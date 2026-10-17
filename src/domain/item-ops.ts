@@ -5,6 +5,7 @@
 import {
   addItem,
   editItemQty,
+  normalizeQty,
   removeItem,
   revokeReadyForChange,
   type RejectionReason,
@@ -242,6 +243,49 @@ export function recalculateSuggestions<T extends Trip>(
   const bagInvalidated = oldSignature !== toiletrySignature(recalculated);
   const next = bagInvalidated ? { ...recalculated, toiletryBagPacked: false } : recalculated;
   return revokeReadyForChange(next, "recalculate").trip;
+}
+
+export interface ToiletryItemInput {
+  /** Caller-chosen unique id for the new Bathroom item. */
+  id: string;
+  name: string;
+  qty: number;
+  packLast: boolean;
+  scope: Scope;
+}
+
+/**
+ * Add a Bathroom (toiletry-bag) item: one canonical checkbox that also gates bag placement. Revokes Ready and
+ * bag placement. "remember" also adds a per-trip staple so future trips get it. A duplicate id is rejected.
+ */
+export function addToiletryItem<T extends Trip>(
+  trip: T,
+  staples: Staple[],
+  input: ToiletryItemInput,
+): ItemOpResult<T> {
+  const name = input.name.trim();
+  if (!name) return rejected(trip, staples, "EMPTY_NAME");
+  const item: TripItem = {
+    id: input.id,
+    name,
+    category: "Toiletries",
+    qty: normalizeQty(input.qty),
+    packed: 0,
+    section: input.packLast ? "packlast" : "main",
+    groupId: TOILETRY_GROUP_ID,
+  };
+  const added = addItem(trip, item);
+  if (!added.ok) return rejected(trip, staples, added.reason);
+  const staple: Staple = {
+    id: item.id,
+    name,
+    category: "Toiletries",
+    qty: item.qty,
+    cadence: "per trip",
+    packLast: input.packLast,
+    groupId: TOILETRY_GROUP_ID,
+  };
+  return accepted(added.trip, input.scope === "remember" ? [...staples, staple] : staples);
 }
 
 /**
