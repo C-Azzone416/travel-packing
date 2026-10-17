@@ -1,4 +1,10 @@
 import { expect, test } from "@playwright/test";
+import { signInAsOwner } from "./helpers/auth";
+
+// Every screen is behind sign-in; these tests run as the allowlisted owner (e2e-only fake sign-in).
+test.beforeEach(async ({ page }) => {
+  await signInAsOwner(page);
+});
 
 const SCREENS = [
   { label: "Trips", path: "/", title: "Trips · Carrywell" },
