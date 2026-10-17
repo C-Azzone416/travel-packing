@@ -11,11 +11,29 @@ import { ITEM_CATEGORIES } from "../db/schema";
 import { fail } from "./result";
 import { refuse } from "./run";
 
+/**
+ * The structured place behind a trip's destination (#47). Provider fields and coordinates are set only for a
+ * place a geocoding provider returned; a curated place has region and country but no provider or coordinates.
+ * Coordinates are always rounded to 2 decimals (about 1 km). These are the most sensitive columns in the schema.
+ */
+export interface StoredPlace {
+  provider: string | null;
+  placeId: string | null;
+  region: string | null;
+  country: string | null;
+  countryCode: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  timezone: string | null;
+}
+
 /** A domain Trip plus the stored fields the UI and lifecycle need. */
 export interface StoredTrip extends Trip {
   destination: string;
   locationId: string | null;
   locationLabel: string | null;
+  /** Optional so callers that never set a place are unaffected; loading always sets it (null when none). */
+  place?: StoredPlace | null;
   copiedFrom: string | null;
   archived: boolean;
   deletedAt: Date | null;
@@ -115,6 +133,36 @@ export async function loadTrip(
   return (await loadTrips(db, ownerId, { tripId, filter }))[0] ?? null;
 }
 
+const toNumber = (value: string | null): number | null => (value === null ? null : Number(value));
+
+function toStoredPlace(row: TripRow): StoredPlace | null {
+  const place: StoredPlace = {
+    provider: row.locationProvider,
+    placeId: row.locationPlaceId,
+    region: row.locationRegion,
+    country: row.locationCountry,
+    countryCode: row.locationCountryCode,
+    latitude: toNumber(row.latitude),
+    longitude: toNumber(row.longitude),
+    timezone: row.timezone,
+  };
+  return Object.values(place).every((value) => value === null) ? null : place;
+}
+
+/** Column values for a place; only called for a trip that carries one, so a caller without a place never nulls them. */
+function placeColumns(place: StoredPlace | null) {
+  return {
+    locationProvider: place?.provider ?? null,
+    locationPlaceId: place?.placeId ?? null,
+    locationRegion: place?.region ?? null,
+    locationCountry: place?.country ?? null,
+    locationCountryCode: place?.countryCode ?? null,
+    latitude: place?.latitude == null ? null : String(place.latitude),
+    longitude: place?.longitude == null ? null : String(place.longitude),
+    timezone: place?.timezone ?? null,
+  };
+}
+
 function toStoredTrip(
   row: TripRow,
   prefs: typeof schema.tripPreferences.$inferSelect | undefined,
@@ -134,6 +182,7 @@ function toStoredTrip(
     destination: row.destination,
     locationId: row.locationId,
     locationLabel: row.locationLabel,
+    place: toStoredPlace(row),
     start: row.startDate,
     end: row.endDate,
     config,
@@ -184,6 +233,7 @@ export async function insertTrip(db: Db, ownerId: string, trip: StoredTrip): Pro
       destination: trip.destination,
       locationId: trip.locationId,
       locationLabel: trip.locationLabel,
+      ...(trip.place === undefined ? {} : placeColumns(trip.place)),
       startDate: trip.start,
       endDate: trip.end,
       days: trip.days,
@@ -207,6 +257,7 @@ export async function saveTrip(db: Db, ownerId: string, trip: StoredTrip): Promi
         destination: trip.destination,
         locationId: trip.locationId,
         locationLabel: trip.locationLabel,
+        ...(trip.place === undefined ? {} : placeColumns(trip.place)),
         startDate: trip.start,
         endDate: trip.end,
         days: trip.days,

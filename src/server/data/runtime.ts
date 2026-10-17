@@ -4,6 +4,7 @@
 import { getAuth } from "../auth/auth-runtime";
 import { createAppDb } from "../db/neon";
 import type { Db } from "../db/retention";
+import { selectResolver } from "../locations/resolver";
 import type { DataContext } from "./context";
 
 let cachedDb: Db | undefined;
@@ -15,7 +16,7 @@ export async function getDataContext(
   if (!connectionString) return null;
   cachedDb ??= createAppDb(connectionString);
   const auth = await getAuth(env);
-  return { db: cachedDb, auth, now: () => new Date() };
+  return { db: cachedDb, auth, now: () => new Date(), resolveLocation: selectResolver(env) };
 }
 
 /** Test hook: forget the cached connection. */

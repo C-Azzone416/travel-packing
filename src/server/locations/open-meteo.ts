@@ -5,6 +5,7 @@
 import type { SampleLocation } from "@/domain/trip-lifecycle";
 
 export const OPEN_METEO_GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search";
+export const OPEN_METEO_GET_URL = "https://geocoding-api.open-meteo.com/v1/get";
 export const PROVIDER_NAME = "open-meteo";
 export const RESULT_COUNT = 5;
 export const TIMEOUT_MS = 3000;
@@ -124,4 +125,56 @@ export async function searchOpenMeteo(
   if (!Array.isArray(results)) throw new LocationSearchError();
   const places = results.filter(isRawPlace).slice(0, RESULT_COUNT);
   return addDetail(places, places.map(toLocation));
+}
+
+const PLACE_ID = new RegExp(`^${PROVIDER_NAME}-(\\d{1,12})$`);
+
+/** The provider's own numeric id from one of our place ids ("open-meteo-2643743"), or null if it isn't one. */
+export function parseOpenMeteoId(id: string): string | null {
+  return PLACE_ID.exec(id)?.[1] ?? null;
+}
+
+export interface OpenMeteoGetOptions extends Omit<OpenMeteoOptions, "baseUrl"> {
+  /** Defaults to the real get-by-id endpoint; e2e points it at a local fake. */
+  baseUrl?: string;
+}
+
+/**
+ * Look one place up by its id, server-side, so what gets stored is the provider's answer and never a
+ * client's claim (#47). An id that is not ours, or that the provider does not know, is null. A provider that
+ * is down, slow, or answers something unexpected is an error, which the caller reports as unavailable.
+ */
+export async function getOpenMeteoPlace(
+  id: string,
+  {
+    fetch: doFetch,
+    signal,
+    timeoutMs = TIMEOUT_MS,
+    baseUrl = OPEN_METEO_GET_URL,
+  }: OpenMeteoGetOptions,
+): Promise<SampleLocation | null> {
+  const providerId = parseOpenMeteoId(id);
+  if (providerId === null) return null;
+  const url = new URL(baseUrl);
+  url.searchParams.set("id", providerId);
+  url.searchParams.set("language", "en");
+
+  const timeout = AbortSignal.timeout(timeoutMs);
+  let response: Response;
+  let body: unknown;
+  try {
+    response = await doFetch(url, {
+      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+      headers: { accept: "application/json" },
+      cache: "no-store",
+    });
+    // The API answers an unknown id with a client error; that is "no such place", not an outage.
+    if (response.status === 400 || response.status === 404) return null;
+    if (!response.ok) throw new LocationSearchError();
+    body = await response.json();
+  } catch {
+    throw new LocationSearchError();
+  }
+  if (!isRawPlace(body) || String(body.id) !== providerId) throw new LocationSearchError();
+  return toLocation(body);
 }
