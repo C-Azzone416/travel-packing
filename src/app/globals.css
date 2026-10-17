@@ -131,6 +131,18 @@ p {
   top: 12px;
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .preview-banner {
   min-height: 24px;
   display: flex;
@@ -524,6 +536,401 @@ main {
 @media (min-width: 900px) and (max-width: 1279px) {
   .app-shell {
     padding-left: calc(var(--nav-rail-width) + 28px);
+  }
+}
+
+/* ---- Trips dashboard (#14). Ported from the prototype; sizes follow design #12 gap 3. */
+.hero {
+  position: relative;
+  overflow: hidden;
+  min-height: 265px;
+  display: grid;
+  align-items: center;
+  padding: 30px 26px;
+  border-radius: 30px;
+  background: linear-gradient(130deg, #dff1ea 0%, #b9ddd0 60%, #8fc4bd 100%);
+  box-shadow: var(--shadow);
+}
+.hero-copy {
+  position: relative;
+  z-index: 2;
+  max-width: 540px;
+}
+.hero-copy p {
+  color: #2a5a62;
+  max-width: 44ch;
+}
+.hero-art {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.sun {
+  position: absolute;
+  width: 92px;
+  height: 92px;
+  border-radius: 50%;
+  right: 12%;
+  top: 22px;
+  background: rgba(243, 201, 148, 0.9);
+}
+.hill {
+  position: absolute;
+  border-radius: 50% 50% 0 0;
+  bottom: -65px;
+  transform: rotate(-6deg);
+}
+.hill.one {
+  width: 380px;
+  height: 190px;
+  right: -70px;
+  background: rgba(22, 109, 122, 0.22);
+}
+.hill.two {
+  width: 340px;
+  height: 145px;
+  right: 130px;
+  bottom: -80px;
+  background: rgba(245, 247, 242, 0.7);
+}
+.hero .actions {
+  position: relative;
+  z-index: 3;
+}
+
+.section-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 28px 2px 12px;
+}
+.section-head h2:focus {
+  outline: none;
+}
+.page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 6px 2px 20px;
+}
+.head-copy {
+  flex: 1;
+}
+.head-copy p {
+  margin-bottom: 0;
+}
+.card-grid {
+  display: grid;
+  gap: 14px;
+}
+.item-meta {
+  color: var(--muted-text);
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.trip-card {
+  overflow: hidden;
+  padding: 0;
+}
+.trip-card-body {
+  padding: 17px 19px 19px;
+}
+.trip-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.trip-top .status-pill {
+  align-self: flex-start;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.trip-card .meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 15px;
+  color: var(--muted-text);
+  font-size: 13px;
+  margin: 9px 0 15px;
+}
+.progress-track {
+  height: 9px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e5ece9;
+}
+.progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--teal);
+}
+.progress-copy {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 7px 0 15px;
+  color: var(--muted-text);
+  font-size: 12px;
+}
+
+.quick-view-toggle {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: -2px 0 13px;
+  padding: 8px 11px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--linen);
+  color: var(--ink);
+  font-weight: 850;
+  cursor: pointer;
+}
+.quick-view-toggle .chevron {
+  color: var(--teal-dark);
+  font-size: 16px;
+}
+.quick-view {
+  margin: -3px 0 15px;
+  padding: 14px;
+  border: 1px solid #b8d6cd;
+  border-radius: 17px;
+  background: #f8fbf9;
+}
+.quick-view-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 11px;
+}
+.quick-view-head h3 {
+  margin: 2px 0 0;
+  font-size: 16px;
+}
+.quick-filters {
+  display: inline-flex;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: #fff;
+}
+.quick-filters button {
+  min-height: 44px;
+  border: 0;
+  border-radius: 8px;
+  padding: 5px 10px;
+  background: transparent;
+  color: var(--muted-text);
+  font-size: 12px;
+  font-weight: 850;
+  cursor: pointer;
+}
+.quick-filters button[aria-pressed="true"] {
+  background: var(--seafoam-soft);
+  color: var(--teal-dark);
+}
+.quick-view-list {
+  max-height: 250px;
+  overflow: auto;
+  padding-right: 3px;
+}
+.quick-view-category + .quick-view-category {
+  margin-top: 11px;
+}
+.quick-view-category h4 {
+  margin: 0 0 5px;
+  color: var(--teal-dark);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.quick-view-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+.quick-view-row strong {
+  color: var(--muted-text);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.quick-view-item-name {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.timing-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 7px;
+  border: 1px solid var(--teal);
+  border-radius: 999px;
+  background: var(--teal);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+.quick-bag-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 11px 0;
+  padding: 10px;
+  border-radius: 12px;
+  background: #fff;
+}
+.quick-bag-row strong,
+.quick-bag-row small {
+  display: block;
+}
+.quick-bag-row small {
+  margin-top: 2px;
+  color: var(--muted-text);
+  font-size: 12px;
+}
+.quick-bag-status {
+  padding: 5px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+.quick-bag-status.complete {
+  background: #d4eadf;
+  color: #185b56;
+}
+.quick-bag-status.pending {
+  background: #fff0dd;
+  color: #704322;
+}
+.quick-bag-status.waiting {
+  background: #edf0ef;
+  color: #4d5e62;
+}
+
+.trip-tabs {
+  display: inline-flex;
+  gap: 5px;
+  margin: 0 0 14px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.78);
+}
+.trip-tabs button {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  border-radius: 12px;
+  padding: 8px 12px;
+  background: transparent;
+  color: var(--muted-text);
+  font-weight: 850;
+  cursor: pointer;
+}
+.trip-tabs button.active {
+  background: var(--seafoam-soft);
+  color: var(--teal-dark);
+}
+.trip-tabs span {
+  min-width: 20px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.85);
+  font-size: 12px;
+  text-align: center;
+}
+
+.empty-state {
+  padding: 24px;
+  border: 1px dashed #acc1bb;
+  border-radius: 18px;
+  color: var(--muted-text);
+  text-align: center;
+}
+.empty-state.compact {
+  padding: 14px;
+  text-align: left;
+  font-size: 12px;
+}
+.deleted-list {
+  display: grid;
+  gap: 8px;
+}
+.archive-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.archive-row:last-child {
+  border-bottom: 0;
+}
+
+/* Loading: two skeleton cards, no spinner; the shimmer-free pulse stops under reduced motion. */
+.skeleton-card {
+  min-height: 220px;
+}
+.skeleton-art {
+  height: 118px;
+  background: var(--seafoam-soft);
+}
+.skeleton-bar {
+  height: 14px;
+  margin-bottom: 12px;
+  border-radius: 8px;
+  background: var(--seafoam-soft);
+}
+.skeleton-bar.short {
+  width: 55%;
+}
+
+/* On phones the sun sits in the bottom corner, clear of the hero text (design's #14 nit). */
+@media (max-width: 659px) {
+  .sun {
+    top: auto;
+    right: 22px;
+    bottom: 22px;
+    width: 64px;
+    height: 64px;
+  }
+}
+
+@media (min-width: 660px) {
+  .card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 900px) {
+  .hero {
+    min-height: 310px;
+    padding: 44px;
+  }
+  .hero-copy {
+    padding-right: 120px;
   }
 }
 
