@@ -43,7 +43,9 @@ export function DestinationArt({ locationId, variant, priority = false }: Destin
               ? "(min-width: 1120px) 1120px, 100vw"
               : "(min-width: 660px) 50vw, 100vw"
           }
-          priority={priority}
+          preload={priority}
+          loading={priority ? "eager" : "lazy"}
+          fetchPriority={priority ? "high" : "auto"}
           onError={() => setFailedSrc(art.src)}
         />
       )}
