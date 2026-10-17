@@ -8,19 +8,26 @@ function Show() {
   const provider = useLocationProvider();
   return (
     <p>
-      {provider.minQueryLength}|{provider.debounceMs}|{provider.attribution}
+      {provider.minQueryLength}|{provider.debounceMs}|{provider.attribution ? "credited" : ""}
     </p>
   );
 }
 
 describe("AppLocationProvider", () => {
-  it("gives the app the API-backed provider: 2+ letters, 300 ms debounce, credited", () => {
+  it("gives the app the API-backed provider: 2+ letters, 300 ms debounce, credited only when the server's provider is on", () => {
+    const { unmount } = render(
+      <AppLocationProvider providerOn>
+        <Show />
+      </AppLocationProvider>,
+    );
+    expect(screen.getByText("2|300|credited")).toBeTruthy();
+    unmount();
     render(
       <AppLocationProvider>
         <Show />
       </AppLocationProvider>,
     );
-    expect(screen.getByText("2|300|Place search is provided by Open-Meteo.")).toBeTruthy();
+    expect(screen.getByText("2|300|")).toBeTruthy();
   });
 
   it("without it, components get the curated provider (1 letter, no debounce, no credit)", () => {

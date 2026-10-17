@@ -1354,3 +1354,10 @@ input:disabled {
     animation: none;
   }
 }
+
+/* A provider credit inside helper text: same size as the text around it, underlined so colour is not the only cue. */
+.credit a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}

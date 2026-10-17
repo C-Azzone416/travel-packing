@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { Credit } from "@/components/ui/Credit";
 import type { LocationProvider } from "@/domain/location-provider";
 import { customLocation } from "@/domain/locations";
 import type { SampleLocation } from "@/domain/trip-lifecycle";
@@ -156,7 +157,12 @@ export function LocationPicker({
       />
       <div id={noteId} className="tiny muted">
         Choose the city, region and country you mean. Free text alone is never a confirmed location.
-        {provider.attribution ? <> {provider.attribution}</> : null}
+        {provider.attribution ? (
+          <>
+            {" "}
+            <Credit parts={provider.attribution} />
+          </>
+        ) : null}
       </div>
       {tooShort ? (
         <p className="tiny muted">Type at least {provider.minQueryLength} letters.</p>
