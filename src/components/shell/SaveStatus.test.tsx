@@ -300,6 +300,36 @@ describe("SaveStatusProvider", () => {
       expect(chipText()).toContain("Saved");
     });
 
+    it("a RETRIED read is still a read: it never shows Saving, and does not hold the chip after a save completes", async () => {
+      setup();
+      const load = deferred();
+      const onSuccess = vi.fn();
+      const read = vi
+        .fn()
+        .mockRejectedValueOnce(new Error("down"))
+        .mockImplementation(() => load.promise);
+      await act(async () => {
+        await api.track(read, onSuccess, { read: true }).catch(() => {});
+      });
+      expect(chipText()).toContain("Couldn't save");
+      act(() => api.retry());
+      await advance(SAVING_DELAY_MS * 5);
+      expect(chipText()).not.toContain("Saving");
+      expect(status()).not.toBe("Saving");
+      // A save finishes while the slow retried load is still in flight: the load must not count as a
+      // pending write, so the chip settles on Saved straight away.
+      await act(async () => {
+        await api.track(() => Promise.resolve("saved"));
+      });
+      expect(chipText()).toContain("Saved");
+      expect(chipText()).not.toContain("Saving");
+      await act(async () => {
+        load.resolve("fresh");
+      });
+      expect(onSuccess).toHaveBeenCalledWith("fresh");
+      expect(chipText()).toContain("Saved");
+    });
+
     it("a successful read does not clear a failed save, which stays until a save succeeds", async () => {
       setup();
       await act(async () => {

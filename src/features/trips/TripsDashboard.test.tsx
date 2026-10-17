@@ -82,6 +82,40 @@ describe("loading and errors", () => {
     }
   });
 
+  it("after a failed load, the chip's Retry with a slow load never says or announces Saving, ends on Saved, and the trips render", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const gate = deferred<LifecycleState>();
+      const base = memory(sampleLifecycleState());
+      const load = vi
+        .fn()
+        .mockRejectedValueOnce(new Error("down"))
+        .mockImplementation(() => gate.promise);
+      renderInApp(<TripsDashboard source={{ ...base, load }} getToday={TODAY} />);
+      await act(async () => {});
+      expect(screen.getByText("Couldn’t load your trips.")).toBeTruthy();
+      const chip = screen.getByRole("button", { name: "Couldn't save, retry" });
+      act(() => chip.click());
+      expect(load).toHaveBeenCalledTimes(2);
+      const everSaid: string[] = [];
+      for (let waited = 0; waited < 2000; waited += 100) {
+        act(() => vi.advanceTimersByTime(100));
+        everSaid.push(
+          document.querySelector(".sync-chip")?.textContent ?? "",
+          screen.getByRole("status", { name: "Save status" }).textContent ?? "",
+        );
+      }
+      expect(everSaid.join("|")).not.toMatch(/Saving/);
+      await act(async () => gate.resolve(await base.load()));
+      await act(async () => {});
+      expect(screen.getByRole("heading", { name: "San Diego" })).toBeTruthy();
+      expect(screen.getByRole("link", { name: "Saved" })).toBeTruthy();
+      expect(screen.getByRole("status", { name: "Save status" }).textContent).toBe("Saved");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("shows 'Couldn't load your trips.' with Try again, the Error chip, and recovers", async () => {
     const base = memory(sampleLifecycleState());
     const load = vi
