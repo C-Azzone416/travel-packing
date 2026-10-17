@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { signInAsOwner } from "./helpers/auth";
 
 // Fixed clock: San Diego is upcoming, Lisbon is past. In-memory data survives client-side
 // navigation (links), not a reload, so every step here navigates by clicking.
@@ -6,7 +7,7 @@ const NOW = new Date("2026-10-16T12:00:00");
 
 async function openDashboard(page: Page) {
   await page.clock.setFixedTime(NOW);
-  await page.goto("/");
+  await signInAsOwner(page);
   await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
 }
 
