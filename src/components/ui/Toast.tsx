@@ -47,9 +47,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const hovered = useRef(false);
   const focused = useRef(false);
 
+  const [paused, setPaused] = useState(false);
+
   const show = useCallback<ToastApi["show"]>((message, options) => {
+    // The replaced toast unmounts without a mouseleave/blur, so reset the pause
+    // state here or the new toast would never expire.
     hovered.current = false;
     focused.current = false;
+    setPaused(false);
     setToast({ id: ++nextId.current, message, action: options?.action });
   }, []);
   const showError = useCallback(
@@ -58,7 +63,6 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   );
   const api = useMemo<ToastApi>(() => ({ show, error: showError }), [show, showError]);
 
-  const [paused, setPaused] = useState(false);
   const toastId = toast?.id;
   const duration = toast?.action ? ACTION_TOAST_MS : TOAST_MS;
   useEffect(() => {

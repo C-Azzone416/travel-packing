@@ -98,6 +98,56 @@ describe("ToastProvider", () => {
     expect(screen.queryByText("Trip removed")).toBeNull();
   });
 
+  it("lasts exactly 4000ms for plain toasts and 8000ms for action toasts (the documented durations)", () => {
+    expect(TOAST_MS).toBe(4000);
+    expect(ACTION_TOAST_MS).toBe(8000);
+    setup();
+    act(() => api.show("Plain"));
+    advance(3999);
+    expect(screen.getByText("Plain")).toBeTruthy();
+    advance(1);
+    expect(screen.queryByText("Plain")).toBeNull();
+    act(() => api.show("Undoable", { action: { label: "Undo", onAction: () => {} } }));
+    advance(7999);
+    expect(screen.getByText("Undoable")).toBeTruthy();
+    advance(1);
+    expect(screen.queryByText("Undoable")).toBeNull();
+  });
+
+  it("pauses on keyboard focus alone (no hover) and resumes on blur", () => {
+    setup();
+    act(() => api.show("Trip removed", { action: { label: "Undo", onAction: () => {} } }));
+    const undo = screen.getByRole("button", { name: "Undo" });
+    fireEvent.focus(undo);
+    advance(8000 * 3);
+    expect(screen.getByText("Trip removed")).toBeTruthy();
+    fireEvent.blur(undo);
+    advance(7999);
+    expect(screen.getByText("Trip removed")).toBeTruthy();
+    advance(1);
+    expect(screen.queryByText("Trip removed")).toBeNull();
+  });
+
+  it("a replacement toast still expires when the one it replaced was hovered", () => {
+    setup();
+    act(() => api.show("A"));
+    fireEvent.mouseEnter(screen.getByText("A").parentElement as HTMLElement);
+    act(() => api.show("B"));
+    advance(3999);
+    expect(screen.getByText("B")).toBeTruthy();
+    advance(1);
+    expect(screen.queryByText("B")).toBeNull();
+  });
+
+  it("a replacement toast still expires when the one it replaced had keyboard focus", () => {
+    setup();
+    act(() => api.show("A", { action: { label: "Undo", onAction: () => {} } }));
+    fireEvent.focus(screen.getByRole("button", { name: "Undo" }));
+    act(() => api.show("B"));
+    advance(4000);
+    expect(screen.queryByText("B")).toBeNull();
+  });
+
   it("replaces the current toast and restarts the timer for the new one", () => {
     setup();
     act(() => api.show("First"));
