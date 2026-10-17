@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { createRateLimiter } from "./rate-limit";
+import { describe, expect, it, vi } from "vitest";
+import { createRateLimiter, DEFAULT_SEARCHES_PER_MINUTE, searchesPerMinute } from "./rate-limit";
 
 function setup(limit = 3, windowMs = 1000) {
   let time = 10_000;
@@ -67,5 +67,43 @@ describe("createRateLimiter", () => {
     const limiter = createRateLimiter({ limit: 1, windowMs: 60_000 });
     expect(limiter.consume("x").ok).toBe(true);
     expect(limiter.consume("x").ok).toBe(false);
+  });
+});
+
+describe("searchesPerMinute", () => {
+  it("defaults to 20", () => {
+    expect(DEFAULT_SEARCHES_PER_MINUTE).toBe(20);
+    expect(searchesPerMinute({})).toBe(20);
+  });
+
+  it.each([
+    ["1", 1],
+    ["20", 20],
+    [" 600 ", 600],
+    ["10000", 10_000],
+  ])("reads %j as %i", (raw, expected) => {
+    expect(searchesPerMinute({ LOCATION_SEARCHES_PER_MINUTE: raw })).toBe(expected);
+  });
+
+  it.each([
+    [""],
+    ["  "],
+    ["0"],
+    ["-5"],
+    ["1.5"],
+    ["abc"],
+    ["10001"],
+    ["99999"],
+    ["100000"],
+    ["1e3"],
+    ["20 searches"],
+  ])("falls back to the default for %j, so a bad value never disables the limit", (raw) => {
+    expect(searchesPerMinute({ LOCATION_SEARCHES_PER_MINUTE: raw })).toBe(20);
+  });
+
+  it("reads process.env by default", () => {
+    vi.stubEnv("LOCATION_SEARCHES_PER_MINUTE", "7");
+    expect(searchesPerMinute()).toBe(7);
+    vi.unstubAllEnvs();
   });
 });

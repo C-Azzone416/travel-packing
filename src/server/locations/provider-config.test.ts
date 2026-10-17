@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { curatedSearch, selectSearch } from "./provider-config";
+import { curatedSearch, geocodingBaseUrl, selectSearch } from "./provider-config";
 
 const signal = new AbortController().signal;
 
@@ -63,5 +63,52 @@ describe("selectSearch", () => {
       globalThis.fetch = original;
       vi.unstubAllEnvs();
     }
+  });
+});
+
+describe("geocodingBaseUrl (e2e-only override)", () => {
+  const fake = "http://127.0.0.1:3102/v1/search";
+
+  it("is honored only in an e2e build, off Vercel", () => {
+    expect(geocodingBaseUrl({ OPEN_METEO_GEOCODING_URL: fake, NEXT_PUBLIC_E2E_BUILD: "1" })).toBe(
+      fake,
+    );
+  });
+
+  it.each([
+    ["no override set", { NEXT_PUBLIC_E2E_BUILD: "1" }],
+    ["an empty override", { OPEN_METEO_GEOCODING_URL: "", NEXT_PUBLIC_E2E_BUILD: "1" }],
+    ["a normal (non-e2e) build", { OPEN_METEO_GEOCODING_URL: fake }],
+    [
+      "a build flag that is not exactly 1",
+      { OPEN_METEO_GEOCODING_URL: fake, NEXT_PUBLIC_E2E_BUILD: "true" },
+    ],
+    [
+      "a Vercel deployment, even with the e2e flag",
+      { OPEN_METEO_GEOCODING_URL: fake, NEXT_PUBLIC_E2E_BUILD: "1", VERCEL: "1" },
+    ],
+  ])("is ignored for %s", (_label, env) => {
+    expect(geocodingBaseUrl(env)).toBeUndefined();
+  });
+
+  it("sends the Open-Meteo request to the override only when it is honored", async () => {
+    const calls: string[] = [];
+    const doFetch = vi.fn<typeof fetch>(
+      async (url) => (calls.push(String(url)), Response.json({})),
+    );
+    await selectSearch(
+      {
+        LOCATION_PROVIDER: "open-meteo",
+        OPEN_METEO_GEOCODING_URL: fake,
+        NEXT_PUBLIC_E2E_BUILD: "1",
+      },
+      doFetch,
+    )("paris", { signal });
+    await selectSearch(
+      { LOCATION_PROVIDER: "open-meteo", OPEN_METEO_GEOCODING_URL: fake },
+      doFetch,
+    )("paris", { signal });
+    expect(calls[0]).toMatch(/^http:\/\/127\.0\.0\.1:3102\/v1\/search\?/);
+    expect(calls[1]).toMatch(/^https:\/\/geocoding-api\.open-meteo\.com\/v1\/search\?/);
   });
 });

@@ -39,3 +39,17 @@ export function createRateLimiter({
     },
   };
 }
+
+export const DEFAULT_SEARCHES_PER_MINUTE = 20;
+
+/**
+ * Searches per minute per session from LOCATION_SEARCHES_PER_MINUTE: a whole number from 1 to 10000.
+ * Anything else (unset, blank, fractional, zero, negative, text) uses the default, so a bad value can
+ * never switch the limit off.
+ */
+export function searchesPerMinute(env: Record<string, string | undefined> = process.env): number {
+  const raw = env.LOCATION_SEARCHES_PER_MINUTE?.trim() ?? "";
+  if (!/^\d{1,5}$/.test(raw)) return DEFAULT_SEARCHES_PER_MINUTE;
+  const value = Number(raw);
+  return value >= 1 && value <= 10_000 ? value : DEFAULT_SEARCHES_PER_MINUTE;
+}
