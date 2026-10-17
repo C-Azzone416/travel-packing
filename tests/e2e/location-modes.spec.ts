@@ -1,11 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
+import { FAKE_GEOCODER_PORT, OPEN_METEO_PORT } from "./support/ports";
 
-// Two copies of the app run during e2e (see playwright.config.ts): the default one on 3100
-// (LOCATION_PROVIDER unset, so the curated list) and one on 3101 with LOCATION_PROVIDER=open-meteo, pointed
-// at a local fake geocoder on 3102. No real network is used anywhere.
-const OPEN_METEO_APP = "http://localhost:3101";
-const FAKE_GEOCODER = "http://127.0.0.1:3102";
+// Two copies of the app run during e2e (see playwright.config.ts and support/ports.ts): the default one
+// (LOCATION_PROVIDER unset, so the curated list) and one with LOCATION_PROVIDER=open-meteo, pointed at a
+// local fake geocoder. No real network is used anywhere.
+const OPEN_METEO_APP = `http://localhost:${OPEN_METEO_PORT}`;
+const FAKE_GEOCODER = `http://127.0.0.1:${FAKE_GEOCODER_PORT}`;
 
 interface FakeQuery {
   params: Record<string, string>;
