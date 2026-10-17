@@ -8,12 +8,15 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.test.{ts,tsx}"],
+    setupFiles: ["./src/test/setup.ts"],
     coverage: {
       provider: "v8",
       include: ["src/**/*.{ts,tsx}"],
       exclude: [
         // Tests themselves are not product code.
         "src/**/*.test.{ts,tsx}",
+        // Shared test setup, not product code.
+        "src/test/**",
         // Type-only declaration files have no runtime statements to cover.
         "src/**/*.d.ts",
         // Test doubles (e.g. the calculator stand-in); used only by tests, never shipped.
