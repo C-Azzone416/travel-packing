@@ -10,9 +10,15 @@ import type { SampleLocation } from "@/domain/trip-lifecycle";
 export const ALLOW_CUSTOM_DESTINATION = false;
 
 export const UNAVAILABLE_MESSAGE = "Location search is unavailable right now. Try again.";
+export const NO_PLACES_MESSAGE = "No places found. Check the spelling.";
+
+const describe = (place: { region: string; country: string }) =>
+  [place.region, place.country].filter(Boolean).join(", ");
 
 export interface LocationPickerProps {
   provider: LocationProvider;
+  /** Offered as an explicit "popular destinations" choice when the provider is unavailable. Never free text. */
+  fallbackProvider?: LocationProvider;
   query: string;
   onQueryChange: (text: string) => void;
   selected: SampleLocation | null;
@@ -29,7 +35,8 @@ type Answer =
 // An ARIA combobox over a LocationProvider. Free text alone never confirms a location: the user
 // must pick an option (or the explicit Custom row when enabled).
 export function LocationPicker({
-  provider,
+  provider: mainProvider,
+  fallbackProvider,
   query,
   onQueryChange,
   selected,
@@ -45,10 +52,12 @@ export function LocationPicker({
   const [active, setActive] = useState(-1);
   const [attempt, setAttempt] = useState(0);
   const [answer, setAnswer] = useState<Answer | null>(null);
+  const [popular, setPopular] = useState(false);
+  const provider = popular && fallbackProvider ? fallbackProvider : mainProvider;
 
   const text = query.trim();
   const searchable = !selected && text.length >= provider.minQueryLength;
-  const key = `${text}#${attempt}`;
+  const key = `${popular ? "popular" : "main"}:${text}#${attempt}`;
 
   useEffect(() => {
     if (!searchable) return;
@@ -71,6 +80,7 @@ export function LocationPicker({
 
   const current = searchable && answer?.key === key ? answer : null;
   const searching = searchable && current === null;
+  const tooShort = !selected && text !== "" && text.length < provider.minQueryLength;
   const failed = current?.status === "error";
   const matches = current?.status === "ready" ? current.items : [];
   const options: SampleLocation[] =
@@ -83,6 +93,7 @@ export function LocationPicker({
 
   function choose(location: SampleLocation) {
     setActive(-1);
+    setPopular(false);
     onSelect(location);
   }
 
@@ -110,9 +121,9 @@ export function LocationPicker({
     : searching
       ? "Searching"
       : noMatches
-        ? "No matches"
+        ? "No places found"
         : current?.status === "ready" && matches.length > 0
-          ? `${matches.length} ${matches.length === 1 ? "destination" : "destinations"} found`
+          ? `${matches.length} ${matches.length === 1 ? "place" : "places"} found`
           : "";
 
   return (
@@ -145,13 +156,32 @@ export function LocationPicker({
       />
       <div id={noteId} className="tiny muted">
         Choose the city, region and country you mean. Free text alone is never a confirmed location.
+        {provider.attribution ? <> {provider.attribution}</> : null}
       </div>
+      {tooShort ? (
+        <p className="tiny muted">Type at least {provider.minQueryLength} letters.</p>
+      ) : null}
+      {popular ? (
+        <p className="tiny muted">
+          Showing popular destinations.{" "}
+          <button
+            type="button"
+            className="button ghost small"
+            onClick={() => {
+              setPopular(false);
+              setAttempt((count) => count + 1);
+            }}
+          >
+            Search all places
+          </button>
+        </p>
+      ) : null}
       <p className="sr-only" role="status" aria-label="Destination results">
         {announcement}
       </p>
       {searching ? (
-        <p className="tiny muted" aria-hidden="true">
-          Searching…
+        <p className="tiny muted searching" aria-hidden="true">
+          <span className="spinner" /> Searching…
         </p>
       ) : null}
       <div
@@ -182,14 +212,15 @@ export function LocationPicker({
               <>
                 <strong>{option.city}</strong>
                 <span>
-                  {option.region}, {option.country}
+                  {describe(option)}
+                  {option.detail ? ` · ${option.detail}` : ""}
                 </span>
               </>
             )}
           </div>
         ))}
       </div>
-      {noMatches ? <div className="empty-state compact">No matches. Try a city name.</div> : null}
+      {noMatches ? <div className="empty-state compact">{NO_PLACES_MESSAGE}</div> : null}
       {failed ? (
         <div className="empty-state compact" role="alert">
           {UNAVAILABLE_MESSAGE}{" "}
@@ -200,6 +231,11 @@ export function LocationPicker({
           >
             Retry
           </button>
+          {fallbackProvider && !popular ? (
+            <button type="button" className="button ghost small" onClick={() => setPopular(true)}>
+              Choose from popular destinations
+            </button>
+          ) : null}
         </div>
       ) : null}
       {selected ? (
@@ -210,7 +246,7 @@ export function LocationPicker({
             <small>
               {selected.id === "custom"
                 ? `${selected.city} · Custom`
-                : `${selected.city} · ${selected.region} · ${selected.country}`}
+                : [selected.city, selected.region, selected.country].filter(Boolean).join(" · ")}
             </small>
           </div>
           <button

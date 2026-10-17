@@ -1232,6 +1232,10 @@ input:disabled {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+    border-top-color: var(--seafoam);
+  }
   *,
   *::before,
   *::after {
