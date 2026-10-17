@@ -77,3 +77,21 @@ describe("artwork data", () => {
     expect(fallbackRow).toContain("Original, no third-party content");
   });
 });
+
+describe("fallback art", () => {
+  it("is pinned to the landmark-neutral illustration", () => {
+    expect(FALLBACK_ART.src).toBe("/destinations/destination-fallback.jpg");
+  });
+
+  it("is a different image from every mapped destination, so a mapping can never silently become the fallback", () => {
+    for (const [id, art] of Object.entries(DESTINATION_ART)) {
+      expect(art.src, id).not.toBe(FALLBACK_ART.src);
+      expect(art.key, id).not.toBe(FALLBACK_ART.key);
+    }
+  });
+
+  it("is what an unrecognized destination ID resolves to", () => {
+    expect(artworkFor("custom-place").src).toBe(FALLBACK_ART.src);
+    expect(artworkFor("custom-place")).toBe(FALLBACK_ART);
+  });
+});
