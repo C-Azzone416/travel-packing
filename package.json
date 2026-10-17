@@ -21,7 +21,8 @@
     "check:no-e2e-in-build": "tsx scripts/check-no-e2e-in-build.ts",
     "build:webpack": "next build --webpack",
     "db:migrate:remote": "tsx scripts/db-migrate-remote.ts",
-    "db:seed": "tsx scripts/db-seed.ts"
+    "db:seed": "tsx scripts/db-seed.ts",
+    "check:repo-hygiene": "tsx scripts/check-repo-hygiene.ts"
   },
   "dependencies": {
     "@neondatabase/auth": "^0.6.0-beta",
