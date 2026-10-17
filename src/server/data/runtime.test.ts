@@ -14,6 +14,7 @@ vi.mock("@/server/db/e2e-driver", () => ({
   createE2eDb: (url: string) => createE2eDb(url),
 }));
 
+import { curatedResolver } from "../locations/resolver";
 import { getDataContext, resetDataRuntime } from "./runtime";
 
 beforeEach(() => {
@@ -44,6 +45,24 @@ describe("getDataContext", () => {
     await getDataContext({ DATABASE_URL: "postgres://example.test/db" });
     await getDataContext({ DATABASE_URL: "postgres://example.test/db" });
     expect(createAppDb).toHaveBeenCalledTimes(1);
+  });
+
+  it("resolves places from the curated list only, unless LOCATION_PROVIDER is exactly open-meteo", async () => {
+    const plain = await getDataContext({ DATABASE_URL: "postgres://example.test/db" });
+    expect(plain?.resolveLocation).toBe(curatedResolver);
+    resetDataRuntime();
+    const wrongCase = await getDataContext({
+      DATABASE_URL: "postgres://example.test/db",
+      LOCATION_PROVIDER: "Open-Meteo",
+    });
+    expect(wrongCase?.resolveLocation).toBe(curatedResolver);
+    resetDataRuntime();
+    const on = await getDataContext({
+      DATABASE_URL: "postgres://example.test/db",
+      LOCATION_PROVIDER: "open-meteo",
+    });
+    expect(on?.resolveLocation).toBeTypeOf("function");
+    expect(on?.resolveLocation).not.toBe(curatedResolver);
   });
 });
 

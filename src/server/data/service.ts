@@ -45,7 +45,17 @@ import { fail, type Result } from "./result";
 import { run, refuse, type OwnerScope } from "./run";
 import * as inputs from "./schemas";
 import { ensureDefaultStaples, listStaples, saveStaples } from "./staple-store";
-import { insertTrip, loadTrip, loadTrips, lockTrip, saveTrip, type StoredTrip } from "./trip-store";
+import { curatedResolver } from "../locations/resolver";
+import { round2 } from "../locations/open-meteo";
+import {
+  insertTrip,
+  loadTrip,
+  loadTrips,
+  lockTrip,
+  saveTrip,
+  type StoredPlace,
+  type StoredTrip,
+} from "./trip-store";
 
 export interface TripResult {
   trip: StoredTrip;
@@ -243,8 +253,50 @@ function toStoredTrip(trip: LifecycleTrip): StoredTrip {
     ...rest,
     locationId: location?.id ?? null,
     locationLabel: location?.label ?? null,
+    place: location ? toStoredPlace(location) : null,
     deletedAt: null,
   };
+}
+
+const orNull = (value: string): string | null => (value === "" ? null : value);
+
+/**
+ * The structured place stored next to a trip's destination (#47). Coordinates exist only for a provider place
+ * and are rounded here again, so even a resolver that returned more precision could never store it.
+ */
+function toStoredPlace(location: SampleLocation): StoredPlace {
+  const fromProvider = location.provider !== undefined && location.providerPlaceId !== undefined;
+  const hasCoordinates =
+    fromProvider && location.latitude !== undefined && location.longitude !== undefined;
+  return {
+    provider: fromProvider ? (location.provider ?? null) : null,
+    placeId: fromProvider ? (location.providerPlaceId ?? null) : null,
+    region: orNull(location.region),
+    country: orNull(location.country),
+    countryCode: orNull(location.countryCode),
+    latitude: hasCoordinates ? round2(location.latitude as number) : null,
+    longitude: hasCoordinates ? round2(location.longitude as number) : null,
+    timezone: fromProvider ? (location.timezone ?? null) : null,
+  };
+}
+
+/**
+ * Turn the place id the browser sent into the canonical place, server-side. Only the id is trusted: the city,
+ * region, coordinates and timezone that get stored come from the resolver, never from the request. An id nobody
+ * recognizes is INVALID_INPUT; a lookup that is down is UNAVAILABLE and nothing is saved.
+ */
+async function resolveLocation(context: DataContext, id: string): Promise<SampleLocation> {
+  let found: SampleLocation | null;
+  try {
+    found = await (context.resolveLocation ?? curatedResolver)(id);
+  } catch {
+    refuse(fail("UNAVAILABLE"));
+  }
+  // Unknown id, or a resolved place outside the stored bounds (checked only; the provider fields are kept).
+  if (!found || !inputs.sampleLocation.safeParse(found).success) {
+    refuse(fail("INVALID_INPUT", { fields: ["location"] }));
+  }
+  return found;
 }
 
 /** Normalized, valid dates or a typed INVALID_INPUT (a return before departure becomes departure). */
@@ -276,13 +328,15 @@ async function saveNewTrip(
 
 /** Create a trip from a confirmed sample location, dates, and preferences. */
 export function createTrip(context: DataContext, input: unknown): Promise<Result<StoredTrip>> {
-  return run(context, inputs.createTripInput, input, (scope, request) => {
+  return run(context, inputs.createTripInput, input, async (scope, request) => {
     const dates = validDates(request.start, request.end);
+    // Resolved before any database write, so a slow lookup never holds a transaction open.
+    const location = await resolveLocation(context, request.location.id);
     return saveNewTrip(
       scope,
       context,
       startDraft(request.config, dates.start, dates.end),
-      request.location,
+      location,
     );
   });
 }
@@ -296,12 +350,13 @@ export function copyTrip(context: DataContext, input: unknown): Promise<Result<S
   return run(context, inputs.copyTripInput, input, async (scope, request) => {
     const source = await mustLoad(scope, request.sourceId);
     const dates = validDates(request.start, request.end);
+    const location = await resolveLocation(context, request.location.id);
     const lifecycleSource: LifecycleTrip = { ...source, location: null };
     return saveNewTrip(
       scope,
       context,
       startCopyDraft(lifecycleSource, dates.start, dates.end),
-      request.location,
+      location,
     );
   });
 }

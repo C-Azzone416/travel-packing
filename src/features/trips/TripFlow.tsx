@@ -10,6 +10,7 @@ import { ModalSheet } from "@/components/ui/ModalSheet";
 import { Switch } from "@/components/ui/Switch";
 import { useToast } from "@/components/ui/Toast";
 import { calculateSuggestions, forecastLabel } from "@/domain/calc";
+import { curatedLocationProvider } from "@/domain/location-provider";
 import { isCustomLocation } from "@/domain/locations";
 import {
   selectDraftLocation,
@@ -192,6 +193,9 @@ function FlowBody({
           >
             <LocationPicker
               provider={provider}
+              fallbackProvider={
+                provider === curatedLocationProvider ? undefined : curatedLocationProvider
+              }
               allowCustom={allowCustom}
               query={query}
               onQueryChange={setQuery}

@@ -4,6 +4,7 @@
 import { getAuth } from "../auth/auth-runtime";
 import { createAppDb } from "../db/neon";
 import type { Db } from "../db/retention";
+import { selectResolver } from "../locations/resolver";
 import type { DataContext } from "./context";
 
 type Env = Record<string, string | undefined>;
@@ -29,7 +30,7 @@ export async function getDataContext(env: Env = process.env): Promise<DataContex
     (await openE2eDb(env)) ?? (connectionString ? createAppDb(connectionString) : undefined);
   if (!cachedDb) return null;
   const auth = await getAuth(env);
-  return { db: cachedDb, auth, now: () => new Date() };
+  return { db: cachedDb, auth, now: () => new Date(), resolveLocation: selectResolver(env) };
 }
 
 /** Test hook: forget the cached connection. */

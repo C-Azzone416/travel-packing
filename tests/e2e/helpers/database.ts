@@ -5,14 +5,8 @@ import { SAMPLE_TODAY } from "../../../src/server/seed/sample-data";
 import { seedSyntheticData } from "../../../src/server/seed/seed";
 import type { Db } from "../../../src/server/db/retention";
 import * as schema from "../../../src/server/db/schema";
+import { E2E_DB_PORT } from "../support/ports";
 
-/** A TCP port from the environment: a whole number 1..65535, else the default (an empty or junk value must not become 0 or NaN). */
-export function portFrom(value: string | undefined, fallback: number): number {
-  const port = Number(value);
-  return Number.isInteger(port) && port >= 1 && port <= 65535 ? port : fallback;
-}
-
-export const E2E_DB_PORT = portFrom(process.env.E2E_DB_PORT, 5433);
 export const E2E_DATABASE_URL = `postgres://postgres:postgres@127.0.0.1:${E2E_DB_PORT}/postgres`;
 
 /**

@@ -167,7 +167,7 @@ describe("trips server actions", () => {
       });
     });
 
-    it("rejects a draft without a confirmed location, bad dates, or an unknown location shape", async () => {
+    it("rejects a draft without a confirmed location, bad dates, or a place the server does not know", async () => {
       expect(await createTripAction(draft({ location: null }))).toEqual({
         ok: false,
         code: "INVALID_INPUT",
@@ -176,10 +176,24 @@ describe("trips server actions", () => {
         ok: false,
         code: "INVALID_INPUT",
       });
-      expect(await createTripAction(draft({ location: { ...location, countryCode: "" } }))).toEqual(
-        { ok: false, code: "INVALID_INPUT" },
-      );
+      expect(
+        await createTripAction(draft({ location: { ...location, id: "not-a-place" } })),
+      ).toEqual({ ok: false, code: "INVALID_INPUT" });
       expect(stateOf(await loadTripsAction()).trips).toEqual([]);
+    });
+
+    it("sends only the place id: whatever else the browser says about the place is ignored", async () => {
+      const result = await createTripAction(
+        draft({
+          location: { ...location, city: "Forged City", label: "Forged", country: "Nowhere" },
+        }),
+      );
+      if (!result.ok) throw new Error(`expected ok, got ${result.code}`);
+      expect(result.trip.destination).toBe("San Diego");
+      expect(result.trip.location).toMatchObject({
+        label: "San Diego, California, United States",
+        country: "United States",
+      });
     });
 
     it("signed out redirects to sign-in; a non-allowlisted user to access-denied; no database is INTERNAL", async () => {

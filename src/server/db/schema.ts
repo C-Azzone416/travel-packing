@@ -17,6 +17,7 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgEnum,
   pgTable,
   primaryKey,
@@ -102,6 +103,16 @@ export const trips = pgTable(
     destination: text("destination").notNull(),
     locationId: text("location_id"),
     locationLabel: text("location_label"),
+    /** Set only for a place that came from a geocoding provider (#47). Curated places leave these null. */
+    locationProvider: text("location_provider"),
+    locationPlaceId: text("location_place_id"),
+    locationRegion: text("location_region"),
+    locationCountry: text("location_country"),
+    locationCountryCode: text("location_country_code"),
+    /** Rounded to 2 decimals (about 1 km) before storage. The most sensitive columns here (docs/schema.md). */
+    latitude: numeric("latitude", { precision: 5, scale: 2 }),
+    longitude: numeric("longitude", { precision: 5, scale: 2 }),
+    timezone: text("timezone"),
     startDate: date("start_date", { mode: "string" }).notNull(),
     endDate: date("end_date", { mode: "string" }).notNull(),
     days: integer("days").notNull(),
@@ -130,6 +141,25 @@ export const trips = pgTable(
       sql`${table.dailyDays} >= 0 and ${table.dailyDays} <= ${table.days}`,
     ),
     check("trips_destination_not_blank", sql`btrim(${table.destination}) <> ''`),
+    check("trips_latitude_range", sql`${table.latitude} between -90 and 90`),
+    check("trips_longitude_range", sql`${table.longitude} between -180 and 180`),
+    // Coordinates come as a pair, and only with a provider place: a curated trip has none.
+    check(
+      "trips_coordinates_pair",
+      sql`(${table.latitude} is null) = (${table.longitude} is null)`,
+    ),
+    check(
+      "trips_coordinates_need_provider",
+      sql`${table.latitude} is null or ${table.locationProvider} is not null`,
+    ),
+    check(
+      "trips_provider_pair",
+      sql`(${table.locationProvider} is null) = (${table.locationPlaceId} is null)`,
+    ),
+    check(
+      "trips_country_code_length",
+      sql`${table.locationCountryCode} is null or char_length(${table.locationCountryCode}) = 2`,
+    ),
     index("trips_owner_start_idx").on(table.ownerId, table.startDate),
     // Supports the purge seam: find soft-deleted trips without scanning live ones.
     index("trips_deleted_at_idx")

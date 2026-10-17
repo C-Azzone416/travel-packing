@@ -63,7 +63,7 @@ export async function undoRemoveTripAction(tripId: string): Promise<TripsActionR
 
 /**
  * Save a finished draft as a new trip (or a copy of one of the owner's trips). The server re-validates everything:
- * the location against the sample-location schema, the dates, the preferences, and (for a copy) that the source trip
+ * the place by its id (the server looks it up itself; nothing else about it is trusted), the dates, the preferences, and (for a copy) that the source trip
  * is the caller's own. A draft without a confirmed location is INVALID_INPUT.
  */
 export async function createTripAction(draft: TripDraft): Promise<CreateTripActionResult> {
@@ -74,12 +74,12 @@ export async function createTripAction(draft: TripDraft): Promise<CreateTripActi
     : draft.mode === "copy" && draft.sourceId
       ? await service.copyTrip(context, {
           sourceId: draft.sourceId,
-          location: draft.location,
+          location: { id: draft.location.id },
           start: draft.start,
           end: draft.end,
         })
       : await service.createTrip(context, {
-          location: draft.location,
+          location: { id: draft.location.id },
           start: draft.start,
           end: draft.end,
           config: draft.config,

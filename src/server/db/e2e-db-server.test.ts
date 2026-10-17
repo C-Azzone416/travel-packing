@@ -55,16 +55,8 @@ describe("e2e database server (real Postgres wire protocol over PGlite)", () => 
   it("writes through the data layer persist, including transactions, and survive a new connection pool", async () => {
     as(OWNER);
     const first = makeContext(open(), fake);
-    const location = {
-      id: "sample-x",
-      city: "Exampleville",
-      region: "Sample Region",
-      country: "Sampleland",
-      countryCode: "SL",
-      label: "Exampleville, Sample Region, Sampleland",
-    };
     const created = await service.createTrip(first, {
-      location,
+      location: { id: "gb-eng-london" },
       start: "2030-05-01",
       end: "2030-05-05",
       config: {
@@ -87,7 +79,7 @@ describe("e2e database server (real Postgres wire protocol over PGlite)", () => 
     // A brand-new pool = a reload/reconnect.
     const second = makeContext(open(), fake);
     const reloaded = await service.getTrip(second, { tripId: created.data.id });
-    expect(reloaded.ok && reloaded.data.destination).toBe("Exampleville");
+    expect(reloaded.ok && reloaded.data.destination).toBe("London");
     expect(
       reloaded.ok && reloaded.data.items.find((item) => item.id === "sunglasses")?.packed,
     ).toBe(1);

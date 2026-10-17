@@ -9,7 +9,7 @@ import {
   type Migration,
 } from "./migrator";
 
-const EXPECTED_TAGS = ["0000_init", "0001_progress_clamp_trigger"];
+const EXPECTED_TAGS = ["0000_init", "0001_progress_clamp_trigger", "0002_location_columns"];
 
 // One in-memory Postgres for the file; each test starts from an empty public schema.
 const client = new PGlite();
@@ -90,7 +90,7 @@ describe("migrateUp", () => {
 
   it("applies only what is pending", async () => {
     await migrateUp(client, migrations.slice(0, 1));
-    expect(await migrateUp(client, migrations)).toEqual([EXPECTED_TAGS[1]]);
+    expect(await migrateUp(client, migrations)).toEqual(EXPECTED_TAGS.slice(1));
   });
 
   it("rolls a failing migration back completely and records nothing", async () => {
@@ -122,10 +122,41 @@ describe("migrateDown", () => {
 
   it("rolls back only the requested number of steps, newest first", async () => {
     await migrateUp(client, migrations);
-    expect(await migrateDown(client, migrations, 1)).toEqual([EXPECTED_TAGS[1]]);
+    expect(await migrateDown(client, migrations, 2)).toEqual([EXPECTED_TAGS[2], EXPECTED_TAGS[1]]);
     expect(await appliedMigrations(client)).toEqual([EXPECTED_TAGS[0]]);
     expect(await userFunctions()).toEqual([]);
     expect(await userTables()).toContain("trip_items");
+  });
+
+  it("rolling back just the location columns removes them and keeps the earlier migrations, and up restores them", async () => {
+    const tripColumns = async () =>
+      (
+        await client.query<{ column_name: string }>(
+          `SELECT column_name FROM information_schema.columns WHERE table_name = 'trips'`,
+        )
+      ).rows.map((row) => row.column_name);
+    const added = [
+      "location_provider",
+      "location_place_id",
+      "location_region",
+      "location_country",
+      "location_country_code",
+      "latitude",
+      "longitude",
+      "timezone",
+    ];
+    await migrateUp(client, migrations);
+    expect(await tripColumns()).toEqual(expect.arrayContaining(added));
+    expect(await migrateDown(client, migrations, 1)).toEqual([EXPECTED_TAGS[2]]);
+    const remaining = await tripColumns();
+    for (const column of added) expect(remaining).not.toContain(column);
+    expect(remaining).toEqual(
+      expect.arrayContaining(["location_id", "location_label", "destination"]),
+    );
+    expect(await appliedMigrations(client)).toEqual(EXPECTED_TAGS.slice(0, 2));
+    expect(await userFunctions()).toEqual(["clamp_progress_to_qty"]);
+    await migrateUp(client, migrations);
+    expect(await tripColumns()).toEqual(expect.arrayContaining(added));
   });
 
   it("does nothing on an empty database", async () => {
