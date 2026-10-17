@@ -205,28 +205,33 @@ export const reviewTripWeatherAgain = weather(reviewWeatherAgain);
 
 /** Create or update one of the owner's staples (bumps its version). Trip snapshots are never touched. */
 export function upsertStaple(context: DataContext, input: unknown): Promise<Result<Staple[]>> {
-  return run(context, inputs.stapleInput, input, async (scope, request) => {
-    await ensureDefaultStaples(scope.db, scope.ownerId);
-    const current = await listStaples(scope.db, scope.ownerId);
-    const staple: Staple = {
-      id: request.semanticId,
-      name: request.name,
-      category: request.category,
-      qty: request.qty,
-      cadence: request.cadence,
-      packLast: request.packLast,
-      ...(request.groupId ? { groupId: request.groupId } : {}),
-    };
-    const exists = current.some((entry) => entry.id === staple.id);
-    await saveStaples(
-      scope.db,
-      scope.ownerId,
-      exists
-        ? current.map((entry) => (entry.id === staple.id ? staple : entry))
-        : [...current, staple],
-    );
-    return listStaples(scope.db, scope.ownerId);
-  });
+  return run(context, inputs.stapleInput, input, (scope, request) =>
+    // One transaction, reading the owner's staples WITH a lock: the write below replaces the whole set (anything not in
+    // the list is deleted), so two concurrent upserts of different staples must not both start from the same snapshot.
+    scope.db.transaction(async (tx) => {
+      const db = tx as OwnerScope["db"];
+      await ensureDefaultStaples(db, scope.ownerId);
+      const current = await listStaples(db, scope.ownerId, { lock: true });
+      const staple: Staple = {
+        id: request.semanticId,
+        name: request.name,
+        category: request.category,
+        qty: request.qty,
+        cadence: request.cadence,
+        packLast: request.packLast,
+        ...(request.groupId ? { groupId: request.groupId } : {}),
+      };
+      const exists = current.some((entry) => entry.id === staple.id);
+      await saveStaples(
+        db,
+        scope.ownerId,
+        exists
+          ? current.map((entry) => (entry.id === staple.id ? staple : entry))
+          : [...current, staple],
+      );
+      return listStaples(db, scope.ownerId);
+    }),
+  );
 }
 
 // ---------------------------------------------------------------- trip lifecycle
