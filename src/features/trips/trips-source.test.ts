@@ -124,3 +124,226 @@ describe("memory trips source", () => {
     });
   });
 });
+
+describe("per-trip commands", () => {
+  const sanDiego = (source: ReturnType<typeof setup>["source"]) =>
+    source.snapshot().trips.find((trip) => trip.id === "san-diego")!;
+  const item = (trip: { items: { id: string; packed: number; qty: number }[] }, id: string) =>
+    trip.items.find((entry) => entry.id === id)!;
+
+  it("getTrip returns the live trip, and NOT_FOUND for an unknown id", async () => {
+    const { source } = setup();
+    expect((await source.getTrip("san-diego")).destination).toBe("San Diego");
+    await expect(source.getTrip("nope")).rejects.toThrow("NOT_FOUND");
+  });
+
+  it.each(["togglePacked", "incrementPacked", "decrementPacked"] as const)(
+    "%s on an unknown trip is NOT_FOUND and changes nothing",
+    async (command) => {
+      const { source } = setup();
+      const before = source.snapshot();
+      await expect(source[command]("nope", "tops")).rejects.toThrow("NOT_FOUND");
+      expect(source.snapshot()).toBe(before);
+    },
+  );
+
+  it("toggles, increments and decrements packed counts, storing the changed trip", async () => {
+    const { source } = setup();
+    const start = item(sanDiego(source), "tops").packed;
+    expect(
+      (await source.togglePacked("san-diego", "tops")).trip.items.find(
+        (entry) => entry.id === "tops",
+      )?.packed,
+    ).toBe(item(sanDiego(source), "tops").qty);
+    await source.togglePacked("san-diego", "tops");
+    expect(item(sanDiego(source), "tops").packed).toBe(0);
+    await source.incrementPacked("san-diego", "socks");
+    expect(item(sanDiego(source), "socks").packed).toBe(2);
+    await source.decrementPacked("san-diego", "socks");
+    expect(item(sanDiego(source), "socks").packed).toBe(1);
+    expect(start).toBe(1);
+  });
+
+  it("an unknown item is refused with its reason and changes nothing", async () => {
+    const { source } = setup();
+    const before = source.snapshot();
+    await expect(source.togglePacked("san-diego", "nope")).rejects.toThrow("ITEM_NOT_FOUND");
+    expect(source.snapshot()).toBe(before);
+  });
+
+  it("checking the last Bathroom item signals the bag prompt, without confirming placement", async () => {
+    const { source } = setup();
+    const toiletries = sanDiego(source).items.filter((entry) => entry.groupId === "toiletry-bag");
+    let last = await source.togglePacked("san-diego", toiletries[0].id);
+    for (const entry of toiletries.slice(1))
+      last = await source.togglePacked("san-diego", entry.id);
+    expect(last.signals.promptBagPlacement).toBe(true);
+    expect(last.trip.toiletryBagPacked).toBe(false);
+  });
+
+  it("walks the bag gate: confirm, then undo; confirming before contents are complete is refused", async () => {
+    const { source } = setup();
+    await expect(source.confirmBagPlacement("san-diego")).rejects.toThrow("CONTENTS_INCOMPLETE");
+    const toiletries = sanDiego(source).items.filter((entry) => entry.groupId === "toiletry-bag");
+    for (const entry of toiletries) await source.togglePacked("san-diego", entry.id);
+    expect((await source.confirmBagPlacement("san-diego")).trip.toiletryBagPacked).toBe(true);
+    expect((await source.undoBagPlacement("san-diego")).trip.toiletryBagPacked).toBe(false);
+  });
+
+  it("Ready needs everything packed; marking not ready keeps all progress", async () => {
+    const { source } = setup();
+    await expect(source.markReady("san-diego")).rejects.toThrow("NOT_ALL_PACKED");
+    const lisbon = (await source.markNotReady("lisbon")).trip;
+    expect(lisbon.ready).toBe(false);
+    expect(lisbon.items.every((entry) => entry.packed === entry.qty)).toBe(true);
+    expect((await source.markReady("lisbon")).trip.ready).toBe(true);
+  });
+
+  it("a trip-only edit changes this trip and never the staples", async () => {
+    const { source } = setup();
+    const staplesBefore = source.staplesSnapshot();
+    const lisbonBefore = source.snapshot().trips.find((trip) => trip.id === "lisbon");
+    const edit = {
+      name: "Underwear (travel)",
+      qty: 5,
+      timing: "main" as const,
+      scope: "this-trip" as const,
+    };
+    const { trip } = await source.editItem("san-diego", "underwear", edit);
+    expect(trip.items.find((entry) => entry.id === "underwear")).toMatchObject({
+      name: "Underwear (travel)",
+      qty: 5,
+    });
+    expect(source.staplesSnapshot()).toEqual(staplesBefore);
+    expect(source.snapshot().trips.find((entry) => entry.id === "lisbon")).toBe(lisbonBefore);
+  });
+
+  it("a remembered edit changes the staples and future trips, but not this or any other existing trip's history", async () => {
+    const { source } = setup();
+    const lisbonBefore = structuredClone(
+      source.snapshot().trips.find((trip) => trip.id === "lisbon"),
+    );
+    const stapleBefore = source.staplesSnapshot().find((entry) => entry.id === "sunglasses")!;
+    await source.editItem("san-diego", "sunglasses", {
+      name: "Polarized sunglasses",
+      qty: 2,
+      timing: "main",
+      scope: "remember",
+    });
+    const staple = source.staplesSnapshot().find((entry) => entry.id === "sunglasses")!;
+    expect(staple).toMatchObject({ name: "Polarized sunglasses", qty: 2 });
+    expect(staple).not.toEqual(stapleBefore);
+    expect(source.snapshot().trips.find((entry) => entry.id === "lisbon")).toEqual(lisbonBefore);
+    const future = await source.createTrip({
+      mode: "create",
+      sourceId: null,
+      location: {
+        id: "x",
+        city: "Paris",
+        region: "Île-de-France",
+        country: "France",
+        countryCode: "FR",
+        label: "Paris",
+      },
+      start: "2026-11-01",
+      end: "2026-11-04",
+      config: {
+        laundry: false,
+        spare: false,
+        niceAttire: false,
+        occasionCount: 1,
+        reuseNice: false,
+        returnOutfit: true,
+      },
+    });
+    expect(future.items.find((entry) => entry.id === "sunglasses")).toMatchObject({
+      name: "Polarized sunglasses",
+      qty: 2,
+    });
+  });
+
+  it("an invalid edit is refused with its reason", async () => {
+    const { source } = setup();
+    await expect(
+      source.editItem("san-diego", "tops", {
+        name: "  ",
+        qty: 1,
+        timing: "main",
+        scope: "this-trip",
+      }),
+    ).rejects.toThrow("EMPTY_NAME");
+  });
+
+  it("removes an item for this trip only, or also from the staples when remembered", async () => {
+    const { source } = setup();
+    const staplesBefore = source.staplesSnapshot();
+    const removed = await source.removeItem("san-diego", "nice-shoes", "this-trip");
+    expect(removed.trip.items.some((entry) => entry.id === "nice-shoes")).toBe(false);
+    expect(source.staplesSnapshot()).toEqual(staplesBefore);
+    await source.removeItem("san-diego", "last-glasses", "remember");
+    expect(source.staplesSnapshot().some((entry) => entry.id === "last-glasses")).toBe(false);
+    await expect(source.removeItem("san-diego", "nope", "this-trip")).rejects.toThrow(
+      "ITEM_NOT_FOUND",
+    );
+  });
+
+  it("adds a Bathroom item (one canonical checkbox in the bag group), also to the staples when remembered", async () => {
+    const { source } = setup();
+    const staplesBefore = source.staplesSnapshot().length;
+    const { trip } = await source.addToiletryItem("san-diego", {
+      name: "Face wash",
+      qty: 1,
+      packLast: false,
+      scope: "this-trip",
+    });
+    const added = trip.items.find((entry) => entry.name === "Face wash")!;
+    expect(added).toMatchObject({ groupId: "toiletry-bag", packed: 0, qty: 1 });
+    expect(source.staplesSnapshot()).toHaveLength(staplesBefore);
+    await source.addToiletryItem("san-diego", {
+      name: "Razor",
+      qty: 1,
+      packLast: true,
+      scope: "remember",
+    });
+    expect(source.staplesSnapshot()).toHaveLength(staplesBefore + 1);
+    expect(source.staplesSnapshot().find((entry) => entry.name === "Razor")).toMatchObject({
+      packLast: true,
+    });
+  });
+
+  it("weather: accepting adds exactly one umbrella and revokes Ready; skipping and reviewing again change only the weather state", async () => {
+    const { source } = setup();
+    // Lisbon starts Ready with its weather already accepted; reopen the review (which changes only the weather state).
+    const reopened = (await source.reviewWeatherAgain("lisbon")).trip;
+    expect(reopened).toMatchObject({ ready: true });
+    expect(reopened.weather.status).toBe("pending");
+    const accepted = (await source.acceptWeather("lisbon")).trip;
+    expect(accepted.ready).toBe(false);
+    expect(accepted.weather.status).toBe("accepted");
+    expect(accepted.items.filter((entry) => entry.id === "weather-umbrella")).toHaveLength(1);
+    await source.acceptWeather("lisbon");
+    expect(
+      source
+        .snapshot()
+        .trips.find((trip) => trip.id === "lisbon")!
+        .items.filter((entry) => entry.id === "weather-umbrella"),
+    ).toHaveLength(1);
+
+    const sd = (await source.skipWeather("san-diego")).trip;
+    expect(sd.weather.status).toBe("skipped");
+    expect(sd.items.some((entry) => entry.id === "weather-umbrella")).toBe(false);
+    expect((await source.reviewWeatherAgain("san-diego")).trip.weather.status).toBe("pending");
+  });
+
+  it("updating preferences recalculates the list, keeps progress on unchanged items and revokes Ready", async () => {
+    const { source } = setup();
+    const trip = sanDiego(source);
+    const underwear = item(trip, "underwear").packed;
+    const next = { ...trip.config, laundry: true };
+    const { trip: changed } = await source.updatePreferences("san-diego", next);
+    expect(changed.config.laundry).toBe(true);
+    expect(changed.items.find((entry) => entry.id === "underwear")?.packed).toBe(underwear);
+    expect(changed.ready).toBe(false);
+    await expect(source.updatePreferences("nope", next)).rejects.toThrow("NOT_FOUND");
+  });
+});
