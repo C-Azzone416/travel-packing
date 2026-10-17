@@ -41,8 +41,10 @@ jobs:
         run: npm run typecheck
 
       # vitest exits non-zero when any coverage threshold (90%) is missed.
-      # The step shell runs with pipefail, so tee does not mask the failure.
+      # An explicit `shell: bash` enables pipefail (the default shell does
+      # not), so piping through tee cannot mask that failure.
       - name: Test with coverage
+        shell: bash
         run: npm run test:coverage 2>&1 | tee coverage-summary.txt
 
       - name: Coverage summary
