@@ -1,12 +1,12 @@
 // Trip lifecycle (plan §12, §3 Trip history): draft, save, copy, archive/restore, classify,
 // remove/undo. Ported from reference/prototype/dist/app.js. Pure and immutable; no framework imports.
 //
-// The calculator pieces from #4 (suggestions, date normalization, forecast label) are injected
-// through TripBuilderDeps so this module does not depend on how #4 packages them.
+// Date normalization, the forecast label, and the item list come from the calculator module
+// (src/domain/calc). Only the id generator and "today" are injected: the domain has no hidden clock.
 
-import { niceAccessoryKey } from "./item-ops";
+import { buildTripItems, forecastLabel, normalizeTripDates } from "./calc";
 import { TOILETRY_GROUP_ID } from "./toiletry-bag";
-import type { Staple, SuggestFn, Trip, TripConfig, TripItem } from "./trip";
+import type { Staple, Trip, TripConfig, TripItem } from "./trip";
 
 export interface SampleLocation {
   id: string;
@@ -46,16 +46,7 @@ export interface LifecycleState {
   draft: TripDraft | null;
 }
 
-export interface NormalizedDates {
-  start: string;
-  end: string;
-  valid: boolean;
-}
-
 export interface TripBuilderDeps {
-  suggest: SuggestFn;
-  normalizeDates: (start: string, end: string) => NormalizedDates;
-  forecastLabel: (start: string, today: string) => string;
   newId: () => string;
   /** Explicit "today" (YYYY-MM-DD). The date/timezone policy is pending #26. */
   today: string;
@@ -70,8 +61,7 @@ export type LifecycleResult =
   | { ok: true; state: LifecycleState; trip: LifecycleTrip }
   | { ok: false; reason: LifecycleRejection; state: LifecycleState };
 
-export const DEFAULT_PACK_LAST = ["Laptop", "Chargers", "Everyday glasses"] as const;
-const PACK_LAST_BATHROOM_NAMES: ReadonlySet<string> = new Set([
+const BATHROOM_NAMES: ReadonlySet<string> = new Set([
   "toothbrush",
   "toothpaste",
   "deodorant",
@@ -85,13 +75,8 @@ export function emptyLifecycleState(): LifecycleState {
 // ---------------------------------------------------------------- drafts
 
 /** Start a new draft. Dates are normalized (a return before departure becomes departure). */
-export function startDraft(
-  config: TripConfig,
-  start: string,
-  end: string,
-  deps: TripBuilderDeps,
-): TripDraft {
-  const dates = deps.normalizeDates(start, end);
+export function startDraft(config: TripConfig, start: string, end: string): TripDraft {
+  const dates = normalizeTripDates(start, end);
   return {
     mode: "create",
     sourceId: null,
@@ -103,26 +88,16 @@ export function startDraft(
 }
 
 /** Start a copy draft: only the source's preference config is carried over; location and dates are chosen anew. */
-export function startCopyDraft(
-  source: LifecycleTrip,
-  start: string,
-  end: string,
-  deps: TripBuilderDeps,
-): TripDraft {
-  return { ...startDraft(source.config, start, end, deps), mode: "copy", sourceId: source.id };
+export function startCopyDraft(source: LifecycleTrip, start: string, end: string): TripDraft {
+  return { ...startDraft(source.config, start, end), mode: "copy", sourceId: source.id };
 }
 
 export function selectDraftLocation(draft: TripDraft, location: SampleLocation): TripDraft {
   return { ...draft, location: { ...location } };
 }
 
-export function setDraftDates(
-  draft: TripDraft,
-  start: string,
-  end: string,
-  deps: TripBuilderDeps,
-): TripDraft {
-  const dates = deps.normalizeDates(start, end);
+export function setDraftDates(draft: TripDraft, start: string, end: string): TripDraft {
+  const dates = normalizeTripDates(start, end);
   return { ...draft, start: dates.start, end: dates.end };
 }
 
@@ -141,94 +116,29 @@ export function cancelDraft(state: LifecycleState): LifecycleState {
 
 // ---------------------------------------------------------------- building a trip snapshot
 
-function toItem(
-  id: string,
-  name: string,
-  category: string,
-  qty: number,
-  section: TripItem["section"],
-): TripItem {
-  return { id, name, category, qty, packed: 0, section };
-}
-
-function packLastId(name: string): string {
-  return name === "Everyday glasses"
-    ? "last-glasses"
-    : `last-${name.toLowerCase().replaceAll(" ", "-")}`;
-}
-
-/** A fresh trip snapshot: calculated suggestions, return outfit, default Pack last items, merged staples. */
+/**
+ * A fresh trip snapshot. The item list is the calculator's `buildTripItems` (suggestions, return outfit, default
+ * Pack last items, staples merged over them). The calculator can leave a quantity-0 row behind when a staple
+ * resolves to zero; a snapshot must not contain phantom rows, so those are dropped here.
+ */
 export function buildTrip(
   destination: string,
   location: SampleLocation | null,
   start: string,
   end: string,
   config: TripConfig,
-  staples: Staple[],
+  staples: readonly Staple[],
   deps: TripBuilderDeps,
   copiedFrom: string | null = null,
 ): LifecycleTrip {
-  const computed = deps.suggest({ ...config, start, end });
-  const suggested = computed.items.map((entry): TripItem => {
-    const built: TripItem = {
-      ...toItem(entry.id, entry.name, entry.category, entry.qty, "main"),
-      optional: Boolean(entry.optional),
-    };
-    if (entry.id === "nice-makeup") built.groupId = TOILETRY_GROUP_ID;
-    return built;
-  });
-  const returnItems = config.returnOutfit
-    ? [
-        toItem("return-top", "Fresh top", "Return outfit", 1, "return"),
-        toItem("return-bottoms", "Bottoms", "Return outfit", 1, "return"),
-        toItem("return-underwear", "Underwear", "Return outfit", 1, "return"),
-        toItem("return-socks", "Socks", "Return outfit", 1, "return"),
-      ]
-    : [];
-  const packLast = DEFAULT_PACK_LAST.map((name) =>
-    toItem(packLastId(name), name, "Pack last", 1, "packlast"),
-  );
-  const items: TripItem[] = [
-    ...suggested,
-    toItem("sunglasses", "Sunglasses", "Accessories", 1, "main"),
-    ...returnItems,
-    ...packLast,
-  ];
-
-  for (const staple of staples) {
-    let qty = staple.cadence === "per day" ? computed.dailyDays * staple.qty : staple.qty;
-    if ((staple.id === "underwear" || staple.id === "socks") && config.spare) qty += 1;
-    // Deviation from the prototype: a staple that resolves to zero contributes nothing, so no phantom 0-qty row.
-    if (qty <= 0) continue;
-    const key = niceAccessoryKey(staple);
-    const existing = items.find(
-      (entry) => entry.id === staple.id || (key !== "" && niceAccessoryKey(entry) === key),
+  const built = buildTripItems({ ...config, start, end }, staples);
+  const items: TripItem[] = built.items
+    .filter((entry) => entry.qty > 0)
+    .map((entry) =>
+      BATHROOM_NAMES.has(entry.name.toLowerCase())
+        ? { ...entry, groupId: TOILETRY_GROUP_ID }
+        : entry,
     );
-    const groupId = key === "makeup" ? TOILETRY_GROUP_ID : staple.groupId;
-    if (existing) {
-      if (key !== "" && existing.id !== staple.id) existing.id = staple.id;
-      existing.name = staple.name;
-      existing.category = staple.category;
-      existing.qty = qty;
-      if (existing.section !== "return") existing.section = staple.packLast ? "packlast" : "main";
-      if (groupId) existing.groupId = groupId;
-      else delete existing.groupId;
-    } else {
-      const added = toItem(
-        staple.id,
-        staple.name,
-        staple.category,
-        qty,
-        staple.packLast ? "packlast" : "main",
-      );
-      if (groupId) added.groupId = groupId;
-      items.push(added);
-    }
-  }
-
-  for (const entry of items) {
-    if (PACK_LAST_BATHROOM_NAMES.has(entry.name.toLowerCase())) entry.groupId = TOILETRY_GROUP_ID;
-  }
 
   return {
     id: deps.newId(),
@@ -237,8 +147,8 @@ export function buildTrip(
     start,
     end,
     config: { ...config },
-    days: computed.days,
-    dailyDays: computed.dailyDays,
+    days: built.days,
+    dailyDays: built.dailyDays,
     items,
     suggestionMemory: {},
     suppressedSuggestions: {},
@@ -246,7 +156,7 @@ export function buildTrip(
     ready: false,
     weather: {
       status: "pending",
-      label: deps.forecastLabel(start, deps.today),
+      label: forecastLabel(start, deps.today),
       suggestion: "Compact umbrella",
     },
     copiedFrom,
@@ -266,7 +176,7 @@ export function saveDraft(
   const draft = state.draft;
   if (!draft) return { ok: false, reason: "NO_DRAFT", state };
   if (!draft.location) return { ok: false, reason: "LOCATION_NOT_CONFIRMED", state };
-  const dates = deps.normalizeDates(draft.start, draft.end);
+  const dates = normalizeTripDates(draft.start, draft.end);
   if (!dates.valid) return { ok: false, reason: "INVALID_DATES", state };
 
   const trip = buildTrip(

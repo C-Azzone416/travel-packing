@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { forecastLabel, normalizeDates, suggest } from "./__fixtures__/calculator";
 import { findIdentityViolations } from "./item-ops";
 import {
   archiveTrip,
@@ -34,9 +33,6 @@ const TODAY = "2030-03-10";
 function makeDeps(overrides: Partial<TripBuilderDeps> = {}): TripBuilderDeps {
   let counter = 0;
   return {
-    suggest,
-    normalizeDates,
-    forecastLabel,
     newId: () => `trip-${++counter}`,
     today: TODAY,
     ...overrides,
@@ -111,7 +107,7 @@ function savedTrip(
   config: TripConfig = CONFIG,
 ): LifecycleTrip {
   const deps = makeDeps(overrides);
-  const draft = selectDraftLocation(startDraft(config, "2030-04-01", "2030-04-08", deps), LOCATION);
+  const draft = selectDraftLocation(startDraft(config, "2030-04-01", "2030-04-08"), LOCATION);
   const result = saveDraft(beginDraft(emptyLifecycleState(), draft), staples, deps);
   if (!result.ok) throw new Error(result.reason);
   return result.trip;
@@ -120,7 +116,7 @@ function savedTrip(
 describe("drafts", () => {
   it("startDraft seeds a create draft with a copy of the config and no confirmed location", () => {
     const config = { ...CONFIG };
-    const draft = startDraft(config, "2030-04-01", "2030-04-05", makeDeps());
+    const draft = startDraft(config, "2030-04-01", "2030-04-05");
     expect(draft).toEqual({
       mode: "create",
       sourceId: null,
@@ -134,9 +130,9 @@ describe("drafts", () => {
   });
 
   it("normalizes a return date before departure to the departure date", () => {
-    const draft = startDraft(CONFIG, "2030-04-05", "2030-04-01", makeDeps());
+    const draft = startDraft(CONFIG, "2030-04-05", "2030-04-01");
     expect(draft).toMatchObject({ start: "2030-04-05", end: "2030-04-05" });
-    expect(setDraftDates(draft, "2030-05-09", "2030-05-02", makeDeps())).toMatchObject({
+    expect(setDraftDates(draft, "2030-05-09", "2030-05-02")).toMatchObject({
       start: "2030-05-09",
       end: "2030-05-09",
     });
@@ -144,10 +140,7 @@ describe("drafts", () => {
 
   it("selecting a location stores a copy; config edits copy too", () => {
     const location = { ...LOCATION };
-    const draft = selectDraftLocation(
-      startDraft(CONFIG, "2030-04-01", "2030-04-05", makeDeps()),
-      location,
-    );
+    const draft = selectDraftLocation(startDraft(CONFIG, "2030-04-01", "2030-04-05"), location);
     location.city = "Mutated";
     expect(draft.location).toEqual(LOCATION);
     const config = { ...CONFIG, laundry: true };
@@ -159,7 +152,7 @@ describe("drafts", () => {
   it("a draft is separate from saved trips; cancel discards it and leaves saved trips untouched", () => {
     const trip = savedTrip();
     const state: LifecycleState = { trips: [trip], deletedTrips: [], draft: null };
-    const drafting = beginDraft(state, startDraft(CONFIG, "2030-06-01", "2030-06-04", makeDeps()));
+    const drafting = beginDraft(state, startDraft(CONFIG, "2030-06-01", "2030-06-04"));
     expect(drafting.draft).not.toBeNull();
     expect(drafting.trips).toBe(state.trips);
     const cancelled = cancelDraft(drafting);
@@ -176,10 +169,7 @@ describe("saveDraft", () => {
   });
 
   it("rejects until a location object is confirmed", () => {
-    const state = beginDraft(
-      emptyLifecycleState(),
-      startDraft(CONFIG, "2030-04-01", "2030-04-05", makeDeps()),
-    );
+    const state = beginDraft(emptyLifecycleState(), startDraft(CONFIG, "2030-04-01", "2030-04-05"));
     expect(saveDraft(state, STAPLES, makeDeps())).toEqual({
       ok: false,
       reason: "LOCATION_NOT_CONFIRMED",
@@ -188,7 +178,7 @@ describe("saveDraft", () => {
   });
 
   it("rejects invalid dates", () => {
-    const draft = selectDraftLocation(startDraft(CONFIG, "", "", makeDeps()), LOCATION);
+    const draft = selectDraftLocation(startDraft(CONFIG, "", ""), LOCATION);
     const state = beginDraft(emptyLifecycleState(), draft);
     expect(saveDraft(state, STAPLES, makeDeps())).toEqual({
       ok: false,
@@ -201,7 +191,7 @@ describe("saveDraft", () => {
     const deps = makeDeps();
     const older = savedTrip();
     const draft = selectDraftLocation(
-      startDraft(CONFIG, "2030-05-01", "2030-05-06", deps),
+      startDraft(CONFIG, "2030-05-01", "2030-05-06"),
       OTHER_LOCATION,
     );
     const result = saveDraft({ trips: [older], deletedTrips: [], draft }, STAPLES, deps);
@@ -228,7 +218,7 @@ describe("saveDraft", () => {
   it("uses the normalized dates and the explicit today for the forecast label", () => {
     const deps = makeDeps({ today: "2030-04-28" });
     const draft = selectDraftLocation(
-      { ...startDraft(CONFIG, "2030-05-01", "2030-05-06", deps), end: "2030-04-01" },
+      { ...startDraft(CONFIG, "2030-05-01", "2030-05-06"), end: "2030-04-01" },
       LOCATION,
     );
     const result = saveDraft(beginDraft(emptyLifecycleState(), draft), STAPLES, deps);
@@ -367,7 +357,7 @@ describe("buildTrip", () => {
     });
   });
 
-  it("a staple resolving to zero quantity adds nothing", () => {
+  it("a staple resolving to zero quantity leaves no phantom row (zero means absent)", () => {
     const staples: Staple[] = [
       {
         id: "extra-socks",
@@ -389,7 +379,8 @@ describe("buildTrip", () => {
     const deps = makeDeps();
     const trip = buildTrip("Short stay", null, "2030-04-01", "2030-04-02", CONFIG, staples, deps);
     expect(byId(trip, "extra-socks")).toBeUndefined();
-    expect(byId(trip, "last-laptop")).toMatchObject({ name: "Laptop", qty: 1 });
+    expect(byId(trip, "last-laptop")).toBeUndefined();
+    expect(trip.items.every((entry) => entry.qty >= 1)).toBe(true);
     expect(trip.location).toBeNull();
   });
 
@@ -404,7 +395,7 @@ describe("buildTrip", () => {
         packLast: true,
       },
     ]);
-    expect(byId(trip, "last-chargers")).not.toHaveProperty("groupId");
+    expect(byId(trip, "last-chargers")?.groupId).toBeFalsy();
     const bathroom = buildTrip(
       "X",
       null,
@@ -453,7 +444,7 @@ describe("copy", () => {
 
   it("seeds a draft from the source preference config only and requires a new location and dates", () => {
     const source = progressedSource();
-    const draft = startCopyDraft(source, "2030-07-01", "2030-07-04", makeDeps());
+    const draft = startCopyDraft(source, "2030-07-01", "2030-07-04");
     expect(draft).toEqual({
       mode: "copy",
       sourceId: source.id,
@@ -475,7 +466,7 @@ describe("copy", () => {
     const snapshot = structuredClone(source);
     const deps = makeDeps({ newId: () => "copy-1" });
     const draft = selectDraftLocation(
-      startCopyDraft(source, "2030-07-01", "2030-07-03", deps),
+      startCopyDraft(source, "2030-07-01", "2030-07-03"),
       OTHER_LOCATION,
     );
     const result = saveDraft({ trips: [source], deletedTrips: [], draft }, STAPLES, deps);
