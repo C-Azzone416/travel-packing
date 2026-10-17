@@ -240,8 +240,12 @@ export function TripScreen({ tripId }: { tripId: string }) {
       }
       onEdit={(id) => setDialog({ kind: "edit", itemId: id })}
       onRetry={(id) => {
-        const failed = retries.current.get(id);
-        if (failed) void act(failed.write, failed.options);
+        // The retry button only renders while a failure is recorded for this row.
+        const failed = retries.current.get(id) as {
+          write: () => Promise<TripChange>;
+          options: ActOptions;
+        };
+        void act(failed.write, failed.options);
       }}
     />
   );

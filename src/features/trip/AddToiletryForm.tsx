@@ -54,12 +54,12 @@ export function AddToiletryForm({ destination, saving, onClose, onAdd }: AddToil
               setNameError(false);
             }}
           />
-          {nameError ? (
-            <span id="toiletry-name-error" className="field-error" role="alert">
-              Enter a name.
-            </span>
-          ) : null}
         </label>
+        {nameError ? (
+          <span id="toiletry-name-error" className="field-error" role="alert">
+            Enter a name.
+          </span>
+        ) : null}
         <label className="field">
           Quantity
           <input
