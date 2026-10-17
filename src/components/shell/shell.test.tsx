@@ -167,8 +167,8 @@ describe("AppShell", () => {
 
   it("provides toasts to its children", () => {
     render(<AppShell>x</AppShell>);
-    expect(screen.getByRole("status")).toBeTruthy();
-    expect(screen.getByRole("alert")).toBeTruthy();
+    expect(document.querySelector(".toast-region")?.getAttribute("aria-live")).toBe("polite");
+    expect(document.querySelector(".error-region")?.getAttribute("aria-live")).toBe("assertive");
   });
 
   it("moves focus to main when the route changes", () => {
