@@ -223,19 +223,21 @@ export function LocationPicker({
       {noMatches ? <div className="empty-state compact">{NO_PLACES_MESSAGE}</div> : null}
       {failed ? (
         <div className="empty-state compact" role="alert">
-          {UNAVAILABLE_MESSAGE}{" "}
-          <button
-            type="button"
-            className="button secondary small"
-            onClick={() => setAttempt((count) => count + 1)}
-          >
-            Retry
-          </button>
-          {fallbackProvider && !popular ? (
-            <button type="button" className="button ghost small" onClick={() => setPopular(true)}>
-              Choose from popular destinations
+          <p>{UNAVAILABLE_MESSAGE}</p>
+          <div className="empty-state-actions">
+            <button
+              type="button"
+              className="button secondary small"
+              onClick={() => setAttempt((count) => count + 1)}
+            >
+              Retry
             </button>
-          ) : null}
+            {fallbackProvider && !popular ? (
+              <button type="button" className="button ghost small" onClick={() => setPopular(true)}>
+                Choose from popular destinations
+              </button>
+            ) : null}
+          </div>
         </div>
       ) : null}
       {selected ? (
