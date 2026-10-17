@@ -8,6 +8,7 @@ import {
   makeContext,
   makeStoredTrip,
   newUuid,
+  NOW,
   openDurableDb,
   OTHER_OWNER,
   OWNER,
@@ -21,6 +22,15 @@ import * as service from "./service";
 import * as stapleStore from "./staple-store";
 import { loadTrip, loadTrips } from "./trip-store";
 
+const LOCATION = {
+  id: "sample-b",
+  city: "Exampleville",
+  region: "Sample Region",
+  country: "Sampleland",
+  countryCode: "SL",
+  label: "Exampleville, Sample Region, Sampleland",
+};
+
 // The staples writer can be made to fail, to prove trip + staples commit together.
 let failStaples = false;
 vi.mock("./staple-store", async (importOriginal) => {
@@ -31,6 +41,31 @@ vi.mock("./staple-store", async (importOriginal) => {
       if (failStaples) throw new Error("staples write failed for Sampleton");
       return original.saveStaples(...args);
     },
+  };
+});
+
+// Fault injection for guards that normal inputs cannot reach (a save that loses a race, a missing row after insert,
+// a draft the domain refuses even though the input was validated).
+const faults = { saveTripFalse: false, loadTripNull: false, domainRefusesDraft: false };
+vi.mock("./trip-store", async (importOriginal) => {
+  const original = await importOriginal<typeof import("./trip-store")>();
+  return {
+    ...original,
+    saveTrip: async (...args: Parameters<typeof original.saveTrip>) =>
+      faults.saveTripFalse ? false : original.saveTrip(...args),
+    loadTrip: async (...args: Parameters<typeof original.loadTrip>) => {
+      return faults.loadTripNull ? null : original.loadTrip(...args);
+    },
+  };
+});
+vi.mock("../../domain/trip-lifecycle", async (importOriginal) => {
+  const original = await importOriginal<typeof import("../../domain/trip-lifecycle")>();
+  return {
+    ...original,
+    saveDraft: (...args: Parameters<typeof original.saveDraft>) =>
+      faults.domainRefusesDraft
+        ? ({ ok: false, reason: "INVALID_DATES", state: args[0] } as const)
+        : original.saveDraft(...args),
   };
 });
 
@@ -47,6 +82,11 @@ beforeEach(async () => {
   await resetData(ctx.client);
   as(OWNER);
   failStaples = false;
+  Object.assign(faults, {
+    saveTripFalse: false,
+    loadTripNull: false,
+    domainRefusesDraft: false,
+  });
   setDataLogSink(() => {});
 });
 afterEach(() => setDataLogSink());
@@ -133,6 +173,20 @@ const OPERATIONS: Operation[] = [
   ["acceptTripWeather", (tripId) => service.acceptTripWeather(context(), { tripId })],
   ["skipTripWeather", (tripId) => service.skipTripWeather(context(), { tripId })],
   ["reviewTripWeatherAgain", (tripId) => service.reviewTripWeatherAgain(context(), { tripId })],
+  ["archiveTrip", (tripId) => service.archiveTrip(context(), { tripId })],
+  ["restoreArchivedTrip", (tripId) => service.restoreArchivedTrip(context(), { tripId })],
+  ["removeTrip", (tripId) => service.removeTrip(context(), { tripId })],
+  ["undoRemoveTrip", (tripId) => service.undoRemoveTrip(context(), { tripId })],
+  [
+    "copyTrip (source)",
+    (tripId) =>
+      service.copyTrip(context(), {
+        sourceId: tripId,
+        location: LOCATION,
+        start: "2030-06-01",
+        end: "2030-06-04",
+      }),
+  ],
 ];
 
 async function snapshot(ownerId: string) {
@@ -168,6 +222,17 @@ describe("signed out: every operation is refused and nothing is written", () => 
           qty: 1,
           cadence: "per trip",
           packLast: false,
+        }),
+    ],
+    ["listRecentlyDeletedTrips", () => service.listRecentlyDeletedTrips(context())],
+    [
+      "createTrip",
+      () =>
+        service.createTrip(context(), {
+          location: LOCATION,
+          start: "2030-06-01",
+          end: "2030-06-04",
+          config: CONFIG,
         }),
     ],
   ])("%s", async (_name, call) => {
@@ -688,6 +753,306 @@ describe("staples", () => {
       )
     ).rows[0];
     expect(row.version).toBe(2);
+  });
+});
+
+describe("trip lifecycle", () => {
+  const countTrips = async () =>
+    Number(
+      (await ctx.client.query<{ n: string }>('SELECT count(*)::text AS n FROM "trips"')).rows[0].n,
+    );
+
+  describe("createTrip", () => {
+    const input = { location: LOCATION, start: "2030-03-15", end: "2030-03-20", config: CONFIG };
+
+    it("creates a fresh trip from the owner's staples, with a forecast label from the injected clock", async () => {
+      const trip = data(await service.createTrip(context(), input));
+      expect(trip).toMatchObject({
+        destination: "Exampleville",
+        locationId: "sample-b",
+        locationLabel: LOCATION.label,
+        start: "2030-03-15",
+        end: "2030-03-20",
+        days: 6,
+        dailyDays: 4,
+        ready: false,
+        toiletryBagPacked: false,
+        archived: false,
+        copiedFrom: null,
+        deletedAt: null,
+        weather: { status: "pending", label: "Close forecast" },
+      });
+      expect(trip.items.every((entry) => entry.packed === 0)).toBe(true);
+      expect(trip.items.length).toBeGreaterThan(10);
+      expect(data(await service.getTrip(context(), { tripId: trip.id }))).toEqual(trip);
+      expect(data(await service.listTrips(context())).map((entry) => entry.id)).toEqual([trip.id]);
+    });
+
+    it("uses a seasonal label for a trip further out", async () => {
+      const trip = data(
+        await service.createTrip(context(), { ...input, start: "2030-09-01", end: "2030-09-04" }),
+      );
+      expect(trip.weather.label).toBe("Seasonal outlook");
+    });
+
+    it("builds the trip from the owner's current staples", async () => {
+      data(
+        await service.upsertStaple(context(), {
+          semanticId: "scarf",
+          name: "Scarf",
+          category: "Accessories",
+          qty: 2,
+          cadence: "per trip",
+          packLast: false,
+        }),
+      );
+      const trip = data(await service.createTrip(context(), input));
+      expect(item(trip, "scarf")).toMatchObject({ name: "Scarf", qty: 2, category: "Accessories" });
+    });
+
+    it("adjusts a return before departure to departure", async () => {
+      const trip = data(
+        await service.createTrip(context(), { ...input, start: "2030-04-05", end: "2030-04-01" }),
+      );
+      expect(trip).toMatchObject({ start: "2030-04-05", end: "2030-04-05", days: 1 });
+    });
+
+    it.each([
+      ["a malformed start", { start: "soon" }, ["start"]],
+      ["an impossible date", { start: "2030-02-30", end: "2030-03-02" }, ["start", "end"]],
+      ["a missing location id", { location: { ...LOCATION, id: "" } }, ["location.id"]],
+      [
+        "an extra-long destination",
+        { location: { ...LOCATION, city: "x".repeat(81) } },
+        ["location.city"],
+      ],
+    ])("rejects %s", async (_name, override, fields) => {
+      const error = errorOf(await service.createTrip(context(), { ...input, ...override }));
+      expect(error).toMatchObject({ code: "INVALID_INPUT" });
+      expect(error?.fields).toEqual(fields);
+      expect(await countTrips()).toBe(0);
+    });
+  });
+
+  describe("copyTrip", () => {
+    it("copies preferences only: every check, bag, Ready, weather and suggestion state starts clear; the source is untouched", async () => {
+      const source = await packedTrip({
+        ready: true,
+        archived: true,
+        weather: { status: "accepted", label: "Close forecast", suggestion: "Compact umbrella" },
+        suppressedSuggestions: { "nice-shoes": true },
+        suggestionMemory: {
+          "nice-top": {
+            id: "nice-top",
+            name: "Remembered",
+            category: "Nice attire",
+            qty: 3,
+            packed: 2,
+            section: "main",
+          },
+        },
+      });
+      const before = JSON.stringify(await loadTrip(db(), OWNER.userId, source.id));
+      const copy = data(
+        await service.copyTrip(context(), {
+          sourceId: source.id,
+          location: LOCATION,
+          start: "2030-07-01",
+          end: "2030-07-04",
+        }),
+      );
+
+      expect(copy.id).not.toBe(source.id);
+      expect(copy).toMatchObject({
+        copiedFrom: source.id,
+        destination: "Exampleville",
+        ready: false,
+        toiletryBagPacked: false,
+        archived: false,
+        days: 4,
+        weather: { status: "pending" },
+      });
+      expect(copy.config).toEqual(source.config);
+      expect(copy.items.every((entry) => entry.packed === 0)).toBe(true);
+      expect(copy.items.some((entry) => entry.userEdited)).toBe(false);
+      expect(copy.suggestionMemory).toEqual({});
+      expect(copy.suppressedSuggestions).toEqual({});
+      expect(item(copy, "weather-umbrella")).toBeUndefined();
+      expect(JSON.stringify(await loadTrip(db(), OWNER.userId, source.id))).toBe(before);
+      expect(await countTrips()).toBe(2);
+    });
+
+    it("refuses another owner's trip as a source and creates nothing (copied_from can never cross owners)", async () => {
+      const theirs = await seedTrip(db(), OTHER_OWNER.userId);
+      const result = await service.copyTrip(context(), {
+        sourceId: theirs.id,
+        location: LOCATION,
+        start: "2030-07-01",
+        end: "2030-07-04",
+      });
+      expect(errorOf(result)?.code).toBe("NOT_FOUND");
+      expect(await countTrips()).toBe(1);
+      expect(
+        (await ctx.client.query('SELECT 1 FROM "trips" WHERE copied_from IS NOT NULL')).rows,
+      ).toEqual([]);
+    });
+
+    it("refuses a missing source, a removed source, and invalid input", async () => {
+      expect(
+        errorOf(
+          await service.copyTrip(context(), {
+            sourceId: newUuid(),
+            location: LOCATION,
+            start: "2030-07-01",
+            end: "2030-07-04",
+          }),
+        )?.code,
+      ).toBe("NOT_FOUND");
+      const source = await seedTrip(db(), OWNER.userId);
+      data(await service.removeTrip(context(), { tripId: source.id }));
+      expect(
+        errorOf(
+          await service.copyTrip(context(), {
+            sourceId: source.id,
+            location: LOCATION,
+            start: "2030-07-01",
+            end: "2030-07-04",
+          }),
+        )?.code,
+      ).toBe("NOT_FOUND");
+      const live = await seedTrip(db(), OWNER.userId);
+      expect(
+        errorOf(
+          await service.copyTrip(context(), {
+            sourceId: live.id,
+            location: LOCATION,
+            start: "nope",
+            end: "2030-07-04",
+          }),
+        )?.code,
+      ).toBe("INVALID_INPUT");
+    });
+  });
+
+  describe("archive and restore", () => {
+    it("sets and clears the flag without touching Ready or progress", async () => {
+      const trip = await packedTrip({ ready: true });
+      const archived = data(await service.archiveTrip(context(), { tripId: trip.id }));
+      expect(archived).toMatchObject({ archived: true, ready: true });
+      expect(archived.items.every((entry) => entry.packed === entry.qty)).toBe(true);
+      expect(data(await service.listTrips(context())).map((entry) => entry.id)).toEqual([trip.id]);
+      expect(data(await service.archiveTrip(context(), { tripId: trip.id })).archived).toBe(true);
+      expect(data(await service.restoreArchivedTrip(context(), { tripId: trip.id })).archived).toBe(
+        false,
+      );
+      expect((await loadTrip(db(), OWNER.userId, trip.id))?.archived).toBe(false);
+    });
+
+    it("archive and restore only reach live trips", async () => {
+      const trip = await seedTrip(db(), OWNER.userId);
+      data(await service.removeTrip(context(), { tripId: trip.id }));
+      expect(errorOf(await service.archiveTrip(context(), { tripId: trip.id }))?.code).toBe(
+        "NOT_FOUND",
+      );
+      expect(errorOf(await service.restoreArchivedTrip(context(), { tripId: trip.id }))?.code).toBe(
+        "NOT_FOUND",
+      );
+    });
+  });
+
+  describe("remove and undo", () => {
+    it("removes to Recently deleted with the clock's time, hides the trip everywhere else, and undo restores it exactly", async () => {
+      const trip = await seedTrip(db(), OWNER.userId);
+      const before = JSON.stringify(await loadTrip(db(), OWNER.userId, trip.id));
+
+      expect(data(await service.removeTrip(context(), { tripId: trip.id }))).toEqual({
+        tripId: trip.id,
+      });
+      expect(data(await service.listTrips(context()))).toEqual([]);
+      expect(errorOf(await service.getTrip(context(), { tripId: trip.id }))?.code).toBe(
+        "NOT_FOUND",
+      );
+      const deleted = data(await service.listRecentlyDeletedTrips(context()));
+      expect(deleted.map((entry) => entry.id)).toEqual([trip.id]);
+      expect(deleted[0].deletedAt).toEqual(NOW);
+
+      expect(
+        errorOf(await service.togglePackedItem(context(), { tripId: trip.id, itemId: "tops" }))
+          ?.code,
+      ).toBe("NOT_FOUND");
+      expect(errorOf(await service.removeTrip(context(), { tripId: trip.id }))?.code).toBe(
+        "NOT_FOUND",
+      );
+
+      const restored = data(await service.undoRemoveTrip(context(), { tripId: trip.id }));
+      expect(JSON.stringify({ ...restored, deletedAt: null })).toBe(
+        before.replace(/"deletedAt":[^,}]*/, '"deletedAt":null'),
+      );
+      expect(restored.deletedAt).toBeNull();
+      expect(data(await service.listRecentlyDeletedTrips(context()))).toEqual([]);
+      expect(errorOf(await service.undoRemoveTrip(context(), { tripId: trip.id }))?.code).toBe(
+        "NOT_FOUND",
+      );
+    });
+
+    it("undo of a trip that was never removed is NOT_FOUND", async () => {
+      const trip = await seedTrip(db(), OWNER.userId);
+      expect(errorOf(await service.undoRemoveTrip(context(), { tripId: trip.id }))?.code).toBe(
+        "NOT_FOUND",
+      );
+    });
+
+    it("another owner can neither see, undo, nor purge-by-undo a deleted trip", async () => {
+      const trip = await seedTrip(db(), OWNER.userId);
+      data(await service.removeTrip(context(), { tripId: trip.id }));
+      as(OTHER_OWNER);
+      expect(data(await service.listRecentlyDeletedTrips(context()))).toEqual([]);
+      expect(errorOf(await service.undoRemoveTrip(context(), { tripId: trip.id }))?.code).toBe(
+        "NOT_FOUND",
+      );
+      as(OWNER);
+      expect(
+        data(await service.listRecentlyDeletedTrips(context())).map((entry) => entry.id),
+      ).toEqual([trip.id]);
+    });
+  });
+});
+
+describe("guards for states normal input cannot reach", () => {
+  it("a save that finds the trip gone is NOT_FOUND and changes nothing", async () => {
+    const trip = await seedTrip(db(), OWNER.userId);
+    faults.saveTripFalse = true;
+    expect(
+      errorOf(await service.togglePackedItem(context(), { tripId: trip.id, itemId: "tops" }))?.code,
+    ).toBe("NOT_FOUND");
+    faults.saveTripFalse = false;
+    expect(item((await loadTrip(db(), OWNER.userId, trip.id))!, "tops")?.packed).toBe(0);
+  });
+
+  it("a draft the domain refuses is INVALID_INPUT and nothing is stored", async () => {
+    faults.domainRefusesDraft = true;
+    const result = await service.createTrip(context(), {
+      location: LOCATION,
+      start: "2030-06-01",
+      end: "2030-06-04",
+      config: CONFIG,
+    });
+    expect(errorOf(result)).toMatchObject({
+      code: "INVALID_INPUT",
+      fields: ["location", "start", "end"],
+    });
+    expect((await ctx.client.query('SELECT 1 FROM "trips"')).rows).toEqual([]);
+  });
+
+  it("a trip that cannot be read back right after it was inserted is INTERNAL", async () => {
+    faults.loadTripNull = true;
+    const result = await service.createTrip(context(), {
+      location: LOCATION,
+      start: "2030-06-01",
+      end: "2030-06-04",
+      config: CONFIG,
+    });
+    expect(errorOf(result)).toMatchObject({ code: "INTERNAL", message: "Something went wrong" });
   });
 });
 

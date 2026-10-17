@@ -3,7 +3,7 @@
 // The owner id never comes from the caller.
 
 import type { ZodType } from "zod";
-import { calculateSuggestions } from "../../domain/calc";
+import { calculateSuggestions, normalizeTripDates } from "../../domain/calc";
 import {
   acceptWeather,
   addToiletryItem,
@@ -12,6 +12,7 @@ import {
   removeTripItem,
   reviewWeatherAgain,
   skipWeather,
+  type ItemOpResult,
 } from "../../domain/item-ops";
 import {
   confirmBagPlacement,
@@ -26,12 +27,25 @@ import {
   type Signals,
 } from "../../domain/readiness";
 import type { Staple } from "../../domain/trip";
-import type { DataContext } from "./context";
+import {
+  beginDraft,
+  emptyLifecycleState,
+  saveDraft,
+  selectDraftLocation,
+  startCopyDraft,
+  startDraft,
+  type LifecycleTrip,
+  type SampleLocation,
+} from "../../domain/trip-lifecycle";
+import { and, eq, isNull } from "drizzle-orm";
+import { restoreDeletedTrip, softDeleteTrip } from "../db/retention";
+import * as schema from "../db/schema";
+import { todayOf, type DataContext } from "./context";
 import { fail, type Result } from "./result";
 import { run, refuse, type OwnerScope } from "./run";
 import * as inputs from "./schemas";
 import { ensureDefaultStaples, listStaples, saveStaples } from "./staple-store";
-import { loadTrip, loadTrips, saveTrip, type StoredTrip } from "./trip-store";
+import { insertTrip, loadTrip, loadTrips, saveTrip, type StoredTrip } from "./trip-store";
 
 export interface TripResult {
   trip: StoredTrip;
@@ -42,6 +56,18 @@ export interface TripResult {
 function unwrap<T>(result: CommandResult<T>): { trip: T; signals: Signals } {
   if (!result.ok) refuse(fail("REJECTED", { reason: result.reason }));
   return { trip: result.trip, signals: result.signals };
+}
+
+/** Turn a domain item-operation result into a mutation, or a typed NOT_FOUND / REJECTED error. */
+function unwrapItemOp<T>(result: ItemOpResult<T>): { trip: T; staples: Staple[] } {
+  if (!result.ok) {
+    refuse(
+      fail(result.reason === "ITEM_NOT_FOUND" ? "NOT_FOUND" : "REJECTED", {
+        reason: result.reason,
+      }),
+    );
+  }
+  return { trip: result.trip, staples: result.staples };
 }
 
 async function mustLoad(scope: OwnerScope, tripId: string): Promise<StoredTrip> {
@@ -132,43 +158,29 @@ export const markTripNotReady = tripCommand(markNotReady);
 // ---------------------------------------------------------------- item operations
 
 export function editTripItem(context: DataContext, input: unknown) {
-  return mutateTrip(context, inputs.editItemInput, input, (trip, { itemId, ...edit }, staples) => {
-    const result = editItem(trip, staples, itemId, edit);
-    if (!result.ok)
-      refuse(
-        fail(result.reason === "ITEM_NOT_FOUND" ? "NOT_FOUND" : "REJECTED", {
-          reason: result.reason,
-        }),
-      );
-    return { trip: result.trip, staples: result.staples };
-  });
+  return mutateTrip(context, inputs.editItemInput, input, (trip, { itemId, ...edit }, staples) =>
+    unwrapItemOp(editItem(trip, staples, itemId, edit)),
+  );
 }
 
 export function removeItemFromTrip(context: DataContext, input: unknown) {
-  return mutateTrip(context, inputs.removeItemInput, input, (trip, { itemId, scope }, staples) => {
-    const result = removeTripItem(trip, staples, itemId, scope);
-    if (!result.ok)
-      refuse(
-        fail(result.reason === "ITEM_NOT_FOUND" ? "NOT_FOUND" : "REJECTED", {
-          reason: result.reason,
-        }),
-      );
-    return { trip: result.trip, staples: result.staples };
-  });
+  return mutateTrip(context, inputs.removeItemInput, input, (trip, { itemId, scope }, staples) =>
+    unwrapItemOp(removeTripItem(trip, staples, itemId, scope)),
+  );
 }
 
 export function addToiletryItemToTrip(context: DataContext, input: unknown) {
-  return mutateTrip(context, inputs.addToiletryItemInput, input, (trip, request, staples) => {
-    const result = addToiletryItem(trip, staples, {
-      id: `toiletry-${crypto.randomUUID()}`,
-      name: request.name,
-      qty: request.qty,
-      packLast: request.packLast,
-      scope: request.scope,
-    });
-    if (!result.ok) refuse(fail("REJECTED", { reason: result.reason }));
-    return { trip: result.trip, staples: result.staples };
-  });
+  return mutateTrip(context, inputs.addToiletryItemInput, input, (trip, request, staples) =>
+    unwrapItemOp(
+      addToiletryItem(trip, staples, {
+        id: `toiletry-${crypto.randomUUID()}`,
+        name: request.name,
+        qty: request.qty,
+        packLast: request.packLast,
+        scope: request.scope,
+      }),
+    ),
+  );
 }
 
 export function updateTripPreferences(context: DataContext, input: unknown) {
@@ -213,4 +225,139 @@ export function upsertStaple(context: DataContext, input: unknown): Promise<Resu
     );
     return listStaples(scope.db, scope.ownerId);
   });
+}
+
+// ---------------------------------------------------------------- trip lifecycle
+
+/** Lifecycle domain trips carry a SampleLocation; storage keeps its id and label next to the destination. */
+function toStoredTrip(trip: LifecycleTrip): StoredTrip {
+  const { location, ...rest } = trip;
+  return {
+    ...rest,
+    locationId: location?.id ?? null,
+    locationLabel: location?.label ?? null,
+    deletedAt: null,
+  };
+}
+
+/** Normalized, valid dates or a typed INVALID_INPUT (a return before departure becomes departure). */
+function validDates(start: string, end: string): { start: string; end: string } {
+  const dates = normalizeTripDates(start, end);
+  if (!dates.valid) refuse(fail("INVALID_INPUT", { fields: ["start", "end"] }));
+  return { start: dates.start, end: dates.end };
+}
+
+/** Save a draft through the domain (location confirmed, dates valid, fresh snapshot) and persist it. */
+async function saveNewTrip(
+  scope: OwnerScope,
+  context: DataContext,
+  draft: ReturnType<typeof startDraft>,
+  location: SampleLocation,
+): Promise<StoredTrip> {
+  await ensureDefaultStaples(scope.db, scope.ownerId);
+  const staples = await listStaples(scope.db, scope.ownerId);
+  const saved = saveDraft(
+    beginDraft(emptyLifecycleState(), selectDraftLocation(draft, location)),
+    staples,
+    { newId: () => crypto.randomUUID(), today: todayOf(context) },
+  );
+  if (!saved.ok) refuse(fail("INVALID_INPUT", { fields: ["location", "start", "end"] }));
+  const trip = toStoredTrip(saved.trip);
+  await insertTrip(scope.db, scope.ownerId, trip);
+  return (await loadTrip(scope.db, scope.ownerId, trip.id)) ?? refuse(fail("INTERNAL"));
+}
+
+/** Create a trip from a confirmed sample location, dates, and preferences. */
+export function createTrip(context: DataContext, input: unknown): Promise<Result<StoredTrip>> {
+  return run(context, inputs.createTripInput, input, (scope, request) => {
+    const dates = validDates(request.start, request.end);
+    return saveNewTrip(
+      scope,
+      context,
+      startDraft(request.config, dates.start, dates.end),
+      request.location,
+    );
+  });
+}
+
+/**
+ * Copy one of the owner's live trips: preferences only; a new location and dates; every check, bag placement,
+ * and Ready state starts clear; `copied_from` records the source. The source is looked up by owner, so another
+ * owner's trip is NOT_FOUND and can never be referenced.
+ */
+export function copyTrip(context: DataContext, input: unknown): Promise<Result<StoredTrip>> {
+  return run(context, inputs.copyTripInput, input, async (scope, request) => {
+    const source = await mustLoad(scope, request.sourceId);
+    const dates = validDates(request.start, request.end);
+    const lifecycleSource: LifecycleTrip = { ...source, location: null };
+    return saveNewTrip(
+      scope,
+      context,
+      startCopyDraft(lifecycleSource, dates.start, dates.end),
+      request.location,
+    );
+  });
+}
+
+async function setArchived(
+  scope: OwnerScope,
+  tripId: string,
+  archived: boolean,
+): Promise<StoredTrip> {
+  const updated = await scope.db
+    .update(schema.trips)
+    .set({ archived, updatedAt: new Date() })
+    .where(
+      and(
+        eq(schema.trips.id, tripId),
+        eq(schema.trips.ownerId, scope.ownerId),
+        isNull(schema.trips.deletedAt),
+      ),
+    )
+    .returning({ id: schema.trips.id });
+  if (updated.length === 0) refuse(fail("NOT_FOUND"));
+  return mustLoad(scope, tripId);
+}
+
+/** Manual flag, independent of Ready and of the dates. */
+export function archiveTrip(context: DataContext, input: unknown): Promise<Result<StoredTrip>> {
+  return run(context, inputs.tripOnly, input, (scope, { tripId }) =>
+    setArchived(scope, tripId, true),
+  );
+}
+
+/** Clear the archive flag (a future trip returns to Upcoming; a past one stays past by date). */
+export function restoreArchivedTrip(
+  context: DataContext,
+  input: unknown,
+): Promise<Result<StoredTrip>> {
+  return run(context, inputs.tripOnly, input, (scope, { tripId }) =>
+    setArchived(scope, tripId, false),
+  );
+}
+
+/** Recoverable delete: the trip moves to Recently deleted (nothing is purged here; that policy is #28). */
+export function removeTrip(
+  context: DataContext,
+  input: unknown,
+): Promise<Result<{ tripId: string }>> {
+  return run(context, inputs.tripOnly, input, async (scope, { tripId }) => {
+    if (!(await softDeleteTrip(scope.db, scope.ownerId, tripId, context.now())))
+      refuse(fail("NOT_FOUND"));
+    return { tripId };
+  });
+}
+
+/** Undo a remove: the exact trip comes back. A trip that is not deleted (or not yours) is NOT_FOUND. */
+export function undoRemoveTrip(context: DataContext, input: unknown): Promise<Result<StoredTrip>> {
+  return run(context, inputs.tripOnly, input, async (scope, { tripId }) => {
+    if (!(await restoreDeletedTrip(scope.db, scope.ownerId, tripId))) refuse(fail("NOT_FOUND"));
+    return mustLoad(scope, tripId);
+  });
+}
+
+export function listRecentlyDeletedTrips(context: DataContext): Promise<Result<StoredTrip[]>> {
+  return run(context, inputs.none, {}, (scope) =>
+    loadTrips(scope.db, scope.ownerId, { filter: "deleted" }),
+  );
 }

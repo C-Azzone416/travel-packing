@@ -517,3 +517,44 @@ describe("domain categories fit the item_category enum", () => {
     expect(await rows("SELECT 1 FROM trip_items")).toHaveLength(categories.length);
   });
 });
+
+describe("indexes the data layer relies on", () => {
+  const definitions = async () =>
+    Object.fromEntries(
+      (
+        await rows<{ indexname: string; indexdef: string }>(
+          "SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = 'public'",
+        )
+      ).map((row) => [row.indexname, row.indexdef]),
+    );
+
+  it.each([
+    ["trips_owner_start_idx", /ON public\.trips USING btree \(owner_id, start_date\)/],
+    ["trip_items_trip_order_idx", /ON public\.trip_items USING btree \(trip_id, sort_order\)/],
+    [
+      "staples_owner_semantic_unique",
+      /UNIQUE INDEX .* ON public\.staples USING btree \(owner_id, semantic_id\)/,
+    ],
+    ["trips_id_owner_unique", /UNIQUE INDEX .* ON public\.trips USING btree \(id, owner_id\)/],
+    [
+      "trip_items_trip_semantic_unique",
+      /UNIQUE INDEX .* ON public\.trip_items USING btree \(trip_id, semantic_id\)/,
+    ],
+    [
+      "trip_items_progress_key",
+      /UNIQUE INDEX .* ON public\.trip_items USING btree \(id, trip_id, owner_id, qty\)/,
+    ],
+    [
+      "trip_item_progress_pk",
+      /UNIQUE INDEX .* ON public\.trip_item_progress USING btree \(item_id\)/,
+    ],
+  ])("%s exists with the expected columns", async (name, pattern) => {
+    expect((await definitions())[name]).toMatch(pattern);
+  });
+
+  it("the recently-deleted index is partial, so it never scans live trips", async () => {
+    const definition = (await definitions())["trips_deleted_at_idx"];
+    expect(definition).toMatch(/ON public\.trips USING btree \(deleted_at\)/);
+    expect(definition).toMatch(/WHERE \(deleted_at IS NOT NULL\)/);
+  });
+});

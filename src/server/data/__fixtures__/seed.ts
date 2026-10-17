@@ -75,10 +75,14 @@ export async function seedTrip(
   return trip;
 }
 
-export function makeContext(db: Db, fake: FakeAuth): DataContext {
+/** The fixed instant used by tests: 2030-03-10, so trips in April 2030 are upcoming. */
+export const NOW = new Date("2030-03-10T12:00:00.000Z");
+
+export function makeContext(db: Db, fake: FakeAuth, now: Date = NOW): DataContext {
   return {
     db,
     auth: { provider: fake, allowlist: parseAllowlist(`${OWNER.email}, ${OTHER_OWNER.email}`) },
+    now: () => now,
   };
 }
 

@@ -6,4 +6,11 @@ import type { Db } from "../db/retention";
 export interface DataContext {
   db: Db;
   auth: { provider: AuthProvider; allowlist: Allowlist };
+  /** The clock, injected so no data-layer code reads time itself. The date/timezone policy is pending #26. */
+  now: () => Date;
+}
+
+/** "Today" as YYYY-MM-DD (UTC) from the injected clock. */
+export function todayOf(context: Pick<DataContext, "now">): string {
+  return context.now().toISOString().slice(0, 10);
 }
