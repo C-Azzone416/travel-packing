@@ -18,7 +18,8 @@
     "db:generate": "drizzle-kit generate",
     "db:check": "drizzle-kit check",
     "db:migrate": "tsx scripts/db-migrate.ts",
-    "check:no-e2e-in-build": "tsx scripts/check-no-e2e-in-build.ts"
+    "check:no-e2e-in-build": "tsx scripts/check-no-e2e-in-build.ts",
+    "build:webpack": "next build --webpack"
   },
   "dependencies": {
     "@neondatabase/auth": "^0.6.0-beta",

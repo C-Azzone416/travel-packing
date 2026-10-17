@@ -65,6 +65,13 @@ jobs:
       - name: Verify the e2e-only sign-in is not in the build
         run: npm run check:no-e2e-in-build
 
+      # The same guarantee must hold for the webpack bundler (`next build --webpack`), not only Turbopack.
+      - name: Build with webpack
+        run: npm run build:webpack
+
+      - name: Verify the e2e-only sign-in is not in the webpack build
+        run: npm run check:no-e2e-in-build
+
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
