@@ -1,0 +1,519 @@
+"use client";
+
+import Link from "next/link";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { DestinationArt } from "@/components/art/DestinationArt";
+import { useSaveStatus } from "@/components/shell/SaveStatus";
+import { Button, buttonClassName } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { ModalSheet } from "@/components/ui/ModalSheet";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { useToast } from "@/components/ui/Toast";
+import type { Staple, TripItem } from "@/domain/trip";
+import type { LifecycleTrip } from "@/domain/trip-lifecycle";
+import { TripsSourceError, type TripChange } from "@/features/trips/trips-source";
+import { useTripsSource } from "@/features/trips/TripsSourceProvider";
+import { formatDays, formatRange } from "@/features/trips/view";
+import { AddToiletryForm } from "./AddToiletryForm";
+import { ItemEditor } from "./ItemEditor";
+import { PackRow } from "./PackRow";
+import { PreferencesForm } from "./PreferencesForm";
+import { ToiletrySection } from "./ToiletrySection";
+import {
+  bagGate,
+  packedAnnouncement,
+  progress,
+  showReviewPrompt,
+  showToiletries,
+  tripSections,
+  visibleItems,
+  type PackFilter,
+} from "./trip-view";
+import { WeatherCard, WeatherDialog } from "./Weather";
+
+type Load =
+  | { phase: "loading" }
+  | { phase: "missing" }
+  | { phase: "error" }
+  | { phase: "ready"; trip: LifecycleTrip };
+type Dialog =
+  | null
+  | { kind: "edit"; itemId: string }
+  | { kind: "add-toiletry" }
+  | { kind: "bag" }
+  | { kind: "weather" }
+  | { kind: "preferences" };
+
+interface ActOptions {
+  /** The row this change is for, so a failure shows "Not saved · Retry" beside it. */
+  row?: string;
+  /** A change made from a dialog: its submit buttons wait for the source. */
+  modal?: boolean;
+  /** The change may have altered the owner's staples ("Remember for future trips"). */
+  staples?: boolean;
+  announce?: (change: TripChange) => string;
+  after?: (change: TripChange) => void;
+}
+
+function ListSection({
+  id,
+  title,
+  subtitle,
+  items,
+  filter,
+  renderRow,
+}: {
+  id: string;
+  title: string;
+  subtitle: string;
+  items: TripItem[];
+  filter: PackFilter;
+  renderRow: (item: TripItem) => ReactNode;
+}) {
+  const visible = visibleItems(items, filter);
+  return (
+    <section className="list-section" aria-labelledby={id}>
+      <div className="list-section-head">
+        <div>
+          <h3 id={id}>{title}</h3>
+          <div className="item-meta">{subtitle}</div>
+        </div>
+        <span className="tag">{visible.length}</span>
+      </div>
+      <div className="packing-list">
+        {visible.length ? (
+          visible.map(renderRow)
+        ) : (
+          <div className="empty-state">Nothing left in this section.</div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+export function TripScreen({ tripId }: { tripId: string }) {
+  const source = useTripsSource();
+  const { track } = useSaveStatus();
+  const toast = useToast();
+  const [load, setLoad] = useState<Load>({ phase: "loading" });
+  const [staples, setStaples] = useState<Staple[]>([]);
+  const [reloads, setReloads] = useState(0);
+  const [filter, setFilter] = useState<PackFilter>("all");
+  const [dialog, setDialog] = useState<Dialog>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [failedRows, setFailedRows] = useState<ReadonlySet<string>>(new Set());
+  const [announcement, setAnnouncement] = useState("");
+  const bagPromptDismissed = useRef(false);
+  const retries = useRef(
+    new Map<string, { write: () => Promise<TripChange>; options: ActOptions }>(),
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    // Opening a trip is a read: it never shows "Saving…", but a failure shows Error and Retry.
+    track(
+      () => Promise.all([source.getTrip(tripId), source.listStaples()]),
+      ([trip, owned]) => {
+        if (cancelled) return;
+        setStaples(owned);
+        setLoad({ phase: "ready", trip });
+      },
+      { read: true },
+    ).catch((error: unknown) => {
+      if (!cancelled)
+        setLoad({
+          phase:
+            error instanceof TripsSourceError && error.message === "NOT_FOUND"
+              ? "missing"
+              : "error",
+        });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [source, track, tripId, reloads]);
+
+  const act = useCallback(
+    (write: () => Promise<TripChange>, options: ActOptions = {}): Promise<void> => {
+      if (options.modal) setSubmitting(true);
+      return track(write, (change) => {
+        setLoad({ phase: "ready", trip: change.trip });
+        if (options.row) {
+          retries.current.delete(options.row);
+          setFailedRows((current) => new Set([...current].filter((id) => id !== options.row)));
+        }
+        if (change.signals.promptBagPlacement && !bagPromptDismissed.current)
+          setDialog({ kind: "bag" });
+        if (options.announce) setAnnouncement(options.announce(change));
+        if (options.staples) void source.listStaples().then(setStaples);
+        options.after?.(change);
+      })
+        .then(() => undefined)
+        .catch(() => {
+          if (!options.row) return;
+          const row = options.row;
+          retries.current.set(row, { write, options });
+          setFailedRows((current) => new Set(current).add(row));
+        })
+        .finally(() => setSubmitting(false));
+    },
+    [source, track],
+  );
+
+  const close = () => setDialog(null);
+
+  if (load.phase === "loading") {
+    return (
+      <section className="screen" aria-busy="true" aria-label="Loading trip">
+        <h1>Packing list</h1>
+      </section>
+    );
+  }
+
+  if (load.phase === "missing") {
+    return (
+      <section className="screen">
+        <h1>That trip isn’t available</h1>
+        <p className="lede">It may have been removed. Your other trips are untouched.</p>
+        <Link className={buttonClassName()} href="/">
+          Back to trips
+        </Link>
+      </section>
+    );
+  }
+
+  if (load.phase === "error") {
+    return (
+      <section className="screen">
+        <h1>Packing list</h1>
+        <div className="empty-state">
+          <strong>Couldn’t load this trip.</strong>
+          <p className="muted">Nothing was changed.</p>
+          <Button
+            onClick={() => {
+              setLoad({ phase: "loading" });
+              setReloads((count) => count + 1);
+            }}
+          >
+            Try again
+          </Button>
+        </div>
+      </section>
+    );
+  }
+
+  const { trip } = load;
+  const sections = tripSections(trip);
+  const gate = bagGate(trip);
+  const totals = progress(trip);
+  const place = trip.location
+    ? [trip.location.region, trip.location.country].filter(Boolean).join(", ")
+    : "";
+  const editing =
+    dialog?.kind === "edit" ? trip.items.find((entry) => entry.id === dialog.itemId) : undefined;
+
+  const row = (item: TripItem) => (
+    <PackRow
+      key={item.id}
+      item={item}
+      failed={failedRows.has(item.id)}
+      onToggle={(id) =>
+        void act(() => source.togglePacked(tripId, id), {
+          row: id,
+          announce: (change) =>
+            packedAnnouncement(change.trip.items.find((entry) => entry.id === id) as TripItem),
+        })
+      }
+      onIncrement={(id) =>
+        void act(() => source.incrementPacked(tripId, id), {
+          row: id,
+          announce: (change) =>
+            packedAnnouncement(change.trip.items.find((entry) => entry.id === id) as TripItem),
+        })
+      }
+      onDecrement={(id) =>
+        void act(() => source.decrementPacked(tripId, id), {
+          row: id,
+          announce: (change) =>
+            packedAnnouncement(change.trip.items.find((entry) => entry.id === id) as TripItem),
+        })
+      }
+      onEdit={(id) => setDialog({ kind: "edit", itemId: id })}
+      onRetry={(id) => {
+        const failed = retries.current.get(id);
+        if (failed) void act(failed.write, failed.options);
+      }}
+    />
+  );
+
+  return (
+    <section className="screen">
+      <div className="destination-trip-head">
+        <DestinationArt locationId={trip.location?.id} variant="header" priority />
+        <div className="destination-head-content">
+          <Link className="back" href="/" aria-label="Back to trips">
+            ←
+          </Link>
+          <div className="head-copy destination-head-copy">
+            <h1>{trip.destination}</h1>
+            <p>
+              {place ? `${place} · ` : ""}
+              {formatRange(trip)} · {formatDays(trip.days)}
+            </p>
+          </div>
+          {trip.ready ? (
+            <StatusBadge status="ready">Ready</StatusBadge>
+          ) : (
+            <StatusBadge status="draft">Packing</StatusBadge>
+          )}
+        </div>
+      </div>
+
+      <p className="sr-only" role="status" aria-label="Packing updates">
+        {announcement}
+      </p>
+
+      <div className="trip-layout">
+        <div>
+          <Card padded>
+            <div className="section-head packing-head">
+              <div>
+                <h2>Packing list</h2>
+                <p className="tiny muted">Partial quantities count as progress.</p>
+              </div>
+              <strong>{totals.percent}%</strong>
+            </div>
+            <div
+              className="progress-track"
+              role="progressbar"
+              aria-label="Packing progress"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={totals.percent}
+              aria-valuetext={`${totals.percent}% packed`}
+            >
+              <span style={{ width: `${totals.percent}%` }} />
+            </div>
+            <div className="filters" role="group" aria-label="Packing list filters">
+              <button
+                type="button"
+                className={filter === "all" ? "filter active" : "filter"}
+                aria-pressed={filter === "all"}
+                onClick={() => setFilter("all")}
+              >
+                All
+              </button>
+              <button
+                type="button"
+                className={filter === "still" ? "filter active" : "filter"}
+                aria-pressed={filter === "still"}
+                onClick={() => setFilter("still")}
+              >
+                Still to pack
+              </button>
+            </div>
+
+            <ListSection
+              id="section-main"
+              title="Everyday & occasion items"
+              subtitle={`${sections.main.length} loose items`}
+              items={sections.main}
+              filter={filter}
+              renderRow={row}
+            />
+            {showToiletries(trip, filter) ? (
+              <ToiletrySection
+                tripId={tripId}
+                items={sections.toiletries}
+                gate={gate}
+                filter={filter}
+                renderRow={row}
+                onPlaceBag={() => setDialog({ kind: "bag" })}
+                onUndoBag={() => void act(() => source.undoBagPlacement(tripId))}
+                onAddItem={() => setDialog({ kind: "add-toiletry" })}
+              />
+            ) : null}
+            {sections.returns.length ? (
+              <ListSection
+                id="section-return"
+                title="Return travel outfit"
+                subtitle="Fresh set kept separate from everyday counts"
+                items={sections.returns}
+                filter={filter}
+                renderRow={row}
+              />
+            ) : null}
+            {sections.packLast.length ? (
+              <ListSection
+                id="section-packlast"
+                title="Pack last"
+                subtitle="A timing view: items flagged Pack last. Bathroom items flagged Pack last stay in Toiletries."
+                items={sections.packLast}
+                filter={filter}
+                renderRow={row}
+              />
+            ) : null}
+
+            {showReviewPrompt(trip) ? (
+              <div className="review-prompt">
+                <h3>Everything is checked. Want to review?</h3>
+                <p>
+                  We will show the full bag, including Pack last and the return outfit, before you
+                  decide it is ready.
+                </p>
+                <Link
+                  className={buttonClassName({ variant: "secondary" })}
+                  href={`/trips/${tripId}/review`}
+                >
+                  Review your bag
+                </Link>
+              </div>
+            ) : null}
+          </Card>
+        </div>
+
+        <aside className="side">
+          {trip.ready ? (
+            <Card padded className="ready-card">
+              <p className="eyebrow">Confirmed after review</p>
+              <h2>You’re ready to go.</h2>
+              <p>
+                You can still correct anything below. Any checklist change will revoke Ready, or you
+                can mark the trip not ready without changing packing progress.
+              </p>
+              <div className="actions">
+                <Link
+                  className={buttonClassName({ variant: "secondary", small: true })}
+                  href={`/trips/${tripId}/review`}
+                >
+                  Review bag again
+                </Link>
+                <Button
+                  className="ready-secondary"
+                  small
+                  onClick={() =>
+                    void act(() => source.markNotReady(tripId), {
+                      after: () => toast.show("Progress kept."),
+                    })
+                  }
+                >
+                  Mark as not ready
+                </Button>
+              </div>
+            </Card>
+          ) : null}
+          <WeatherCard
+            weather={trip.weather}
+            onReview={() => setDialog({ kind: "weather" })}
+            onReviewAgain={() =>
+              void act(() => source.reviewWeatherAgain(tripId), {
+                after: () => setDialog({ kind: "weather" }),
+              })
+            }
+          />
+          <Card padded>
+            <h3>Trip math</h3>
+            <p className="tiny muted">
+              {formatDays(trip.days)} − outbound worn − return outfit ={" "}
+              <strong>{trip.dailyDays} everyday days</strong>.
+            </p>
+            <Button variant="ghost" small onClick={() => setDialog({ kind: "preferences" })}>
+              Edit preferences
+            </Button>
+          </Card>
+        </aside>
+      </div>
+
+      {editing ? (
+        <ItemEditor
+          key={editing.id}
+          item={editing}
+          destination={trip.destination}
+          dailyDays={trip.dailyDays}
+          staples={staples}
+          saving={submitting}
+          onClose={close}
+          onSave={(edit) =>
+            void act(() => source.editItem(tripId, editing.id, edit), {
+              modal: true,
+              staples: edit.scope === "remember",
+              after: close,
+            })
+          }
+          onRemove={(scope) =>
+            void act(() => source.removeItem(tripId, editing.id, scope), {
+              modal: true,
+              staples: scope === "remember",
+              after: close,
+            })
+          }
+        />
+      ) : null}
+      {dialog?.kind === "add-toiletry" ? (
+        <AddToiletryForm
+          destination={trip.destination}
+          saving={submitting}
+          onClose={close}
+          onAdd={(item) =>
+            void act(() => source.addToiletryItem(tripId, item), {
+              modal: true,
+              staples: item.scope === "remember",
+              after: close,
+            })
+          }
+        />
+      ) : null}
+      {dialog?.kind === "preferences" ? (
+        <PreferencesForm
+          config={trip.config}
+          saving={submitting}
+          onClose={close}
+          onSave={(config) =>
+            void act(() => source.updatePreferences(tripId, config), { modal: true, after: close })
+          }
+        />
+      ) : null}
+      {dialog?.kind === "weather" ? (
+        <WeatherDialog
+          suggestion={trip.weather.suggestion}
+          ready={trip.ready}
+          saving={submitting}
+          onClose={close}
+          onAccept={() =>
+            void act(() => source.acceptWeather(tripId), { modal: true, after: close })
+          }
+          onSkip={() => void act(() => source.skipWeather(tripId), { modal: true, after: close })}
+        />
+      ) : null}
+      <ModalSheet
+        open={dialog?.kind === "bag"}
+        title="Toiletry bag in suitcase?"
+        description="A separate bag-placement step."
+        onClose={() => {
+          bagPromptDismissed.current = true;
+          close();
+        }}
+        actions={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                bagPromptDismissed.current = true;
+                close();
+              }}
+            >
+              Not yet
+            </Button>
+            <Button
+              onClick={() => void act(() => source.confirmBagPlacement(tripId), { after: close })}
+            >
+              Confirm
+            </Button>
+          </>
+        }
+      >
+        <p>All Bathroom items are checked. Is the completed toiletry bag in the suitcase?</p>
+      </ModalSheet>
+    </section>
+  );
+}
