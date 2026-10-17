@@ -9,6 +9,11 @@ export default defineConfig({
     environment: "node",
     include: ["src/**/*.test.{ts,tsx}"],
     setupFiles: ["./src/test/setup.ts"],
+    // PGlite (in-memory Postgres) starts in a beforeAll and can take several seconds when the machine is busy,
+    // for example several full test runs at once. Generous timeouts avoid flaky starts; they never mask a hang
+    // because every test is still bounded.
+    hookTimeout: 60_000,
+    testTimeout: 30_000,
     coverage: {
       provider: "v8",
       include: ["src/**/*.{ts,tsx}"],
