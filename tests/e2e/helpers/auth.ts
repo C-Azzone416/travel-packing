@@ -1,9 +1,27 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 // Synthetic values for the e2e-only fake sign-in (never available on Vercel; see src/server/auth/e2e-provider.ts).
 export const E2E_PASSWORD = "synthetic-e2e-only";
 export const OWNER_EMAIL = "owner@example.test";
 export const OTHER_EMAIL = "intruder@example.test";
+/** Allowlisted like the owners but never seeded: a second real user with nothing of their own (cross-user tests). */
+export const SECOND_EMAIL = "second@example.test";
+
+export const PROJECT_NAMES = ["phone", "desktop"] as const;
+
+/**
+ * Each Playwright project signs in as its own seeded owner, so the phone and desktop runs (which execute in parallel
+ * against one database) never change each other's trips.
+ */
+export const ownerEmailFor = (project: string) => `owner-${project}@example.test`;
+
+/** Everyone the e2e server allowlists: the shared owner, one owner per project, and the second (unseeded) user. */
+export const ALLOWLISTED_EMAILS = [OWNER_EMAIL, ...PROJECT_NAMES.map(ownerEmailFor), SECOND_EMAIL];
+
+/** The owners whose sample trips are seeded, by the user id the fake sign-in produces ("e2e-" + email). */
+export const SEEDED_OWNER_IDS = [OWNER_EMAIL, ...PROJECT_NAMES.map(ownerEmailFor)].map(
+  (email) => `e2e-${email}`,
+);
 
 export async function signIn(page: Page, email: string, password = E2E_PASSWORD) {
   await page.goto("/sign-in");
@@ -12,8 +30,8 @@ export async function signIn(page: Page, email: string, password = E2E_PASSWORD)
   await page.getByRole("button", { name: "Sign in" }).click();
 }
 
-/** Sign in as the allowlisted owner and wait until the app is showing. */
-export async function signInAsOwner(page: Page) {
-  await signIn(page, OWNER_EMAIL);
+/** Sign in as this project's seeded owner and wait until the app is showing. */
+export async function signInAsOwner(page: Page, email = ownerEmailFor(test.info().project.name)) {
+  await signIn(page, email);
   await expect(page).toHaveURL(/\/$/);
 }

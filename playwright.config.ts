@@ -1,6 +1,6 @@
 import { defineConfig } from "@playwright/test";
 import { join } from "node:path";
-import { E2E_PASSWORD, OWNER_EMAIL } from "./tests/e2e/helpers/auth";
+import { ALLOWLISTED_EMAILS, E2E_PASSWORD, SEEDED_OWNER_IDS } from "./tests/e2e/helpers/auth";
 
 // Ports are overridable so several worktrees (or agents) can run e2e on one machine. Servers are never reused:
 // reusing whatever happens to be listening could silently test another checkout's code.
@@ -23,7 +23,7 @@ export default defineConfig({
       port: DB_PORT,
       reuseExistingServer: false,
       timeout: 60_000,
-      env: { E2E_DB_PORT: String(DB_PORT) },
+      env: { E2E_DB_PORT: String(DB_PORT), E2E_SEED_OWNERS: SEEDED_OWNER_IDS.join(",") },
     },
     {
       command: `npm run build && npm run start -- --port ${PORT}`,
@@ -39,7 +39,7 @@ export default defineConfig({
         // Server-side session tokens for the fake sign-in (ignored by git via test-results/).
         AUTH_E2E_STATE_DIR: join(process.cwd(), "test-results", "e2e-sessions"),
         E2E_DATABASE_URL,
-        OWNER_EMAIL_ALLOWLIST: OWNER_EMAIL,
+        OWNER_EMAIL_ALLOWLIST: ALLOWLISTED_EMAILS.join(","),
       },
     },
   ],
