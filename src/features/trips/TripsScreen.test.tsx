@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { renderInApp } from "@/test/providers";
 import { TripsScreen } from "./TripsScreen";
+import { TripsSourceProvider } from "./TripsSourceProvider";
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
 
@@ -12,7 +13,11 @@ describe("TripsScreen", () => {
     vi.useFakeTimers({ toFake: ["Date"], now: new Date(2026, 9, 16, 12) });
     try {
       const user = userEvent.setup({ advanceTimers: () => {} });
-      renderInApp(<TripsScreen />);
+      renderInApp(
+        <TripsSourceProvider>
+          <TripsScreen />
+        </TripsSourceProvider>,
+      );
       expect(await screen.findByRole("heading", { name: "San Diego" })).toBeTruthy();
       await user.click(screen.getByRole("button", { name: "Remove: San Diego" }));
       await user.click(

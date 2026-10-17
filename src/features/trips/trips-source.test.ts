@@ -1,11 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { classifyTrip } from "@/domain/trip-lifecycle";
+import { LOCATIONS } from "@/domain/locations";
+import { classifyTrip, startCopyDraft, startDraft } from "@/domain/trip-lifecycle";
+import { DEFAULT_TRIP_CONFIG } from "./draft";
 import { sampleLifecycleState } from "./fixtures";
 import { createMemoryTripsSource, TripsSourceError } from "./trips-source";
 
 function setup(now = 1_000) {
   const initial = sampleLifecycleState();
-  return { initial, source: createMemoryTripsSource(initial, { now: () => now }) };
+  let counter = 0;
+  const source = createMemoryTripsSource(initial, {
+    now: () => now,
+    newId: () => `new-${++counter}`,
+    today: () => "2026-10-16",
+  });
+  return { initial, source };
 }
 
 describe("memory trips source", () => {
@@ -59,5 +67,60 @@ describe("memory trips source", () => {
 
   it("names its error type", () => {
     expect(new TripsSourceError("x").name).toBe("TripsSourceError");
+  });
+
+  describe("createTrip", () => {
+    const london = LOCATIONS.find((entry) => entry.id === "gb-eng-london")!;
+    const completeDraft = () => ({
+      ...startDraft(DEFAULT_TRIP_CONFIG, "2026-10-20", "2026-10-24"),
+      location: london,
+    });
+
+    it("saves a finished draft as a new trip at the front, with clear progress and a forecast from today", async () => {
+      const { source } = setup();
+      const trip = await source.createTrip(completeDraft());
+      expect(trip).toMatchObject({
+        id: "new-1",
+        destination: "London",
+        archived: false,
+        ready: false,
+        toiletryBagPacked: false,
+        copiedFrom: null,
+      });
+      expect(trip.items.every((item) => item.packed === 0)).toBe(true);
+      expect(trip.weather.label).toBe("Close forecast");
+      expect(source.snapshot().trips.map((t) => t.id)).toEqual(["new-1", "san-diego", "lisbon"]);
+      expect(source.snapshot().draft).toBeNull();
+    });
+
+    it("records where a copy came from and leaves the source untouched", async () => {
+      const { initial, source } = setup();
+      const original = structuredClone(initial.trips[0]);
+      const draft = {
+        ...startCopyDraft(initial.trips[0], "2026-12-04", "2026-12-08"),
+        location: london,
+      };
+      const trip = await source.createTrip(draft);
+      expect(trip.copiedFrom).toBe("san-diego");
+      expect(trip.items.every((item) => item.packed === 0)).toBe(true);
+      expect(source.snapshot().trips.find((t) => t.id === "san-diego")).toEqual(original);
+    });
+
+    it.each([
+      ["no destination", { location: null }, "LOCATION_NOT_CONFIRMED"],
+      ["no dates", { start: "", end: "" }, "INVALID_DATES"],
+    ])("rejects a draft with %s and changes nothing", async (_label, patch, reason) => {
+      const { source } = setup();
+      const before = source.snapshot();
+      await expect(source.createTrip({ ...completeDraft(), ...patch })).rejects.toThrow(reason);
+      expect(source.snapshot()).toBe(before);
+    });
+
+    it("uses real defaults for ids, today and staples when none are injected", async () => {
+      const source = createMemoryTripsSource(sampleLifecycleState(), { now: () => 1 });
+      const trip = await source.createTrip(completeDraft());
+      expect(trip.id).toMatch(/^[0-9a-f-]{36}$/);
+      expect(trip.items.some((item) => item.name === "Toothbrush")).toBe(true);
+    });
   });
 });

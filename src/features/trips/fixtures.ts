@@ -23,10 +23,10 @@ export const SAMPLE_LOCATIONS: Record<string, SampleLocation> = {
   "pt-lisbon": {
     id: "pt-lisbon",
     city: "Lisbon",
-    region: "Lisboa",
+    region: "Lisbon District",
     country: "Portugal",
     countryCode: "PT",
-    label: "Lisbon, Lisboa, Portugal",
+    label: "Lisbon, Lisbon District, Portugal",
   },
 };
 

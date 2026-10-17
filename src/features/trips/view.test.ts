@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { LifecycleTrip } from "@/domain/trip-lifecycle";
 import { sampleLifecycleState } from "./fixtures";
-import { formatRange, quickViewModel, tripCardView } from "./view";
+import { formatDays, formatRange, quickViewModel, tripCardView } from "./view";
 
 const TODAY = "2026-10-16";
 const trips = () => sampleLifecycleState().trips;
@@ -10,6 +10,14 @@ const lisbon = () => trips().find((trip) => trip.id === "lisbon")!;
 const withPatch = (trip: LifecycleTrip, patch: Partial<LifecycleTrip>): LifecycleTrip => ({
   ...trip,
   ...patch,
+});
+
+describe("formatDays", () => {
+  it("pluralizes", () => {
+    expect(formatDays(1)).toBe("1 day");
+    expect(formatDays(0)).toBe("0 days");
+    expect(formatDays(5)).toBe("5 days");
+  });
 });
 
 describe("formatRange", () => {
