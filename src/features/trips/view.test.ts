@@ -92,6 +92,34 @@ describe("tripCardView", () => {
     expect(view.forecast).toBeNull();
   });
 
+  it("rounds the percentage to the nearest whole number (2 of 3 is 67%, 1 of 3 is 33%)", () => {
+    const base = sanDiego();
+    const item = { ...base.items[0], qty: 3 };
+    const twoOfThree = withPatch(base, {
+      items: [{ ...item, packed: 2 }],
+      toiletryBagPacked: false,
+    });
+    expect(tripCardView(twoOfThree, TODAY, "upcoming")).toMatchObject({
+      packed: 2,
+      total: 3,
+      percent: 67,
+    });
+    const oneOfThree = withPatch(base, {
+      items: [{ ...item, packed: 1 }],
+      toiletryBagPacked: false,
+    });
+    expect(tripCardView(oneOfThree, TODAY, "upcoming")).toMatchObject({
+      packed: 1,
+      total: 3,
+      percent: 33,
+    });
+    const sixOfNine = withPatch(base, {
+      items: [{ ...item, qty: 8, packed: 5 }],
+      toiletryBagPacked: false,
+    });
+    expect(tripCardView(sixOfNine, TODAY, "upcoming").percent).toBe(63);
+  });
+
   it("reports 0% for a trip with no items instead of dividing by zero", () => {
     const empty = withPatch(sanDiego(), { items: [], toiletryBagPacked: false });
     expect(tripCardView(empty, TODAY, "upcoming")).toMatchObject({

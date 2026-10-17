@@ -42,11 +42,13 @@ export function TripsDashboard({ source, getToday = localToday }: TripsDashboard
 
   useEffect(() => {
     let cancelled = false;
+    // A load is a read: it must not flash "Saving…", but a failure still shows Error and Retry.
     track(
       () => source.load(),
       (state) => {
         if (!cancelled) setLoad({ phase: "ready", state, today: getToday() });
       },
+      { read: true },
     ).catch(() => {
       if (!cancelled) setLoad({ phase: "error" });
     });

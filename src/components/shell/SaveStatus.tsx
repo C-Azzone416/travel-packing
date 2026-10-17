@@ -18,6 +18,15 @@ export const SAVING_DELAY_MS = 400;
 interface PendingWrite {
   write: () => Promise<unknown>;
   onSuccess?: (result: never) => void;
+  read: boolean;
+}
+
+export interface TrackOptions {
+  /**
+   * A read (a load) never shows "Saving…" and never announces it, because nothing is being saved. A
+   * failed read still shows the Error state with Retry, and a successful retry clears it.
+   */
+  read?: boolean;
 }
 
 interface SaveStatusApi {
@@ -26,7 +35,11 @@ interface SaveStatusApi {
    * Run a write, reflecting it in the chip. Rejects with the write's own error. `onSuccess` receives
    * the result, and is kept with the write so a Retry delivers the result to the screen too.
    */
-  track: <T>(write: () => Promise<T>, onSuccess?: (result: T) => void) => Promise<T>;
+  track: <T>(
+    write: () => Promise<T>,
+    onSuccess?: (result: T) => void,
+    options?: TrackOptions,
+  ) => Promise<T>;
   /** Re-run the last FAILED write only. A newer successful write clears it, so stale writes never replay. */
   retry: () => void;
 }
@@ -60,15 +73,23 @@ export function SaveStatusProvider({ children }: { children: ReactNode }) {
   );
 
   const track = useCallback(
-    async <T,>(write: () => Promise<T>, onSuccess?: (result: T) => void): Promise<T> => {
-      pending.current += 1;
-      if (!timer.current && !failed.current) {
-        timer.current = setTimeout(() => {
-          timer.current = null;
-          setStatus((current) => (current === "error" ? current : "saving"));
-        }, SAVING_DELAY_MS);
+    async <T,>(
+      write: () => Promise<T>,
+      onSuccess?: (result: T) => void,
+      options?: TrackOptions,
+    ): Promise<T> => {
+      const read = options?.read ?? false;
+      if (!read) {
+        pending.current += 1;
+        if (!timer.current && !failed.current) {
+          timer.current = setTimeout(() => {
+            timer.current = null;
+            setStatus((current) => (current === "error" ? current : "saving"));
+          }, SAVING_DELAY_MS);
+        }
       }
       const settle = () => {
+        if (read) return;
         pending.current -= 1;
         if (pending.current === 0 && timer.current) {
           clearTimeout(timer.current);
@@ -78,15 +99,18 @@ export function SaveStatusProvider({ children }: { children: ReactNode }) {
       try {
         const result = await write();
         settle();
-        // A newer success makes any earlier failure stale: clear it, and the Error state with it.
-        lastFailed.current = null;
-        failed.current = false;
-        if (pending.current === 0) setStatus("saved");
+        // A newer successful write makes any earlier failure stale: clear it, and the Error state with
+        // it. A successful read only clears a failed READ (a failed save stays until a save succeeds).
+        if (!read || lastFailed.current?.read) {
+          lastFailed.current = null;
+          failed.current = false;
+          if (pending.current === 0) setStatus("saved");
+        }
         onSuccess?.(result);
         return result;
       } catch (error) {
         settle();
-        lastFailed.current = { write, onSuccess: onSuccess as PendingWrite["onSuccess"] };
+        lastFailed.current = { write, onSuccess: onSuccess as PendingWrite["onSuccess"], read };
         failed.current = true;
         setStatus("error");
         throw error;
@@ -98,9 +122,9 @@ export function SaveStatusProvider({ children }: { children: ReactNode }) {
   const retry = useCallback(() => {
     const failedWrite = lastFailed.current;
     if (failedWrite)
-      void track(failedWrite.write, failedWrite.onSuccess as (result: unknown) => void).catch(
-        () => {},
-      );
+      void track(failedWrite.write, failedWrite.onSuccess as (result: unknown) => void, {
+        read: failedWrite.read,
+      }).catch(() => {});
   }, [track]);
 
   const api = useMemo<SaveStatusApi>(() => ({ status, track, retry }), [status, track, retry]);

@@ -240,6 +240,98 @@ describe("SaveStatusProvider", () => {
     expect(chipText()).not.toContain("Saving…");
   });
 
+  describe("reads", () => {
+    it("a slow read never shows or announces Saving, and still delivers its result", async () => {
+      setup();
+      const load = deferred();
+      const onSuccess = vi.fn();
+      let result: Promise<string>;
+      act(() => {
+        result = api.track(() => load.promise, onSuccess, { read: true });
+      });
+      await advance(SAVING_DELAY_MS * 10);
+      expect(chipText()).toContain("Saved");
+      expect(chipText()).not.toContain("Saving");
+      expect(status()).toBe("Saved");
+      await act(async () => {
+        load.resolve("loaded");
+        await result;
+      });
+      expect(onSuccess).toHaveBeenCalledWith("loaded");
+      expect(chipText()).toContain("Saved");
+    });
+
+    it("a slow write still shows Saving after 400ms, even while a read is in flight", async () => {
+      setup();
+      const load = deferred();
+      const write = deferred();
+      act(() => {
+        void api.track(() => load.promise, undefined, { read: true });
+        void api.track(() => write.promise);
+      });
+      await advance(399);
+      expect(chipText()).toContain("Saved");
+      await advance(1);
+      expect(chipText()).toContain("Saving…");
+      await act(async () => {
+        load.resolve("a");
+      });
+      expect(chipText()).toContain("Saving…");
+      await act(async () => {
+        write.resolve("b");
+      });
+      expect(chipText()).toContain("Saved");
+    });
+
+    it("a failed read shows the Error state, and Retry re-runs the read and delivers its result", async () => {
+      setup();
+      const onSuccess = vi.fn();
+      const read = vi.fn().mockRejectedValueOnce(new Error("down")).mockResolvedValue("fresh");
+      await act(async () => {
+        await api.track(read, onSuccess, { read: true }).catch(() => {});
+      });
+      expect(chipText()).toContain("Couldn't save · Retry");
+      expect(onSuccess).not.toHaveBeenCalled();
+      await act(async () => {
+        api.retry();
+      });
+      expect(read).toHaveBeenCalledTimes(2);
+      expect(onSuccess).toHaveBeenCalledWith("fresh");
+      expect(chipText()).toContain("Saved");
+    });
+
+    it("a successful read does not clear a failed save, which stays until a save succeeds", async () => {
+      setup();
+      await act(async () => {
+        await api.track(() => Promise.reject(new Error("x"))).catch(() => {});
+      });
+      await act(async () => {
+        await api.track(() => Promise.resolve("read"), undefined, { read: true });
+      });
+      expect(chipText()).toContain("Couldn't save");
+      await act(async () => {
+        await api.track(() => Promise.resolve("saved"));
+      });
+      expect(chipText()).toContain("Saved");
+    });
+
+    it("does not show Saving for a read made while a failed save is still showing Error", async () => {
+      setup();
+      await act(async () => {
+        await api.track(() => Promise.reject(new Error("x"))).catch(() => {});
+      });
+      const load = deferred();
+      act(() => {
+        void api.track(() => load.promise, undefined, { read: true });
+      });
+      await advance(SAVING_DELAY_MS * 3);
+      expect(chipText()).toContain("Couldn't save");
+      await act(async () => {
+        load.resolve("x");
+      });
+    });
+  });
+
   it("stays Saving until every overlapping write has finished", async () => {
     setup();
     const a = deferred();

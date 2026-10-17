@@ -60,6 +60,28 @@ describe("loading and errors", () => {
     expect(screen.queryByRole("region", { name: "Loading trips" })).toBeNull();
   });
 
+  it("a slow initial load leaves the chip on Saved and announces nothing about saving", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const gate = deferred<LifecycleState>();
+      const base = memory(sampleLifecycleState());
+      renderInApp(
+        <TripsDashboard source={{ ...base, load: () => gate.promise }} getToday={TODAY} />,
+      );
+      act(() => vi.advanceTimersByTime(5000));
+      expect(screen.getByRole("link", { name: "Saved" })).toBeTruthy();
+      expect(screen.getByRole("status", { name: "Save status" }).textContent).toBe("Saved");
+      expect(screen.queryByText("Saving…")).toBeNull();
+      // findBy* polls on setTimeout, which is faked here, so flush with act and query synchronously.
+      await act(async () => gate.resolve(await base.load()));
+      await act(async () => {});
+      expect(screen.getByRole("heading", { name: "San Diego" })).toBeTruthy();
+      expect(screen.getByRole("link", { name: "Saved" })).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("shows 'Couldn't load your trips.' with Try again, the Error chip, and recovers", async () => {
     const base = memory(sampleLifecycleState());
     const load = vi
@@ -137,6 +159,17 @@ describe("upcoming view", () => {
     expect(within(sanDiego).queryByText(/Upcoming trip|Past trip|Archived trip/)).toBeNull();
     expect(document.body.textContent).not.toMatch(/sample|Sample/);
     expect(screen.queryByText(/Illustrative/)).toBeNull();
+  });
+
+  it("does not show Recently deleted on the Upcoming tab (it belongs to Past & archive only)", async () => {
+    const { user } = setup();
+    await ready();
+    expect(screen.queryByRole("heading", { name: "Recently deleted" })).toBeNull();
+    expect(screen.queryByText("Nothing recently deleted.")).toBeNull();
+    await user.click(tab(/Past & archive/));
+    expect(screen.getByRole("heading", { name: "Recently deleted" })).toBeTruthy();
+    await user.click(tab(/Upcoming/));
+    expect(screen.queryByRole("heading", { name: "Recently deleted" })).toBeNull();
   });
 
   it("shows the hero with a New trip link and the tab counts", async () => {
