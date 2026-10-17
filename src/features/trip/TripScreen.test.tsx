@@ -792,6 +792,44 @@ describe("preferences and Ready", () => {
   });
 });
 
+describe("closing dialogs without saving", () => {
+  const closeButton = () => screen.queryByRole("button", { name: "Close dialog" });
+
+  it("the item editor, preferences and add-Bathroom-item sheets have a visible close that leaves everything unchanged", async () => {
+    const { user, source } = setup();
+    await ready();
+    const before = source.snapshot();
+
+    await user.click(within(row("tops")).getByRole("button", { name: "Edit Everyday tops" }));
+    await user.click(closeButton() as HTMLElement);
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Edit preferences" }));
+    await user.click(closeButton() as HTMLElement);
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "＋ Add a Bathroom item" }));
+    await user.click(closeButton() as HTMLElement);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(source.snapshot()).toBe(before);
+  });
+
+  it("dialogs with their own safe choice have no close button: the remove confirm, the bag prompt and the weather dialog", async () => {
+    const { user } = setup();
+    await ready();
+    await user.click(within(row("nice-shoes")).getByRole("button", { name: "Edit Dress shoes" }));
+    await user.click(screen.getByRole("button", { name: "Remove item" }));
+    expect(screen.getByRole("dialog", { name: "Remove Dress shoes?" })).toBeTruthy();
+    expect(closeButton()).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Keep item" }));
+    await user.keyboard("{Escape}");
+
+    await user.click(screen.getByRole("button", { name: "Review suggestion" }));
+    expect(screen.getByRole("dialog", { name: "Add a compact umbrella?" })).toBeTruthy();
+    expect(closeButton()).toBeNull();
+  });
+});
+
 describe("edges", () => {
   it("a failed change that is not tied to a row (a dialog submit) keeps the dialog open and shows the Error chip", async () => {
     const { user, source } = setup("san-diego", (base) => ({

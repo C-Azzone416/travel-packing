@@ -425,6 +425,21 @@ main {
 .modal-head h2 {
   margin: 0;
 }
+.modal-close {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin: -6px -6px 0 0;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
 .modal-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1466,6 +1481,15 @@ input:disabled {
   border-radius: 16px;
   background: #fff;
 }
+@media (max-width: 659px) {
+  .bag-placement.pending {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .bag-placement.pending .button {
+    width: 100%;
+  }
+}
 .bag-placement p {
   margin: 2px 0 0;
   color: var(--muted-text);
@@ -1546,7 +1570,9 @@ input:disabled {
   background: var(--seafoam-soft);
 }
 .choice input {
+  flex: none;
   width: 22px;
+  height: 22px;
   min-height: 22px;
   accent-color: var(--teal);
 }
