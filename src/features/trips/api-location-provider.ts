@@ -2,11 +2,20 @@
 // holds the real provider server-side; the browser never contacts a geocoding service, and only the
 // typed text leaves the page.
 
+import type { CreditPart } from "@/components/ui/Credit";
 import type { LocationProvider } from "@/domain/location-provider";
 import type { SampleLocation } from "@/domain/trip-lifecycle";
 
 export const SEARCH_PATH = "/api/locations/search";
-export const SEARCH_ATTRIBUTION = "Place search is provided by Open-Meteo.";
+// Open-Meteo's licence (CC BY 4.0) asks for a link to open-meteo.com next to its data, and its geocoding data
+// comes from GeoNames (also CC BY 4.0).
+export const SEARCH_ATTRIBUTION: readonly CreditPart[] = [
+  "Place search by ",
+  { text: "Open-Meteo.com", href: "https://open-meteo.com/" },
+  ", location data from ",
+  { text: "GeoNames", href: "https://www.geonames.org/" },
+  ".",
+];
 
 const text = (value: unknown): value is string => typeof value === "string";
 
@@ -21,15 +30,18 @@ function isPlace(value: unknown): value is SampleLocation {
 
 export interface ApiProviderOptions {
   fetch?: typeof fetch;
+  /** The server is using the real provider, so its credit is shown. Curated answers need no credit. */
+  credited?: boolean;
 }
 
 export function createApiLocationProvider({
   fetch: doFetch = (...args) => fetch(...args),
+  credited = false,
 }: ApiProviderOptions = {}): LocationProvider {
   return {
     minQueryLength: 2,
     debounceMs: 300,
-    attribution: SEARCH_ATTRIBUTION,
+    ...(credited ? { attribution: SEARCH_ATTRIBUTION } : {}),
     async search(query, { signal }) {
       const response = await doFetch(`${SEARCH_PATH}?q=${encodeURIComponent(query)}`, {
         signal,

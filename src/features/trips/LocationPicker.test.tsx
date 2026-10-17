@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { curatedLocationProvider, type LocationProvider } from "@/domain/location-provider";
 import { locationById } from "@/domain/locations";
 import type { SampleLocation } from "@/domain/trip-lifecycle";
+import { SEARCH_ATTRIBUTION } from "./api-location-provider";
 import {
   ALLOW_CUSTOM_DESTINATION,
   LocationPicker,
@@ -344,17 +345,32 @@ describe("LocationPicker", () => {
       expect(screen.queryByText(/Type at least/)).toBeNull();
     });
 
-    it("credits the provider under the field when it asks to be credited", () => {
-      const { provider } = manualProvider({
-        attribution: "Place search is provided by Open-Meteo.",
-      });
+    it("credits the provider as the last sentence of the helper line, with real links", () => {
+      const { provider } = manualProvider({ attribution: SEARCH_ATTRIBUTION });
       render(<Harness provider={provider} />);
-      expect(screen.getByText(/Place search is provided by Open-Meteo\./)).toBeTruthy();
+      const helper = screen.getByText(/Choose the city, region and country you mean\./);
+      expect(helper.textContent).toMatch(
+        /Free text alone is never a confirmed location\. Place search by Open-Meteo\.com, location data from GeoNames\.$/,
+      );
+      const open = within(helper).getByRole("link", { name: "Open-Meteo.com" });
+      expect(open.getAttribute("href")).toBe("https://open-meteo.com/");
+      expect(open.getAttribute("target")).toBe("_blank");
+      expect(open.getAttribute("rel")).toBe("noopener noreferrer");
+      expect(within(helper).getByRole("link", { name: "GeoNames" }).getAttribute("href")).toBe(
+        "https://www.geonames.org/",
+      );
+    });
+
+    it("keeps the credit visible when there are no results", async () => {
+      const { provider } = manualProvider({ attribution: SEARCH_ATTRIBUTION });
+      render(<Harness provider={provider} />);
+      expect(screen.getAllByRole("link")).toHaveLength(2);
     });
 
     it("shows no credit for a provider that has none", () => {
       render(<Harness />);
-      expect(screen.queryByText(/provided by/)).toBeNull();
+      expect(screen.queryByRole("link")).toBeNull();
+      expect(screen.queryByText(/Place search by/)).toBeNull();
     });
 
     it("tells apart results that share a city with the finer detail, and tolerates a missing region", async () => {
