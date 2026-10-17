@@ -21,6 +21,11 @@ export function geocodingBaseUrl(env: Record<string, string | undefined>): strin
   return override;
 }
 
+/** The get-by-id sibling of the (e2e-only) search override: the same host, `/get` instead of `/search`. */
+export function geocodingGetUrl(env: Record<string, string | undefined>): string | undefined {
+  return geocodingBaseUrl(env)?.replace(/\/search$/, "/get");
+}
+
 export function selectSearch(
   env: Record<string, string | undefined> = process.env,
   doFetch: typeof fetch = (...args) => fetch(...args),

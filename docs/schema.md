@@ -73,17 +73,21 @@ test fails if any category the calculator or default staples produce is missing 
 
 These reveal where and when someone travels. Keep them out of logs, analytics, fixtures, and client bundles.
 
-| Column                                      | Why                       |
-| ------------------------------------------- | ------------------------- |
-| `trips.start_date`, `trips.end_date`        | Exact travel dates        |
-| `trips.destination`                         | Destination city          |
-| `trips.location_id`, `trips.location_label` | City / region / country   |
-| `trips.days`, `trips.daily_days`            | Reveal trip length        |
-| `trips.copied_from`                         | Links trips to each other |
-| `trips.deleted_at`                          | Deletion time             |
-| `trip_items.name` (and staple names)        | Packing habits            |
-| `trip_preferences.*`                        | Packing habits            |
-| `weather_suggestions.label`                 | Tied to a trip's timing   |
+| Column                                                                           | Why                                                                   |
+| -------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `trips.start_date`, `trips.end_date`                                             | Exact travel dates                                                    |
+| `trips.destination`                                                              | Destination city                                                      |
+| `trips.location_id`, `trips.location_label`                                      | City / region / country                                               |
+| `trips.location_provider`, `trips.location_place_id`                             | Which provider place was chosen                                       |
+| `trips.location_region`, `trips.location_country`, `trips.location_country_code` | Region / country                                                      |
+| `trips.latitude`, `trips.longitude`                                              | **Most sensitive.** About 1 km (rounded to 2 decimals before storage) |
+| `trips.timezone`                                                                 | Narrows the destination                                               |
+| `trips.days`, `trips.daily_days`                                                 | Reveal trip length                                                    |
+| `trips.copied_from`                                                              | Links trips to each other                                             |
+| `trips.deleted_at`                                                               | Deletion time                                                         |
+| `trip_items.name` (and staple names)                                             | Packing habits                                                        |
+| `trip_preferences.*`                                                             | Packing habits                                                        |
+| `weather_suggestions.label`                                                      | Tied to a trip's timing                                               |
 
 `users.id` and `owner_id` identify the account holder.
 
@@ -154,3 +158,21 @@ it is invented; nothing is real trip data.
   never a connection string, date, or place.
 - `--owner <id>` or `SEED_OWNER_ID` sets the owner (default `seed-owner`). Tests can call `seedSyntheticData(db, ownerId)`
   directly as a fixture.
+
+## Places (#47)
+
+A trip's place is stored next to its destination: `location_id` / `location_label` (always, for a located trip),
+`location_region` / `location_country` / `location_country_code`, and, **only for a place a geocoding provider
+returned**, `location_provider`, `location_place_id`, `latitude`, `longitude`, `timezone`. Migration `0002` adds
+them as nullable columns, so existing trips and curated-list trips stay valid with every provider column null.
+
+Database rules (all `CHECK`s): latitude within -90..90 and longitude within -180..180; latitude and longitude come as
+a pair; coordinates exist only with a provider; `location_provider` and `location_place_id` come as a pair; a country
+code is two letters. Coordinates are `numeric(5,2)`, so the column itself rounds to 2 decimals (about 1 km).
+
+**The server resolves the place; the browser only names it.** `createTrip` and `copyTrip` accept a place **id**
+and nothing else is trusted (extra fields are stripped by validation). The server looks the id up
+(`DataContext.resolveLocation`: the curated list, plus the provider for `open-meteo-<id>` ids when
+`LOCATION_PROVIDER=open-meteo`) and stores the canonical result, re-rounding coordinates itself. An unknown id is
+`INVALID_INPUT`; a lookup that is down is `UNAVAILABLE` and nothing is saved. The lookup happens before any database
+write. Provider calls never happen inside the data layer's SQL transaction, and the queries and places are never logged.

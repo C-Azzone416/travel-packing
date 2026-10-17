@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  getOpenMeteoPlace,
   LocationSearchError,
   OPEN_METEO_GEOCODING_URL,
+  OPEN_METEO_GET_URL,
+  parseOpenMeteoId,
   RESULT_COUNT,
   round2,
   searchOpenMeteo,
@@ -255,6 +258,122 @@ describe("searchOpenMeteo failures", () => {
     );
     await searchOpenMeteo("SecretCity", { fetch: fakeFetch({ results: [london] }) });
     await searchOpenMeteo("SecretCity", { fetch: fakeFetch({}, { status: 500 }) }).catch(() => {});
+    for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+  });
+});
+
+describe("parseOpenMeteoId", () => {
+  it("reads the provider id from our place ids, and nothing else", () => {
+    expect(parseOpenMeteoId("open-meteo-2643743")).toBe("2643743");
+    for (const bad of [
+      "",
+      "2643743",
+      "open-meteo-",
+      "open-meteo-abc",
+      "open-meteo-12a",
+      "OPEN-METEO-1",
+      "open-meteo-1234567890123",
+      "x-open-meteo-1",
+      "open-meteo-1 ",
+      "us-ca-san-diego",
+      "open-meteo-1/../2",
+    ]) {
+      expect(parseOpenMeteoId(bad), bad).toBeNull();
+    }
+  });
+});
+
+describe("getOpenMeteoPlace", () => {
+  it("looks the place up by the provider id only, and maps it like a search result", async () => {
+    const doFetch = fakeFetch(london);
+    const place = await getOpenMeteoPlace("open-meteo-2643743", { fetch: doFetch });
+    expect(place).toMatchObject({
+      id: "open-meteo-2643743",
+      city: "London",
+      countryCode: "GB",
+      latitude: 51.51,
+      longitude: -0.13,
+      timezone: "Europe/London",
+      provider: "open-meteo",
+      providerPlaceId: "2643743",
+    });
+    const [url, init] = doFetch.mock.calls[0];
+    const parsed = new URL(String(url));
+    expect(`${parsed.origin}${parsed.pathname}`).toBe(OPEN_METEO_GET_URL);
+    expect([...parsed.searchParams.keys()].sort()).toEqual(["id", "language"]);
+    expect(parsed.searchParams.get("id")).toBe("2643743");
+    expect(init?.cache).toBe("no-store");
+    expect(init?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("never makes a request for an id that is not one of ours", async () => {
+    const doFetch = fakeFetch(london);
+    expect(await getOpenMeteoPlace("us-ca-san-diego", { fetch: doFetch })).toBeNull();
+    expect(await getOpenMeteoPlace("open-meteo-abc", { fetch: doFetch })).toBeNull();
+    expect(doFetch).not.toHaveBeenCalled();
+  });
+
+  it("uses a custom base URL, and passes the caller's signal on", async () => {
+    const doFetch = fakeFetch(london);
+    const controller = new AbortController();
+    await getOpenMeteoPlace("open-meteo-2643743", {
+      fetch: doFetch,
+      baseUrl: "https://fake.test/get",
+      signal: controller.signal,
+    });
+    expect(String(doFetch.mock.calls[0][0])).toMatch(/^https:\/\/fake\.test\/get\?/);
+  });
+
+  it.each([[400], [404]])("an unknown id (HTTP %i) is null, not an outage", async (status) => {
+    expect(
+      await getOpenMeteoPlace("open-meteo-1", {
+        fetch: fakeFetch({ error: true, reason: "x" }, { status }),
+      }),
+    ).toBeNull();
+  });
+
+  it.each([
+    ["a server error", () => fakeFetch({}, { status: 500 })],
+    ["a rate limit", () => fakeFetch({}, { status: 429 })],
+    [
+      "a network failure",
+      () => vi.fn<typeof fetch>(async () => Promise.reject(new TypeError("offline"))),
+    ],
+    [
+      "a body that is not JSON",
+      () => vi.fn<typeof fetch>(async () => new Response("<html>", { status: 200 })),
+    ],
+    ["a body that is not a place", () => fakeFetch({ results: [] })],
+    ["a place with a different id than asked for", () => fakeFetch({ ...london, id: 999 })],
+    ["a place with no coordinates", () => fakeFetch({ id: 2643743, name: "London" })],
+  ])("fails with the generic error for %s", async (_label, make) => {
+    const error = await getOpenMeteoPlace("open-meteo-2643743", { fetch: make() }).catch(
+      (caught: unknown) => caught,
+    );
+    expect(error).toBeInstanceOf(LocationSearchError);
+    expect((error as Error).message).toBe("Location search is unavailable");
+  });
+
+  it("gives up after the timeout", async () => {
+    const hang = vi.fn<typeof fetch>(
+      (_url, init) =>
+        new Promise<Response>((_resolve, reject) =>
+          init?.signal?.addEventListener("abort", () => reject(new Error("aborted"))),
+        ),
+    );
+    await expect(
+      getOpenMeteoPlace("open-meteo-1", { fetch: hang, timeoutMs: 15 }),
+    ).rejects.toBeInstanceOf(LocationSearchError);
+  });
+
+  it("never logs", async () => {
+    const spies = (["log", "info", "warn", "error", "debug"] as const).map((method) =>
+      vi.spyOn(console, method).mockImplementation(() => {}),
+    );
+    await getOpenMeteoPlace("open-meteo-2643743", { fetch: fakeFetch(london) });
+    await getOpenMeteoPlace("open-meteo-2643743", { fetch: fakeFetch({}, { status: 500 }) }).catch(
+      () => {},
+    );
     for (const spy of spies) expect(spy).not.toHaveBeenCalled();
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { curatedSearch, geocodingBaseUrl, selectSearch } from "./provider-config";
+import { curatedSearch, geocodingBaseUrl, geocodingGetUrl, selectSearch } from "./provider-config";
 
 const signal = new AbortController().signal;
 
@@ -110,5 +110,20 @@ describe("geocodingBaseUrl (e2e-only override)", () => {
     )("paris", { signal });
     expect(calls[0]).toMatch(/^http:\/\/127\.0\.0\.1:3102\/v1\/search\?/);
     expect(calls[1]).toMatch(/^https:\/\/geocoding-api\.open-meteo\.com\/v1\/search\?/);
+  });
+});
+
+describe("geocodingGetUrl", () => {
+  it("is the e2e override's /get sibling, honored under exactly the same rules", () => {
+    const env = {
+      OPEN_METEO_GEOCODING_URL: "http://127.0.0.1:3302/v1/search",
+      NEXT_PUBLIC_E2E_BUILD: "1",
+    };
+    expect(geocodingGetUrl(env)).toBe("http://127.0.0.1:3302/v1/get");
+    expect(geocodingGetUrl({ ...env, VERCEL: "1" })).toBeUndefined();
+    expect(
+      geocodingGetUrl({ OPEN_METEO_GEOCODING_URL: env.OPEN_METEO_GEOCODING_URL }),
+    ).toBeUndefined();
+    expect(geocodingGetUrl({})).toBeUndefined();
   });
 });
