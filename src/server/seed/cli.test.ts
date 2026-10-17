@@ -89,6 +89,27 @@ describe("runSeedCli: local", () => {
     await client.close();
   });
 
+  it("dates the sample trips from the injected run date, not a fixed one", async () => {
+    const { client, deps } = await fakeDeps();
+    expect(await runSeedCli([], {}, { ...deps, today: () => "2030-05-01" })).toBe(0);
+    const { rows } = await client.query<{
+      destination: string;
+      start_date: string;
+      end_date: string;
+    }>(
+      "SELECT destination, start_date::text AS start_date, end_date::text AS end_date FROM trips ORDER BY start_date",
+    );
+    expect(rows).toEqual([
+      { destination: "Lisbon", start_date: "2030-03-19", end_date: "2030-03-23" },
+      { destination: "San Diego", start_date: "2030-05-08", end_date: "2030-05-12" },
+    ]);
+    const forecast = await client.query<{ label: string }>(
+      "SELECT w.label FROM weather_suggestions w JOIN trips t ON t.id = w.trip_id WHERE t.destination = 'San Diego'",
+    );
+    expect(forecast.rows[0]?.label).toBe("Close forecast");
+    await client.close();
+  });
+
   it("ignores unknown arguments", async () => {
     const { client, deps } = await fakeDeps();
     expect(await runSeedCli(["--whatever", "x"], {}, deps)).toBe(0);
