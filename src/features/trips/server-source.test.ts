@@ -41,6 +41,7 @@ describe("createServerTripsSource", () => {
     expect(await source.remove("c")).toBe(state);
     expect(await source.undoRemove("d")).toBe(state);
     expect(await source.createTrip(draft)).toBe(trip);
+    expect(fakes.create).toHaveBeenCalledWith(draft);
     expect(calls).toEqual(["load", "archive:a", "restore:b", "remove:c", "undoRemove:d", "create"]);
   });
 

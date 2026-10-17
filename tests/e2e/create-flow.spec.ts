@@ -1,8 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
-import { signInAsOwner } from "./helpers/auth";
+import { ownerEmailFor, signIn, signInAsOwner } from "./helpers/auth";
 
-// Fixed clock: San Diego is upcoming, Lisbon is past. In-memory data survives client-side
-// navigation (links), not a reload, so every step here navigates by clicking.
+// Fixed clock: San Diego is upcoming, Lisbon is past. Trips are stored in the e2e database, so what a test saves
+// survives a reload and a new session; each test starts from the freshly seeded state (see signInAsOwner).
 const NOW = new Date("2026-10-16T12:00:00");
 
 async function openDashboard(page: Page) {
@@ -126,6 +126,37 @@ test("create: pick, set dates, shape, save -> the trip is on the dashboard with 
   await expect(london).toBeVisible();
   await expect(london.getByText(/^0 of \d+ packed$/)).toBeVisible();
   await expect(london.getByText("Oct 23")).toHaveCount(0);
+
+  // It is in the database, not just in the page: it survives a reload.
+  await page.reload();
+  await expect(upcomingCount(page)).toContainText("2");
+  await expect(card(page, "London").getByText(/^0 of \d+ packed$/)).toBeVisible();
+  await expect(card(page, "San Diego")).toBeVisible();
+});
+
+test("create: the saved trip is there in a brand-new session (another device)", async ({
+  page,
+  browser,
+}) => {
+  await openDashboard(page);
+  await page.getByRole("link", { name: /New trip/ }).click();
+  await pick(page, "lon", /England/);
+  await setDates(page, "2026-11-12", "2026-11-16");
+  await page.getByRole("button", { name: "Continue to packing preferences" }).click();
+  await page.getByRole("button", { name: "Save trip" }).click();
+  await expect(card(page, "London")).toBeVisible();
+
+  const other = await browser.newContext({ viewport: page.viewportSize() ?? undefined });
+  try {
+    const device = await other.newPage();
+    await device.clock.setFixedTime(NOW);
+    await signIn(device, ownerEmailFor(test.info().project.name));
+    await expect(device).toHaveURL(/\/$/);
+    await expect(upcomingCount(device)).toContainText("2");
+    await expect(card(device, "London").getByText(/^0 of \d+ packed$/)).toBeVisible();
+  } finally {
+    await other.close();
+  }
 });
 
 test("copy: a new trip with clear progress, and the source trip unchanged", async ({ page }) => {
@@ -144,6 +175,12 @@ test("copy: a new trip with clear progress, and the source trip unchanged", asyn
   await expect(page.getByText("Unsaved copy of San Diego")).toBeVisible();
   await page.getByRole("button", { name: "Save trip" }).click();
 
+  await expect(upcomingCount(page)).toContainText("2");
+  await expect(card(page, "Paris").getByText(/^0 of \d+ packed$/)).toBeVisible();
+  expect(await card(page, "San Diego").innerText()).toBe(before);
+
+  // The copy is stored: it survives a reload, with nothing packed, and the source is still untouched.
+  await page.reload();
   await expect(upcomingCount(page)).toContainText("2");
   await expect(card(page, "Paris").getByText(/^0 of \d+ packed$/)).toBeVisible();
   expect(await card(page, "San Diego").innerText()).toBe(before);
