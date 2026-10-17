@@ -13,6 +13,8 @@ export const FORBIDDEN_EVERYWHERE = [
   "E2E_DATABASE_URL",
   // The seed target is chosen per run in CI, never configured on a deployed app.
   "SEED_DATABASE_URL",
+  // Lets the location search be pointed at another server; for e2e only.
+  "OPEN_METEO_GEOCODING_URL",
 ] as const;
 
 export const REQUIRED = [
@@ -59,8 +61,13 @@ export function checkDeployEnv(
   for (const name of REQUIRED) {
     if (!present(env, name)) problems.push(`${name} is not set`);
   }
+  // Production may leave the provider unset (search off) or use the real one; any other value is a mistake.
+  const provider = env.LOCATION_PROVIDER?.trim();
+  if (target === "production" && provider && provider !== PREVIEW_LOCATION_PROVIDER) {
+    problems.push(`LOCATION_PROVIDER, when set, must be ${PREVIEW_LOCATION_PROVIDER}`);
+  }
   if (target === "preview") {
-    if (env.LOCATION_PROVIDER?.trim() !== PREVIEW_LOCATION_PROVIDER) {
+    if (provider !== PREVIEW_LOCATION_PROVIDER) {
       problems.push(
         `LOCATION_PROVIDER must be ${PREVIEW_LOCATION_PROVIDER} in a preview environment`,
       );

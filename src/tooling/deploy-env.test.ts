@@ -38,12 +38,25 @@ describe("checkDeployEnv", () => {
     "AUTH_E2E_STATE_DIR",
     "E2E_DATABASE_URL",
     "SEED_DATABASE_URL",
+    "OPEN_METEO_GEOCODING_URL",
   ])("refuses %s in both environments, naming it but not its value", (name) => {
     for (const target of ["preview", "production"] as const) {
       const problems = checkDeployEnv(target, { ...good, [name]: "secret-value" }, PROD_HOST);
       expect(problems).toEqual([`${name} must not be set in a ${target} environment`]);
       expect(problems.join()).not.toContain("secret-value");
     }
+  });
+
+  it("lets production leave the location provider unset or use open-meteo, and nothing else", () => {
+    const { LOCATION_PROVIDER: _unused, ...unset } = good;
+    void _unused;
+    expect(checkDeployEnv("production", unset, undefined)).toEqual([]);
+    expect(
+      checkDeployEnv("production", { ...good, LOCATION_PROVIDER: " open-meteo " }, undefined),
+    ).toEqual([]);
+    expect(checkDeployEnv("production", { ...good, LOCATION_PROVIDER: "fake" }, undefined)).toEqual(
+      ["LOCATION_PROVIDER, when set, must be open-meteo"],
+    );
   });
 
   it("requires open-meteo for previews", () => {
