@@ -75,7 +75,11 @@ vi.mock("../../domain/trip-lifecycle", async (importOriginal) => {
 let ctx: Awaited<ReturnType<typeof createMigratedDb>>;
 const fake = createFakeAuth();
 const db = () => ctx.db as unknown as Db;
-const context = () => makeContext(db(), fake);
+// Places are resolved server-side from their id (#47); this test world knows exactly one.
+const context = () => ({
+  ...makeContext(db(), fake),
+  resolveLocation: async (id: string) => (id === LOCATION.id ? LOCATION : null),
+});
 const as = (user: typeof OWNER | null) => signedInAs(fake, user);
 
 beforeAll(async () => {
@@ -858,11 +862,6 @@ describe("trip lifecycle", () => {
       ["a malformed start", { start: "soon" }, ["start"]],
       ["an impossible date", { start: "2030-02-30", end: "2030-03-02" }, ["start", "end"]],
       ["a missing location id", { location: { ...LOCATION, id: "" } }, ["location.id"]],
-      [
-        "an extra-long destination",
-        { location: { ...LOCATION, city: "x".repeat(81) } },
-        ["location.city"],
-      ],
     ])("rejects %s", async (_name, override, fields) => {
       const error = errorOf(await service.createTrip(context(), { ...input, ...override }));
       expect(error).toMatchObject({ code: "INVALID_INPUT" });
@@ -1052,6 +1051,258 @@ describe("trip lifecycle", () => {
         data(await service.listRecentlyDeletedTrips(context())).map((entry) => entry.id),
       ).toEqual([trip.id]);
     });
+  });
+});
+
+describe("places are resolved server-side from their id (#47)", () => {
+  const countRows = async (table: "trips" | "staples") =>
+    Number(
+      (await ctx.client.query<{ n: string }>(`SELECT count(*)::text AS n FROM "${table}"`)).rows[0]
+        .n,
+    );
+  const countTrips = () => countRows("trips");
+  const input = { location: LOCATION, start: "2030-03-15", end: "2030-03-20", config: CONFIG };
+  const LONDON = {
+    id: "open-meteo-2643743",
+    city: "London",
+    region: "England",
+    country: "United Kingdom",
+    countryCode: "GB",
+    label: "London, England, United Kingdom",
+    provider: "open-meteo",
+    providerPlaceId: "2643743",
+    latitude: 51.50853,
+    longitude: -0.12574,
+    timezone: "Europe/London",
+  };
+  const withResolver = (resolve: (id: string) => Promise<unknown>) =>
+    ({ ...makeContext(db(), fake), resolveLocation: resolve }) as ReturnType<typeof makeContext>;
+
+  it("trusts only the id: a forged city, label, provider and coordinates never reach storage", async () => {
+    const forged = {
+      ...LOCATION,
+      city: "Forged City",
+      label: "Forged, Nowhere",
+      provider: "evil",
+      providerPlaceId: "9",
+      latitude: 1.2345,
+      longitude: 2.3456,
+      timezone: "Mars/Base",
+    };
+    const trip = data(await service.createTrip(context(), { ...input, location: forged }));
+    expect(trip.destination).toBe("Exampleville");
+    expect(trip.locationLabel).toBe(LOCATION.label);
+    expect(trip.place).toEqual({
+      provider: null,
+      placeId: null,
+      region: "Sample Region",
+      country: "Sampleland",
+      countryCode: "SL",
+      latitude: null,
+      longitude: null,
+      timezone: null,
+    });
+  });
+
+  it("needs nothing but the id", async () => {
+    const trip = data(
+      await service.createTrip(context(), { ...input, location: { id: LOCATION.id } }),
+    );
+    expect(trip.destination).toBe("Exampleville");
+  });
+
+  it("stores a provider place with coordinates rounded to 2 decimals, and reads it back", async () => {
+    const created = data(
+      await service.createTrip(
+        withResolver(async () => LONDON),
+        { ...input, location: { id: LONDON.id } },
+      ),
+    );
+    const expected = {
+      provider: "open-meteo",
+      placeId: "2643743",
+      region: "England",
+      country: "United Kingdom",
+      countryCode: "GB",
+      latitude: 51.51,
+      longitude: -0.13,
+      timezone: "Europe/London",
+    };
+    expect(created.place).toEqual(expected);
+    expect(created.locationId).toBe(LONDON.id);
+    expect(data(await service.getTrip(context(), { tripId: created.id })).place).toEqual(expected);
+    expect(data(await service.listTrips(context()))[0].place).toEqual(expected);
+  });
+
+  it("re-rounds coordinates itself, whatever precision a resolver returns", async () => {
+    const precise = { ...LONDON, latitude: 51.508539123, longitude: -0.125741987 };
+    const trip = data(
+      await service.createTrip(
+        withResolver(async () => precise),
+        { ...input, location: { id: LONDON.id } },
+      ),
+    );
+    expect([trip.place?.latitude, trip.place?.longitude]).toEqual([51.51, -0.13]);
+  });
+
+  it("drops coordinates and timezone that did not come from a provider", async () => {
+    const stray = { ...LOCATION, latitude: 10, longitude: 20, timezone: "Europe/Paris" };
+    const trip = data(
+      await service.createTrip(
+        withResolver(async () => stray),
+        { ...input, location: { id: LOCATION.id } },
+      ),
+    );
+    expect(trip.place).toMatchObject({
+      provider: null,
+      latitude: null,
+      longitude: null,
+      timezone: null,
+    });
+  });
+
+  it("stores a provider place that has no coordinates or timezone", async () => {
+    const bare = { ...LONDON, latitude: undefined, longitude: undefined, timezone: undefined };
+    const trip = data(
+      await service.createTrip(
+        withResolver(async () => bare),
+        { ...input, location: { id: LONDON.id } },
+      ),
+    );
+    expect(trip.place).toMatchObject({
+      provider: "open-meteo",
+      latitude: null,
+      longitude: null,
+      timezone: null,
+    });
+  });
+
+  it("stores a missing region as null, not as an empty string", async () => {
+    const noRegion = { ...LOCATION, region: "" };
+    const trip = data(
+      await service.createTrip(
+        withResolver(async () => noRegion),
+        { ...input, location: { id: LOCATION.id } },
+      ),
+    );
+    expect(trip.place?.region).toBeNull();
+  });
+
+  it("refuses an id nobody recognizes with INVALID_INPUT on location, and stores nothing", async () => {
+    const error = errorOf(
+      await service.createTrip(context(), { ...input, location: { id: "nowhere" } }),
+    );
+    expect(error).toMatchObject({ code: "INVALID_INPUT", fields: ["location"] });
+    expect(await countTrips()).toBe(0);
+  });
+
+  it("refuses a resolved place outside the stored bounds", async () => {
+    const huge = { ...LOCATION, city: "x".repeat(81) };
+    const error = errorOf(
+      await service.createTrip(
+        withResolver(async () => huge),
+        { ...input, location: { id: LOCATION.id } },
+      ),
+    );
+    expect(error).toMatchObject({ code: "INVALID_INPUT", fields: ["location"] });
+    expect(await countTrips()).toBe(0);
+  });
+
+  it("answers UNAVAILABLE, with nothing stored and no detail, when the lookup is down", async () => {
+    const down = withResolver(async () => Promise.reject(new Error("provider secret for London")));
+    const result = await service.createTrip(down, { ...input, location: { id: LONDON.id } });
+    expect(errorOf(result)).toMatchObject({
+      code: "UNAVAILABLE",
+      message: "That isn't available right now. Try again.",
+    });
+    expect(JSON.stringify(result)).not.toContain("secret");
+    expect(await countTrips()).toBe(0);
+  });
+
+  it("resolves before writing anything, so a failed lookup leaves the owner no trace (not even default staples)", async () => {
+    await service.createTrip(
+      withResolver(async () => Promise.reject(new Error("down"))),
+      { ...input, location: { id: LONDON.id } },
+    );
+    expect(await countTrips()).toBe(0);
+  });
+
+  it("asks the resolver for exactly the id the browser sent", async () => {
+    const ids: string[] = [];
+    await service.createTrip(
+      withResolver(async (id) => (ids.push(id), LOCATION)),
+      { ...input, location: { id: LOCATION.id } },
+    );
+    expect(ids).toEqual([LOCATION.id]);
+  });
+
+  it("copyTrip resolves the same way: forged fields ignored, unknown id refused, lookup down is UNAVAILABLE, source untouched", async () => {
+    const source = await packedTrip({});
+    const copyInput = {
+      sourceId: source.id,
+      location: { id: LONDON.id },
+      start: "2030-05-01",
+      end: "2030-05-04",
+    };
+    const copy = data(
+      await service.copyTrip(
+        withResolver(async () => LONDON),
+        { ...copyInput, location: { ...LONDON, city: "Forged" } },
+      ),
+    );
+    expect(copy.destination).toBe("London");
+    expect(copy.place).toMatchObject({ provider: "open-meteo", latitude: 51.51 });
+    expect(copy.copiedFrom).toBe(source.id);
+    expect(
+      errorOf(await service.copyTrip(context(), { ...copyInput, location: { id: "nowhere" } })),
+    ).toMatchObject({ code: "INVALID_INPUT", fields: ["location"] });
+    expect(
+      errorOf(
+        await service.copyTrip(
+          withResolver(async () => Promise.reject(new Error("x"))),
+          copyInput,
+        ),
+      ),
+    ).toMatchObject({ code: "UNAVAILABLE" });
+    expect(data(await service.getTrip(context(), { tripId: source.id })).id).toBe(source.id);
+  });
+
+  it("with no resolver configured only the curated list resolves, and provider ids never do", async () => {
+    const plain = makeContext(db(), fake);
+    const san = data(
+      await service.createTrip(plain, { ...input, location: { id: "us-ca-san-diego" } }),
+    );
+    expect(san).toMatchObject({ destination: "San Diego", locationId: "us-ca-san-diego" });
+    expect(san.place).toEqual({
+      provider: null,
+      placeId: null,
+      region: "California",
+      country: "United States",
+      countryCode: "US",
+      latitude: null,
+      longitude: null,
+      timezone: null,
+    });
+    expect(
+      errorOf(
+        await service.createTrip(plain, { ...input, location: { id: "open-meteo-2643743" } }),
+      ),
+    ).toMatchObject({ code: "INVALID_INPUT", fields: ["location"] });
+  });
+
+  it("keeps the place through later edits", async () => {
+    const created = data(
+      await service.createTrip(
+        withResolver(async () => LONDON),
+        { ...input, location: { id: LONDON.id } },
+      ),
+    );
+    const itemId = created.items[0].id;
+    const edited = data(await service.togglePackedItem(context(), { tripId: created.id, itemId }));
+    expect(edited.trip.place).toEqual(created.place);
+    expect(data(await service.getTrip(context(), { tripId: created.id })).place).toEqual(
+      created.place,
+    );
   });
 });
 
