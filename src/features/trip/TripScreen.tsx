@@ -132,7 +132,9 @@ export function TripScreen({ tripId }: { tripId: string }) {
       if (!cancelled)
         setLoad({
           phase:
-            error instanceof TripsSourceError && error.message === "NOT_FOUND"
+            // A malformed id (INVALID_INPUT) can't be a trip either, so it reads the same as a missing one.
+            error instanceof TripsSourceError &&
+            (error.message === "NOT_FOUND" || error.message === "INVALID_INPUT")
               ? "missing"
               : "error",
         });
