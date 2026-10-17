@@ -39,7 +39,13 @@ import { formatDays, formatRange } from "./view";
 
 type Step = "details" | "shape";
 
-export function TripFlow({ copyId, allowCustom }: { copyId?: string; allowCustom?: boolean }) {
+export interface TripFlowProps {
+  copyId?: string;
+  allowCustom?: boolean;
+  getToday?: () => string;
+}
+
+export function TripFlow({ copyId, allowCustom, getToday = localToday }: TripFlowProps) {
   const source = useTripsSource();
   const [loaded, setLoaded] = useState<
     | { phase: "loading" }
@@ -85,17 +91,26 @@ export function TripFlow({ copyId, allowCustom }: { copyId?: string; allowCustom
     );
   }
 
-  return <FlowBody initial={loaded.initial} from={loaded.from} allowCustom={allowCustom} />;
+  return (
+    <FlowBody
+      initial={loaded.initial}
+      from={loaded.from}
+      allowCustom={allowCustom}
+      today={getToday()}
+    />
+  );
 }
 
 function FlowBody({
   initial,
   from,
   allowCustom,
+  today,
 }: {
   initial: TripDraft;
   from: LifecycleTrip | null;
   allowCustom?: boolean;
+  today: string;
 }) {
   const router = useRouter();
   const source = useTripsSource();
@@ -268,6 +283,7 @@ function FlowBody({
           header={header}
           saving={saving}
           announcement={announcement}
+          today={today}
           onChange={updateConfig}
           onBack={() => setStep("details")}
           onSave={save}
@@ -303,6 +319,7 @@ interface ShapeStepProps {
   header: (title: string, lede: string, eyebrow: string) => React.ReactNode;
   saving: boolean;
   announcement: string;
+  today: string;
   onChange: (patch: Partial<TripConfig>) => void;
   onBack: () => void;
   onSave: () => void;
@@ -315,6 +332,7 @@ function ShapeStep({
   header,
   saving,
   announcement,
+  today,
   onChange,
   onBack,
   onSave,
@@ -325,7 +343,7 @@ function ShapeStep({
   // Step 2 is only reachable once a destination is confirmed (Continue is blocked without one).
   const location = draft.location as SampleLocation;
   const forecast =
-    location && !isCustomLocation(location) ? forecastLabel(draft.start, localToday()) : null;
+    location && !isCustomLocation(location) ? forecastLabel(draft.start, today) : null;
 
   return (
     <>

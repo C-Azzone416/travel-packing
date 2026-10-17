@@ -17,7 +17,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 function setup(
-  props: { copyId?: string; allowCustom?: boolean } = {},
+  props: { copyId?: string; allowCustom?: boolean; getToday?: () => string } = {},
   wrap?: (base: ReturnType<typeof memory>) => TripsSource,
 ) {
   push.mockClear();
@@ -227,6 +227,18 @@ describe("step 2: shape the list", () => {
     expect(screen.getByText("Destination confirmed")).toBeTruthy();
     expect(leave().value).toBe("2026-11-12");
     expect(ret().value).toBe("2026-11-16");
+  });
+
+  it("labels the forecast from the injected today, not the system clock", async () => {
+    const near = setup({ getToday: () => "2026-11-10" });
+    await toShapeStep(near.user);
+    expect(screen.getByText("Simulated · Close forecast")).toBeTruthy();
+  });
+
+  it("uses a seasonal outlook when the trip is far off", async () => {
+    const far = setup({ getToday: () => "2026-01-01" });
+    await toShapeStep(far.user);
+    expect(screen.getByText("Simulated · Seasonal outlook")).toBeTruthy();
   });
 
   it("omits the forecast card for a custom destination", async () => {
