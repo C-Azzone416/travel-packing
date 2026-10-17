@@ -1,0 +1,9 @@
+reference/
+.next/
+coverage/
+playwright-report/
+test-results/
+package-lock.json
+TRAVEL_PACKING_DESIGN_AND_IMPLEMENTATION_PLAN.md
+# Next.js rewrites this file on every build in its own style
+tsconfig.json
