@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import type { LifecycleTrip } from "@/domain/trip-lifecycle";
 import { QuickView } from "./QuickView";
-import type { TripCardView } from "./view";
+import { formatDays, type TripCardView } from "./view";
 
 export interface TripCardProps {
   trip: LifecycleTrip;
@@ -58,7 +58,7 @@ export function TripCard({
         </div>
         <div className="meta">
           <span>◷ {view.range}</span>
-          <span>{view.days} days</span>
+          <span>{formatDays(view.days)}</span>
           {view.forecast ? <span>{view.forecast} · Simulated</span> : null}
         </div>
         <div

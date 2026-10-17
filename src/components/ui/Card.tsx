@@ -1,7 +1,7 @@
 import type { HTMLAttributes } from "react";
 
 export interface CardProps extends HTMLAttributes<HTMLElement> {
-  as?: "div" | "section" | "article";
+  as?: "div" | "section" | "article" | "aside";
   padded?: boolean;
 }
 

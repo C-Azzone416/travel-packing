@@ -20,6 +20,10 @@ export function formatRange(trip: Pick<LifecycleTrip, "start" | "end">): string 
   return `${formatDate(trip.start)} – ${formatDate(trip.end)}`;
 }
 
+export function formatDays(days: number): string {
+  return days === 1 ? "1 day" : `${days} days`;
+}
+
 export interface TripCardView {
   id: string;
   destination: string;
