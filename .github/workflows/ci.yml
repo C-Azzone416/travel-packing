@@ -60,6 +60,11 @@ jobs:
       - name: Build
         run: npm run build
 
+      # The e2e-only fake sign-in must not be in a deployable build. This build is made without
+      # NEXT_PUBLIC_E2E_BUILD, exactly like production; the e2e step below rebuilds with it.
+      - name: Verify the e2e-only sign-in is not in the build
+        run: npm run check:no-e2e-in-build
+
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 

@@ -12,6 +12,8 @@ export default defineConfig({
     timeout: 180_000,
     // Synthetic, e2e-only sign-in; the server refuses this mode on any Vercel deployment.
     env: {
+      // Compiles the e2e-only sign-in into THIS build only. Deployed builds never set it, so the code is absent.
+      NEXT_PUBLIC_E2E_BUILD: "1",
       AUTH_E2E_FAKE: "1",
       AUTH_E2E_PASSWORD: E2E_PASSWORD,
       OWNER_EMAIL_ALLOWLIST: OWNER_EMAIL,

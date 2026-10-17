@@ -89,14 +89,36 @@ describe("getAuth", () => {
     expect(getAuth({})).not.toBe(first);
   });
 
-  describe("e2e fake sign-in", () => {
+  describe("e2e fake sign-in (three independent locks)", () => {
     const e2eEnv = {
       AUTH_E2E_FAKE: "1",
       AUTH_E2E_PASSWORD: "synthetic-e2e-only",
       OWNER_EMAIL_ALLOWLIST: "owner@example.test",
     };
 
-    it("is used when explicitly enabled outside Vercel, with the allowlist still applied", async () => {
+    afterEach(() => vi.unstubAllEnvs());
+
+    it("lock 1, compile time: without the e2e build flag the opt-in is ignored entirely", async () => {
+      vi.stubEnv("NEXT_PUBLIC_E2E_BUILD", "");
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      const auth = await getAuth(e2eEnv);
+      expect(auth.available).toBe(false);
+      expect(
+        await auth.provider.signInWithPassword("owner@example.test", "synthetic-e2e-only"),
+      ).toEqual({ ok: false });
+      expect(createNeonAuth).not.toHaveBeenCalled();
+    });
+
+    it("lock 2, runtime opt-in: the build flag alone enables nothing", async () => {
+      vi.stubEnv("NEXT_PUBLIC_E2E_BUILD", "1");
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      expect((await getAuth({ OWNER_EMAIL_ALLOWLIST: "owner@example.test" })).available).toBe(
+        false,
+      );
+    });
+
+    it("is used only when the build flag, the opt-in, and a non-Vercel runtime all hold; the allowlist still applies", async () => {
+      vi.stubEnv("NEXT_PUBLIC_E2E_BUILD", "1");
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
       const auth = await getAuth(e2eEnv);
       expect(auth.available).toBe(true);
@@ -109,13 +131,17 @@ describe("getAuth", () => {
     it.each([
       ["production", { VERCEL: "1", VERCEL_ENV: "production" }],
       ["preview", { VERCEL: "1", VERCEL_ENV: "preview" }],
-    ])("is ignored on a Vercel %s deployment: auth stays unavailable", async (_name, vercel) => {
-      vi.spyOn(console, "warn").mockImplementation(() => {});
-      const auth = await getAuth({ ...e2eEnv, ...vercel });
-      expect(auth.available).toBe(false);
-      expect(
-        await auth.provider.signInWithPassword("owner@example.test", "synthetic-e2e-only"),
-      ).toEqual({ ok: false });
-    });
+    ])(
+      "lock 3, never on Vercel: ignored on a %s deployment even in an e2e build",
+      async (_name, vercel) => {
+        vi.stubEnv("NEXT_PUBLIC_E2E_BUILD", "1");
+        vi.spyOn(console, "warn").mockImplementation(() => {});
+        const auth = await getAuth({ ...e2eEnv, ...vercel });
+        expect(auth.available).toBe(false);
+        expect(
+          await auth.provider.signInWithPassword("owner@example.test", "synthetic-e2e-only"),
+        ).toEqual({ ok: false });
+      },
+    );
   });
 });
