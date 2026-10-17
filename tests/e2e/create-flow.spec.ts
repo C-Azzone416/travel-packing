@@ -1,8 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
-import { signInAsOwner } from "./helpers/auth";
+import { ownerEmailFor, signIn, signInAsOwner } from "./helpers/auth";
 
-// Fixed clock: San Diego is upcoming, Lisbon is past. In-memory data survives client-side
-// navigation (links), not a reload, so every step here navigates by clicking.
+// Fixed clock: San Diego is upcoming, Lisbon is past. Trips are stored in the e2e database, so what a test saves
+// survives a reload and a new session; each test starts from the freshly seeded state (see signInAsOwner).
 const NOW = new Date("2026-10-16T12:00:00");
 
 async function openDashboard(page: Page) {
@@ -87,6 +87,8 @@ test("keyboard: arrow keys and Enter pick a destination without submitting the f
   await page.getByRole("link", { name: /New trip/ }).click();
   const box = page.getByRole("combobox", { name: "Destination search" });
   await box.fill("london");
+  // Results arrive after the search debounce and a server round trip; arrows act on what is listed.
+  await expect(page.getByRole("option")).toHaveCount(2);
   await box.press("ArrowDown");
   await box.press("ArrowDown");
   await box.press("Enter");
@@ -126,6 +128,37 @@ test("create: pick, set dates, shape, save -> the trip is on the dashboard with 
   await expect(london).toBeVisible();
   await expect(london.getByText(/^0 of \d+ packed$/)).toBeVisible();
   await expect(london.getByText("Oct 23")).toHaveCount(0);
+
+  // It is in the database, not just in the page: it survives a reload.
+  await page.reload();
+  await expect(upcomingCount(page)).toContainText("2");
+  await expect(card(page, "London").getByText(/^0 of \d+ packed$/)).toBeVisible();
+  await expect(card(page, "San Diego")).toBeVisible();
+});
+
+test("create: the saved trip is there in a brand-new session (another device)", async ({
+  page,
+  browser,
+}) => {
+  await openDashboard(page);
+  await page.getByRole("link", { name: /New trip/ }).click();
+  await pick(page, "lon", /England/);
+  await setDates(page, "2026-11-12", "2026-11-16");
+  await page.getByRole("button", { name: "Continue to packing preferences" }).click();
+  await page.getByRole("button", { name: "Save trip" }).click();
+  await expect(card(page, "London")).toBeVisible();
+
+  const other = await browser.newContext({ viewport: page.viewportSize() ?? undefined });
+  try {
+    const device = await other.newPage();
+    await device.clock.setFixedTime(NOW);
+    await signIn(device, ownerEmailFor(test.info().project.name));
+    await expect(device).toHaveURL(/\/$/);
+    await expect(upcomingCount(device)).toContainText("2");
+    await expect(card(device, "London").getByText(/^0 of \d+ packed$/)).toBeVisible();
+  } finally {
+    await other.close();
+  }
 });
 
 test("copy: a new trip with clear progress, and the source trip unchanged", async ({ page }) => {
@@ -144,6 +177,12 @@ test("copy: a new trip with clear progress, and the source trip unchanged", asyn
   await expect(page.getByText("Unsaved copy of San Diego")).toBeVisible();
   await page.getByRole("button", { name: "Save trip" }).click();
 
+  await expect(upcomingCount(page)).toContainText("2");
+  await expect(card(page, "Paris").getByText(/^0 of \d+ packed$/)).toBeVisible();
+  expect(await card(page, "San Diego").innerText()).toBe(before);
+
+  // The copy is stored: it survives a reload, with nothing packed, and the source is still untouched.
+  await page.reload();
   await expect(upcomingCount(page)).toContainText("2");
   await expect(card(page, "Paris").getByText(/^0 of \d+ packed$/)).toBeVisible();
   expect(await card(page, "San Diego").innerText()).toBe(before);
@@ -194,4 +233,68 @@ test("screenshots of the create flow", async ({ page }, testInfo) => {
     path: `test-results/screenshots/${testInfo.project.name}-create-step2.png`,
     fullPage: true,
   });
+});
+
+test("place search goes only through this app's own endpoint, never to a geocoder", async ({
+  page,
+}) => {
+  const external: string[] = [];
+  const searches: string[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname === "/api/locations/search") searches.push(`${url.origin}${url.pathname}`);
+    else if (url.origin !== new URL(page.url()).origin && !url.protocol.startsWith("data"))
+      external.push(url.hostname);
+  });
+  await openDashboard(page);
+  await page.getByRole("link", { name: /New trip/ }).click();
+  await page.getByRole("combobox", { name: "Destination search" }).fill("Lon");
+  await expect(page.getByRole("option")).toHaveCount(3);
+  await expect(page.getByRole("option").nth(0)).toContainText("England, United Kingdom");
+  await expect(page.getByRole("option").nth(1)).toContainText("Ontario, Canada");
+  expect(searches.length).toBeGreaterThan(0);
+  expect(new Set(searches).size).toBe(1);
+  expect(external.filter((host) => /open-meteo|geocod/i.test(host))).toEqual([]);
+  await expect(page.getByText("Place search is provided by Open-Meteo.")).toBeVisible();
+});
+
+test("shows a clear error with Retry when search is unavailable, never falling back to free text", async ({
+  page,
+}) => {
+  await openDashboard(page);
+  await page.getByRole("link", { name: /New trip/ }).click();
+  let down = true;
+  await page.route("**/api/locations/search**", (route) =>
+    down ? route.fulfill({ status: 502, json: { error: "unavailable" } }) : route.continue(),
+  );
+  await page.getByRole("combobox", { name: "Destination search" }).fill("lisbon");
+  const alert = page
+    .getByRole("alert")
+    .filter({ hasText: "Location search is unavailable right now. Try again." });
+  await expect(alert).toBeVisible();
+  await expect(page.getByRole("option")).toHaveCount(0);
+  await setDates(page, "2026-11-12", "2026-11-16");
+  await page
+    .getByRole("button", { name: "Continue to packing preferences" })
+    .click({ force: true });
+  await expect(page.getByRole("heading", { name: "Confirm the trip" })).toBeVisible();
+  down = false;
+  await alert.getByRole("button", { name: "Retry" }).click();
+  await expect(page.getByRole("option")).toHaveCount(1);
+  await expect(page.getByRole("option")).toContainText("Lisbon District, Portugal");
+});
+
+test("on an unavailable provider, the popular destinations are an explicit alternative", async ({
+  page,
+}) => {
+  await openDashboard(page);
+  await page.getByRole("link", { name: /New trip/ }).click();
+  await page.route("**/api/locations/search**", (route) =>
+    route.fulfill({ status: 502, json: { error: "unavailable" } }),
+  );
+  await page.getByRole("combobox", { name: "Destination search" }).fill("paris");
+  await page.getByRole("button", { name: "Choose from popular destinations" }).click();
+  await expect(page.getByText("Showing popular destinations.")).toBeVisible();
+  await page.getByRole("option", { name: /Paris/ }).click();
+  await expect(page.getByText("Destination confirmed")).toBeVisible();
 });

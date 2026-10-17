@@ -10,6 +10,8 @@ export interface LocationProvider {
   minQueryLength: number;
   /** Quiet period after typing stops before a search starts. */
   debounceMs: number;
+  /** Shown under the search box when the provider requires crediting, e.g. "Place search is provided by Open-Meteo." */
+  attribution?: string;
   /** Rejects when the provider is unavailable. `signal` aborts a search the user has moved on from. */
   search(query: string, options: { signal: AbortSignal }): Promise<SampleLocation[]>;
 }

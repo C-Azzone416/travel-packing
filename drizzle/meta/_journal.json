@@ -15,6 +15,13 @@
       "when": 1792261039290,
       "tag": "0001_progress_clamp_trigger",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792269019595,
+      "tag": "0002_location_columns",
+      "breakpoints": true
     }
   ]
 }

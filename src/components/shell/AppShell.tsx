@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { ToastProvider } from "@/components/ui/Toast";
+import { AppLocationProvider } from "@/features/trips/AppLocationProvider";
 import { TripsSourceProvider } from "@/features/trips/TripsSourceProvider";
 import { Nav } from "./Nav";
 import { PreviewBanner } from "./PreviewBanner";
@@ -12,29 +13,31 @@ export function AppShell({ children }: { children: ReactNode }) {
     <ToastProvider>
       <SaveStatusProvider>
         <TripsSourceProvider>
-          <a className="skip-link" href="#main">
-            Skip to main content
-          </a>
-          <PreviewBanner />
-          <div className="app-shell">
-            <header className="topbar">
-              <Link className="brand-button" href="/" aria-label="Go to trips">
-                <span className="brand-mark" aria-hidden="true">
-                  ✦
-                </span>
-                <span>
-                  <strong>Carrywell</strong>
-                  <small>Caroline’s packing companion</small>
-                </span>
-              </Link>
-              <ConnectedSaveChip />
-            </header>
-            <main id="main" tabIndex={-1}>
-              {children}
-            </main>
-            <Nav />
-          </div>
-          <RouteFocus />
+          <AppLocationProvider>
+            <a className="skip-link" href="#main">
+              Skip to main content
+            </a>
+            <PreviewBanner />
+            <div className="app-shell">
+              <header className="topbar">
+                <Link className="brand-button" href="/" aria-label="Go to trips">
+                  <span className="brand-mark" aria-hidden="true">
+                    ✦
+                  </span>
+                  <span>
+                    <strong>Carrywell</strong>
+                    <small>Caroline’s packing companion</small>
+                  </span>
+                </Link>
+                <ConnectedSaveChip />
+              </header>
+              <main id="main" tabIndex={-1}>
+                {children}
+              </main>
+              <Nav />
+            </div>
+            <RouteFocus />
+          </AppLocationProvider>
         </TripsSourceProvider>
       </SaveStatusProvider>
     </ToastProvider>

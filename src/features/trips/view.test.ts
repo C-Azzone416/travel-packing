@@ -100,6 +100,19 @@ describe("tripCardView", () => {
     expect(view.forecast).toBeNull();
   });
 
+  it("shows only the parts of the place that exist (no dangling comma for an empty country or region)", () => {
+    const location = sanDiego().location!;
+    const place = (patch: object) =>
+      tripCardView(
+        withPatch(sanDiego(), { location: { ...location, ...patch } }),
+        TODAY,
+        "upcoming",
+      ).place;
+    expect(place({ country: "" })).toBe("California");
+    expect(place({ region: "" })).toBe("United States");
+    expect(place({ region: "", country: "" })).toBeNull();
+  });
+
   it("rounds the percentage to the nearest whole number (2 of 3 is 67%, 1 of 3 is 33%)", () => {
     const base = sanDiego();
     const item = { ...base.items[0], qty: 3 };

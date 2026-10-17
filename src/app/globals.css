@@ -1138,6 +1138,25 @@ input:disabled {
   border: 0;
 }
 
+/* 8px between the label, the box, the helper line and what follows: the focus ring (3px + 2px offset) needs
+   at least 5px, and the helper must not touch the results list. */
+.location-picker {
+  display: grid;
+  gap: 8px;
+}
+.location-picker > p,
+.location-picker > div {
+  margin: 0;
+}
+.empty-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.empty-state.compact p {
+  margin: 0;
+}
 .location-results {
   display: grid;
   gap: 7px;
@@ -1232,6 +1251,10 @@ input:disabled {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+    border-top-color: var(--seafoam);
+  }
   *,
   *::before,
   *::after {

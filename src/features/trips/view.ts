@@ -51,7 +51,9 @@ export function tripCardView(trip: LifecycleTrip, today: string, view: TripListV
   return {
     id: trip.id,
     destination: trip.destination,
-    place: trip.location ? `${trip.location.region}, ${trip.location.country}` : null,
+    place: trip.location
+      ? [trip.location.region, trip.location.country].filter(Boolean).join(", ") || null
+      : null,
     eyebrow: trip.archived ? "Archived trip" : past ? "Past trip" : null,
     ready: trip.ready,
     packed: totals.packed,

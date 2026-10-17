@@ -122,6 +122,99 @@ describe("check constraints reject invalid rows", () => {
     await expect(addTrip(owner, overrides)).rejects.toThrow(constraint);
   });
 
+  describe("trips: provider location columns (#47)", () => {
+    const place = {
+      location_provider: "open-meteo",
+      location_place_id: "2643743",
+      location_region: "England",
+      location_country: "United Kingdom",
+      location_country_code: "GB",
+      latitude: 51.51,
+      longitude: -0.13,
+      timezone: "Europe/London",
+    };
+
+    it.each([
+      ["latitude above 90", "trips_latitude_range", { ...place, latitude: 90.01 }],
+      ["latitude below -90", "trips_latitude_range", { ...place, latitude: -90.01 }],
+      [
+        "a latitude that overflows the column",
+        "numeric field overflow",
+        { ...place, latitude: 1000 },
+      ],
+      ["longitude above 180", "trips_longitude_range", { ...place, longitude: 180.01 }],
+      ["longitude below -180", "trips_longitude_range", { ...place, longitude: -180.01 }],
+      ["latitude without longitude", "trips_coordinates_pair", { ...place, longitude: null }],
+      ["longitude without latitude", "trips_coordinates_pair", { ...place, latitude: null }],
+      [
+        "coordinates without a provider",
+        "trips_coordinates_need_provider",
+        { ...place, location_provider: null, location_place_id: null },
+      ],
+      [
+        "a provider without a place id",
+        "trips_provider_pair",
+        { ...place, location_place_id: null, latitude: null, longitude: null },
+      ],
+      [
+        "a place id without a provider",
+        "trips_provider_pair",
+        { ...place, location_provider: null, latitude: null, longitude: null },
+      ],
+      [
+        "a 3-letter country code",
+        "trips_country_code_length",
+        { ...place, location_country_code: "GBR" },
+      ],
+      [
+        "a 1-letter country code",
+        "trips_country_code_length",
+        { ...place, location_country_code: "G" },
+      ],
+    ])("rejects %s", async (_name, constraint, overrides) => {
+      const owner = await addUser("owner-a");
+      await expect(addTrip(owner, overrides)).rejects.toThrow(constraint);
+    });
+
+    it("accepts a full provider place, the coordinate extremes, and a trip with no place at all", async () => {
+      const owner = await addUser("owner-a");
+      await expect(addTrip(owner, place)).resolves.toBeTruthy();
+      await expect(
+        addTrip(owner, { ...place, latitude: 90, longitude: 180 }),
+      ).resolves.toBeTruthy();
+      await expect(
+        addTrip(owner, { ...place, latitude: -90, longitude: -180 }),
+      ).resolves.toBeTruthy();
+      await expect(addTrip(owner, {})).resolves.toBeTruthy();
+      await expect(
+        addTrip(owner, {
+          location_id: "us-ca-san-diego",
+          location_label: "San Diego, California, United States",
+          location_region: "California",
+          location_country: "United States",
+          location_country_code: "US",
+        }),
+      ).resolves.toBeTruthy();
+    });
+
+    it("keeps coordinates to 2 decimals even if a caller sends more (the column rounds)", async () => {
+      const owner = await addUser("owner-a");
+      const id = await addTrip(owner, { ...place, latitude: 51.508539, longitude: -0.125741 });
+      const [row] = await rows<{ latitude: string; longitude: string }>(
+        'SELECT "latitude", "longitude" FROM "trips" WHERE "id" = $1',
+        [id],
+      );
+      expect([row.latitude, row.longitude]).toEqual(["51.51", "-0.13"]);
+    });
+
+    it("existing trips (no place) stay valid with every new column null", async () => {
+      const owner = await addUser("owner-a");
+      const id = await addTrip(owner, {});
+      const [row] = await rows('SELECT * FROM "trips" WHERE "id" = $1', [id]);
+      for (const column of Object.keys(place)) expect(row[column], column).toBeNull();
+    });
+  });
+
   it("accepts a same-day trip", async () => {
     const owner = await addUser("owner-a");
     await expect(

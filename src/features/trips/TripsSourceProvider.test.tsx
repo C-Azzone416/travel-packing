@@ -6,6 +6,20 @@ import { sampleLifecycleState } from "./fixtures";
 import { TripsSourceProvider, useTripsSource } from "./TripsSourceProvider";
 import { createMemoryTripsSource, type TripsSource } from "./trips-source";
 
+const actions = vi.hoisted(() => ({ loadTripsAction: vi.fn() }));
+vi.mock("./actions", () => ({
+  loadTripsAction: actions.loadTripsAction,
+  archiveTripAction: vi.fn(),
+  restoreTripAction: vi.fn(),
+  removeTripAction: vi.fn(),
+  undoRemoveTripAction: vi.fn(),
+  createTripAction: vi.fn(),
+}));
+actions.loadTripsAction.mockResolvedValue({
+  ok: true,
+  state: { trips: [{ id: "from-the-server" }], deletedTrips: [], draft: null },
+});
+
 function Probe({ expected }: { expected?: TripsSource }) {
   const source = useTripsSource();
   const [ids, setIds] = useState<string[]>([]);
@@ -37,7 +51,7 @@ describe("TripsSourceProvider", () => {
     expect(screen.getByText("injected")).toBeTruthy();
   });
 
-  it("falls back to an in-memory source seeded with the synthetic sample trips", async () => {
+  it("falls back to a source that reads and writes through the server actions", async () => {
     render(
       <TripsSourceProvider>
         <Probe />
@@ -45,7 +59,8 @@ describe("TripsSourceProvider", () => {
     );
     expect(screen.getByText("default")).toBeTruthy();
     await waitFor(() =>
-      expect(screen.getByLabelText("loaded").textContent).toBe("san-diego,lisbon"),
+      expect(screen.getByLabelText("loaded").textContent).toBe("from-the-server"),
     );
+    expect(actions.loadTripsAction).toHaveBeenCalledTimes(1);
   });
 });
