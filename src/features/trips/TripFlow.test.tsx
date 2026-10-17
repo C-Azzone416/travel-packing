@@ -89,6 +89,13 @@ describe("step 1: confirm the trip", () => {
     );
   });
 
+  it("a form submit while blocked (e.g. from a script) still cannot skip ahead", () => {
+    setup();
+    fireEvent.submit(cont().closest("form") as HTMLFormElement);
+    expect(screen.getByRole("heading", { name: "Confirm the trip" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Shape the list" })).toBeNull();
+  });
+
   it("ambiguous London requires an explicit choice between the two", async () => {
     const { user } = setup();
     await user.type(search(), "london");

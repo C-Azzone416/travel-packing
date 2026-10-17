@@ -15,6 +15,7 @@ import {
   selectDraftLocation,
   setDraftConfig,
   type LifecycleTrip,
+  type SampleLocation,
   type TripDraft,
 } from "@/domain/trip-lifecycle";
 import type { TripConfig } from "@/domain/trip";
@@ -318,7 +319,8 @@ function ShapeStep({
 }: ShapeStepProps) {
   const { config } = draft;
   const calculated = calculateSuggestions({ ...config, start: draft.start, end: draft.end });
-  const location = draft.location;
+  // Step 2 is only reachable once a destination is confirmed (Continue is blocked without one).
+  const location = draft.location as SampleLocation;
   const forecast =
     location && !isCustomLocation(location) ? forecastLabel(draft.start, localToday()) : null;
 
@@ -326,7 +328,7 @@ function ShapeStep({
     <>
       {header(
         "Shape the list",
-        `${location?.label ?? ""} · ${formatRange(draft)} · ${formatDays(calculated.days)}`,
+        `${location.label} · ${formatRange(draft)} · ${formatDays(calculated.days)}`,
         eyebrow,
       )}
       <div className="builder-layout">
