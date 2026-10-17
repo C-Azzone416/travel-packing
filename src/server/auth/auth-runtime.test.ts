@@ -57,7 +57,9 @@ describe("getAuth", () => {
 
   it("builds the Neon provider from configuration and the allowlist", async () => {
     createNeonAuth.mockReturnValue({
-      getSession: async () => ({ data: { user: { id: "u1", email: "owner@example.test" } } }),
+      getSession: async () => ({
+        data: { user: { id: "u1", email: "owner@example.test", emailVerified: true } },
+      }),
       signIn: { email: async () => ({ data: null, error: { message: "x" } }) },
       signOut: async () => {},
     });
@@ -93,6 +95,7 @@ describe("getAuth", () => {
     const e2eEnv = {
       AUTH_E2E_FAKE: "1",
       AUTH_E2E_PASSWORD: "synthetic-e2e-only",
+      AUTH_E2E_STATE_DIR: "/tmp/e2e-state-not-used-in-this-test",
       OWNER_EMAIL_ALLOWLIST: "owner@example.test",
     };
 

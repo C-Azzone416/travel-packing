@@ -1,4 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const jar = new Map<string, string>();
 vi.mock("next/headers", () => ({
@@ -11,18 +14,28 @@ vi.mock("next/headers", () => ({
 
 import { createE2eAuthProvider, e2eAuthEnabled, E2E_COOKIE } from "./e2e-provider";
 
-const env = { AUTH_E2E_FAKE: "1", AUTH_E2E_PASSWORD: "synthetic-e2e-only" };
+const dir = mkdtempSync(join(tmpdir(), "e2e-sessions-"));
+const env = {
+  AUTH_E2E_FAKE: "1",
+  AUTH_E2E_PASSWORD: "synthetic-e2e-only",
+  AUTH_E2E_STATE_DIR: dir,
+};
 
-beforeEach(() => jar.clear());
+beforeEach(() => {
+  jar.clear();
+  for (const name of readdirSync(dir)) rmSync(join(dir, name), { force: true });
+});
+afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
 describe("e2eAuthEnabled", () => {
-  it("needs the explicit opt-in and a password", () => {
+  it("needs the opt-in, a password, and a state directory", () => {
     expect(e2eAuthEnabled(env)).toBe(true);
     expect(e2eAuthEnabled({})).toBe(false);
-    expect(e2eAuthEnabled({ AUTH_E2E_FAKE: "0", AUTH_E2E_PASSWORD: "x" })).toBe(false);
-    expect(e2eAuthEnabled({ AUTH_E2E_FAKE: "true", AUTH_E2E_PASSWORD: "x" })).toBe(false);
-    expect(e2eAuthEnabled({ AUTH_E2E_FAKE: "1" })).toBe(false);
-    expect(e2eAuthEnabled({ AUTH_E2E_FAKE: "1", AUTH_E2E_PASSWORD: "" })).toBe(false);
+    expect(e2eAuthEnabled({ ...env, AUTH_E2E_FAKE: "0" })).toBe(false);
+    expect(e2eAuthEnabled({ ...env, AUTH_E2E_FAKE: "true" })).toBe(false);
+    expect(e2eAuthEnabled({ ...env, AUTH_E2E_PASSWORD: "" })).toBe(false);
+    expect(e2eAuthEnabled({ ...env, AUTH_E2E_PASSWORD: undefined })).toBe(false);
+    expect(e2eAuthEnabled({ ...env, AUTH_E2E_STATE_DIR: "" })).toBe(false);
   });
 
   it.each([
@@ -36,37 +49,100 @@ describe("e2eAuthEnabled", () => {
 
 describe("createE2eAuthProvider", () => {
   const provider = createE2eAuthProvider(env);
+  const OWNER = "owner@example.test";
 
   it("starts signed out", async () => {
     expect(await provider.getSession()).toBeNull();
   });
 
-  it("signs in with the shared synthetic password and keeps the session in an httpOnly cookie", async () => {
-    expect(await provider.signInWithPassword("owner@example.test", env.AUTH_E2E_PASSWORD)).toEqual({
+  it("signs in with the synthetic password and keeps an unguessable token, not the email, in the cookie", async () => {
+    expect(await provider.signInWithPassword(OWNER, env.AUTH_E2E_PASSWORD)).toEqual({
       ok: true,
-      session: { userId: "e2e-owner@example.test", email: "owner@example.test" },
+      session: { userId: `e2e-${OWNER}`, email: OWNER },
     });
-    expect(jar.get(E2E_COOKIE)).toBe("owner@example.test");
-    expect(await provider.getSession()).toEqual({
-      userId: "e2e-owner@example.test",
-      email: "owner@example.test",
-    });
+    const token = jar.get(E2E_COOKIE) ?? "";
+    expect(token).toMatch(/^[0-9a-f]{64}$/);
+    expect(token).not.toContain("owner");
+    expect(await provider.getSession()).toEqual({ userId: `e2e-${OWNER}`, email: OWNER });
   });
 
-  it("rejects a wrong password and leaves no session", async () => {
-    expect(await provider.signInWithPassword("owner@example.test", "nope")).toEqual({ ok: false });
+  it("mints a different token for every sign-in, and each session keeps its own email", async () => {
+    await provider.signInWithPassword(OWNER, env.AUTH_E2E_PASSWORD);
+    const first = jar.get(E2E_COOKIE);
+    await provider.signInWithPassword("second@example.test", env.AUTH_E2E_PASSWORD);
+    const second = jar.get(E2E_COOKIE);
+    expect(first).not.toBe(second);
+    jar.set(E2E_COOKIE, first ?? "");
+    expect((await provider.getSession())?.email).toBe(OWNER);
+    jar.set(E2E_COOKIE, second ?? "");
+    expect((await provider.getSession())?.email).toBe("second@example.test");
+  });
+
+  it("rejects a wrong password and mints nothing", async () => {
+    expect(await provider.signInWithPassword(OWNER, "nope")).toEqual({ ok: false });
     expect(jar.size).toBe(0);
+    expect(readdirSync(dir)).toEqual([]);
   });
 
   it("rejects everything when no password is configured", async () => {
-    expect(await createE2eAuthProvider({}).signInWithPassword("owner@example.test", "")).toEqual({
-      ok: false,
+    expect(
+      await createE2eAuthProvider({ AUTH_E2E_STATE_DIR: dir }).signInWithPassword(OWNER, ""),
+    ).toEqual({ ok: false });
+  });
+
+  describe("forged cookies are rejected: knowing the owner's email is not enough", () => {
+    it.each([
+      ["the plaintext email", OWNER],
+      ["a well-formed token that was never minted", "a".repeat(64)],
+      ["an upper-case token", "A".repeat(64)],
+      ["a token that is too short", "ab12"],
+      ["a token that is too long", "a".repeat(65)],
+      ["a path traversal attempt", "../../etc/passwd"],
+      ["a path separator inside a valid-looking token", `${"a".repeat(60)}/../x`],
+      ["an empty value", ""],
+    ])("%s", async (_name, forged) => {
+      jar.set(E2E_COOKIE, forged);
+      expect(await provider.getSession()).toBeNull();
+    });
+
+    it("a minted token with one character changed is rejected", async () => {
+      await provider.signInWithPassword(OWNER, env.AUTH_E2E_PASSWORD);
+      const token = jar.get(E2E_COOKIE) ?? "";
+      jar.set(E2E_COOKIE, `${token.slice(0, -1)}${token.endsWith("0") ? "1" : "0"}`);
+      expect(await provider.getSession()).toBeNull();
+    });
+
+    it("a token whose file holds nothing is rejected", async () => {
+      const token = "b".repeat(64);
+      writeFileSync(join(dir, token), "   ");
+      jar.set(E2E_COOKIE, token);
+      expect(await provider.getSession()).toBeNull();
     });
   });
 
-  it("signs out by deleting the cookie", async () => {
-    await provider.signInWithPassword("owner@example.test", env.AUTH_E2E_PASSWORD);
-    await provider.signOut();
-    expect(await provider.getSession()).toBeNull();
+  describe("sign out", () => {
+    it("ends the session and removes the cookie", async () => {
+      await provider.signInWithPassword(OWNER, env.AUTH_E2E_PASSWORD);
+      await provider.signOut();
+      expect(jar.has(E2E_COOKIE)).toBe(false);
+      expect(await provider.getSession()).toBeNull();
+    });
+
+    it("a stale token replayed after sign-out is rejected, because the server forgot it", async () => {
+      await provider.signInWithPassword(OWNER, env.AUTH_E2E_PASSWORD);
+      const stale = jar.get(E2E_COOKIE) ?? "";
+      expect(existsSync(join(dir, stale))).toBe(true);
+      await provider.signOut();
+      expect(existsSync(join(dir, stale))).toBe(false);
+      jar.set(E2E_COOKIE, stale);
+      expect(await provider.getSession()).toBeNull();
+    });
+
+    it("is safe when signed out or holding a forged value", async () => {
+      await expect(provider.signOut()).resolves.toBeUndefined();
+      jar.set(E2E_COOKIE, "../../x");
+      await expect(provider.signOut()).resolves.toBeUndefined();
+      expect(jar.has(E2E_COOKIE)).toBe(false);
+    });
   });
 });

@@ -26,12 +26,40 @@ describe("proxy", () => {
 });
 
 describe("proxy matcher", () => {
-  const matcher = new RegExp(`^${config.matcher[0]}$`);
+  const [apiMatcher, pageMatcher] = config.matcher;
+  const pageRegex = new RegExp(`^${pageMatcher}$`);
+  // `/api/:path*` matches /api and everything under it.
+  const covered = (path: string) =>
+    path === "/api" || path.startsWith("/api/") || pageRegex.test(path);
 
-  it.each(["/", "/trips", "/trips/abc", "/api/trips", "/sign-in", "/access-denied", "/settings"])(
-    "covers %s",
+  it("has the API matcher first", () => {
+    expect(apiMatcher).toBe("/api/:path*");
+  });
+
+  it.each([
+    "/",
+    "/trips",
+    "/trips/abc",
+    "/sign-in",
+    "/access-denied",
+    "/settings",
+    "/api",
+    "/api/trips",
+  ])("covers %s", (path) => {
+    expect(covered(path)).toBe(true);
+  });
+
+  it.each([
+    "/api/x.js",
+    "/api/export.css",
+    "/api/logo.png",
+    "/api/v1/report.svg",
+    "/api/a/b/c.webp",
+  ])(
+    "never lets an API path skip the proxy, even one that looks like a static file: %s",
     (path) => {
-      expect(matcher.test(path)).toBe(true);
+      expect(covered(path)).toBe(true);
+      expect(pageRegex.test(path)).toBe(false);
     },
   );
 
@@ -42,7 +70,7 @@ describe("proxy matcher", () => {
     "/logo.png",
     "/assets/art.webp",
     "/styles.css",
-  ])("skips %s", (path) => {
-    expect(matcher.test(path)).toBe(false);
+  ])("skips the static file %s", (path) => {
+    expect(covered(path)).toBe(false);
   });
 });

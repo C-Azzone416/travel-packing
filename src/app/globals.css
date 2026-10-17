@@ -542,13 +542,15 @@ main {
 .auth-screen {
   min-height: 100vh;
   display: grid;
-  place-content: center;
+  /* A fixed column (max 400px, else the full width inside the 16px gutter) so the card never shrinks to its content. */
+  grid-template-columns: min(100%, 400px);
+  justify-content: center;
+  align-content: center;
   gap: 16px;
   padding: 24px 16px;
 }
 .auth-card {
-  width: min(100%, 400px);
-  margin: 0 auto;
+  width: 100%;
   box-shadow: var(--shadow);
 }
 .auth-card h1 {
@@ -580,18 +582,19 @@ main {
   background: #fff;
   color: var(--ink);
 }
-.field input:disabled {
+/* While signing in the fields are read-only (not disabled) so keyboard focus stays where it was. */
+.field input[readonly] {
   background: var(--seafoam-soft);
   color: var(--muted-text);
 }
+/* The toggle sits on its own line so Email and Password are the same width on a phone. */
 .password-row {
-  display: flex;
+  display: grid;
   gap: 8px;
-  align-items: stretch;
+  justify-items: start;
 }
 .password-row input {
-  flex: 1;
-  min-width: 0;
+  width: 100%;
 }
 .password-row .button {
   white-space: nowrap;

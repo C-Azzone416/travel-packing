@@ -11,6 +11,7 @@ import type { AuthProvider, AuthSession, SignInResult } from "./types";
 interface NeonUser {
   id?: string | null;
   email?: string | null;
+  emailVerified?: boolean | null;
 }
 
 /** The subset of the SDK this adapter uses. */
@@ -25,8 +26,15 @@ export interface NeonAuthLike {
   signOut(): Promise<unknown>;
 }
 
+/**
+ * A user is a session only with an id, an email, and `emailVerified === true`. Fail closed on anything else
+ * (false, null, missing): if sign-up is open, anyone could register the owner's address with their own password,
+ * and an unverified address proves nothing about who owns it. The allowlist is only meaningful for a verified email.
+ */
 function toSession(user: NeonUser | null | undefined): AuthSession | null {
-  return user?.id && user.email ? { userId: user.id, email: user.email } : null;
+  return user?.id && user.email && user.emailVerified === true
+    ? { userId: user.id, email: user.email }
+    : null;
 }
 
 export function createNeonAuthProvider(neon: NeonAuthLike): AuthProvider {

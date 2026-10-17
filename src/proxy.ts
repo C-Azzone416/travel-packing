@@ -8,8 +8,10 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Everything except Next.js internals and static files.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|svg|webp|ico|css|js)$).*)",
+    // Every API path goes through the proxy, whatever it ends with (so `/api/x.js` cannot skip it).
+    "/api/:path*",
+    // Pages: everything except Next.js internals and static files.
+    "/((?!api/|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|svg|webp|ico|css|js)$).*)",
   ],
 };

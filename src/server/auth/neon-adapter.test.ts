@@ -33,6 +33,8 @@ function fakeNeon(
   return { neon, calls };
 }
 
+const VERIFIED_USER = { id: "u1", email: "owner@example.test", emailVerified: true };
+
 let logged: string[];
 beforeEach(() => {
   logged = [];
@@ -40,38 +42,53 @@ beforeEach(() => {
 });
 afterEach(() => setAuthLogSink());
 
+const UNVERIFIED_CASES = [
+  ["emailVerified false", { id: "u1", email: "owner@example.test", emailVerified: false }],
+  ["emailVerified null", { id: "u1", email: "owner@example.test", emailVerified: null }],
+  ["emailVerified missing", { id: "u1", email: "owner@example.test" }],
+  [
+    "emailVerified the string 'true'",
+    { id: "u1", email: "owner@example.test", emailVerified: "true" },
+  ],
+] as const;
+
 describe("getSession", () => {
-  it("maps the SDK user to a session", async () => {
-    const { neon } = fakeNeon({
-      session: { data: { user: { id: "u1", email: "owner@example.test" } } },
-    });
+  it("maps a verified SDK user to a session", async () => {
+    const { neon } = fakeNeon({ session: { data: { user: VERIFIED_USER } } });
     expect(await createNeonAuthProvider(neon).getSession()).toEqual({
       userId: "u1",
       email: "owner@example.test",
     });
   });
 
-  it.each([
+  const signedOutCases: [string, unknown][] = [
     ["no result", null],
     ["no data", { data: null }],
     ["no user", { data: { user: null } }],
-    ["a user without an id", { data: { user: { email: "owner@example.test" } } }],
-    ["a user without an email", { data: { user: { id: "u1" } } }],
     [
-      "an error alongside a user",
-      { data: { user: { id: "u1", email: "owner@example.test" } }, error: { message: "x" } },
+      "a user without an id",
+      { data: { user: { email: "owner@example.test", emailVerified: true } } },
     ],
-  ])("is signed out for %s", async (_name, session) => {
-    const { neon } = fakeNeon({ session: session as SessionResult });
+    ["a user without an email", { data: { user: { id: "u1", emailVerified: true } } }],
+    [
+      "an error alongside a verified user",
+      { data: { user: VERIFIED_USER }, error: { message: "x" } },
+    ],
+    ...UNVERIFIED_CASES.map(([name, user]): [string, unknown] => [
+      `an unverified email (${name})`,
+      { data: { user } },
+    ]),
+  ];
+
+  it.each(signedOutCases)("is signed out for %s", async (_name, session) => {
+    const { neon } = fakeNeon({ session: session as unknown as SessionResult });
     expect(await createNeonAuthProvider(neon).getSession()).toBeNull();
   });
 });
 
 describe("signInWithPassword", () => {
-  it("passes credentials through and maps the user", async () => {
-    const { neon, calls } = fakeNeon({
-      signIn: { data: { user: { id: "u1", email: "owner@example.test" } } },
-    });
+  it("passes credentials through and maps a verified user", async () => {
+    const { neon, calls } = fakeNeon({ signIn: { data: { user: VERIFIED_USER } } });
     const result = await createNeonAuthProvider(neon).signInWithPassword(
       "owner@example.test",
       "pw",
@@ -80,12 +97,22 @@ describe("signInWithPassword", () => {
     expect(calls.signIn).toEqual([{ email: "owner@example.test", password: "pw" }]);
   });
 
-  it.each([
+  const failedCases: [string, unknown][] = [
     ["an API error", { data: null, error: { message: "Invalid credentials" } }],
     ["no result", null],
     ["a result without a user", { data: { user: null } }],
-  ])("fails generically on %s", async (_name, signIn) => {
-    const { neon } = fakeNeon({ signIn: signIn as SignInResult });
+    [
+      "an error alongside a verified user (fails closed on the error)",
+      { data: { user: VERIFIED_USER }, error: { message: "x" } },
+    ],
+    ...UNVERIFIED_CASES.map(([name, user]): [string, unknown] => [
+      `an unverified email (${name})`,
+      { data: { user } },
+    ]),
+  ];
+
+  it.each(failedCases)("fails generically on %s", async (_name, signIn) => {
+    const { neon } = fakeNeon({ signIn: signIn as unknown as SignInResult });
     expect(await createNeonAuthProvider(neon).signInWithPassword("a@example.test", "pw")).toEqual({
       ok: false,
     });
@@ -99,7 +126,9 @@ describe("signInWithPassword", () => {
     });
     expect(
       await createNeonAuthProvider(neon).signInWithPassword("a@example.test", "hunter2"),
-    ).toEqual({ ok: false });
+    ).toEqual({
+      ok: false,
+    });
     expect(logged).toEqual([JSON.stringify({ scope: "auth", event: "provider-error" })]);
   });
 });

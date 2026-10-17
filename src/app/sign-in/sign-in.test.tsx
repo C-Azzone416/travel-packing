@@ -54,8 +54,11 @@ describe("SignInView (design spec #31)", () => {
     expect(view()).toContain("Show password");
     const shown = view({ showPassword: true });
     expect(shown).toMatch(/<input id="password" type="text"/);
-    expect(shown).toContain("Hide password");
+    // One fixed label; aria-pressed carries the state.
+    expect(shown).not.toContain("Hide password");
+    expect(shown).toContain("Show password");
     expect(shown).toContain('aria-pressed="true"');
+    expect(view()).toContain('aria-pressed="false"');
   });
 
   it("shows the error inline, above the submit button, as an alert", () => {
@@ -64,11 +67,12 @@ describe("SignInView (design spec #31)", () => {
     expect(html.indexOf("Email or password is incorrect.")).toBeLessThan(html.indexOf(">Sign in<"));
   });
 
-  it("disables the form and shows progress while signing in", () => {
+  it("shows progress, disables only the submit button, and keeps the fields read-only (focus is not lost)", () => {
     const html = view({ pending: true });
     expect(html).toContain("Signing in…");
     expect(html).toContain('aria-busy="true"');
-    expect(html.match(/disabled=""/g)?.length).toBeGreaterThanOrEqual(3);
+    expect(html.match(/readOnly=""/g)).toHaveLength(2);
+    expect(html.match(/disabled=""/g)).toHaveLength(1);
   });
 
   it("renders an optional decorative banner above the card", () => {

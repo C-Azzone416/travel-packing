@@ -24,10 +24,13 @@ test.describe("signed out", () => {
     await expect(page.getByRole("link", { name: /sign up|create account/i })).toHaveCount(0);
     const password = page.getByLabel("Password", { exact: true });
     await expect(password).toHaveAttribute("type", "password");
-    await page.getByRole("button", { name: "Show password" }).click();
+    const toggle = page.getByRole("button", { name: "Show password" });
+    await toggle.click();
     await expect(password).toHaveAttribute("type", "text");
-    await page.getByRole("button", { name: "Hide password" }).click();
+    await expect(toggle).toHaveAttribute("aria-pressed", "true");
+    await toggle.click();
     await expect(password).toHaveAttribute("type", "password");
+    await expect(toggle).toHaveAttribute("aria-pressed", "false");
   });
 
   test("a wrong password shows one generic error and stays on sign-in", async ({ page }) => {
@@ -114,4 +117,45 @@ test.describe("auth screens stand alone", () => {
     await expect(page).toHaveURL(/\/access-denied$/);
     await shot("access-denied");
   });
+});
+
+test.describe("e2e sign-in session is unforgeable", () => {
+  test("a cookie holding just the owner's email gets nothing", async ({
+    page,
+    context,
+    baseURL,
+  }) => {
+    await context.addCookies([
+      { name: "e2e-auth-session", value: OWNER_EMAIL, url: baseURL ?? "http://localhost:3100" },
+    ]);
+    await page.goto("/");
+    await expect(page).toHaveURL(/\/sign-in$/);
+  });
+
+  test("a forged or guessed token gets a 401 on the API and a redirect on pages", async ({
+    request,
+    page,
+    context,
+    baseURL,
+  }) => {
+    const forged = "a".repeat(64);
+    await context.addCookies([
+      { name: "e2e-auth-session", value: forged, url: baseURL ?? "http://localhost:3100" },
+    ]);
+    await page.goto("/staples");
+    await expect(page).toHaveURL(/\/sign-in$/);
+    const response = await request.get("/api/anything", {
+      headers: { cookie: `e2e-auth-session=${forged}` },
+    });
+    expect(response.status()).toBe(401);
+  });
+});
+
+test("Email and Password fields are the same width (the show/hide toggle sits on its own line)", async ({
+  page,
+}) => {
+  await page.goto("/sign-in");
+  const email = await page.getByLabel("Email").boundingBox();
+  const password = await page.getByLabel("Password", { exact: true }).boundingBox();
+  expect(Math.abs((email?.width ?? 0) - (password?.width ?? 1))).toBeLessThanOrEqual(1);
 });

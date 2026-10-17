@@ -39,7 +39,7 @@ export function SignInView({
               type="email"
               autoComplete="username"
               required
-              disabled={pending}
+              readOnly={pending}
             />
           </div>
 
@@ -52,15 +52,17 @@ export function SignInView({
                 type={showPassword ? "text" : "password"}
                 autoComplete="current-password"
                 required
-                disabled={pending}
+                readOnly={pending}
               />
+              {/* One fixed label with aria-pressed: a label that also flips would read as contradictory. */}
               <Button
                 variant="secondary"
                 small
+                className="password-toggle"
                 onClick={onTogglePassword}
                 aria-pressed={showPassword}
               >
-                {showPassword ? "Hide password" : "Show password"}
+                Show password
               </Button>
             </div>
           </div>

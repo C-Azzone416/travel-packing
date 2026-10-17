@@ -16,13 +16,17 @@ describe("SignInForm", () => {
     render(<SignInForm />);
     const password = screen.getByLabelText("Password");
     expect(password.getAttribute("type")).toBe("password");
-    await user.click(screen.getByRole("button", { name: "Show password" }));
+    const toggle = screen.getByRole("button", { name: "Show password" });
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+    await user.click(toggle);
     expect(password.getAttribute("type")).toBe("text");
-    expect(screen.getByRole("button", { name: "Hide password" }).getAttribute("aria-pressed")).toBe(
-      "true",
-    );
-    await user.click(screen.getByRole("button", { name: "Hide password" }));
+    // One fixed label; the pressed state carries the meaning (a flipping label too would read as contradictory).
+    expect(screen.getByRole("button", { name: "Show password" })).toBe(toggle);
+    expect(toggle.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.queryByRole("button", { name: "Hide password" })).toBeNull();
+    await user.click(toggle);
     expect(password.getAttribute("type")).toBe("password");
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
   });
 
   it("submits the credentials to the server action and shows its error inline", async () => {
@@ -57,8 +61,11 @@ describe("SignInForm", () => {
     const busy = await screen.findByRole("button", { name: /Signing in/ });
     expect((busy as HTMLButtonElement).disabled).toBe(true);
     expect(busy.getAttribute("aria-busy")).toBe("true");
-    expect((screen.getByLabelText("Email") as HTMLInputElement).disabled).toBe(true);
-    expect((screen.getByLabelText("Password") as HTMLInputElement).disabled).toBe(true);
+    // Read-only (not disabled) so keyboard focus is not lost while the request is in flight.
+    expect((screen.getByLabelText("Email") as HTMLInputElement).readOnly).toBe(true);
+    expect((screen.getByLabelText("Password") as HTMLInputElement).readOnly).toBe(true);
+    expect((screen.getByLabelText("Email") as HTMLInputElement).disabled).toBe(false);
+    expect((screen.getByLabelText("Password") as HTMLInputElement).disabled).toBe(false);
 
     finish({ error: null });
     await waitFor(() =>
