@@ -4,6 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { renderInApp } from "@/test/providers";
 import { sampleLifecycleState } from "./fixtures";
+import type { LocationProvider } from "@/domain/location-provider";
+import { LocationProviderProvider } from "./LocationProviderContext";
 import { TripFlow } from "./TripFlow";
 import { TripsSourceProvider } from "./TripsSourceProvider";
 import { createMemoryTripsSource, type TripsSource } from "./trips-source";
@@ -469,5 +471,45 @@ describe("copy", () => {
       finish();
       fail();
     });
+  });
+});
+
+describe("destination provider", () => {
+  it("searches through whichever LocationProvider is supplied, so a geocoding adapter needs no UI change", async () => {
+    push.mockClear();
+    const place = {
+      id: "geo-1",
+      city: "Springfield",
+      region: "Illinois",
+      country: "United States",
+      countryCode: "US",
+      label: "Springfield, Illinois, United States",
+    };
+    const searchSpy = vi.fn().mockResolvedValue([place]);
+    const provider: LocationProvider = { minQueryLength: 2, debounceMs: 0, search: searchSpy };
+    const user = userEvent.setup();
+    renderInApp(
+      <TripsSourceProvider source={memory()}>
+        <LocationProviderProvider provider={provider}>
+          <TripFlow />
+        </LocationProviderProvider>
+      </TripsSourceProvider>,
+    );
+    await user.type(search(), "sp");
+    await user.click(
+      (await within(screen.getByRole("listbox", { hidden: true })).findAllByRole("option"))[0],
+    );
+    expect(searchSpy).toHaveBeenCalled();
+    expect(screen.getByText(/Springfield · Illinois · United States/)).toBeTruthy();
+    expect(screen.getByText("Destination confirmed")).toBeTruthy();
+  });
+
+  it("falls back to the curated list when no provider is supplied", async () => {
+    const { user } = setup();
+    await user.type(search(), "paris");
+    expect(
+      (await within(screen.getByRole("listbox", { hidden: true })).findAllByRole("option"))[0]
+        .textContent,
+    ).toContain("Île-de-France");
   });
 });

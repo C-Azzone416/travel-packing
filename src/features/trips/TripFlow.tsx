@@ -33,6 +33,7 @@ import {
   withDates,
 } from "./draft";
 import { LocationPicker } from "./LocationPicker";
+import { useLocationProvider } from "./LocationProviderContext";
 import { useTripsSource } from "./TripsSourceProvider";
 import { formatDays, formatRange } from "./view";
 
@@ -98,6 +99,7 @@ function FlowBody({
 }) {
   const router = useRouter();
   const source = useTripsSource();
+  const provider = useLocationProvider();
   const { track } = useSaveStatus();
   const toast = useToast();
   const [step, setStep] = useState<Step>("details");
@@ -174,6 +176,7 @@ function FlowBody({
             }}
           >
             <LocationPicker
+              provider={provider}
               allowCustom={allowCustom}
               query={query}
               onQueryChange={setQuery}

@@ -1,25 +1,30 @@
 // @vitest-environment jsdom
-import { render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { curatedLocationProvider, type LocationProvider } from "@/domain/location-provider";
 import { locationById } from "@/domain/locations";
 import type { SampleLocation } from "@/domain/trip-lifecycle";
-import { ALLOW_CUSTOM_DESTINATION, LocationPicker } from "./LocationPicker";
+import { ALLOW_CUSTOM_DESTINATION, LocationPicker, UNAVAILABLE_MESSAGE } from "./LocationPicker";
 
-function Harness({
-  allowCustom,
-  onSubmit = () => {},
-  onSelectSpy = () => {},
-  onClearSpy = () => {},
-  initial = null,
-}: {
+interface HarnessProps {
+  provider?: LocationProvider;
   allowCustom?: boolean;
   onSubmit?: () => void;
   onSelectSpy?: (l: SampleLocation) => void;
   onClearSpy?: () => void;
   initial?: SampleLocation | null;
-}) {
+}
+
+function Harness({
+  provider = curatedLocationProvider,
+  allowCustom,
+  onSubmit = () => {},
+  onSelectSpy = () => {},
+  onClearSpy = () => {},
+  initial = null,
+}: HarnessProps) {
   const [query, setQuery] = useState(initial ? initial.label : "");
   const [selected, setSelected] = useState<SampleLocation | null>(initial);
   return (
@@ -30,6 +35,7 @@ function Harness({
       }}
     >
       <LocationPicker
+        provider={provider}
         query={query}
         onQueryChange={setQuery}
         selected={selected}
@@ -50,6 +56,26 @@ function Harness({
 const box = () => screen.getByRole("combobox", { name: "Destination search" });
 const list = () => screen.getByRole("listbox", { hidden: true });
 const announce = () => screen.getByRole("status", { name: "Destination results" });
+const options = () => within(list()).findAllByRole("option");
+const announced = (text: string) => waitFor(() => expect(announce().textContent).toBe(text));
+
+// A provider whose answers the test settles by hand.
+function manualProvider(overrides: Partial<LocationProvider> = {}) {
+  const pending: {
+    query: string;
+    signal: AbortSignal;
+    resolve: (items: SampleLocation[]) => void;
+    reject: (error: Error) => void;
+  }[] = [];
+  const provider: LocationProvider = {
+    minQueryLength: 2,
+    debounceMs: 0,
+    search: (query, { signal }) =>
+      new Promise((resolve, reject) => pending.push({ query, signal, resolve, reject })),
+    ...overrides,
+  };
+  return { provider, pending };
+}
 
 describe("LocationPicker", () => {
   it("is a labelled combobox, collapsed and invalid until something is confirmed", () => {
@@ -68,22 +94,21 @@ describe("LocationPicker", () => {
   it("lists matches with city, region and country, so the two Londons are told apart", async () => {
     render(<Harness />);
     await userEvent.type(box(), "london");
-    expect(box().getAttribute("aria-expanded")).toBe("true");
-    const options = within(list()).getAllByRole("option");
-    expect(options.map((option) => option.textContent)).toEqual([
+    expect((await options()).map((option) => option.textContent)).toEqual([
       "LondonEngland, United Kingdom",
       "LondonOntario, Canada",
     ]);
-    expect(announce().textContent).toBe("2 destinations found");
+    expect(box().getAttribute("aria-expanded")).toBe("true");
+    await announced("2 destinations found");
   });
 
   it("announces a single result in the singular, and no matches plainly", async () => {
     render(<Harness />);
     await userEvent.type(box(), "lisbon");
-    expect(announce().textContent).toBe("1 destination found");
+    await announced("1 destination found");
     await userEvent.clear(box());
     await userEvent.type(box(), "zzzz");
-    expect(announce().textContent).toBe("No matches");
+    await announced("No matches");
     expect(screen.getByText("No matches. Try a city name.")).toBeTruthy();
     expect(list().hidden).toBe(true);
     expect(screen.queryByText(/as typed/)).toBeNull();
@@ -92,7 +117,7 @@ describe("LocationPicker", () => {
   it("moves through options with the arrow keys (wrapping) and exposes the active one", async () => {
     render(<Harness />);
     await userEvent.type(box(), "london");
-    const [first, second] = within(list()).getAllByRole("option");
+    const [first, second] = await options();
     await userEvent.keyboard("{ArrowDown}");
     expect(box().getAttribute("aria-activedescendant")).toBe(first.id);
     expect(first.getAttribute("aria-selected")).toBe("true");
@@ -109,6 +134,7 @@ describe("LocationPicker", () => {
     const onSelectSpy = vi.fn();
     render(<Harness onSubmit={onSubmit} onSelectSpy={onSelectSpy} />);
     await userEvent.type(box(), "london");
+    await options();
     await userEvent.keyboard("{Enter}");
     expect(onSelectSpy).not.toHaveBeenCalled();
     expect(onSubmit).not.toHaveBeenCalled();
@@ -121,22 +147,24 @@ describe("LocationPicker", () => {
   it("Escape closes the list, and typing opens it again", async () => {
     render(<Harness />);
     await userEvent.type(box(), "london");
+    await options();
     await userEvent.keyboard("{ArrowDown}{Escape}");
     expect(box().getAttribute("aria-expanded")).toBe("false");
     expect(box().getAttribute("aria-activedescendant")).toBeNull();
     expect(list().hidden).toBe(true);
     await userEvent.type(box(), "{Backspace}n");
+    await options();
     expect(box().getAttribute("aria-expanded")).toBe("true");
   });
 
-  it("arrow keys reopen a closed list; ignored with no options or other keys", async () => {
+  it("arrow keys reopen a closed list; unrelated keys and a second Escape change nothing", async () => {
     render(<Harness />);
     await userEvent.keyboard("{Tab}{ArrowDown}");
     expect(box().getAttribute("aria-activedescendant")).toBeNull();
     await userEvent.type(box(), "london");
+    await options();
     await userEvent.keyboard("{Escape}{ArrowDown}");
     expect(box().getAttribute("aria-expanded")).toBe("true");
-    // A second Escape on an already-closed list, and unrelated keys, change nothing.
     await userEvent.keyboard("{Escape}{Escape}{Home}");
     expect(box().getAttribute("aria-expanded")).toBe("false");
   });
@@ -145,7 +173,7 @@ describe("LocationPicker", () => {
     const onSelectSpy = vi.fn();
     render(<Harness onSelectSpy={onSelectSpy} />);
     await userEvent.type(box(), "lisbon");
-    await userEvent.click(within(list()).getByRole("option", { name: /Lisbon/ }));
+    await userEvent.click((await options())[0]);
     expect(onSelectSpy).toHaveBeenCalledWith(locationById("pt-lisbon"));
     const confirmed = screen.getByRole("status", { name: "" });
     expect(confirmed.textContent).toContain("Destination confirmed");
@@ -180,10 +208,124 @@ describe("LocationPicker", () => {
     expect(announce().textContent).toBe("");
   });
 
+  describe("provider behavior", () => {
+    it("shows Searching… (and announces it) until the provider answers, then lists the answer", async () => {
+      const { provider, pending } = manualProvider();
+      render(<Harness provider={provider} />);
+      await userEvent.type(box(), "lon");
+      await waitFor(() => expect(pending.length).toBeGreaterThan(0));
+      expect(screen.getByText("Searching…")).toBeTruthy();
+      expect(announce().textContent).toBe("Searching");
+      expect(screen.queryByText("No matches. Try a city name.")).toBeNull();
+      await act(async () => pending[pending.length - 1].resolve([locationById("gb-eng-london")!]));
+      expect((await options()).map((option) => option.textContent)).toEqual([
+        "LondonEngland, United Kingdom",
+      ]);
+      expect(screen.queryByText("Searching…")).toBeNull();
+      await announced("1 destination found");
+    });
+
+    it("never searches below the provider's minimum length, and says nothing while the text is too short", async () => {
+      const { provider, pending } = manualProvider({ minQueryLength: 3 });
+      render(<Harness provider={provider} />);
+      await userEvent.type(box(), "lo");
+      expect(pending).toHaveLength(0);
+      expect(announce().textContent).toBe("");
+      expect(screen.queryByText("Searching…")).toBeNull();
+      await userEvent.type(box(), "n");
+      await waitFor(() => expect(pending).toHaveLength(1));
+      expect(pending[0].query).toBe("lon");
+    });
+
+    it("sends only the trimmed query (plus an abort signal) to the provider", async () => {
+      const search = vi.fn().mockResolvedValue([]);
+      render(<Harness provider={{ minQueryLength: 1, debounceMs: 0, search }} />);
+      await userEvent.type(box(), "  paris ");
+      await waitFor(() => expect(search).toHaveBeenCalled());
+      const [query, options] = search.mock.calls[search.mock.calls.length - 1];
+      expect(query).toBe("paris");
+      expect(Object.keys(options)).toEqual(["signal"]);
+    });
+
+    it("debounces: nothing is sent until typing pauses for the provider's delay", () => {
+      // Testing Library's async wrapper waits on a real setTimeout, which a faked one never fires,
+      // so this test types with synchronous change events and drives the clock itself.
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        const search = vi.fn().mockResolvedValue([]);
+        render(<Harness provider={{ minQueryLength: 2, debounceMs: 300, search }} />);
+        for (const value of ["l", "lo", "lon", "lond"]) {
+          fireEvent.change(box(), { target: { value } });
+          act(() => vi.advanceTimersByTime(100));
+        }
+        expect(search).not.toHaveBeenCalled();
+        act(() => vi.advanceTimersByTime(199));
+        expect(search).not.toHaveBeenCalled();
+        act(() => vi.advanceTimersByTime(1));
+        expect(search).toHaveBeenCalledTimes(1);
+        expect(search.mock.calls[0][0]).toBe("lond");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("aborts the search it no longer needs, and ignores an answer that arrives late for old text", async () => {
+      const { provider, pending } = manualProvider({ minQueryLength: 1 });
+      render(<Harness provider={provider} />);
+      await userEvent.type(box(), "l");
+      await waitFor(() => expect(pending).toHaveLength(1));
+      await userEvent.type(box(), "o");
+      await waitFor(() => expect(pending).toHaveLength(2));
+      expect(pending[0].signal.aborted).toBe(true);
+      expect(pending[1].signal.aborted).toBe(false);
+      await act(async () => pending[0].resolve([locationById("pt-lisbon")!]));
+      expect(screen.queryByRole("option")).toBeNull();
+      expect(screen.getByText("Searching…")).toBeTruthy();
+      await act(async () => pending[1].resolve([locationById("gb-eng-london")!]));
+      expect((await options()).map((option) => option.textContent)).toEqual([
+        "LondonEngland, United Kingdom",
+      ]);
+    });
+
+    it("ignores a failure that arrives for text the user has already changed", async () => {
+      const { provider, pending } = manualProvider({ minQueryLength: 1 });
+      render(<Harness provider={provider} />);
+      await userEvent.type(box(), "l");
+      await waitFor(() => expect(pending).toHaveLength(1));
+      await userEvent.type(box(), "o");
+      await act(async () => pending[0].reject(new Error("late")));
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
+
+    it("shows an error with Retry when the provider is unavailable, never falling back to free text", async () => {
+      let down = true;
+      const search = vi.fn(async () => {
+        if (down) throw new Error("down");
+        return [locationById("pt-lisbon")!];
+      });
+      render(<Harness provider={{ minQueryLength: 1, debounceMs: 0, search }} allowCustom />);
+      await userEvent.type(box(), "lisbon");
+      const alert = await screen.findByRole("alert");
+      expect(alert.textContent).toContain(UNAVAILABLE_MESSAGE);
+      expect(UNAVAILABLE_MESSAGE).toBe("Location search is unavailable right now. Try again.");
+      expect(announce().textContent).toBe(UNAVAILABLE_MESSAGE);
+      expect(screen.queryByText(/as typed/)).toBeNull();
+      expect(screen.queryByRole("option")).toBeNull();
+      expect(screen.queryByText("No matches. Try a city name.")).toBeNull();
+      down = false;
+      await userEvent.click(within(alert).getByRole("button", { name: "Retry" }));
+      expect((await options()).map((option) => option.textContent)).toEqual([
+        "LisbonLisbon District, Portugal",
+      ]);
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
+  });
+
   describe("Custom destination row (flag, off by default)", () => {
     it("is not offered by default", async () => {
       render(<Harness />);
       await userEvent.type(box(), "Grandma's cabin");
+      await announced("No matches");
       expect(screen.queryByText(/as typed/)).toBeNull();
     });
 
@@ -191,7 +333,7 @@ describe("LocationPicker", () => {
       const onSelectSpy = vi.fn();
       render(<Harness allowCustom onSelectSpy={onSelectSpy} />);
       await userEvent.type(box(), "Grandma's cabin");
-      const row = within(list()).getByRole("option");
+      const row = (await options())[0];
       expect(row.textContent).toContain("Use “Grandma's cabin” as typed");
       expect(row.textContent).toContain("Custom");
       expect(onSelectSpy).not.toHaveBeenCalled();
@@ -207,6 +349,7 @@ describe("LocationPicker", () => {
     it("is not offered when the list has matches", async () => {
       render(<Harness allowCustom />);
       await userEvent.type(box(), "paris");
+      await options();
       expect(screen.queryByText(/as typed/)).toBeNull();
     });
   });
