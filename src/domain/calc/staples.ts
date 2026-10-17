@@ -1,6 +1,5 @@
+import { TOILETRY_GROUP_ID } from "../toiletry-bag";
 import { calculateSuggestions, type CalcConfig } from "./suggestions";
-
-export const TOILETRY_GROUP_ID = "toiletry-bag";
 
 export type StapleCadence = "per day" | "per trip";
 export type ItemSection = "main" | "packlast" | "return";

@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { TOILETRY_GROUP_ID } from "../toiletry-bag";
 import {
   buildTripItems,
   DEFAULT_PACK_LAST,
   DEFAULT_STAPLES,
   niceAccessoryKey,
-  TOILETRY_GROUP_ID,
   type Staple,
   type TripItem,
 } from "./staples";
@@ -167,6 +167,34 @@ describe("staple merge", () => {
     const noSpare = buildTripItems(config, stapleSet).items;
     expect(byId(noSpare, "underwear")?.qty).toBe(6);
     expect(byId(noSpare, "socks")?.qty).toBe(3);
+  });
+
+  // Prototype quirk kept on purpose: only an UNMATCHED staple with qty <= 0 is
+  // skipped. A matched one still overwrites the existing item, down to qty 0.
+  it("zeroes an existing item matched by id when the staple quantity is 0", () => {
+    const { items } = buildTripItems(config, [
+      staple({ id: "sleepwear", name: "Sleepwear", qty: 0 }),
+    ]);
+    expect(items.filter((item) => item.id === "sleepwear")).toHaveLength(1);
+    expect(byId(items, "sleepwear")?.qty).toBe(0);
+  });
+
+  it("zeroes an existing item matched by nice-accessory key when the staple quantity is 0", () => {
+    const { items } = buildTripItems({ ...config, niceAttire: true }, [
+      staple({ id: "my-shoes", name: "Dress shoes", qty: 0 }),
+    ]);
+    expect(byId(items, "nice-shoes")).toBeUndefined();
+    expect(byId(items, "my-shoes")?.qty).toBe(0);
+  });
+
+  it("replaces a matched item's quantity with 0 for a per-day staple on a trip with no packing days", () => {
+    const twoDays = { ...config, end: "2026-11-13" };
+    expect(byId(buildTripItems(twoDays, []).items, "sleepwear")?.qty).toBe(1);
+    const { dailyDays, items } = buildTripItems(twoDays, [
+      staple({ id: "sleepwear", name: "Sleepwear", cadence: "per day" }),
+    ]);
+    expect(dailyDays).toBe(0);
+    expect(byId(items, "sleepwear")?.qty).toBe(0);
   });
 
   it("moves a matched item to Pack last or main by the staple's packLast flag", () => {
