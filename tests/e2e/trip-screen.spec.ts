@@ -167,7 +167,7 @@ test("completing the last item only reveals Review your bag; it never marks the 
     .click();
   const review = page.getByRole("link", { name: "Review your bag" });
   await expect(review).toBeVisible();
-  await expect(review).toHaveAttribute("href", "/trips/san-diego/review");
+  await expect(review).toHaveAttribute("href", /^\/trips\/[0-9a-f-]{36}\/review$/);
   await expect(page.getByText("Packing", { exact: true })).toBeVisible();
   await expect(page.getByText("You’re ready to go.")).toHaveCount(0);
 });
@@ -227,12 +227,11 @@ test("a remembered edit changes future trips, but neither this trip's history no
   await expect(row(page, "sunglasses")).toContainText("Polarized sunglasses");
 });
 
-test("weather: nothing changes until accepted; accepting adds exactly one umbrella and revokes Ready", async ({
+test("weather: nothing changes until accepted; accepting adds exactly one umbrella", async ({
   page,
 }) => {
-  await openLisbon(page);
-  await expect(page.getByText("You’re ready to go.")).toBeVisible();
-  await expect(page.getByText("Simulated · Seasonal outlook")).toBeVisible();
+  await openSanDiego(page);
+  await expect(page.getByText("Simulated · Close forecast")).toBeVisible();
   await expect(
     page.getByText("This is a simulated suggestion, not a real forecast.").first(),
   ).toBeVisible();
@@ -240,13 +239,13 @@ test("weather: nothing changes until accepted; accepting adds exactly one umbrel
 
   await page.getByRole("button", { name: "Review suggestion" }).click();
   const dialog = page.getByRole("dialog", { name: "Add a compact umbrella?" });
+  // The trip is not Ready, so the dialog does not warn that Ready will turn off.
   await expect(
     dialog.getByText("Accepting changes your list, so Ready will turn off."),
-  ).toBeVisible();
+  ).toHaveCount(0);
   await dialog.getByRole("button", { name: "Skip" }).click();
   await expect(page.getByText("Simulated · skipped")).toBeVisible();
   await expect(row(page, "weather-umbrella")).toHaveCount(0);
-  await expect(page.getByText("You’re ready to go.")).toBeVisible();
 
   await page.getByRole("button", { name: "Review again" }).click();
   await page
@@ -255,8 +254,17 @@ test("weather: nothing changes until accepted; accepting adds exactly one umbrel
     .click();
   await expect(row(page, "weather-umbrella")).toHaveCount(1);
   await expect(page.getByText("Simulated · accepted")).toBeVisible();
-  await expect(page.getByText("You’re ready to go.")).toHaveCount(0);
-  await expect(page.getByText("Packing", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Review suggestion" })).toHaveCount(0);
+});
+
+test("a trip whose umbrella was already accepted shows it once, with no suggestion to review", async ({
+  page,
+}) => {
+  await openLisbon(page);
+  await expect(page.getByText("You’re ready to go.")).toBeVisible();
+  await expect(page.getByText("Simulated · accepted")).toBeVisible();
+  await expect(row(page, "weather-umbrella")).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "Review suggestion" })).toHaveCount(0);
 });
 
 test("an optional item can be removed, after a confirmation that focuses the safe button", async ({
@@ -440,7 +448,9 @@ test("screenshots of the trip screen", async ({ page }, testInfo) => {
   await shot("preferences");
 });
 
-test("screenshots of the Ready trip, weather card and its dialog", async ({ page }, testInfo) => {
+test("screenshots of the Ready trip, the weather card and its dialog", async ({
+  page,
+}, testInfo) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   const shot = (name: string) =>
     page.screenshot({
@@ -449,6 +459,10 @@ test("screenshots of the Ready trip, weather card and its dialog", async ({ page
   await openLisbon(page);
   await expect(page.getByText("You’re ready to go.")).toBeVisible();
   await shot("ready");
+
+  await page.getByRole("link", { name: "Back to trips" }).click();
+  await page.getByRole("link", { name: "Keep packing: San Diego" }).click();
+  await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
   await page.getByRole("button", { name: "Review suggestion" }).scrollIntoViewIfNeeded();
   await shot("weather-card");
   await page.getByRole("button", { name: "Review suggestion" }).click();

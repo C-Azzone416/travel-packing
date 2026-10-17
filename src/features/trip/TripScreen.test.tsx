@@ -4,7 +4,11 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderInApp } from "@/test/providers";
 import { sampleLifecycleState } from "@/features/trips/fixtures";
-import { createMemoryTripsSource, type TripsSource } from "@/features/trips/trips-source";
+import {
+  createMemoryTripsSource,
+  TripsSourceError,
+  type TripsSource,
+} from "@/features/trips/trips-source";
 import { TripsSourceProvider } from "@/features/trips/TripsSourceProvider";
 import { TripScreen } from "./TripScreen";
 
@@ -88,6 +92,20 @@ describe("loading and states", () => {
     setup("nope");
     expect(await screen.findByRole("heading", { name: "That trip isn’t available" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Back to trips" }).getAttribute("href")).toBe("/");
+  });
+
+  it("treats a malformed trip id like a missing one, and any other failure as a load error", async () => {
+    const base = memory();
+    const make = (code: string) => ({
+      ...base,
+      getTrip: () => Promise.reject(new TripsSourceError(code)),
+    });
+    renderInApp(
+      <TripsSourceProvider source={make("INVALID_INPUT")}>
+        <TripScreen tripId="nope" />
+      </TripsSourceProvider>,
+    );
+    expect(await screen.findByRole("heading", { name: "That trip isn’t available" })).toBeTruthy();
   });
 
   it("shows a load error with Try again, and the Error chip; both recover", async () => {

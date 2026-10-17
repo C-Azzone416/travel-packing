@@ -10,6 +10,25 @@ import {
   undoRemoveTripAction,
 } from "./actions";
 import { createServerTripsSource } from "./server-source";
+import {
+  acceptWeatherAction,
+  addToiletryItemAction,
+  confirmBagPlacementAction,
+  decrementPackedAction,
+  editItemAction,
+  getTripAction,
+  incrementPackedAction,
+  listStaplesAction,
+  markNotReadyAction,
+  markReadyAction,
+  removeItemAction,
+  reviewWeatherAgainAction,
+  setPackedAction,
+  skipWeatherAction,
+  togglePackedAction,
+  undoBagPlacementAction,
+  updatePreferencesAction,
+} from "./trip-actions";
 import type { TripsSource } from "./trips-source";
 
 const TripsSourceContext = createContext<TripsSource | null>(null);
@@ -33,14 +52,35 @@ export function TripsSourceProvider({
   const [value] = useState<TripsSource>(
     () =>
       source ??
-      createServerTripsSource({
-        load: loadTripsAction,
-        archive: archiveTripAction,
-        restore: restoreTripAction,
-        remove: removeTripAction,
-        undoRemove: undoRemoveTripAction,
-        create: createTripAction,
-      }),
+      createServerTripsSource(
+        {
+          load: loadTripsAction,
+          archive: archiveTripAction,
+          restore: restoreTripAction,
+          remove: removeTripAction,
+          undoRemove: undoRemoveTripAction,
+          create: createTripAction,
+        },
+        {
+          getTrip: getTripAction,
+          listStaples: listStaplesAction,
+          setPacked: setPackedAction,
+          togglePacked: togglePackedAction,
+          incrementPacked: incrementPackedAction,
+          decrementPacked: decrementPackedAction,
+          editItem: editItemAction,
+          removeItem: removeItemAction,
+          addToiletryItem: addToiletryItemAction,
+          confirmBagPlacement: confirmBagPlacementAction,
+          undoBagPlacement: undoBagPlacementAction,
+          markReady: markReadyAction,
+          markNotReady: markNotReadyAction,
+          acceptWeather: acceptWeatherAction,
+          skipWeather: skipWeatherAction,
+          reviewWeatherAgain: reviewWeatherAgainAction,
+          updatePreferences: updatePreferencesAction,
+        },
+      ),
   );
   return <TripsSourceContext.Provider value={value}>{children}</TripsSourceContext.Provider>;
 }
