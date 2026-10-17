@@ -22,6 +22,7 @@ Node 22 LTS (`.nvmrc`), npm.
 | `npm run build`             | Production build                                                                                                                               |
 | `npm run db:generate`       | Generate the next migration from `src/server/db/schema.ts` (see `docs/schema.md`)                                                              |
 | `npm run db:check`          | Validate the migration set                                                                                                                     |
+| `npm run db:seed`           | Load the synthetic sample set into a local PGlite database (or `SEED_DATABASE_URL` with `--yes`); refuses production                           |
 | `npm run db:migrate:remote` | Apply pending migrations over one direct connection (`DATABASE_URL_UNPOOLED`); not run by CI                                                   |
 | `npm run db:migrate`        | Apply all migrations to an empty in-memory Postgres, roll back, and re-apply (no real database)                                                |
 

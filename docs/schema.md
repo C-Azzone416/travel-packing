@@ -130,3 +130,20 @@ Every entry point is `run(context, zodSchema, input, handler)`:
 Trips are loaded and saved as one aggregate (trip + preferences + weather + items with progress). Another owner's
 trip is indistinguishable from a missing one (`NOT_FOUND`), including as the source of a copy, so `copied_from` can
 only ever reference the caller's own trip. First use seeds the default staples once (never re-adding removed ones).
+
+## Synthetic seed data (`npm run db:seed`)
+
+Loads the prototype's sample set (plan §6) for one owner: **San Diego** (upcoming, partially packed, Nice outfits on)
+and **Lisbon** (past, fully packed, bag confirmed, Ready, simulated umbrella accepted), plus the default staples. All of
+it is invented; nothing is real trip data.
+
+- **Idempotent.** The two sample trips have ids derived from the owner id, so re-running replaces exactly those trips
+  and sets the staples back to the defaults. Other trips the owner has, and other owners' data, are untouched.
+- **Never the app's own database.** The target is chosen explicitly: a local on-disk PGlite database
+  (`--pglite <dir>`, default `.data/seed-db`, git-ignored), or a remote dev/preview database named by
+  `SEED_DATABASE_URL` (already migrated, and `--yes` is required). The app's `DATABASE_URL` is never read as a target.
+- **Refuses production.** It stops when `NODE_ENV=production`, on any Vercel runtime, and when the target is the same
+  database as `DATABASE_URL` or `DATABASE_URL_UNPOOLED` (pooled or direct host spelling). It prints a summary only,
+  never a connection string, date, or place.
+- `--owner <id>` or `SEED_OWNER_ID` sets the owner (default `seed-owner`). Tests can call `seedSyntheticData(db, ownerId)`
+  directly as a fixture.
