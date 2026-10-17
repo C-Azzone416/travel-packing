@@ -9,15 +9,17 @@ prebuilt output.
 1. Waits for the `ci` workflow to pass on the same commit (fails if it failed or never finishes).
 2. `vercel pull` for the target, then `scripts/check-deploy-env.ts` checks the pulled variables. It prints variable
    **names** only, and fails when:
-   - any test-only variable is present (`NEXT_PUBLIC_E2E_BUILD`, `AUTH_E2E_*`, `E2E_DATABASE_URL`, `SEED_DATABASE_URL`, `OPEN_METEO_GEOCODING_URL`);
-   - a required variable is missing;
+   - any test-only variable is present (`NEXT_PUBLIC_E2E_BUILD`, anything starting with `AUTH_E2E_`, `E2E_DATABASE_URL`, `SEED_DATABASE_URL`, `OPEN_METEO_GEOCODING_URL`);
+   - a required variable is missing, or `NEON_AUTH_COOKIE_SECRET` is shorter than the 32 characters sign-in needs;
    - `LOCATION_PROVIDER` is set to anything but `open-meteo` (required in preview; optional in production, where unset
      means location search is off);
-   - (preview) `PRODUCTION_DB_HOST` is unset, or `DATABASE_URL` /
+   - (preview) `PRODUCTION_DB_HOST` is unset or is not a bare host name (a full connection URL is refused, never guessed at), or `DATABASE_URL` /
      `DATABASE_URL_UNPOOLED` point at the production database host.
 3. `vercel build`, then `npm run check:no-e2e-in-build` (the fake sign-in, the e2e driver and the sample fixtures must
    not be in the output).
-4. Migrations run as their own logged step over the **direct** connection (`npm run db:migrate:remote`).
+4. A second check (`scripts/check-migration-target.ts`) looks at the GitHub environment's `DATABASE_URL_UNPOOLED`, the secret
+   the migrate and seed steps actually use: in a preview run it must NOT be `PRODUCTION_DB_HOST`, in a production run it
+   MUST be. Then migrations run as their own logged step over the **direct** connection (`npm run db:migrate:remote`).
 5. Preview only: `npm run db:seed -- --yes` loads the synthetic sample set (see the seed guard in `docs/schema.md`).
 6. `vercel deploy --prebuilt`, then the smoke test (`scripts/smoke-test.ts`): `/sign-in` answers 200 and `/` redirects
    a signed-out visitor to `/sign-in`.
@@ -29,7 +31,8 @@ version in `package.json`. Bump either in a PR.
 
 GitHub, repository level (already exist): secret `VERCEL_TOKEN`, variables `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`.
 
-GitHub repository variable: `PRODUCTION_DB_HOST` — the production database's host name (not a secret). Previews refuse
+GitHub repository variable: `PRODUCTION_DB_HOST` — the production database's bare host name, such as
+`ep-xxxx.us-east-2.aws.neon.tech` (not a URL; not a secret). Previews refuse
 to deploy if their database has this host.
 
 GitHub **environment `preview`**:
@@ -90,7 +93,6 @@ permissions:
 
 env:
   VERCEL_CLI_VERSION: 64.5.0 # pinned; never @latest
-  VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
   VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
   VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
   TARGET: ${{ github.ref_name == 'main' && 'production' || 'preview' }}
@@ -131,7 +133,11 @@ jobs:
       - name: Install Vercel CLI (pinned)
         run: npm install --global "vercel@${VERCEL_CLI_VERSION}"
 
+      # VERCEL_TOKEN can deploy to production, so only the three Vercel steps below get it (not `npm ci`, whose
+      # install scripts run before this point, and not the migrate or seed steps).
       - name: Pull Vercel environment
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: vercel pull --yes --environment="$TARGET" --token="$VERCEL_TOKEN"
 
       - name: Check the deploy environment (names only, no values)
@@ -140,11 +146,21 @@ jobs:
         run: npx tsx scripts/check-deploy-env.ts "$TARGET" ".vercel/.env.${TARGET}.local"
 
       - name: Build
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
           if [ "$TARGET" = production ]; then vercel build --prod --token="$VERCEL_TOKEN"; else vercel build --token="$VERCEL_TOKEN"; fi
 
       - name: No test-only code in the build
         run: npm run check:no-e2e-in-build
+
+      # The migrate and seed steps use the GitHub environment's secret, which the Vercel env check never sees. Prove it
+      # points at the right database first: not production in a preview run, production in a production run.
+      - name: Check the migration target
+        env:
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+          PRODUCTION_DB_HOST: ${{ vars.PRODUCTION_DB_HOST }}
+        run: npx tsx scripts/check-migration-target.ts "$TARGET"
 
       - name: Apply database migrations
         env:
@@ -163,6 +179,8 @@ jobs:
 
       - name: Deploy
         id: deploy
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
           if [ "$TARGET" = production ]; then
             url=$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")
