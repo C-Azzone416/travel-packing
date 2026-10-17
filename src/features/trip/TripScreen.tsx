@@ -31,6 +31,9 @@ import {
 } from "./trip-view";
 import { WeatherCard, WeatherDialog } from "./Weather";
 
+/** Taps on a quantity stepper settle for this long before one write carries the final count. */
+export const PACK_DEBOUNCE_MS = 300;
+
 type Load =
   | { phase: "loading" }
   | { phase: "missing" }
@@ -107,6 +110,12 @@ export function TripScreen({ tripId }: { tripId: string }) {
   const retries = useRef(
     new Map<string, { write: () => Promise<TripChange>; options: ActOptions }>(),
   );
+  // Counts the user has tapped but the source has not confirmed yet. The row shows these straight away; one write
+  // per item carries the latest, and writes for the same item are sent one after another.
+  const [tapped, setTapped] = useState<Readonly<Record<string, number>>>({});
+  const tappedRef = useRef<Record<string, number>>({});
+  const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const chains = useRef(new Map<string, Promise<void>>());
 
   useEffect(() => {
     let cancelled = false;
@@ -160,6 +169,61 @@ export function TripScreen({ tripId }: { tripId: string }) {
     [source, track],
   );
 
+  const settle = useCallback((id: string, value: number) => {
+    // A newer tap while this write was in flight keeps its own count on screen.
+    if (tappedRef.current[id] !== value) return;
+    const rest = { ...tappedRef.current };
+    delete rest[id];
+    tappedRef.current = rest;
+    setTapped(rest);
+  }, []);
+
+  // Sends the item's latest tapped count. Writes for one item queue behind each other; the value is read when the
+  // write starts (and again on Retry), so a retry never re-sends a stale count.
+  const flush = useCallback(
+    (id: string) => {
+      const timer = timers.current.get(id);
+      if (timer) clearTimeout(timer);
+      timers.current.delete(id);
+      if (tappedRef.current[id] === undefined) return;
+      const sent = { value: tappedRef.current[id] };
+      const write = () => {
+        sent.value = tappedRef.current[id] ?? sent.value;
+        return source.setPacked(tripId, id, sent.value);
+      };
+      const queued = (chains.current.get(id) ?? Promise.resolve()).then(() =>
+        act(write, { row: id, after: () => settle(id, sent.value) }),
+      );
+      chains.current.set(id, queued);
+    },
+    [act, settle, source, tripId],
+  );
+
+  const setCount = useCallback(
+    (item: TripItem, count: number, delay: number) => {
+      tappedRef.current = { ...tappedRef.current, [item.id]: count };
+      setTapped(tappedRef.current);
+      setAnnouncement(packedAnnouncement({ ...item, packed: count }));
+      const pending = timers.current.get(item.id);
+      if (pending) clearTimeout(pending);
+      if (delay === 0) flush(item.id);
+      else
+        timers.current.set(
+          item.id,
+          setTimeout(() => flush(item.id), delay),
+        );
+    },
+    [flush],
+  );
+
+  // Leaving the screen sends whatever has been tapped but not yet sent.
+  useEffect(() => {
+    const waiting = timers.current;
+    return () => {
+      for (const id of [...waiting.keys()]) flush(id);
+    };
+  }, [flush]);
+
   const close = () => setDialog(null);
 
   if (load.phase === "loading") {
@@ -202,7 +266,12 @@ export function TripScreen({ tripId }: { tripId: string }) {
     );
   }
 
-  const { trip } = load;
+  const trip: LifecycleTrip = {
+    ...load.trip,
+    items: load.trip.items.map((entry) =>
+      tapped[entry.id] === undefined ? entry : { ...entry, packed: tapped[entry.id] },
+    ),
+  };
   const sections = tripSections(trip);
   const gate = bagGate(trip);
   const totals = progress(trip);
@@ -217,27 +286,9 @@ export function TripScreen({ tripId }: { tripId: string }) {
       key={item.id}
       item={item}
       failed={failedRows.has(item.id)}
-      onToggle={(id) =>
-        void act(() => source.togglePacked(tripId, id), {
-          row: id,
-          announce: (change) =>
-            packedAnnouncement(change.trip.items.find((entry) => entry.id === id) as TripItem),
-        })
-      }
-      onIncrement={(id) =>
-        void act(() => source.incrementPacked(tripId, id), {
-          row: id,
-          announce: (change) =>
-            packedAnnouncement(change.trip.items.find((entry) => entry.id === id) as TripItem),
-        })
-      }
-      onDecrement={(id) =>
-        void act(() => source.decrementPacked(tripId, id), {
-          row: id,
-          announce: (change) =>
-            packedAnnouncement(change.trip.items.find((entry) => entry.id === id) as TripItem),
-        })
-      }
+      onToggle={() => setCount(item, item.packed >= item.qty ? 0 : item.qty, 0)}
+      onIncrement={() => setCount(item, Math.min(item.qty, item.packed + 1), PACK_DEBOUNCE_MS)}
+      onDecrement={() => setCount(item, Math.max(0, item.packed - 1), PACK_DEBOUNCE_MS)}
       onEdit={(id) => setDialog({ kind: "edit", itemId: id })}
       onRetry={(id) => {
         // The retry button only renders while a failure is recorded for this row.

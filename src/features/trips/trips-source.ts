@@ -21,6 +21,7 @@ import {
   incrementPacked,
   markNotReady,
   markReady,
+  setPacked,
   togglePacked,
   undoBagPlacement,
   type CommandResult,
@@ -61,6 +62,8 @@ export interface TripsSource {
   getTrip(tripId: string): Promise<LifecycleTrip>;
   /** The owner's staples (what "Remember for future trips" changes). */
   listStaples(): Promise<Staple[]>;
+  /** Sets one item's packed count (clamped to 0..qty). The screen sends one of these per item after taps settle. */
+  setPacked(tripId: string, itemId: string, packed: number): Promise<TripChange>;
   togglePacked(tripId: string, itemId: string): Promise<TripChange>;
   incrementPacked(tripId: string, itemId: string): Promise<TripChange>;
   decrementPacked(tripId: string, itemId: string): Promise<TripChange>;
@@ -177,6 +180,7 @@ export function createMemoryTripsSource(
 
     getTrip: async (id) => find(id),
     listStaples: async () => currentStaples,
+    setPacked: (id, itemId, packed) => command(id, (trip) => setPacked(trip, itemId, packed)),
     togglePacked: (id, itemId) => command(id, (trip) => togglePacked(trip, itemId)),
     incrementPacked: (id, itemId) => command(id, (trip) => incrementPacked(trip, itemId)),
     decrementPacked: (id, itemId) => command(id, (trip) => decrementPacked(trip, itemId)),
