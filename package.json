@@ -20,6 +20,7 @@
     "db:migrate": "tsx scripts/db-migrate.ts"
   },
   "dependencies": {
+    "@neondatabase/auth": "^0.6.0-beta",
     "drizzle-orm": "^0.45.4",
     "next": "^16.4.2",
     "react": "^19.3.1",
