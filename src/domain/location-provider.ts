@@ -2,6 +2,7 @@
 // adapter (#47) can replace the curated list without any UI change. Adapters never get more
 // than the typed query, and the picker never falls back to free text if one fails.
 
+import type { CreditPart } from "@/components/ui/Credit";
 import { searchLocations } from "./locations";
 import type { SampleLocation } from "./trip-lifecycle";
 
@@ -10,8 +11,8 @@ export interface LocationProvider {
   minQueryLength: number;
   /** Quiet period after typing stops before a search starts. */
   debounceMs: number;
-  /** Shown under the search box when the provider requires crediting, e.g. "Place search is provided by Open-Meteo." */
-  attribution?: string;
+  /** The credit the provider requires, shown as the last sentence of the helper line under the search box. */
+  attribution?: readonly CreditPart[];
   /** Rejects when the provider is unavailable. `signal` aborts a search the user has moved on from. */
   search(query: string, options: { signal: AbortSignal }): Promise<SampleLocation[]>;
 }

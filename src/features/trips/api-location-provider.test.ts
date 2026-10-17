@@ -24,11 +24,24 @@ const signal = new AbortController().signal;
 
 describe("createApiLocationProvider", () => {
   it("asks for 2+ characters, waits 300 ms, and credits Open-Meteo", () => {
-    const provider = createApiLocationProvider({ fetch: ok({ places: [] }) });
+    const provider = createApiLocationProvider({ fetch: ok({ places: [] }), credited: true });
     expect(provider.minQueryLength).toBe(2);
     expect(provider.debounceMs).toBe(300);
     expect(provider.attribution).toBe(SEARCH_ATTRIBUTION);
-    expect(SEARCH_ATTRIBUTION).toBe("Place search is provided by Open-Meteo.");
+    expect(SEARCH_ATTRIBUTION).toEqual([
+      "Place search by ",
+      { text: "Open-Meteo.com", href: "https://open-meteo.com/" },
+      ", location data from ",
+      { text: "GeoNames", href: "https://www.geonames.org/" },
+      ".",
+    ]);
+  });
+
+  it("carries no credit unless the server says the real provider is on", () => {
+    expect(createApiLocationProvider({ fetch: ok({ places: [] }) }).attribution).toBeUndefined();
+    expect(
+      createApiLocationProvider({ fetch: ok({ places: [] }), credited: false }).attribution,
+    ).toBeUndefined();
   });
 
   it("calls only this app's own endpoint, with only the typed text, same-origin", async () => {

@@ -26,11 +26,15 @@ export function geocodingGetUrl(env: Record<string, string | undefined>): string
   return geocodingBaseUrl(env)?.replace(/\/search$/, "/get");
 }
 
+/** The one place that decides whether the real provider is on: only the exact value "open-meteo". */
+export const providerEnabled = (env: Record<string, string | undefined> = process.env): boolean =>
+  env.LOCATION_PROVIDER === "open-meteo";
+
 export function selectSearch(
   env: Record<string, string | undefined> = process.env,
   doFetch: typeof fetch = (...args) => fetch(...args),
 ): SearchFn {
-  if (env.LOCATION_PROVIDER === "open-meteo") {
+  if (providerEnabled(env)) {
     const baseUrl = geocodingBaseUrl(env);
     return (query, { signal }) => searchOpenMeteo(query, { fetch: doFetch, signal, baseUrl });
   }

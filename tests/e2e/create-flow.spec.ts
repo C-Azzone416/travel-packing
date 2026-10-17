@@ -218,7 +218,8 @@ test("place search goes only through this app's own endpoint, never to a geocode
   expect(searches.length).toBeGreaterThan(0);
   expect(new Set(searches).size).toBe(1);
   expect(external.filter((host) => /open-meteo|geocod/i.test(host))).toEqual([]);
-  await expect(page.getByText("Place search is provided by Open-Meteo.")).toBeVisible();
+  // This app runs with the curated list, so there is no provider to credit.
+  await expect(page.getByText(/Place search by/)).toHaveCount(0);
 });
 
 test("shows a clear error with Retry when search is unavailable, never falling back to free text", async ({

@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { ToastProvider } from "@/components/ui/Toast";
 import { AppLocationProvider } from "@/features/trips/AppLocationProvider";
+import { providerEnabled } from "@/server/locations/provider-config";
 import { TripsSourceProvider } from "@/features/trips/TripsSourceProvider";
 import { Nav } from "./Nav";
 import { PreviewBanner } from "./PreviewBanner";
@@ -13,7 +14,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <ToastProvider>
       <SaveStatusProvider>
         <TripsSourceProvider>
-          <AppLocationProvider>
+          <AppLocationProvider providerOn={providerEnabled()}>
             <a className="skip-link" href="#main">
               Skip to main content
             </a>

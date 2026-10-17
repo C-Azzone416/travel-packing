@@ -1,7 +1,35 @@
 import { describe, expect, it, vi } from "vitest";
-import { curatedSearch, geocodingBaseUrl, geocodingGetUrl, selectSearch } from "./provider-config";
+import {
+  curatedSearch,
+  geocodingBaseUrl,
+  geocodingGetUrl,
+  providerEnabled,
+  selectSearch,
+} from "./provider-config";
 
 const signal = new AbortController().signal;
+
+describe("providerEnabled", () => {
+  it("is on only for the exact value open-meteo", () => {
+    expect(providerEnabled({ LOCATION_PROVIDER: "open-meteo" })).toBe(true);
+    for (const value of [undefined, "", "curated", "OPEN-METEO", "open-meteo ", "true"])
+      expect(providerEnabled({ LOCATION_PROVIDER: value })).toBe(false);
+    expect(providerEnabled({})).toBe(false);
+  });
+
+  it("reads the process environment by default", () => {
+    const before = process.env.LOCATION_PROVIDER;
+    try {
+      process.env.LOCATION_PROVIDER = "open-meteo";
+      expect(providerEnabled()).toBe(true);
+      delete process.env.LOCATION_PROVIDER;
+      expect(providerEnabled()).toBe(false);
+    } finally {
+      if (before === undefined) delete process.env.LOCATION_PROVIDER;
+      else process.env.LOCATION_PROVIDER = before;
+    }
+  });
+});
 
 describe("selectSearch", () => {
   it("answers from the curated list, with no network, unless Open-Meteo is explicitly enabled", async () => {
