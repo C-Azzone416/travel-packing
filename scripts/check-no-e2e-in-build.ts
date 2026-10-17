@@ -7,6 +7,8 @@ import { join } from "node:path";
 const MARKERS: readonly { name: string; text: string }[] = [
   { name: "the e2e fake sign-in", text: "e2e-auth-session" },
   { name: "the e2e Postgres driver", text: "e2e-test-only-pg-driver" },
+  // The sample trips in src/features/trips/fixtures.ts are for tests only; the dashboard reads real data.
+  { name: "the dashboard sample-trip fixtures", text: "Lisbon, Lisboa, Portugal" },
 ];
 const BUILD_DIR = ".next";
 
