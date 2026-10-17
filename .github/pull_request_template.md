@@ -13,7 +13,7 @@ Closes #
 ## Coverage
 
 | Lines | Branches | Functions | Statements |
-|-------|----------|-----------|------------|
+| ----- | -------- | --------- | ---------- |
 |       |          |           |            |
 
 ## Screenshots (UI changes)
