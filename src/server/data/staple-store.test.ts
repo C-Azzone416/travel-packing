@@ -140,4 +140,44 @@ describe("saveStaples", () => {
     ).rejects.toBeInstanceOf(Refusal);
     expect(await listStaples(db(), OWNER.userId)).toEqual([]);
   });
+
+  describe("another owner with the same default ids", () => {
+    const base: Staple = {
+      id: "socks",
+      name: "Socks",
+      category: "Clothing",
+      qty: 1,
+      cadence: "per day",
+      packLast: false,
+    };
+
+    it.each([
+      ["A saves first", [OWNER.userId, OTHER_OWNER.userId]],
+      ["B saves first", [OTHER_OWNER.userId, OWNER.userId]],
+    ])("each owner's edit persists and bumps only their own version (%s)", async (_name, order) => {
+      for (const owner of order) await saveStaples(db(), owner, [base]);
+      await saveStaples(db(), OWNER.userId, [{ ...base, qty: 3 }]);
+      expect((await listStaples(db(), OWNER.userId))[0].qty).toBe(3);
+      expect((await listStaples(db(), OTHER_OWNER.userId))[0].qty).toBe(1);
+      await saveStaples(db(), OTHER_OWNER.userId, [{ ...base, qty: 5 }]);
+      expect((await listStaples(db(), OTHER_OWNER.userId))[0].qty).toBe(5);
+      expect((await listStaples(db(), OWNER.userId))[0].qty).toBe(3);
+      const versions = (
+        await ctx.client.query<{ owner_id: string; version: number }>(
+          "SELECT owner_id, version FROM staples ORDER BY owner_id",
+        )
+      ).rows;
+      expect(versions).toEqual([
+        { owner_id: OWNER.userId, version: 2 },
+        { owner_id: OTHER_OWNER.userId, version: 2 },
+      ]);
+    });
+
+    it("deleting one owner's staple leaves the other's identical staple", async () => {
+      await saveStaples(db(), OWNER.userId, [base]);
+      await saveStaples(db(), OTHER_OWNER.userId, [base]);
+      await saveStaples(db(), OWNER.userId, []);
+      expect(await listStaples(db(), OTHER_OWNER.userId)).toEqual([base]);
+    });
+  });
 });

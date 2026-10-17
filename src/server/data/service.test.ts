@@ -1,5 +1,7 @@
+import { drizzle } from "drizzle-orm/pglite";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMigratedDb, resetData } from "../db/__fixtures__/db";
+import * as schema from "../db/schema";
 import type { TripItem } from "../../domain/trip";
 import type { Db } from "../db/retention";
 import {
@@ -1050,6 +1052,280 @@ describe("trip lifecycle", () => {
         data(await service.listRecentlyDeletedTrips(context())).map((entry) => entry.id),
       ).toEqual([trip.id]);
     });
+  });
+});
+
+describe("staples are per-owner even when owners share the same default ids", () => {
+  const stapleRow = async (owner: string, id: string) =>
+    (
+      await ctx.client.query<{ qty: number; version: number }>(
+        "SELECT qty, version FROM staples WHERE owner_id = $1 AND semantic_id = $2",
+        [owner, id],
+      )
+    ).rows[0];
+  const upsertSocks = (qty: number) =>
+    service.upsertStaple(context(), {
+      semanticId: "socks",
+      name: "Socks",
+      category: "Clothing",
+      qty,
+      cadence: "per day",
+      packLast: false,
+    });
+
+  it.each([
+    ["A seeded first", [OWNER, OTHER_OWNER]],
+    ["B seeded first", [OTHER_OWNER, OWNER]],
+  ])(
+    "each owner's edit persists, bumps only their version, and leaves the other alone (%s)",
+    async (_name, order) => {
+      for (const user of order) {
+        as(user);
+        data(await service.listStaplesForOwner(context()));
+      }
+      as(OWNER);
+      data(await upsertSocks(3));
+      expect(await stapleRow(OWNER.userId, "socks")).toEqual({ qty: 3, version: 2 });
+      expect(await stapleRow(OTHER_OWNER.userId, "socks")).toEqual({ qty: 1, version: 1 });
+
+      as(OTHER_OWNER);
+      data(await upsertSocks(5));
+      expect(await stapleRow(OTHER_OWNER.userId, "socks")).toEqual({ qty: 5, version: 2 });
+      expect(await stapleRow(OWNER.userId, "socks")).toEqual({ qty: 3, version: 2 });
+    },
+  );
+
+  it("an item edit that remembers a change reaches only the editing owner's staple", async () => {
+    for (const user of [OWNER, OTHER_OWNER]) {
+      as(user);
+      data(await service.listStaplesForOwner(context()));
+    }
+    as(OWNER);
+    const trip = await seedTrip(db(), OWNER.userId);
+    data(
+      await service.editTripItem(context(), {
+        tripId: trip.id,
+        itemId: "last-laptop",
+        name: "Work laptop",
+        qty: 1,
+        timing: "main",
+        scope: "remember",
+      }),
+    );
+    const names = (
+      await ctx.client.query<{ owner_id: string; name: string }>(
+        "SELECT owner_id, name FROM staples WHERE semantic_id = 'last-laptop' ORDER BY owner_id",
+      )
+    ).rows;
+    expect(names).toEqual([
+      { owner_id: OWNER.userId, name: "Work laptop" },
+      { owner_id: OTHER_OWNER.userId, name: "Laptop" },
+    ]);
+  });
+});
+
+describe("archive and restore never touch a removed trip", () => {
+  const archivedFlag = async (tripId: string) =>
+    (
+      await ctx.client.query<{ archived: boolean }>("SELECT archived FROM trips WHERE id = $1", [
+        tripId,
+      ])
+    ).rows[0].archived;
+
+  it("archiving a removed trip is NOT_FOUND and the flag stays false", async () => {
+    const trip = await seedTrip(db(), OWNER.userId);
+    data(await service.removeTrip(context(), { tripId: trip.id }));
+    expect(errorOf(await service.archiveTrip(context(), { tripId: trip.id }))?.code).toBe(
+      "NOT_FOUND",
+    );
+    expect(await archivedFlag(trip.id)).toBe(false);
+  });
+
+  it("restoring a removed, archived trip is NOT_FOUND and the flag stays true", async () => {
+    const trip = await seedTrip(db(), OWNER.userId);
+    data(await service.archiveTrip(context(), { tripId: trip.id }));
+    data(await service.removeTrip(context(), { tripId: trip.id }));
+    expect(errorOf(await service.restoreArchivedTrip(context(), { tripId: trip.id }))?.code).toBe(
+      "NOT_FOUND",
+    );
+    expect(await archivedFlag(trip.id)).toBe(true);
+  });
+});
+
+describe("input bounds are enforced exactly at the limit", () => {
+  const tripId = "00000000-0000-4000-8000-000000000001";
+  const edit = (over: Record<string, unknown>) =>
+    service.editTripItem(context(), {
+      tripId,
+      itemId: "tops",
+      name: "x",
+      qty: 1,
+      timing: "main",
+      scope: "this-trip",
+      ...over,
+    });
+
+  it.each([
+    ["item qty", (n: number) => edit({ qty: n }), 999, 1000, "qty"],
+    ["item qty (lower bound)", (n: number) => edit({ qty: n }), 1, 0, "qty"],
+    ["item name length", (n: number) => edit({ name: "n".repeat(n) }), 120, 121, "name"],
+    ["itemId length", (n: number) => edit({ itemId: "i".repeat(n) }), 100, 101, "itemId"],
+    [
+      "packed",
+      (n: number) => service.setPackedItem(context(), { tripId, itemId: "tops", packed: n }),
+      999,
+      1000,
+      "packed",
+    ],
+    [
+      "added Bathroom item qty",
+      (n: number) =>
+        service.addToiletryItemToTrip(context(), {
+          tripId,
+          name: "x",
+          qty: n,
+          packLast: false,
+          scope: "this-trip",
+        }),
+      999,
+      1000,
+      "qty",
+    ],
+    [
+      "added Bathroom item name length",
+      (n: number) =>
+        service.addToiletryItemToTrip(context(), {
+          tripId,
+          name: "n".repeat(n),
+          qty: 1,
+          packLast: false,
+          scope: "this-trip",
+        }),
+      120,
+      121,
+      "name",
+    ],
+    [
+      "staple qty",
+      (n: number) =>
+        service.upsertStaple(context(), {
+          semanticId: "s",
+          name: "x",
+          category: "Tech",
+          qty: n,
+          cadence: "per trip",
+          packLast: false,
+        }),
+      999,
+      1000,
+      "qty",
+    ],
+    [
+      "staple name length",
+      (n: number) =>
+        service.upsertStaple(context(), {
+          semanticId: "s",
+          name: "n".repeat(n),
+          category: "Tech",
+          qty: 1,
+          cadence: "per trip",
+          packLast: false,
+        }),
+      120,
+      121,
+      "name",
+    ],
+    [
+      "staple semanticId length",
+      (n: number) =>
+        service.upsertStaple(context(), {
+          semanticId: "s".repeat(n),
+          name: "x",
+          category: "Tech",
+          qty: 1,
+          cadence: "per trip",
+          packLast: false,
+        }),
+      100,
+      101,
+      "semanticId",
+    ],
+  ])(
+    "%s: the limit is accepted, one past it is INVALID_INPUT",
+    async (_name, call, atLimit, past, field) => {
+      // At the limit validation passes (whatever happens next, it is not INVALID_INPUT); one past is refused up front.
+      const accepted = await call(atLimit);
+      expect(accepted.ok || errorOf(accepted)?.code !== "INVALID_INPUT").toBe(true);
+      const refused = await call(past);
+      expect(errorOf(refused)).toMatchObject({ code: "INVALID_INPUT" });
+      expect(errorOf(refused)?.fields).toEqual([field]);
+    },
+  );
+});
+
+describe("concurrent edits to one trip are serialized (no lost updates)", () => {
+  it("rapid double and triple '+' taps all count", async () => {
+    const trip = await seedTrip(db(), OWNER.userId);
+    const tap = () => service.incrementPackedItem(context(), { tripId: trip.id, itemId: "tops" });
+    const twice = await Promise.all([tap(), tap()]);
+    expect(twice.every((result) => result.ok)).toBe(true);
+    expect(item((await loadTrip(db(), OWNER.userId, trip.id))!, "tops")?.packed).toBe(2);
+
+    await Promise.all([tap(), tap(), tap()]);
+    expect(item((await loadTrip(db(), OWNER.userId, trip.id))!, "tops")?.packed).toBe(4);
+  });
+
+  it("mixed concurrent edits to different items on one trip all land", async () => {
+    const trip = await seedTrip(db(), OWNER.userId);
+    await Promise.all([
+      service.incrementPackedItem(context(), { tripId: trip.id, itemId: "tops" }),
+      service.incrementPackedItem(context(), { tripId: trip.id, itemId: "underwear" }),
+      service.togglePackedItem(context(), { tripId: trip.id, itemId: "sunglasses" }),
+    ]);
+    const stored = (await loadTrip(db(), OWNER.userId, trip.id))!;
+    expect(item(stored, "tops")?.packed).toBe(1);
+    expect(item(stored, "underwear")?.packed).toBe(1);
+    expect(item(stored, "sunglasses")?.packed).toBe(1);
+  });
+
+  it("every trip change locks the trip row, and the owner's staples, before it reads them", async () => {
+    const trip = await seedTrip(db(), OWNER.userId);
+    const statements: string[] = [];
+    const logged = drizzle(ctx.client, {
+      schema,
+      logger: { logQuery: (query: string) => void statements.push(query) },
+    }) as unknown as Db;
+    data(
+      await service.incrementPackedItem(makeContext(logged, fake), {
+        tripId: trip.id,
+        itemId: "tops",
+      }),
+    );
+
+    const lockTripAt = statements.findIndex(
+      (sql) => /from "trips"/.test(sql) && /for update/i.test(sql),
+    );
+    const lockStaplesAt = statements.findIndex(
+      (sql) => /from "staples"/.test(sql) && /for update/i.test(sql),
+    );
+    const firstTripReadAt = statements.findIndex((sql) => /from "trip_items"/.test(sql));
+    expect(lockTripAt).toBeGreaterThan(-1);
+    expect(lockStaplesAt).toBeGreaterThan(-1);
+    expect(lockTripAt).toBeLessThan(firstTripReadAt);
+    expect(statements.findIndex((sql) => /begin/i.test(sql))).toBeLessThan(lockTripAt);
+  });
+
+  it("a trip that is removed, missing, or another owner's cannot be locked and gives NOT_FOUND", async () => {
+    const trip = await seedTrip(db(), OWNER.userId);
+    data(await service.removeTrip(context(), { tripId: trip.id }));
+    expect(
+      errorOf(await service.incrementPackedItem(context(), { tripId: trip.id, itemId: "tops" }))
+        ?.code,
+    ).toBe("NOT_FOUND");
+    expect(
+      errorOf(await service.incrementPackedItem(context(), { tripId: newUuid(), itemId: "tops" }))
+        ?.code,
+    ).toBe("NOT_FOUND");
   });
 });
 

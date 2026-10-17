@@ -85,6 +85,27 @@ export async function loadTrips(
   });
 }
 
+/**
+ * Lock the owner's live trip row until the surrounding transaction ends. Every change reads the whole trip and
+ * rewrites it, so without this two rapid edits (say two quick "+" taps) could both read the same state and the second
+ * write would silently drop the first. With the lock they run one after the other. Returns false if there is no
+ * such live trip for this owner.
+ */
+export async function lockTrip(db: Db, ownerId: string, tripId: string): Promise<boolean> {
+  const rows = await db
+    .select({ id: schema.trips.id })
+    .from(schema.trips)
+    .where(
+      and(
+        eq(schema.trips.id, tripId),
+        eq(schema.trips.ownerId, ownerId),
+        isNull(schema.trips.deletedAt),
+      ),
+    )
+    .for("update");
+  return rows.length > 0;
+}
+
 export async function loadTrip(
   db: Db,
   ownerId: string,

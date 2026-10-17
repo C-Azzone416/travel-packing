@@ -66,6 +66,10 @@ export async function listRecentlyDeleted(db: Db, ownerId: string): Promise<Dele
 }
 
 /**
+ * ADMIN / CRON ONLY. This is the one helper here that is not scoped to the calling user: without `ownerId` it purges
+ * every owner's expired trips. It must never be called from a user request path (`src/app`, the data-layer service,
+ * server actions); a test enforces that. Retention policy (#28) decides who calls it and with which cutoff.
+ *
  * Permanently delete trips soft-deleted strictly before `cutoff` (children cascade). Live trips are never
  * touched. `cutoff` is required: the retention period is a policy decision (#28), not a default here.
  * Optionally scoped to one owner. Returns the purged trip ids.

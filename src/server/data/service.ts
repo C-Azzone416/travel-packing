@@ -45,7 +45,7 @@ import { fail, type Result } from "./result";
 import { run, refuse, type OwnerScope } from "./run";
 import * as inputs from "./schemas";
 import { ensureDefaultStaples, listStaples, saveStaples } from "./staple-store";
-import { insertTrip, loadTrip, loadTrips, saveTrip, type StoredTrip } from "./trip-store";
+import { insertTrip, loadTrip, loadTrips, lockTrip, saveTrip, type StoredTrip } from "./trip-store";
 
 export interface TripResult {
   trip: StoredTrip;
@@ -95,8 +95,10 @@ function mutateTrip<Input extends { tripId: string }>(
   return run(context, schema, raw, async (scope, input) =>
     scope.db.transaction(async (tx) => {
       const txScope: OwnerScope = { db: tx as OwnerScope["db"], ownerId: scope.ownerId };
+      // Serialize edits to this trip (and to the owner's staples): see lockTrip.
+      if (!(await lockTrip(txScope.db, txScope.ownerId, input.tripId))) refuse(fail("NOT_FOUND"));
       const current = await mustLoad(txScope, input.tripId);
-      const staples = await listStaples(txScope.db, txScope.ownerId);
+      const staples = await listStaples(txScope.db, txScope.ownerId, { lock: true });
       const next = apply(current, input, staples);
       if (!(await saveTrip(txScope.db, txScope.ownerId, next.trip))) refuse(fail("NOT_FOUND"));
       if (next.staples && next.staples !== staples) {

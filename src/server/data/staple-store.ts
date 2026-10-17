@@ -26,12 +26,18 @@ function toStaple(row: StapleRow): Staple {
   return staple;
 }
 
-export async function listStaples(db: Db, ownerId: string): Promise<Staple[]> {
-  const rows = await db
+/** The owner's staples. With `lock`, the rows are locked until the transaction ends (read-modify-write callers). */
+export async function listStaples(
+  db: Db,
+  ownerId: string,
+  options: { lock?: boolean } = {},
+): Promise<Staple[]> {
+  const query = db
     .select()
     .from(schema.staples)
     .where(eq(schema.staples.ownerId, ownerId))
     .orderBy(schema.staples.createdAt, schema.staples.semanticId);
+  const rows = await (options.lock ? query.for("update") : query);
   return rows.map(toStaple);
 }
 
