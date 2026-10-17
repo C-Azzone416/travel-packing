@@ -82,6 +82,14 @@ createServer((request, response) => {
     queries.length = 0;
     return send(200, { ok: true });
   }
+  if (url.pathname === "/v1/get") {
+    // Like the real get-by-id endpoint: one place object, or a client error for an unknown id.
+    const wanted = url.searchParams.get("id");
+    const place = Object.values(PLACES)
+      .flat()
+      .find((candidate) => String(candidate.id) === wanted);
+    return place ? send(200, place) : send(404, { error: true });
+  }
   if (url.pathname !== "/v1/search") return send(404, {});
   const name = (url.searchParams.get("name") ?? "").toLowerCase();
   queries.push({

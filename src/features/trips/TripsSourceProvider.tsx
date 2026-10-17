@@ -1,8 +1,16 @@
 "use client";
 
 import { createContext, useContext, useState, type ReactNode } from "react";
-import { sampleLifecycleState } from "./fixtures";
-import { createMemoryTripsSource, type TripsSource } from "./trips-source";
+import {
+  archiveTripAction,
+  createTripAction,
+  loadTripsAction,
+  removeTripAction,
+  restoreTripAction,
+  undoRemoveTripAction,
+} from "./actions";
+import { createServerTripsSource } from "./server-source";
+import type { TripsSource } from "./trips-source";
 
 const TripsSourceContext = createContext<TripsSource | null>(null);
 
@@ -12,9 +20,9 @@ export function useTripsSource(): TripsSource {
   return source;
 }
 
-// One source for the whole app, so a trip saved on one screen shows on the others. Until #10
-// lands this is an in-memory source seeded with synthetic sample trips; #10 swaps it for the
-// real data layer here and nothing else changes.
+// One source for the whole app, so a trip saved on one screen shows on the others. By default it reads and writes
+// through the owner-gated data layer (server actions). Tests inject an in-memory source; no sample trips are
+// bundled with the app.
 export function TripsSourceProvider({
   source,
   children,
@@ -23,7 +31,16 @@ export function TripsSourceProvider({
   children: ReactNode;
 }) {
   const [value] = useState<TripsSource>(
-    () => source ?? createMemoryTripsSource(sampleLifecycleState(), { now: () => Date.now() }),
+    () =>
+      source ??
+      createServerTripsSource({
+        load: loadTripsAction,
+        archive: archiveTripAction,
+        restore: restoreTripAction,
+        remove: removeTripAction,
+        undoRemove: undoRemoveTripAction,
+        create: createTripAction,
+      }),
   );
   return <TripsSourceContext.Provider value={value}>{children}</TripsSourceContext.Provider>;
 }

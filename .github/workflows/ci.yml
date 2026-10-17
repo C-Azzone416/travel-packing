@@ -34,6 +34,10 @@ jobs:
       - name: Install
         run: npm ci
 
+      # Fails on any committed file over 1 MiB or any local database, build, test, dependency, or env file.
+      - name: Repository hygiene
+        run: npm run check:repo-hygiene
+
       - name: Lint
         run: npm run lint
 

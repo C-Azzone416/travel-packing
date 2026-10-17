@@ -126,7 +126,7 @@ test.describe("e2e sign-in session is unforgeable", () => {
     baseURL,
   }) => {
     await context.addCookies([
-      { name: "e2e-auth-session", value: OWNER_EMAIL, url: baseURL ?? "http://localhost:3100" },
+      { name: "e2e-auth-session", value: OWNER_EMAIL, url: baseURL as string },
     ]);
     await page.goto("/");
     await expect(page).toHaveURL(/\/sign-in$/);
@@ -139,9 +139,7 @@ test.describe("e2e sign-in session is unforgeable", () => {
     baseURL,
   }) => {
     const forged = "a".repeat(64);
-    await context.addCookies([
-      { name: "e2e-auth-session", value: forged, url: baseURL ?? "http://localhost:3100" },
-    ]);
+    await context.addCookies([{ name: "e2e-auth-session", value: forged, url: baseURL as string }]);
     await page.goto("/staples");
     await expect(page).toHaveURL(/\/sign-in$/);
     const response = await request.get("/api/anything", {
