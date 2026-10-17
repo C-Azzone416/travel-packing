@@ -9,13 +9,19 @@ export interface NormalizedDates {
   valid: boolean;
 }
 
-// Dates are date-only strings (YYYY-MM-DD) read as UTC midnight, so results
-// never depend on the machine's timezone or DST (pending #26).
+// Dates are strict date-only strings (YYYY-MM-DD) read as UTC midnight, so
+// results never depend on the machine's timezone or DST (pending #26).
+// Anything else, including impossible dates like 2026-02-30, is rejected.
+const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
+
 export function parseDate(value: string | null | undefined): Date | null {
-  if (!value) return null;
-  const parts = value.split("-").map(Number);
-  if (parts.length !== 3 || parts.some(Number.isNaN)) return null;
-  return new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+  const match = value ? DATE_ONLY.exec(value) : null;
+  if (!match) return null;
+  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  const date = new Date(Date.UTC(year, month - 1, day));
+  const roundTrips =
+    date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+  return roundTrips ? date : null;
 }
 
 export function tripDays(start: string | null | undefined, end: string | null | undefined): number {
