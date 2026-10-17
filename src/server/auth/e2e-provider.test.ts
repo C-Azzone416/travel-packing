@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -103,6 +103,56 @@ describe("createE2eAuthProvider", () => {
     ])("%s", async (_name, forged) => {
       jar.set(E2E_COOKIE, forged);
       expect(await provider.getSession()).toBeNull();
+    });
+
+    // These plant a file holding an ALLOWLISTED email wherever a forged token would point. Without the token-format
+    // guard each of them would read that file and sign the forger in as the owner, so a null session here proves the
+    // guard (not a missing file) is what rejects them.
+    describe("the token-format guard is what stops a forged token from reading a planted file", () => {
+      const planted = (path: string) => {
+        mkdirSync(join(path, ".."), { recursive: true });
+        writeFileSync(path, OWNER);
+      };
+
+      it("a path-traversal token that points at a real file outside the state directory", async () => {
+        const outside = join(dir, "..", `leaked-${Date.now()}`);
+        planted(outside);
+        try {
+          jar.set(E2E_COOKIE, `../${outside.split("/").pop()}`);
+          expect(await provider.getSession()).toBeNull();
+        } finally {
+          rmSync(outside, { force: true });
+        }
+      });
+
+      it("an absolute-path token pointing at a real file", async () => {
+        const outside = join(tmpdir(), `leaked-abs-${Date.now()}`);
+        planted(outside);
+        try {
+          jar.set(E2E_COOKIE, outside);
+          expect(await provider.getSession()).toBeNull();
+        } finally {
+          rmSync(outside, { force: true });
+        }
+      });
+
+      it.each([
+        ["an upper-case token", "A".repeat(64)],
+        ["a token one character too short", "c".repeat(63)],
+        ["a token one character too long", "d".repeat(65)],
+        ["a token with a non-hex character", `${"e".repeat(63)}g`],
+      ])("%s whose file exists inside the state directory", async (_name, forged) => {
+        planted(join(dir, forged));
+        jar.set(E2E_COOKIE, forged);
+        expect(await provider.getSession()).toBeNull();
+      });
+
+      it("control: the same planted file IS read for a well-formed token (so the checks above are meaningful)", async () => {
+        const valid = "f".repeat(64);
+        planted(join(dir, valid));
+        jar.set(E2E_COOKIE, valid);
+        expect(await provider.getSession()).toEqual({ userId: `e2e-${OWNER}`, email: OWNER });
+      });
     });
 
     it("a minted token with one character changed is rejected", async () => {
