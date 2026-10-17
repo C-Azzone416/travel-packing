@@ -1,0 +1,7 @@
+reference/
+.next/
+coverage/
+playwright-report/
+test-results/
+package-lock.json
+TRAVEL_PACKING_DESIGN_AND_IMPLEMENTATION_PLAN.md
