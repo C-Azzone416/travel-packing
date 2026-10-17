@@ -14,9 +14,9 @@ const withPatch = (trip: LifecycleTrip, patch: Partial<LifecycleTrip>): Lifecycl
 
 describe("formatDays", () => {
   it("pluralizes", () => {
-    expect(formatDays(1)).toBe("1 day");
-    expect(formatDays(0)).toBe("0 days");
-    expect(formatDays(5)).toBe("5 days");
+    expect(formatDays(1)).toBe("1\u00a0day");
+    expect(formatDays(0)).toBe("0\u00a0days");
+    expect(formatDays(5)).toBe("5\u00a0days");
   });
 });
 

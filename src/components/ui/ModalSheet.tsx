@@ -18,6 +18,11 @@ export interface ModalSheetProps {
    * dismiss them (design's #16 gap 1).
    */
   dismissOnBackdrop?: boolean;
+  /**
+   * A visible "×" so touch and screen-reader users can leave without saving. For forms and editors; dialogs that
+   * already offer their own safe choice ("Not yet", "Skip", "Keep item") leave it off. Default false.
+   */
+  showClose?: boolean;
 }
 
 // Bottom sheet on phones, centered dialog from 660px. Traps focus, closes on
@@ -30,6 +35,7 @@ export function ModalSheet({
   children,
   actions,
   dismissOnBackdrop = true,
+  showClose = false,
 }: ModalSheetProps) {
   const titleId = useId();
   const descriptionId = useId();
@@ -42,7 +48,11 @@ export function ModalSheet({
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const dialog = dialogRef.current as HTMLDivElement;
-    (dialog.querySelector<HTMLElement>(FOCUSABLE) ?? dialog).focus();
+    // The close button comes first in the DOM, but a person opening a form wants to start in the form.
+    const start = [...dialog.querySelectorAll<HTMLElement>(FOCUSABLE)].find(
+      (node) => !node.hasAttribute("data-modal-close"),
+    );
+    (start ?? dialog).focus();
     // Everything else on the page is inert while the dialog is open, so focus and assistive tech stay inside
     // it. Anything that was already inert is left exactly as it was.
     const background = [...document.body.children].filter(
@@ -113,6 +123,17 @@ export function ModalSheet({
             <h2 id={titleId}>{title}</h2>
             {description ? <p id={descriptionId}>{description}</p> : null}
           </div>
+          {showClose ? (
+            <button
+              type="button"
+              className="modal-close"
+              data-modal-close=""
+              aria-label="Close dialog"
+              onClick={onClose}
+            >
+              <span aria-hidden="true">×</span>
+            </button>
+          ) : null}
         </div>
         {children}
         {actions ? <div className="modal-actions">{actions}</div> : null}

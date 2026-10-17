@@ -21,7 +21,8 @@ export function formatRange(trip: Pick<LifecycleTrip, "start" | "end">): string 
 }
 
 export function formatDays(days: number): string {
-  return days === 1 ? "1 day" : `${days} days`;
+  // A non-breaking space keeps the number with its unit, so a narrow header never strands "days" alone.
+  return days === 1 ? "1\u00a0day" : `${days}\u00a0days`;
 }
 
 export interface TripCardView {

@@ -35,6 +35,7 @@ export function AddToiletryForm({ destination, saving, onClose, onAdd }: AddToil
   return (
     <ModalSheet
       open
+      showClose
       title="Add a Bathroom item"
       description="Create a normal toiletry checklist item."
       onClose={onClose}

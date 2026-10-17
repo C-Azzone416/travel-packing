@@ -33,6 +33,7 @@ export function PreferencesForm({ config, saving, onClose, onSave }: Preferences
   return (
     <ModalSheet
       open
+      showClose
       title="Edit packing preferences"
       description="This trip only."
       onClose={onClose}

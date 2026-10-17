@@ -368,6 +368,33 @@ test("rows are keyboard operable with 44px targets, and nothing scrolls sideways
   await expect(underwear.getByRole("button", { name: "Edit Underwear" })).toBeFocused();
 });
 
+test("a sheet can be closed with its visible close button, and the bag button never wraps", async ({
+  page,
+}, testInfo) => {
+  await openSanDiego(page);
+  await row(page, "tops").getByRole("button", { name: "Edit Everyday tops" }).click();
+  const close = page.getByRole("button", { name: "Close dialog" });
+  const box = (await close.boundingBox())!;
+  expect(box.width).toBeGreaterThanOrEqual(43.9);
+  expect(box.height).toBeGreaterThanOrEqual(43.9);
+  await close.click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(row(page, "tops").getByRole("button", { name: "Edit Everyday tops" })).toBeFocused();
+
+  for (const id of TOILETRIES)
+    await row(page, id)
+      .getByRole("button", { name: /^Pack all / })
+      .click();
+  await page.getByRole("button", { name: "Not yet" }).click();
+  const put = page.getByRole("button", { name: "Put bag in suitcase" });
+  const card = page.locator(".bag-placement.pending");
+  const putBox = (await put.boundingBox())!;
+  const cardBox = (await card.boundingBox())!;
+  // One line of text: about 44-52px tall, whatever the width.
+  expect(putBox.height, testInfo.project.name).toBeLessThan(60);
+  if (testInfo.project.name === "phone") expect(putBox.width).toBeGreaterThan(cardBox.width - 40);
+});
+
 // Design's screenshot set for the trip screen. "Not saved · Retry" is not here: the in-memory source cannot fail, so
 // that state is covered by unit tests now and gets a real network-failure screenshot with the data-layer wiring.
 test("screenshots of the trip screen", async ({ page }, testInfo) => {

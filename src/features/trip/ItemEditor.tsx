@@ -103,6 +103,7 @@ export function ItemEditor({
     <ModalSheet
       key="edit"
       open
+      showClose
       title="Edit item"
       description="Existing trips stay as they were."
       onClose={onClose}

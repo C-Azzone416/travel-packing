@@ -217,4 +217,36 @@ describe("ModalSheet", () => {
     await userEvent.click(screen.getByRole("button", { name: "Open" }));
     expect(screen.getByTestId("modal-backdrop").parentElement).toBe(document.body);
   });
+
+  describe("showClose", () => {
+    it("has no close button by default", () => {
+      render(
+        <ModalSheet open title="Plain" onClose={() => {}}>
+          <input aria-label="Name" />
+        </ModalSheet>,
+      );
+      expect(screen.queryByRole("button", { name: "Close dialog" })).toBeNull();
+    });
+
+    it("adds a labelled close button that closes, without taking the initial focus", async () => {
+      const onClose = vi.fn();
+      render(
+        <ModalSheet open showClose title="Edit" onClose={onClose}>
+          <input aria-label="Name" />
+        </ModalSheet>,
+      );
+      expect(document.activeElement).toBe(screen.getByLabelText("Name"));
+      await userEvent.click(screen.getByRole("button", { name: "Close dialog" }));
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it("still focuses the dialog itself when the close button is all it holds", () => {
+      render(
+        <ModalSheet open showClose title="Empty" onClose={() => {}}>
+          {null}
+        </ModalSheet>,
+      );
+      expect(document.activeElement).toBe(screen.getByRole("dialog"));
+    });
+  });
 });
