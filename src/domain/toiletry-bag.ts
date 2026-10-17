@@ -6,7 +6,7 @@ export interface PackableItem {
   id: string;
   qty: number;
   packed: number;
-  groupId?: string;
+  groupId?: string | null;
 }
 
 export interface ReadinessTrip<I extends PackableItem = PackableItem> {

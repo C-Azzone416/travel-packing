@@ -10,7 +10,8 @@ import {
   type RejectionReason,
 } from "./readiness";
 import { TOILETRY_GROUP_ID, toiletryItems } from "./toiletry-bag";
-import type { Scope, Section, Staple, SuggestFn, Trip, TripConfig, TripItem } from "./trip";
+import { niceAccessoryKey } from "./calc";
+import type { ItemSection, Scope, Staple, SuggestFn, Trip, TripConfig, TripItem } from "./trip";
 
 /** Ids the calculator owns; everything else on a trip is user-added or canonical (Pack last, return, ...). */
 export const CALCULATED_ITEM_IDS: ReadonlySet<string> = new Set([
@@ -44,19 +45,8 @@ export type ItemOpResult<T> =
 export interface ItemEdit {
   name: string;
   qty: number;
-  timing: Section;
+  timing: ItemSection;
   scope: Scope;
-}
-
-export type NiceAccessoryKey = "makeup" | "dress-shoes" | "dress-undergarments";
-
-/** Classifies items that mean the same thing as a calculated Nice suggestion, so they are not duplicated. */
-export function niceAccessoryKey(entry: { name: string }): NiceAccessoryKey | "" {
-  const name = entry.name.toLowerCase();
-  if (name.includes("makeup") || name.includes("make-up")) return "makeup";
-  if (name.includes("dress") && name.includes("shoe")) return "dress-shoes";
-  if (name.includes("dress") && name.includes("undergarment")) return "dress-undergarments";
-  return "";
 }
 
 function accepted<T>(trip: T, staples: Staple[]): ItemOpResult<T> {
@@ -122,14 +112,14 @@ export function editItem<T extends Trip>(
   if (!item) return rejected(trip, staples, "ITEM_NOT_FOUND");
   const name = edit.name.trim();
   if (!name) return rejected(trip, staples, "EMPTY_NAME");
-  const timings: Section[] = ["main", "return", "packlast"];
+  const timings: ItemSection[] = ["main", "return", "packlast"];
   if (!timings.includes(edit.timing) || (edit.timing === "return" && item.section !== "return")) {
     return rejected(trip, staples, "INVALID_TIMING");
   }
 
   // The item exists (checked above), so editItemQty cannot reject; its trip is the edited trip.
   const qtyEdited = editItemQty(trip, itemId, edit.qty);
-  const section: Section = item.section === "return" ? "return" : edit.timing;
+  const section: ItemSection = item.section === "return" ? "return" : edit.timing;
   const edited = qtyEdited.trip.items.find((entry) => entry.id === itemId)!;
   const updated: TripItem = { ...edited, name, section, userEdited: true };
   const nextTrip = {

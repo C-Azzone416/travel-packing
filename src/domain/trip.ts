@@ -1,36 +1,28 @@
 // Trip-level types shared by item operations (plan §7). Pure data; no framework imports.
 
-import type { PackableItem, ReadinessTrip } from "./toiletry-bag";
+import type {
+  CalcConfig,
+  ItemSection,
+  Staple,
+  Suggestions,
+  TripItem as CalcTripItem,
+} from "./calc";
+import type { ReadinessTrip } from "./toiletry-bag";
 
-export type Section = "main" | "return" | "packlast";
+// Item, staple, suggestion, and config shapes come from the calculator module (src/domain/calc);
+// this file only adds what trip state needs on top of them.
+export type { ItemSection, Staple, Suggestions };
 export type Scope = "this-trip" | "remember";
 
-export interface TripItem extends PackableItem {
-  name: string;
-  category: string;
-  section: Section;
-  optional?: boolean;
+/** A calculator item plus the flag item operations keep when the user edits it. */
+export interface TripItem extends CalcTripItem {
   userEdited?: boolean;
 }
 
-export interface Staple {
-  id: string;
-  name: string;
-  category: string;
-  qty: number;
-  cadence: "per day" | "per trip";
-  packLast: boolean;
-  groupId?: string;
-}
-
-export interface TripConfig {
-  laundry: boolean;
-  spare: boolean;
-  niceAttire: boolean;
+/** The planning preferences, derived from the calculator's config so the two cannot drift. */
+export type TripConfig = Required<Omit<CalcConfig, "start" | "end" | "occasionCount">> & {
   occasionCount: number;
-  reuseNice: boolean;
-  returnOutfit: boolean;
-}
+};
 
 export type WeatherStatus = "pending" | "accepted" | "skipped";
 
@@ -52,20 +44,5 @@ export interface Trip extends ReadinessTrip<TripItem> {
   weather: WeatherState;
 }
 
-/** One calculated suggestion, in the shape the #4 calculator produces (`core.js` calculateSuggestions). */
-export interface SuggestedItem {
-  id: string;
-  name: string;
-  category: string;
-  qty: number;
-  optional?: boolean;
-}
-
-export interface Suggestions {
-  days: number;
-  dailyDays: number;
-  items: SuggestedItem[];
-}
-
-/** The calculator, injected so item operations do not depend on how #4 packages it. */
-export type SuggestFn = (input: TripConfig & { start: string; end: string }) => Suggestions;
+/** The calculator, injected so item operations do not depend on how it is packaged. */
+export type SuggestFn = (input: CalcConfig) => Suggestions;

@@ -3,7 +3,6 @@ import {
   acceptWeather,
   editItem,
   findIdentityViolations,
-  niceAccessoryKey,
   recalculateSuggestions,
   removeTripItem,
   reviewWeatherAgain,
@@ -14,61 +13,8 @@ import {
 } from "./item-ops";
 import { setPacked } from "./readiness";
 import { TOILETRY_GROUP_ID } from "./toiletry-bag";
-import type { Staple, SuggestFn, Trip, TripConfig, TripItem } from "./trip";
-
-/** Test double for the #4 calculator: same formulas as reference/prototype/dist/core.js. */
-const suggest: SuggestFn = (input) => {
-  const days = Math.max(
-    0,
-    Math.round((Date.parse(input.end) - Date.parse(input.start)) / 86400000) + 1,
-  );
-  const dailyDays = Math.max(0, days - 2);
-  const spare = input.spare ? 1 : 0;
-  const niceCount = input.niceAttire ? Math.max(1, input.occasionCount) : 0;
-  const niceLooks = input.reuseNice ? Math.min(niceCount, 1) : niceCount;
-  const everydayLooks = Math.max(0, dailyDays - niceCount);
-  const items = [
-    {
-      id: "tops",
-      name: "Everyday tops",
-      category: "Clothes",
-      qty: input.laundry ? Math.ceil(everydayLooks / 2) : everydayLooks,
-    },
-    {
-      id: "bottoms",
-      name: "Everyday bottoms",
-      category: "Clothes",
-      qty: everydayLooks ? Math.max(1, Math.ceil(everydayLooks / (input.laundry ? 4 : 2))) : 0,
-    },
-    { id: "underwear", name: "Underwear", category: "Clothes", qty: dailyDays + spare },
-    { id: "socks", name: "Socks", category: "Clothes", qty: dailyDays + spare },
-    { id: "sleepwear", name: "Sleepwear", category: "Clothes", qty: days > 1 ? 1 : 0 },
-    { id: "nice-top", name: "Nice-attire top", category: "Nice attire", qty: niceLooks },
-    { id: "nice-bottom", name: "Nice-attire bottom", category: "Nice attire", qty: niceLooks },
-    {
-      id: "nice-shoes",
-      name: "Dress shoes",
-      category: "Nice attire",
-      qty: niceCount ? 1 : 0,
-      optional: true,
-    },
-    {
-      id: "nice-makeup",
-      name: "Makeup",
-      category: "Bathroom",
-      qty: niceCount ? 1 : 0,
-      optional: true,
-    },
-    {
-      id: "nice-undergarments",
-      name: "Dress-specific undergarments",
-      category: "Nice attire",
-      qty: niceCount ? 1 : 0,
-      optional: true,
-    },
-  ];
-  return { days, dailyDays, items: items.filter((entry) => entry.qty > 0) };
-};
+import { calculateSuggestions as suggest } from "./calc";
+import type { Staple, Trip, TripConfig, TripItem } from "./trip";
 
 const CONFIG: TripConfig = {
   laundry: false,
@@ -780,18 +726,5 @@ describe("findIdentityViolations", () => {
         ),
       ),
     ).toEqual([]);
-  });
-});
-
-describe("niceAccessoryKey", () => {
-  it.each([
-    ["Makeup", "makeup"],
-    ["Make-up bag", "makeup"],
-    ["Black dress shoes", "dress-shoes"],
-    ["Dress undergarments", "dress-undergarments"],
-    ["Everyday shoes", ""],
-    ["Dress", ""],
-  ])("%s → %s", (name, key) => {
-    expect(niceAccessoryKey({ name })).toBe(key);
   });
 });
