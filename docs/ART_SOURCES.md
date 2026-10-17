@@ -19,3 +19,12 @@ only (empty alt text, no caption).
 The fallback is used for every destination without its own art, including
 custom typed destinations. Source: the approved prototype
 (`reference/prototype/dist/assets/`), copied unmodified.
+
+## Trip theme illustrations (#48)
+
+Hand-built SVG, original, in `public/themes/`. One per theme id; `viewBox` 1600×480, focal cluster at about 72% across
+and 58% down, shown with `object-position: 72% 58%`. Existing Lagoon & Linen tokens only. No text, people or landmarks.
+
+| Filename     | Theme id | Date       | Tool                    | Subject                                       | License note                     |
+| ------------ | -------- | ---------- | ----------------------- | --------------------------------------------- | -------------------------------- |
+| `travel.svg` | `travel` | 2026-10-17 | Hand-built SVG, by hand | Plane on a dotted route, suitcase, folded map | Original, no third-party content |
