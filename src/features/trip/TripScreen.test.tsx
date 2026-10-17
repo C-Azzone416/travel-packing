@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderInApp } from "@/test/providers";
 import { sampleLifecycleState } from "@/features/trips/fixtures";
 import { createMemoryTripsSource, type TripsSource } from "@/features/trips/trips-source";
@@ -789,6 +789,204 @@ describe("preferences and Ready", () => {
     );
     await ready();
     expect(screen.getByText(/Oct 23 – Oct 23 · 1 day$/)).toBeTruthy();
+  });
+});
+
+describe("how long things take", () => {
+  afterEach(() => vi.useRealTimers());
+
+  const flush = () => act(async () => {});
+  // findBy* polls on timers, which are faked here, so wait for the load by flushing instead.
+  const loaded = async () => {
+    await flush();
+    await flush();
+    return screen.getByRole("heading", { name: "San Diego", level: 1 });
+  };
+
+  it("opening a trip is a read: even a slow load never shows 'Saving…'", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const gate = deferred<void>();
+    setup("san-diego", (base) => ({
+      ...base,
+      getTrip: async (id) => (await gate.promise, base.getTrip(id)),
+    }));
+    act(() => vi.advanceTimersByTime(5000));
+    expect(screen.queryByText("Saving…")).toBeNull();
+    await act(async () => gate.resolve());
+    expect(await loaded()).toBeTruthy();
+    expect(screen.queryByText("Saving…")).toBeNull();
+  });
+
+  it("a check is sent at once, with no pause", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const setPacked = vi.fn();
+    setup("san-diego", (base) => ({
+      ...base,
+      setPacked: (id, itemId, packed) => (
+        setPacked(itemId, packed),
+        base.setPacked(id, itemId, packed)
+      ),
+    }));
+    await loaded();
+    fireEvent.click(within(row("tops")).getByRole("button", { name: "Pack all Everyday tops" }));
+    await flush();
+    expect(setPacked).toHaveBeenCalledTimes(1);
+    expect(setPacked).toHaveBeenCalledWith("tops", 2);
+    fireEvent.click(
+      within(row("tops")).getByRole("button", { name: "Mark Everyday tops unpacked" }),
+    );
+    await flush();
+    expect(setPacked).toHaveBeenLastCalledWith("tops", 0);
+  });
+
+  it("a tap waits 300 ms of quiet, and every further tap restarts the wait", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const setPacked = vi.fn();
+    setup("san-diego", (base) => ({
+      ...base,
+      setPacked: (id, itemId, packed) => (
+        setPacked(itemId, packed),
+        base.setPacked(id, itemId, packed)
+      ),
+    }));
+    await loaded();
+    const up = () => within(row("socks")).getByRole("button", { name: "Increase packed Socks" });
+    fireEvent.click(up());
+    act(() => vi.advanceTimersByTime(299));
+    expect(setPacked).not.toHaveBeenCalled();
+    fireEvent.click(up());
+    // 400 ms after the first tap but only 200 after the second: still waiting.
+    act(() => vi.advanceTimersByTime(200));
+    await flush();
+    expect(setPacked).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(100));
+    await flush();
+    expect(setPacked).toHaveBeenCalledTimes(1);
+    expect(setPacked).toHaveBeenCalledWith("socks", 3);
+  });
+
+  it("leaving the screen sends waiting taps straight away, once", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const setPacked = vi.fn();
+    const { view } = setup("san-diego", (base) => ({
+      ...base,
+      setPacked: (id, itemId, packed) => (
+        setPacked(itemId, packed),
+        base.setPacked(id, itemId, packed)
+      ),
+    }));
+    await loaded();
+    fireEvent.click(within(row("socks")).getByRole("button", { name: "Increase packed Socks" }));
+    expect(setPacked).not.toHaveBeenCalled();
+    view.unmount();
+    await flush();
+    expect(setPacked).toHaveBeenCalledTimes(1);
+    expect(setPacked).toHaveBeenCalledWith("socks", 2);
+    act(() => vi.advanceTimersByTime(2000));
+    await flush();
+    expect(setPacked).toHaveBeenCalledTimes(1);
+  });
+
+  it("Retry sends the latest count even when more taps are still waiting to be sent", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    let fail = true;
+    const sent: number[] = [];
+    const { source } = setup("san-diego", (base) => ({
+      ...base,
+      setPacked: (id, itemId, packed) => {
+        sent.push(packed);
+        return fail ? Promise.reject(new Error("nope")) : base.setPacked(id, itemId, packed);
+      },
+    }));
+    await loaded();
+    const up = () => within(row("socks")).getByRole("button", { name: "Increase packed Socks" });
+    fireEvent.click(up());
+    act(() => vi.advanceTimersByTime(300));
+    await flush();
+    expect(sent).toEqual([2]);
+    const retry = within(row("socks")).getByRole("button", { name: "Not saved · Retry" });
+    fireEvent.click(up());
+    fireEvent.click(up());
+    fail = false;
+    // The debounce for those two taps has not fired yet when Retry is pressed.
+    fireEvent.click(retry);
+    await flush();
+    expect(sent).toEqual([2, 4]);
+    expect(itemOf(source, "socks").packed).toBe(4);
+    act(() => vi.advanceTimersByTime(1000));
+    await flush();
+    expect(sent).toEqual([2, 4]);
+  });
+});
+
+describe("toiletry gate buttons appear only in their own state", () => {
+  const put = () => screen.queryByRole("button", { name: "Put bag in suitcase" });
+  const undo = () => screen.queryByRole("button", { name: "Undo placement" });
+
+  it("waiting: neither; ready to place: only Put bag; in the suitcase: only Undo", async () => {
+    const { user } = setup();
+    await ready();
+    expect(put()).toBeNull();
+    expect(undo()).toBeNull();
+    for (const id of TOILETRIES)
+      await user.click(within(row(id)).getByRole("button", { name: /^Pack all / }));
+    await user.click(await screen.findByRole("button", { name: "Not yet" }));
+    expect(put()).toBeTruthy();
+    expect(undo()).toBeNull();
+    await user.click(put() as HTMLElement);
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Confirm" }));
+    await screen.findByText("Toiletry bag is in the suitcase");
+    expect(put()).toBeNull();
+    expect(undo()).toBeTruthy();
+  });
+});
+
+describe("dialog submits wait for the source", () => {
+  it("a double click on 'Add toiletry item' adds one item", async () => {
+    const gate = deferred<void>();
+    const add = vi.fn();
+    const { user } = setup("san-diego", (base) => ({
+      ...base,
+      addToiletryItem: async (id, input) => {
+        add(input.name);
+        await gate.promise;
+        return base.addToiletryItem(id, input);
+      },
+    }));
+    await ready();
+    await user.click(screen.getByRole("button", { name: "＋ Add a Bathroom item" }));
+    const dialog = screen.getByRole("dialog", { name: "Add a Bathroom item" });
+    await user.type(within(dialog).getByLabelText("Item name"), "Face wash");
+    const submit = within(dialog).getByRole("button", { name: "Add toiletry item" });
+    await user.dblClick(submit);
+    expect(add).toHaveBeenCalledTimes(1);
+    expect(submit.hasAttribute("disabled")).toBe(true);
+    await act(async () => gate.resolve());
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(add).toHaveBeenCalledTimes(1);
+  });
+
+  it("a double click on 'Save item' saves once", async () => {
+    const gate = deferred<void>();
+    const edit = vi.fn();
+    const { user } = setup("san-diego", (base) => ({
+      ...base,
+      editItem: async (id, itemId, change) => {
+        edit(itemId);
+        await gate.promise;
+        return base.editItem(id, itemId, change);
+      },
+    }));
+    await ready();
+    await user.click(within(row("sunglasses")).getByRole("button", { name: "Edit Sunglasses" }));
+    const dialog = screen.getByRole("dialog", { name: "Edit item" });
+    const save = within(dialog).getByRole("button", { name: "Save item" });
+    await user.dblClick(save);
+    expect(edit).toHaveBeenCalledTimes(1);
+    expect(save.hasAttribute("disabled")).toBe(true);
+    await act(async () => gate.resolve());
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(edit).toHaveBeenCalledTimes(1);
   });
 });
 
