@@ -15,7 +15,6 @@ const SCREENS = [
 test("navigation reaches all three screens with titles, current state and focus on main", async ({
   page,
 }) => {
-  await page.goto("/");
   const nav = page.getByRole("navigation", { name: "Primary navigation" });
   await expect(nav.getByRole("link")).toHaveCount(3);
   // Start on Trips, so every click below is a real route change.
@@ -35,7 +34,6 @@ test("navigation reaches all three screens with titles, current state and focus 
 });
 
 test("skip link is the first tab stop and jumps to main", async ({ page }) => {
-  await page.goto("/");
   await page.keyboard.press("Tab");
   const skip = page.getByRole("link", { name: "Skip to main content" });
   await expect(skip).toBeFocused();
@@ -45,7 +43,6 @@ test("skip link is the first tab stop and jumps to main", async ({ page }) => {
 });
 
 test("keyboard focus is clearly visible", async ({ page }) => {
-  await page.goto("/");
   await page.keyboard.press("Tab");
   await page.keyboard.press("Tab");
   const outline = await page.evaluate(() => {
@@ -56,7 +53,6 @@ test("keyboard focus is clearly visible", async ({ page }) => {
 });
 
 test("touch targets are at least 44px", async ({ page }) => {
-  await page.goto("/");
   const targets = [
     page.getByRole("link", { name: "Go to trips" }),
     page.getByRole("link", { name: "Saved" }),
@@ -83,7 +79,6 @@ test("no horizontal scroll at 320px", async ({ page }) => {
 test("navigation is a bottom bar on phones and a side rail on desktop", async ({
   page,
 }, testInfo) => {
-  await page.goto("/");
   const box = await page.getByRole("navigation", { name: "Primary navigation" }).boundingBox();
   const viewport = page.viewportSize()!;
   if (testInfo.project.name === "phone") {

@@ -1,11 +1,15 @@
 import { expect, test, type Page } from "@playwright/test";
+import { signInAsOwner } from "./helpers/auth";
 
 // A fixed clock keeps the synthetic trips stable: San Diego upcoming, Lisbon past.
 const NOW = new Date("2026-10-16T12:00:00");
 
-async function openDashboard(page: Page) {
+// Every route needs the owner's session, so each test signs in first. `signedIn` is true for a page
+// opened in a context that already has the session cookie.
+async function openDashboard(page: Page, { signedIn = false } = {}) {
   await page.clock.setFixedTime(NOW);
-  await page.goto("/");
+  if (signedIn) await page.goto("/");
+  else await signInAsOwner(page);
   await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
 }
 
@@ -92,7 +96,7 @@ test("a failed destination image swaps to the neutral surface at the same size (
   const failing = await page.context().newPage();
   await failing.route("**/_next/image**", (route) => route.abort());
   await failing.setViewportSize(page.viewportSize()!);
-  await openDashboard(failing);
+  await openDashboard(failing, { signedIn: true });
   const failedArt = card(failing, "San Diego").locator("[data-art-key]");
   await expect(failedArt).toHaveAttribute("data-art-failed", "true");
   await expect(failedArt.locator("img")).toHaveCount(0);
