@@ -16,6 +16,7 @@ import {
   seedTrip,
   signedInAs,
 } from "./__fixtures__/seed";
+import type { DataContext } from "./context";
 import type { Result } from "./result";
 import { setDataLogSink } from "./safe-log";
 import * as service from "./service";
@@ -296,6 +297,40 @@ describe("cross-user: user B cannot touch user A's trips or staples", () => {
       data(await service.listStaplesForOwner(context())).find((staple) => staple.id === "socks")
         ?.qty,
     ).toBe(1);
+  });
+});
+
+describe("every exported entry point is owner-gated (new ones cannot skip this)", () => {
+  // Authorization runs before validation, so no input is needed to prove the gate: whatever the arguments,
+  // a signed-out caller gets UNAUTHENTICATED and a non-allowlisted caller gets FORBIDDEN. Enumerating the module's
+  // exports means a function added later is covered automatically.
+  type EntryPoint = (context: DataContext, input?: unknown) => Promise<Result<unknown>>;
+  const entryPoints = Object.entries(service).filter(
+    ([, value]) => typeof value === "function",
+  ) as unknown as [string, EntryPoint][];
+
+  it("finds the entry points", () => {
+    expect(entryPoints.length).toBeGreaterThanOrEqual(25);
+  });
+
+  it.each(entryPoints)("%s: signed out -> UNAUTHENTICATED", async (_name, call) => {
+    as(null);
+    expect(errorOf(await call(context(), {}))?.code).toBe("UNAUTHENTICATED");
+    expect(errorOf(await call(context(), undefined))?.code).toBe("UNAUTHENTICATED");
+  });
+
+  it.each(entryPoints)("%s: not allowlisted -> FORBIDDEN, session ended", async (_name, call) => {
+    as({ userId: "intruder", email: "intruder@example.test" });
+    expect(errorOf(await call(context(), {}))?.code).toBe("FORBIDDEN");
+    expect(fake.current).toBeNull();
+  });
+
+  it.each(entryPoints)("%s: never reaches the database when refused", async (_name, call) => {
+    as(null);
+    const before = await snapshot(OWNER.userId);
+    await call(context(), { tripId: newUuid() });
+    expect(await snapshot(OWNER.userId)).toBe(before);
+    expect((await ctx.client.query('SELECT 1 FROM "users"')).rows).toEqual([]);
   });
 });
 
