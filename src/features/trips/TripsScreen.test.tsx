@@ -1,15 +1,40 @@
 // @vitest-environment jsdom
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderInApp } from "@/test/providers";
 import { TripsScreen } from "./TripsScreen";
 import { TripsSourceProvider } from "./TripsSourceProvider";
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
 
+// The server actions are replaced by a stateful stand-in (in tests only; production reads the data layer).
+const control = vi.hoisted(() => ({ failLoad: false }));
+vi.mock("./actions", async () => {
+  const { createMemoryTripsSource } = await import("./trips-source");
+  const { sampleLifecycleState } = await import("./fixtures");
+  const source = createMemoryTripsSource(sampleLifecycleState(), { now: () => Date.now() });
+  const ok = async (pending: ReturnType<typeof source.load>) => ({
+    ok: true as const,
+    state: await pending,
+  });
+  return {
+    loadTripsAction: async () =>
+      control.failLoad ? { ok: false as const, code: "INTERNAL" as const } : ok(source.load()),
+    archiveTripAction: (id: string) => ok(source.archive(id)),
+    restoreTripAction: (id: string) => ok(source.restore(id)),
+    removeTripAction: (id: string) => ok(source.remove(id)),
+    undoRemoveTripAction: (id: string) => ok(source.undoRemove(id)),
+    createTripAction: async () => ({ ok: false as const, code: "INTERNAL" as const }),
+  };
+});
+
+afterEach(() => {
+  control.failLoad = false;
+});
+
 describe("TripsScreen", () => {
-  it("wires the dashboard to an in-memory source seeded with the synthetic trips", async () => {
+  it("reads and writes through the server actions", async () => {
     vi.useFakeTimers({ toFake: ["Date"], now: new Date(2026, 9, 16, 12) });
     try {
       const user = userEvent.setup({ advanceTimers: () => {} });
@@ -29,5 +54,18 @@ describe("TripsScreen", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("shows the error state with Retry when the data layer fails", async () => {
+    control.failLoad = true;
+    renderInApp(
+      <TripsSourceProvider>
+        <TripsScreen />
+      </TripsSourceProvider>,
+    );
+    expect(
+      (await screen.findAllByRole("button", { name: /try again|retry/i })).length,
+    ).toBeGreaterThan(0);
+    expect(screen.queryByRole("heading", { name: "San Diego" })).toBeNull();
   });
 });

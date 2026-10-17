@@ -158,6 +158,8 @@ it is invented; nothing is real trip data.
   never a connection string, date, or place.
 - `--owner <id>` or `SEED_OWNER_ID` sets the owner (default `seed-owner`). Tests can call `seedSyntheticData(db, ownerId)`
   directly as a fixture.
+  The seed **resets that owner's staples to the defaults**, so never point `--owner` / `SEED_OWNER_ID` at a real account
+  id. If `DATABASE_URL` is unset where you seed, `SEED_ALLOWED_HOSTS` is the only protection: list only disposable hosts.
 
 ## Places (#47)
 

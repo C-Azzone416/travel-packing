@@ -1,7 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
 
-// A fixed clock keeps the synthetic trips stable: San Diego upcoming, Lisbon past.
+// A fixed clock keeps the seeded sample trips stable: San Diego upcoming, Lisbon past. (Trip ids are the real
+// database's uuids, so tests find a trip's panels by role/name or `aria-controls`, never by a fixture id.)
 const NOW = new Date("2026-10-16T12:00:00");
 
 // Every route needs the owner's session, so each test signs in first. `signedIn` is true for a page
@@ -70,7 +71,7 @@ test("quick view filters without changing progress or touching the network", asy
   const chip = page.getByRole("link", { name: "Saved" });
 
   await san.getByRole("button", { name: /Quick view/ }).click();
-  const quick = san.locator("#quick-view-san-diego");
+  const quick = san.locator('[id^="quick-view-"]');
   await expect(quick.getByRole("button", { name: "Still to pack" })).toHaveAttribute(
     "aria-pressed",
     "true",
@@ -115,7 +116,7 @@ test("no horizontal scroll at 320px with a quick view open", async ({ page }) =>
   await card(page, "San Diego")
     .getByRole("button", { name: /Quick view/ })
     .click();
-  await expect(page.locator("#quick-view-san-diego")).toBeVisible();
+  await expect(card(page, "San Diego").locator('[id^="quick-view-"]')).toBeVisible();
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   );
@@ -144,7 +145,7 @@ test("dashboard controls are keyboard operable with 44px targets", async ({ page
     .getByRole("button", { name: /Quick view/ })
     .focus();
   await page.keyboard.press("Enter");
-  const quick = page.locator("#quick-view-san-diego");
+  const quick = card(page, "San Diego").locator('[id^="quick-view-"]');
   await expect(quick).toBeVisible();
   for (const control of await quick.getByRole("button").all()) {
     expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(43.9);
