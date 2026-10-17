@@ -50,14 +50,20 @@ export const addToiletryItemInput = z.object({
 });
 export const updatePreferencesInput = z.object({ tripId, config: tripConfig });
 
+/**
+ * The browser's claim about a place is only its id. Anything else it sends (city, region, coordinates) is
+ * stripped here and never trusted: the server resolves the canonical place from the id (#47).
+ */
+export const locationSelection = z.object({ id: z.string().min(1).max(60) });
+
 export const createTripInput = z.object({
-  location: sampleLocation,
+  location: locationSelection,
   ...dates.shape,
   config: tripConfig,
 });
 export const copyTripInput = z.object({
   sourceId: tripId,
-  location: sampleLocation,
+  location: locationSelection,
   ...dates.shape,
 });
 

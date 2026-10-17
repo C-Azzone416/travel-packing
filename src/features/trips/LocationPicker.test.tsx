@@ -6,10 +6,16 @@ import { describe, expect, it, vi } from "vitest";
 import { curatedLocationProvider, type LocationProvider } from "@/domain/location-provider";
 import { locationById } from "@/domain/locations";
 import type { SampleLocation } from "@/domain/trip-lifecycle";
-import { ALLOW_CUSTOM_DESTINATION, LocationPicker, UNAVAILABLE_MESSAGE } from "./LocationPicker";
+import {
+  ALLOW_CUSTOM_DESTINATION,
+  LocationPicker,
+  NO_PLACES_MESSAGE,
+  UNAVAILABLE_MESSAGE,
+} from "./LocationPicker";
 
 interface HarnessProps {
   provider?: LocationProvider;
+  fallbackProvider?: LocationProvider;
   allowCustom?: boolean;
   onSubmit?: () => void;
   onSelectSpy?: (l: SampleLocation) => void;
@@ -19,6 +25,7 @@ interface HarnessProps {
 
 function Harness({
   provider = curatedLocationProvider,
+  fallbackProvider,
   allowCustom,
   onSubmit = () => {},
   onSelectSpy = () => {},
@@ -36,6 +43,7 @@ function Harness({
     >
       <LocationPicker
         provider={provider}
+        fallbackProvider={fallbackProvider}
         query={query}
         onQueryChange={setQuery}
         selected={selected}
@@ -99,17 +107,17 @@ describe("LocationPicker", () => {
       "LondonOntario, Canada",
     ]);
     expect(box().getAttribute("aria-expanded")).toBe("true");
-    await announced("2 destinations found");
+    await announced("2 places found");
   });
 
   it("announces a single result in the singular, and no matches plainly", async () => {
     render(<Harness />);
     await userEvent.type(box(), "lisbon");
-    await announced("1 destination found");
+    await announced("1 place found");
     await userEvent.clear(box());
     await userEvent.type(box(), "zzzz");
-    await announced("No matches");
-    expect(screen.getByText("No matches. Try a city name.")).toBeTruthy();
+    await announced("No places found");
+    expect(screen.getByText("No places found. Check the spelling.")).toBeTruthy();
     expect(list().hidden).toBe(true);
     expect(screen.queryByText(/as typed/)).toBeNull();
   });
@@ -216,13 +224,13 @@ describe("LocationPicker", () => {
       await waitFor(() => expect(pending.length).toBeGreaterThan(0));
       expect(screen.getByText("Searching…")).toBeTruthy();
       expect(announce().textContent).toBe("Searching");
-      expect(screen.queryByText("No matches. Try a city name.")).toBeNull();
+      expect(screen.queryByText("No places found. Check the spelling.")).toBeNull();
       await act(async () => pending[pending.length - 1].resolve([locationById("gb-eng-london")!]));
       expect((await options()).map((option) => option.textContent)).toEqual([
         "LondonEngland, United Kingdom",
       ]);
       expect(screen.queryByText("Searching…")).toBeNull();
-      await announced("1 destination found");
+      await announced("1 place found");
     });
 
     it("never searches below the provider's minimum length, and says nothing while the text is too short", async () => {
@@ -311,7 +319,7 @@ describe("LocationPicker", () => {
       expect(announce().textContent).toBe(UNAVAILABLE_MESSAGE);
       expect(screen.queryByText(/as typed/)).toBeNull();
       expect(screen.queryByRole("option")).toBeNull();
-      expect(screen.queryByText("No matches. Try a city name.")).toBeNull();
+      expect(screen.queryByText("No places found. Check the spelling.")).toBeNull();
       down = false;
       await userEvent.click(within(alert).getByRole("button", { name: "Retry" }));
       expect((await options()).map((option) => option.textContent)).toEqual([
@@ -321,11 +329,156 @@ describe("LocationPicker", () => {
     });
   });
 
+  describe("states from design's #47 review", () => {
+    it("asks for more letters while the text is shorter than the provider's minimum, and not for the curated list", async () => {
+      const { provider } = manualProvider({ minQueryLength: 2 });
+      render(<Harness provider={provider} />);
+      expect(screen.queryByText(/Type at least/)).toBeNull();
+      await userEvent.type(box(), "l");
+      expect(screen.getByText("Type at least 2 letters.")).toBeTruthy();
+      await userEvent.type(box(), "o");
+      expect(screen.queryByText(/Type at least/)).toBeNull();
+      await userEvent.clear(box());
+      render(<Harness />);
+      await userEvent.type(screen.getAllByRole("combobox")[1], "l");
+      expect(screen.queryByText(/Type at least/)).toBeNull();
+    });
+
+    it("credits the provider under the field when it asks to be credited", () => {
+      const { provider } = manualProvider({
+        attribution: "Place search is provided by Open-Meteo.",
+      });
+      render(<Harness provider={provider} />);
+      expect(screen.getByText(/Place search is provided by Open-Meteo\./)).toBeTruthy();
+    });
+
+    it("shows no credit for a provider that has none", () => {
+      render(<Harness />);
+      expect(screen.queryByText(/provided by/)).toBeNull();
+    });
+
+    it("tells apart results that share a city with the finer detail, and tolerates a missing region", async () => {
+      const twins: SampleLocation[] = [
+        {
+          id: "a",
+          city: "Springfield",
+          region: "Illinois",
+          country: "United States",
+          countryCode: "US",
+          label: "x",
+          detail: "Sangamon County",
+        },
+        {
+          id: "b",
+          city: "Springfield",
+          region: "Illinois",
+          country: "United States",
+          countryCode: "US",
+          label: "x",
+          detail: "Cook County",
+        },
+        {
+          id: "c",
+          city: "Monaco",
+          region: "",
+          country: "Monaco",
+          countryCode: "MC",
+          label: "Monaco, Monaco",
+        },
+      ];
+      render(
+        <Harness provider={{ minQueryLength: 1, debounceMs: 0, search: async () => twins }} />,
+      );
+      await userEvent.type(box(), "s");
+      expect((await options()).map((option) => option.textContent)).toEqual([
+        "SpringfieldIllinois, United States · Sangamon County",
+        "SpringfieldIllinois, United States · Cook County",
+        "MonacoMonaco",
+      ]);
+    });
+
+    it("shows a confirmed place without a region cleanly", () => {
+      const monaco: SampleLocation = {
+        id: "c",
+        city: "Monaco",
+        region: "",
+        country: "Monaco",
+        countryCode: "MC",
+        label: "Monaco, Monaco",
+      };
+      render(<Harness initial={monaco} />);
+      expect(screen.getByText("Monaco · Monaco")).toBeTruthy();
+    });
+
+    it("on an unavailable provider, offers the curated list as an explicit alternative (never free text)", async () => {
+      const failing: LocationProvider = {
+        minQueryLength: 2,
+        debounceMs: 0,
+        search: async () => Promise.reject(new Error("down")),
+      };
+      const onSelectSpy = vi.fn();
+      render(
+        <Harness
+          provider={failing}
+          fallbackProvider={curatedLocationProvider}
+          onSelectSpy={onSelectSpy}
+        />,
+      );
+      await userEvent.type(box(), "lisbon");
+      const alert = await screen.findByRole("alert");
+      expect(within(alert).getByRole("button", { name: "Retry" })).toBeTruthy();
+      await userEvent.click(
+        within(alert).getByRole("button", { name: "Choose from popular destinations" }),
+      );
+      expect(screen.getByText(/Showing popular destinations/)).toBeTruthy();
+      expect(screen.queryByRole("alert")).toBeNull();
+      const [lisbon] = await options();
+      expect(lisbon.textContent).toBe("LisbonLisbon District, Portugal");
+      await userEvent.click(lisbon);
+      expect(onSelectSpy).toHaveBeenCalledWith(locationById("pt-lisbon"));
+      expect(screen.queryByText(/Showing popular destinations/)).toBeNull();
+    });
+
+    it("does not offer the curated list when none was supplied, and 'Search all places' goes back to the provider", async () => {
+      let down = true;
+      const flaky: LocationProvider = {
+        minQueryLength: 2,
+        debounceMs: 0,
+        search: async () => {
+          if (down) throw new Error("down");
+          return [locationById("gb-eng-london")!];
+        },
+      };
+      const first = render(<Harness provider={flaky} />);
+      await userEvent.type(box(), "lon");
+      await screen.findByRole("alert");
+      expect(screen.queryByRole("button", { name: "Choose from popular destinations" })).toBeNull();
+      first.unmount();
+
+      render(<Harness provider={flaky} fallbackProvider={curatedLocationProvider} />);
+      await userEvent.type(box(), "lon");
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Choose from popular destinations" }),
+      );
+      await options();
+      down = false;
+      await userEvent.click(screen.getByRole("button", { name: "Search all places" }));
+      expect(screen.queryByText(/Showing popular destinations/)).toBeNull();
+      expect((await options()).map((option) => option.textContent)).toEqual([
+        "LondonEngland, United Kingdom",
+      ]);
+    });
+
+    it("uses the documented wording for no results", () => {
+      expect(NO_PLACES_MESSAGE).toBe("No places found. Check the spelling.");
+    });
+  });
+
   describe("Custom destination row (flag, off by default)", () => {
     it("is not offered by default", async () => {
       render(<Harness />);
       await userEvent.type(box(), "Grandma's cabin");
-      await announced("No matches");
+      await announced("No places found");
       expect(screen.queryByText(/as typed/)).toBeNull();
     });
 

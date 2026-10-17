@@ -10,7 +10,14 @@ import {
   seedOwner,
   seedTrip,
 } from "./__fixtures__/seed";
-import { insertTrip, loadTrip, loadTrips, lockTrip, saveTrip } from "./trip-store";
+import {
+  insertTrip,
+  loadTrip,
+  loadTrips,
+  lockTrip,
+  saveTrip,
+  type StoredPlace,
+} from "./trip-store";
 
 let ctx: Awaited<ReturnType<typeof createMigratedDb>>;
 const db = () => ctx.db as unknown as Db;
@@ -31,6 +38,109 @@ function canonical<T>(value: T): T {
     entry === false || entry === null ? undefined : entry,
   );
 }
+
+describe("the structured place (#47)", () => {
+  const LONDON: StoredPlace = {
+    provider: "open-meteo",
+    placeId: "2643743",
+    region: "England",
+    country: "United Kingdom",
+    countryCode: "GB",
+    latitude: 51.51,
+    longitude: -0.13,
+    timezone: "Europe/London",
+  };
+  const CURATED: StoredPlace = {
+    provider: null,
+    placeId: null,
+    region: "California",
+    country: "United States",
+    countryCode: "US",
+    latitude: null,
+    longitude: null,
+    timezone: null,
+  };
+
+  it("stores and reloads a provider place, with coordinates back as numbers", async () => {
+    await seedOwner(db(), OWNER.userId);
+    const trip = makeStoredTrip({ place: LONDON });
+    await insertTrip(db(), OWNER.userId, trip);
+    const loaded = await loadTrip(db(), OWNER.userId, trip.id);
+    expect(loaded?.place).toEqual(LONDON);
+    expect(typeof loaded?.place?.latitude).toBe("number");
+    expect(typeof loaded?.place?.longitude).toBe("number");
+    expect((await loadTrips(db(), OWNER.userId, { filter: "live" }))[0].place).toEqual(LONDON);
+  });
+
+  it("stores and reloads a curated place (no provider, no coordinates)", async () => {
+    await seedOwner(db(), OWNER.userId);
+    const trip = makeStoredTrip({ place: CURATED });
+    await insertTrip(db(), OWNER.userId, trip);
+    expect((await loadTrip(db(), OWNER.userId, trip.id))?.place).toEqual(CURATED);
+  });
+
+  it("a trip with no place loads with place null, and every place column null in the database", async () => {
+    await seedOwner(db(), OWNER.userId);
+    const trip = makeStoredTrip({});
+    await insertTrip(db(), OWNER.userId, trip);
+    expect((await loadTrip(db(), OWNER.userId, trip.id))?.place).toBeNull();
+    const row = (
+      await ctx.client.query<Record<string, unknown>>('SELECT * FROM "trips" WHERE "id" = $1', [
+        trip.id,
+      ])
+    ).rows[0];
+    for (const column of [
+      "location_provider",
+      "location_place_id",
+      "location_region",
+      "location_country",
+      "location_country_code",
+      "latitude",
+      "longitude",
+      "timezone",
+    ]) {
+      expect(row[column], column).toBeNull();
+    }
+  });
+
+  it("saving a trip that carries no `place` field leaves the stored place alone (it can never be wiped by accident)", async () => {
+    await seedOwner(db(), OWNER.userId);
+    const trip = makeStoredTrip({ place: LONDON });
+    await insertTrip(db(), OWNER.userId, trip);
+    const { place: _omitted, ...withoutPlace } = (await loadTrip(db(), OWNER.userId, trip.id))!;
+    void _omitted;
+    expect(await saveTrip(db(), OWNER.userId, { ...withoutPlace, destination: "Renamed" })).toBe(
+      true,
+    );
+    const after = await loadTrip(db(), OWNER.userId, trip.id);
+    expect(after?.destination).toBe("Renamed");
+    expect(after?.place).toEqual(LONDON);
+  });
+
+  it("saving with a place replaces it, and saving with null clears it", async () => {
+    await seedOwner(db(), OWNER.userId);
+    const trip = makeStoredTrip({ place: LONDON });
+    await insertTrip(db(), OWNER.userId, trip);
+    await saveTrip(db(), OWNER.userId, { ...trip, place: CURATED });
+    expect((await loadTrip(db(), OWNER.userId, trip.id))?.place).toEqual(CURATED);
+    await saveTrip(db(), OWNER.userId, { ...trip, place: null });
+    expect((await loadTrip(db(), OWNER.userId, trip.id))?.place).toBeNull();
+  });
+
+  it("the database refuses a place that breaks its rules (coordinates need a provider)", async () => {
+    await seedOwner(db(), OWNER.userId);
+    const bad: StoredPlace = { ...CURATED, latitude: 10, longitude: 20 };
+    await expect(insertTrip(db(), OWNER.userId, makeStoredTrip({ place: bad }))).rejects.toThrow();
+  });
+
+  it("another owner's place is never visible", async () => {
+    await seedOwner(db(), OWNER.userId);
+    await seedOwner(db(), OTHER_OWNER.userId);
+    const trip = makeStoredTrip({ place: LONDON });
+    await insertTrip(db(), OWNER.userId, trip);
+    expect(await loadTrip(db(), OTHER_OWNER.userId, trip.id)).toBeNull();
+  });
+});
 
 describe("round trip", () => {
   it("stores and reloads a trip, its preferences, weather, and items with progress", async () => {

@@ -15,6 +15,15 @@ export interface SampleLocation {
   country: string;
   countryCode: string;
   label: string;
+  /** Extra place detail (e.g. a county), set only to tell apart results that share city, region and country. */
+  detail?: string;
+  /** Present only for a place that came from a geocoding provider (#47); curated entries have none of these. */
+  provider?: string;
+  providerPlaceId?: string;
+  /** Rounded to 2 decimals (about 1 km) before they are ever stored. */
+  latitude?: number;
+  longitude?: number;
+  timezone?: string;
 }
 
 export interface LifecycleTrip extends Trip {
