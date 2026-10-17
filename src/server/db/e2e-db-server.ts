@@ -7,6 +7,7 @@ import { PGLiteSocketServer } from "@electric-sql/pglite-socket";
 import { drizzle } from "drizzle-orm/pglite";
 import { join } from "node:path";
 import { assertSeedAllowed } from "../seed/guard";
+import { SAMPLE_TODAY } from "../seed/sample-data";
 import { seedSyntheticData } from "../seed/seed";
 import { loadMigrations, migrateUp } from "./migrator";
 import type { Db } from "./retention";
@@ -24,12 +25,15 @@ export interface E2eDbOptions {
   port: number;
   /** Owners to seed with the synthetic sample set (ids as the e2e sign-in produces them). */
   seedOwners: string[];
+  /** The run date the sample trips are relative to. Fixed by default so a pinned-clock e2e run is deterministic. */
+  today?: string;
   env?: Record<string, string | undefined>;
 }
 
 export async function startE2eDbServer({
   port,
   seedOwners,
+  today = SAMPLE_TODAY,
   env = process.env,
 }: E2eDbOptions): Promise<E2eDbServer> {
   // Same guard as `npm run db:seed`: this must never run in production or on Vercel.
@@ -37,7 +41,7 @@ export async function startE2eDbServer({
   const client = await PGlite.create();
   await migrateUp(client, loadMigrations(join(process.cwd(), "drizzle")));
   const db = drizzle(client, { schema }) as unknown as Db;
-  for (const owner of seedOwners) await seedSyntheticData(db, owner);
+  for (const owner of seedOwners) await seedSyntheticData(db, owner, today);
 
   const server = new PGLiteSocketServer({ db: client, port, host: "127.0.0.1", maxConnections: 8 });
   await server.start();
