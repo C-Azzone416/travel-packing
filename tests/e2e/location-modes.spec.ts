@@ -37,11 +37,48 @@ test.describe("curated mode (LOCATION_PROVIDER unset)", () => {
     await expect(page.getByRole("option")).toContainText("Île-de-France, France");
     expect(await received(unique)).toEqual([]);
     expect(await received("paris")).toEqual([]);
+    // No provider, so no credit and no links under the search box.
+    await expect(page.locator(".location-picker").getByRole("link")).toHaveCount(0);
+    await expect(page.getByText(/Place search by/)).toHaveCount(0);
   });
 });
 
 test.describe("open-meteo mode (LOCATION_PROVIDER=open-meteo, fake geocoder)", () => {
   test.use({ baseURL: OPEN_METEO_APP });
+
+  test("credits Open-Meteo and GeoNames with real links, in every state", async ({ page }) => {
+    await openNewTrip(page);
+    const helper = page.locator(".location-picker .tiny.muted").first();
+    const links = helper.getByRole("link");
+    const expectCredit = async () => {
+      await expect(helper).toContainText(
+        "Place search by Open-Meteo.com, location data from GeoNames.",
+      );
+      await expect(links).toHaveCount(2);
+      await expect(links.nth(0)).toHaveAttribute("href", "https://open-meteo.com/");
+      await expect(links.nth(0)).toHaveAttribute("target", "_blank");
+      await expect(links.nth(0)).toHaveAttribute("rel", "noopener noreferrer");
+      await expect(links.nth(1)).toHaveAttribute("href", "https://www.geonames.org/");
+    };
+    await expectCredit();
+    const field = page.getByRole("combobox", { name: "Destination search" });
+    await field.fill("zzqcredit");
+    await expect(page.getByRole("status", { name: "Destination results" })).toHaveText(
+      "No places found",
+    );
+    await expectCredit();
+    await field.fill("boom");
+    await expect(
+      page.getByRole("alert").filter({ hasText: "Location search is unavailable" }),
+    ).toBeVisible();
+    await expectCredit();
+    await field.fill("london");
+    await expect(page.getByRole("option").first()).toBeVisible();
+    await expectCredit();
+    expect(await links.first().evaluate((node) => getComputedStyle(node).textDecorationLine)).toBe(
+      "underline",
+    );
+  });
 
   test("lists provider places, tells identical ones apart, and a picked place can be saved", async ({
     page,
