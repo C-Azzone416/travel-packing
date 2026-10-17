@@ -151,7 +151,7 @@ describe("nice attire", () => {
       ["nice-makeup", "Bathroom"],
       ["nice-undergarments", "Nice attire"],
     ]);
-    expect(items.find((item) => item.id === "tops")?.category).toBe("Clothes");
+    expect(items.find((item) => item.id === "tops")?.category).toBe("Clothing");
   });
 });
 
@@ -169,5 +169,21 @@ describe("return outfit switch point (TODO #25)", () => {
     expect(dailyDaysFor(5, false, "exclude-return-day")).toBe(3);
     expect(dailyDaysFor(1, false, "add-return-day-back")).toBe(0);
     expect(dailyDaysFor(0, false, "add-return-day-back")).toBe(0);
+  });
+
+  it('uses the single semantic category "Clothing" for every everyday clothing row (never "Clothes")', () => {
+    const { items } = calculateSuggestions({ ...off, laundry: true, spare: true });
+    const everyday = items.filter((item) =>
+      ["tops", "bottoms", "underwear", "socks", "sleepwear"].includes(item.id),
+    );
+    expect(everyday.map((item) => item.id)).toEqual([
+      "tops",
+      "bottoms",
+      "underwear",
+      "socks",
+      "sleepwear",
+    ]);
+    expect(everyday.every((item) => item.category === "Clothing")).toBe(true);
+    expect(items.some((item) => item.category === "Clothes")).toBe(false);
   });
 });

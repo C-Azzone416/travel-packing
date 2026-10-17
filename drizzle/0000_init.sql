@@ -1,4 +1,4 @@
-CREATE TYPE "public"."item_category" AS ENUM('Clothing', 'Clothes', 'Nice attire', 'Bathroom', 'Toiletries', 'Tech', 'Other essentials', 'Accessories', 'Pack last', 'Return outfit', 'Weather suggestion');--> statement-breakpoint
+CREATE TYPE "public"."item_category" AS ENUM('Clothing', 'Nice attire', 'Bathroom', 'Toiletries', 'Tech', 'Other essentials', 'Accessories', 'Pack last', 'Return outfit', 'Weather suggestion');--> statement-breakpoint
 CREATE TYPE "public"."item_section" AS ENUM('main', 'return', 'packlast');--> statement-breakpoint
 CREATE TYPE "public"."staple_cadence" AS ENUM('per day', 'per trip');--> statement-breakpoint
 CREATE TYPE "public"."weather_status" AS ENUM('pending', 'accepted', 'skipped');--> statement-breakpoint

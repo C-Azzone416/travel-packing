@@ -29,10 +29,9 @@ import {
 export const ITEM_SECTIONS = ["main", "return", "packlast"] as const;
 export const STAPLE_CADENCES = ["per day", "per trip"] as const;
 export const WEATHER_STATUSES = ["pending", "accepted", "skipped"] as const;
-/** Category strings as the domain uses them today (the prototype mixes "Clothes" and "Clothing"; see docs/schema.md). */
+/** Category strings the domain uses. "Clothing" is the single semantic name (the prototype's "Clothes" was normalized to it). */
 export const ITEM_CATEGORIES = [
   "Clothing",
-  "Clothes",
   "Nice attire",
   "Bathroom",
   "Toiletries",

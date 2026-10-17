@@ -1,6 +1,7 @@
 import { getTableConfig, type PgTable } from "drizzle-orm/pg-core";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createMigratedDb, resetData } from "./__fixtures__/db";
+import { buildTripItems, calculateSuggestions, DEFAULT_STAPLES } from "../../domain/calc";
 import * as schema from "./schema";
 
 let ctx: Awaited<ReturnType<typeof createMigratedDb>>;
@@ -474,5 +475,45 @@ describe("drizzle schema matches the migrated database", () => {
       { typname: "staple_cadence", labels: [...schema.STAPLE_CADENCES] },
       { typname: "weather_status", labels: [...schema.WEATHER_STATUSES] },
     ]);
+  });
+});
+
+describe("domain categories fit the item_category enum", () => {
+  const allOn = {
+    start: "2030-04-01",
+    end: "2030-04-12",
+    laundry: true,
+    spare: true,
+    niceAttire: true,
+    occasionCount: 3,
+    reuseNice: false,
+    returnOutfit: true,
+  };
+  const allowed = new Set<string>(schema.ITEM_CATEGORIES);
+
+  it("every category the calculator and default staples produce is a valid enum value", () => {
+    const produced = new Set<string>([
+      ...calculateSuggestions(allOn).items.map((entry) => entry.category),
+      ...buildTripItems(allOn, DEFAULT_STAPLES).items.map((entry) => entry.category),
+      ...DEFAULT_STAPLES.map((staple) => staple.category),
+    ]);
+    expect([...produced].filter((category) => !allowed.has(category))).toEqual([]);
+  });
+
+  it('normalizes everyday clothing to "Clothing" only', () => {
+    expect(allowed.has("Clothing")).toBe(true);
+    expect(allowed.has("Clothes")).toBe(false);
+  });
+
+  it("the migrated database accepts every produced category", async () => {
+    const owner = await addUser("owner-a");
+    const trip = await addTrip(owner);
+    const categories = [
+      ...new Set(buildTripItems(allOn, DEFAULT_STAPLES).items.map((entry) => entry.category)),
+    ];
+    for (const [index, category] of categories.entries()) {
+      await addItem(trip, owner, { semantic_id: `item-${index}`, category });
+    }
+    expect(await rows("SELECT 1 FROM trip_items")).toHaveLength(categories.length);
   });
 });

@@ -54,18 +54,18 @@ export function calculateSuggestions(config: CalcConfig): Suggestions {
     {
       id: "tops",
       name: "Everyday tops",
-      category: "Clothes",
+      category: "Clothing",
       qty: laundry ? Math.ceil(everydayLooks / 2) : everydayLooks,
     },
     {
       id: "bottoms",
       name: "Everyday bottoms",
-      category: "Clothes",
+      category: "Clothing",
       qty: everydayLooks ? Math.max(1, Math.ceil(everydayLooks / (laundry ? 4 : 2))) : 0,
     },
-    { id: "underwear", name: "Underwear", category: "Clothes", qty: dailyDays + spare },
-    { id: "socks", name: "Socks", category: "Clothes", qty: dailyDays + spare },
-    { id: "sleepwear", name: "Sleepwear", category: "Clothes", qty: days > 1 ? 1 : 0 },
+    { id: "underwear", name: "Underwear", category: "Clothing", qty: dailyDays + spare },
+    { id: "socks", name: "Socks", category: "Clothing", qty: dailyDays + spare },
+    { id: "sleepwear", name: "Sleepwear", category: "Clothing", qty: days > 1 ? 1 : 0 },
     { id: "nice-top", name: "Nice-attire top", category: "Nice attire", qty: niceLooks },
     { id: "nice-bottom", name: "Nice-attire bottom", category: "Nice attire", qty: niceLooks },
     {

@@ -65,9 +65,9 @@ so quantity edits succeed instead of failing the cascade.
 | Enums                                  | `item_section`, `staple_cadence`, `weather_status`, `item_category` |
 | Non-null owner on every row            | `owner_id NOT NULL` + FK to `users`                                 |
 
-`item_category` lists the strings the domain uses today. The prototype mixes `Clothes` (calculated rows) and
-`Clothing` (staples); both are kept so nothing is silently remapped. Normalizing them is an open product/data
-question for the PM, not decided here.
+`item_category` lists the strings the domain uses. The semantic category for everyday clothing is the single value
+`Clothing` (the plan's name); the prototype's calculator label `Clothes` was normalized to it (PM decision), and a
+test fails if any category the calculator or default staples produce is missing from the enum.
 
 ## Privacy-sensitive columns
 
