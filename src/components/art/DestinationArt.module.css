@@ -1,0 +1,75 @@
+/* Decorative destination art. The box has a fixed size in every state, so a
+   broken image swaps to the neutral surface without shifting the layout. */
+.visual {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  background: var(--seafoam, #b9ddd0);
+}
+
+.visual::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(245, 247, 242, 0.34), transparent 48%);
+  pointer-events: none;
+}
+
+.failed::after {
+  display: none;
+}
+
+.image {
+  object-fit: cover;
+  object-position: center 58%;
+}
+
+/* Trip card banner: compact on phones, taller as the grid widens. */
+.card {
+  height: 118px;
+  border-bottom: 1px solid rgba(24, 61, 69, 0.12);
+}
+
+@media (min-width: 431px) {
+  .card {
+    height: 132px;
+  }
+}
+
+@media (min-width: 660px) {
+  .card {
+    height: 148px;
+  }
+}
+
+/* Trip header: fills its container, with a scrim so the copy panel stays legible. */
+.header {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+}
+
+.header::after {
+  background: linear-gradient(
+    180deg,
+    rgba(245, 247, 242, 0.16),
+    rgba(245, 247, 242, 0.12) 42%,
+    rgba(245, 247, 242, 0.82) 78%
+  );
+}
+
+@media (min-width: 431px) {
+  .header::after {
+    background: linear-gradient(
+      90deg,
+      rgba(245, 247, 242, 0.93) 0%,
+      rgba(245, 247, 242, 0.73) 43%,
+      rgba(245, 247, 242, 0.08) 76%
+    );
+  }
+}
+
+.failed.header::after {
+  display: none;
+}
