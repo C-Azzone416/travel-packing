@@ -4,7 +4,7 @@
 // Date normalization, the forecast label, and the item list come from the calculator module
 // (src/domain/calc). Only the id generator and "today" are injected: the domain has no hidden clock.
 
-import { buildTripItems, forecastLabel, normalizeTripDates } from "./calc";
+import { buildTripItems, forecastLabel, normalizeTripDates, parseDate } from "./calc";
 import { TOILETRY_GROUP_ID } from "./toiletry-bag";
 import type { Staple, Trip, TripConfig, TripItem } from "./trip";
 
@@ -120,6 +120,9 @@ export function cancelDraft(state: LifecycleState): LifecycleState {
  * A fresh trip snapshot. The item list is the calculator's `buildTripItems` (suggestions, return outfit, default
  * Pack last items, staples merged over them). The calculator can leave a quantity-0 row behind when a staple
  * resolves to zero; a snapshot must not contain phantom rows, so those are dropped here.
+ *
+ * `start` and `end` must already be valid, ordered dates (saveDraft normalizes them first); with an invalid range
+ * the calculator reports 0 days, which the database schema (days >= 1) would reject.
  */
 export function buildTrip(
   destination: string,
@@ -194,24 +197,11 @@ export function saveDraft(
 
 // ---------------------------------------------------------------- classification
 
-function parseIsoDate(value: string): number | null {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!match) return null;
-  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
-  const time = Date.UTC(year, month - 1, day);
-  const parsed = new Date(time);
-  const valid =
-    parsed.getUTCFullYear() === year &&
-    parsed.getUTCMonth() === month - 1 &&
-    parsed.getUTCDate() === day;
-  return valid ? time : null;
-}
-
 /** A trip is past when its end date is strictly before `today`; an unparseable date is never past. */
 export function isPastTrip(trip: Pick<LifecycleTrip, "end">, today: string): boolean {
-  const end = parseIsoDate(trip.end);
-  const now = parseIsoDate(today);
-  return end !== null && now !== null && end < now;
+  const end = parseDate(trip.end);
+  const now = parseDate(today);
+  return end !== null && now !== null && end.getTime() < now.getTime();
 }
 
 /** Archived wins over past: archiving is a manual flag independent of dates and of Ready. */

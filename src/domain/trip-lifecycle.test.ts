@@ -213,6 +213,11 @@ describe("saveDraft", () => {
       toiletryBagPacked: false,
       weather: { status: "pending", label: "Seasonal outlook", suggestion: "Compact umbrella" },
     });
+    // A fresh trip starts with no progress and no remembered or suppressed suggestions.
+    expect(result.trip.suggestionMemory).toEqual({});
+    expect(result.trip.suppressedSuggestions).toEqual({});
+    expect(result.trip.items.every((entry) => entry.packed === 0)).toBe(true);
+    expect(result.trip.items.some((entry) => "userEdited" in entry)).toBe(false);
   });
 
   it("uses the normalized dates and the explicit today for the forecast label", () => {
@@ -480,11 +485,17 @@ describe("copy", () => {
       ready: false,
       archived: false,
       copiedFrom: source.id,
-      suggestionMemory: {},
-      suppressedSuggestions: {},
       destination: "Exampleville",
       days: 3,
       weather: { status: "pending" },
+    });
+    // toMatchObject treats {} as "any object", so the empty-state fields need strict equality.
+    expect(copy.suggestionMemory).toEqual({});
+    expect(copy.suppressedSuggestions).toEqual({});
+    expect(copy.weather).toEqual({
+      status: "pending",
+      label: "Seasonal outlook",
+      suggestion: "Compact umbrella",
     });
     expect(copy.id).not.toBe(source.id);
     expect(byId(copy, "nice-makeup")).toBeDefined();
