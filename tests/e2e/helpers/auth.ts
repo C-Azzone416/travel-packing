@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { resetOwnerData } from "./database";
 
 // Synthetic values for the e2e-only fake sign-in (never available on Vercel; see src/server/auth/e2e-provider.ts).
 export const E2E_PASSWORD = "synthetic-e2e-only";
@@ -30,8 +31,11 @@ export async function signIn(page: Page, email: string, password = E2E_PASSWORD)
   await page.getByRole("button", { name: "Sign in" }).click();
 }
 
-/** Sign in as this project's seeded owner and wait until the app is showing. */
+/** Sign in as this project's seeded owner (reset to the seeded state first) and wait until the app is showing. */
 export async function signInAsOwner(page: Page, email = ownerEmailFor(test.info().project.name)) {
+  // Every test starts from the freshly seeded state, whatever earlier tests created or changed.
+  const ownerId = `e2e-${email}`;
+  if (SEEDED_OWNER_IDS.includes(ownerId)) await resetOwnerData(ownerId);
   await signIn(page, email);
   await expect(page).toHaveURL(/\/$/);
 }

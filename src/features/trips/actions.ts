@@ -1,16 +1,18 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import type { LifecycleState } from "@/domain/trip-lifecycle";
+import type { LifecycleState, LifecycleTrip, TripDraft } from "@/domain/trip-lifecycle";
 import * as service from "@/server/data/service";
 import type { DataContext } from "@/server/data/context";
 import type { ErrorCode, Result } from "@/server/data/result";
 import { getDataContext } from "@/server/data/runtime";
 import { ACCESS_DENIED_PATH, SIGN_IN_PATH } from "@/server/auth/proxy-handler";
-import { toLifecycleState } from "@/server/trips/to-lifecycle";
+import { toLifecycleState, toLifecycleTrip } from "@/server/trips/to-lifecycle";
 
 export type TripsActionResult =
   { ok: true; state: LifecycleState } | { ok: false; code: ErrorCode };
+export type CreateTripActionResult =
+  { ok: true; trip: LifecycleTrip } | { ok: false; code: ErrorCode };
 
 /** The dashboard's whole state, read through the owner gate. */
 async function readState(context: DataContext): Promise<Result<LifecycleState>> {
@@ -57,4 +59,33 @@ export async function removeTripAction(tripId: string): Promise<TripsActionResul
 
 export async function undoRemoveTripAction(tripId: string): Promise<TripsActionResult> {
   return respond((context) => service.undoRemoveTrip(context, { tripId }));
+}
+
+/**
+ * Save a finished draft as a new trip (or a copy of one of the owner's trips). The server re-validates everything:
+ * the location against the sample-location schema, the dates, the preferences, and (for a copy) that the source trip
+ * is the caller's own. A draft without a confirmed location is INVALID_INPUT.
+ */
+export async function createTripAction(draft: TripDraft): Promise<CreateTripActionResult> {
+  const context = await getDataContext();
+  if (!context) return { ok: false, code: "INTERNAL" };
+  const saved = !draft?.location
+    ? ({ ok: false, error: { code: "INVALID_INPUT" } } as const)
+    : draft.mode === "copy" && draft.sourceId
+      ? await service.copyTrip(context, {
+          sourceId: draft.sourceId,
+          location: draft.location,
+          start: draft.start,
+          end: draft.end,
+        })
+      : await service.createTrip(context, {
+          location: draft.location,
+          start: draft.start,
+          end: draft.end,
+          config: draft.config,
+        });
+  if (saved.ok) return { ok: true, trip: toLifecycleTrip(saved.data) };
+  if (saved.error.code === "UNAUTHENTICATED") redirect(SIGN_IN_PATH);
+  if (saved.error.code === "FORBIDDEN") redirect(ACCESS_DENIED_PATH);
+  return { ok: false, code: saved.error.code };
 }

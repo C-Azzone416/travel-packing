@@ -25,6 +25,7 @@ vi.mock("./actions", async () => {
     restoreTripAction: (id: string) => ok(source.restore(id)),
     removeTripAction: (id: string) => ok(source.remove(id)),
     undoRemoveTripAction: (id: string) => ok(source.undoRemove(id)),
+    createTripAction: async () => ({ ok: false as const, code: "INTERNAL" as const }),
   };
 });
 
@@ -57,7 +58,11 @@ describe("TripsScreen", () => {
 
   it("shows the error state with Retry when the data layer fails", async () => {
     control.failLoad = true;
-    renderInApp(<TripsScreen />);
+    renderInApp(
+      <TripsSourceProvider>
+        <TripsScreen />
+      </TripsSourceProvider>,
+    );
     expect(
       (await screen.findAllByRole("button", { name: /try again|retry/i })).length,
     ).toBeGreaterThan(0);

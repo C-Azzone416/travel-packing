@@ -10,6 +10,7 @@ import {
   signedInAs,
 } from "@/server/data/__fixtures__/seed";
 import type { DataContext } from "@/server/data/context";
+import { CONFIG } from "@/server/data/__fixtures__/seed";
 
 let current: DataContext | null = null;
 vi.mock("@/server/data/runtime", () => ({ getDataContext: async () => current }));
@@ -19,8 +20,10 @@ vi.mock("next/navigation", () => ({
   },
 }));
 
+import type { TripDraft } from "@/domain/trip-lifecycle";
 import {
   archiveTripAction,
+  createTripAction,
   loadTripsAction,
   removeTripAction,
   restoreTripAction,
@@ -108,6 +111,85 @@ describe("trips server actions", () => {
     const state = stateOf(await loadTripsAction());
     expect(state.trips.map((entry) => entry.id)).toEqual([trip.id]);
     expect(state.trips[0].archived).toBe(false);
+  });
+
+  describe("createTripAction", () => {
+    const location = {
+      id: "us-ca-san-diego",
+      city: "San Diego",
+      region: "California",
+      country: "United States",
+      countryCode: "US",
+      label: "San Diego, California, United States",
+    };
+    const draft = (patch: Partial<TripDraft> = {}): TripDraft => ({
+      mode: "create",
+      sourceId: null,
+      location,
+      start: "2030-04-01",
+      end: "2030-04-05",
+      config: CONFIG,
+      ...patch,
+    });
+
+    it("saves a new trip for the signed-in owner and returns it in the dashboard's shape", async () => {
+      const result = await createTripAction(draft());
+      if (!result.ok) throw new Error(`expected ok, got ${result.code}`);
+      expect(result.trip).toMatchObject({
+        destination: "San Diego",
+        start: "2030-04-01",
+        end: "2030-04-05",
+      });
+      expect(result.trip.location).toMatchObject({
+        id: "us-ca-san-diego",
+        country: "United States",
+      });
+      expect(stateOf(await loadTripsAction()).trips.map((entry) => entry.id)).toEqual([
+        result.trip.id,
+      ]);
+    });
+
+    it("copies one of the owner's own trips, recording where it came from", async () => {
+      const source = await seedTrip(db(), OWNER.userId);
+      const result = await createTripAction(
+        draft({ mode: "copy", sourceId: source.id, start: "2030-06-01", end: "2030-06-03" }),
+      );
+      if (!result.ok) throw new Error(`expected ok, got ${result.code}`);
+      expect(result.trip.copiedFrom).toBe(source.id);
+      expect(result.trip.id).not.toBe(source.id);
+    });
+
+    it("cannot copy another owner's trip (NOT_FOUND)", async () => {
+      const source = await seedTrip(db(), OTHER_OWNER.userId);
+      expect(await createTripAction(draft({ mode: "copy", sourceId: source.id }))).toEqual({
+        ok: false,
+        code: "NOT_FOUND",
+      });
+    });
+
+    it("rejects a draft without a confirmed location, bad dates, or an unknown location shape", async () => {
+      expect(await createTripAction(draft({ location: null }))).toEqual({
+        ok: false,
+        code: "INVALID_INPUT",
+      });
+      expect(await createTripAction(draft({ start: "nope" }))).toEqual({
+        ok: false,
+        code: "INVALID_INPUT",
+      });
+      expect(await createTripAction(draft({ location: { ...location, countryCode: "" } }))).toEqual(
+        { ok: false, code: "INVALID_INPUT" },
+      );
+      expect(stateOf(await loadTripsAction()).trips).toEqual([]);
+    });
+
+    it("signed out redirects to sign-in; a non-allowlisted user to access-denied; no database is INTERNAL", async () => {
+      as(null);
+      await expect(createTripAction(draft())).rejects.toThrow("NEXT_REDIRECT:/sign-in");
+      as({ userId: "intruder", email: "intruder@example.test" });
+      await expect(createTripAction(draft())).rejects.toThrow("NEXT_REDIRECT:/access-denied");
+      current = null;
+      expect(await createTripAction(draft())).toEqual({ ok: false, code: "INTERNAL" });
+    });
   });
 
   describe("Result -> UI mapping", () => {

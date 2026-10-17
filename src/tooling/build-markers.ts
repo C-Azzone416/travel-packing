@@ -22,7 +22,7 @@ export const BUILD_MARKERS: readonly BuildMarker[] = [
   // The sample trips are for tests only; the dashboard reads real data.
   {
     name: "the dashboard sample-trip fixtures",
-    text: "Lisbon, Lisboa, Portugal",
+    text: "Lisbon, Lisbon District, Portugal",
     source: "src/features/trips/fixtures.ts",
   },
 ];
