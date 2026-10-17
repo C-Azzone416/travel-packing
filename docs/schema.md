@@ -107,3 +107,26 @@ children.
 - Each migration runs in a transaction together with its `schema_migrations` bookkeeping row.
 - Tests (`src/server/db/*.test.ts`) run against PGlite. **No Neon credentials are used or needed**; connecting to a
   real database (and its credentials) arrives with the data layer (#10) and is Caroline's call (#27-#29).
+
+## Connections
+
+- **App**: `DATABASE_URL` (pooled), opened by `createAppDb` in `src/server/db/neon.ts` (Neon serverless driver over
+  WebSockets, so transactions work), wrapped in Drizzle with this schema.
+- **Migrations**: `DATABASE_URL_UNPOOLED`, one direct (non-pooled) connection. `createMigrationConnection` refuses a
+  Neon `-pooler` host. `npm run db:migrate:remote` applies pending migrations over it; it is not run by CI and must
+  not be pointed at a shared or production database without Caroline's approval (#27-#29).
+- Neither string has a default, is logged, or appears in the repository. Tests use PGlite and never connect.
+
+## Data layer (`src/server/data`)
+
+Every entry point is `run(context, zodSchema, input, handler)`:
+
+1. authorize an allowlisted owner (owner id comes from the session, never from input);
+2. validate input with zod (field paths in errors, never values);
+3. run the handler scoped to that owner, in a transaction where several rows change;
+4. return a typed `Result` (`UNAUTHENTICATED | FORBIDDEN | NOT_FOUND | INVALID_INPUT | REJECTED | INTERNAL`) with
+   generic messages: no trip dates, destinations, item names, or database text.
+
+Trips are loaded and saved as one aggregate (trip + preferences + weather + items with progress). Another owner's
+trip is indistinguishable from a missing one (`NOT_FOUND`), including as the source of a copy, so `copied_from` can
+only ever reference the caller's own trip. First use seeds the default staples once (never re-adding removed ones).
