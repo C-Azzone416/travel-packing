@@ -2,6 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getAuth, resetAuthRuntime, unavailableAuth } from "./auth-runtime";
 import { setAuthLogSink } from "./safe-log";
 
+vi.mock("next/headers", () => ({
+  cookies: async () => ({ get: () => undefined, set: () => {}, delete: () => {} }),
+}));
+
 const createNeonAuth = vi.fn();
 vi.mock("@neondatabase/auth/next/server", () => ({
   createNeonAuth: (...args: unknown[]) => createNeonAuth(...args),
@@ -83,5 +87,35 @@ describe("getAuth", () => {
     expect(getAuth(env)).toBe(first);
     resetAuthRuntime();
     expect(getAuth({})).not.toBe(first);
+  });
+
+  describe("e2e fake sign-in", () => {
+    const e2eEnv = {
+      AUTH_E2E_FAKE: "1",
+      AUTH_E2E_PASSWORD: "synthetic-e2e-only",
+      OWNER_EMAIL_ALLOWLIST: "owner@example.test",
+    };
+
+    it("is used when explicitly enabled outside Vercel, with the allowlist still applied", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const auth = await getAuth(e2eEnv);
+      expect(auth.available).toBe(true);
+      expect([...auth.allowlist]).toEqual(["owner@example.test"]);
+      expect(createNeonAuth).not.toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("e2e fake sign-in enabled"));
+      expect(await auth.provider.getSession()).toBeNull();
+    });
+
+    it.each([
+      ["production", { VERCEL: "1", VERCEL_ENV: "production" }],
+      ["preview", { VERCEL: "1", VERCEL_ENV: "preview" }],
+    ])("is ignored on a Vercel %s deployment: auth stays unavailable", async (_name, vercel) => {
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      const auth = await getAuth({ ...e2eEnv, ...vercel });
+      expect(auth.available).toBe(false);
+      expect(
+        await auth.provider.signInWithPassword("owner@example.test", "synthetic-e2e-only"),
+      ).toEqual({ ok: false });
+    });
   });
 });

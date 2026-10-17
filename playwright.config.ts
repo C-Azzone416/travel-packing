@@ -1,4 +1,5 @@
 import { defineConfig } from "@playwright/test";
+import { E2E_PASSWORD, OWNER_EMAIL } from "./tests/e2e/helpers/auth";
 
 const PORT = 3100;
 
@@ -9,6 +10,12 @@ export default defineConfig({
     url: `http://localhost:${PORT}`,
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,
+    // Synthetic, e2e-only sign-in; the server refuses this mode on any Vercel deployment.
+    env: {
+      AUTH_E2E_FAKE: "1",
+      AUTH_E2E_PASSWORD: E2E_PASSWORD,
+      OWNER_EMAIL_ALLOWLIST: OWNER_EMAIL,
+    },
   },
   use: { baseURL: `http://localhost:${PORT}` },
   projects: [

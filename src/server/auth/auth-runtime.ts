@@ -1,8 +1,9 @@
 // Runtime wiring: picks the provider from environment configuration. Fails closed: if configuration is
 // missing or invalid, the app is "unavailable" (nobody can sign in, every request is unauthenticated).
 
-import type { Allowlist } from "./allowlist";
+import { parseAllowlist, type Allowlist } from "./allowlist";
 import { loadAuthConfig } from "./config";
+import { createE2eAuthProvider, e2eAuthEnabled } from "./e2e-provider";
 import { createNeonAuthProvider } from "./neon-adapter";
 import { logAuthEvent } from "./safe-log";
 import type { AuthProvider } from "./types";
@@ -29,6 +30,14 @@ export function unavailableAuth(): RuntimeAuth {
 }
 
 async function buildAuth(env: Record<string, string | undefined>): Promise<RuntimeAuth> {
+  if (e2eAuthEnabled(env)) {
+    console.warn("auth: e2e fake sign-in enabled (never available on Vercel)");
+    return {
+      provider: createE2eAuthProvider(env),
+      allowlist: parseAllowlist(env.OWNER_EMAIL_ALLOWLIST),
+      available: true,
+    };
+  }
   const loaded = loadAuthConfig(env);
   if (!loaded.ok) {
     // Names of missing settings only; never values.
