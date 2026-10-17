@@ -10,7 +10,7 @@ import {
   seedOwner,
   seedTrip,
 } from "./__fixtures__/seed";
-import { insertTrip, loadTrip, loadTrips, saveTrip } from "./trip-store";
+import { insertTrip, loadTrip, loadTrips, lockTrip, saveTrip } from "./trip-store";
 
 let ctx: Awaited<ReturnType<typeof createMigratedDb>>;
 const db = () => ctx.db as unknown as Db;
@@ -234,5 +234,44 @@ describe("saveTrip", () => {
     const loaded = await loadTrip(db(), OWNER.userId, trip.id);
     expect(loaded?.ready).toBe(false);
     expect(loaded?.items.some((item) => item.id === "bad-qty")).toBe(false);
+  });
+});
+
+describe("lockTrip", () => {
+  it("locks only the owner's own live trip", async () => {
+    const trip = await seedTrip(db(), OWNER.userId);
+    await seedOwner(db(), OTHER_OWNER.userId);
+    expect(await lockTrip(db(), OWNER.userId, trip.id)).toBe(true);
+    // The owner filter is a security filter: another owner cannot take (or probe) the lock on this trip.
+    expect(await lockTrip(db(), OTHER_OWNER.userId, trip.id)).toBe(false);
+  });
+
+  it("refuses a missing trip and a removed trip", async () => {
+    const trip = await seedTrip(db(), OWNER.userId);
+    expect(await lockTrip(db(), OWNER.userId, newUuid())).toBe(false);
+    await ctx.client.query('UPDATE "trips" SET "deleted_at" = now() WHERE "id" = $1', [trip.id]);
+    expect(await lockTrip(db(), OWNER.userId, trip.id)).toBe(false);
+  });
+
+  it("takes a row lock inside a transaction (FOR UPDATE), so a competing lock waits for it", async () => {
+    const trip = await seedTrip(db(), OWNER.userId);
+    const order: string[] = [];
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const first = db().transaction(async (tx) => {
+      await lockTrip(tx as Db, OWNER.userId, trip.id);
+      order.push("first locked");
+      await held;
+      order.push("first done");
+    });
+    // PGlite runs transactions one at a time, so the second can only start after the first ends.
+    const second = db().transaction(async (tx) => {
+      await lockTrip(tx as Db, OWNER.userId, trip.id);
+      order.push("second locked");
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    release();
+    await Promise.all([first, second]);
+    expect(order).toEqual(["first locked", "first done", "second locked"]);
   });
 });
