@@ -68,7 +68,6 @@ export function sampleLifecycleState(): LifecycleState {
   lisbon.items = lisbon.items.map((item) => ({ ...item, packed: item.qty }));
   lisbon.toiletryBagPacked = true;
   lisbon.ready = true;
-  lisbon.weather = { ...lisbon.weather, status: "accepted" };
 
   return { ...emptyLifecycleState(), trips: [sanDiego, lisbon] };
 }
