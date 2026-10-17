@@ -115,4 +115,39 @@ test.describe("open-meteo mode (LOCATION_PROVIDER=open-meteo, fake geocoder)", (
     await expect(page.getByRole("heading", { name: "Confirm the trip" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
   });
+
+  test("screenshots of the picker states", async ({ page }, testInfo) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.clock.setFixedTime(new Date("2026-10-16T12:00:00"));
+    const shot = (name: string) =>
+      page.screenshot({
+        path: `test-results/screenshots/${testInfo.project.name}-location-${name}.png`,
+      });
+    const field = () => page.getByRole("combobox", { name: "Destination search" });
+    await openNewTrip(page);
+
+    await field().fill("slow");
+    await expect(page.getByText("Searching…").first()).toBeVisible();
+    await shot("searching");
+
+    await field().fill("zzqscreens");
+    await expect(page.getByRole("status", { name: "Destination results" })).toHaveText(
+      "No places found",
+    );
+    await shot("no-matches");
+
+    await field().fill("boom");
+    await expect(
+      page.getByRole("alert").filter({ hasText: "Location search is unavailable right now." }),
+    ).toBeVisible();
+    await shot("unavailable");
+
+    await field().fill(`spring${testInfo.project.name}`);
+    await expect(page.getByRole("option")).toHaveCount(2);
+    await shot("results");
+
+    await page.getByRole("option").nth(1).click();
+    await expect(page.getByText("Destination confirmed")).toBeVisible();
+    await shot("confirmed");
+  });
 });

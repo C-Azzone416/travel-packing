@@ -78,6 +78,8 @@ createServer((request, response) => {
     headers: Object.keys(request.headers).sort(),
   });
   if (name === "boom") return send(500, { error: true });
+  // A slow answer, so a test can look at the "Searching…" state.
+  if (name === "slow") return setTimeout(() => send(200, { generationtime_ms: 0.1 }), 2500);
   const key = Object.keys(PLACES).find((candidate) => name.startsWith(candidate));
   // Like the real API, no match means no `results` key at all.
   return send(
