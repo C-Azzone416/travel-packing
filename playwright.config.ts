@@ -4,8 +4,13 @@ import { E2E_PASSWORD, OWNER_EMAIL } from "./tests/e2e/helpers/auth";
 
 // Ports are overridable so several worktrees (or agents) can run e2e on one machine. Servers are never reused:
 // reusing whatever happens to be listening could silently test another checkout's code.
-const PORT = Number(process.env.E2E_PORT ?? 3100);
-const DB_PORT = Number(process.env.E2E_DB_PORT ?? 5433);
+/** A TCP port from the environment: a whole number 1..65535, else the default (an empty or junk value must not become 0 or NaN). */
+function portFrom(value: string | undefined, fallback: number): number {
+  const port = Number(value);
+  return Number.isInteger(port) && port >= 1 && port <= 65535 ? port : fallback;
+}
+const PORT = portFrom(process.env.E2E_PORT, 3100);
+const DB_PORT = portFrom(process.env.E2E_DB_PORT, 5433);
 const E2E_DATABASE_URL = `postgres://postgres:postgres@127.0.0.1:${DB_PORT}/postgres`;
 
 export default defineConfig({
