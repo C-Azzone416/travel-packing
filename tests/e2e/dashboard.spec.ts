@@ -164,3 +164,33 @@ test("screenshots of the dashboard", async ({ page }, testInfo) => {
     fullPage: true,
   });
 });
+
+test("on phones the hero sun clears the hero text, and the end of the page is never hidden behind the nav", async ({
+  page,
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name !== "phone",
+    "the bottom nav and the corner sun are phone layouts",
+  );
+  await openDashboard(page);
+  const sun = (await page.locator(".sun").boundingBox())!;
+  for (const node of await page.locator(".hero-copy").locator("p, h1, .actions a").all()) {
+    const text = (await node.boundingBox())!;
+    const apart =
+      sun.x >= text.x + text.width ||
+      sun.x + sun.width <= text.x ||
+      sun.y >= text.y + text.height ||
+      sun.y + sun.height <= text.y;
+    expect(
+      apart,
+      `sun overlaps ${await node.evaluate((el) => el.tagName + "." + el.className)}`,
+    ).toBe(true);
+  }
+
+  await tab(page, /Past & archive/).click();
+  await expect(page.getByText("Nothing recently deleted.")).toBeVisible();
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  const nav = (await page.getByRole("navigation", { name: "Primary navigation" }).boundingBox())!;
+  const last = (await page.locator(".deleted-list").boundingBox())!;
+  expect(last.y + last.height).toBeLessThanOrEqual(nav.y);
+});

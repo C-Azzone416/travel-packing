@@ -907,6 +907,17 @@ main {
   width: 55%;
 }
 
+/* On phones the sun sits in the bottom corner, clear of the hero text (design's #14 nit). */
+@media (max-width: 659px) {
+  .sun {
+    top: auto;
+    right: 22px;
+    bottom: 22px;
+    width: 64px;
+    height: 64px;
+  }
+}
+
 @media (min-width: 660px) {
   .card-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));

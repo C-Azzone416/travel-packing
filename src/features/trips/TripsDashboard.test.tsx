@@ -189,6 +189,7 @@ describe("past & archive view", () => {
     const lisbon = card("Lisbon");
     expect(within(lisbon).getByText("Past trip")).toBeTruthy();
     expect(within(lisbon).getByText("Ready to go")).toBeTruthy();
+    expect(within(lisbon).queryByText(/Simulated/)).toBeNull();
     expect(within(lisbon).getByRole("link", { name: "Review bag: Lisbon" })).toBeTruthy();
     expect(within(lisbon).queryByRole("button", { name: /Archive|Restore/ })).toBeNull();
     expect(screen.getByText("Nothing recently deleted.")).toBeTruthy();

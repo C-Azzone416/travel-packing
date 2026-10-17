@@ -78,6 +78,14 @@ describe("tripCardView", () => {
     expect(tripCardView(endsToday, "2026-10-17", "archive").eyebrow).toBe("Past trip");
   });
 
+  it("hides the forecast for a trip that is already past, but keeps it for an archived future trip", () => {
+    expect(tripCardView(lisbon(), TODAY, "archive").forecast).toBeNull();
+    expect(tripCardView(withPatch(sanDiego(), { archived: true }), TODAY, "archive").forecast).toBe(
+      "Close forecast",
+    );
+    expect(tripCardView(sanDiego(), "2026-10-28", "archive").forecast).toBeNull();
+  });
+
   it("has no place and no forecast without a confirmed location", () => {
     const view = tripCardView(withPatch(sanDiego(), { location: null }), TODAY, "upcoming");
     expect(view.place).toBeNull();

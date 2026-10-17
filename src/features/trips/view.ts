@@ -34,7 +34,7 @@ export interface TripCardView {
   percent: number;
   range: string;
   days: number;
-  /** Simulated forecast label; null when there is no confirmed location (e.g. custom). */
+  /** Simulated forecast label; null without a confirmed location (e.g. custom) and for trips already past. */
   forecast: string | null;
   canArchive: boolean;
   canRestore: boolean;
@@ -56,7 +56,8 @@ export function tripCardView(trip: LifecycleTrip, today: string, view: TripListV
     percent: totals.total ? Math.round((totals.packed / totals.total) * 100) : 0,
     range: formatRange(trip),
     days: trip.days,
-    forecast: trip.location ? trip.weather.label : null,
+    // A forecast for a trip that has already happened says nothing, so it is hidden once the trip is past.
+    forecast: trip.location && !past ? trip.weather.label : null,
     canArchive: view === "upcoming",
     // Restoring only makes sense for a future trip; a past one returns to past by date.
     canRestore: view === "archive" && kind === "archived" && !past,
