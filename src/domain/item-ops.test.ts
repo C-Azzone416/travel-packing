@@ -218,6 +218,69 @@ describe("editItem", () => {
     expect(history).toEqual(snapshot);
   });
 
+  describe("remember on a per-day staple stores a per-day amount, never the trip total", () => {
+    const perDay: Staple[] = [
+      {
+        id: "underwear",
+        name: "Underwear",
+        category: "Clothing",
+        qty: 1,
+        cadence: "per day",
+        packLast: false,
+      },
+    ];
+    const remember = (tripQty: number, dailyDays: number) => {
+      const trip = { ...makeTrip(), dailyDays };
+      const result = editItem(trip, perDay, "underwear", {
+        name: "Underwear",
+        qty: tripQty,
+        timing: "main",
+        scope: "remember",
+      });
+      okTrip(result);
+      return result.staples[0];
+    };
+
+    it.each([
+      ["12 over 6 days", 12, 6, 2],
+      ["exactly one per day", 6, 6, 1],
+      ["rounds .5 up", 9, 6, 2],
+      ["rounds down below .5", 8, 6, 1],
+      ["never below 1", 1, 6, 1],
+      ["a one-day trip", 3, 1, 3],
+    ])("%s", (_name, tripQty, dailyDays, expected) => {
+      expect(remember(tripQty, dailyDays)).toMatchObject({ qty: expected, cadence: "per day" });
+    });
+
+    it("leaves the staple quantity unchanged when the trip has no packing days", () => {
+      expect(remember(5, 0)).toMatchObject({ qty: 1, cadence: "per day", name: "Underwear" });
+    });
+
+    it("still updates name and Pack last when the quantity is left alone", () => {
+      const trip = { ...makeTrip(), dailyDays: 0 };
+      const result = editItem(trip, perDay, "underwear", {
+        name: "Briefs",
+        qty: 5,
+        timing: "packlast",
+        scope: "remember",
+      });
+      expect(result.staples[0]).toMatchObject({ name: "Briefs", qty: 1, packLast: true });
+    });
+
+    it("per-trip staples store the trip quantity as is", () => {
+      const result = editItem(makeTrip(), STAPLES, "last-laptop", {
+        name: "Laptop",
+        qty: 4,
+        timing: "packlast",
+        scope: "remember",
+      });
+      expect(result.staples.find((staple) => staple.id === "last-laptop")).toMatchObject({
+        qty: 4,
+        cadence: "per trip",
+      });
+    });
+  });
+
   it("remember creates a staple when none exists, carrying category, Pack last, and Bathroom membership", () => {
     const created = editItem(makeTrip(), [], "sunglasses", {
       name: "Sunglasses",
@@ -370,6 +433,42 @@ describe("removeTripItem", () => {
     ).toEqual({});
   });
 
+  it("suppression needs both the optional flag and a Nice suggestion id", () => {
+    const base = makeTrip();
+    const memory = {
+      custom: item("custom", "Custom", "Other essentials", 1),
+      "nice-top": item("nice-top", "Nice-attire top", "Nice attire", 2),
+    };
+    const withCustom = {
+      ...base,
+      suggestionMemory: memory,
+      items: [
+        ...base.items,
+        { ...item("custom", "Custom", "Other essentials", 1), optional: true },
+      ],
+    };
+    const customRemoved = okTrip(removeTripItem(withCustom, STAPLES, "custom", "this-trip"));
+    expect(customRemoved.suppressedSuggestions).toEqual({});
+    expect(customRemoved.suggestionMemory).toEqual(memory);
+
+    const notOptional = {
+      ...base,
+      suggestionMemory: memory,
+      items: base.items.map((entry) =>
+        entry.id === "nice-shoes" ? { ...entry, optional: false } : entry,
+      ),
+    };
+    const shoesRemoved = okTrip(removeTripItem(notOptional, STAPLES, "nice-shoes", "this-trip"));
+    expect(shoesRemoved.suppressedSuggestions).toEqual({});
+    expect(shoesRemoved.suggestionMemory).toEqual(memory);
+
+    const optionalShoes = okTrip(
+      removeTripItem({ ...base, suggestionMemory: memory }, STAPLES, "nice-shoes", "this-trip"),
+    );
+    expect(optionalShoes.suppressedSuggestions).toEqual({ "nice-shoes": true });
+    expect(optionalShoes.suggestionMemory).toEqual(memory);
+  });
+
   it("this-trip leaves staples alone; remember also removes the staple", () => {
     const local = removeTripItem(makeTrip(), STAPLES, "last-laptop", "this-trip");
     expect(local.staples).toBe(STAPLES);
@@ -446,6 +545,24 @@ describe("recalculateSuggestions", () => {
     const on = checked(recalculateSuggestions(fresh, CONFIG, suggest));
     expect(byId(on, "nice-top")).toMatchObject({ qty: 2, packed: 0, section: "main" });
     expect(byId(on, "nice-makeup")?.groupId).toBe(TOILETRY_GROUP_ID);
+  });
+
+  it("a non-edited item restored from memory keeps its remembered qty and progress, not the new calculation", () => {
+    const three = { ...CONFIG, occasionCount: 3 };
+    let trip = checked(recalculateSuggestions(makeTrip(), three, suggest));
+    trip = setPacked(trip, "nice-top", 2).trip;
+    expect(byId(trip, "nice-top")).toMatchObject({ qty: 3, packed: 2 });
+    expect(byId(trip, "nice-top")?.userEdited).toBeUndefined();
+
+    const off = checked(recalculateSuggestions(trip, { ...three, niceAttire: false }, suggest));
+    expect(byId(off, "nice-top")).toBeUndefined();
+
+    const five = checked(recalculateSuggestions(off, { ...three, occasionCount: 5 }, suggest));
+    expect(byId(five, "nice-top")).toMatchObject({ qty: 3, packed: 2, userEdited: false });
+    // An item that stayed on the list takes the new calculation instead.
+    expect(byId(five, "nice-bottom")?.qty).toBe(3);
+    const stayed = checked(recalculateSuggestions(trip, { ...three, occasionCount: 5 }, suggest));
+    expect(byId(stayed, "nice-top")).toMatchObject({ qty: 5, packed: 2 });
   });
 
   it("an explicitly removed optional suggestion stays suppressed across recalculation and toggling", () => {

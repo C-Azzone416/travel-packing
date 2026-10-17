@@ -67,7 +67,17 @@ function rejected<T>(trip: T, staples: Staple[], reason: ItemOpRejection): ItemO
   return { ok: false, reason, trip, staples };
 }
 
-function upsertStaple(staples: Staple[], item: TripItem): Staple[] {
+/**
+ * What a trip quantity means for a staple. A per-trip staple stores the trip quantity as is. A per-day staple
+ * must not store the trip total (it would multiply on the next trip): it stores the per-day amount, or keeps
+ * its quantity when the trip has no packing days to divide by. (PM product call on #40.)
+ */
+function stapleQtyFor(existing: Staple, tripQty: number, dailyDays: number): number {
+  if (existing.cadence === "per trip") return tripQty;
+  return dailyDays > 0 ? Math.max(1, Math.round(tripQty / dailyDays)) : existing.qty;
+}
+
+function upsertStaple(staples: Staple[], item: TripItem, dailyDays: number): Staple[] {
   const packLast = item.section === "packlast";
   const groupId = item.groupId;
   const existing = staples.find((staple) => staple.id === item.id);
@@ -87,7 +97,13 @@ function upsertStaple(staples: Staple[], item: TripItem): Staple[] {
   void _previousGroup;
   return staples.map((staple) =>
     staple.id === item.id
-      ? { ...rest, name: item.name, qty: item.qty, packLast, ...(groupId ? { groupId } : {}) }
+      ? {
+          ...rest,
+          name: item.name,
+          qty: stapleQtyFor(existing, item.qty, dailyDays),
+          packLast,
+          ...(groupId ? { groupId } : {}),
+        }
       : staple,
   );
 }
@@ -120,7 +136,10 @@ export function editItem<T extends Trip>(
     ...qtyEdited.trip,
     items: qtyEdited.trip.items.map((entry) => (entry.id === itemId ? updated : entry)),
   };
-  return accepted(nextTrip, edit.scope === "remember" ? upsertStaple(staples, updated) : staples);
+  return accepted(
+    nextTrip,
+    edit.scope === "remember" ? upsertStaple(staples, updated, trip.dailyDays) : staples,
+  );
 }
 
 /**
