@@ -2,7 +2,13 @@ import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createFakeAuth, type FakeAuth } from "./__fixtures__/fake-auth";
 import { parseAllowlist } from "./allowlist";
-import { ACCESS_DENIED_PATH, handleRequest, isPublicPath, SIGN_IN_PATH } from "./proxy-handler";
+import {
+  ACCESS_DENIED_PATH,
+  AUTH_SCREEN_HEADER,
+  handleRequest,
+  isPublicPath,
+  SIGN_IN_PATH,
+} from "./proxy-handler";
 
 const OWNER = { userId: "u1", email: "owner@example.test" };
 const OTHER = { userId: "u2", email: "intruder@example.test" };
@@ -134,5 +140,40 @@ describe("provider failure", () => {
     expect(location(await run("/trips"))).toBe(SIGN_IN_PATH);
     fake.failNextGetSession = true;
     expect((await run("/api/trips")).status).toBe(401);
+  });
+});
+
+describe("auth-screen marker (so the layout can drop the app chrome)", () => {
+  const forwarded = (response: Response, name = AUTH_SCREEN_HEADER) =>
+    response.headers.get(`x-middleware-request-${name}`);
+  const withHeader = (path: string) =>
+    new NextRequest(new URL(path, "https://app.example.test"), {
+      headers: { [AUTH_SCREEN_HEADER]: "1" },
+    });
+  const runRequest = (req: NextRequest) => handleRequest(req, { provider: fake, allowlist });
+
+  it.each([SIGN_IN_PATH, ACCESS_DENIED_PATH])("is set on the public screen %s", async (path) => {
+    expect(forwarded(await run(path))).toBe("1");
+  });
+
+  it("is not set on app pages for an allowlisted owner", async () => {
+    fake.current = OWNER;
+    expect(forwarded(await run("/trips"))).toBeNull();
+  });
+
+  it("a client-supplied marker is stripped from app pages, so it cannot hide the shell", async () => {
+    fake.current = OWNER;
+    const response = await runRequest(withHeader("/trips"));
+    expect(forwarded(response)).toBeNull();
+    expect(response.headers.get("x-middleware-override-headers")).not.toContain(AUTH_SCREEN_HEADER);
+  });
+
+  it("is forced to '1' (not echoed) on public screens regardless of what the client sent", async () => {
+    const response = await runRequest(
+      new NextRequest(new URL(SIGN_IN_PATH, "https://app.example.test"), {
+        headers: { [AUTH_SCREEN_HEADER]: "something-else" },
+      }),
+    );
+    expect(forwarded(response)).toBe("1");
   });
 });

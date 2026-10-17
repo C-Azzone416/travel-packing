@@ -1,7 +1,10 @@
-// Presentational sign-in card (design spec #31): centered card, "Welcome back", Email + Password with a
-// show/hide toggle, inline error above the button, no sign-up link, standard autocomplete attributes.
+// Presentational sign-in card (design spec #31): a single centered card on Linen, "Welcome back", Email and
+// Password (with show/hide), an inline error above the button, no sign-up link, standard autocomplete
+// attributes so password managers work, and a loading state that disables the form.
 
 import type { ReactNode } from "react";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
 
 export interface SignInViewProps {
   action: (formData: FormData) => void;
@@ -9,7 +12,7 @@ export interface SignInViewProps {
   pending: boolean;
   showPassword: boolean;
   onTogglePassword: () => void;
-  /** Reserved for the decorative art banner above the card (alt="" so it is ignored by assistive tech). */
+  /** Optional decorative art above the card (must use alt="" so assistive tech ignores it). */
   banner?: ReactNode;
 }
 
@@ -24,45 +27,63 @@ export function SignInView({
   return (
     <main className="auth-screen">
       {banner}
-      <section className="auth-card" aria-labelledby="sign-in-title">
+      <Card as="section" padded className="auth-card" aria-labelledby="sign-in-title">
+        <p className="eyebrow">Carrywell</p>
         <h1 id="sign-in-title">Welcome back</h1>
-        <form action={action} noValidate>
-          <label htmlFor="email">Email</label>
-          <input
-            id="email"
-            name="email"
-            type="email"
-            autoComplete="username"
-            required
-            disabled={pending}
-          />
-
-          <label htmlFor="password">Password</label>
-          <div className="password-row">
+        <form className="auth-form" action={action} noValidate>
+          <div className="field">
+            <label htmlFor="email">Email</label>
             <input
-              id="password"
-              name="password"
-              type={showPassword ? "text" : "password"}
-              autoComplete="current-password"
+              id="email"
+              name="email"
+              type="email"
+              autoComplete="username"
               required
               disabled={pending}
             />
-            <button type="button" onClick={onTogglePassword} aria-pressed={showPassword}>
-              {showPassword ? "Hide password" : "Show password"}
-            </button>
+          </div>
+
+          <div className="field">
+            <label htmlFor="password">Password</label>
+            <div className="password-row">
+              <input
+                id="password"
+                name="password"
+                type={showPassword ? "text" : "password"}
+                autoComplete="current-password"
+                required
+                disabled={pending}
+              />
+              <Button
+                variant="secondary"
+                small
+                onClick={onTogglePassword}
+                aria-pressed={showPassword}
+              >
+                {showPassword ? "Hide password" : "Show password"}
+              </Button>
+            </div>
           </div>
 
           {error ? (
             <p className="auth-error" role="alert">
+              <span aria-hidden="true">⚠ </span>
               {error}
             </p>
           ) : null}
 
-          <button type="submit" disabled={pending} aria-busy={pending}>
-            {pending ? "Signing in…" : "Sign in"}
-          </button>
+          <Button type="submit" block disabled={pending} aria-busy={pending}>
+            {pending ? (
+              <>
+                <span className="spinner" aria-hidden="true" />
+                Signing in…
+              </>
+            ) : (
+              "Sign in"
+            )}
+          </Button>
         </form>
-      </section>
+      </Card>
     </main>
   );
 }

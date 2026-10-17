@@ -3,7 +3,7 @@ import { getAuth } from "@/server/auth/auth-runtime";
 import { authorizeOwner } from "@/server/auth/guard";
 import { SignInForm } from "./SignInForm";
 
-export const metadata = { title: "Sign in · Travel Packing" };
+export const metadata = { title: "Sign in" };
 // Reads the session on every request.
 export const dynamic = "force-dynamic";
 

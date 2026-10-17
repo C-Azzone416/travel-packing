@@ -6,6 +6,12 @@ import { authorizeOwner } from "./guard";
 import type { Allowlist } from "./allowlist";
 import type { AuthProvider } from "./types";
 
+/**
+ * Request header the proxy sets on the public auth screens so the root layout can render them without the app
+ * chrome (top bar, nav). A client-supplied copy is always stripped, so only the proxy can set it.
+ */
+export const AUTH_SCREEN_HEADER = "x-auth-screen";
+
 export const SIGN_IN_PATH = "/sign-in";
 export const ACCESS_DENIED_PATH = "/access-denied";
 
@@ -25,15 +31,23 @@ function noStore<T extends NextResponse>(response: T): T {
   return response;
 }
 
+/** Pass the request on, with the auth-screen marker set only when `authScreen` and never client-controlled. */
+function proceed(request: NextRequest, authScreen: boolean): NextResponse {
+  const headers = new Headers(request.headers);
+  headers.delete(AUTH_SCREEN_HEADER);
+  if (authScreen) headers.set(AUTH_SCREEN_HEADER, "1");
+  return noStore(NextResponse.next({ request: { headers } }));
+}
+
 export async function handleRequest(
   request: NextRequest,
   auth: { provider: AuthProvider; allowlist: Allowlist },
 ): Promise<NextResponse> {
   const { pathname } = request.nextUrl;
-  if (isPublicPath(pathname)) return noStore(NextResponse.next());
+  if (isPublicPath(pathname)) return proceed(request, true);
 
   const decision = await authorizeOwner(auth.provider, auth.allowlist);
-  if (decision.status === "ok") return noStore(NextResponse.next());
+  if (decision.status === "ok") return proceed(request, false);
 
   if (isApiPath(pathname)) {
     return noStore(
