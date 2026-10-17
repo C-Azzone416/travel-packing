@@ -39,6 +39,7 @@ function rejected<T>(trip: T, reason: RejectionReason): CommandResult<T> {
   return { ok: false, reason, trip };
 }
 
+/** Whole number in 0..qty. Non-finite input (NaN, +/-Infinity) is treated as 0, not as "fully packed". */
 export function clampPacked(packed: number, qty: number): number {
   const whole = Number.isFinite(packed) ? Math.trunc(packed) : 0;
   return Math.min(Math.max(whole, 0), qty);
