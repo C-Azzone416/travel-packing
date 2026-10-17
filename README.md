@@ -20,6 +20,9 @@ Node 22 LTS (`.nvmrc`), npm.
 | `npm run test:coverage` | Same as `npm test`; **fails below 90%** on lines, branches, functions, statements                                                              |
 | `npm run test:e2e`      | Playwright smoke tests on phone (390×844) and desktop (1440×1000); builds and serves the app first. Run `npx playwright install chromium` once |
 | `npm run build`         | Production build                                                                                                                               |
+| `npm run db:generate`   | Generate the next migration from `src/server/db/schema.ts` (see `docs/schema.md`)                                                              |
+| `npm run db:check`      | Validate the migration set                                                                                                                     |
+| `npm run db:migrate`    | Apply all migrations to an empty in-memory Postgres, roll back, and re-apply (no real database)                                                |
 
 Fresh clone check: `npm ci && npm run lint && npm run typecheck && npm run test:coverage && npm run build`.
 
