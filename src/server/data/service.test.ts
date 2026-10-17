@@ -1263,6 +1263,75 @@ describe("input bounds are enforced exactly at the limit", () => {
   );
 });
 
+describe("concurrent staple upserts are serialized (no silently dropped staple)", () => {
+  const upsert = (semanticId: string, name: string, over: Record<string, unknown> = {}) =>
+    service.upsertStaple(context(), {
+      semanticId,
+      name,
+      category: "Accessories",
+      qty: 1,
+      cadence: "per trip",
+      packLast: false,
+      ...over,
+    });
+  const staplesOf = async (owner: string) =>
+    (
+      await ctx.client.query<{ semantic_id: string }>(
+        "SELECT semantic_id FROM staples WHERE owner_id = $1 ORDER BY semantic_id",
+        [owner],
+      )
+    ).rows.map((row) => row.semantic_id);
+
+  it("two concurrent upserts of different staples both survive", async () => {
+    const results = await Promise.all([upsert("scarf", "Scarf"), upsert("hat", "Hat")]);
+    expect(results.every((result) => result.ok)).toBe(true);
+    const ids = await staplesOf(OWNER.userId);
+    expect(ids).toEqual(expect.arrayContaining(["scarf", "hat"]));
+    expect(ids).toHaveLength(13); // 11 defaults + scarf + hat
+  });
+
+  it("concurrent upserts of the same staple end on one of the two values, with the rest intact", async () => {
+    await Promise.all([upsert("scarf", "Wool scarf"), upsert("scarf", "Silk scarf")]);
+    const rows = (
+      await ctx.client.query<{ name: string }>(
+        "SELECT name FROM staples WHERE owner_id = $1 AND semantic_id = 'scarf'",
+        [OWNER.userId],
+      )
+    ).rows;
+    expect(rows).toHaveLength(1);
+    expect(["Wool scarf", "Silk scarf"]).toContain(rows[0].name);
+    expect(await staplesOf(OWNER.userId)).toHaveLength(12);
+  });
+
+  it("reads the owner's staples FOR UPDATE inside the transaction, before it writes any", async () => {
+    const statements: string[] = [];
+    const logged = drizzle(ctx.client, {
+      schema,
+      logger: { logQuery: (query: string) => void statements.push(query) },
+    }) as unknown as Db;
+    data(
+      await service.upsertStaple(makeContext(logged, fake), {
+        semanticId: "scarf",
+        name: "Scarf",
+        category: "Accessories",
+        qty: 1,
+        cadence: "per trip",
+        packLast: false,
+      }),
+    );
+    const lock = statements.findIndex(
+      (sql) => /from "staples"/.test(sql) && /for update/i.test(sql),
+    );
+    // (drizzle's PGlite driver does not log BEGIN, so the transaction itself is not asserted here.)
+    expect(lock).toBeGreaterThan(-1);
+    // The write that replaces the staple set happens only after the lock was taken.
+    const writesAfterLock = statements
+      .slice(lock + 1)
+      .filter((sql) => /^insert into "staples"/i.test(sql));
+    expect(writesAfterLock.length).toBeGreaterThan(0);
+  });
+});
+
 describe("concurrent edits to one trip are serialized (no lost updates)", () => {
   it("rapid double and triple '+' taps all count", async () => {
     const trip = await seedTrip(db(), OWNER.userId);
@@ -1312,7 +1381,8 @@ describe("concurrent edits to one trip are serialized (no lost updates)", () => 
     expect(lockTripAt).toBeGreaterThan(-1);
     expect(lockStaplesAt).toBeGreaterThan(-1);
     expect(lockTripAt).toBeLessThan(firstTripReadAt);
-    expect(statements.findIndex((sql) => /begin/i.test(sql))).toBeLessThan(lockTripAt);
+    // The trip row is locked before the staples, always in that order (so two edits cannot deadlock each other).
+    expect(lockTripAt).toBeLessThan(lockStaplesAt);
   });
 
   it("a trip that is removed, missing, or another owner's cannot be locked and gives NOT_FOUND", async () => {
