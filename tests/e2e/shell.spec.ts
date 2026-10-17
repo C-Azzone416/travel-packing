@@ -23,7 +23,9 @@ test("navigation reaches all three screens with titles, current state and focus 
     await nav.getByRole("link", { name: screen.label }).click();
     await expect(page).toHaveURL(screen.path);
     await expect(page).toHaveTitle(screen.title);
-    await expect(page.getByRole("heading", { name: screen.label, level: 1 })).toBeVisible();
+    // The loaded Trips dashboard leads with its hero; the other screens lead with their name.
+    const heading = screen.label === "Trips" ? "Pack for the trip, not the anxiety." : screen.label;
+    await expect(page.getByRole("heading", { name: heading, level: 1 })).toBeVisible();
     await expect(nav.getByRole("link", { name: screen.label })).toHaveAttribute(
       "aria-current",
       "page",

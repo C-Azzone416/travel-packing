@@ -7,7 +7,12 @@ import { Card } from "@/components/ui/Card";
 import { ModalSheet } from "@/components/ui/ModalSheet";
 import { useToast } from "@/components/ui/Toast";
 import { useSaveStatus } from "@/components/shell/SaveStatus";
-import { pastAndArchivedTrips, upcomingTrips, type LifecycleState } from "@/domain/trip-lifecycle";
+import {
+  pastAndArchivedTrips,
+  upcomingTrips,
+  type LifecycleState,
+  type LifecycleTrip,
+} from "@/domain/trip-lifecycle";
 import { localToday } from "@/lib/today";
 import { TripCard } from "./TripCard";
 import type { TripsSource } from "./trips-source";
@@ -37,13 +42,14 @@ export function TripsDashboard({ source, getToday = localToday }: TripsDashboard
 
   useEffect(() => {
     let cancelled = false;
-    track(() => source.load())
-      .then((state) => {
+    track(
+      () => source.load(),
+      (state) => {
         if (!cancelled) setLoad({ phase: "ready", state, today: getToday() });
-      })
-      .catch(() => {
-        if (!cancelled) setLoad({ phase: "error" });
-      });
+      },
+    ).catch(() => {
+      if (!cancelled) setLoad({ phase: "error" });
+    });
     return () => {
       cancelled = true;
     };
@@ -54,26 +60,27 @@ export function TripsDashboard({ source, getToday = localToday }: TripsDashboard
     setReloads((count) => count + 1);
   };
 
-  // Run a write for one trip. Nothing is removed or changed on screen until the source confirms.
+  // Run a write for one trip. Nothing changes on screen until the source confirms; `after` runs
+  // on success only, including when the chip's Retry re-sends the write.
   const run = useCallback(
-    async (id: string, write: () => Promise<LifecycleState>): Promise<boolean> => {
+    (id: string, write: () => Promise<LifecycleState>, after?: () => void): Promise<void> => {
       setBusy((current) => new Set(current).add(id));
-      try {
-        const state = await track(write);
-        setLoad((current) => (current.phase === "ready" ? { ...current, state } : current));
-        return true;
-      } catch {
-        return false;
-      } finally {
-        setBusy((current) => {
-          const next = new Set(current);
-          next.delete(id);
-          return next;
+      return track(write, (state) => {
+        setLoad({ phase: "ready", state, today: getToday() });
+        after?.();
+      })
+        .then(() => undefined)
+        .catch(() => undefined)
+        .finally(() => {
+          setBusy((current) => {
+            const next = new Set(current);
+            next.delete(id);
+            return next;
+          });
+          headingRef.current?.focus();
         });
-        headingRef.current?.focus();
-      }
     },
-    [track],
+    [track, getToday],
   );
 
   if (load.phase === "loading") {
@@ -118,22 +125,25 @@ export function TripsDashboard({ source, getToday = localToday }: TripsDashboard
   const archiveView = view === "archive";
   const removeTarget = state.trips.find((trip) => trip.id === removing) ?? null;
 
-  async function confirmRemove(id: string) {
-    const trip = state.trips.find((entry) => entry.id === id);
+  function confirmRemove(trip: LifecycleTrip) {
+    const id = trip.id;
     setRemoving(null);
-    if (!trip) return;
-    const ok = await run(id, () => source.remove(id));
-    if (!ok) return;
-    toast.show(`${trip.destination} removed`, {
-      action: {
-        label: "Undo",
-        onAction: () => {
-          void run(id, () => source.undoRemove(id)).then((restored) => {
-            if (restored) toast.show(`${trip.destination} restored`);
-          });
-        },
-      },
-    });
+    void run(
+      id,
+      () => source.remove(id),
+      () =>
+        toast.show(`${trip.destination} removed`, {
+          action: {
+            label: "Undo",
+            onAction: () =>
+              void run(
+                id,
+                () => source.undoRemove(id),
+                () => toast.show(`${trip.destination} restored`),
+              ),
+          },
+        }),
+    );
   }
 
   return (
@@ -258,27 +268,26 @@ export function TripsDashboard({ source, getToday = localToday }: TripsDashboard
         </>
       ) : null}
 
-      <ModalSheet
-        open={removeTarget !== null}
-        title={removeTarget ? `Remove ${removeTarget.destination}?` : "Remove trip"}
-        description="It moves to Recently deleted in Past & archive, where you can undo it. Nothing about your list changes."
-        onClose={() => setRemoving(null)}
-        actions={
-          <>
-            <Button variant="secondary" onClick={() => setRemoving(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="danger"
-              onClick={() => removeTarget && void confirmRemove(removeTarget.id)}
-            >
-              Remove trip
-            </Button>
-          </>
-        }
-      >
-        {null}
-      </ModalSheet>
+      {removeTarget ? (
+        <ModalSheet
+          open
+          title={`Remove ${removeTarget.destination}?`}
+          description="It moves to Recently deleted in Past & archive, where you can undo it. Nothing about your list changes."
+          onClose={() => setRemoving(null)}
+          actions={
+            <>
+              <Button variant="secondary" onClick={() => setRemoving(null)}>
+                Cancel
+              </Button>
+              <Button variant="danger" onClick={() => confirmRemove(removeTarget)}>
+                Remove trip
+              </Button>
+            </>
+          }
+        >
+          {null}
+        </ModalSheet>
+      ) : null}
     </section>
   );
 }

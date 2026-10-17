@@ -102,6 +102,7 @@ export function TripCard({
           <Link
             className={buttonClassName({ variant: "secondary", small: true })}
             href={`/trips/new?copy=${trip.id}`}
+            aria-label={`Copy trip: ${view.destination}`}
           >
             Copy trip
           </Link>

@@ -15,12 +15,18 @@ import { SaveChip, type SaveStatus } from "./SaveChip";
 // "Saving…" appears only if a write takes longer than this, to avoid flicker (#31).
 export const SAVING_DELAY_MS = 400;
 
-type Write = () => Promise<unknown>;
+interface PendingWrite {
+  write: () => Promise<unknown>;
+  onSuccess?: (result: never) => void;
+}
 
 interface SaveStatusApi {
   status: SaveStatus;
-  /** Run a write, reflecting it in the chip. Rejects with the write's own error. */
-  track: <T>(write: () => Promise<T>) => Promise<T>;
+  /**
+   * Run a write, reflecting it in the chip. Rejects with the write's own error. `onSuccess` receives
+   * the result, and is kept with the write so a Retry delivers the result to the screen too.
+   */
+  track: <T>(write: () => Promise<T>, onSuccess?: (result: T) => void) => Promise<T>;
   /** Re-run the last FAILED write only. A newer successful write clears it, so stale writes never replay. */
   retry: () => void;
 }
@@ -42,7 +48,7 @@ const ANNOUNCE: Record<SaveStatus, string> = {
 export function SaveStatusProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<SaveStatus>("saved");
   const pending = useRef(0);
-  const lastFailed = useRef<Write | null>(null);
+  const lastFailed = useRef<PendingWrite | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const failed = useRef(false);
 
@@ -53,41 +59,48 @@ export function SaveStatusProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const track = useCallback(async <T,>(write: () => Promise<T>): Promise<T> => {
-    pending.current += 1;
-    if (!timer.current && !failed.current) {
-      timer.current = setTimeout(() => {
-        timer.current = null;
-        setStatus((current) => (current === "error" ? current : "saving"));
-      }, SAVING_DELAY_MS);
-    }
-    const settle = () => {
-      pending.current -= 1;
-      if (pending.current === 0 && timer.current) {
-        clearTimeout(timer.current);
-        timer.current = null;
+  const track = useCallback(
+    async <T,>(write: () => Promise<T>, onSuccess?: (result: T) => void): Promise<T> => {
+      pending.current += 1;
+      if (!timer.current && !failed.current) {
+        timer.current = setTimeout(() => {
+          timer.current = null;
+          setStatus((current) => (current === "error" ? current : "saving"));
+        }, SAVING_DELAY_MS);
       }
-    };
-    try {
-      const result = await write();
-      settle();
-      // A newer success makes any earlier failure stale: clear it, and the Error state with it.
-      lastFailed.current = null;
-      failed.current = false;
-      if (pending.current === 0) setStatus("saved");
-      return result;
-    } catch (error) {
-      settle();
-      lastFailed.current = write;
-      failed.current = true;
-      setStatus("error");
-      throw error;
-    }
-  }, []);
+      const settle = () => {
+        pending.current -= 1;
+        if (pending.current === 0 && timer.current) {
+          clearTimeout(timer.current);
+          timer.current = null;
+        }
+      };
+      try {
+        const result = await write();
+        settle();
+        // A newer success makes any earlier failure stale: clear it, and the Error state with it.
+        lastFailed.current = null;
+        failed.current = false;
+        if (pending.current === 0) setStatus("saved");
+        onSuccess?.(result);
+        return result;
+      } catch (error) {
+        settle();
+        lastFailed.current = { write, onSuccess: onSuccess as PendingWrite["onSuccess"] };
+        failed.current = true;
+        setStatus("error");
+        throw error;
+      }
+    },
+    [],
+  );
 
   const retry = useCallback(() => {
-    const write = lastFailed.current;
-    if (write) void track(write).catch(() => {});
+    const failedWrite = lastFailed.current;
+    if (failedWrite)
+      void track(failedWrite.write, failedWrite.onSuccess as (result: unknown) => void).catch(
+        () => {},
+      );
   }, [track]);
 
   const api = useMemo<SaveStatusApi>(() => ({ status, track, retry }), [status, track, retry]);
