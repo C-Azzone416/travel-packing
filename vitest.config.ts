@@ -16,6 +16,8 @@ export default defineConfig({
         "src/**/*.test.{ts,tsx}",
         // Type-only declaration files have no runtime statements to cover.
         "src/**/*.d.ts",
+        // Test doubles (e.g. the calculator stand-in); used only by tests, never shipped.
+        "src/**/__fixtures__/**",
         // Next.js root layout is framework wiring (html/body shell, metadata); exercised by e2e + build.
         "src/app/layout.tsx",
       ],
