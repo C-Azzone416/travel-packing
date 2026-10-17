@@ -13,13 +13,43 @@ export class SeedRefused extends Error {
   }
 }
 
-/** "host/db" for comparing two connection strings without ever printing them. */
+function decoded(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+/**
+ * "host/db" for comparing two connection strings without ever printing them. Every spelling of the same database must
+ * produce the same key: the host is percent-decoded and lowercased, a trailing dot is dropped, and a `-pooler` suffix
+ * (any case) is ignored; the database is the first path segment, percent-decoded, with slashes stripped. (Database
+ * names are case-sensitive in Postgres, so their case is kept.) Returns null if the URL cannot be read.
+ */
 function target(connectionString: string): string | null {
   try {
     const url = new URL(connectionString);
-    return `${url.hostname.replace(/-pooler(?=\.)/, "")}${url.pathname}`;
+    const host = decoded(url.hostname)
+      .toLowerCase()
+      .replace(/\.+$/, "")
+      .replace(/-pooler(?=\.|$)/, "");
+    const database = decoded(url.pathname).split("/").filter(Boolean)[0] ?? "";
+    return `${host}/${database}`;
   } catch {
     return null;
+  }
+}
+
+/** Query parameters that can point a connection somewhere other than the URL's host and path. */
+const OVERRIDING_PARAMS = ["host", "hostaddr", "dbname", "service"] as const;
+
+function overridesTarget(connectionString: string): boolean {
+  try {
+    const params = new URL(connectionString).searchParams;
+    return OVERRIDING_PARAMS.some((name) => params.has(name));
+  } catch {
+    return false;
   }
 }
 
@@ -34,6 +64,12 @@ export function assertSeedAllowed(env: Env, targetUrl?: string): void {
 
   const seedTarget = target(targetUrl);
   if (!seedTarget) throw new SeedRefused("SEED_DATABASE_URL is not a valid connection URL");
+  if (overridesTarget(targetUrl)) {
+    // A `?host=` / `?dbname=` style override can send the connection somewhere the URL does not show.
+    throw new SeedRefused(
+      "SEED_DATABASE_URL must not override its host or database in the query string",
+    );
+  }
 
   // The app's own connections are the production database by convention: never seed them, whichever host
   // spelling (pooled or direct) they use.
