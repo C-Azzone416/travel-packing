@@ -6,7 +6,7 @@ Responsive, same-origin Next.js (App Router, TypeScript strict) app. See
 
 ## Requirements
 
-Node 20 LTS or newer (`.nvmrc`), npm.
+Node 22 LTS (`.nvmrc`), npm.
 
 ## Commands
 
