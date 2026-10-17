@@ -2,14 +2,16 @@ import { defineConfig } from "@playwright/test";
 import { join } from "node:path";
 import { E2E_PASSWORD, OWNER_EMAIL } from "./tests/e2e/helpers/auth";
 
-const PORT = 3100;
+// The port is overridable so several worktrees (or agents) can run e2e on one machine. Servers are never reused:
+// reusing whatever happens to be listening could silently test another checkout's code.
+const PORT = Number(process.env.E2E_PORT ?? 3100);
 
 export default defineConfig({
   testDir: "tests/e2e",
   webServer: {
     command: `npm run build && npm run start -- --port ${PORT}`,
     url: `http://localhost:${PORT}`,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
     timeout: 180_000,
     // Synthetic, e2e-only sign-in; the server refuses this mode on any Vercel deployment.
     env: {
