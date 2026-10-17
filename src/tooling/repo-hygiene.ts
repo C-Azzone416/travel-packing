@@ -4,6 +4,9 @@
 
 export const MAX_FILE_BYTES = 1024 * 1024;
 
+/** Generated lockfiles are exempt from the size limit (they grow with the dependency tree); the path rules still apply. */
+const SIZE_EXEMPT = new Set(["package-lock.json"]);
+
 export interface TrackedFile {
   path: string;
   bytes: number;
@@ -28,7 +31,7 @@ export function findHygieneProblems(files: readonly TrackedFile[]): string[] {
     for (const [pattern, why] of FORBIDDEN_PATHS) {
       if (pattern.test(path)) problems.push(`${path}: ${why} must not be committed`);
     }
-    if (bytes > MAX_FILE_BYTES) {
+    if (bytes > MAX_FILE_BYTES && !SIZE_EXEMPT.has(path)) {
       problems.push(`${path}: ${bytes} bytes exceeds the ${MAX_FILE_BYTES}-byte limit`);
     }
   }

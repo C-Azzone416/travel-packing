@@ -15,6 +15,9 @@ const E2E_DATABASE_URL = `postgres://postgres:postgres@127.0.0.1:${DB_PORT}/post
 
 export default defineConfig({
   testDir: "tests/e2e",
+  // One worker: the e2e database is a single PGlite instance, which serializes every connection, so parallel tests
+  // queue behind each other and time out waiting for the dashboard. (CI already runs one worker.)
+  workers: 1,
   webServer: [
     {
       // A real Postgres (PGlite behind the wire protocol), migrated and seeded with the synthetic sample set, in

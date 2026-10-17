@@ -1,15 +1,10 @@
 // Fails if any e2e-only module made it into a build. Run after `npm run build` (without NEXT_PUBLIC_E2E_BUILD=1).
-// Each marker is a string that exists only in that module.
+// Each marker (src/tooling/build-markers.ts) is a string that exists only in that module.
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { BUILD_MARKERS } from "../src/tooling/build-markers";
 
-const MARKERS: readonly { name: string; text: string }[] = [
-  { name: "the e2e fake sign-in", text: "e2e-auth-session" },
-  { name: "the e2e Postgres driver", text: "e2e-test-only-pg-driver" },
-  // The sample trips in src/features/trips/fixtures.ts are for tests only; the dashboard reads real data.
-  { name: "the dashboard sample-trip fixtures", text: "Lisbon, Lisboa, Portugal" },
-];
 const BUILD_DIR = ".next";
 
 function* files(dir: string): Generator<string> {
@@ -32,7 +27,7 @@ function main(): void {
     text: readFileSync(path, "utf8"),
   }));
   let failed = false;
-  for (const marker of MARKERS) {
+  for (const marker of BUILD_MARKERS) {
     const hits = contents.filter((file) => file.text.includes(marker.text));
     if (hits.length === 0) continue;
     failed = true;

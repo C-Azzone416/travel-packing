@@ -80,6 +80,13 @@ describe("findHygieneProblems", () => {
       expect(problems[0]).toContain("exceeds");
     });
 
+    it("exempts only the root package-lock.json from the size limit", () => {
+      const big = MAX_FILE_BYTES * 3;
+      expect(findHygieneProblems([file("package-lock.json", big)])).toEqual([]);
+      expect(findHygieneProblems([file("sub/package-lock.json", big)])).toHaveLength(1);
+      expect(findHygieneProblems([file("package-lock.json.bak", big)])).toHaveLength(1);
+    });
+
     it("the limit is 1 MiB", () => {
       expect(MAX_FILE_BYTES).toBe(1_048_576);
     });
