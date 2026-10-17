@@ -57,6 +57,17 @@ const PLACES = {
   ],
 };
 
+PLACES.countryless = [
+  {
+    ...PLACES.london[0],
+    id: 111,
+    name: "Countryless",
+    country: undefined,
+    country_code: undefined,
+  },
+  { ...PLACES.london[0], id: 112, name: "Countryless" },
+];
+
 const queries = [];
 
 createServer((request, response) => {

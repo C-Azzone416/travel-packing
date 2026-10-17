@@ -100,11 +100,27 @@ describe("searchOpenMeteo results", () => {
     expect(await searchOpenMeteo("zzzz", { fetch: fakeFetch({ results: [] }) })).toEqual([]);
   });
 
-  it("copes with missing region, country and timezone", async () => {
+  it("copes with missing region and timezone", async () => {
     const [place] = await searchOpenMeteo("x", {
-      fetch: fakeFetch({ results: [{ id: 1, name: "Nowhere", latitude: 1, longitude: 2 }] }),
+      fetch: fakeFetch({
+        results: [
+          {
+            id: 1,
+            name: "Nowhere",
+            latitude: 1,
+            longitude: 2,
+            country: "Land",
+            country_code: "LD",
+          },
+        ],
+      }),
     });
-    expect(place).toMatchObject({ region: "", country: "", countryCode: "", label: "Nowhere" });
+    expect(place).toMatchObject({
+      region: "",
+      country: "Land",
+      countryCode: "LD",
+      label: "Nowhere, Land",
+    });
     expect("timezone" in place).toBe(false);
     const [partial] = await searchOpenMeteo("x", {
       fetch: fakeFetch({
@@ -115,14 +131,32 @@ describe("searchOpenMeteo results", () => {
             latitude: 1,
             longitude: 2,
             country: "Land",
+            country_code: "ld",
             admin1: "  ",
             timezone: " ",
           },
         ],
       }),
     });
-    expect(partial).toMatchObject({ region: "", label: "Place, Land" });
+    expect(partial).toMatchObject({ region: "", countryCode: "LD", label: "Place, Land" });
     expect("timezone" in partial).toBe(false);
+  });
+
+  it.each([
+    ["no country", { country_code: "LD" }],
+    ["a blank country", { country: "  ", country_code: "LD" }],
+    ["no country code", { country: "Land" }],
+    ["a one-letter country code", { country: "Land", country_code: "L" }],
+    ["a three-letter country code", { country: "Land", country_code: "LDX" }],
+    ["a non-text country code", { country: "Land", country_code: 7 }],
+  ])("never offers a place with %s, since it could not be saved", async (_label, extra) => {
+    const unsaveable = { id: 9, name: "Nowhere", latitude: 1, longitude: 2, ...extra };
+    const keep = { ...london, id: 10 };
+    const places = await searchOpenMeteo("x", {
+      fetch: fakeFetch({ results: [unsaveable, keep] }),
+    });
+    expect(places.map((place) => place.providerPlaceId)).toEqual(["10"]);
+    expect(await searchOpenMeteo("x", { fetch: fakeFetch({ results: [unsaveable] }) })).toEqual([]);
   });
 
   it("skips malformed entries and keeps at most five", async () => {
@@ -158,6 +192,7 @@ describe("searchOpenMeteo results", () => {
       latitude: 39.8,
       longitude: -89.65,
       country: "United States",
+      country_code: "US",
       admin1: "Illinois",
       admin2: "Sangamon County",
     };
@@ -186,6 +221,7 @@ describe("searchOpenMeteo results", () => {
       latitude: 1,
       longitude: 1,
       country: "Land",
+      country_code: "LD",
       admin1: "Region",
     };
     const places = await searchOpenMeteo("twin", {

@@ -71,6 +71,15 @@ test.describe("open-meteo mode (LOCATION_PROVIDER=open-meteo, fake geocoder)", (
     ).toBeVisible();
   });
 
+  test("a provider place with no country is neither listed nor counted", async ({ page }) => {
+    await openNewTrip(page);
+    await page.getByRole("combobox", { name: "Destination search" }).fill("countryless");
+    await expect(page.getByRole("option")).toHaveCount(1);
+    await expect(page.getByRole("status", { name: "Destination results" })).toHaveText(
+      "1 place found",
+    );
+  });
+
   test("sends the provider only the typed text, and none of the user's credentials", async ({
     page,
   }, testInfo) => {

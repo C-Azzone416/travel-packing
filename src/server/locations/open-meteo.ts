@@ -42,6 +42,8 @@ const isText = (value: unknown): value is string =>
 const isNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
 
+// A place with no country or a malformed country code is dropped here: the picker would show it without its
+// "region, country" line and the data layer would refuse to save it, so it is never offered at all.
 function isRawPlace(value: unknown): value is RawPlace {
   if (typeof value !== "object" || value === null) return false;
   const place = value as Record<string, unknown>;
@@ -49,7 +51,10 @@ function isRawPlace(value: unknown): value is RawPlace {
     isNumber(place.id) &&
     isText(place.name) &&
     isNumber(place.latitude) &&
-    isNumber(place.longitude)
+    isNumber(place.longitude) &&
+    isText(place.country) &&
+    typeof place.country_code === "string" &&
+    /^[A-Za-z]{2}$/.test(place.country_code)
   );
 }
 
@@ -58,13 +63,13 @@ export const round2 = (value: number): number => Math.round(value * 100) / 100;
 
 function toLocation(place: RawPlace): SampleLocation {
   const region = isText(place.admin1) ? place.admin1 : "";
-  const country = isText(place.country) ? place.country : "";
+  const country = place.country as string;
   const location: SampleLocation = {
     id: `${PROVIDER_NAME}-${place.id}`,
     city: place.name,
     region,
     country,
-    countryCode: isText(place.country_code) ? place.country_code.toUpperCase() : "",
+    countryCode: (place.country_code as string).toUpperCase(),
     label: [place.name, region, country].filter(Boolean).join(", "),
     provider: PROVIDER_NAME,
     providerPlaceId: String(place.id),
