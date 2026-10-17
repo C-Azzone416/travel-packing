@@ -131,6 +131,18 @@ describe("per-trip commands", () => {
   const item = (trip: { items: { id: string; packed: number; qty: number }[] }, id: string) =>
     trip.items.find((entry) => entry.id === id)!;
 
+  it("listStaples returns the owner's current staples, including remembered changes", async () => {
+    const { source } = setup();
+    expect((await source.listStaples()).length).toBe(source.staplesSnapshot().length);
+    await source.addToiletryItem("san-diego", {
+      name: "Razor",
+      qty: 1,
+      packLast: false,
+      scope: "remember",
+    });
+    expect((await source.listStaples()).some((entry) => entry.name === "Razor")).toBe(true);
+  });
+
   it("getTrip returns the live trip, and NOT_FOUND for an unknown id", async () => {
     const { source } = setup();
     expect((await source.getTrip("san-diego")).destination).toBe("San Diego");

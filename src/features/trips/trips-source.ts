@@ -59,6 +59,8 @@ export interface TripsSource {
 
   /** One live trip. Rejects with NOT_FOUND for an id that is not there. */
   getTrip(tripId: string): Promise<LifecycleTrip>;
+  /** The owner's staples (what "Remember for future trips" changes). */
+  listStaples(): Promise<Staple[]>;
   togglePacked(tripId: string, itemId: string): Promise<TripChange>;
   incrementPacked(tripId: string, itemId: string): Promise<TripChange>;
   decrementPacked(tripId: string, itemId: string): Promise<TripChange>;
@@ -174,6 +176,7 @@ export function createMemoryTripsSource(
     },
 
     getTrip: async (id) => find(id),
+    listStaples: async () => currentStaples,
     togglePacked: (id, itemId) => command(id, (trip) => togglePacked(trip, itemId)),
     incrementPacked: (id, itemId) => command(id, (trip) => incrementPacked(trip, itemId)),
     decrementPacked: (id, itemId) => command(id, (trip) => decrementPacked(trip, itemId)),

@@ -68,6 +68,26 @@ function stapleQtyFor(existing: Staple, tripQty: number, dailyDays: number): num
   return dailyDays > 0 ? Math.max(1, Math.round(tripQty / dailyDays)) : existing.qty;
 }
 
+export type RememberPreview =
+  { kind: "per-day"; perDay: number } | { kind: "no-packing-days" } | null;
+
+/**
+ * What "Remember for future trips" would save for this item, read from the same rule the edit uses
+ * (`stapleQtyFor`), so the editor's hint can never disagree with what is stored. Only an item that comes from a
+ * per-day staple has anything to preview; a per-trip staple (or no staple) is stored as-is.
+ */
+export function rememberPreview(
+  staples: readonly Staple[],
+  itemId: string,
+  tripQty: number,
+  dailyDays: number,
+): RememberPreview {
+  const staple = staples.find((entry) => entry.id === itemId);
+  if (!staple || staple.cadence !== "per day") return null;
+  if (dailyDays <= 0) return { kind: "no-packing-days" };
+  return { kind: "per-day", perDay: stapleQtyFor(staple, tripQty, dailyDays) };
+}
+
 function upsertStaple(staples: Staple[], item: TripItem, dailyDays: number): Staple[] {
   const packLast = item.section === "packlast";
   const groupId = item.groupId;

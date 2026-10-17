@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -12,6 +13,11 @@ export interface ModalSheetProps {
   onClose: () => void;
   children: ReactNode;
   actions?: ReactNode;
+  /**
+   * Close on a press outside the dialog. Default true. Destructive confirms pass false so a stray tap can't
+   * dismiss them (design's #16 gap 1).
+   */
+  dismissOnBackdrop?: boolean;
 }
 
 // Bottom sheet on phones, centered dialog from 660px. Traps focus, closes on
@@ -23,10 +29,12 @@ export function ModalSheet({
   onClose,
   children,
   actions,
+  dismissOnBackdrop = true,
 }: ModalSheetProps) {
   const titleId = useId();
   const descriptionId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -35,7 +43,14 @@ export function ModalSheet({
     document.body.style.overflow = "hidden";
     const dialog = dialogRef.current as HTMLDivElement;
     (dialog.querySelector<HTMLElement>(FOCUSABLE) ?? dialog).focus();
+    // Everything else on the page is inert while the dialog is open, so focus and assistive tech stay inside
+    // it. Anything that was already inert is left exactly as it was.
+    const background = [...document.body.children].filter(
+      (node) => node !== backdropRef.current && !node.hasAttribute("inert"),
+    );
+    for (const node of background) node.setAttribute("inert", "");
     return () => {
+      for (const node of background) node.removeAttribute("inert");
       document.body.style.overflow = previousOverflow;
       opener?.focus();
     };
@@ -71,12 +86,16 @@ export function ModalSheet({
     }
   }
 
-  return (
+  return createPortal(
     <div
+      ref={backdropRef}
       className="modal-backdrop"
       data-testid="modal-backdrop"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
+        if (event.target !== event.currentTarget) return;
+        if (dismissOnBackdrop) onClose();
+        // An ignored press must not pull focus out of the dialog (Escape would stop working).
+        else event.preventDefault();
       }}
     >
       <div
@@ -98,6 +117,7 @@ export function ModalSheet({
         {children}
         {actions ? <div className="modal-actions">{actions}</div> : null}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
