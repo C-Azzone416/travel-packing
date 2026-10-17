@@ -536,3 +536,94 @@ main {
     transition-duration: 0.001ms !important;
   }
 }
+
+/* Sign-in and access-denied (design spec #31). Shown without the app chrome: the proxy marks these screens and
+   the root layout renders them bare. Tokens only; targets are at least 44px. */
+.auth-screen {
+  min-height: 100vh;
+  display: grid;
+  /* A fixed column (max 400px, else the full width inside the 16px gutter) so the card never shrinks to its content. */
+  grid-template-columns: min(100%, 400px);
+  justify-content: center;
+  align-content: center;
+  gap: 16px;
+  padding: 24px 16px;
+}
+.auth-card {
+  width: 100%;
+  box-shadow: var(--shadow);
+}
+.auth-card h1 {
+  font-size: clamp(26px, 6vw, 32px);
+}
+.auth-card .button.block {
+  margin-top: 4px;
+}
+.auth-form {
+  display: grid;
+  gap: 16px;
+  margin-top: 16px;
+}
+.field {
+  display: grid;
+  gap: 6px;
+}
+.field label {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 800;
+}
+.field input {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 10px 14px;
+  background: #fff;
+  color: var(--ink);
+}
+/* While signing in the fields are read-only (not disabled) so keyboard focus stays where it was. */
+.field input[readonly] {
+  background: var(--seafoam-soft);
+  color: var(--muted-text);
+}
+/* The toggle sits on its own line so Email and Password are the same width on a phone. */
+.password-row {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+.password-row input {
+  width: 100%;
+}
+.password-row .button {
+  white-space: nowrap;
+}
+.auth-error {
+  margin: 0;
+  border: 1px solid #e4b8bd;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #f8e9eb;
+  color: var(--danger);
+  font-weight: 700;
+}
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+/* Respect reduced motion: a static ring instead of a spinning one. */
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}

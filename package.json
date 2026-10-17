@@ -17,9 +17,12 @@
     "test:e2e": "playwright test",
     "db:generate": "drizzle-kit generate",
     "db:check": "drizzle-kit check",
-    "db:migrate": "tsx scripts/db-migrate.ts"
+    "db:migrate": "tsx scripts/db-migrate.ts",
+    "check:no-e2e-in-build": "tsx scripts/check-no-e2e-in-build.ts",
+    "build:webpack": "next build --webpack"
   },
   "dependencies": {
+    "@neondatabase/auth": "^0.6.0-beta",
     "drizzle-orm": "^0.45.4",
     "next": "^16.4.2",
     "react": "^19.3.1",
@@ -44,5 +47,10 @@
     "tsx": "^4.23.15",
     "typescript": "^6.0.3",
     "vitest": "^5.0.5"
+  },
+  "overrides": {
+    "@esbuild-kit/core-utils": {
+      "esbuild": "^0.25.0"
+    }
   }
 }
