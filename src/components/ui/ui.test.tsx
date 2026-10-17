@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { Button, buttonClassName } from "./Button";
 import { Card } from "./Card";
 import { StatusBadge } from "./StatusBadge";
+import { Switch } from "./Switch";
 
 describe("buttonClassName", () => {
   it.each([
@@ -81,6 +82,15 @@ describe("Card", () => {
     expect(card.className).toBe("card");
   });
 
+  it("can render as an aside landmark", () => {
+    render(
+      <Card as="aside" aria-label="Summary">
+        Body
+      </Card>,
+    );
+    expect(screen.getByRole("complementary", { name: "Summary" }).className).toBe("card");
+  });
+
   it("supports padding, a custom element and extra classes", () => {
     render(
       <Card as="section" padded className="wide" aria-label="Panel">
@@ -90,5 +100,43 @@ describe("Card", () => {
     const card = screen.getByRole("region", { name: "Panel" });
     expect(card.tagName).toBe("SECTION");
     expect(card.className).toBe("card padded wide");
+  });
+});
+
+describe("Switch", () => {
+  it("is a labelled, described switch that reports changes", async () => {
+    const onChange = vi.fn();
+    render(
+      <Switch
+        label="Laundry access"
+        description="Reduce repeatable clothing."
+        checked={false}
+        onChange={onChange}
+      />,
+    );
+    const control = screen.getByRole("switch", { name: "Laundry access" });
+    expect(control.getAttribute("aria-describedby")).toBeTruthy();
+    expect(screen.getByText("Reduce repeatable clothing.")).toBeTruthy();
+    expect((control as HTMLInputElement).checked).toBe(false);
+    await userEvent.click(control);
+    expect(onChange).toHaveBeenCalledWith(true);
+  });
+
+  it("reflects checked, works without a description, and ignores clicks when disabled", async () => {
+    const onChange = vi.fn();
+    render(<Switch label="Spare" checked disabled onChange={onChange} />);
+    const control = screen.getByRole("switch", { name: "Spare" }) as HTMLInputElement;
+    expect(control.checked).toBe(true);
+    expect(control.getAttribute("aria-describedby")).toBeNull();
+    await userEvent.click(control);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("toggles off with the keyboard", async () => {
+    const onChange = vi.fn();
+    render(<Switch label="Spare" checked onChange={onChange} />);
+    screen.getByRole("switch", { name: "Spare" }).focus();
+    await userEvent.keyboard(" ");
+    expect(onChange).toHaveBeenCalledWith(false);
   });
 });

@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { SaveStatusProvider } from "@/components/shell/SaveStatus";
 import { ToastProvider } from "@/components/ui/Toast";
+import { TripsSourceProvider } from "@/features/trips/TripsSourceProvider";
 import TripsPage, { metadata as tripsMetadata } from "./page";
 import SettingsPage, { metadata as settingsMetadata } from "./settings/page";
 import StaplesPage, { metadata as staplesMetadata } from "./staples/page";
@@ -21,7 +22,9 @@ describe("screens", () => {
     const html = renderToStaticMarkup(
       <ToastProvider>
         <SaveStatusProvider>
-          <TripsPage />
+          <TripsSourceProvider>
+            <TripsPage />
+          </TripsSourceProvider>
         </SaveStatusProvider>
       </ToastProvider>,
     );
