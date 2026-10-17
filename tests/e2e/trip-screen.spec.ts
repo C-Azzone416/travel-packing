@@ -368,15 +368,63 @@ test("rows are keyboard operable with 44px targets, and nothing scrolls sideways
   await expect(underwear.getByRole("button", { name: "Edit Underwear" })).toBeFocused();
 });
 
+// Design's screenshot set for the trip screen. "Not saved · Retry" is not here: the in-memory source cannot fail, so
+// that state is covered by unit tests now and gets a real network-failure screenshot with the data-layer wiring.
 test("screenshots of the trip screen", async ({ page }, testInfo) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
+  const shot = (name: string, fullPage = false) =>
+    page.screenshot({
+      path: `test-results/screenshots/${testInfo.project.name}-trip-${name}.png`,
+      fullPage,
+    });
+
   await openSanDiego(page);
-  await page.screenshot({
-    path: `test-results/screenshots/${testInfo.project.name}-trip.png`,
-    fullPage: true,
-  });
+  await shot("top");
+  await row(page, "underwear").scrollIntoViewIfNeeded();
+  await shot("partial-row");
+  await shot("full", true);
+
   await row(page, "nice-shoes").getByRole("button", { name: "Edit Dress shoes" }).click();
-  await page.screenshot({
-    path: `test-results/screenshots/${testInfo.project.name}-trip-editor.png`,
-  });
+  await shot("editor");
+  await page
+    .getByRole("dialog", { name: "Edit item" })
+    .getByRole("button", { name: "Remove item" })
+    .click();
+  await shot("remove-confirm");
+  await page.getByRole("button", { name: "Keep item" }).click();
+  await page.keyboard.press("Escape");
+
+  await page.getByText("Toiletry bag not ready to place").scrollIntoViewIfNeeded();
+  await shot("toiletries-waiting");
+  for (const id of TOILETRIES)
+    await row(page, id)
+      .getByRole("button", { name: /^Pack all / })
+      .click();
+  await shot("bag-prompt");
+  await page.getByRole("button", { name: "Not yet" }).click();
+  await page.getByText("Toiletry bag ready to place").scrollIntoViewIfNeeded();
+  await shot("toiletries-ready");
+  await page.getByRole("button", { name: "Put bag in suitcase" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Confirm" }).click();
+  await expect(page.getByText("Toiletry bag is in the suitcase")).toBeVisible();
+  await shot("toiletries-in-suitcase");
+
+  await page.getByRole("button", { name: "Edit preferences" }).click();
+  await shot("preferences");
+});
+
+test("screenshots of the Ready trip, weather card and its dialog", async ({ page }, testInfo) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const shot = (name: string) =>
+    page.screenshot({
+      path: `test-results/screenshots/${testInfo.project.name}-trip-${name}.png`,
+    });
+  await openLisbon(page);
+  await expect(page.getByText("You’re ready to go.")).toBeVisible();
+  await shot("ready");
+  await page.getByRole("button", { name: "Review suggestion" }).scrollIntoViewIfNeeded();
+  await shot("weather-card");
+  await page.getByRole("button", { name: "Review suggestion" }).click();
+  await expect(page.getByRole("dialog", { name: "Add a compact umbrella?" })).toBeVisible();
+  await shot("weather-dialog");
 });
