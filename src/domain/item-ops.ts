@@ -1,0 +1,300 @@
+// Item-level operations (plan §3 Packing preferences / Packing-list interaction, §11 Weather).
+// Ported from reference/prototype/dist/app.js. Pure and immutable; Ready revocation and
+// toiletry-bag invalidation go through the #5 state machines.
+
+import {
+  addItem,
+  editItemQty,
+  removeItem,
+  revokeReadyForChange,
+  type RejectionReason,
+} from "./readiness";
+import { TOILETRY_GROUP_ID, toiletryItems } from "./toiletry-bag";
+import type { Scope, Section, Staple, SuggestFn, Trip, TripConfig, TripItem } from "./trip";
+
+/** Ids the calculator owns; everything else on a trip is user-added or canonical (Pack last, return, ...). */
+export const CALCULATED_ITEM_IDS: ReadonlySet<string> = new Set([
+  "tops",
+  "bottoms",
+  "underwear",
+  "socks",
+  "sleepwear",
+  "nice-top",
+  "nice-bottom",
+  "nice-shoes",
+  "nice-makeup",
+  "nice-undergarments",
+]);
+
+/** Optional Nice-outfit suggestions; removing one suppresses it until the user restores it. */
+export const OPTIONAL_NICE_IDS: ReadonlySet<string> = new Set([
+  "nice-shoes",
+  "nice-makeup",
+  "nice-undergarments",
+]);
+
+export const WEATHER_UMBRELLA_ID = "weather-umbrella";
+
+export type ItemOpRejection = RejectionReason | "EMPTY_NAME" | "INVALID_TIMING";
+
+export type ItemOpResult<T> =
+  | { ok: true; trip: T; staples: Staple[] }
+  | { ok: false; reason: ItemOpRejection; trip: T; staples: Staple[] };
+
+export interface ItemEdit {
+  name: string;
+  qty: number;
+  timing: Section;
+  scope: Scope;
+}
+
+export type NiceAccessoryKey = "makeup" | "dress-shoes" | "dress-undergarments";
+
+/** Classifies items that mean the same thing as a calculated Nice suggestion, so they are not duplicated. */
+export function niceAccessoryKey(entry: { name: string }): NiceAccessoryKey | "" {
+  const name = entry.name.toLowerCase();
+  if (name.includes("makeup") || name.includes("make-up")) return "makeup";
+  if (name.includes("dress") && name.includes("shoe")) return "dress-shoes";
+  if (name.includes("dress") && name.includes("undergarment")) return "dress-undergarments";
+  return "";
+}
+
+function accepted<T>(trip: T, staples: Staple[]): ItemOpResult<T> {
+  return { ok: true, trip, staples };
+}
+
+function rejected<T>(trip: T, staples: Staple[], reason: ItemOpRejection): ItemOpResult<T> {
+  return { ok: false, reason, trip, staples };
+}
+
+function upsertStaple(staples: Staple[], item: TripItem): Staple[] {
+  const packLast = item.section === "packlast";
+  const groupId = item.groupId;
+  const existing = staples.find((staple) => staple.id === item.id);
+  if (!existing) {
+    const added: Staple = {
+      id: item.id,
+      name: item.name,
+      category: item.category,
+      qty: item.qty,
+      cadence: "per trip",
+      packLast,
+      ...(groupId ? { groupId } : {}),
+    };
+    return [...staples, added];
+  }
+  const { groupId: _previousGroup, ...rest } = existing;
+  void _previousGroup;
+  return staples.map((staple) =>
+    staple.id === item.id
+      ? { ...rest, name: item.name, qty: item.qty, packLast, ...(groupId ? { groupId } : {}) }
+      : staple,
+  );
+}
+
+/**
+ * Edit name, quantity, and timing. "this-trip" never touches staples; "remember" updates (or creates)
+ * the staple for future trips only. Always revokes Ready. Return-outfit items keep their `return` timing.
+ */
+export function editItem<T extends Trip>(
+  trip: T,
+  staples: Staple[],
+  itemId: string,
+  edit: ItemEdit,
+): ItemOpResult<T> {
+  const item = trip.items.find((entry) => entry.id === itemId);
+  if (!item) return rejected(trip, staples, "ITEM_NOT_FOUND");
+  const name = edit.name.trim();
+  if (!name) return rejected(trip, staples, "EMPTY_NAME");
+  const timings: Section[] = ["main", "return", "packlast"];
+  if (!timings.includes(edit.timing) || (edit.timing === "return" && item.section !== "return")) {
+    return rejected(trip, staples, "INVALID_TIMING");
+  }
+
+  // The item exists (checked above), so editItemQty cannot reject; its trip is the edited trip.
+  const qtyEdited = editItemQty(trip, itemId, edit.qty);
+  const section: Section = item.section === "return" ? "return" : edit.timing;
+  const edited = qtyEdited.trip.items.find((entry) => entry.id === itemId)!;
+  const updated: TripItem = { ...edited, name, section, userEdited: true };
+  const nextTrip = {
+    ...qtyEdited.trip,
+    items: qtyEdited.trip.items.map((entry) => (entry.id === itemId ? updated : entry)),
+  };
+  return accepted(nextTrip, edit.scope === "remember" ? upsertStaple(staples, updated) : staples);
+}
+
+/**
+ * Remove an item. Removing an optional Nice suggestion suppresses it (and drops its remembered copy);
+ * "remember" also removes the matching staple so future trips do not re-add it.
+ */
+export function removeTripItem<T extends Trip>(
+  trip: T,
+  staples: Staple[],
+  itemId: string,
+  scope: Scope,
+): ItemOpResult<T> {
+  const item = trip.items.find((entry) => entry.id === itemId);
+  if (!item) return rejected(trip, staples, "ITEM_NOT_FOUND");
+
+  // The item exists, so removeItem cannot reject.
+  let next = removeItem(trip, itemId).trip;
+  if (item.optional && OPTIONAL_NICE_IDS.has(itemId)) {
+    const { [itemId]: _forgotten, ...memory } = next.suggestionMemory;
+    void _forgotten;
+    next = {
+      ...next,
+      suppressedSuggestions: { ...next.suppressedSuggestions, [itemId]: true },
+      suggestionMemory: memory,
+    };
+  }
+  return accepted(
+    next,
+    scope === "remember" ? staples.filter((staple) => staple.id !== itemId) : staples,
+  );
+}
+
+function toiletrySignature(trip: Trip): string {
+  return toiletryItems(trip)
+    .map((entry) => `${entry.id}:${entry.qty}`)
+    .sort()
+    .join("|");
+}
+
+/**
+ * Recalculate suggestions after a preference change, merging with user edits (prototype
+ * `reconcileTripSuggestions`). Also used for Nice outfits off/on: edits and progress survive through
+ * `suggestionMemory`; explicitly removed optional suggestions stay suppressed. Revokes Ready, and
+ * invalidates bag placement when the Bathroom contents change.
+ */
+export function recalculateSuggestions<T extends Trip>(
+  trip: T,
+  nextConfig: TripConfig,
+  suggest: SuggestFn,
+): T {
+  const oldItems = trip.items;
+  const oldSignature = toiletrySignature(trip);
+  const suppressed = trip.suppressedSuggestions;
+
+  const memory: Record<string, TripItem> = { ...trip.suggestionMemory };
+  for (const entry of oldItems) {
+    if (CALCULATED_ITEM_IDS.has(entry.id) && !suppressed[entry.id]) memory[entry.id] = { ...entry };
+  }
+
+  const calculated = suggest({ ...nextConfig, start: trip.start, end: trip.end });
+  const nonCalculated = oldItems.filter((entry) => !CALCULATED_ITEM_IDS.has(entry.id));
+
+  const nextSuggested = calculated.items
+    .map((suggestion): TripItem => {
+      const template: TripItem = {
+        id: suggestion.id,
+        name: suggestion.name,
+        category: suggestion.category,
+        qty: suggestion.qty,
+        packed: 0,
+        section: "main",
+        optional: Boolean(suggestion.optional),
+        ...(suggestion.id === "nice-makeup" ? { groupId: TOILETRY_GROUP_ID } : {}),
+      };
+      return template;
+    })
+    .filter((template) => {
+      if (suppressed[template.id]) return false;
+      const key = niceAccessoryKey(template);
+      return !key || !nonCalculated.some((entry) => niceAccessoryKey(entry) === key);
+    })
+    .map((template): TripItem => {
+      const existing = oldItems.find((entry) => entry.id === template.id);
+      const source = existing ?? memory[template.id];
+      if (!source) return template;
+      const merged: TripItem = { ...template };
+      if (source.userEdited || !existing) {
+        merged.name = source.name;
+        merged.qty = source.qty;
+        merged.section = source.section;
+        merged.userEdited = Boolean(source.userEdited);
+      }
+      merged.packed = Math.min(source.packed || 0, merged.qty);
+      merged.optional = Boolean(template.optional || source.optional);
+      const groupId =
+        template.id === "nice-makeup" ? TOILETRY_GROUP_ID : (source.groupId ?? template.groupId);
+      if (groupId) merged.groupId = groupId;
+      else delete merged.groupId;
+      return merged;
+    });
+
+  const recalculated: T = {
+    ...trip,
+    items: [...nextSuggested, ...nonCalculated],
+    suggestionMemory: memory,
+    config: { ...nextConfig },
+    days: calculated.days,
+    dailyDays: calculated.dailyDays,
+  };
+  const bagInvalidated = oldSignature !== toiletrySignature(recalculated);
+  const next = bagInvalidated ? { ...recalculated, toiletryBagPacked: false } : recalculated;
+  return revokeReadyForChange(next, "recalculate").trip;
+}
+
+/**
+ * Accept the simulated weather suggestion: adds exactly one canonical `weather-umbrella` item and
+ * revokes Ready. Accepting again never adds a second umbrella.
+ */
+export function acceptWeather<T extends Trip>(trip: T): T {
+  if (trip.weather.status === "accepted") return trip;
+  const withStatus: T = { ...trip, weather: { ...trip.weather, status: "accepted" } };
+  if (withStatus.items.some((entry) => entry.id === WEATHER_UMBRELLA_ID)) {
+    return revokeReadyForChange(withStatus, "weather-accepted").trip;
+  }
+  const umbrella: TripItem = {
+    id: WEATHER_UMBRELLA_ID,
+    name: "Compact umbrella",
+    category: "Weather suggestion",
+    qty: 1,
+    packed: 0,
+    section: "main",
+  };
+  // addItem only rejects duplicate ids, which was ruled out above.
+  return addItem(withStatus, umbrella).trip;
+}
+
+/** Skip the suggestion: adds nothing and does not touch Ready. */
+export function skipWeather<T extends Trip>(trip: T): T {
+  return trip.weather.status === "skipped"
+    ? trip
+    : { ...trip, weather: { ...trip.weather, status: "skipped" } };
+}
+
+/** Return to pending. Never adds or removes list items. */
+export function reviewWeatherAgain<T extends Trip>(trip: T): T {
+  return trip.weather.status === "pending"
+    ? trip
+    : { ...trip, weather: { ...trip.weather, status: "pending" } };
+}
+
+/**
+ * Item identity invariants (plan §20.5): unique ids, no duplicated Bathroom / Pack last items,
+ * no duplicated Nice accessories, no split Chargers collection. Returns human-readable violations.
+ */
+export function findIdentityViolations(trip: Pick<Trip, "items">): string[] {
+  const violations: string[] = [];
+  const duplicates = (values: string[]) =>
+    values.filter((value, index) => values.indexOf(value) !== index);
+  const names = (items: TripItem[]) => items.map((entry) => entry.name.trim().toLowerCase());
+
+  for (const id of new Set(duplicates(trip.items.map((entry) => entry.id))))
+    violations.push(`duplicate id: ${id}`);
+  for (const name of new Set(
+    duplicates(names(trip.items.filter((entry) => entry.groupId === TOILETRY_GROUP_ID))),
+  ))
+    violations.push(`duplicate Bathroom item: ${name}`);
+  for (const name of new Set(
+    duplicates(names(trip.items.filter((entry) => entry.section === "packlast"))),
+  ))
+    violations.push(`duplicate Pack last item: ${name}`);
+  const accessoryKeys = trip.items.map((entry) => niceAccessoryKey(entry)).filter(Boolean);
+  for (const key of new Set(duplicates(accessoryKeys)))
+    violations.push(`duplicate Nice accessory: ${key}`);
+  if (trip.items.filter((entry) => /\bchargers?\b/i.test(entry.name)).length > 1)
+    violations.push("split Chargers");
+  return violations;
+}
