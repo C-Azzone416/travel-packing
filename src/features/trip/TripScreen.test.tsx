@@ -212,38 +212,95 @@ describe("packing", () => {
     const { user, source } = setup();
     await ready();
     const underwear = row("underwear");
-    await user.click(within(underwear).getByRole("button", { name: "Increase packed Underwear" }));
-    await waitFor(() => expect(live().textContent).toBe("Underwear 3 of 4 packed"));
-    await user.click(within(underwear).getByRole("button", { name: "Increase packed Underwear" }));
-    expect(
-      within(underwear)
-        .getByRole("button", { name: "Increase packed Underwear" })
-        .getAttribute("aria-disabled"),
-    ).toBe("true");
-    await user.click(within(underwear).getByRole("button", { name: "Increase packed Underwear" }));
-    expect(itemOf(source, "underwear").packed).toBe(4);
-    for (let n = 0; n < 4; n++)
-      await user.click(
-        within(underwear).getByRole("button", { name: "Decrease packed Underwear" }),
-      );
-    expect(
-      within(underwear)
-        .getByRole("button", { name: "Decrease packed Underwear" })
-        .getAttribute("aria-disabled"),
-    ).toBe("true");
-    await user.click(within(underwear).getByRole("button", { name: "Decrease packed Underwear" }));
-    expect(itemOf(source, "underwear").packed).toBe(0);
+    const up = () => within(underwear).getByRole("button", { name: "Increase packed Underwear" });
+    const down = () => within(underwear).getByRole("button", { name: "Decrease packed Underwear" });
+    await user.click(up());
+    // The tapped count shows at once, before anything is sent.
+    expect(live().textContent).toBe("Underwear 3 of 4 packed");
+    expect(within(underwear).getByText("3/4")).toBeTruthy();
+    await user.click(up());
+    expect(up().getAttribute("aria-disabled")).toBe("true");
+    await user.click(up());
+    await waitFor(() => expect(itemOf(source, "underwear").packed).toBe(4));
+    for (let n = 0; n < 4; n++) await user.click(down());
+    expect(down().getAttribute("aria-disabled")).toBe("true");
+    await user.click(down());
+    await waitFor(() => expect(itemOf(source, "underwear").packed).toBe(0));
     expect(within(underwear).getByText("0/4")).toBeTruthy();
   });
 
-  it("a failed change shows 'Not saved · Retry' beside that row and the Error chip, and Retry clears both when it works", async () => {
-    const toggle = vi.fn().mockRejectedValueOnce(new Error("nope"));
+  it("sends ONE write per item with the final count after the taps settle", async () => {
+    const setPacked = vi.fn();
     const { user, source } = setup("san-diego", (base) => ({
       ...base,
-      togglePacked: (id, itemId) =>
-        toggle.mock.calls.length === 0
-          ? (toggle(), Promise.reject(new Error("nope")))
-          : base.togglePacked(id, itemId),
+      setPacked: (id, itemId, packed) => (
+        setPacked(itemId, packed),
+        base.setPacked(id, itemId, packed)
+      ),
+    }));
+    await ready();
+    const socks = row("socks");
+    for (let n = 0; n < 3; n++)
+      await user.click(within(socks).getByRole("button", { name: "Increase packed Socks" }));
+    expect(setPacked).not.toHaveBeenCalled();
+    expect(within(socks).getByText("4/4")).toBeTruthy();
+    await waitFor(() => expect(itemOf(source, "socks").packed).toBe(4));
+    expect(setPacked).toHaveBeenCalledTimes(1);
+    expect(setPacked).toHaveBeenCalledWith("socks", 4);
+  });
+
+  it("keeps the tapped count on screen while a write is in flight, and sends the next one only after it finishes", async () => {
+    const gate = deferred<void>();
+    const calls: number[] = [];
+    const { user, source } = setup("san-diego", (base) => ({
+      ...base,
+      setPacked: async (id, itemId, packed) => {
+        calls.push(packed);
+        if (calls.length === 1) await gate.promise;
+        return base.setPacked(id, itemId, packed);
+      },
+    }));
+    await ready();
+    const socks = row("socks");
+    const up = () => within(socks).getByRole("button", { name: "Increase packed Socks" });
+    await user.click(up());
+    await waitFor(() => expect(calls).toEqual([2]));
+    // A tap during the first write: shown at once, not sent in parallel.
+    await user.click(up());
+    expect(within(socks).getByText("3/4")).toBeTruthy();
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    expect(calls).toEqual([2]);
+    await act(async () => gate.resolve());
+    await waitFor(() => expect(calls).toEqual([2, 3]));
+    await waitFor(() => expect(itemOf(source, "socks").packed).toBe(3));
+    expect(within(socks).getByText("3/4")).toBeTruthy();
+  });
+
+  it("a check or uncheck is sent at once, not after a pause", async () => {
+    const { user, source } = setup();
+    await ready();
+    await user.click(within(row("tops")).getByRole("button", { name: "Pack all Everyday tops" }));
+    await waitFor(() => expect(itemOf(source, "tops").packed).toBe(itemOf(source, "tops").qty));
+    await user.click(
+      within(row("tops")).getByRole("button", { name: "Mark Everyday tops unpacked" }),
+    );
+    await waitFor(() => expect(itemOf(source, "tops").packed).toBe(0));
+  });
+
+  it("sends taps that are still waiting when the screen is left", async () => {
+    const { user, source, view } = setup();
+    await ready();
+    await user.click(within(row("socks")).getByRole("button", { name: "Increase packed Socks" }));
+    view.unmount();
+    await waitFor(() => expect(itemOf(source, "socks").packed).toBe(2));
+  });
+
+  it("a failed change shows 'Not saved · Retry' beside that row and the Error chip, and Retry clears both when it works", async () => {
+    let fail = true;
+    const { user, source } = setup("san-diego", (base) => ({
+      ...base,
+      setPacked: (id, itemId, packed) =>
+        fail ? Promise.reject(new Error("nope")) : base.setPacked(id, itemId, packed),
     }));
     await ready();
     await user.click(within(row("tops")).getByRole("button", { name: "Pack all Everyday tops" }));
@@ -251,19 +308,45 @@ describe("packing", () => {
       await within(row("tops")).findByRole("button", { name: "Not saved · Retry" }),
     ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Couldn't save, retry" })).toBeTruthy();
+    // The row keeps showing what the user did, and nothing was stored.
     expect(itemOf(source, "tops").packed).toBe(1);
+    expect(within(row("tops")).getByText("2/2")).toBeTruthy();
+    fail = false;
     await user.click(within(row("tops")).getByRole("button", { name: "Not saved · Retry" }));
     await waitFor(() => expect(itemOf(source, "tops").packed).toBe(2));
     expect(within(row("tops")).queryByRole("button", { name: "Not saved · Retry" })).toBeNull();
     expect(screen.getByRole("link", { name: "Saved" })).toBeTruthy();
   });
 
+  it("Retry sends only the latest count, even after more taps on the failed row", async () => {
+    let fail = true;
+    const sent: number[] = [];
+    const { user, source } = setup("san-diego", (base) => ({
+      ...base,
+      setPacked: (id, itemId, packed) => {
+        sent.push(packed);
+        return fail ? Promise.reject(new Error("nope")) : base.setPacked(id, itemId, packed);
+      },
+    }));
+    await ready();
+    const socks = row("socks");
+    await user.click(within(socks).getByRole("button", { name: "Increase packed Socks" }));
+    await within(socks).findByRole("button", { name: "Not saved · Retry" });
+    await user.click(within(socks).getByRole("button", { name: "Decrease packed Socks" }));
+    await user.click(within(socks).getByRole("button", { name: "Decrease packed Socks" }));
+    await waitFor(() => expect(sent).toEqual([2, 0]));
+    fail = false;
+    await user.click(within(socks).getByRole("button", { name: "Not saved · Retry" }));
+    await waitFor(() => expect(itemOf(source, "socks").packed).toBe(0));
+    expect(sent).toEqual([2, 0, 0]);
+  });
+
   it("the chip's Retry re-sends the failed row change too, and the row error clears", async () => {
     let fail = true;
     const { user, source } = setup("san-diego", (base) => ({
       ...base,
-      incrementPacked: (id, itemId) =>
-        fail ? Promise.reject(new Error("nope")) : base.incrementPacked(id, itemId),
+      setPacked: (id, itemId, packed) =>
+        fail ? Promise.reject(new Error("nope")) : base.setPacked(id, itemId, packed),
     }));
     await ready();
     await user.click(within(row("socks")).getByRole("button", { name: "Increase packed Socks" }));
