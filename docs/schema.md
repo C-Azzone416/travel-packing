@@ -139,11 +139,18 @@ it is invented; nothing is real trip data.
 
 - **Idempotent.** The two sample trips have ids derived from the owner id, so re-running replaces exactly those trips
   and sets the staples back to the defaults. Other trips the owner has, and other owners' data, are untouched.
+- **Relative dates.** The sample trips' dates are computed from the run date: San Diego starts 7 days out (so it is always
+  upcoming, with a "Close forecast") and Lisbon started 43 days ago (always past); both are five days long. With the
+  prototype's "today" (2026-10-16) they land on its exact dates, Oct 23-27 and Sep 3-7, 2026.
 - **Never the app's own database.** The target is chosen explicitly: a local on-disk PGlite database
   (`--pglite <dir>`, default `.data/seed-db`, git-ignored), or a remote dev/preview database named by
-  `SEED_DATABASE_URL` (already migrated, and `--yes` is required). The app's `DATABASE_URL` is never read as a target.
+  `SEED_DATABASE_URL` (already migrated). A remote target also needs `--yes` **and** its host in `SEED_ALLOWED_HOSTS`
+  (an exact, normalized host list; if it is unset or empty every remote target is refused, so `--yes` alone is never
+  enough). The app's `DATABASE_URL` is never read as a target.
 - **Refuses production.** It stops when `NODE_ENV=production`, on any Vercel runtime, and when the target is the same
-  database as `DATABASE_URL` or `DATABASE_URL_UNPOOLED` (pooled or direct host spelling). It prints a summary only,
+  database as `DATABASE_URL` or `DATABASE_URL_UNPOOLED` (compared after normalizing the host and database name, so
+  upper-case, `-POOLER`, trailing-dot, trailing-slash and percent-encoded spellings are all caught), and when the URL carries
+  a `host`, `hostaddr`, `dbname` or `service` query override. It prints a summary only,
   never a connection string, date, or place.
 - `--owner <id>` or `SEED_OWNER_ID` sets the owner (default `seed-owner`). Tests can call `seedSyntheticData(db, ownerId)`
   directly as a fixture.

@@ -10,6 +10,21 @@ import type { StoredTrip } from "../data/trip-store";
 /** The prototype's fixed "today" for deterministic history and forecast labels (plan §6). */
 export const SAMPLE_TODAY = "2026-10-16";
 
+/**
+ * Sample trip dates are relative to the run date ("today"), so San Diego is always upcoming and Lisbon always past
+ * no matter when the seed runs. With today = SAMPLE_TODAY they land on the prototype's exact dates
+ * (San Diego Oct 23-27, Lisbon Sep 3-7, 2026).
+ */
+export const SAN_DIEGO_STARTS_IN_DAYS = 7;
+export const LISBON_STARTED_DAYS_AGO = 43;
+const TRIP_LENGTH_DAYS = 5;
+
+/** A YYYY-MM-DD date plus whole days (UTC calendar arithmetic, so no timezone or DST effects). */
+export function addDays(date: string, days: number): string {
+  const [year, month, day] = date.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
+}
+
 export type SampleTripSlug = "san-diego" | "lisbon";
 export const SAMPLE_TRIP_SLUGS: readonly SampleTripSlug[] = ["san-diego", "lisbon"];
 
@@ -46,6 +61,7 @@ function sampleTrip(
   start: string,
   end: string,
   config: TripConfig,
+  today: string,
 ): StoredTrip {
   const built = buildTripItems({ ...config, start, end }, DEFAULT_STAPLES);
   return {
@@ -65,7 +81,7 @@ function sampleTrip(
     ready: false,
     weather: {
       status: "pending",
-      label: forecastLabel(start, SAMPLE_TODAY),
+      label: forecastLabel(start, today),
       suggestion: "Compact umbrella",
     },
     copiedFrom: null,
@@ -75,13 +91,15 @@ function sampleTrip(
 }
 
 /** San Diego: upcoming, partially packed, Nice outfits on. */
-export function sanDiegoTrip(ownerId: string): StoredTrip {
+export function sanDiegoTrip(ownerId: string, today: string): StoredTrip {
+  const start = addDays(today, SAN_DIEGO_STARTS_IN_DAYS);
   const trip = sampleTrip(
     sampleTripId(ownerId, "san-diego"),
     SAN_DIEGO,
-    "2026-10-23",
-    "2026-10-27",
+    start,
+    addDays(start, TRIP_LENGTH_DAYS - 1),
     SAMPLE_CONFIG,
+    today,
   );
   const partial: Record<string, number> = {
     tops: 1,
@@ -99,12 +117,16 @@ export function sanDiegoTrip(ownerId: string): StoredTrip {
 }
 
 /** Lisbon: past, fully packed, bag confirmed, Ready, simulated umbrella accepted. */
-export function lisbonTrip(ownerId: string): StoredTrip {
-  const trip = sampleTrip(sampleTripId(ownerId, "lisbon"), LISBON, "2026-09-03", "2026-09-07", {
-    ...SAMPLE_CONFIG,
-    laundry: true,
-    spare: false,
-  });
+export function lisbonTrip(ownerId: string, today: string): StoredTrip {
+  const start = addDays(today, -LISBON_STARTED_DAYS_AGO);
+  const trip = sampleTrip(
+    sampleTripId(ownerId, "lisbon"),
+    LISBON,
+    start,
+    addDays(start, TRIP_LENGTH_DAYS - 1),
+    { ...SAMPLE_CONFIG, laundry: true, spare: false },
+    today,
+  );
   const umbrella: TripItem = {
     id: "weather-umbrella",
     name: "Compact umbrella",
@@ -122,6 +144,6 @@ export function lisbonTrip(ownerId: string): StoredTrip {
   };
 }
 
-export function sampleTrips(ownerId: string): StoredTrip[] {
-  return [sanDiegoTrip(ownerId), lisbonTrip(ownerId)];
+export function sampleTrips(ownerId: string, today: string): StoredTrip[] {
+  return [sanDiegoTrip(ownerId, today), lisbonTrip(ownerId, today)];
 }

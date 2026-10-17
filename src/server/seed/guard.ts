@@ -13,6 +13,15 @@ export class SeedRefused extends Error {
   }
 }
 
+/** A host in canonical form: percent-decoded, lowercased, trailing dot(s) dropped, `-pooler` suffix ignored. */
+export function normalizeHost(host: string): string {
+  return decoded(host)
+    .trim()
+    .toLowerCase()
+    .replace(/\.+$/, "")
+    .replace(/-pooler(?=\.|$)/, "");
+}
+
 function decoded(value: string): string {
   try {
     return decodeURIComponent(value);
@@ -30,15 +39,26 @@ function decoded(value: string): string {
 function target(connectionString: string): string | null {
   try {
     const url = new URL(connectionString);
-    const host = decoded(url.hostname)
-      .toLowerCase()
-      .replace(/\.+$/, "")
-      .replace(/-pooler(?=\.|$)/, "");
+    const host = normalizeHost(url.hostname);
     const database = decoded(url.pathname).split("/").filter(Boolean)[0] ?? "";
     return `${host}/${database}`;
   } catch {
     return null;
   }
+}
+
+/**
+ * SEED_ALLOWED_HOSTS: the hosts a remote seed may write to, comma or whitespace separated. Entries are compared as exact
+ * normalized hosts; there are no wildcards and no ports, schemes, or paths (an entry containing any of those can never
+ * match anything).
+ */
+function allowedHosts(raw: string | undefined): ReadonlySet<string> {
+  return new Set(
+    (raw ?? "")
+      .split(/[\s,]+/)
+      .map(normalizeHost)
+      .filter((entry) => entry.length > 0),
+  );
 }
 
 /** Query parameters that can point a connection somewhere other than the URL's host and path. */
@@ -78,5 +98,16 @@ export function assertSeedAllowed(env: Env, targetUrl?: string): void {
     if (configured && target(configured) === seedTarget) {
       throw new SeedRefused(`SEED_DATABASE_URL points at the same database as ${name}`);
     }
+  }
+
+  // Finally the explicit allowlist: --yes alone is never enough. With no list, every remote target is refused.
+  const allowed = allowedHosts(env.SEED_ALLOWED_HOSTS);
+  if (allowed.size === 0) {
+    throw new SeedRefused(
+      "remote seeding needs SEED_ALLOWED_HOSTS, an explicit list of hosts that may be seeded",
+    );
+  }
+  if (!allowed.has(seedTarget.split("/")[0])) {
+    throw new SeedRefused("SEED_DATABASE_URL's host is not in SEED_ALLOWED_HOSTS");
   }
 }

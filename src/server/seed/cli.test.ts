@@ -33,6 +33,7 @@ async function fakeDeps() {
   const closed: string[] = [];
   const opened: string[] = [];
   const deps: SeedCliDeps = {
+    today: () => "2026-10-16",
     openLocal: async (dir) => {
       opened.push(`local:${dir}`);
       return { db, close: async () => void closed.push("local") };
@@ -51,6 +52,7 @@ async function fakeDeps() {
 }
 
 const REMOTE = "postgres://user:pw@ep-dev-branch-123.us-west-2.aws.neon.tech/devdb";
+const ALLOW_REMOTE = { SEED_ALLOWED_HOSTS: "ep-dev-branch-123.us-west-2.aws.neon.tech" };
 
 describe("runSeedCli: local", () => {
   it("seeds a local database by default and prints only a summary", async () => {
@@ -97,7 +99,7 @@ describe("runSeedCli: local", () => {
 describe("runSeedCli: remote", () => {
   it("needs --yes before touching a remote database, and opens nothing without it", async () => {
     const { client, deps, logs, opened } = await fakeDeps();
-    expect(await runSeedCli([], { SEED_DATABASE_URL: REMOTE }, deps)).toBe(1);
+    expect(await runSeedCli([], { SEED_DATABASE_URL: REMOTE, ...ALLOW_REMOTE }, deps)).toBe(1);
     expect(logs).toEqual(["db:seed refused: seeding a remote database needs --yes"]);
     expect(opened).toEqual([]);
     await client.close();
@@ -105,7 +107,9 @@ describe("runSeedCli: remote", () => {
 
   it("seeds a remote database named by SEED_DATABASE_URL when confirmed", async () => {
     const { client, deps, closed, opened, tripOwners } = await fakeDeps();
-    expect(await runSeedCli(["--yes"], { SEED_DATABASE_URL: REMOTE }, deps)).toBe(0);
+    expect(await runSeedCli(["--yes"], { SEED_DATABASE_URL: REMOTE, ...ALLOW_REMOTE }, deps)).toBe(
+      0,
+    );
     expect(opened).toEqual([`remote:${REMOTE}`]);
     expect(closed).toEqual(["remote"]);
     expect(await tripOwners()).toEqual([DEFAULT_OWNER_ID]);
@@ -142,6 +146,7 @@ describe("runSeedCli: failures", () => {
     const closed: string[] = [];
     const logs: string[] = [];
     const deps: SeedCliDeps = {
+      today: () => "2026-10-16",
       openLocal: async () => ({
         db: {
           insert: () => {
@@ -163,6 +168,7 @@ describe("runSeedCli: failures", () => {
   it("reports a failure to open the database the same way", async () => {
     const logs: string[] = [];
     const deps: SeedCliDeps = {
+      today: () => "2026-10-16",
       openLocal: async () => {
         throw new Error(`cannot open ${scratch}`);
       },

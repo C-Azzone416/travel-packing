@@ -16,10 +16,14 @@ export interface SeedSummary {
 }
 
 /**
- * Replace the owner's sample trips (by their fixed ids) and set their staples to the prototype defaults.
+ * Replace the owner's sample trips (by their derived ids; dates are relative to `today`, YYYY-MM-DD) and set their staples to the prototype defaults.
  * Any other trips the owner has are left alone. Callers must have passed assertSeedAllowed first.
  */
-export async function seedSyntheticData(db: Db, ownerId: string): Promise<SeedSummary> {
+export async function seedSyntheticData(
+  db: Db,
+  ownerId: string,
+  today: string,
+): Promise<SeedSummary> {
   await db.insert(schema.users).values({ id: ownerId }).onConflictDoNothing();
 
   const ids = SAMPLE_TRIP_SLUGS.map((slug) => sampleTripId(ownerId, slug));
@@ -27,7 +31,7 @@ export async function seedSyntheticData(db: Db, ownerId: string): Promise<SeedSu
     await tx
       .delete(schema.trips)
       .where(and(inArray(schema.trips.id, ids), eq(schema.trips.ownerId, ownerId)));
-    for (const trip of sampleTrips(ownerId)) await insertTrip(tx as Db, ownerId, trip);
+    for (const trip of sampleTrips(ownerId, today)) await insertTrip(tx as Db, ownerId, trip);
   });
 
   const staples: Staple[] = DEFAULT_STAPLES.map((staple) => ({ ...staple }));

@@ -6,6 +6,14 @@ const SAME_DB_DIRECT = "postgres://app:secret@ep-dev-branch-123.us-west-2.aws.ne
 const SAME_DB_POOLED =
   "postgres://app:secret@ep-dev-branch-123-pooler.us-west-2.aws.neon.tech/devdb";
 
+const hostOf = (url: string) => new URL(url).hostname;
+const SEED_HOST = hostOf(SEED_URL);
+/** An environment that allowlists the host of `url`, plus anything else the test needs. */
+const allowing = (url: string, extra: Record<string, string> = {}) => ({
+  SEED_ALLOWED_HOSTS: hostOf(url),
+  ...extra,
+});
+
 function refusal(fn: () => void): SeedRefused {
   try {
     fn();
@@ -23,10 +31,12 @@ describe("assertSeedAllowed", () => {
   });
 
   it("allows a remote database that is not the app's own", () => {
-    expect(() => assertSeedAllowed({}, SEED_URL)).not.toThrow();
+    expect(() => assertSeedAllowed(allowing(SEED_URL), SEED_URL)).not.toThrow();
     expect(() =>
       assertSeedAllowed(
-        { DATABASE_URL: "postgres://app:secret@ep-other-456.us-west-2.aws.neon.tech/prod" },
+        allowing(SEED_URL, {
+          DATABASE_URL: "postgres://app:secret@ep-other-456.us-west-2.aws.neon.tech/prod",
+        }),
         SEED_URL,
       ),
     ).not.toThrow();
@@ -72,7 +82,10 @@ describe("assertSeedAllowed", () => {
 
     it("but a different database name on the same host is a different database", () => {
       expect(() =>
-        assertSeedAllowed({ DATABASE_URL: SAME_DB_DIRECT.replace("devdb", "prod") }, SEED_URL),
+        assertSeedAllowed(
+          allowing(SEED_URL, { DATABASE_URL: SAME_DB_DIRECT.replace("devdb", "prod") }),
+          SEED_URL,
+        ),
       ).not.toThrow();
     });
 
@@ -158,7 +171,9 @@ describe("assertSeedAllowed", () => {
           "postgres://u:p@ep-dev-branch-1234.us-west-2.aws.neon.tech/devdb",
         ],
       ])("%s", (_name, seedUrl) => {
-        expect(() => assertSeedAllowed({ DATABASE_URL: app }, seedUrl)).not.toThrow();
+        expect(() =>
+          assertSeedAllowed(allowing(seedUrl, { DATABASE_URL: app }), seedUrl),
+        ).not.toThrow();
       });
     });
 
@@ -176,7 +191,7 @@ describe("assertSeedAllowed", () => {
 
       it("still allows harmless query parameters", () => {
         expect(() =>
-          assertSeedAllowed({}, `${SEED_URL}?sslmode=require&connect_timeout=5`),
+          assertSeedAllowed(allowing(SEED_URL), `${SEED_URL}?sslmode=require&connect_timeout=5`),
         ).not.toThrow();
       });
     });
@@ -185,6 +200,102 @@ describe("assertSeedAllowed", () => {
       expect(refusal(() => assertSeedAllowed({}, "not a url")).message).toContain(
         "not a valid connection URL",
       );
+    });
+  });
+
+  describe("SEED_ALLOWED_HOSTS: a remote target must be explicitly allowed (--yes alone is never enough)", () => {
+    it.each([
+      ["unset", {}],
+      ["empty", { SEED_ALLOWED_HOSTS: "" }],
+      ["blank", { SEED_ALLOWED_HOSTS: "   " }],
+      ["only separators", { SEED_ALLOWED_HOSTS: " , ,, " }],
+    ])("refuses every remote target when the list is %s", (_name, env) => {
+      const error = refusal(() => assertSeedAllowed(env, SEED_URL));
+      // The unset/empty case has its own message (distinct from "host not in the list").
+      expect(error.message).toContain("needs SEED_ALLOWED_HOSTS");
+      expect(error.message).not.toContain("not in SEED_ALLOWED_HOSTS");
+    });
+
+    it("refuses a host that is not on the list", () => {
+      const error = refusal(() =>
+        assertSeedAllowed(
+          { SEED_ALLOWED_HOSTS: "ep-someone-else-1.us-west-2.aws.neon.tech" },
+          SEED_URL,
+        ),
+      );
+      expect(error.message).toContain("not in SEED_ALLOWED_HOSTS");
+    });
+
+    it("allows a host that is on the list, alone or among several (comma or whitespace separated)", () => {
+      expect(() => assertSeedAllowed({ SEED_ALLOWED_HOSTS: SEED_HOST }, SEED_URL)).not.toThrow();
+      expect(() =>
+        assertSeedAllowed(
+          { SEED_ALLOWED_HOSTS: `a.example.test, ${SEED_HOST} ,b.example.test` },
+          SEED_URL,
+        ),
+      ).not.toThrow();
+      expect(() =>
+        assertSeedAllowed(
+          { SEED_ALLOWED_HOSTS: `a.example.test\n${SEED_HOST}\tb.example.test` },
+          SEED_URL,
+        ),
+      ).not.toThrow();
+    });
+
+    it.each([
+      ["an upper-case entry", SEED_HOST.toUpperCase()],
+      ["a trailing-dot entry", `${SEED_HOST}.`],
+      [
+        "a pooled spelling of the host",
+        SEED_HOST.replace("ep-dev-branch-123", "ep-dev-branch-123-pooler"),
+      ],
+      ["a percent-encoded entry", SEED_HOST.replace("ep-", "%65p-")],
+    ])("matches the host however the list spells it: %s", (_name, entry) => {
+      expect(() => assertSeedAllowed({ SEED_ALLOWED_HOSTS: entry }, SEED_URL)).not.toThrow();
+    });
+
+    it.each([
+      ["a wildcard", "*"],
+      ["a wildcard subdomain", "*.us-west-2.aws.neon.tech"],
+      ["a suffix", "us-west-2.aws.neon.tech"],
+      ["a prefix", "ep-dev-branch"],
+      ["an entry with a port", `${SEED_HOST}:5432`],
+      ["an entry with a scheme", `postgres://${SEED_HOST}`],
+      ["an entry with a path", `${SEED_HOST}/devdb`],
+    ])("never matches on %s (exact hosts only)", (_name, entry) => {
+      expect(
+        refusal(() => assertSeedAllowed({ SEED_ALLOWED_HOSTS: entry }, SEED_URL)),
+      ).toBeInstanceOf(SeedRefused);
+    });
+
+    it("is not needed for a local database", () => {
+      expect(() => assertSeedAllowed({})).not.toThrow();
+    });
+
+    it("never overrides the other refusals, even for an allowlisted host", () => {
+      const env = { SEED_ALLOWED_HOSTS: SEED_HOST };
+      expect(
+        refusal(() => assertSeedAllowed({ ...env, NODE_ENV: "production" }, SEED_URL)).message,
+      ).toContain("NODE_ENV");
+      expect(refusal(() => assertSeedAllowed({ ...env, VERCEL: "1" }, SEED_URL)).message).toContain(
+        "Vercel",
+      );
+      expect(
+        refusal(() => assertSeedAllowed({ ...env, DATABASE_URL: SAME_DB_DIRECT }, SEED_URL))
+          .message,
+      ).toContain("DATABASE_URL");
+      expect(
+        refusal(() => assertSeedAllowed(env, `${SEED_URL}?host=elsewhere.example.test`)).message,
+      ).toContain("must not override");
+    });
+
+    it("does not echo the host or the list in its messages", () => {
+      const errors = [
+        refusal(() => assertSeedAllowed({}, SEED_URL)),
+        refusal(() => assertSeedAllowed({ SEED_ALLOWED_HOSTS: "other.example.test" }, SEED_URL)),
+      ];
+      for (const error of errors)
+        expect(error.message).not.toMatch(/neon\.tech|other\.example|devdb|pw@/);
     });
   });
 

@@ -27,6 +27,8 @@ export interface OpenedDb {
 }
 
 export interface SeedCliDeps {
+  /** The run date (YYYY-MM-DD, UTC), from the injected clock: the sample trips' dates are relative to it. */
+  today(): string;
   openLocal(dir: string): Promise<OpenedDb>;
   openRemote(url: string): Promise<OpenedDb>;
   log(line: string): void;
@@ -69,7 +71,7 @@ export async function runSeedCli(argv: string[], env: Env, deps: SeedCliDeps): P
       throw new SeedRefused("seeding a remote database needs --yes");
     }
     opened = remoteUrl ? await deps.openRemote(remoteUrl) : await deps.openLocal(options.localDir);
-    const summary = await seedSyntheticData(opened.db, options.owner);
+    const summary = await seedSyntheticData(opened.db, options.owner, deps.today());
     deps.log(
       `seeded synthetic data: ${summary.trips} trips and ${summary.staples} staples for one owner`,
     );
@@ -92,6 +94,7 @@ export async function openLocalDb(dir: string): Promise<OpenedDb> {
 }
 
 export const realDeps: SeedCliDeps = {
+  today: () => new Date().toISOString().slice(0, 10),
   openLocal: openLocalDb,
   openRemote: async (url) => ({ db: createAppDb(url), close: async () => {} }),
   log: (line) => console.log(line),

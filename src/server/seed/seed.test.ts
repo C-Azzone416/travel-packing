@@ -9,7 +9,14 @@ import { createFakeAuth, makeContext, signedInAs } from "../data/__fixtures__/se
 import { listStaples } from "../data/staple-store";
 import * as service from "../data/service";
 import { loadTrips, type StoredTrip } from "../data/trip-store";
-import { SAMPLE_TODAY, sampleTripId, sampleTrips } from "./sample-data";
+import {
+  addDays,
+  LISBON_STARTED_DAYS_AGO,
+  SAMPLE_TODAY,
+  SAN_DIEGO_STARTS_IN_DAYS,
+  sampleTripId,
+  sampleTrips,
+} from "./sample-data";
 import { seedSyntheticData } from "./seed";
 
 let ctx: Awaited<ReturnType<typeof createMigratedDb>>;
@@ -53,7 +60,7 @@ async function state(ownerId: string) {
 
 describe("the sample set (plan §6)", () => {
   beforeEach(async () => {
-    await seedSyntheticData(db(), OWNER);
+    await seedSyntheticData(db(), OWNER, SAMPLE_TODAY);
   });
 
   it("seeds exactly two trips and the default staples", async () => {
@@ -133,9 +140,9 @@ describe("the sample set (plan §6)", () => {
 
 describe("idempotent", () => {
   it("running twice yields the same state", async () => {
-    await seedSyntheticData(db(), OWNER);
+    await seedSyntheticData(db(), OWNER, SAMPLE_TODAY);
     const first = await state(OWNER);
-    await seedSyntheticData(db(), OWNER);
+    await seedSyntheticData(db(), OWNER, SAMPLE_TODAY);
     expect(await state(OWNER)).toBe(first);
     const counts = JSON.parse(first).counts;
     expect(counts).toEqual({
@@ -147,8 +154,8 @@ describe("idempotent", () => {
   });
 
   it("does not bump staple versions when nothing changed", async () => {
-    await seedSyntheticData(db(), OWNER);
-    await seedSyntheticData(db(), OWNER);
+    await seedSyntheticData(db(), OWNER, SAMPLE_TODAY);
+    await seedSyntheticData(db(), OWNER, SAMPLE_TODAY);
     const versions = (
       await ctx.client.query<{ version: number }>('SELECT DISTINCT version FROM "staples"')
     ).rows;
@@ -156,7 +163,7 @@ describe("idempotent", () => {
   });
 
   it("restores the sample trips and staples after edits, leaving unrelated trips alone", async () => {
-    await seedSyntheticData(db(), OWNER);
+    await seedSyntheticData(db(), OWNER, SAMPLE_TODAY);
     const canonical = JSON.stringify(await bySlug(OWNER, "Lisbon"));
     const extraId = "00000000-0000-4000-8000-0000000000aa";
     await ctx.client.query(
@@ -168,7 +175,7 @@ describe("idempotent", () => {
     );
     await ctx.client.query(`UPDATE staples SET qty = 9 WHERE semantic_id = 'socks'`);
 
-    await seedSyntheticData(db(), OWNER);
+    await seedSyntheticData(db(), OWNER, SAMPLE_TODAY);
     expect(JSON.stringify(await bySlug(OWNER, "Lisbon"))).toBe(canonical);
     expect((await listStaples(db(), OWNER)).find((staple) => staple.id === "socks")?.qty).toBe(1);
     const mine = await ctx.client.query<{ destination: string }>(
@@ -179,14 +186,14 @@ describe("idempotent", () => {
   });
 
   it("leaves other owners' data alone and gives each owner their own sample trips", async () => {
-    await seedSyntheticData(db(), "owner-one");
-    await seedSyntheticData(db(), "owner-two");
+    await seedSyntheticData(db(), "owner-one", SAMPLE_TODAY);
+    await seedSyntheticData(db(), "owner-two", SAMPLE_TODAY);
     const one = await loadTrips(db(), "owner-one", { filter: "live" });
     const two = await loadTrips(db(), "owner-two", { filter: "live" });
     expect(one).toHaveLength(2);
     expect(two).toHaveLength(2);
     expect(new Set([...one, ...two].map((trip) => trip.id)).size).toBe(4);
-    await seedSyntheticData(db(), "owner-one");
+    await seedSyntheticData(db(), "owner-one", SAMPLE_TODAY);
     expect(await loadTrips(db(), "owner-two", { filter: "live" })).toHaveLength(2);
   });
 });
@@ -202,9 +209,68 @@ describe("sampleTripId", () => {
   });
 
   it("sampleTrips uses those ids", () => {
-    expect(sampleTrips("owner-a").map((trip) => trip.id)).toEqual([
+    expect(sampleTrips("owner-a", SAMPLE_TODAY).map((trip) => trip.id)).toEqual([
       sampleTripId("owner-a", "san-diego"),
       sampleTripId("owner-a", "lisbon"),
     ]);
+  });
+});
+
+describe("addDays", () => {
+  it.each([
+    ["2026-10-16", 7, "2026-10-23"],
+    ["2026-10-16", -43, "2026-09-03"],
+    ["2026-10-29", 3, "2026-11-01"],
+    ["2026-12-28", 7, "2027-01-04"],
+    ["2026-01-03", -5, "2025-12-29"],
+    ["2028-02-27", 3, "2028-03-01"],
+    ["2027-02-27", 3, "2027-03-02"],
+    ["2026-03-08", 1, "2026-03-09"],
+    ["2026-10-16", 0, "2026-10-16"],
+  ])("%s %+d days = %s", (date, days, expected) => {
+    expect(addDays(date, days)).toBe(expected);
+  });
+});
+
+describe("sample dates are relative to the run date", () => {
+  it("land on the prototype's exact dates when the run date is the prototype's 'today'", () => {
+    const [sanDiego, lisbon] = sampleTrips("o", SAMPLE_TODAY);
+    expect([sanDiego.start, sanDiego.end]).toEqual(["2026-10-23", "2026-10-27"]);
+    expect([lisbon.start, lisbon.end]).toEqual(["2026-09-03", "2026-09-07"]);
+  });
+
+  it("are the constants the offsets say", () => {
+    expect(SAN_DIEGO_STARTS_IN_DAYS).toBe(7);
+    expect(LISBON_STARTED_DAYS_AGO).toBe(43);
+  });
+
+  it.each([SAMPLE_TODAY, "2026-12-28", "2028-02-27", "2030-01-31", "2035-07-04", "2026-03-08"])(
+    "run on %s: San Diego is upcoming, Lisbon is past, both five days long",
+    async (today) => {
+      await resetData(ctx.client);
+      await seedSyntheticData(db(), OWNER, today);
+      const sanDiego = await bySlug(OWNER, "San Diego");
+      const lisbon = await bySlug(OWNER, "Lisbon");
+      expect(classifyTrip(sanDiego as unknown as LifecycleTrip, today)).toBe("upcoming");
+      expect(classifyTrip(lisbon as unknown as LifecycleTrip, today)).toBe("past");
+      expect(sanDiego.start).toBe(addDays(today, 7));
+      expect(sanDiego.days).toBe(5);
+      expect(lisbon.end).toBe(addDays(today, -39));
+      expect(lisbon.days).toBe(5);
+      // The simulated forecast label follows the same run date: close for San Diego, never for a past trip's start.
+      expect(sanDiego.weather.label).toBe("Close forecast");
+      expect(lisbon.weather.label).toBe("Seasonal outlook");
+    },
+  );
+
+  it("re-running on a later day moves the sample trips and keeps San Diego upcoming", async () => {
+    await seedSyntheticData(db(), OWNER, "2026-10-16");
+    await seedSyntheticData(db(), OWNER, "2026-11-30");
+    const trips = await loadTrips(db(), OWNER, { filter: "live" });
+    expect(trips).toHaveLength(2);
+    expect((await bySlug(OWNER, "San Diego")).start).toBe("2026-12-07");
+    expect(
+      classifyTrip((await bySlug(OWNER, "San Diego")) as unknown as LifecycleTrip, "2026-11-30"),
+    ).toBe("upcoming");
   });
 });
