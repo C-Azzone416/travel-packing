@@ -2,28 +2,42 @@ import { defineConfig } from "@playwright/test";
 import { join } from "node:path";
 import { E2E_PASSWORD, OWNER_EMAIL } from "./tests/e2e/helpers/auth";
 
-// The port is overridable so several worktrees (or agents) can run e2e on one machine. Servers are never reused:
+// Ports are overridable so several worktrees (or agents) can run e2e on one machine. Servers are never reused:
 // reusing whatever happens to be listening could silently test another checkout's code.
 const PORT = Number(process.env.E2E_PORT ?? 3100);
+const DB_PORT = Number(process.env.E2E_DB_PORT ?? 5433);
+const E2E_DATABASE_URL = `postgres://postgres:postgres@127.0.0.1:${DB_PORT}/postgres`;
 
 export default defineConfig({
   testDir: "tests/e2e",
-  webServer: {
-    command: `npm run build && npm run start -- --port ${PORT}`,
-    url: `http://localhost:${PORT}`,
-    reuseExistingServer: false,
-    timeout: 180_000,
-    // Synthetic, e2e-only sign-in; the server refuses this mode on any Vercel deployment.
-    env: {
-      // Compiles the e2e-only sign-in into THIS build only. Deployed builds never set it, so the code is absent.
-      NEXT_PUBLIC_E2E_BUILD: "1",
-      AUTH_E2E_FAKE: "1",
-      AUTH_E2E_PASSWORD: E2E_PASSWORD,
-      // Server-side session tokens for the fake sign-in (ignored by git via test-results/).
-      AUTH_E2E_STATE_DIR: join(process.cwd(), "test-results", "e2e-sessions"),
-      OWNER_EMAIL_ALLOWLIST: OWNER_EMAIL,
+  webServer: [
+    {
+      // A real Postgres (PGlite behind the wire protocol), migrated and seeded with the synthetic sample set, in
+      // memory so every run starts clean. Test use only; the script refuses production and Vercel.
+      command: "npx tsx scripts/e2e-db-server.ts",
+      port: DB_PORT,
+      reuseExistingServer: false,
+      timeout: 60_000,
+      env: { E2E_DB_PORT: String(DB_PORT) },
     },
-  },
+    {
+      command: `npm run build && npm run start -- --port ${PORT}`,
+      url: `http://localhost:${PORT}`,
+      reuseExistingServer: false,
+      timeout: 180_000,
+      // Synthetic, e2e-only sign-in and database driver; the server refuses both on any Vercel deployment.
+      env: {
+        // Compiles the e2e-only modules into THIS build only. Deployed builds never set it, so the code is absent.
+        NEXT_PUBLIC_E2E_BUILD: "1",
+        AUTH_E2E_FAKE: "1",
+        AUTH_E2E_PASSWORD: E2E_PASSWORD,
+        // Server-side session tokens for the fake sign-in (ignored by git via test-results/).
+        AUTH_E2E_STATE_DIR: join(process.cwd(), "test-results", "e2e-sessions"),
+        E2E_DATABASE_URL,
+        OWNER_EMAIL_ALLOWLIST: OWNER_EMAIL,
+      },
+    },
+  ],
   use: { baseURL: `http://localhost:${PORT}` },
   projects: [
     { name: "phone", use: { browserName: "chromium", viewport: { width: 390, height: 844 } } },

@@ -49,29 +49,24 @@ export async function loadTrips(
 
   const ids = tripRows.map((row) => row.id);
   const owned = (column: PgColumn) => eq(column, ownerId);
-  const [preferences, weather, items] = await Promise.all([
-    db
-      .select()
-      .from(schema.tripPreferences)
-      .where(
-        and(inArray(schema.tripPreferences.tripId, ids), owned(schema.tripPreferences.ownerId)),
-      ),
-    db
-      .select()
-      .from(schema.weatherSuggestions)
-      .where(
-        and(
-          inArray(schema.weatherSuggestions.tripId, ids),
-          owned(schema.weatherSuggestions.ownerId),
-        ),
-      ),
-    db
-      .select({ item: schema.tripItems, packed: schema.tripItemProgress.packed })
-      .from(schema.tripItems)
-      .leftJoin(schema.tripItemProgress, eq(schema.tripItemProgress.itemId, schema.tripItems.id))
-      .where(and(inArray(schema.tripItems.tripId, ids), owned(schema.tripItems.ownerId)))
-      .orderBy(schema.tripItems.tripId, schema.tripItems.sortOrder),
-  ]);
+  // Sequential on purpose: inside a transaction these share one connection, and issuing queries concurrently on a
+  // single node-postgres client is deprecated (removed in pg@9).
+  const preferences = await db
+    .select()
+    .from(schema.tripPreferences)
+    .where(and(inArray(schema.tripPreferences.tripId, ids), owned(schema.tripPreferences.ownerId)));
+  const weather = await db
+    .select()
+    .from(schema.weatherSuggestions)
+    .where(
+      and(inArray(schema.weatherSuggestions.tripId, ids), owned(schema.weatherSuggestions.ownerId)),
+    );
+  const items = await db
+    .select({ item: schema.tripItems, packed: schema.tripItemProgress.packed })
+    .from(schema.tripItems)
+    .leftJoin(schema.tripItemProgress, eq(schema.tripItemProgress.itemId, schema.tripItems.id))
+    .where(and(inArray(schema.tripItems.tripId, ids), owned(schema.tripItems.ownerId)))
+    .orderBy(schema.tripItems.tripId, schema.tripItems.sortOrder);
 
   return tripRows.map((row) => {
     const prefs = preferences.find((entry) => entry.tripId === row.id);
