@@ -9,6 +9,7 @@ import {
   incrementPacked,
   markNotReady,
   markReady,
+  normalizeQty,
   packedTotals,
   removeItem,
   revokeReadyForChange,
@@ -334,9 +335,64 @@ describe("editItemQty", () => {
     [-4, 1],
     [2.8, 2],
     [Number.NaN, 1],
+    [Number.POSITIVE_INFINITY, 1],
+    [1.5, 1],
   ])("normalizes qty %s to %s", (qty, expected) => {
     expect(ok(editItemQty(trip([shirt(0)]), "shirt", qty)).trip.items[0].qty).toBe(expected);
   });
+});
+
+describe("normalizeQty", () => {
+  it.each([
+    [0, 1],
+    [-2, 1],
+    [Number.NaN, 1],
+    [Number.POSITIVE_INFINITY, 1],
+    [Number.NEGATIVE_INFINITY, 1],
+    [1.5, 1],
+    [2.8, 2],
+    [4, 4],
+  ])("%s -> %s", (qty, expected) => {
+    expect(normalizeQty(qty)).toBe(expected);
+  });
+});
+
+describe("addItem qty validation", () => {
+  it.each([
+    [0, 1],
+    [-2, 1],
+    [Number.NaN, 1],
+    [Number.POSITIVE_INFINITY, 1],
+    [1.5, 1],
+    [3.9, 3],
+  ])(
+    "an added item with qty %s is stored with qty %s and a clamped packed count",
+    (qty, expected) => {
+      const added = ok(addItem(packedPlain(), { id: "hat", qty, packed: 99 })).trip;
+      const hat = added.items.at(-1)!;
+      expect(hat).toEqual({ id: "hat", qty: expected, packed: expected });
+    },
+  );
+
+  it("negative or NaN packed on an added item becomes 0", () => {
+    expect(
+      ok(addItem(packedPlain(), { id: "hat", qty: 2, packed: -2 })).trip.items.at(-1)!.packed,
+    ).toBe(0);
+    expect(
+      ok(addItem(packedPlain(), { id: "hat", qty: 2, packed: Number.NaN })).trip.items.at(-1)!
+        .packed,
+    ).toBe(0);
+  });
+
+  it.each([0, -2, Number.NaN, 1.5])(
+    "a trip with a bad-qty item (%s) can still be fully packed and marked Ready",
+    (qty) => {
+      const added = ok(addItem(packedPlain(), { id: "hat", qty, packed: 0 })).trip;
+      const packed = ok(togglePacked(added, "hat")).trip;
+      expect(allPacked(packed)).toBe(true);
+      expect(ok(markReady(packed)).trip.ready).toBe(true);
+    },
+  );
 });
 
 describe("addItem / removeItem", () => {

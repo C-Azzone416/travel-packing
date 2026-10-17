@@ -44,6 +44,11 @@ export function clampPacked(packed: number, qty: number): number {
   return Math.min(Math.max(whole, 0), qty);
 }
 
+/** Quantities are whole numbers >= 1; anything else (0, negatives, NaN, Infinity) becomes 1, fractions truncate. */
+export function normalizeQty(qty: number): number {
+  return Math.max(1, Number.isFinite(qty) ? Math.trunc(qty) : 1);
+}
+
 export function allPacked(trip: ReadinessTrip): boolean {
   const itemsPacked = trip.items.length > 0 && trip.items.every((item) => item.packed >= item.qty);
   return itemsPacked && (toiletryItems(trip).length === 0 || trip.toiletryBagPacked);
@@ -131,7 +136,7 @@ export function editItemQty<T extends ReadinessTrip>(
 ): CommandResult<T> {
   const item = findItem(trip, itemId);
   if (!item) return rejected(trip, "ITEM_NOT_FOUND");
-  const nextQty = Math.max(1, Number.isFinite(qty) ? Math.trunc(qty) : 1);
+  const nextQty = normalizeQty(qty);
   const edited = replaceItem(trip, {
     ...item,
     qty: nextQty,
@@ -153,7 +158,8 @@ export function addItem<T extends ReadinessTrip>(
   item: T["items"][number],
 ): CommandResult<T> {
   if (findItem(trip, item.id)) return rejected(trip, "DUPLICATE_ITEM");
-  const added = { ...item, packed: clampPacked(item.packed, item.qty) };
+  const qty = normalizeQty(item.qty);
+  const added = { ...item, qty, packed: clampPacked(item.packed, qty) };
   const bagPacked = isToiletryItem(added) ? false : trip.toiletryBagPacked;
   return accepted(
     normalize({
