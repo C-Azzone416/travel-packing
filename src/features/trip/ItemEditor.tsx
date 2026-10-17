@@ -121,12 +121,12 @@ export function ItemEditor({
               setNameError(false);
             }}
           />
-          {nameError ? (
-            <span id="name-error" className="field-error" role="alert">
-              Enter a name.
-            </span>
-          ) : null}
         </label>
+        {nameError ? (
+          <span id="name-error" className="field-error" role="alert">
+            Enter a name.
+          </span>
+        ) : null}
         <label className="field">
           Quantity
           <input
