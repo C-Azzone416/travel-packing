@@ -1840,8 +1840,28 @@ input:disabled {
   outline-offset: 2px;
 }
 
-/* "Change theme" sits under the trip's details in the header copy panel. */
+/* "Change theme": on a phone it sits on the header's bottom row beside the status chip, so the copy panel stays short
+   and the picture shows; from 660px it sits inside the copy panel under the trip's details. */
 .change-theme {
-  margin-top: 10px;
+  grid-column: 2;
+  justify-self: end;
+  align-self: center;
   min-height: 44px;
+  margin: 0;
+  background-color: rgba(245, 247, 242, 0.92);
+}
+@media (min-width: 660px) {
+  .change-theme {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    justify-self: start;
+    align-self: end;
+    margin: 0 0 13px 15px;
+    z-index: 1;
+  }
+  /* Panel and button share row 2, so the button sits in the panel's bottom padding. */
+  .destination-head-copy {
+    grid-row: 2;
+    padding-bottom: 67px;
+  }
 }

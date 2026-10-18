@@ -324,20 +324,20 @@ export function TripScreen({ tripId }: { tripId: string }) {
               {place ? `${place} · ` : ""}
               {formatRange(trip)} · {formatDays(trip.days)}
             </p>
-            <Button
-              variant="secondary"
-              small
-              className="change-theme"
-              onClick={() => setDialog({ kind: "theme" })}
-            >
-              Change theme
-            </Button>
           </div>
           {trip.ready ? (
             <StatusBadge status="ready">Ready</StatusBadge>
           ) : (
             <StatusBadge status="draft">Packing</StatusBadge>
           )}
+          <Button
+            variant="secondary"
+            small
+            className="change-theme"
+            onClick={() => setDialog({ kind: "theme" })}
+          >
+            Change theme
+          </Button>
         </div>
       </div>
 

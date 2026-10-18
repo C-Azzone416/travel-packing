@@ -220,7 +220,23 @@ test("changing the theme from the trip header is stored, and the dashboard card 
   await page.emulateMedia({ reducedMotion: "reduce" });
   await openSanDiego(page);
   expect(await headerArt(page)).toBe("beach");
-  await page.getByRole("button", { name: "Change theme" }).click();
+  // Placement: on a phone the button sits outside the copy panel (so the picture shows); on desktop inside it.
+  const button = page.getByRole("button", { name: "Change theme" });
+  const panel = (await page.locator(".destination-head-copy").boundingBox())!;
+  const at = (await button.boundingBox())!;
+  expect(at.height).toBeGreaterThanOrEqual(43.9);
+  const inside =
+    at.x >= panel.x &&
+    at.x + at.width <= panel.x + panel.width &&
+    at.y >= panel.y &&
+    at.y + at.height <= panel.y + panel.height;
+  expect(inside, testInfo.project.name).toBe(testInfo.project.name === "desktop");
+  if (testInfo.project.name === "phone") {
+    const head = (await page.locator(".destination-trip-head").boundingBox())!;
+    // The copy panel leaves at least a third of the header for the picture.
+    expect(panel.height).toBeLessThan(head.height * 0.67);
+  }
+  await button.click();
   const sheet = page.getByRole("dialog", { name: "Change theme" });
   await expect(sheet.getByRole("radio", { name: "Beach" })).toBeChecked();
   await expect(sheet.getByRole("radio", { name: "Beach" })).toBeFocused();
