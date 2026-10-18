@@ -1,0 +1,2 @@
+CREATE TYPE "public"."trip_theme" AS ENUM('travel', 'city', 'beach', 'outdoors', 'theme_park', 'home');--> statement-breakpoint
+ALTER TABLE "trips" ADD COLUMN "theme" "trip_theme" DEFAULT 'travel' NOT NULL;

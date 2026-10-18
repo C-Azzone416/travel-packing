@@ -2,9 +2,12 @@
 // so nothing unexpected reaches the domain or the database.
 
 import { z } from "zod";
+import { THEME_IDS } from "../../domain/themes";
 import { ITEM_CATEGORIES, TOILETRY_GROUP } from "../db/schema";
 
 export const tripId = z.uuid();
+/** The six built-in themes, and nothing else: an unknown value is INVALID_INPUT (#48). */
+export const theme = z.enum(THEME_IDS);
 export const itemId = z.string().min(1).max(100);
 export const scope = z.enum(["this-trip", "remember"]);
 export const timing = z.enum(["main", "return", "packlast"]);
@@ -60,12 +63,17 @@ export const createTripInput = z.object({
   location: locationSelection,
   ...dates.shape,
   config: tripConfig,
+  /** Travel when left out. */
+  theme: theme.optional(),
 });
 export const copyTripInput = z.object({
   sourceId: tripId,
   location: locationSelection,
   ...dates.shape,
+  /** The source trip's theme when left out. */
+  theme: theme.optional(),
 });
+export const setThemeInput = z.object({ tripId, theme });
 
 export const stapleInput = z.object({
   semanticId: z.string().min(1).max(100),

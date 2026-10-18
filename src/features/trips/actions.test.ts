@@ -129,6 +129,7 @@ describe("trips server actions", () => {
       start: "2030-04-01",
       end: "2030-04-05",
       config: CONFIG,
+      theme: "travel",
       ...patch,
     });
 

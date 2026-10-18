@@ -306,7 +306,7 @@ export function TripScreen({ tripId }: { tripId: string }) {
   return (
     <section className="screen">
       <div className="destination-trip-head">
-        <DestinationArt locationId={trip.location?.id} variant="header" priority />
+        <DestinationArt theme={trip.theme} variant="header" priority />
         <div className="destination-head-content">
           <Link className="back" href="/" aria-label="Back to trips">
             ←

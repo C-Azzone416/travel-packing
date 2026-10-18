@@ -9,7 +9,12 @@ import {
   type Migration,
 } from "./migrator";
 
-const EXPECTED_TAGS = ["0000_init", "0001_progress_clamp_trigger", "0002_location_columns"];
+const EXPECTED_TAGS = [
+  "0000_init",
+  "0001_progress_clamp_trigger",
+  "0002_location_columns",
+  "0003_trip_theme",
+];
 
 // One in-memory Postgres for the file; each test starts from an empty public schema.
 const client = new PGlite();
@@ -77,6 +82,7 @@ describe("migrateUp", () => {
       "item_category",
       "item_section",
       "staple_cadence",
+      "trip_theme",
       "weather_status",
     ]);
     expect(await userFunctions()).toEqual(["clamp_progress_to_qty"]);
@@ -122,7 +128,11 @@ describe("migrateDown", () => {
 
   it("rolls back only the requested number of steps, newest first", async () => {
     await migrateUp(client, migrations);
-    expect(await migrateDown(client, migrations, 2)).toEqual([EXPECTED_TAGS[2], EXPECTED_TAGS[1]]);
+    expect(await migrateDown(client, migrations, 3)).toEqual([
+      EXPECTED_TAGS[3],
+      EXPECTED_TAGS[2],
+      EXPECTED_TAGS[1],
+    ]);
     expect(await appliedMigrations(client)).toEqual([EXPECTED_TAGS[0]]);
     expect(await userFunctions()).toEqual([]);
     expect(await userTables()).toContain("trip_items");
@@ -147,7 +157,7 @@ describe("migrateDown", () => {
     ];
     await migrateUp(client, migrations);
     expect(await tripColumns()).toEqual(expect.arrayContaining(added));
-    expect(await migrateDown(client, migrations, 1)).toEqual([EXPECTED_TAGS[2]]);
+    expect(await migrateDown(client, migrations, 2)).toEqual([EXPECTED_TAGS[3], EXPECTED_TAGS[2]]);
     const remaining = await tripColumns();
     for (const column of added) expect(remaining).not.toContain(column);
     expect(remaining).toEqual(
@@ -157,6 +167,33 @@ describe("migrateDown", () => {
     expect(await userFunctions()).toEqual(["clamp_progress_to_qty"]);
     await migrateUp(client, migrations);
     expect(await tripColumns()).toEqual(expect.arrayContaining(added));
+  });
+
+  it("rolling back just the theme removes the column and its type, and up restores them with every old trip on Travel", async () => {
+    const themeColumn = async () =>
+      (
+        await client.query<{ column_default: string | null; is_nullable: string }>(
+          `SELECT column_default, is_nullable FROM information_schema.columns
+           WHERE table_name = 'trips' AND column_name = 'theme'`,
+        )
+      ).rows;
+    await migrateUp(client, migrations.slice(0, 3));
+    await client.exec(
+      `INSERT INTO "users" ("id") VALUES ('u1');
+       INSERT INTO "trips" ("owner_id","destination","start_date","end_date","days","daily_days")
+       VALUES ('u1','Anywhere','2030-04-01','2030-04-03',3,1)`,
+    );
+    await migrateUp(client, migrations);
+    const [column] = await themeColumn();
+    expect(column.is_nullable).toBe("NO");
+    expect(column.column_default).toContain("travel");
+    const old = await client.query<{ theme: string }>(`SELECT theme FROM trips`);
+    expect(old.rows).toEqual([{ theme: "travel" }]);
+    await expect(client.query(`UPDATE trips SET theme = 'volcano'`)).rejects.toThrow();
+    expect(await migrateDown(client, migrations, 1)).toEqual([EXPECTED_TAGS[3]]);
+    expect(await themeColumn()).toEqual([]);
+    expect(await userTypes()).not.toContain("trip_theme");
+    expect(await migrateUp(client, migrations)).toEqual([EXPECTED_TAGS[3]]);
   });
 
   it("does nothing on an empty database", async () => {
