@@ -413,9 +413,11 @@ test.describe("more states", () => {
 async function expectBadgeClear(row: Locator): Promise<{ sameLine: boolean }> {
   const name = (await row.locator(".item-name").boundingBox())!;
   const badge = (await row.locator(".timing-tag").boundingBox())!;
+  // The text right before the badge: everything in .item-meta up to the badge, last client rect.
   const last = await row.locator(".item-meta").evaluate((node) => {
     const range = document.createRange();
-    range.selectNodeContents(node.firstChild as Node);
+    range.setStart(node, 0);
+    range.setEndBefore(node.querySelector(".timing-tag")!);
     const rects = Array.from(range.getClientRects());
     const box = rects[rects.length - 1];
     return { right: box.right, top: box.top, bottom: box.bottom };
