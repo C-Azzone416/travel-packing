@@ -843,6 +843,8 @@ main {
 
 .trip-tabs {
   display: inline-flex;
+  flex-wrap: wrap;
+  max-width: 100%;
   gap: 5px;
   margin: 0 0 14px;
   padding: 5px;
@@ -1360,6 +1362,12 @@ input:disabled {
 .list-section-head h3 {
   margin: 0;
 }
+/* The review has no heading between its title (h1) and its sections, so they are h2 in the outline but look the same. */
+.review-group .list-section-head h2 {
+  margin: 0;
+  font-size: 16px;
+  letter-spacing: normal;
+}
 .packing-list {
   display: grid;
   gap: 8px;
@@ -1505,6 +1513,10 @@ input:disabled {
 .bag-placement.complete {
   border-color: #aed2c0;
   background: #d4eadf;
+}
+/* The muted text colour is too light on the green "in the suitcase" card (contrast); use the ink colour there. */
+.bag-placement.complete p {
+  color: var(--ink);
 }
 .review-prompt {
   margin-top: 16px;

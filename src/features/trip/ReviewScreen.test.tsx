@@ -77,7 +77,8 @@ describe("loading and states", () => {
       "Toiletries · Bathroom",
       "Return travel outfit",
     ]) {
-      expect(screen.getByRole("heading", { name: heading })).toBeTruthy();
+      // Level 2: the title is the only level 1 heading, and nothing skips a level.
+      expect(screen.getByRole("heading", { name: heading, level: 2 })).toBeTruthy();
     }
     expect(screen.getByText("Packing", { selector: ".status-pill" })).toBeTruthy();
     expect(screen.getByText("There are still unpacked items.")).toBeTruthy();

@@ -41,7 +41,7 @@ function ReviewRows({
     <section className="review-group" aria-labelledby={id}>
       <div className="list-section-head">
         <div>
-          <h3 id={id}>{title}</h3>
+          <h2 id={id}>{title}</h2>
         </div>
         <span className="tag">{items.length}</span>
       </div>

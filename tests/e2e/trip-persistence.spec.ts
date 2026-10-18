@@ -140,13 +140,17 @@ test("accepting the weather suggestion adds one umbrella, and it is still there 
 
 test("an edit and a removal are stored", async ({ page }) => {
   await openSanDiego(page);
-  await row(page, "sunglasses").getByRole("button", { name: "Edit Sunglasses" }).click();
+  await row(page, "sunglasses")
+    .getByRole("button", { name: /^Sunglasses / })
+    .click();
   const editor = page.getByRole("dialog", { name: "Edit item" });
   await editor.getByLabel("Item name").fill("Polarized sunglasses");
   await editor.getByRole("button", { name: "Save item" }).click();
   await expect(row(page, "sunglasses")).toContainText("Polarized sunglasses");
 
-  await row(page, "nice-shoes").getByRole("button", { name: "Edit Dress shoes" }).click();
+  await row(page, "nice-shoes")
+    .getByRole("button", { name: /^Dress shoes / })
+    .click();
   await page
     .getByRole("dialog", { name: "Edit item" })
     .getByRole("button", { name: "Remove item" })

@@ -508,6 +508,9 @@ describe("quick view", () => {
     await user.click(within(card("San Diego")).getByRole("button", { name: /Quick view/ }));
     const quick = document.getElementById("quick-view-san-diego") as HTMLElement;
     expect(within(quick).getByText("Read-only preview")).toBeTruthy();
+    // Its list scrolls, so it must be reachable and named for keyboard and screen-reader users.
+    const list = within(quick).getByRole("region", { name: "Quick view items" });
+    expect(list.getAttribute("tabindex")).toBe("0");
     expect(
       within(quick).getByRole("button", { name: "Still to pack" }).getAttribute("aria-pressed"),
     ).toBe("true");

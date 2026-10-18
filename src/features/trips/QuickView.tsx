@@ -40,7 +40,7 @@ export function QuickView({ trip, id }: { trip: LifecycleTrip; id: string }) {
       <p className="sr-only" role="status" aria-label="Quick view result count">
         {count === 1 ? "1 item shown" : `${count} items shown`}
       </p>
-      <div className="quick-view-list">
+      <div className="quick-view-list" role="region" aria-label="Quick view items" tabIndex={0}>
         {model.categories.length === 0 ? (
           <div className="empty-state compact">No items left in this view.</div>
         ) : (
