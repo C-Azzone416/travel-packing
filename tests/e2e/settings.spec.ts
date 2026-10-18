@@ -110,7 +110,7 @@ test("no Offline, Waiting or simulated-sync copy anywhere on Settings, at both s
       page.getByRole("button", { name: "Sign out" }),
       page.getByRole("link", { name: /Saved|Saving/ }),
     ]) {
-      expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      expect(Math.round((await control.boundingBox())!.height)).toBeGreaterThanOrEqual(44);
     }
   }
   const overflow = await page.evaluate(

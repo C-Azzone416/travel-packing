@@ -29,6 +29,7 @@ import {
   togglePackedAction,
   undoBagPlacementAction,
   updatePreferencesAction,
+  upsertStapleAction,
 } from "./trip-actions";
 import type { TripsSource } from "./trips-source";
 
@@ -65,6 +66,7 @@ export function TripsSourceProvider({
         {
           getTrip: getTripAction,
           listStaples: listStaplesAction,
+          upsertStaple: upsertStapleAction,
           setPacked: setPackedAction,
           togglePacked: togglePackedAction,
           incrementPacked: incrementPackedAction,

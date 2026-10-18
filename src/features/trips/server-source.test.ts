@@ -68,6 +68,10 @@ function tripActions(result: TripCommandResult = { ok: true, trip, signals }) {
       calls.push(["listStaples"]);
       return result.ok ? ({ ok: true, staples: [] } as const) : result;
     }),
+    upsertStaple: vi.fn(async (staple: { id: string }) => {
+      calls.push(["upsertStaple", staple.id]);
+      return result.ok ? ({ ok: true, staples: [] } as const) : result;
+    }),
     ...Object.fromEntries(TRIP_COMMANDS.map((name) => [name, record(name)])),
   };
   return { fakes: fakes as unknown as TripActions, calls };
@@ -138,6 +142,22 @@ describe("createServerTripsSource: per-trip commands", () => {
     expect(calls).toEqual([["getTrip", "t"], ["listStaples"]]);
   });
 
+  it("upserts a staple through its own action and returns the list it gives back", async () => {
+    const { fakes, calls } = tripActions();
+    const source = createServerTripsSource(actions().fakes, fakes);
+    const staple = {
+      id: "razor",
+      name: "Razor",
+      qty: 1,
+      cadence: "per trip",
+      category: "Bathroom",
+      packLast: false,
+    } as const;
+    expect(await source.upsertStaple(staple)).toEqual([]);
+    expect(fakes.upsertStaple).toHaveBeenCalledWith(staple);
+    expect(calls).toEqual([["upsertStaple", "razor"]]);
+  });
+
   it.each(["NOT_FOUND", "REJECTED", "INVALID_INPUT", "INTERNAL"] as const)(
     "turns a failed action (%s) into a TripsSourceError carrying only the code",
     async (code) => {
@@ -148,6 +168,15 @@ describe("createServerTripsSource: per-trip commands", () => {
         ...TRIP_COMMANDS.map((name) => run[name]),
         () => source.getTrip("t"),
         () => source.listStaples(),
+        () =>
+          source.upsertStaple({
+            id: "x",
+            name: "X",
+            qty: 1,
+            cadence: "per trip",
+            category: "Other essentials",
+            packLast: false,
+          }),
       ]) {
         const error = await call().catch((caught: unknown) => caught);
         expect(error).toBeInstanceOf(TripsSourceError);

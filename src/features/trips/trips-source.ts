@@ -63,6 +63,8 @@ export interface TripsSource {
   getTrip(tripId: string): Promise<LifecycleTrip>;
   /** The owner's staples (what "Remember for future trips" changes). */
   listStaples(): Promise<Staple[]>;
+  /** Create or update one of the owner's staples (matched by id). Applies to future trips only; returns the whole list. */
+  upsertStaple(staple: Staple): Promise<Staple[]>;
   /** Sets one item's packed count (clamped to 0..qty). The screen sends one of these per item after taps settle. */
   setPacked(tripId: string, itemId: string, packed: number): Promise<TripChange>;
   togglePacked(tripId: string, itemId: string): Promise<TripChange>;
@@ -183,6 +185,13 @@ export function createMemoryTripsSource(
 
     getTrip: async (id) => find(id),
     listStaples: async () => currentStaples,
+    upsertStaple: async (staple) => {
+      const exists = currentStaples.some((entry) => entry.id === staple.id);
+      currentStaples = exists
+        ? currentStaples.map((entry) => (entry.id === staple.id ? { ...staple } : entry))
+        : [...currentStaples, { ...staple }];
+      return currentStaples;
+    },
     setPacked: (id, itemId, packed) => command(id, (trip) => setPacked(trip, itemId, packed)),
     togglePacked: (id, itemId) => command(id, (trip) => togglePacked(trip, itemId)),
     incrementPacked: (id, itemId) => command(id, (trip) => incrementPacked(trip, itemId)),
