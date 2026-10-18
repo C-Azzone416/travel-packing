@@ -27,6 +27,7 @@ import {
   type CommandResult,
   type Signals,
 } from "@/domain/readiness";
+import { isThemeId, type ThemeId } from "@/domain/themes";
 import type { Scope, Staple, TripConfig } from "@/domain/trip";
 import {
   archiveTrip,
@@ -78,6 +79,8 @@ export interface TripsSource {
   skipWeather(tripId: string): Promise<TripChange>;
   reviewWeatherAgain(tripId: string): Promise<TripChange>;
   updatePreferences(tripId: string, config: TripConfig): Promise<TripChange>;
+  /** Change the trip's picture (#48). Only the six built-in themes are accepted; nothing else about the trip changes. */
+  setTheme(tripId: string, theme: ThemeId): Promise<TripChange>;
 }
 
 export class TripsSourceError extends Error {
@@ -199,5 +202,9 @@ export function createMemoryTripsSource(
     reviewWeatherAgain: (id) => direct(id, reviewWeatherAgain),
     updatePreferences: (id, config) =>
       direct(id, (trip) => recalculateSuggestions(trip, config, calculateSuggestions)),
+    setTheme: (id, theme) => {
+      if (!isThemeId(theme)) return Promise.reject(new TripsSourceError("INVALID_INPUT"));
+      return direct(id, (trip) => ({ ...trip, theme }));
+    },
   };
 }

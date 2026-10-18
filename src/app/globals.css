@@ -1839,3 +1839,9 @@ input:disabled {
   outline: 3px solid var(--teal);
   outline-offset: 2px;
 }
+
+/* "Change theme" sits under the trip's details in the header copy panel. */
+.change-theme {
+  margin-top: 10px;
+  min-height: 44px;
+}

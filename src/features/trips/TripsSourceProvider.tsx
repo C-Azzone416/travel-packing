@@ -24,6 +24,7 @@ import {
   removeItemAction,
   reviewWeatherAgainAction,
   setPackedAction,
+  setThemeAction,
   skipWeatherAction,
   togglePackedAction,
   undoBagPlacementAction,
@@ -79,6 +80,7 @@ export function TripsSourceProvider({
           skipWeather: skipWeatherAction,
           reviewWeatherAgain: reviewWeatherAgainAction,
           updatePreferences: updatePreferencesAction,
+          setTheme: setThemeAction,
         },
       ),
   );
