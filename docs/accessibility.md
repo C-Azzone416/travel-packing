@@ -56,8 +56,6 @@ every dialog that is not a destructive confirm backdrop press.
 
 ## Deferred
 
-- **Staples screen** (#66 is not merged yet): its list, editor and duplicate-name states are added to the axe spec as
-  soon as it lands.
 - **Manual screen-reader and large-system-text passes** need a person and a device (see below).
 - **Combobox in a real screen reader**: the ARIA pattern (expanded state, active option, result count) is unit-tested
   and axe-clean, but only a person with VoiceOver can confirm how it is read.

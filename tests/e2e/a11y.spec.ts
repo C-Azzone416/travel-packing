@@ -536,3 +536,42 @@ test("screenshots of the visual fixes (after)", async ({ page }, testInfo) => {
   await page.evaluate(() => window.scrollTo(0, 0));
   await shot("error-chip");
 });
+
+test.describe("staples", () => {
+  async function openStaples(page: Page) {
+    await openDashboard(page);
+    await page.goto("/staples");
+    await expect(
+      page.getByRole("heading", { name: "Every trip starts here", level: 1 }),
+    ).toBeVisible();
+    await expect(page.getByRole("region", { name: "Clothing" })).toBeVisible();
+  }
+
+  test("the list, and the Pack last filter", async ({ page }) => {
+    await openStaples(page);
+    await expectAccessible(page, "staples list");
+    await page.getByRole("button", { name: "Pack last" }).click();
+    await expect(page.getByRole("button", { name: "Pack last" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expectAccessible(page, "staples pack last filter");
+  });
+
+  test("the editor for a Bathroom staple, and the add form with a duplicate name", async ({
+    page,
+  }) => {
+    await openStaples(page);
+    await page
+      .locator('[data-staple-id="last-toothbrush"]')
+      .getByRole("button", { name: "Edit Toothbrush" })
+      .click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await expectAccessible(page, "staple editor (Bathroom)");
+    await page.getByRole("dialog").getByRole("button", { name: /close/i }).click();
+    await page.getByRole("button", { name: /Add/ }).click();
+    await page.getByRole("dialog").getByLabel("Item name").fill("socks");
+    await expect(page.getByText("You already have Socks.")).toBeVisible();
+    await expectAccessible(page, "staple add form, duplicate name");
+  });
+});
