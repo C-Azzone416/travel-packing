@@ -17,8 +17,18 @@ vi.mock("@/server/auth/auth-runtime", () => ({
 vi.mock("@/app/sign-in/actions", () => ({ signOutAction: async () => {} }));
 
 describe("screens", () => {
-  it("Staples renders its heading", () => {
-    expect(renderToStaticMarkup(<StaplesPage />)).toContain("<h1>Staples</h1>");
+  it("Staples renders its screen, starting in its loading state", () => {
+    const html = renderToStaticMarkup(
+      <ToastProvider>
+        <SaveStatusProvider>
+          <TripsSourceProvider>
+            <StaplesPage />
+          </TripsSourceProvider>
+        </SaveStatusProvider>
+      </ToastProvider>,
+    );
+    expect(html).toContain("<h1>Every trip starts here</h1>");
+    expect(html).toContain('aria-label="Loading staples"');
   });
 
   it("Settings renders the signed-in account and a Sign out button", async () => {

@@ -27,6 +27,7 @@ export interface TripsActions {
 export interface TripActions {
   getTrip(tripId: string): Promise<TripReadResult>;
   listStaples(): Promise<StaplesReadResult>;
+  upsertStaple(staple: Staple): Promise<StaplesReadResult>;
   setPacked(tripId: string, itemId: string, packed: number): Promise<TripCommandResult>;
   togglePacked(tripId: string, itemId: string): Promise<TripCommandResult>;
   incrementPacked(tripId: string, itemId: string): Promise<TripCommandResult>;
@@ -87,6 +88,7 @@ export function createServerTripsSource(actions: TripsActions, trip: TripActions
 
     getTrip: (id) => unwrapRead(trip.getTrip(id)),
     listStaples: () => unwrapStaples(trip.listStaples()),
+    upsertStaple: (staple) => unwrapStaples(trip.upsertStaple(staple)),
     setPacked: (id, itemId, packed) => unwrapChange(trip.setPacked(id, itemId, packed)),
     togglePacked: (id, itemId) => unwrapChange(trip.togglePacked(id, itemId)),
     incrementPacked: (id, itemId) => unwrapChange(trip.incrementPacked(id, itemId)),
