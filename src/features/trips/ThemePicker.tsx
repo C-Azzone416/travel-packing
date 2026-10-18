@@ -32,6 +32,7 @@ export function ThemePicker({
               name={name}
               value={theme.id}
               checked={value === theme.id}
+              data-modal-autofocus={value === theme.id ? "" : undefined}
               onChange={() => onChange(theme.id)}
             />
             <span className="theme-thumb" aria-hidden="true">
