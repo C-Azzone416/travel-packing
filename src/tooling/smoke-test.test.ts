@@ -1,0 +1,77 @@
+import { describe, expect, it } from "vitest";
+import { smokeTest } from "./smoke-test";
+
+type Routes = Record<string, Response | "throw">;
+function fakeFetch(routes: Routes, seen: { url: string; headers: Record<string, string> }[] = []) {
+  return async (url: string, init: { redirect: "manual"; headers: Record<string, string> }) => {
+    seen.push({ url, headers: init.headers });
+    expect(init.redirect).toBe("manual");
+    const route = routes[new URL(url).pathname];
+    if (!route || route === "throw") throw new Error("network");
+    return route;
+  };
+}
+const redirect = (location: string, status = 307) =>
+  new Response(null, { status, headers: { location } });
+const healthy = (): Routes => ({
+  "/sign-in": new Response("ok", { status: 200 }),
+  "/": redirect("/sign-in"),
+});
+
+describe("smokeTest", () => {
+  it("passes when sign-in is 200 and the protected page redirects to sign-in", async () => {
+    const result = await smokeTest("https://x.test/", fakeFetch(healthy()));
+    expect(result.ok).toBe(true);
+    expect(result.lines).toEqual([
+      "ok   /sign-in: 200 (expected 200)",
+      "ok   /: 307 (expected a redirect to /sign-in when signed out)",
+    ]);
+  });
+
+  it("accepts an absolute redirect to sign-in", async () => {
+    const routes = { ...healthy(), "/": redirect("https://x.test/sign-in?next=%2F", 302) };
+    expect((await smokeTest("https://x.test", fakeFetch(routes))).ok).toBe(true);
+  });
+
+  it("fails when sign-in is not 200", async () => {
+    const routes = { ...healthy(), "/sign-in": new Response("no", { status: 500 }) };
+    const result = await smokeTest("https://x.test", fakeFetch(routes));
+    expect(result.ok).toBe(false);
+    expect(result.lines[0]).toBe("FAIL /sign-in: 500 (expected 200)");
+  });
+
+  it.each([
+    ["a 200 (page open to anyone)", new Response("dashboard", { status: 200 })],
+    ["a redirect elsewhere", redirect("/somewhere")],
+    ["a redirect with no location", new Response(null, { status: 307 })],
+    ["a redirect to an unparseable location", redirect("http://[bad")],
+  ])("fails when the protected page gives %s", async (_name, response) => {
+    const result = await smokeTest("https://x.test", fakeFetch({ ...healthy(), "/": response }));
+    expect(result.ok).toBe(false);
+    expect(result.lines[1]).toMatch(/^FAIL \/:/);
+  });
+
+  it("fails, without echoing the error, when the site does not answer", async () => {
+    const result = await smokeTest(
+      "https://x.test",
+      fakeFetch({ "/sign-in": "throw", "/": "throw" }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.lines).toEqual([
+      "FAIL /sign-in: no response (expected 200)",
+      "FAIL /: no response (expected a redirect to /sign-in when signed out)",
+    ]);
+  });
+
+  it("sends the protection bypass header only when given a secret", async () => {
+    const seen: { url: string; headers: Record<string, string> }[] = [];
+    await smokeTest("https://x.test", fakeFetch(healthy(), seen), { bypassSecret: "s3cret" });
+    expect(seen.map((s) => s.headers)).toEqual([
+      { "x-vercel-protection-bypass": "s3cret" },
+      { "x-vercel-protection-bypass": "s3cret" },
+    ]);
+    const plain: typeof seen = [];
+    await smokeTest("https://x.test", fakeFetch(healthy(), plain));
+    expect(plain.map((s) => s.headers)).toEqual([{}, {}]);
+  });
+});

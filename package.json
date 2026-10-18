@@ -22,10 +22,13 @@
     "build:webpack": "next build --webpack",
     "db:migrate:remote": "tsx scripts/db-migrate-remote.ts",
     "db:seed": "tsx scripts/db-seed.ts",
-    "check:repo-hygiene": "tsx scripts/check-repo-hygiene.ts"
+    "check:repo-hygiene": "tsx scripts/check-repo-hygiene.ts",
+    "check:deploy-env": "tsx scripts/check-deploy-env.ts",
+    "check:migration-target": "tsx scripts/check-migration-target.ts",
+    "smoke": "tsx scripts/smoke-test.ts"
   },
   "dependencies": {
-    "@neondatabase/auth": "^0.6.0-beta",
+    "@neondatabase/auth": "0.6.0-beta",
     "@neondatabase/serverless": "^1.2.0",
     "drizzle-orm": "^0.45.4",
     "next": "^16.4.2",
