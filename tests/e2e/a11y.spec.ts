@@ -372,14 +372,17 @@ test.describe("more states", () => {
 
   test("the dashboard while it loads, and when it cannot load", async ({ page }) => {
     await openDashboard(page);
-    // Slow answers: the skeleton shows.
+    // Answers held back until the check is done: the skeleton shows for as long as we need.
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
     await page.route("**/*", async (route) => {
-      if (isAction(route.request())) await new Promise((resolve) => setTimeout(resolve, 2500));
-      await route.continue();
+      if (isAction(route.request())) await held;
+      await route.continue().catch(() => undefined);
     });
     await page.reload();
     await expect(page.getByRole("region", { name: "Loading trips" })).toBeVisible();
     await expectAccessible(page, "dashboard loading");
+    release();
     await page.unroute("**/*");
     // No answer at all: the load error card.
     await page.route("**/*", (route) =>
@@ -425,15 +428,19 @@ test.describe("design's known items", () => {
     await expect(row).toBeVisible();
     const name = (await row.locator(".item-name").boundingBox())!;
     const badge = (await row.locator(".timing-tag").boundingBox())!;
-    // Beside the category line, not on top of the name, and at least 6px from its text.
-    const meta = (await row.locator(".item-meta").evaluate((node) => {
+    // The badge never touches the text before it. On a wide row it sits on the category line with a gap of at least
+    // 6px; when the line is too narrow it wraps below that line instead. Either way it is below the name.
+    const last = await row.locator(".item-meta").evaluate((node) => {
       const range = document.createRange();
       range.selectNodeContents(node.firstChild as Node);
-      const box = range.getBoundingClientRect();
-      return { right: box.right };
-    })) as { right: number };
-    expect(badge.x - meta.right).toBeGreaterThanOrEqual(6);
-    expect(badge.y + badge.height).toBeGreaterThan(name.y);
+      const rects = Array.from(range.getClientRects());
+      const box = rects[rects.length - 1];
+      return { right: box.right, top: box.top, bottom: box.bottom };
+    });
+    const sameLine = badge.y < last.bottom - 1 && badge.y + badge.height > last.top + 1;
+    if (sameLine) expect(badge.x - last.right).toBeGreaterThanOrEqual(6);
+    else expect(badge.y).toBeGreaterThanOrEqual(last.bottom - 1);
+    expect(badge.y).toBeGreaterThanOrEqual(name.y + name.height - 1);
   });
 
   test("group labels are the same size as field labels", async ({ page }) => {
