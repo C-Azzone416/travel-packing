@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { artworkFor } from "./destination-art";
 import {
   customLocation,
   CUSTOM_LOCATION_ID,
@@ -30,11 +29,9 @@ describe("curated locations", () => {
     ]);
   });
 
-  it("includes the three entries that have their own art", () => {
-    for (const id of ["us-ca-san-diego", "pt-lisbon", "gb-eng-london"]) {
+  it("includes the sample trips' places", () => {
+    for (const id of ["us-ca-san-diego", "pt-lisbon", "gb-eng-london"])
       expect(locationById(id), id).not.toBeNull();
-      expect(artworkFor(id).key).not.toBe("fallback");
-    }
   });
 
   it("looks a location up by ID, or returns null", () => {
@@ -84,7 +81,6 @@ describe("custom destinations", () => {
       countryCode: "",
       label: "Grandma's cabin",
     });
-    expect(artworkFor(custom.id).key).toBe("fallback");
   });
 
   it("recognizes only the custom ID", () => {

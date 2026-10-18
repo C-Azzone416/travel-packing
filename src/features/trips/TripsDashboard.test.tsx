@@ -237,10 +237,27 @@ describe("upcoming view", () => {
     const typed = card("Somewhere typed");
     expect(within(typed).queryByText(/Simulated/)).toBeNull();
     expect(within(typed).queryByText(/United States/)).toBeNull();
-    expect(typed.querySelector("[data-art-key]")?.getAttribute("data-art-key")).toBe("fallback");
+    // The picture is the trip's theme (inherited here from the San Diego row it was copied from), never its place.
+    expect(typed.querySelector("[data-art-key]")?.getAttribute("data-art-key")).toBe("beach");
     const [first, second] = [...view.container.querySelectorAll("article img")];
     expect(first.getAttribute("loading")).toBe("eager");
     expect(second.getAttribute("loading")).toBe("lazy");
+  });
+});
+
+describe("trip themes on cards", () => {
+  it("each card shows its trip's theme art, and a trip's theme is the only thing that picks it", async () => {
+    const state = sampleLifecycleState();
+    state.trips = state.trips.map((trip) =>
+      trip.id === "san-diego" ? { ...trip, theme: "theme_park" as const } : trip,
+    );
+    setup(state);
+    await ready();
+    const sanDiego = card("San Diego");
+    expect(sanDiego.querySelector("[data-art-key]")?.getAttribute("data-art-key")).toBe(
+      "theme_park",
+    );
+    expect(sanDiego.querySelector("img")?.getAttribute("src")).toBe("/themes/theme_park.svg");
   });
 });
 

@@ -152,6 +152,77 @@ describe("step 1: confirm the trip", () => {
   });
 });
 
+describe("trip theme", () => {
+  const radios = () => screen.getAllByRole("radio") as HTMLInputElement[];
+
+  it("appears only once a destination is confirmed, after the dates, with Travel selected", async () => {
+    const { user } = setup();
+    expect(screen.queryByRole("group", { name: "Trip theme" })).toBeNull();
+    await user.type(search(), "lisbon");
+    await user.click(within(screen.getByRole("listbox")).getAllByRole("option")[0]);
+    const group = screen.getByRole("group", { name: "Trip theme" });
+    expect(
+      within(group).getByText("Pick a picture for your trip. You can change it later."),
+    ).toBeTruthy();
+    expect(radios().map((radio) => radio.checked)).toEqual([
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+    ]);
+    // After the dates fields, before the Continue button.
+    const position = (node: Node) => (node as HTMLElement).compareDocumentPosition.bind(node);
+    expect(position(ret())(group) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(position(group)(cont()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("goes away again when the destination is cleared", async () => {
+    const { user } = setup();
+    await user.type(search(), "lisbon");
+    await user.click(within(screen.getByRole("listbox")).getAllByRole("option")[0]);
+    await user.click(screen.getByRole("button", { name: "Change" }));
+    expect(screen.queryByRole("group", { name: "Trip theme" })).toBeNull();
+  });
+
+  it("the chosen theme is what gets saved, and counts as a change for the discard prompt", async () => {
+    const { user, source } = setup();
+    await fillDetails(user);
+    await user.click(screen.getByRole("radio", { name: "Beach" }));
+    await user.click(cont());
+    await user.click(await screen.findByRole("button", { name: "Save trip" }));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/"));
+    expect(source.snapshot().trips[0].theme).toBe("beach");
+  });
+
+  it("a trip saved without touching it is Travel", async () => {
+    const { user, source } = setup();
+    await fillDetails(user);
+    await user.click(cont());
+    await user.click(await screen.findByRole("button", { name: "Save trip" }));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/"));
+    expect(source.snapshot().trips[0].theme).toBe("travel");
+  });
+
+  it("a copy starts on the source trip's theme, and it can be changed before saving", async () => {
+    const { user, source } = setup({ copyId: "lisbon" });
+    await screen.findByRole("heading", { name: "Confirm the trip" });
+    await fillDetails(user, "paris", "2026-12-04", "2026-12-08");
+    expect(
+      radios()
+        .find((radio) => radio.checked)
+        ?.closest("label")?.textContent,
+    ).toContain("City");
+    await user.click(screen.getByRole("radio", { name: "Home / family" }));
+    await user.click(cont());
+    await user.click(await screen.findByRole("button", { name: "Save trip" }));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/"));
+    expect(source.snapshot().trips[0].theme).toBe("home");
+    expect(source.snapshot().trips.find((trip) => trip.id === "lisbon")?.theme).toBe("city");
+  });
+});
+
 describe("step 2: shape the list", () => {
   it("shows the live calculation from the draft and updates everything the moment a preference changes", async () => {
     const { user } = setup();

@@ -267,6 +267,7 @@ describe("per-trip commands", () => {
         reuseNice: false,
         returnOutfit: true,
       },
+      theme: "travel",
     });
     expect(future.items.find((entry) => entry.id === "sunglasses")).toMatchObject({
       name: "Polarized sunglasses",

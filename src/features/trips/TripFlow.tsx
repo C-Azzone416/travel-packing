@@ -15,6 +15,7 @@ import { isCustomLocation } from "@/domain/locations";
 import {
   selectDraftLocation,
   setDraftConfig,
+  setDraftTheme,
   type LifecycleTrip,
   type SampleLocation,
   type TripDraft,
@@ -35,6 +36,7 @@ import {
 } from "./draft";
 import { LocationPicker } from "./LocationPicker";
 import { useLocationProvider } from "./LocationProviderContext";
+import { ThemePicker } from "./ThemePicker";
 import { useTripsSource } from "./TripsSourceProvider";
 import { formatDays, formatRange } from "./view";
 
@@ -247,6 +249,12 @@ function FlowBody({
             <p className="notice" role="status" aria-label="Date notice">
               {adjusted ? "Return date moved to match your departure." : ""}
             </p>
+            {draft.location ? (
+              <ThemePicker
+                value={draft.theme}
+                onChange={(theme) => setDraft(setDraftTheme(draft, theme))}
+              />
+            ) : null}
             {from ? (
               <div className="callout">
                 <strong>The original {from.destination} trip stays unchanged.</strong> This copy
