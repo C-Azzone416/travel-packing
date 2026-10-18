@@ -379,3 +379,27 @@ describe("the toiletry bag step", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 });
+
+describe("the 'No longer ready' toast is for the change that revoked Ready, not later ones", () => {
+  it("shows once, then stays quiet for the next change", async () => {
+    const { user, source } = await setup("lisbon");
+    await screen.findByRole("heading", { name: "Toiletries · Bathroom" });
+    await user.click(
+      within(rowOf("tops")).getByRole("button", { name: "Packed ✓ Everyday tops, mark unpacked" }),
+    );
+    expect(await screen.findByText("No longer ready: an item was unchecked")).toBeTruthy();
+    expect(tripOf(source, "lisbon").ready).toBe(false);
+    await waitFor(() => expect(screen.queryByText(/No longer ready/)).toBeNull(), {
+      timeout: 6000,
+    });
+    await user.click(within(rowOf("tops")).getByRole("button", { name: /^Mark packed/ }));
+    await within(rowOf("tops")).findByRole("button", {
+      name: "Packed ✓ Everyday tops, mark unpacked",
+    });
+    await user.click(
+      within(rowOf("tops")).getByRole("button", { name: "Packed ✓ Everyday tops, mark unpacked" }),
+    );
+    await within(rowOf("tops")).findByRole("button", { name: /^Mark packed/ });
+    expect(screen.queryByText(/No longer ready/)).toBeNull();
+  }, 20_000);
+});
