@@ -1286,3 +1286,48 @@ describe("edges", () => {
     expect(screen.getByRole("heading", { name: "Everyday & occasion items" })).toBeTruthy();
   });
 });
+
+describe("Ready is never revoked silently", () => {
+  it("says why when unchecking an item takes a Ready trip back to packing", async () => {
+    const { user, source } = setup("lisbon");
+    await ready("Lisbon");
+    expect(screen.getByText("Ready", { selector: ".status-pill" })).toBeTruthy();
+    await user.click(
+      within(row("tops")).getByRole("button", { name: "Mark Everyday tops unpacked" }),
+    );
+    expect(await screen.findByText("No longer ready: an item was unchecked")).toBeTruthy();
+    expect(tripOf(source, "lisbon").ready).toBe(false);
+    expect(screen.getByText("Packing", { selector: ".status-pill" })).toBeTruthy();
+  });
+
+  it("says nothing when a change leaves the trip as it was", async () => {
+    const { user } = setup("san-diego");
+    await ready();
+    await user.click(within(row("tops")).getByRole("button", { name: "Pack all Everyday tops" }));
+    await waitFor(() => expect(screen.getByText("Everyday tops 2 of 2 packed")).toBeTruthy());
+    expect(screen.queryByText(/No longer ready/)).toBeNull();
+  });
+});
+
+describe("the 'No longer ready' toast is for the change that revoked Ready, not later ones", () => {
+  it("shows once, then stays quiet for the next change", async () => {
+    const { user, source } = setup("lisbon");
+    await ready("Lisbon");
+    await user.click(
+      within(row("tops")).getByRole("button", { name: "Mark Everyday tops unpacked" }),
+    );
+    expect(await screen.findByText("No longer ready: an item was unchecked")).toBeTruthy();
+    expect(tripOf(source, "lisbon").ready).toBe(false);
+    // Let that toast expire, then change the (no longer Ready) trip twice more.
+    await waitFor(() => expect(screen.queryByText(/No longer ready/)).toBeNull(), {
+      timeout: 6000,
+    });
+    await user.click(within(row("tops")).getByRole("button", { name: "Pack all Everyday tops" }));
+    await within(row("tops")).findByRole("button", { name: "Mark Everyday tops unpacked" });
+    await user.click(
+      within(row("tops")).getByRole("button", { name: "Mark Everyday tops unpacked" }),
+    );
+    await within(row("tops")).findByRole("button", { name: "Pack all Everyday tops" });
+    expect(screen.queryByText(/No longer ready/)).toBeNull();
+  }, 20_000);
+});

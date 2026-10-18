@@ -1741,6 +1741,29 @@ input:disabled {
   text-underline-offset: 2px;
 }
 
+/* A button that is not available yet (aria-disabled, still focusable so its reason can be reached) must look it:
+   Seafoam-soft with muted text, no pointer. (#17) */
+.button[aria-disabled="true"],
+.button[aria-disabled="true"]:hover {
+  border-color: var(--line);
+  background: var(--seafoam-soft);
+  color: var(--muted-text);
+  box-shadow: none;
+  cursor: default;
+}
+/* Review: the reason sits on its own line under the Ready button, and the back arrow is a link that looks like the
+   shared back button on every other screen. */
+.review-actions .ready-blocker {
+  flex: 1 0 100%;
+  margin: 0;
+}
+a.back {
+  display: inline-grid;
+  place-items: center;
+  text-decoration: none;
+  color: var(--ink);
+}
+
 /* Trip theme picker (#48): a native radio group of six tiles. 2 columns on a phone, 3 from 660px. */
 .theme-picker {
   min-width: 0;
