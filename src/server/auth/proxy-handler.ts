@@ -3,6 +3,7 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { authorizeOwner } from "./guard";
+import { ACCESS_DENIED_PATH, PUBLIC_PATHS, SIGN_IN_PATH } from "./public-paths";
 import type { Allowlist } from "./allowlist";
 import type { AuthProvider } from "./types";
 
@@ -12,11 +13,7 @@ import type { AuthProvider } from "./types";
  */
 export const AUTH_SCREEN_HEADER = "x-auth-screen";
 
-export const SIGN_IN_PATH = "/sign-in";
-export const ACCESS_DENIED_PATH = "/access-denied";
-
-/** Pages a signed-out (or denied) visitor may see. Everything else is protected. */
-const PUBLIC_PATHS: readonly string[] = [SIGN_IN_PATH, ACCESS_DENIED_PATH];
+export { ACCESS_DENIED_PATH, SIGN_IN_PATH };
 
 export function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some((path) => pathname === path || pathname === `${path}/`);

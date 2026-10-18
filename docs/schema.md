@@ -156,7 +156,7 @@ it is invented; nothing is real trip data.
   upper-case, `-POOLER`, trailing-dot, trailing-slash and percent-encoded spellings are all caught), and when the URL carries
   a `host`, `hostaddr`, `dbname` or `service` query override. It prints a summary only,
   never a connection string, date, or place.
-- `--owner <id>` or `SEED_OWNER_ID` sets the owner (default `seed-owner`). Tests can call `seedSyntheticData(db, ownerId)`
+- `--owner <id>` or `SEED_OWNER_ID` sets the owner (default `seed-owner` for a local database; a remote seed refuses to run without an explicit owner, and the preview deploy goes through `npm run db:seed:preview`, see `docs/deploy.md`). Tests can call `seedSyntheticData(db, ownerId)`
   directly as a fixture.
   The seed **resets that owner's staples to the defaults**, so never point `--owner` / `SEED_OWNER_ID` at a real account
   id. If `DATABASE_URL` is unset where you seed, `SEED_ALLOWED_HOSTS` is the only protection: list only disposable hosts.
