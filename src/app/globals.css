@@ -1751,6 +1751,8 @@ input:disabled {
 .settings-grid h2 {
   margin: 0 0 8px;
   font-size: 18px;
+}
+
 /* Trip theme picker (#48): a native radio group of six tiles. 2 columns on a phone, 3 from 660px. */
 .theme-picker {
   min-width: 0;
