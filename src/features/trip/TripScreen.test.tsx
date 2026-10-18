@@ -1008,6 +1008,140 @@ describe("dialog submits wait for the source", () => {
   });
 });
 
+describe("changing the theme", () => {
+  const artKey = () =>
+    document.querySelector(".destination-trip-head [data-art-key]")?.getAttribute("data-art-key");
+  const changeButton = () => screen.getByRole("button", { name: "Change theme" });
+
+  it("opens a sheet with the current theme selected, Save and Cancel, and no other controls changed", async () => {
+    const { user } = setup();
+    await ready();
+    expect(artKey()).toBe("beach");
+    await user.click(changeButton());
+    const sheet = screen.getByRole("dialog", { name: "Change theme" });
+    expect((within(sheet).getByRole("radio", { name: "Beach" }) as HTMLInputElement).checked).toBe(
+      true,
+    );
+    expect(within(sheet).getAllByRole("radio")).toHaveLength(6);
+    expect(within(sheet).getByRole("button", { name: "Cancel" })).toBeTruthy();
+    expect(within(sheet).getByRole("button", { name: "Save theme" })).toBeTruthy();
+    // It starts on the selected option, so the arrow keys move from there.
+    expect(document.activeElement).toBe(within(sheet).getByRole("radio", { name: "Beach" }));
+  });
+
+  it("saving stores the theme, then the header art changes and the change is announced", async () => {
+    const { user, source } = setup();
+    await ready();
+    await user.click(changeButton());
+    await user.click(screen.getByRole("radio", { name: "Mountain / outdoors" }));
+    // Choosing alone changes nothing yet.
+    expect(artKey()).toBe("beach");
+    expect(tripOf(source).theme).toBe("beach");
+    await user.click(screen.getByRole("button", { name: "Save theme" }));
+    await waitFor(() => expect(artKey()).toBe("outdoors"));
+    expect(tripOf(source).theme).toBe("outdoors");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(live().textContent).toBe("Theme changed to Mountain / outdoors.");
+    expect(document.activeElement).toBe(changeButton());
+  });
+
+  it("the header art changes only after the source confirms", async () => {
+    const gate = deferred<void>();
+    const { user, source } = setup("san-diego", (base) => ({
+      ...base,
+      setTheme: async (id, theme) => {
+        await gate.promise;
+        return base.setTheme(id, theme);
+      },
+    }));
+    await ready();
+    await user.click(changeButton());
+    await user.click(screen.getByRole("radio", { name: "City" }));
+    await user.click(screen.getByRole("button", { name: "Save theme" }));
+    // Still waiting: the old picture stays, and the sheet cannot be submitted twice.
+    expect(artKey()).toBe("beach");
+    expect(screen.getByRole("button", { name: "Save theme" }).hasAttribute("disabled")).toBe(true);
+    await act(async () => gate.resolve());
+    await waitFor(() => expect(artKey()).toBe("city"));
+    expect(tripOf(source).theme).toBe("city");
+  });
+
+  it("a double click on Save sends one write", async () => {
+    const gate = deferred<void>();
+    const calls = vi.fn();
+    const { user } = setup("san-diego", (base) => ({
+      ...base,
+      setTheme: async (id, theme) => {
+        calls(theme);
+        await gate.promise;
+        return base.setTheme(id, theme);
+      },
+    }));
+    await ready();
+    await user.click(changeButton());
+    await user.click(screen.getByRole("radio", { name: "Home / family" }));
+    await user.dblClick(screen.getByRole("button", { name: "Save theme" }));
+    expect(calls).toHaveBeenCalledTimes(1);
+    await act(async () => gate.resolve());
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("Cancel and Escape discard the choice and return focus to the button", async () => {
+    const { user, source } = setup();
+    await ready();
+    const before = source.snapshot();
+    await user.click(changeButton());
+    await user.click(screen.getByRole("radio", { name: "Theme park" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(artKey()).toBe("beach");
+    expect(document.activeElement).toBe(changeButton());
+    await user.click(changeButton());
+    // Reopened, it shows the saved theme again, not the discarded choice.
+    expect((screen.getByRole("radio", { name: "Beach" }) as HTMLInputElement).checked).toBe(true);
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(source.snapshot()).toBe(before);
+  });
+
+  it("saving without changing the theme just closes, with no write", async () => {
+    const setTheme = vi.fn();
+    const { user } = setup("san-diego", (base) => ({
+      ...base,
+      setTheme: (id, theme) => (setTheme(theme), base.setTheme(id, theme)),
+    }));
+    await ready();
+    await user.click(changeButton());
+    await user.click(screen.getByRole("button", { name: "Save theme" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(setTheme).not.toHaveBeenCalled();
+  });
+
+  it("a failed save keeps the sheet open and the old picture, says so in the sheet, and Save tries again", async () => {
+    let fail = true;
+    const { user, source } = setup("san-diego", (base) => ({
+      ...base,
+      setTheme: (id, theme) =>
+        fail ? Promise.reject(new Error("nope")) : base.setTheme(id, theme),
+    }));
+    await ready();
+    await user.click(changeButton());
+    await user.click(screen.getByRole("radio", { name: "City" }));
+    await user.click(screen.getByRole("button", { name: "Save theme" }));
+    expect(await screen.findByRole("button", { name: "Couldn't save, retry" })).toBeTruthy();
+    const sheet = screen.getByRole("dialog", { name: "Change theme" });
+    // The chip is behind the sheet, so the sheet says so itself.
+    expect(within(sheet).getByRole("alert").textContent).toMatch(/Couldn’t save the theme/);
+    expect(artKey()).toBe("beach");
+    expect(tripOf(source).theme).toBe("beach");
+    fail = false;
+    await user.click(within(sheet).getByRole("button", { name: "Save theme" }));
+    await waitFor(() => expect(artKey()).toBe("city"));
+    expect(tripOf(source).theme).toBe("city");
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+});
+
 describe("closing dialogs without saving", () => {
   const closeButton = () => screen.queryByRole("button", { name: "Close dialog" });
 
