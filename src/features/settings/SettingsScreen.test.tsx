@@ -54,6 +54,34 @@ describe("SettingsScreen", () => {
     );
   });
 
+  it("says Saving… while a write is in flight, never that everything is saved", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      setup();
+      let finish!: () => void;
+      const pending = new Promise<string>((resolve) => (finish = () => resolve("ok")));
+      let write!: Promise<string>;
+      act(() => {
+        write = tracker.track(() => pending);
+      });
+      // "Saving…" shows only if a write takes longer than the short delay (no flicker for quick saves).
+      expect(screen.getByText("Everything you changed is saved.")).toBeTruthy();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(500);
+      });
+      expect(screen.getByText("Saving…")).toBeTruthy();
+      expect(screen.queryByText("Everything you changed is saved.")).toBeNull();
+      await act(async () => {
+        finish();
+        await write;
+      });
+      expect(screen.getByText("Everything you changed is saved.")).toBeTruthy();
+      expect(screen.queryByText("Saving…")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("does not claim 'saved' while the last change failed", async () => {
     setup();
     await act(async () => {
