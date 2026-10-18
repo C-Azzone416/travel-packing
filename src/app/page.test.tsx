@@ -9,13 +9,25 @@ import StaplesPage, { metadata as staplesMetadata } from "./staples/page";
 import { metadata as rootMetadata, viewport } from "./layout";
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
+vi.mock("@/server/auth/auth-runtime", () => ({
+  getAuth: async () => ({
+    provider: { getSession: async () => ({ userId: "u", email: "owner@example.test" }) },
+  }),
+}));
+vi.mock("@/app/sign-in/actions", () => ({ signOutAction: async () => {} }));
 
 describe("screens", () => {
-  it.each([
-    ["Staples", StaplesPage],
-    ["Settings", SettingsPage],
-  ])("%s renders its heading", (name, Page) => {
-    expect(renderToStaticMarkup(<Page />)).toContain(`<h1>${name}</h1>`);
+  it("Staples renders its heading", () => {
+    expect(renderToStaticMarkup(<StaplesPage />)).toContain("<h1>Staples</h1>");
+  });
+
+  it("Settings renders the signed-in account and a Sign out button", async () => {
+    const html = renderToStaticMarkup(
+      <SaveStatusProvider>{await SettingsPage()}</SaveStatusProvider>,
+    );
+    expect(html).toContain("<h1>Settings</h1>");
+    expect(html).toContain("owner@example.test");
+    expect(html).toContain("Sign out");
   });
 
   it("Trips renders the dashboard, starting in its loading state", () => {

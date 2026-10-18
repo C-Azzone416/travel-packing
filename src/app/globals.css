@@ -1740,3 +1740,15 @@ input:disabled {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+
+/* Settings (#19) */
+.settings-grid {
+  display: grid;
+  gap: 14px;
+  max-width: 760px;
+  margin-inline: auto;
+}
+.settings-grid h2 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}

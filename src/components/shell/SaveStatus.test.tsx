@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import { useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -186,7 +186,7 @@ describe("SaveStatusProvider", () => {
     expect(chipText()).toContain("Saved");
   });
 
-  it("the chip's Retry button retries", async () => {
+  it("the error chip opens a sheet; Retry retries and Dismiss leaves the Error state", async () => {
     setup();
     const write = vi.fn().mockRejectedValueOnce(new Error("x")).mockResolvedValue("ok");
     await act(async () => {
@@ -195,8 +195,67 @@ describe("SaveStatusProvider", () => {
     await act(async () => {
       (document.querySelector("button.sync-chip") as HTMLButtonElement).click();
     });
+    // Tapping the chip does not retry by itself: it explains first.
+    expect(write).toHaveBeenCalledTimes(1);
+    const dialog = screen.getByRole("dialog", { name: "Couldn’t save" });
+    expect(within(dialog).getByText(/Your last change hasn’t been saved/)).toBeTruthy();
+    await act(async () => {
+      within(dialog).getByRole("button", { name: "Dismiss" }).click();
+    });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(chipText()).toContain("Couldn't save");
+    expect(write).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      (document.querySelector("button.sync-chip") as HTMLButtonElement).click();
+    });
+    await act(async () => {
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Retry" }).click();
+    });
     expect(write).toHaveBeenCalledTimes(2);
     expect(chipText()).toContain("Saved");
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("closes the sheet by itself when a newer save succeeds", async () => {
+    setup();
+    await act(async () => {
+      await api.track(() => Promise.reject(new Error("x"))).catch(() => {});
+    });
+    await act(async () => {
+      (document.querySelector("button.sync-chip") as HTMLButtonElement).click();
+    });
+    expect(screen.getByRole("dialog", { name: "Couldn’t save" })).toBeTruthy();
+    await act(async () => {
+      await api.track(async () => "ok");
+    });
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("remembers when the last write succeeded, ignores reads, and warns before leaving while in Error", async () => {
+    setup();
+    expect(api.lastSavedAt).toBeNull();
+    await act(async () => {
+      await api.track(async () => "loaded", undefined, { read: true });
+    });
+    expect(api.lastSavedAt).toBeNull();
+    await act(async () => {
+      await api.track(async () => "ok");
+    });
+    expect(api.lastSavedAt).toBeInstanceOf(Date);
+    const leave = () => {
+      const event = new Event("beforeunload", { cancelable: true });
+      window.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    expect(leave()).toBe(false);
+    await act(async () => {
+      await api.track(() => Promise.reject(new Error("x"))).catch(() => {});
+    });
+    expect(leave()).toBe(true);
+    await act(async () => {
+      await api.track(async () => "ok");
+    });
+    expect(leave()).toBe(false);
   });
 
   it("hands a successful result to onSuccess, and not a failed one", async () => {

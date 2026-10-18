@@ -142,6 +142,11 @@ describe("loading and states", () => {
     );
     await screen.findByText("Couldn’t load this trip.");
     await user.click(screen.getByRole("button", { name: "Couldn't save, retry" }));
+    await user.click(
+      within(screen.getByRole("dialog", { name: "Couldn’t save" })).getByRole("button", {
+        name: "Retry",
+      }),
+    );
     expect(await ready()).toBeTruthy();
   });
 
@@ -373,6 +378,11 @@ describe("packing", () => {
     ).toBeTruthy();
     fail = false;
     await user.click(screen.getByRole("button", { name: "Couldn't save, retry" }));
+    await user.click(
+      within(screen.getByRole("dialog", { name: "Couldn’t save" })).getByRole("button", {
+        name: "Retry",
+      }),
+    );
     await waitFor(() => expect(itemOf(source, "socks").packed).toBe(2));
     expect(within(row("socks")).queryByRole("button", { name: "Not saved · Retry" })).toBeNull();
   });

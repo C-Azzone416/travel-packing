@@ -109,9 +109,9 @@ describe("SaveChip", () => {
     expect(chip.className).toContain("saving");
   });
 
-  it("shows the error as a Retry button, not a link", async () => {
+  it("shows the error as a button that opens the retry sheet, not a link", async () => {
     const onRetry = vi.fn();
-    render(<SaveChip status="error" onRetry={onRetry} />);
+    render(<SaveChip status="error" onOpenError={onRetry} />);
     const chip = screen.getByRole("button", { name: "Couldn't save, retry" });
     expect(chip.textContent).toContain("Couldn't save · Retry");
     expect(screen.queryByRole("link")).toBeNull();

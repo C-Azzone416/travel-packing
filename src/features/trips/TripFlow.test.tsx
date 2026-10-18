@@ -317,6 +317,11 @@ describe("saving", () => {
     expect(push).not.toHaveBeenCalled();
     expect(source.snapshot().trips).toHaveLength(2);
     await user.click(screen.getByRole("button", { name: "Couldn't save, retry" }));
+    await user.click(
+      within(screen.getByRole("dialog", { name: "Couldn’t save" })).getByRole("button", {
+        name: "Retry",
+      }),
+    );
     await waitFor(() => expect(push).toHaveBeenCalledWith("/"));
     expect(source.snapshot().trips).toHaveLength(3);
   });
