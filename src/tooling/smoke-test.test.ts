@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { PUBLIC_PATHS } from "../server/auth/public-paths";
 import { smokeTest } from "./smoke-test";
 
 type Routes = Record<string, Response | "throw">;
@@ -15,6 +16,7 @@ const redirect = (location: string, status = 307) =>
   new Response(null, { status, headers: { location } });
 const healthy = (): Routes => ({
   "/sign-in": new Response("ok", { status: 200 }),
+  "/access-denied": new Response("ok", { status: 200 }),
   "/": redirect("/sign-in"),
 });
 
@@ -24,6 +26,7 @@ describe("smokeTest", () => {
     expect(result.ok).toBe(true);
     expect(result.lines).toEqual([
       "ok   /sign-in: 200 (expected 200)",
+      "ok   /access-denied: 200 (expected 200)",
       "ok   /: 307 (expected a redirect to /sign-in when signed out)",
     ]);
   });
@@ -48,17 +51,18 @@ describe("smokeTest", () => {
   ])("fails when the protected page gives %s", async (_name, response) => {
     const result = await smokeTest("https://x.test", fakeFetch({ ...healthy(), "/": response }));
     expect(result.ok).toBe(false);
-    expect(result.lines[1]).toMatch(/^FAIL \/:/);
+    expect(result.lines[2]).toMatch(/^FAIL \/:/);
   });
 
   it("fails, without echoing the error, when the site does not answer", async () => {
     const result = await smokeTest(
       "https://x.test",
-      fakeFetch({ "/sign-in": "throw", "/": "throw" }),
+      fakeFetch({ "/sign-in": "throw", "/access-denied": "throw", "/": "throw" }),
     );
     expect(result.ok).toBe(false);
     expect(result.lines).toEqual([
       "FAIL /sign-in: no response (expected 200)",
+      "FAIL /access-denied: no response (expected 200)",
       "FAIL /: no response (expected a redirect to /sign-in when signed out)",
     ]);
   });
@@ -66,12 +70,30 @@ describe("smokeTest", () => {
   it("sends the protection bypass header only when given a secret", async () => {
     const seen: { url: string; headers: Record<string, string> }[] = [];
     await smokeTest("https://x.test", fakeFetch(healthy(), seen), { bypassSecret: "s3cret" });
-    expect(seen.map((s) => s.headers)).toEqual([
-      { "x-vercel-protection-bypass": "s3cret" },
-      { "x-vercel-protection-bypass": "s3cret" },
-    ]);
+    expect(seen.map((s) => s.headers)).toEqual(
+      seen.map(() => ({ "x-vercel-protection-bypass": "s3cret" })),
+    );
     const plain: typeof seen = [];
     await smokeTest("https://x.test", fakeFetch(healthy(), plain));
-    expect(plain.map((s) => s.headers)).toEqual([{}, {}]);
+    expect(plain.map((s) => s.headers)).toEqual(plain.map(() => ({})));
+  });
+
+  it("needs no owner session and checks every public auth page the gate allows (so a future sign-up page is covered)", async () => {
+    const seen: { url: string; headers: Record<string, string> }[] = [];
+    await smokeTest("https://x.test", fakeFetch(healthy(), seen));
+    const paths = seen.map((s) => new URL(s.url).pathname);
+    for (const path of PUBLIC_PATHS) expect(paths).toContain(path);
+    expect(seen.every((s) => !("cookie" in s.headers) && !("authorization" in s.headers))).toBe(
+      true,
+    );
+  });
+
+  it("fails when a public auth page redirects away", async () => {
+    const result = await smokeTest(
+      "https://x.test",
+      fakeFetch({ ...healthy(), "/access-denied": redirect("/sign-in") }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.lines[1]).toBe("FAIL /access-denied: 307 (expected 200)");
   });
 });

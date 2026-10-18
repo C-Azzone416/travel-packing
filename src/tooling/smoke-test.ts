@@ -1,5 +1,8 @@
-// Post-deploy smoke test: the sign-in page answers 200, and a protected page sends a signed-out visitor to sign-in.
+// Post-deploy smoke test: every public auth page answers 200 to a signed-out visitor (no owner session needed, so it
+// works on the first preview, before any account exists), and a protected page sends a signed-out visitor to sign-in.
 // Redirects are not followed, so a bounce is seen as a bounce. Nothing here prints more than the path and status.
+
+import { PUBLIC_PATHS } from "../server/auth/public-paths";
 
 type Fetch = (
   url: string,
@@ -40,7 +43,10 @@ export async function smokeTest(
     }
   }
 
-  await check("/sign-in", "expected 200", (response) => response.status === 200);
+  // The list the request gate uses, so a sign-up page (#27) is checked as soon as it becomes public.
+  for (const path of PUBLIC_PATHS) {
+    await check(path, "expected 200", (response) => response.status === 200);
+  }
   await check("/", "expected a redirect to /sign-in when signed out", (response) => {
     if (response.status < 300 || response.status > 399) return false;
     const location = response.headers.get("location") ?? "";

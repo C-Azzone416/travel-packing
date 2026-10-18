@@ -22,6 +22,7 @@
     "build:webpack": "next build --webpack",
     "db:migrate:remote": "tsx scripts/db-migrate-remote.ts",
     "db:seed": "tsx scripts/db-seed.ts",
+    "db:seed:preview": "tsx scripts/seed-preview.ts",
     "check:repo-hygiene": "tsx scripts/check-repo-hygiene.ts",
     "check:client-bundle": "tsx scripts/check-client-bundle.ts",
     "check:deploy-env": "tsx scripts/check-deploy-env.ts",

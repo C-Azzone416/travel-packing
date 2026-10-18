@@ -4,7 +4,8 @@
 //   npm run db:seed -- --pglite <dir>     local on-disk PGlite at <dir>
 //   SEED_DATABASE_URL=... npm run db:seed -- --yes
 //                                         a remote dev/preview database (already migrated); needs --yes
-//   --owner <id>                          owner id to seed (default: SEED_OWNER_ID, else "seed-owner")
+//   --owner <id>                          owner id to seed (default: SEED_OWNER_ID, else "seed-owner" for a LOCAL
+//                                         database only; a remote seed always needs an explicit owner)
 //
 // Prints a summary only: never a connection string, never a trip date or place.
 
@@ -40,6 +41,8 @@ export const DEFAULT_OWNER_ID = "seed-owner";
 interface Options {
   localDir: string;
   owner: string;
+  /** False when the owner is only the local default: fine for a throwaway PGlite, never for a remote database. */
+  ownerExplicit: boolean;
   yes: boolean;
 }
 
@@ -47,6 +50,7 @@ function parse(argv: string[], env: Env): Options {
   const options: Options = {
     localDir: DEFAULT_LOCAL_DIR,
     owner: env.SEED_OWNER_ID?.trim() || DEFAULT_OWNER_ID,
+    ownerExplicit: Boolean(env.SEED_OWNER_ID?.trim()),
     yes: false,
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -54,8 +58,13 @@ function parse(argv: string[], env: Env): Options {
     if (arg === "--yes") options.yes = true;
     else if (arg === "--pglite") options.localDir = argv[++index] ?? DEFAULT_LOCAL_DIR;
     else if (arg.startsWith("--pglite=")) options.localDir = arg.slice("--pglite=".length);
-    else if (arg === "--owner") options.owner = argv[++index] ?? options.owner;
-    else if (arg.startsWith("--owner=")) options.owner = arg.slice("--owner=".length);
+    else if (arg === "--owner") {
+      const value = argv[++index]?.trim();
+      if (value) Object.assign(options, { owner: value, ownerExplicit: true });
+    } else if (arg.startsWith("--owner=")) {
+      const value = arg.slice("--owner=".length).trim();
+      if (value) Object.assign(options, { owner: value, ownerExplicit: true });
+    }
   }
   return options;
 }
@@ -69,6 +78,12 @@ export async function runSeedCli(argv: string[], env: Env, deps: SeedCliDeps): P
     assertSeedAllowed(env, remoteUrl || undefined);
     if (remoteUrl && !options.yes) {
       throw new SeedRefused("seeding a remote database needs --yes");
+    }
+    if (remoteUrl && !options.ownerExplicit) {
+      // Never write sample rows under a made-up owner into a database real accounts live in.
+      throw new SeedRefused(
+        "seeding a remote database needs an explicit owner (SEED_OWNER_ID or --owner)",
+      );
     }
     opened = remoteUrl ? await deps.openRemote(remoteUrl) : await deps.openLocal(options.localDir);
     const summary = await seedSyntheticData(opened.db, options.owner, deps.today());
