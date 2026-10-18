@@ -147,6 +147,23 @@ export function checkDeployEnv(
       }
     }
   }
+  if (target === "production") {
+    // Production proves it is looking at ITS database: both connection strings must be on PRODUCTION_DB_HOST.
+    const prodHost = productionHost(productionDbHost);
+    if (prodHost === "missing") {
+      problems.push("PRODUCTION_DB_HOST is not set, so production cannot confirm its database");
+    } else if (prodHost === "invalid") {
+      problems.push(PRODUCTION_HOST_FORMAT);
+    } else {
+      for (const name of ["DATABASE_URL", "DATABASE_URL_UNPOOLED"] as const) {
+        if (present(env, name) && hostOf(env[name]) !== prodHost) {
+          problems.push(
+            `${name} does not point at PRODUCTION_DB_HOST; production must use its own database`,
+          );
+        }
+      }
+    }
+  }
   return problems;
 }
 

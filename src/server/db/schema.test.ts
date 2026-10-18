@@ -2,6 +2,7 @@ import { getTableConfig, type PgTable } from "drizzle-orm/pg-core";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createMigratedDb, resetData } from "./__fixtures__/db";
 import { buildTripItems, calculateSuggestions, DEFAULT_STAPLES } from "../../domain/calc";
+import { THEME_IDS } from "../../domain/themes";
 import * as schema from "./schema";
 
 let ctx: Awaited<ReturnType<typeof createMigratedDb>>;
@@ -275,6 +276,17 @@ describe("check constraints reject invalid rows", () => {
     const owner = await addUser("owner-a");
     const trip = await addTrip(owner);
     await expect(addItem(trip, owner, overrides)).rejects.toThrow(type);
+  });
+
+  it("a trip's theme defaults to travel and only the six built-in names are accepted", async () => {
+    const owner = await addUser("owner-a");
+    const plain = await addTrip(owner);
+    expect(await rows(`SELECT theme FROM "trips" WHERE id = '${plain}'`)).toEqual([
+      { theme: "travel" },
+    ]);
+    for (const theme of THEME_IDS) await addTrip(owner, { theme });
+    await expect(addTrip(owner, { theme: "volcano" })).rejects.toThrow("trip_theme");
+    await expect(addTrip(owner, { theme: null })).rejects.toThrow("theme");
   });
 
   it("enum rejects unknown cadence and weather status", async () => {
@@ -566,6 +578,7 @@ describe("drizzle schema matches the migrated database", () => {
       { typname: "item_category", labels: [...schema.ITEM_CATEGORIES] },
       { typname: "item_section", labels: [...schema.ITEM_SECTIONS] },
       { typname: "staple_cadence", labels: [...schema.STAPLE_CADENCES] },
+      { typname: "trip_theme", labels: [...THEME_IDS] },
       { typname: "weather_status", labels: [...schema.WEATHER_STATUSES] },
     ]);
   });

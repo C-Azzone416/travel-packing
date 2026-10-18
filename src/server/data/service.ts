@@ -32,6 +32,7 @@ import {
   emptyLifecycleState,
   saveDraft,
   selectDraftLocation,
+  setDraftTheme,
   startCopyDraft,
   startDraft,
   type LifecycleTrip,
@@ -201,6 +202,13 @@ export function updateTripPreferences(context: DataContext, input: unknown) {
   }));
 }
 
+/** Change a trip's picture (#48). Only the six built-in names are accepted; nothing else about the trip changes. */
+export function setTripTheme(context: DataContext, input: unknown) {
+  return mutateTrip(context, inputs.setThemeInput, input, (trip, { theme }) => ({
+    trip: { ...trip, theme },
+  }));
+}
+
 // ---------------------------------------------------------------- weather (simulated)
 
 const weather =
@@ -335,7 +343,7 @@ export function createTrip(context: DataContext, input: unknown): Promise<Result
     return saveNewTrip(
       scope,
       context,
-      startDraft(request.config, dates.start, dates.end),
+      startDraft(request.config, dates.start, dates.end, request.theme),
       location,
     );
   });
@@ -352,10 +360,11 @@ export function copyTrip(context: DataContext, input: unknown): Promise<Result<S
     const dates = validDates(request.start, request.end);
     const location = await resolveLocation(context, request.location.id);
     const lifecycleSource: LifecycleTrip = { ...source, location: null };
+    const draft = startCopyDraft(lifecycleSource, dates.start, dates.end);
     return saveNewTrip(
       scope,
       context,
-      startCopyDraft(lifecycleSource, dates.start, dates.end),
+      request.theme ? setDraftTheme(draft, request.theme) : draft,
       location,
     );
   });

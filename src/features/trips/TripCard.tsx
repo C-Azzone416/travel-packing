@@ -46,7 +46,7 @@ export function TripCard({
       aria-labelledby={`trip-title-${trip.id}`}
       aria-busy={busy}
     >
-      <DestinationArt locationId={trip.location?.id} variant="card" priority={first} />
+      <DestinationArt theme={trip.theme} variant="card" priority={first} />
       <div className="trip-card-body">
         <div className="trip-top">
           <div>

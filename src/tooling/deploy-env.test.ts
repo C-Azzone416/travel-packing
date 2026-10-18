@@ -19,15 +19,22 @@ const good = {
   LOCATION_PROVIDER: "open-meteo",
 };
 
+// A production environment: both connection strings on the production host.
+const production = {
+  ...good,
+  DATABASE_URL: `postgres://u:p@${PROD_HOST.replace("ep-prod-1", "ep-prod-1-pooler")}/db`,
+  DATABASE_URL_UNPOOLED: `postgres://u:p@${PROD_HOST}/db`,
+};
+
 describe("checkDeployEnv", () => {
   it("accepts a complete preview environment on its own database", () => {
     expect(checkDeployEnv("preview", good, PROD_HOST)).toEqual([]);
   });
 
   it("accepts a production environment without a location provider override", () => {
-    const { LOCATION_PROVIDER: _unused, ...production } = good;
+    const { LOCATION_PROVIDER: _unused, ...withoutProvider } = production;
     void _unused;
-    expect(checkDeployEnv("production", production, undefined)).toEqual([]);
+    expect(checkDeployEnv("production", withoutProvider, PROD_HOST)).toEqual([]);
   });
 
   it("requires exactly these five variables (a name dropped from the list must fail here)", () => {
@@ -47,7 +54,7 @@ describe("checkDeployEnv", () => {
     "NEON_AUTH_COOKIE_SECRET",
     "OWNER_EMAIL_ALLOWLIST",
   ])("reports %s when it is missing (literal list, independent of REQUIRED)", (name) => {
-    expect(checkDeployEnv("production", { ...good, [name]: undefined }, undefined)).toContain(
+    expect(checkDeployEnv("production", { ...production, [name]: undefined }, PROD_HOST)).toContain(
       `${name} is not set`,
     );
   });
@@ -56,34 +63,46 @@ describe("checkDeployEnv", () => {
     "refuses the whole AUTH_E2E_ family, not just the known names (%s)",
     (name) => {
       for (const target of ["preview", "production"] as const) {
-        expect(checkDeployEnv(target, { ...good, [name]: "x" }, PROD_HOST)).toEqual([
-          `${name} must not be set in a ${target} environment`,
-        ]);
+        expect(
+          checkDeployEnv(
+            target,
+            { ...(target === "production" ? production : good), [name]: "x" },
+            PROD_HOST,
+          ),
+        ).toEqual([`${name} must not be set in a ${target} environment`]);
       }
     },
   );
 
   it("ignores an empty AUTH_E2E_ variable and names that merely contain the prefix", () => {
     expect(
-      checkDeployEnv("production", { ...good, AUTH_E2E_X: " ", MY_AUTH_E2E_X: "1" }, undefined),
+      checkDeployEnv(
+        "production",
+        { ...production, AUTH_E2E_X: " ", MY_AUTH_E2E_X: "1" },
+        PROD_HOST,
+      ),
     ).toEqual([]);
   });
 
   it("reports a cookie secret shorter than the auth config's minimum", () => {
-    const short = { ...good, NEON_AUTH_COOKIE_SECRET: "a".repeat(31) };
-    expect(checkDeployEnv("production", short, undefined)).toEqual([
+    const short = { ...production, NEON_AUTH_COOKIE_SECRET: "a".repeat(31) };
+    expect(checkDeployEnv("production", short, PROD_HOST)).toEqual([
       "NEON_AUTH_COOKIE_SECRET is shorter than 32 characters, so sign-in would not work",
     ]);
     expect(
-      checkDeployEnv("production", { ...good, NEON_AUTH_COOKIE_SECRET: "a".repeat(32) }, undefined),
+      checkDeployEnv(
+        "production",
+        { ...production, NEON_AUTH_COOKIE_SECRET: "a".repeat(32) },
+        PROD_HOST,
+      ),
     ).toEqual([]);
   });
 
   it.each(REQUIRED)("reports %s when it is missing or blank", (name) => {
-    expect(checkDeployEnv("production", { ...good, [name]: "  " }, undefined)).toEqual([
+    expect(checkDeployEnv("production", { ...production, [name]: "  " }, PROD_HOST)).toEqual([
       `${name} is not set`,
     ]);
-    expect(checkDeployEnv("production", { ...good, [name]: undefined }, undefined)).toEqual([
+    expect(checkDeployEnv("production", { ...production, [name]: undefined }, PROD_HOST)).toEqual([
       `${name} is not set`,
     ]);
   });
@@ -95,22 +114,59 @@ describe("checkDeployEnv", () => {
     "OPEN_METEO_GEOCODING_URL",
   ])("refuses %s in both environments, naming it but not its value", (name) => {
     for (const target of ["preview", "production"] as const) {
-      const problems = checkDeployEnv(target, { ...good, [name]: "secret-value" }, PROD_HOST);
+      const problems = checkDeployEnv(
+        target,
+        { ...(target === "production" ? production : good), [name]: "secret-value" },
+        PROD_HOST,
+      );
       expect(problems).toEqual([`${name} must not be set in a ${target} environment`]);
       expect(problems.join()).not.toContain("secret-value");
     }
   });
 
   it("lets production leave the location provider unset or use open-meteo, and nothing else", () => {
-    const { LOCATION_PROVIDER: _unused, ...unset } = good;
+    const { LOCATION_PROVIDER: _unused, ...unset } = production;
     void _unused;
-    expect(checkDeployEnv("production", unset, undefined)).toEqual([]);
+    expect(checkDeployEnv("production", unset, PROD_HOST)).toEqual([]);
     expect(
-      checkDeployEnv("production", { ...good, LOCATION_PROVIDER: " open-meteo " }, undefined),
+      checkDeployEnv("production", { ...production, LOCATION_PROVIDER: " open-meteo " }, PROD_HOST),
     ).toEqual([]);
-    expect(checkDeployEnv("production", { ...good, LOCATION_PROVIDER: "fake" }, undefined)).toEqual(
-      ["LOCATION_PROVIDER, when set, must be open-meteo"],
-    );
+    expect(
+      checkDeployEnv("production", { ...production, LOCATION_PROVIDER: "fake" }, PROD_HOST),
+    ).toEqual(["LOCATION_PROVIDER, when set, must be open-meteo"]);
+  });
+
+  it("makes production prove it is on its own database: both strings on PRODUCTION_DB_HOST", () => {
+    expect(checkDeployEnv("production", production, PROD_HOST)).toEqual([]);
+    expect(
+      checkDeployEnv("production", { ...production, DATABASE_URL: good.DATABASE_URL }, PROD_HOST),
+    ).toEqual([
+      "DATABASE_URL does not point at PRODUCTION_DB_HOST; production must use its own database",
+    ]);
+    expect(
+      checkDeployEnv(
+        "production",
+        { ...production, DATABASE_URL_UNPOOLED: good.DATABASE_URL_UNPOOLED },
+        PROD_HOST,
+      ),
+    ).toEqual([
+      "DATABASE_URL_UNPOOLED does not point at PRODUCTION_DB_HOST; production must use its own database",
+    ]);
+  });
+
+  it("fails production closed when PRODUCTION_DB_HOST is unset or not a bare host name", () => {
+    expect(checkDeployEnv("production", production, undefined)).toEqual([
+      "PRODUCTION_DB_HOST is not set, so production cannot confirm its database",
+    ]);
+    expect(checkDeployEnv("production", production, `postgres://${PROD_HOST}/db`)).toEqual([
+      PRODUCTION_HOST_FORMAT,
+    ]);
+  });
+
+  it("does not double-report a missing connection string in production", () => {
+    expect(
+      checkDeployEnv("production", { ...production, DATABASE_URL: undefined }, PROD_HOST),
+    ).toEqual(["DATABASE_URL is not set"]);
   });
 
   it("requires open-meteo for previews", () => {

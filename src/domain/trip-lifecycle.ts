@@ -5,6 +5,7 @@
 // (src/domain/calc). Only the id generator and "today" are injected: the domain has no hidden clock.
 
 import { buildTripItems, forecastLabel, normalizeTripDates, parseDate } from "./calc";
+import { DEFAULT_THEME, type ThemeId } from "./themes";
 import { TOILETRY_GROUP_ID } from "./toiletry-bag";
 import type { Staple, Trip, TripConfig, TripItem } from "./trip";
 
@@ -31,6 +32,8 @@ export interface LifecycleTrip extends Trip {
   location: SampleLocation | null;
   copiedFrom: string | null;
   archived: boolean;
+  /** The trip's picture (#48). */
+  theme: ThemeId;
 }
 
 export interface TripDraft {
@@ -41,6 +44,8 @@ export interface TripDraft {
   start: string;
   end: string;
   config: TripConfig;
+  /** Chosen on step 1; Travel until changed, and a copy starts from the source trip's theme. */
+  theme: ThemeId;
 }
 
 export interface DeletedTrip {
@@ -84,7 +89,12 @@ export function emptyLifecycleState(): LifecycleState {
 // ---------------------------------------------------------------- drafts
 
 /** Start a new draft. Dates are normalized (a return before departure becomes departure). */
-export function startDraft(config: TripConfig, start: string, end: string): TripDraft {
+export function startDraft(
+  config: TripConfig,
+  start: string,
+  end: string,
+  theme: ThemeId = DEFAULT_THEME,
+): TripDraft {
   const dates = normalizeTripDates(start, end);
   return {
     mode: "create",
@@ -93,12 +103,23 @@ export function startDraft(config: TripConfig, start: string, end: string): Trip
     start: dates.start,
     end: dates.end,
     config: { ...config },
+    theme,
   };
 }
 
-/** Start a copy draft: only the source's preference config is carried over; location and dates are chosen anew. */
+/**
+ * Start a copy draft: the source's preference config and theme are carried over; location and dates are chosen anew.
+ */
 export function startCopyDraft(source: LifecycleTrip, start: string, end: string): TripDraft {
-  return { ...startDraft(source.config, start, end), mode: "copy", sourceId: source.id };
+  return {
+    ...startDraft(source.config, start, end, source.theme),
+    mode: "copy",
+    sourceId: source.id,
+  };
+}
+
+export function setDraftTheme(draft: TripDraft, theme: ThemeId): TripDraft {
+  return { ...draft, theme };
 }
 
 export function selectDraftLocation(draft: TripDraft, location: SampleLocation): TripDraft {
@@ -142,6 +163,7 @@ export function buildTrip(
   staples: readonly Staple[],
   deps: TripBuilderDeps,
   copiedFrom: string | null = null,
+  theme: ThemeId = DEFAULT_THEME,
 ): LifecycleTrip {
   const built = buildTripItems({ ...config, start, end }, staples);
   const items: TripItem[] = built.items
@@ -173,6 +195,7 @@ export function buildTrip(
     },
     copiedFrom,
     archived: false,
+    theme,
   };
 }
 
@@ -200,6 +223,7 @@ export function saveDraft(
     staples,
     deps,
     draft.sourceId,
+    draft.theme,
   );
   return { ok: true, state: { ...state, trips: [trip, ...state.trips], draft: null }, trip };
 }
