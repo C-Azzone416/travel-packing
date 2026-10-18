@@ -6,7 +6,7 @@
     </linearGradient>
   </defs>
   <rect width="1600" height="480" fill="url(#sky)"/>
-  <circle cx="1380" cy="150" r="52" fill="#F3C994"/>
+  <circle cx="1250" cy="145" r="52" fill="#F3C994"/>
   <g fill="#F5F7F2">
     <ellipse cx="280" cy="124" rx="70" ry="20"/>
     <ellipse cx="320" cy="110" rx="48" ry="24"/>
@@ -24,7 +24,7 @@
   </g>
   <path d="M0 336 C200 300 420 330 620 322 C840 314 1000 290 1200 306 C1380 320 1500 304 1600 322 L1600 480 L0 480Z" fill="#B9DDD0"/>
   <path d="M0 384 C260 356 520 392 800 380 C1080 368 1340 384 1600 370 L1600 480 L0 480Z" fill="#88BBB6"/>
-  <g transform="translate(0 -34)">
+  <g transform="translate(-170 -62)">
   <rect x="954" y="360" width="12" height="76" fill="#0F5660"/>
   <circle cx="960" cy="334" r="52" fill="#0F5660"/>
   <circle cx="934" cy="354" r="31" fill="#0F5660"/>

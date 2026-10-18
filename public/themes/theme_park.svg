@@ -6,7 +6,7 @@
     </linearGradient>
   </defs>
   <rect width="1600" height="480" fill="url(#sky)"/>
-  <circle cx="1290" cy="170" r="54" fill="#F3C994"/>
+  <circle cx="1190" cy="150" r="54" fill="#F3C994"/>
   <g fill="#F5F7F2">
     <ellipse cx="300" cy="124" rx="70" ry="20"/>
     <ellipse cx="340" cy="110" rx="48" ry="24"/>
@@ -23,13 +23,16 @@
     <ellipse cx="1496" cy="138" rx="66" ry="13"/>
   </g>
   <path d="M0 340 C200 300 380 330 560 320 C760 310 900 270 1100 296 C1300 322 1450 300 1600 330 L1600 480 L0 480Z" fill="#B9DDD0"/>
+  <g transform="translate(-150 -30)">
   <path d="M640 380 C700 380 740 250 800 250 C860 250 880 380 940 380 C1000 380 1020 300 1060 300" fill="none" stroke="#166D7A" stroke-opacity="0.6" stroke-width="12" stroke-linecap="round"/>
   <path d="M700 380 V420" stroke="#166D7A" stroke-opacity="0.6" stroke-width="6"/>
   <path d="M760 380 V420" stroke="#166D7A" stroke-opacity="0.6" stroke-width="6"/>
   <path d="M820 380 V420" stroke="#166D7A" stroke-opacity="0.6" stroke-width="6"/>
   <path d="M880 380 V420" stroke="#166D7A" stroke-opacity="0.6" stroke-width="6"/>
   <path d="M940 380 V420" stroke="#166D7A" stroke-opacity="0.6" stroke-width="6"/>
+  </g>
   <path d="M0 400 C260 380 520 410 800 398 C1080 386 1340 400 1600 388 L1600 480 L0 480Z" fill="#88BBB6"/>
+  <g transform="translate(-150 -30)">
   <path d="M1360 430 L1360 372 L1420 336 L1480 372 L1480 430Z" fill="#F5F7F2"/>
   <path d="M1360 372 L1380 372 L1380 430 L1360 430Z" fill="#F6DECB"/>
   <path d="M1400 372 L1420 372 L1420 430 L1400 430Z" fill="#F6DECB"/>
@@ -63,5 +66,6 @@
   <path d="M986.0 361.5 L1014.0 361.5 L1000.0 387.5Z" fill="#F6DECB"/>
   <path d="M1026.0 348.4 L1054.0 348.4 L1040.0 374.4Z" fill="#B9DDD0"/>
   <path d="M1066.0 330.0 L1094.0 330.0 L1080.0 356.0Z" fill="#F6DECB"/>
+  </g>
   <path d="M0 440 C300 420 620 450 900 440 C1180 430 1400 440 1600 428 L1600 480 L0 480Z" fill="#579A9C"/>
 </svg>

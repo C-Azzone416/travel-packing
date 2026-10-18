@@ -6,7 +6,7 @@
     </linearGradient>
   </defs>
   <rect width="1600" height="480" fill="url(#sky)"/>
-  <circle cx="1140" cy="196" r="62" fill="#F3C994"/>
+  <circle cx="1030" cy="190" r="62" fill="#F3C994"/>
   <g fill="#F5F7F2">
     <ellipse cx="280" cy="124" rx="70" ry="20"/>
     <ellipse cx="320" cy="110" rx="48" ry="24"/>
@@ -22,6 +22,7 @@
     <ellipse cx="1506" cy="120" rx="43" ry="22"/>
     <ellipse cx="1488" cy="140" rx="74" ry="14"/>
   </g>
+  <g transform="translate(-120 0)">
   <path d="M760 420 L930 232 L1010 300 L1080 218 L1260 420Z" fill="#B9DDD0"/>
   <path d="M1000 420 L1170 152 L1380 420Z" fill="#88BBB6"/>
   <path d="M1120 188 L1170 152 L1220 190 L1196 184 L1172 206 L1148 184Z" fill="#F5F7F2"/>
@@ -29,8 +30,10 @@
   <path d="M1300 284 L1330 250 L1360 286 L1344 282 L1330 296 L1316 282Z" fill="#F5F7F2"/>
   <path d="M860 430 L1040 262 L1230 430Z" fill="#579A9C"/>
   <path d="M1000 300 L1040 262 L1080 302 L1060 296 L1040 314 L1020 296Z" fill="#F5F7F2"/>
+  </g>
   <path d="M0 400 C260 376 520 408 800 394 C1080 380 1340 396 1600 384 L1600 480 L0 480Z" fill="#579A9C"/>
   <path d="M0 440 C300 420 620 450 900 440 C1180 430 1400 440 1600 428 L1600 480 L0 480Z" fill="#0F5660" fill-opacity="0.7"/>
+  <g transform="translate(-120 -36)">
   <path d="M1330 480 C1260 450 1100 452 1180 420 C1240 396 1330 404 1290 372" fill="none" stroke="#F5F7F2" stroke-width="7" stroke-linecap="round" stroke-dasharray="14 12"/>
   <path d="M1040 446 L1112 354 L1184 446Z" fill="#F3C994"/>
   <path d="M1112 354 L1112 446 L1068 446Z" fill="#F5F7F2" fill-opacity="0.35"/>
@@ -41,4 +44,5 @@
   <path d="M1010 348 L994 390 L1026 390Z" fill="#0F5660"/><path d="M1010 376 L987 418 L1033 418Z" fill="#0F5660"/><path d="M1010 404 L980 446 L1040 446Z" fill="#0F5660"/><rect x="1006" y="442" width="8" height="14" fill="#0F5660"/>
   <path d="M980 362 L966 396 L994 396Z" fill="#0F5660"/><path d="M980 384 L960 418 L1000 418Z" fill="#0F5660"/><path d="M980 407 L954 440 L1006 440Z" fill="#0F5660"/><rect x="976" y="436" width="8" height="14" fill="#0F5660"/>
   <path d="M1380 346 L1364 388 L1396 388Z" fill="#0F5660"/><path d="M1380 374 L1357 416 L1403 416Z" fill="#0F5660"/><path d="M1380 402 L1350 444 L1410 444Z" fill="#0F5660"/><rect x="1376" y="440" width="8" height="14" fill="#0F5660"/>
+  </g>
 </svg>

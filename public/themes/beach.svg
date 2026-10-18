@@ -6,7 +6,7 @@
     </linearGradient>
   </defs>
   <rect width="1600" height="480" fill="url(#sky)"/>
-  <circle cx="980" cy="318" r="70" fill="#F3C994"/>
+  <circle cx="860" cy="318" r="70" fill="#F3C994"/>
   <g fill="#F5F7F2">
     <ellipse cx="300" cy="114" rx="70" ry="20"/>
     <ellipse cx="340" cy="100" rx="48" ry="24"/>
@@ -26,11 +26,14 @@
   <rect x="0" y="318" width="1600" height="3" fill="#F5F7F2" fill-opacity="0.8"/>
   <path d="M0 350 C100 336 200 364 300 350 C400 336 500 364 600 350 C700 336 800 364 900 350 C1000 336 1100 364 1200 350 C1300 336 1400 364 1500 350 L1600 350 L1600 480 L0 480Z" fill="#166D7A" fill-opacity="0.3"/>
   <path d="M0 392 C120 376 240 408 360 392 C480 376 600 408 720 392 C840 376 960 408 1080 392 C1200 376 1320 408 1440 392 L1600 392 L1600 480 L0 480Z" fill="#166D7A" fill-opacity="0.45"/>
+  <g transform="translate(-240 0)">
   <path d="M820 330 L820 262 L870 322Z" fill="#F5F7F2"/>
   <path d="M820 330 L820 262 L838 326Z" fill="#166D7A" fill-opacity="0.3"/>
   <path d="M812 330 L880 330 L866 344 L826 344Z" fill="#166D7A"/>
+  </g>
   <path d="M860 480 C960 420 1080 392 1220 394 C1380 396 1500 430 1600 440 L1600 480Z" fill="#F6DECB"/>
   <path d="M980 480 C1080 446 1180 430 1300 434 C1420 438 1520 456 1600 464 L1600 480Z" fill="#F3C994" fill-opacity="0.6"/>
+  <g transform="translate(-160 0)">
   <path d="M1140 440 L1160 330" stroke="#0F5660" stroke-width="7" stroke-linecap="round"/>
   <clipPath id="umb"><path d="M1074 334 Q1074 256 1160 256 Q1246 256 1246 334Z"/></clipPath>
   <path d="M1074 334 Q1074 256 1160 256 Q1246 256 1246 334Z" fill="#F3C994"/>
@@ -50,4 +53,5 @@
   <path d="M1306 268 Q1347.4 251.3 1388.7 308.6 Q1355.4 273.3 1306 272Z" fill="#166D7A" fill-opacity="1"/>
   <path d="M1306 268 Q1268.4 257.7 1230.8 321.4 Q1276.4 279.7 1306 272Z" fill="#0F5660" fill-opacity="0.9"/>
   <circle cx="1300" cy="276" r="7" fill="#F3C994"/><circle cx="1314" cy="280" r="7" fill="#F3C994"/>
+  </g>
 </svg>
