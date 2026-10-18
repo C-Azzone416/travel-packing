@@ -6,14 +6,53 @@ import { sampleLifecycleState } from "./fixtures";
 import { TripsSourceProvider, useTripsSource } from "./TripsSourceProvider";
 import { createMemoryTripsSource, type TripsSource } from "./trips-source";
 
-const actions = vi.hoisted(() => ({ loadTripsAction: vi.fn() }));
+const actions = vi.hoisted(() => {
+  const state = { trips: [], deletedTrips: [], draft: null };
+  const trip = { id: "t" };
+  const change = { ok: true, trip, signals: { promptBagPlacement: false, reviewPrompt: false } };
+  const dashboard = (name: string) =>
+    [name, vi.fn().mockResolvedValue({ ok: true, state })] as const;
+  const command = (name: string) => [name, vi.fn().mockResolvedValue(change)] as const;
+  return {
+    loadTripsAction: vi.fn(),
+    dashboard: Object.fromEntries(
+      ["archiveTripAction", "restoreTripAction", "removeTripAction", "undoRemoveTripAction"].map(
+        dashboard,
+      ),
+    ),
+    createTripAction: vi.fn().mockResolvedValue({ ok: true, trip }),
+    getTripAction: vi.fn().mockResolvedValue({ ok: true, trip }),
+    listStaplesAction: vi.fn().mockResolvedValue({ ok: true, staples: [] }),
+    commands: Object.fromEntries(
+      [
+        "setPackedAction",
+        "togglePackedAction",
+        "incrementPackedAction",
+        "decrementPackedAction",
+        "editItemAction",
+        "removeItemAction",
+        "addToiletryItemAction",
+        "confirmBagPlacementAction",
+        "undoBagPlacementAction",
+        "markReadyAction",
+        "markNotReadyAction",
+        "acceptWeatherAction",
+        "skipWeatherAction",
+        "reviewWeatherAgainAction",
+        "updatePreferencesAction",
+      ].map(command),
+    ),
+  };
+});
 vi.mock("./actions", () => ({
   loadTripsAction: actions.loadTripsAction,
-  archiveTripAction: vi.fn(),
-  restoreTripAction: vi.fn(),
-  removeTripAction: vi.fn(),
-  undoRemoveTripAction: vi.fn(),
-  createTripAction: vi.fn(),
+  createTripAction: actions.createTripAction,
+  ...actions.dashboard,
+}));
+vi.mock("./trip-actions", () => ({
+  getTripAction: actions.getTripAction,
+  listStaplesAction: actions.listStaplesAction,
+  ...actions.commands,
 }));
 actions.loadTripsAction.mockResolvedValue({
   ok: true,
@@ -62,5 +101,155 @@ describe("TripsSourceProvider", () => {
       expect(screen.getByLabelText("loaded").textContent).toBe("from-the-server"),
     );
     expect(actions.loadTripsAction).toHaveBeenCalledTimes(1);
+  });
+
+  describe("the default wiring: every source method calls exactly its own action, once, with its arguments", () => {
+    const edit = { name: "Shades", qty: 2, timing: "main", scope: "this-trip" } as const;
+    const toiletry = { name: "Face wash", qty: 1, packLast: false, scope: "this-trip" } as const;
+    const config = {
+      laundry: true,
+      spare: true,
+      niceAttire: false,
+      occasionCount: 1,
+      reuseNice: false,
+      returnOutfit: true,
+    };
+    const draft = { mode: "create" } as never;
+
+    // method -> [how to call it on the source, the one action it must reach, that action's expected arguments]
+    const WIRING: [
+      string,
+      (source: TripsSource) => Promise<unknown>,
+      () => ReturnType<typeof vi.fn>,
+      unknown[],
+    ][] = [
+      ["load", (s) => s.load(), () => actions.loadTripsAction, []],
+      ["archive", (s) => s.archive("a"), () => actions.dashboard.archiveTripAction, ["a"]],
+      ["restore", (s) => s.restore("a"), () => actions.dashboard.restoreTripAction, ["a"]],
+      ["remove", (s) => s.remove("a"), () => actions.dashboard.removeTripAction, ["a"]],
+      ["undoRemove", (s) => s.undoRemove("a"), () => actions.dashboard.undoRemoveTripAction, ["a"]],
+      ["createTrip", (s) => s.createTrip(draft), () => actions.createTripAction, [draft]],
+      ["getTrip", (s) => s.getTrip("t"), () => actions.getTripAction, ["t"]],
+      ["listStaples", (s) => s.listStaples(), () => actions.listStaplesAction, []],
+      [
+        "setPacked",
+        (s) => s.setPacked("t", "i", 3),
+        () => actions.commands.setPackedAction,
+        ["t", "i", 3],
+      ],
+      [
+        "togglePacked",
+        (s) => s.togglePacked("t", "i"),
+        () => actions.commands.togglePackedAction,
+        ["t", "i"],
+      ],
+      [
+        "incrementPacked",
+        (s) => s.incrementPacked("t", "i"),
+        () => actions.commands.incrementPackedAction,
+        ["t", "i"],
+      ],
+      [
+        "decrementPacked",
+        (s) => s.decrementPacked("t", "i"),
+        () => actions.commands.decrementPackedAction,
+        ["t", "i"],
+      ],
+      [
+        "editItem",
+        (s) => s.editItem("t", "i", edit),
+        () => actions.commands.editItemAction,
+        ["t", "i", edit],
+      ],
+      [
+        "removeItem",
+        (s) => s.removeItem("t", "i", "remember"),
+        () => actions.commands.removeItemAction,
+        ["t", "i", "remember"],
+      ],
+      [
+        "addToiletryItem",
+        (s) => s.addToiletryItem("t", toiletry),
+        () => actions.commands.addToiletryItemAction,
+        ["t", toiletry],
+      ],
+      [
+        "confirmBagPlacement",
+        (s) => s.confirmBagPlacement("t"),
+        () => actions.commands.confirmBagPlacementAction,
+        ["t"],
+      ],
+      [
+        "undoBagPlacement",
+        (s) => s.undoBagPlacement("t"),
+        () => actions.commands.undoBagPlacementAction,
+        ["t"],
+      ],
+      ["markReady", (s) => s.markReady("t"), () => actions.commands.markReadyAction, ["t"]],
+      [
+        "markNotReady",
+        (s) => s.markNotReady("t"),
+        () => actions.commands.markNotReadyAction,
+        ["t"],
+      ],
+      [
+        "acceptWeather",
+        (s) => s.acceptWeather("t"),
+        () => actions.commands.acceptWeatherAction,
+        ["t"],
+      ],
+      ["skipWeather", (s) => s.skipWeather("t"), () => actions.commands.skipWeatherAction, ["t"]],
+      [
+        "reviewWeatherAgain",
+        (s) => s.reviewWeatherAgain("t"),
+        () => actions.commands.reviewWeatherAgainAction,
+        ["t"],
+      ],
+      [
+        "updatePreferences",
+        (s) => s.updatePreferences("t", config),
+        () => actions.commands.updatePreferencesAction,
+        ["t", config],
+      ],
+    ];
+
+    const everyAction = () => [
+      actions.loadTripsAction,
+      actions.createTripAction,
+      actions.getTripAction,
+      actions.listStaplesAction,
+      ...Object.values(actions.dashboard),
+      ...Object.values(actions.commands),
+    ];
+
+    function Capture({ onSource }: { onSource: (source: TripsSource) => void }) {
+      onSource(useTripsSource());
+      return null;
+    }
+
+    it("covers every method of the port", () => {
+      let captured!: TripsSource;
+      render(
+        <TripsSourceProvider>
+          <Capture onSource={(source) => (captured = source)} />
+        </TripsSourceProvider>,
+      );
+      expect(WIRING.map(([name]) => name).sort()).toEqual(Object.keys(captured).sort());
+    });
+
+    it.each(WIRING)("%s", async (_name, call, target, args) => {
+      let captured!: TripsSource;
+      render(
+        <TripsSourceProvider>
+          <Capture onSource={(source) => (captured = source)} />
+        </TripsSourceProvider>,
+      );
+      for (const action of everyAction()) action.mockClear();
+      await call(captured);
+      expect(target()).toHaveBeenCalledTimes(1);
+      expect(target()).toHaveBeenCalledWith(...args);
+      for (const action of everyAction().filter((other) => other !== target()))
+        expect(action).not.toHaveBeenCalled();
+    });
   });
 });

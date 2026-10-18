@@ -156,4 +156,97 @@ describe("ModalSheet", () => {
     expect(onClose).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog")).toBeTruthy();
   });
+
+  it("makes the rest of the page inert while open, and restores it on close", async () => {
+    render(
+      <>
+        <main data-testid="page">page</main>
+        <Harness />
+      </>,
+    );
+    const page = screen.getByTestId("page");
+    const host = page.parentElement as HTMLElement;
+    host.setAttribute("data-host", "1");
+    expect(host.hasAttribute("inert")).toBe(false);
+    await userEvent.click(screen.getByRole("button", { name: "Open" }));
+    expect(host.hasAttribute("inert")).toBe(true);
+    expect(screen.getByRole("dialog").closest("[inert]")).toBeNull();
+    await userEvent.keyboard("{Escape}");
+    expect(host.hasAttribute("inert")).toBe(false);
+  });
+
+  it("leaves anything that was already inert exactly as it was", async () => {
+    const stray = document.createElement("div");
+    stray.setAttribute("inert", "");
+    document.body.appendChild(stray);
+    try {
+      render(<Harness />);
+      await userEvent.click(screen.getByRole("button", { name: "Open" }));
+      await userEvent.keyboard("{Escape}");
+      expect(stray.hasAttribute("inert")).toBe(true);
+    } finally {
+      stray.remove();
+    }
+  });
+
+  it("closes on a backdrop press by default, but not when dismissOnBackdrop is off (destructive confirms)", async () => {
+    const onClose = vi.fn();
+    const { rerender } = render(
+      <ModalSheet open title="Remove" onClose={onClose}>
+        <button>Inside</button>
+      </ModalSheet>,
+    );
+    await userEvent.click(screen.getByTestId("modal-backdrop"));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    rerender(
+      <ModalSheet open title="Remove" onClose={onClose} dismissOnBackdrop={false}>
+        <button>Inside</button>
+      </ModalSheet>,
+    );
+    screen.getByRole("button", { name: "Inside" }).focus();
+    await userEvent.click(screen.getByTestId("modal-backdrop"));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    // The ignored press leaves focus inside the dialog, so Escape still works.
+    expect(screen.getByRole("dialog").contains(document.activeElement)).toBe(true);
+    await userEvent.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledTimes(2);
+  });
+
+  it("renders into the document body so it sits above everything", async () => {
+    render(<Harness />);
+    await userEvent.click(screen.getByRole("button", { name: "Open" }));
+    expect(screen.getByTestId("modal-backdrop").parentElement).toBe(document.body);
+  });
+
+  describe("showClose", () => {
+    it("has no close button by default", () => {
+      render(
+        <ModalSheet open title="Plain" onClose={() => {}}>
+          <input aria-label="Name" />
+        </ModalSheet>,
+      );
+      expect(screen.queryByRole("button", { name: "Close dialog" })).toBeNull();
+    });
+
+    it("adds a labelled close button that closes, without taking the initial focus", async () => {
+      const onClose = vi.fn();
+      render(
+        <ModalSheet open showClose title="Edit" onClose={onClose}>
+          <input aria-label="Name" />
+        </ModalSheet>,
+      );
+      expect(document.activeElement).toBe(screen.getByLabelText("Name"));
+      await userEvent.click(screen.getByRole("button", { name: "Close dialog" }));
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it("still focuses the dialog itself when the close button is all it holds", () => {
+      render(
+        <ModalSheet open showClose title="Empty" onClose={() => {}}>
+          {null}
+        </ModalSheet>,
+      );
+      expect(document.activeElement).toBe(screen.getByRole("dialog"));
+    });
+  });
 });

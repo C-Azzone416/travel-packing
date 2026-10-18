@@ -4,6 +4,7 @@ import {
   editItem,
   findIdentityViolations,
   recalculateSuggestions,
+  rememberPreview,
   removeTripItem,
   reviewWeatherAgain,
   skipWeather,
@@ -726,5 +727,74 @@ describe("findIdentityViolations", () => {
         ),
       ),
     ).toEqual([]);
+  });
+});
+
+describe("rememberPreview", () => {
+  const perDay = (id: string, qty = 1): Staple => ({
+    id,
+    name: id,
+    qty,
+    cadence: "per day",
+    category: "Clothing",
+    packLast: false,
+  });
+  const perTrip = (id: string): Staple => ({
+    id,
+    name: id,
+    qty: 1,
+    cadence: "per trip",
+    category: "Clothing",
+    packLast: false,
+  });
+
+  it("previews the per-day amount a remembered edit would save (the same rounding the edit uses)", () => {
+    expect(rememberPreview([perDay("socks")], "socks", 6, 3)).toEqual({
+      kind: "per-day",
+      perDay: 2,
+    });
+    expect(rememberPreview([perDay("socks")], "socks", 7, 3)).toEqual({
+      kind: "per-day",
+      perDay: 2,
+    });
+    expect(rememberPreview([perDay("socks")], "socks", 8, 3)).toEqual({
+      kind: "per-day",
+      perDay: 3,
+    });
+    expect(rememberPreview([perDay("socks")], "socks", 1, 5)).toEqual({
+      kind: "per-day",
+      perDay: 1,
+    });
+  });
+
+  it("says the saved quantity stays the same when the trip has no packing days", () => {
+    expect(rememberPreview([perDay("socks", 2)], "socks", 4, 0)).toEqual({
+      kind: "no-packing-days",
+    });
+  });
+
+  it("has nothing to preview for a per-trip staple, an item with no staple, or an unknown id", () => {
+    expect(rememberPreview([perTrip("laptop")], "laptop", 2, 3)).toBeNull();
+    expect(rememberPreview([perDay("socks")], "nothing", 2, 3)).toBeNull();
+    expect(rememberPreview([], "socks", 2, 3)).toBeNull();
+  });
+
+  it("agrees with what editItem actually stores", () => {
+    const trip = makeTrip();
+    const staples = [perDay(trip.items[0].id, 1)];
+    for (const qty of [1, 3, 4, 7, 10]) {
+      const preview = rememberPreview(staples, trip.items[0].id, qty, trip.dailyDays);
+      const edited = editItem(trip, staples, trip.items[0].id, {
+        name: trip.items[0].name,
+        qty,
+        timing: trip.items[0].section,
+        scope: "remember",
+      });
+      expect(edited.ok).toBe(true);
+      if (edited.ok && preview?.kind === "per-day")
+        expect(edited.staples.find((entry) => entry.id === trip.items[0].id)?.qty).toBe(
+          preview.perDay,
+        );
+    }
   });
 });
