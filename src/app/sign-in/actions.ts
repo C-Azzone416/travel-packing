@@ -1,10 +1,18 @@
 "use server";
 
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getAuth } from "@/server/auth/auth-runtime";
 import { ACCESS_DENIED_PATH, SIGN_IN_PATH } from "@/server/auth/proxy-handler";
+import { logAuthEvent } from "@/server/auth/safe-log";
 import { signInOwner, signOutOwner } from "@/server/auth/sign-in";
-import { INVALID_CREDENTIALS_MESSAGE, UNAVAILABLE_MESSAGE, type SignInState } from "./state";
+import { clientAddress, signInLimits } from "@/server/auth/sign-in-limit";
+import {
+  INVALID_CREDENTIALS_MESSAGE,
+  RATE_LIMITED_MESSAGE,
+  UNAVAILABLE_MESSAGE,
+  type SignInState,
+} from "./state";
 
 /** Form action for the sign-in screen. The allowlist check happens here on the server, not in the UI. */
 export async function signInAction(
@@ -13,8 +21,21 @@ export async function signInAction(
 ): Promise<SignInState> {
   const auth = await getAuth();
   if (!auth.available) return { error: UNAVAILABLE_MESSAGE };
+  // Ask first, before the credentials are looked at: once guessing is blocked, not even the right password gets in.
+  // Only failures count, and the lockout is per (email, address), so nobody can lock the owner out from elsewhere.
+  const email = typeof formData.get("email") === "string" ? (formData.get("email") as string) : "";
+  const address = clientAddress(await headers());
+  const limits = signInLimits();
+  if (limits.blocked(email, address)) {
+    logAuthEvent("sign-in-rate-limited");
+    return { error: RATE_LIMITED_MESSAGE };
+  }
   const outcome = await signInOwner(auth, formData.get("email"), formData.get("password"));
-  if (outcome === "ok") redirect("/");
+  if (outcome === "ok") {
+    limits.recordSuccess(email, address);
+    redirect("/");
+  }
+  limits.recordFailure(email, address);
   if (outcome === "denied") redirect(ACCESS_DENIED_PATH);
   return { error: INVALID_CREDENTIALS_MESSAGE };
 }

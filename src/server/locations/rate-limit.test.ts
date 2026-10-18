@@ -7,6 +7,31 @@ function setup(limit = 3, windowMs = 1000) {
   return { limiter, advance: (ms: number) => (time += ms) };
 }
 
+describe("peek and clear", () => {
+  it("peek reports a full key without counting, and agrees with consume as the window slides", () => {
+    const { limiter, advance } = setup(2, 1000);
+    expect(limiter.peek("a")).toEqual({ ok: true });
+    expect(limiter.peek("a")).toEqual({ ok: true });
+    limiter.consume("a");
+    limiter.consume("a");
+    expect(limiter.peek("a")).toEqual({ ok: false, retryAfterMs: 1000 });
+    advance(400);
+    expect(limiter.peek("a")).toEqual({ ok: false, retryAfterMs: 600 });
+    advance(600);
+    expect(limiter.peek("a")).toEqual({ ok: true });
+    expect(limiter.peek("never-seen")).toEqual({ ok: true });
+  });
+
+  it("clear forgets a key only", () => {
+    const { limiter } = setup(1, 1000);
+    limiter.consume("a");
+    limiter.consume("b");
+    limiter.clear("a");
+    expect(limiter.peek("a").ok).toBe(true);
+    expect(limiter.peek("b").ok).toBe(false);
+  });
+});
+
 describe("createRateLimiter", () => {
   it("allows up to the limit, then refuses with how long to wait", () => {
     const { limiter, advance } = setup();
