@@ -21,13 +21,16 @@ export function AppShell({ children }: { children: ReactNode }) {
             <PreviewBanner />
             <div className="app-shell">
               <header className="topbar">
-                <Link className="brand-button" href="/" aria-label="Go to trips">
+                <Link
+                  className="brand-button"
+                  href="/"
+                  aria-label="Carrywell, Caroline’s packing companion: go to trips"
+                >
                   <span className="brand-mark" aria-hidden="true">
                     ✦
                   </span>
                   <span>
-                    <strong>Carrywell</strong>
-                    <small>Caroline’s packing companion</small>
+                    <strong>Carrywell</strong> <small>Caroline’s packing companion</small>
                   </span>
                 </Link>
                 <ConnectedSaveChip />

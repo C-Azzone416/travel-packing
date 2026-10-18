@@ -176,7 +176,9 @@ test("a trip-only edit leaves the staples alone: a new trip still has the defaul
   page,
 }) => {
   await openSanDiego(page);
-  await row(page, "sunglasses").getByRole("button", { name: "Edit Sunglasses" }).click();
+  await row(page, "sunglasses")
+    .getByRole("button", { name: /^Sunglasses / })
+    .click();
   const dialog = page.getByRole("dialog", { name: "Edit item" });
   await dialog.getByLabel("Item name").fill("Beach sunglasses");
   await expect(dialog.getByRole("radio", { name: /This trip only/ })).toBeChecked();
@@ -200,7 +202,9 @@ test("a remembered edit changes future trips, but neither this trip's history no
   page,
 }) => {
   await openSanDiego(page);
-  await row(page, "sunglasses").getByRole("button", { name: "Edit Sunglasses" }).click();
+  await row(page, "sunglasses")
+    .getByRole("button", { name: /^Sunglasses / })
+    .click();
   const dialog = page.getByRole("dialog", { name: "Edit item" });
   await dialog.getByLabel("Item name").fill("Polarized sunglasses");
   await dialog.getByRole("radio", { name: /Remember for future trips/ }).check();
@@ -271,7 +275,9 @@ test("an optional item can be removed, after a confirmation that focuses the saf
   page,
 }) => {
   await openSanDiego(page);
-  await row(page, "nice-shoes").getByRole("button", { name: "Edit Dress shoes" }).click();
+  await row(page, "nice-shoes")
+    .getByRole("button", { name: /^Dress shoes / })
+    .click();
   await page
     .getByRole("dialog", { name: "Edit item" })
     .getByRole("button", { name: "Remove item" })
@@ -284,7 +290,9 @@ test("an optional item can be removed, after a confirmation that focuses the saf
   await page.keyboard.press("Escape");
   await expect(row(page, "nice-shoes")).toBeVisible();
 
-  await row(page, "nice-shoes").getByRole("button", { name: "Edit Dress shoes" }).click();
+  await row(page, "nice-shoes")
+    .getByRole("button", { name: /^Dress shoes / })
+    .click();
   await page
     .getByRole("dialog", { name: "Edit item" })
     .getByRole("button", { name: "Remove item" })
@@ -298,7 +306,9 @@ test("an optional item can be removed, after a confirmation that focuses the saf
 
 test("a required item has no Remove button, and an empty name is refused", async ({ page }) => {
   await openSanDiego(page);
-  await row(page, "tops").getByRole("button", { name: "Edit Everyday tops" }).click();
+  await row(page, "tops")
+    .getByRole("button", { name: /^Everyday tops / })
+    .click();
   const dialog = page.getByRole("dialog", { name: "Edit item" });
   await expect(dialog.getByRole("button", { name: "Remove item" })).toHaveCount(0);
   await dialog.getByLabel("Item name").fill("   ");
@@ -354,7 +364,7 @@ test("rows are keyboard operable with 44px targets, and nothing scrolls sideways
   const underwear = row(page, "underwear");
   const targets: [string, ReturnType<typeof underwear.getByRole>][] = [
     ["check", underwear.getByRole("button", { name: "Pack all Underwear" })],
-    ["edit", underwear.getByRole("button", { name: "Edit Underwear" })],
+    ["edit", underwear.getByRole("button", { name: /^Underwear / })],
     ["increase", underwear.getByRole("button", { name: "Increase packed Underwear" })],
     ["decrease", underwear.getByRole("button", { name: "Decrease packed Underwear" })],
     ["filter", page.getByRole("button", { name: "Still to pack" })],
@@ -367,27 +377,29 @@ test("rows are keyboard operable with 44px targets, and nothing scrolls sideways
   await underwear.getByRole("button", { name: "Increase packed Underwear" }).focus();
   await page.keyboard.press("Enter");
   await expect(underwear).toContainText("3/4");
-  await underwear.getByRole("button", { name: "Edit Underwear" }).focus();
+  await underwear.getByRole("button", { name: /^Underwear / }).focus();
   await page.keyboard.press("Enter");
   const dialog = page.getByRole("dialog", { name: "Edit item" });
   await expect(dialog.getByLabel("Item name")).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
-  await expect(underwear.getByRole("button", { name: "Edit Underwear" })).toBeFocused();
+  await expect(underwear.getByRole("button", { name: /^Underwear / })).toBeFocused();
 });
 
 test("a sheet can be closed with its visible close button, and the bag button never wraps", async ({
   page,
 }, testInfo) => {
   await openSanDiego(page);
-  await row(page, "tops").getByRole("button", { name: "Edit Everyday tops" }).click();
+  await row(page, "tops")
+    .getByRole("button", { name: /^Everyday tops / })
+    .click();
   const close = page.getByRole("button", { name: "Close dialog" });
   const box = (await close.boundingBox())!;
   expect(box.width).toBeGreaterThanOrEqual(43.9);
   expect(box.height).toBeGreaterThanOrEqual(43.9);
   await close.click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(row(page, "tops").getByRole("button", { name: "Edit Everyday tops" })).toBeFocused();
+  await expect(row(page, "tops").getByRole("button", { name: /^Everyday tops / })).toBeFocused();
 
   for (const id of TOILETRIES)
     await row(page, id)
@@ -419,7 +431,9 @@ test("screenshots of the trip screen", async ({ page }, testInfo) => {
   await shot("partial-row");
   await shot("full", true);
 
-  await row(page, "nice-shoes").getByRole("button", { name: "Edit Dress shoes" }).click();
+  await row(page, "nice-shoes")
+    .getByRole("button", { name: /^Dress shoes / })
+    .click();
   await shot("editor");
   await page
     .getByRole("dialog", { name: "Edit item" })

@@ -59,7 +59,7 @@ test("keyboard focus is clearly visible", async ({ page }) => {
 
 test("touch targets are at least 44px", async ({ page }) => {
   const targets = [
-    page.getByRole("link", { name: "Go to trips" }),
+    page.getByRole("link", { name: /go to trips/i }),
     page.getByRole("link", { name: "Saved" }),
     ...(await page.getByRole("navigation").getByRole("link").all()),
   ];
