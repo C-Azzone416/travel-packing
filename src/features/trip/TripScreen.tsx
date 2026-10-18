@@ -29,6 +29,7 @@ import {
   visibleItems,
   type PackFilter,
 } from "./trip-view";
+import { revocationReason } from "./review-view";
 import { WeatherCard, WeatherDialog } from "./Weather";
 
 /** Taps on a quantity stepper settle for this long before one write carries the final count. */
@@ -107,6 +108,8 @@ export function TripScreen({ tripId }: { tripId: string }) {
   const [failedRows, setFailedRows] = useState<ReadonlySet<string>>(new Set());
   const [announcement, setAnnouncement] = useState("");
   const bagPromptDismissed = useRef(false);
+  // The last trip the server confirmed, so a change that takes the trip out of Ready can say so.
+  const confirmed = useRef<LifecycleTrip | null>(null);
   const retries = useRef(
     new Map<string, { write: () => Promise<TripChange>; options: ActOptions }>(),
   );
@@ -125,6 +128,7 @@ export function TripScreen({ tripId }: { tripId: string }) {
       ([trip, owned]) => {
         if (cancelled) return;
         setStaples(owned);
+        confirmed.current = trip;
         setLoad({ phase: "ready", trip });
       },
       { read: true },
@@ -148,7 +152,10 @@ export function TripScreen({ tripId }: { tripId: string }) {
     (write: () => Promise<TripChange>, options: ActOptions = {}): Promise<void> => {
       if (options.modal) setSubmitting(true);
       return track(write, (change) => {
+        const reason = confirmed.current ? revocationReason(confirmed.current, change.trip) : null;
+        confirmed.current = change.trip;
         setLoad({ phase: "ready", trip: change.trip });
+        if (reason) toast.show(`No longer ready: ${reason}`);
         if (options.row) {
           retries.current.delete(options.row);
           setFailedRows((current) => new Set([...current].filter((id) => id !== options.row)));
@@ -168,7 +175,7 @@ export function TripScreen({ tripId }: { tripId: string }) {
         })
         .finally(() => setSubmitting(false));
     },
-    [source, track],
+    [source, toast, track],
   );
 
   const settle = useCallback((id: string, value: number) => {
