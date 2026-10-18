@@ -249,4 +249,14 @@ describe("ModalSheet", () => {
       expect(document.activeElement).toBe(screen.getByRole("dialog"));
     });
   });
+
+  it("starts on a control that asks to be first, such as a checked radio, instead of the first control", () => {
+    render(
+      <ModalSheet open title="Pick" onClose={() => {}}>
+        <input type="radio" name="x" aria-label="One" />
+        <input type="radio" name="x" aria-label="Two" defaultChecked data-modal-autofocus="" />
+      </ModalSheet>,
+    );
+    expect(document.activeElement).toBe(screen.getByLabelText("Two"));
+  });
 });

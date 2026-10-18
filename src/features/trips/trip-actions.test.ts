@@ -34,6 +34,7 @@ import {
   removeItemAction,
   reviewWeatherAgainAction,
   setPackedAction,
+  setThemeAction,
   skipWeatherAction,
   togglePackedAction,
   undoBagPlacementAction,
@@ -311,6 +312,32 @@ describe("item and preference commands", () => {
   });
 });
 
+describe("themes", () => {
+  it("setThemeAction stores the theme, changes nothing else, and is validated", async () => {
+    const trip = await seedTrip(db(), OWNER.userId);
+    const changed2 = changed(await setThemeAction(trip.id, "outdoors"));
+    expect(changed2.trip.theme).toBe("outdoors");
+    expect({ ...changed2.trip, theme: "travel" }).toMatchObject({
+      id: trip.id,
+      destination: trip.destination,
+      ready: trip.ready,
+    });
+    const read = await getTripAction(trip.id);
+    if (!read.ok) throw new Error("expected ok");
+    expect(read.trip.theme).toBe("outdoors");
+    for (const theme of ["volcano", "", "Beach", null, 3])
+      expect(await setThemeAction(trip.id, theme as never)).toEqual({
+        ok: false,
+        code: "INVALID_INPUT",
+      });
+    expect(await setThemeAction("not-a-uuid", "city")).toEqual({
+      ok: false,
+      code: "INVALID_INPUT",
+    });
+    expect(await setThemeAction(MISSING, "city")).toEqual({ ok: false, code: "NOT_FOUND" });
+  });
+});
+
 describe("owner gate", () => {
   it("another owner's trip id is NOT_FOUND for every command, and nothing changes", async () => {
     const trip = await seedTrip(db(), OWNER.userId);
@@ -349,6 +376,7 @@ describe("owner gate", () => {
       ["skipWeather", () => skipWeatherAction(trip.id)],
       ["reviewWeather", () => reviewWeatherAgainAction(trip.id)],
       ["preferences", () => updatePreferencesAction(trip.id, trip.config)],
+      ["theme", () => setThemeAction(trip.id, "city")],
     ];
     for (const [name, attempt] of attempts)
       expect(await attempt(), name).toEqual({ ok: false, code: "NOT_FOUND" });
@@ -378,6 +406,7 @@ describe("owner gate", () => {
       () => setPackedAction(trip.id, "socks", 1),
       () => markReadyAction(trip.id),
       () => updatePreferencesAction(trip.id, trip.config),
+      () => setThemeAction(trip.id, "city"),
     ];
     as(null);
     for (const call of calls) await expect(call()).rejects.toThrow("NEXT_REDIRECT:/sign-in");

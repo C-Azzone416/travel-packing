@@ -8,6 +8,7 @@
 import { redirect } from "next/navigation";
 import type { ItemEdit } from "@/domain/item-ops";
 import type { Signals } from "@/domain/readiness";
+import type { ThemeId } from "@/domain/themes";
 import type { Staple, TripConfig, Scope } from "@/domain/trip";
 import type { LifecycleTrip } from "@/domain/trip-lifecycle";
 import { ACCESS_DENIED_PATH, SIGN_IN_PATH } from "@/server/auth/proxy-handler";
@@ -176,6 +177,10 @@ export async function skipWeatherAction(tripId: string): Promise<TripCommandResu
 
 export async function reviewWeatherAgainAction(tripId: string): Promise<TripCommandResult> {
   return command((context) => service.reviewTripWeatherAgain(context, { tripId }));
+}
+
+export async function setThemeAction(tripId: string, theme: ThemeId): Promise<TripCommandResult> {
+  return command((context) => service.setTripTheme(context, { tripId, theme }));
 }
 
 export async function updatePreferencesAction(

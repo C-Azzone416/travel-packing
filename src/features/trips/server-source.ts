@@ -4,6 +4,7 @@
 import type { LifecycleState, LifecycleTrip, TripDraft } from "@/domain/trip-lifecycle";
 import type { CreateTripActionResult, TripsActionResult } from "./actions";
 import type { ItemEdit } from "@/domain/item-ops";
+import type { ThemeId } from "@/domain/themes";
 import type { Scope, Staple, TripConfig } from "@/domain/trip";
 import type { StaplesReadResult, TripCommandResult, TripReadResult } from "./trip-actions";
 import {
@@ -42,6 +43,7 @@ export interface TripActions {
   skipWeather(tripId: string): Promise<TripCommandResult>;
   reviewWeatherAgain(tripId: string): Promise<TripCommandResult>;
   updatePreferences(tripId: string, config: TripConfig): Promise<TripCommandResult>;
+  setTheme(tripId: string, theme: ThemeId): Promise<TripCommandResult>;
 }
 
 /** A failed action becomes a TripsSourceError carrying only the error code (never data). */
@@ -102,5 +104,6 @@ export function createServerTripsSource(actions: TripsActions, trip: TripActions
     skipWeather: (id) => unwrapChange(trip.skipWeather(id)),
     reviewWeatherAgain: (id) => unwrapChange(trip.reviewWeatherAgain(id)),
     updatePreferences: (id, config) => unwrapChange(trip.updatePreferences(id, config)),
+    setTheme: (id, theme) => unwrapChange(trip.setTheme(id, theme)),
   };
 }

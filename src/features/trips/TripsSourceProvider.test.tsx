@@ -41,6 +41,7 @@ const actions = vi.hoisted(() => {
         "skipWeatherAction",
         "reviewWeatherAgainAction",
         "updatePreferencesAction",
+        "setThemeAction",
       ].map(command),
     ),
   };
@@ -221,6 +222,12 @@ describe("TripsSourceProvider", () => {
         (s) => s.updatePreferences("t", config),
         () => actions.commands.updatePreferencesAction,
         ["t", config],
+      ],
+      [
+        "setTheme",
+        (s) => s.setTheme("t", "city"),
+        () => actions.commands.setThemeAction,
+        ["t", "city"],
       ],
     ];
 
