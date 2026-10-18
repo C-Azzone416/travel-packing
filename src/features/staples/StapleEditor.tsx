@@ -56,6 +56,7 @@ export function StapleEditor({
 
   function submit(event: FormEvent) {
     event.preventDefault();
+    if (saving) return; // Enter in a field submits too: one save at a time, never two ids for one staple
     if (name.trim() === "") return setProblem("name");
     if (!qtyValid) return setProblem("qty");
     if (duplicate) return; // the message below says what to do

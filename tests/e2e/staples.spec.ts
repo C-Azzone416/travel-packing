@@ -7,7 +7,6 @@ const NOW = new Date("2026-10-16T12:00:00");
 
 const staple = (page: Page, id: string) => page.locator(`[data-staple-id="${id}"]`);
 const section = (page: Page, name: string) => page.getByRole("region", { name });
-const card = (page: Page, name: string) => page.getByRole("article", { name });
 
 async function openStaples(page: Page) {
   await page.clock.setFixedTime(NOW);

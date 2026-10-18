@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { renderInApp } from "@/test/providers";
@@ -201,6 +201,46 @@ describe("adding a staple", () => {
     await user.click(within(dialog).getByRole("button", { name: "Add staple" }));
     expect(within(dialog).getByRole("alert").textContent).toBe("Enter a quantity from 1 to 30.");
     expect(source.staplesSnapshot()).toHaveLength(before);
+  });
+
+  it("treats a name of only spaces as empty: asks for a name and saves nothing", async () => {
+    const upsertStaple = vi.fn();
+    const { user, source } = setup((base) => ({ ...base, upsertStaple }));
+    await title();
+    const before = source.staplesSnapshot().length;
+    await user.click(screen.getByRole("button", { name: /Add/ }));
+    const dialog = screen.getByRole("dialog");
+    await user.type(within(dialog).getByLabelText("Item name"), "   ");
+    await user.click(within(dialog).getByRole("button", { name: "Add staple" }));
+    expect(within(dialog).getByRole("alert").textContent).toBe("Enter a name.");
+    expect(upsertStaple).not.toHaveBeenCalled();
+    expect(source.staplesSnapshot()).toHaveLength(before);
+  });
+
+  it("while a save is pending the button is disabled, and a second press saves nothing more", async () => {
+    const gate = deferred<void>();
+    const upsertStaple = vi.fn();
+    const { user, source } = setup((base) => ({
+      ...base,
+      upsertStaple: async (staple) => {
+        upsertStaple(staple);
+        await gate.promise;
+        return base.upsertStaple(staple);
+      },
+    }));
+    await title();
+    await user.click(screen.getByRole("button", { name: /Add/ }));
+    const dialog = screen.getByRole("dialog");
+    await user.type(within(dialog).getByLabelText("Item name"), "Hat");
+    const button = within(dialog).getByRole("button", { name: "Add staple" });
+    await user.click(button);
+    await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(true));
+    await user.click(button);
+    fireEvent.submit(dialog.querySelector("form") as HTMLFormElement);
+    expect(upsertStaple).toHaveBeenCalledTimes(1);
+    await act(async () => gate.resolve());
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(source.staplesSnapshot().filter((entry) => entry.name === "Hat")).toHaveLength(1);
   });
 
   it("refuses a duplicate name (ignoring case) and offers to edit the existing one", async () => {
