@@ -38,13 +38,8 @@ export function PackRow({
       >
         <span aria-hidden="true">{complete ? "✓" : ""}</span>
       </button>
-      <button
-        type="button"
-        className="item-body"
-        aria-label={`Edit ${item.name}`}
-        onClick={() => onEdit(item.id)}
-      >
-        <span className="item-name">{item.name}</span>
+      <button type="button" className="item-body" onClick={() => onEdit(item.id)}>
+        <span className="item-name">{item.name}</span>{" "}
         <span className="item-meta">
           {item.category} · tap to edit
           {item.section === "packlast" ? <span className="timing-tag">Pack last</span> : null}
@@ -59,7 +54,7 @@ export function PackRow({
         >
           −
         </button>
-        <span aria-hidden="true">
+        <span role="img" aria-label={`${item.packed} of ${item.qty} packed`}>
           {item.packed}/{item.qty}
         </span>
         <button

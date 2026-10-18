@@ -161,7 +161,7 @@ describe("AppShell", () => {
 
   it("brand link goes home and the save chip is present", () => {
     render(<AppShell>x</AppShell>);
-    expect(screen.getByRole("link", { name: "Go to trips" }).getAttribute("href")).toBe("/");
+    expect(screen.getByRole("link", { name: /go to trips/i }).getAttribute("href")).toBe("/");
     expect(screen.getByRole("link", { name: "Saved" })).toBeTruthy();
   });
 

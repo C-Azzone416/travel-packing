@@ -220,6 +220,7 @@ function FlowBody({
                   type="date"
                   value={draft.start}
                   required
+                  aria-describedby="date-hint date-notice"
                   onChange={(event) => {
                     const change = withDates(draft, event.target.value, draft.end);
                     setDraft(change.draft);
@@ -232,6 +233,7 @@ function FlowBody({
                 <input
                   name="end"
                   type="date"
+                  aria-describedby="date-hint date-notice"
                   value={draft.end}
                   min={draft.start || undefined}
                   required
@@ -243,10 +245,10 @@ function FlowBody({
                 />
               </label>
             </div>
-            <div className="tiny muted">
+            <div id="date-hint" className="tiny muted">
               Same-day trips are allowed. Return cannot be before departure.
             </div>
-            <p className="notice" role="status" aria-label="Date notice">
+            <p id="date-notice" className="notice" role="status" aria-label="Date notice">
               {adjusted ? "Return date moved to match your departure." : ""}
             </p>
             {draft.location ? (

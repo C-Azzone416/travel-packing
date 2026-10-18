@@ -520,7 +520,7 @@ describe("item editor", () => {
     const { user, source } = setup();
     await ready();
     const staples = source.staplesSnapshot();
-    await user.click(within(row("sunglasses")).getByRole("button", { name: "Edit Sunglasses" }));
+    await user.click(within(row("sunglasses")).getByRole("button", { name: /^Sunglasses / }));
     const dialog = screen.getByRole("dialog", { name: "Edit item" });
     expect(
       within(dialog)
@@ -535,14 +535,14 @@ describe("item editor", () => {
     expect(itemOf(source, "sunglasses").name).toBe("Beach sunglasses");
     expect(source.staplesSnapshot()).toEqual(staples);
     expect(document.activeElement).toBe(
-      within(row("sunglasses")).getByRole("button", { name: "Edit Beach sunglasses" }),
+      within(row("sunglasses")).getByRole("button", { name: /^Beach sunglasses / }),
     );
   });
 
   it("a remembered edit saves to the staples; the per-day preview reads from the domain and updates as the quantity changes", async () => {
     const { user, source } = setup();
     await ready();
-    await user.click(within(row("underwear")).getByRole("button", { name: "Edit Underwear" }));
+    await user.click(within(row("underwear")).getByRole("button", { name: /^Underwear / }));
     const dialog = screen.getByRole("dialog", { name: "Edit item" });
     const hint = within(dialog).getByRole("status", { name: "Saved quantity" });
     expect(hint.textContent).toBe("");
@@ -571,7 +571,7 @@ describe("item editor", () => {
       </TripsSourceProvider>,
     );
     await ready();
-    await user.click(within(row("underwear")).getByRole("button", { name: "Edit Underwear" }));
+    await user.click(within(row("underwear")).getByRole("button", { name: /^Underwear / }));
     await user.click(screen.getByRole("radio", { name: /Remember for future trips/ }));
     expect(screen.getByRole("status", { name: "Saved quantity" }).textContent).toBe(
       "This trip has no packing days, so the saved quantity stays the same.",
@@ -581,7 +581,7 @@ describe("item editor", () => {
   it("has no preview for a per-trip staple", async () => {
     const { user } = setup();
     await ready();
-    await user.click(within(row("sunglasses")).getByRole("button", { name: "Edit Sunglasses" }));
+    await user.click(within(row("sunglasses")).getByRole("button", { name: /^Sunglasses / }));
     await user.click(screen.getByRole("radio", { name: /Remember for future trips/ }));
     expect(screen.getByRole("status", { name: "Saved quantity" }).textContent).toBe("");
   });
@@ -589,7 +589,7 @@ describe("item editor", () => {
   it("refuses an empty name inline, and clears the error as the person types", async () => {
     const { user, source } = setup();
     await ready();
-    await user.click(within(row("tops")).getByRole("button", { name: "Edit Everyday tops" }));
+    await user.click(within(row("tops")).getByRole("button", { name: /^Everyday tops / }));
     const dialog = screen.getByRole("dialog", { name: "Edit item" });
     await user.clear(within(dialog).getByLabelText("Item name"));
     await user.click(within(dialog).getByRole("button", { name: "Save item" }));
@@ -602,7 +602,7 @@ describe("item editor", () => {
   it("a required item has no Remove button; Pack last is a timing switch that moves the item", async () => {
     const { user, source } = setup();
     await ready();
-    await user.click(within(row("tops")).getByRole("button", { name: "Edit Everyday tops" }));
+    await user.click(within(row("tops")).getByRole("button", { name: /^Everyday tops / }));
     const dialog = screen.getByRole("dialog", { name: "Edit item" });
     expect(within(dialog).queryByRole("button", { name: "Remove item" })).toBeNull();
     await user.click(within(dialog).getByRole("switch", { name: "Pack last" }));
@@ -614,7 +614,7 @@ describe("item editor", () => {
   it("a return item shows its callout and has no Pack last switch", async () => {
     const { user } = setup();
     await ready();
-    await user.click(within(row("return-top")).getByRole("button", { name: "Edit Fresh top" }));
+    await user.click(within(row("return-top")).getByRole("button", { name: /^Fresh top / }));
     const dialog = screen.getByRole("dialog", { name: "Edit item" });
     expect(within(dialog).getByText(/stays in the dedicated return set/)).toBeTruthy();
     expect(within(dialog).queryByRole("switch", { name: "Pack last" })).toBeNull();
@@ -625,19 +625,17 @@ describe("item editor", () => {
   it("shows the optional and Bathroom callouts", async () => {
     const { user } = setup();
     await ready();
-    await user.click(within(row("nice-shoes")).getByRole("button", { name: "Edit Dress shoes" }));
+    await user.click(within(row("nice-shoes")).getByRole("button", { name: /^Dress shoes / }));
     expect(screen.getByText(/Optional suggestion\./)).toBeTruthy();
     await user.keyboard("{Escape}");
-    await user.click(
-      within(row("last-toothbrush")).getByRole("button", { name: "Edit Toothbrush" }),
-    );
+    await user.click(within(row("last-toothbrush")).getByRole("button", { name: /^Toothbrush / }));
     expect(screen.getByText(/Bathroom item\./)).toBeTruthy();
   });
 
   it("removes an optional item only after a confirmation that focuses the safe button; Keep item returns to the editor", async () => {
     const { user, source } = setup();
     await ready();
-    await user.click(within(row("nice-shoes")).getByRole("button", { name: "Edit Dress shoes" }));
+    await user.click(within(row("nice-shoes")).getByRole("button", { name: /^Dress shoes / }));
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", { name: "Remove item" }),
     );
@@ -664,9 +662,7 @@ describe("item editor", () => {
   it("removing with 'Remember' also removes the staple, and the confirmation says so", async () => {
     const { user, source } = setup();
     await ready();
-    await user.click(
-      within(row("last-toothbrush")).getByRole("button", { name: "Edit Toothbrush" }),
-    );
+    await user.click(within(row("last-toothbrush")).getByRole("button", { name: /^Toothbrush / }));
     await user.click(screen.getByRole("radio", { name: /Remember for future trips/ }));
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", { name: "Remove item" }),
@@ -1006,7 +1002,7 @@ describe("dialog submits wait for the source", () => {
       },
     }));
     await ready();
-    await user.click(within(row("sunglasses")).getByRole("button", { name: "Edit Sunglasses" }));
+    await user.click(within(row("sunglasses")).getByRole("button", { name: /^Sunglasses / }));
     const dialog = screen.getByRole("dialog", { name: "Edit item" });
     const save = within(dialog).getByRole("button", { name: "Save item" });
     await user.dblClick(save);
@@ -1172,7 +1168,7 @@ describe("a form submitted twice while saving saves once", () => {
       },
     }));
     await ready();
-    await user.click(within(row("sunglasses")).getByRole("button", { name: "Edit Sunglasses" }));
+    await user.click(within(row("sunglasses")).getByRole("button", { name: /^Sunglasses / }));
     submitTwice();
     await waitFor(() => expect(calls).toHaveBeenCalledTimes(1));
     submitTwice();
@@ -1275,6 +1271,27 @@ describe("the theme sheet's failure message", () => {
   });
 });
 
+describe("accessible names of a packing row", () => {
+  it("the edit button is named by what it shows, including the Pack last badge", async () => {
+    setup();
+    await ready();
+    const tops = within(row("tops")).getByRole("button", { name: /^Everyday tops / });
+    expect(tops.textContent).toContain("Everyday tops");
+    expect(tops.textContent).toContain("tap to edit");
+    // Name from content: nothing in the name is missing from what is on screen.
+    expect(tops.getAttribute("aria-label")).toBeNull();
+    const toothbrush = within(row("last-toothbrush")).getByRole("button", { name: /^Toothbrush / });
+    expect(toothbrush.textContent).toContain("Pack last");
+    expect(toothbrush.getAttribute("aria-label")).toBeNull();
+  });
+
+  it("the packed count is readable, not hidden: '1 of 2 packed'", async () => {
+    setup();
+    await ready();
+    expect(within(row("tops")).getByRole("img", { name: "1 of 2 packed" }).textContent).toBe("1/2");
+  });
+});
+
 describe("closing dialogs without saving", () => {
   const closeButton = () => screen.queryByRole("button", { name: "Close dialog" });
 
@@ -1283,7 +1300,7 @@ describe("closing dialogs without saving", () => {
     await ready();
     const before = source.snapshot();
 
-    await user.click(within(row("tops")).getByRole("button", { name: "Edit Everyday tops" }));
+    await user.click(within(row("tops")).getByRole("button", { name: /^Everyday tops / }));
     await user.click(closeButton() as HTMLElement);
     expect(screen.queryByRole("dialog")).toBeNull();
 
@@ -1300,7 +1317,7 @@ describe("closing dialogs without saving", () => {
   it("dialogs with their own safe choice have no close button: the remove confirm, the bag prompt and the weather dialog", async () => {
     const { user } = setup();
     await ready();
-    await user.click(within(row("nice-shoes")).getByRole("button", { name: "Edit Dress shoes" }));
+    await user.click(within(row("nice-shoes")).getByRole("button", { name: /^Dress shoes / }));
     await user.click(screen.getByRole("button", { name: "Remove item" }));
     expect(screen.getByRole("dialog", { name: "Remove Dress shoes?" })).toBeTruthy();
     expect(closeButton()).toBeNull();
@@ -1368,7 +1385,7 @@ describe("edges", () => {
   it("Escape on the remove confirmation goes back to the editor without removing anything", async () => {
     const { user, source } = setup();
     await ready();
-    await user.click(within(row("nice-shoes")).getByRole("button", { name: "Edit Dress shoes" }));
+    await user.click(within(row("nice-shoes")).getByRole("button", { name: /^Dress shoes / }));
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", { name: "Remove item" }),
     );
@@ -1381,7 +1398,7 @@ describe("edges", () => {
   it("a backdrop press does not dismiss the remove confirmation", async () => {
     const { user } = setup();
     await ready();
-    await user.click(within(row("nice-shoes")).getByRole("button", { name: "Edit Dress shoes" }));
+    await user.click(within(row("nice-shoes")).getByRole("button", { name: /^Dress shoes / }));
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", { name: "Remove item" }),
     );
