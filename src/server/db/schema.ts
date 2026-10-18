@@ -9,6 +9,7 @@
 // - Recoverable delete is trips.deleted_at. Purging is a seam with no built-in retention period (#28).
 
 import { sql } from "drizzle-orm";
+import { THEME_IDS } from "../../domain/themes";
 import {
   boolean,
   check,
@@ -50,6 +51,8 @@ export const itemSection = pgEnum("item_section", ITEM_SECTIONS);
 export const stapleCadence = pgEnum("staple_cadence", STAPLE_CADENCES);
 export const weatherStatus = pgEnum("weather_status", WEATHER_STATUSES);
 export const itemCategory = pgEnum("item_category", ITEM_CATEGORIES);
+/** The six built-in trip theme images (#48), shared with the domain so the two can never drift apart. */
+export const tripTheme = pgEnum("trip_theme", THEME_IDS);
 
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
 const updatedAt = () => timestamp("updated_at", { withTimezone: true }).notNull().defaultNow();
@@ -121,6 +124,8 @@ export const trips = pgTable(
     ready: boolean("ready").notNull().default(false),
     archived: boolean("archived").notNull().default(false),
     copiedFrom: uuid("copied_from"),
+    /** The picture shown on the trip card and header (#48). Not sensitive: one of six fixed names. */
+    theme: tripTheme("theme").notNull().default("travel"),
     /** Recoverable delete: set = "recently deleted". Null = live. */
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: createdAt(),

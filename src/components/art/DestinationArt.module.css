@@ -20,9 +20,14 @@
   display: none;
 }
 
+/* Every theme keeps its focal subject at about 72% across and 58% down, so one crop works for all of them. */
 .image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   object-fit: cover;
-  object-position: center 58%;
+  object-position: 72% 58%;
 }
 
 /* Trip card banner: compact on phones, taller as the grid widens. */

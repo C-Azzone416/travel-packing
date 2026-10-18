@@ -77,12 +77,14 @@ export async function createTripAction(draft: TripDraft): Promise<CreateTripActi
           location: { id: draft.location.id },
           start: draft.start,
           end: draft.end,
+          theme: draft.theme,
         })
       : await service.createTrip(context, {
           location: { id: draft.location.id },
           start: draft.start,
           end: draft.end,
           config: draft.config,
+          theme: draft.theme,
         });
   if (saved.ok) return { ok: true, trip: toLifecycleTrip(saved.data) };
   if (saved.error.code === "UNAUTHENTICATED") redirect(SIGN_IN_PATH);

@@ -86,7 +86,7 @@ test("quick view filters without changing progress or touching the network", asy
   expect(requests).toEqual([]);
 });
 
-test("a failed destination image swaps to the neutral surface at the same size (deferred from #13)", async ({
+test("a failed theme image swaps to the neutral surface at the same size (deferred from #13)", async ({
   page,
 }) => {
   await openDashboard(page);
@@ -95,7 +95,7 @@ test("a failed destination image swaps to the neutral surface at the same size (
   const expected = await art.boundingBox();
 
   const failing = await page.context().newPage();
-  await failing.route("**/_next/image**", (route) => route.abort());
+  await failing.route("**/themes/*.svg", (route) => route.abort());
   await failing.setViewportSize(page.viewportSize()!);
   await openDashboard(failing, { signedIn: true });
   const failedArt = card(failing, "San Diego").locator("[data-art-key]");
