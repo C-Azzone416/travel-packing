@@ -163,6 +163,7 @@ test("controls are 44px targets on phone and nothing scrolls sideways", async ({
       staple(page, "underwear").getByRole("button", { name: "Edit Underwear" }),
       page.getByRole("button", { name: /Add/ }),
     ]) {
+      await expect(control).toBeVisible();
       expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
     }
   }
