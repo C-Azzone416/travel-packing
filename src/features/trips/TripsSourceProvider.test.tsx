@@ -23,6 +23,7 @@ const actions = vi.hoisted(() => {
     createTripAction: vi.fn().mockResolvedValue({ ok: true, trip }),
     getTripAction: vi.fn().mockResolvedValue({ ok: true, trip }),
     listStaplesAction: vi.fn().mockResolvedValue({ ok: true, staples: [] }),
+    upsertStapleAction: vi.fn().mockResolvedValue({ ok: true, staples: [] }),
     commands: Object.fromEntries(
       [
         "setPackedAction",
@@ -53,6 +54,7 @@ vi.mock("./actions", () => ({
 vi.mock("./trip-actions", () => ({
   getTripAction: actions.getTripAction,
   listStaplesAction: actions.listStaplesAction,
+  upsertStapleAction: actions.upsertStapleAction,
   ...actions.commands,
 }));
 actions.loadTripsAction.mockResolvedValue({
@@ -116,6 +118,14 @@ describe("TripsSourceProvider", () => {
       returnOutfit: true,
     };
     const draft = { mode: "create" } as never;
+    const staple = {
+      id: "razor",
+      name: "Razor",
+      qty: 1,
+      cadence: "per trip",
+      category: "Bathroom",
+      packLast: false,
+    } as const;
 
     // method -> [how to call it on the source, the one action it must reach, that action's expected arguments]
     const WIRING: [
@@ -132,6 +142,7 @@ describe("TripsSourceProvider", () => {
       ["createTrip", (s) => s.createTrip(draft), () => actions.createTripAction, [draft]],
       ["getTrip", (s) => s.getTrip("t"), () => actions.getTripAction, ["t"]],
       ["listStaples", (s) => s.listStaples(), () => actions.listStaplesAction, []],
+      ["upsertStaple", (s) => s.upsertStaple(staple), () => actions.upsertStapleAction, [staple]],
       [
         "setPacked",
         (s) => s.setPacked("t", "i", 3),
@@ -225,6 +236,7 @@ describe("TripsSourceProvider", () => {
       actions.createTripAction,
       actions.getTripAction,
       actions.listStaplesAction,
+      actions.upsertStapleAction,
       ...Object.values(actions.dashboard),
       ...Object.values(actions.commands),
     ];

@@ -143,6 +143,26 @@ describe("per-trip commands", () => {
     expect((await source.listStaples()).some((entry) => entry.name === "Razor")).toBe(true);
   });
 
+  it("upsertStaple adds a new staple and replaces an existing one by id, leaving existing trips alone", async () => {
+    const { source } = setup();
+    const tripsBefore = JSON.stringify(source.snapshot().trips);
+    const before = (await source.listStaples()).length;
+    const added = await source.upsertStaple({
+      id: "razor",
+      name: "Razor",
+      qty: 1,
+      cadence: "per trip",
+      category: "Bathroom",
+      packLast: false,
+    });
+    expect(added).toHaveLength(before + 1);
+    const changed = await source.upsertStaple({ ...added.find((s) => s.id === "razor")!, qty: 2 });
+    expect(changed).toHaveLength(before + 1);
+    expect(changed.find((s) => s.id === "razor")!.qty).toBe(2);
+    expect(source.staplesSnapshot()).toEqual(changed);
+    expect(JSON.stringify(source.snapshot().trips)).toBe(tripsBefore);
+  });
+
   it("getTrip returns the live trip, and NOT_FOUND for an unknown id", async () => {
     const { source } = setup();
     expect((await source.getTrip("san-diego")).destination).toBe("San Diego");
