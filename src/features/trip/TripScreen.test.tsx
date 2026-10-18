@@ -142,6 +142,11 @@ describe("loading and states", () => {
     );
     await screen.findByText("Couldn’t load this trip.");
     await user.click(screen.getByRole("button", { name: "Couldn't save, retry" }));
+    await user.click(
+      within(screen.getByRole("dialog", { name: "Couldn’t save" })).getByRole("button", {
+        name: "Retry",
+      }),
+    );
     expect(await ready()).toBeTruthy();
   });
 
@@ -373,6 +378,11 @@ describe("packing", () => {
     ).toBeTruthy();
     fail = false;
     await user.click(screen.getByRole("button", { name: "Couldn't save, retry" }));
+    await user.click(
+      within(screen.getByRole("dialog", { name: "Couldn’t save" })).getByRole("button", {
+        name: "Retry",
+      }),
+    );
     await waitFor(() => expect(itemOf(source, "socks").packed).toBe(2));
     expect(within(row("socks")).queryByRole("button", { name: "Not saved · Retry" })).toBeNull();
   });
@@ -1139,6 +1149,53 @@ describe("changing the theme", () => {
     await waitFor(() => expect(artKey()).toBe("city"));
     expect(tripOf(source).theme).toBe("city");
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+});
+
+describe("the theme sheet's failure message", () => {
+  it("is cleared as soon as Save is pressed again, while the retry is still pending", async () => {
+    const gate = deferred<void>();
+    let attempts = 0;
+    const { user } = setup("san-diego", (base) => ({
+      ...base,
+      setTheme: async (id, theme) => {
+        attempts += 1;
+        if (attempts === 1) throw new Error("nope");
+        await gate.promise;
+        return base.setTheme(id, theme);
+      },
+    }));
+    await ready();
+    await user.click(screen.getByRole("button", { name: "Change theme" }));
+    await user.click(screen.getByRole("radio", { name: "City" }));
+    await user.click(screen.getByRole("button", { name: "Save theme" }));
+    const sheet = screen.getByRole("dialog", { name: "Change theme" });
+    expect((await within(sheet).findByRole("alert")).textContent).toMatch(
+      /Couldn’t save the theme/,
+    );
+    await user.click(within(sheet).getByRole("button", { name: "Save theme" }));
+    // The retry is in flight: the old message is gone and Save is waiting.
+    expect(within(sheet).queryByRole("alert")).toBeNull();
+    expect(within(sheet).getByRole("button", { name: "Save theme" }).hasAttribute("disabled")).toBe(
+      true,
+    );
+    await act(async () => gate.resolve());
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("is also cleared when the sheet is closed, so reopening starts clean", async () => {
+    const { user } = setup("san-diego", (base) => ({
+      ...base,
+      setTheme: () => Promise.reject(new Error("nope")),
+    }));
+    await ready();
+    await user.click(screen.getByRole("button", { name: "Change theme" }));
+    await user.click(screen.getByRole("radio", { name: "City" }));
+    await user.click(screen.getByRole("button", { name: "Save theme" }));
+    await within(screen.getByRole("dialog")).findByRole("alert");
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await user.click(screen.getByRole("button", { name: "Change theme" }));
+    expect(within(screen.getByRole("dialog")).queryByRole("alert")).toBeNull();
   });
 });
 

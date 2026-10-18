@@ -9,12 +9,14 @@ import StaplesPage, { metadata as staplesMetadata } from "./staples/page";
 import { metadata as rootMetadata, viewport } from "./layout";
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
+vi.mock("@/server/auth/auth-runtime", () => ({
+  getAuth: async () => ({
+    provider: { getSession: async () => ({ userId: "u", email: "owner@example.test" }) },
+  }),
+}));
+vi.mock("@/app/sign-in/actions", () => ({ signOutAction: async () => {} }));
 
 describe("screens", () => {
-  it("Settings renders its heading", () => {
-    expect(renderToStaticMarkup(<SettingsPage />)).toContain("<h1>Settings</h1>");
-  });
-
   it("Staples renders its screen, starting in its loading state", () => {
     const html = renderToStaticMarkup(
       <ToastProvider>
@@ -27,6 +29,15 @@ describe("screens", () => {
     );
     expect(html).toContain("<h1>Every trip starts here</h1>");
     expect(html).toContain('aria-label="Loading staples"');
+  });
+
+  it("Settings renders the signed-in account and a Sign out button", async () => {
+    const html = renderToStaticMarkup(
+      <SaveStatusProvider>{await SettingsPage()}</SaveStatusProvider>,
+    );
+    expect(html).toContain("<h1>Settings</h1>");
+    expect(html).toContain("owner@example.test");
+    expect(html).toContain("Sign out");
   });
 
   it("Trips renders the dashboard, starting in its loading state", () => {

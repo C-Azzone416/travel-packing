@@ -8,14 +8,14 @@ const COPY: Record<SaveStatus, { text: string; label: string; glyph: string }> =
   error: { text: "Couldn't save · Retry", label: "Couldn't save, retry", glyph: "!" },
 };
 
-// Presentational slot from #31 (placement only). #19 owns the state, the retry
-// sheet and the "Last saved" line. Saved/Saving open Settings, Error retries.
+// The top-bar chip from #31. Saved/Saving open Settings (where "Last saved" lives); Error opens the retry sheet, so
+// recovery is one tap from any screen.
 export function SaveChip({
   status = "saved",
-  onRetry,
+  onOpenError,
 }: {
   status?: SaveStatus;
-  onRetry?: () => void;
+  onOpenError?: () => void;
 }) {
   const { text, label, glyph } = COPY[status];
   const content = (
@@ -27,7 +27,7 @@ export function SaveChip({
     </>
   );
   return status === "error" ? (
-    <button type="button" className="sync-chip error" aria-label={label} onClick={onRetry}>
+    <button type="button" className="sync-chip error" aria-label={label} onClick={onOpenError}>
       {content}
     </button>
   ) : (
