@@ -42,13 +42,17 @@ describe("SettingsScreen", () => {
     expect(screen.getByRole("button", { name: "Sign out" })).toBeTruthy();
   });
 
-  it("says nothing has been saved yet, then when the last write succeeded", async () => {
+  it("is honest before anything was saved (one line, no 'saved' claim, no Last saved), then after a real write", async () => {
     setup();
-    expect(screen.getByText("Nothing saved yet this visit.")).toBeTruthy();
-    expect(screen.getByText("Everything you changed is saved.")).toBeTruthy();
+    expect(
+      screen.getByText("No changes yet this visit. Changes you make are saved as you go."),
+    ).toBeTruthy();
+    expect(screen.queryByText("Everything you changed is saved.")).toBeNull();
+    expect(screen.queryByText(/^Last saved/)).toBeNull();
     await act(async () => {
       await tracker.track(async () => "ok");
     });
+    expect(screen.getByText("Everything you changed is saved.")).toBeTruthy();
     expect(screen.getByText(/^Last saved /).textContent).toMatch(
       /^Last saved \d{1,2}:\d{2}\s?[AP]M$/,
     );
@@ -65,12 +69,12 @@ describe("SettingsScreen", () => {
         write = tracker.track(() => pending);
       });
       // "Saving…" shows only if a write takes longer than the short delay (no flicker for quick saves).
-      expect(screen.getByText("Everything you changed is saved.")).toBeTruthy();
       await act(async () => {
         await vi.advanceTimersByTimeAsync(500);
       });
       expect(screen.getByText("Saving…")).toBeTruthy();
       expect(screen.queryByText("Everything you changed is saved.")).toBeNull();
+      expect(screen.queryByText(/^No changes yet/)).toBeNull();
       await act(async () => {
         finish();
         await write;
@@ -82,14 +86,22 @@ describe("SettingsScreen", () => {
     }
   });
 
-  it("does not claim 'saved' while the last change failed", async () => {
+  it("does not claim 'saved' while the last change failed, and offers Retry right in the card", async () => {
     setup();
+    const write = vi
+      .fn<() => Promise<string>>()
+      .mockRejectedValueOnce(new Error("down"))
+      .mockResolvedValue("ok");
     await act(async () => {
-      await tracker.track(() => Promise.reject(new Error("down"))).catch(() => {});
+      await tracker.track(write).catch(() => {});
     });
     expect(screen.getByText(/Your last change hasn’t been saved/)).toBeTruthy();
     expect(screen.queryByText("Everything you changed is saved.")).toBeNull();
-    expect(screen.getByText("Nothing saved yet this visit.")).toBeTruthy();
+    expect(screen.queryByText(/^Last saved/)).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(write).toHaveBeenCalledTimes(2);
+    expect(screen.getByText("Everything you changed is saved.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
   });
 
   it("has no Offline, Waiting, simulated-sync or sample-data copy, and no Data section yet", () => {
@@ -100,8 +112,7 @@ describe("SettingsScreen", () => {
 });
 
 describe("lastSavedText", () => {
-  it("formats a time, or says nothing was saved", () => {
-    expect(lastSavedText(null)).toBe("Nothing saved yet this visit.");
+  it("formats the time of the last write", () => {
     expect(lastSavedText(new Date(2026, 9, 16, 15, 42))).toMatch(/^Last saved 3:42\s?PM$/);
   });
 });

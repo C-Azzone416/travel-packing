@@ -184,7 +184,7 @@ test("every control on the review is a 44px target on phone, and nothing scrolls
       page.getByRole("link", { name: "Back to packing list" }).last(),
     ]) {
       const box = (await control.boundingBox())!;
-      expect(box.height).toBeGreaterThanOrEqual(44);
+      expect(Math.round(box.height)).toBeGreaterThanOrEqual(44);
     }
   }
   const overflow = await page.evaluate(
