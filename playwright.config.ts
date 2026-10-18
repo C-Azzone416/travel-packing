@@ -16,6 +16,8 @@ const e2eEnv = {
   OWNER_EMAIL_ALLOWLIST: ALLOWLISTED_EMAILS.join(","),
   // Many tests search at once as the same owner; production keeps the default of 20 a minute.
   LOCATION_SEARCHES_PER_MINUTE: "1000",
+  // Every e2e test signs in as one of a few owners from one address; production keeps the default of 10 per 15 minutes.
+  SIGN_IN_ATTEMPTS_PER_15_MIN: "10000",
 };
 
 // Servers are never reused: reusing whatever happens to be listening could silently test another checkout's code.

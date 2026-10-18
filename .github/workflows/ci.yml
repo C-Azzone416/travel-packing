@@ -38,6 +38,10 @@ jobs:
       - name: Repository hygiene
         run: npm run check:repo-hygiene
 
+      # Known-vulnerable runtime dependencies fail the build (#22). Dev-only tooling is Dependabot's job.
+      - name: Dependency audit (production dependencies)
+        run: npm audit --omit=dev --audit-level=high
+
       - name: Lint
         run: npm run lint
 
@@ -69,12 +73,20 @@ jobs:
       - name: Verify the e2e-only sign-in is not in the build
         run: npm run check:no-e2e-in-build
 
+      # Nothing the browser can download may name a server secret, hold a secret-shaped value, or contain server-only
+      # code (#22). The scan's own tests inject a fake secret and require it to fail.
+      - name: Scan the client bundle for secrets and server-only code
+        run: npm run check:client-bundle
+
       # The same guarantee must hold for the webpack bundler (`next build --webpack`), not only Turbopack.
       - name: Build with webpack
         run: npm run build:webpack
 
       - name: Verify the e2e-only sign-in is not in the webpack build
         run: npm run check:no-e2e-in-build
+
+      - name: Scan the webpack client bundle
+        run: npm run check:client-bundle
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium

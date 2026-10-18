@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
 import type { NextConfig } from "next";
+import { securityHeaders } from "./src/security/headers";
 
 // Test-only modules are compiled in ONLY when the build sets NEXT_PUBLIC_E2E_BUILD=1 (Playwright's webServer does; no
 // deployed build does). In every other build each import resolves to a stub that can never enable anything, so the
@@ -28,6 +29,12 @@ interface WebpackApi {
 const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
 
 const nextConfig: NextConfig = {
+  // Security headers on every route (#22). `next dev` is the only development run; builds are production.
+  async headers() {
+    return [
+      { source: "/:path*", headers: securityHeaders(process.env.NODE_ENV === "development") },
+    ];
+  },
   turbopack: {
     resolveAlias: e2eBuild
       ? {}
