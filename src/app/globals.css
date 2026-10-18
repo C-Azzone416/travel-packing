@@ -1741,6 +1741,18 @@ input:disabled {
   text-underline-offset: 2px;
 }
 
+/* Settings (#19) */
+.settings-grid {
+  display: grid;
+  gap: 14px;
+  max-width: 760px;
+  margin-inline: auto;
+}
+.settings-grid h2 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+
 /* A button that is not available yet (aria-disabled, still focusable so its reason can be reached) must look it:
    Seafoam-soft with muted text, no pointer. (#17) */
 .button[aria-disabled="true"],
