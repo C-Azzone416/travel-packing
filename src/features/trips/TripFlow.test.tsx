@@ -118,6 +118,16 @@ describe("step 1: confirm the trip", () => {
     expect(screen.getByText(/London, Ontario, Canada/)).toBeTruthy();
   });
 
+  it("ties both date inputs to the hint and the date notice", async () => {
+    setup();
+    for (const input of [leave(), ret()])
+      expect(input.getAttribute("aria-describedby")).toBe("date-hint date-notice");
+    expect(document.getElementById("date-hint")?.textContent).toMatch(
+      /Return cannot be before departure/,
+    );
+    expect(document.getElementById("date-notice")?.getAttribute("role")).toBe("status");
+  });
+
   it("after choosing a place it asks for dates next, and moves an earlier return to the departure with a visible notice", async () => {
     const { user } = setup();
     await user.type(search(), "lisbon");

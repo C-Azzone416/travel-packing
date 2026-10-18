@@ -206,6 +206,8 @@ p {
 }
 
 .sync-chip {
+  flex: none;
+  white-space: nowrap;
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -977,6 +979,13 @@ main {
   display: grid;
   gap: 12px;
 }
+/* Group labels (legends) are the same size and weight as field labels. */
+legend {
+  padding: 0;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+}
 label.field {
   display: grid;
   gap: 6px;
@@ -1424,8 +1433,9 @@ input:disabled {
 .item-body .item-meta {
   margin-top: 0;
 }
-.item-body .timing-tag {
-  margin-left: 6px;
+/* The "Pack last" badge never touches the name before it (design: 6 to 8 px). */
+.timing-tag {
+  margin-left: 8px;
 }
 .qty-stepper {
   display: grid;

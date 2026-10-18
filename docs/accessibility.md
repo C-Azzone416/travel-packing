@@ -20,7 +20,7 @@ way a person reaches it, against the real e2e database.
 | Review your bag | with items left, on a Ready trip                                                                                                                                                                                                      |
 | Settings        | idle, in the error state                                                                                                                                                                                                              |
 
-Also asserted (not axe): the skip link is the first Tab stop and moves focus to the main content; a dialog traps Tab and
+Also asserted (not axe): the fixed bottom navigation never covers the last content on a short phone; with the OS reduced-motion setting on, no animation is running; the skip link is the first Tab stop and moves focus to the main content; a dialog traps Tab and
 leaves the page behind it unreachable, closes on Escape and returns focus to what opened it; nothing scrolls sideways at
 320 px on the dashboard, trip screen and settings; 200% text keeps everything reachable with no sideways scroll.
 
@@ -41,12 +41,26 @@ radio-group keyboard behaviour of the theme picker, and the live regions that an
 | "Review your bag" jumped from a level 1 heading to level 3 section headings.                                                                                  | 1.3.1               | The sections are level 2 headings and look the same.                                                                                                                                  |
 | The dashboard's trip tabs overflowed at 320 px with larger text.                                                                                              | 1.4.4 / 1.4.10      | The tabs wrap.                                                                                                                                                                        |
 
+## Before and after
+
+For each visible change the e2e run saves an **after** screenshot at both viewports (artifact names
+`<project>-a11y-*.png`: pack-last-badge, editor-legend, bag-card-in-suitcase, error-chip). The **before** is the same
+screen in the previous develop run's artifacts (`*-trip.png`, `*-trip-editor.png`, and the Settings error shots).
+
 ## Keyboard walkthrough
 
 Covered by the e2e above and by the earlier screen specs: every control on the screens listed is reachable and operable
 with the keyboard; focus rings are the shared 3 px teal outline with a 2 px offset; hit areas are at least 44 px
 (asserted per screen); dialogs open on a sensible first control, trap focus, restore it on close, and Escape closes
 every dialog that is not a destructive confirm backdrop press.
+
+## Deferred
+
+- **Staples screen** (#66 is not merged yet): its list, editor and duplicate-name states are added to the axe spec as
+  soon as it lands.
+- **Manual screen-reader and large-system-text passes** need a person and a device (see below).
+- **Combobox in a real screen reader**: the ARIA pattern (expanded state, active option, result count) is unit-tested
+  and axe-clean, but only a person with VoiceOver can confirm how it is read.
 
 ## Colour contrast
 

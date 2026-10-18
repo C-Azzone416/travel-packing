@@ -366,3 +366,173 @@ test.describe("narrow screens and large text", () => {
     await expectAccessible(page, "dashboard with 200% text at 320px");
   });
 });
+
+test.describe("more states", () => {
+  const isAction = (request: { method(): string }) => request.method() === "POST";
+
+  test("the dashboard while it loads, and when it cannot load", async ({ page }) => {
+    await openDashboard(page);
+    // Slow answers: the skeleton shows.
+    await page.route("**/*", async (route) => {
+      if (isAction(route.request())) await new Promise((resolve) => setTimeout(resolve, 2500));
+      await route.continue();
+    });
+    await page.reload();
+    await expect(page.getByRole("region", { name: "Loading trips" })).toBeVisible();
+    await expectAccessible(page, "dashboard loading");
+    await page.unroute("**/*");
+    // No answer at all: the load error card.
+    await page.route("**/*", (route) =>
+      isAction(route.request()) ? route.abort("failed") : route.continue(),
+    );
+    await page.reload();
+    await expect(page.getByText("Couldn’t load your trips.")).toBeVisible();
+    await expectAccessible(page, "dashboard load error");
+  });
+
+  test("review after a change took the trip out of Ready", async ({ page }) => {
+    await openDashboard(page);
+    await page.getByRole("button", { name: /Past & archive/ }).click();
+    await page.getByRole("link", { name: "Review bag: Lisbon" }).click();
+    await page.getByRole("link", { name: "Review bag again" }).click();
+    await expect(page.getByRole("heading", { name: "Toiletries · Bathroom" })).toBeVisible();
+    await page
+      .locator('[data-item-id="tops"]')
+      .getByRole("button", { name: /mark unpacked/ })
+      .click();
+    await expect(page.getByText("No longer ready: an item was unchecked")).toBeVisible();
+    await expectAccessible(page, "review after Ready was revoked");
+  });
+});
+
+test.describe("design's known items", () => {
+  test("the error chip stays on one line, and the Pack last badge keeps its distance", async ({
+    page,
+  }) => {
+    await openDashboard(page);
+    await page.route("**/*", (route) =>
+      route.request().method() === "POST" ? route.abort("failed") : route.continue(),
+    );
+    await page.getByRole("button", { name: "Archive: San Diego" }).click();
+    const chip = page.getByRole("button", { name: "Couldn't save, retry" });
+    await expect(chip).toBeVisible();
+    await page.unroute("**/*");
+    // One line of 12px text plus padding: well under two lines.
+    expect((await chip.boundingBox())!.height).toBeLessThan(60);
+    await page.reload();
+    await page.getByRole("link", { name: "Keep packing: San Diego" }).click();
+    const row = page.locator('[data-item-id="last-toothbrush"]');
+    await expect(row).toBeVisible();
+    const name = (await row.locator(".item-name").boundingBox())!;
+    const badge = (await row.locator(".timing-tag").boundingBox())!;
+    // Beside the category line, not on top of the name, and at least 6px from its text.
+    const meta = (await row.locator(".item-meta").evaluate((node) => {
+      const range = document.createRange();
+      range.selectNodeContents(node.firstChild as Node);
+      const box = range.getBoundingClientRect();
+      return { right: box.right };
+    })) as { right: number };
+    expect(badge.x - meta.right).toBeGreaterThanOrEqual(6);
+    expect(badge.y + badge.height).toBeGreaterThan(name.y);
+  });
+
+  test("group labels are the same size as field labels", async ({ page }) => {
+    await openDashboard(page);
+    await page.getByRole("link", { name: "Keep packing: San Diego" }).click();
+    await page
+      .locator('[data-item-id="sunglasses"]')
+      .getByRole("button", { name: /^Sunglasses / })
+      .click();
+    const legend = page.getByRole("group", { name: "Apply this change to" }).locator("legend");
+    const label = page.getByLabel("Item name").locator("xpath=ancestor::label");
+    const size = (node: import("@playwright/test").Locator) =>
+      node.evaluate((element) => getComputedStyle(element).fontSize);
+    expect(await size(legend)).toBe(await size(label));
+  });
+
+  test("the fixed bottom navigation never covers the last content", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 600 });
+    await openDashboard(page);
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    const nav = (await page.getByRole("navigation", { name: "Primary navigation" }).boundingBox())!;
+    const lastBottom = await page.evaluate(() => {
+      const main = document.querySelector("main") as HTMLElement;
+      const content = Array.from(main.querySelectorAll("*")).filter(
+        (node) => node.getBoundingClientRect().height > 0,
+      );
+      return Math.max(...content.map((node) => node.getBoundingClientRect().bottom));
+    });
+    expect(lastBottom).toBeLessThanOrEqual(nav.y + 1);
+  });
+
+  test("date inputs are tied to their hint and notice", async ({ page }) => {
+    await openDashboard(page);
+    await page.getByRole("link", { name: /New trip/ }).click();
+    for (const label of ["Leave", "Return"]) {
+      const input = page.getByLabel(label, { exact: true });
+      await expect(input).toHaveAttribute("aria-describedby", "date-hint date-notice");
+    }
+    await expect(page.locator("#date-hint")).toContainText("Return cannot be before departure");
+  });
+
+  test("with reduced motion no animation runs", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await openDashboard(page);
+    const running = await page.evaluate(
+      () =>
+        document.getAnimations().filter((animation) => animation.playState === "running").length,
+    );
+    expect(running).toBe(0);
+  });
+});
+
+test("screenshots of the visual fixes (after)", async ({ page }, testInfo) => {
+  const shot = (name: string, options: { fullPage?: boolean } = {}) =>
+    page.screenshot({
+      path: `test-results/screenshots/${testInfo.project.name}-a11y-${name}.png`,
+      ...options,
+    });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await openDashboard(page);
+  await page.getByRole("link", { name: "Keep packing: San Diego" }).click();
+  await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
+  // Rows with the Pack last badge, and the packed count.
+  await page.locator('[data-item-id="last-toothbrush"]').scrollIntoViewIfNeeded();
+  await shot("pack-last-badge");
+  // The scope legend in the item editor.
+  await page
+    .locator('[data-item-id="sunglasses"]')
+    .getByRole("button", { name: /^Sunglasses / })
+    .click();
+  await shot("editor-legend");
+  await page.getByRole("button", { name: "Close dialog" }).click();
+  // The green bag card, after placing the bag.
+  for (const id of [
+    "nice-makeup",
+    "last-toothbrush",
+    "last-toothpaste",
+    "last-deodorant",
+    "last-contacts",
+  ])
+    await page
+      .locator(`[data-item-id="${id}"]`)
+      .getByRole("button", { name: /^Pack all / })
+      .click();
+  await page.getByRole("button", { name: "Not yet" }).click();
+  await page.getByRole("button", { name: "Put bag in suitcase" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Confirm" }).click();
+  await expect(page.getByText("Toiletry bag is in the suitcase")).toBeVisible();
+  await page.getByText("Toiletry bag is in the suitcase").scrollIntoViewIfNeeded();
+  await shot("bag-card-in-suitcase");
+  // The error chip on one line.
+  await page.route("**/trips/**", (route) =>
+    route.request().method() === "POST" ? route.abort("failed") : route.continue(),
+  );
+  await page
+    .locator('[data-item-id="socks"]')
+    .getByRole("button", { name: "Increase packed Socks" })
+    .click();
+  await expect(page.getByRole("button", { name: "Couldn't save, retry" })).toBeVisible();
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await shot("error-chip");
+});
