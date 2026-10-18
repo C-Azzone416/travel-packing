@@ -64,6 +64,23 @@ export async function listStaplesAction(): Promise<StaplesReadResult> {
   ) as Promise<StaplesReadResult>;
 }
 
+/** Create or update one staple. The server validates every field; changes apply to future trips only. */
+export async function upsertStapleAction(staple: Staple): Promise<StaplesReadResult> {
+  return withContext(
+    (context) =>
+      service.upsertStaple(context, {
+        semanticId: staple.id,
+        name: staple.name,
+        category: staple.category,
+        qty: staple.qty,
+        cadence: staple.cadence,
+        packLast: staple.packLast,
+        ...(staple.groupId ? { groupId: staple.groupId } : {}),
+      }),
+    (staples) => ({ ok: true as const, staples }),
+  ) as Promise<StaplesReadResult>;
+}
+
 export async function setPackedAction(
   tripId: string,
   itemId: string,

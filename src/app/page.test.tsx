@@ -11,11 +11,22 @@ import { metadata as rootMetadata, viewport } from "./layout";
 vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
 
 describe("screens", () => {
-  it.each([
-    ["Staples", StaplesPage],
-    ["Settings", SettingsPage],
-  ])("%s renders its heading", (name, Page) => {
-    expect(renderToStaticMarkup(<Page />)).toContain(`<h1>${name}</h1>`);
+  it("Settings renders its heading", () => {
+    expect(renderToStaticMarkup(<SettingsPage />)).toContain("<h1>Settings</h1>");
+  });
+
+  it("Staples renders its screen, starting in its loading state", () => {
+    const html = renderToStaticMarkup(
+      <ToastProvider>
+        <SaveStatusProvider>
+          <TripsSourceProvider>
+            <StaplesPage />
+          </TripsSourceProvider>
+        </SaveStatusProvider>
+      </ToastProvider>,
+    );
+    expect(html).toContain("<h1>Every trip starts here</h1>");
+    expect(html).toContain('aria-label="Loading staples"');
   });
 
   it("Trips renders the dashboard, starting in its loading state", () => {

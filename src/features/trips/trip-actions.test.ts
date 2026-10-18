@@ -28,6 +28,7 @@ import {
   getTripAction,
   incrementPackedAction,
   listStaplesAction,
+  upsertStapleAction,
   markNotReadyAction,
   markReadyAction,
   removeItemAction,
@@ -208,6 +209,54 @@ describe("item and preference commands", () => {
     expect(after.staples).not.toEqual(before.staples);
   });
 
+  it("upsertStapleAction adds and edits a staple for future trips, and an existing trip keeps its list", async () => {
+    const trip = await seedTrip(db(), OWNER.userId);
+    const staple = {
+      id: "razor",
+      name: "Razor",
+      qty: 1,
+      cadence: "per trip",
+      category: "Bathroom",
+      packLast: false,
+      groupId: "toiletry-bag",
+    } as const;
+    const added = await upsertStapleAction(staple);
+    if (!added.ok) throw new Error(`expected ok, got ${added.code}`);
+    expect(added.staples.find((entry) => entry.id === "razor")).toMatchObject({
+      name: "Razor",
+      qty: 1,
+      groupId: "toiletry-bag",
+    });
+    const edited = await upsertStapleAction({ ...staple, qty: 3, packLast: true });
+    if (!edited.ok) throw new Error(`expected ok, got ${edited.code}`);
+    const razors = edited.staples.filter((entry) => entry.id === "razor");
+    expect(razors).toHaveLength(1);
+    expect(razors[0]).toMatchObject({ qty: 3, packLast: true });
+    const read = await getTripAction(trip.id);
+    if (!read.ok) throw new Error("expected ok");
+    expect(read.trip.items.some((entry) => entry.id === "razor")).toBe(false);
+  });
+
+  it("upsertStapleAction rejects bad input, and another owner's staples are separate", async () => {
+    const bad = {
+      id: "x",
+      name: " ",
+      qty: 0,
+      cadence: "per trip",
+      category: "Tech",
+      packLast: false,
+    } as const;
+    expect(await upsertStapleAction(bad)).toEqual({ ok: false, code: "INVALID_INPUT" });
+    expect(
+      await upsertStapleAction({ ...bad, name: "Cable", qty: 1, category: "Nope" as never }),
+    ).toEqual({ ok: false, code: "INVALID_INPUT" });
+    await upsertStapleAction({ ...bad, id: "mine", name: "Mine", qty: 1 });
+    as(OTHER_OWNER);
+    const theirs = await listStaplesAction();
+    if (!theirs.ok) throw new Error("expected ok");
+    expect(theirs.staples.some((entry) => entry.id === "mine")).toBe(false);
+  });
+
   it("removes an optional item, adds a Bathroom item, and updates preferences", async () => {
     const trip = await seedTrip(db(), OWNER.userId);
     const removed = changed(await removeItemAction(trip.id, "nice-shoes", "this-trip"));
@@ -317,6 +366,15 @@ describe("owner gate", () => {
     const calls = [
       () => getTripAction(trip.id),
       () => listStaplesAction(),
+      () =>
+        upsertStapleAction({
+          id: "x",
+          name: "X",
+          qty: 1,
+          cadence: "per trip",
+          category: "Tech",
+          packLast: false,
+        }),
       () => setPackedAction(trip.id, "socks", 1),
       () => markReadyAction(trip.id),
       () => updatePreferencesAction(trip.id, trip.config),
