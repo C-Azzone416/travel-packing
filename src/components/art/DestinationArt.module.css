@@ -48,7 +48,8 @@
   }
 }
 
-/* Trip header: fills its container, with a scrim so the copy panel stays legible. */
+/* Trip header: fills its container. The copy panel has its own background, so the phone scrim only softens the
+   bottom edge and the pastel illustrations stay visible. */
 .header {
   position: absolute;
   inset: 0;
@@ -60,7 +61,7 @@
     180deg,
     rgba(245, 247, 242, 0.16),
     rgba(245, 247, 242, 0.12) 42%,
-    rgba(245, 247, 242, 0.82) 78%
+    rgba(245, 247, 242, 0.35) 78%
   );
 }
 
