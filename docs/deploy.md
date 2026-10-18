@@ -13,7 +13,7 @@ prebuilt output.
    - a required variable is missing, or `NEON_AUTH_COOKIE_SECRET` is shorter than the 32 characters sign-in needs;
    - `LOCATION_PROVIDER` is set to anything but `open-meteo` (required in preview; optional in production, where unset
      means location search is off);
-   - (preview) `PRODUCTION_DB_HOST` is unset or is not a bare host name (a full connection URL is refused, never guessed at), or `DATABASE_URL` /
+   - `PRODUCTION_DB_HOST` is unset or is not a bare host name (a full connection URL is refused, never guessed at), or `DATABASE_URL` /
      `DATABASE_URL_UNPOOLED` point at the production database host.
 3. `vercel build`, then `npm run check:no-e2e-in-build` (the fake sign-in, the e2e driver and the sample fixtures must
    not be in the output).
@@ -26,6 +26,12 @@ prebuilt output.
 
 The Vercel CLI version is pinned in the workflow (`VERCEL_CLI_VERSION`); `@neondatabase/auth` is pinned to an exact
 version in `package.json`. Bump either in a PR.
+
+## Things to know
+
+- **Preview data is reset on every `develop` push.** The preview job re-runs the seed, which restores the sample trips and
+  sets the preview owner's staples back to the defaults. Anything entered by hand in the preview is lost, by design.
+- The seed only runs in the preview job, against `PREVIEW_DB_HOST` (its allowlist), and refuses production runtimes.
 
 ## What Caroline must set (for #29)
 
@@ -41,6 +47,9 @@ GitHub **environment `preview`**:
 - variable `PREVIEW_DB_HOST` — that preview database's host name (the seed allowlist);
 - variable `PREVIEW_SEED_OWNER_ID` — the sign-in id of the preview owner whose account should see the sample trips;
 - secret `VERCEL_AUTOMATION_BYPASS_SECRET` — only if Vercel deployment protection is on for previews.
+
+In both GitHub environments, restrict deployment branches (`preview`: `develop` only; `production`: `main` only), so a
+branch or pull request can never pick up an environment's secrets.
 
 GitHub **environment `production`**: add **required reviewers** (this is the manual approval for every production
 deploy and migration), and the secret `DATABASE_URL_UNPOOLED` for the **production** database. Production secrets
@@ -133,8 +142,8 @@ jobs:
       - name: Install Vercel CLI (pinned)
         run: npm install --global "vercel@${VERCEL_CLI_VERSION}"
 
-      # VERCEL_TOKEN can deploy to production, so only the three Vercel steps below get it (not `npm ci`, whose
-      # install scripts run before this point, and not the migrate or seed steps).
+      # VERCEL_TOKEN can deploy to production, so only the two Vercel steps that talk to Vercel (pull and deploy) get it (not `npm ci`, whose
+      # install scripts run before this point, nor the build, migrate or seed steps).
       - name: Pull Vercel environment
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
@@ -145,11 +154,11 @@ jobs:
           PRODUCTION_DB_HOST: ${{ vars.PRODUCTION_DB_HOST }}
         run: npx tsx scripts/check-deploy-env.ts "$TARGET" ".vercel/.env.${TARGET}.local"
 
+      # `vercel build` works from the files `vercel pull` wrote; it needs no token (so the build, which runs project
+      # code, never sees one).
       - name: Build
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
-          if [ "$TARGET" = production ]; then vercel build --prod --token="$VERCEL_TOKEN"; else vercel build --token="$VERCEL_TOKEN"; fi
+          if [ "$TARGET" = production ]; then vercel build --prod; else vercel build; fi
 
       - name: No test-only code in the build
         run: npm run check:no-e2e-in-build
@@ -192,6 +201,7 @@ jobs:
 
       - name: Smoke test
         env:
+          DEPLOY_URL: ${{ steps.deploy.outputs.url }}
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
-        run: npx tsx scripts/smoke-test.ts "${{ steps.deploy.outputs.url }}"
+        run: npx tsx scripts/smoke-test.ts "$DEPLOY_URL"
 ```
