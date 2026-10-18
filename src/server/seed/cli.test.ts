@@ -128,12 +128,39 @@ describe("runSeedCli: remote", () => {
 
   it("seeds a remote database named by SEED_DATABASE_URL when confirmed", async () => {
     const { client, deps, closed, opened, tripOwners } = await fakeDeps();
-    expect(await runSeedCli(["--yes"], { SEED_DATABASE_URL: REMOTE, ...ALLOW_REMOTE }, deps)).toBe(
-      0,
-    );
+    const env = { SEED_DATABASE_URL: REMOTE, SEED_OWNER_ID: "real-owner-id", ...ALLOW_REMOTE };
+    expect(await runSeedCli(["--yes"], env, deps)).toBe(0);
     expect(opened).toEqual([`remote:${REMOTE}`]);
     expect(closed).toEqual(["remote"]);
-    expect(await tripOwners()).toEqual([DEFAULT_OWNER_ID]);
+    expect(await tripOwners()).toEqual(["real-owner-id"]);
+    await client.close();
+  });
+
+  it.each([
+    ["no owner at all", [], {}],
+    ["a blank SEED_OWNER_ID", [], { SEED_OWNER_ID: "   " }],
+    ["a blank --owner", ["--owner="], {}],
+    ["a valueless --owner", ["--owner"], {}],
+  ])(
+    "refuses a remote seed with %s: nothing opened, nothing written",
+    async (_name, argv, extra) => {
+      const { client, deps, logs, opened, tripOwners } = await fakeDeps();
+      const env = { SEED_DATABASE_URL: REMOTE, ...ALLOW_REMOTE, ...extra };
+      expect(await runSeedCli(["--yes", ...argv], env, deps)).toBe(1);
+      expect(logs).toEqual([
+        "db:seed refused: seeding a remote database needs an explicit owner (SEED_OWNER_ID or --owner)",
+      ]);
+      expect(opened).toEqual([]);
+      expect(await tripOwners()).toEqual([]);
+      await client.close();
+    },
+  );
+
+  it("accepts the owner from --owner for a remote seed", async () => {
+    const { client, deps, tripOwners } = await fakeDeps();
+    const env = { SEED_DATABASE_URL: REMOTE, ...ALLOW_REMOTE };
+    expect(await runSeedCli(["--yes", "--owner", "cli-owner-id"], env, deps)).toBe(0);
+    expect(await tripOwners()).toEqual(["cli-owner-id"]);
     await client.close();
   });
 

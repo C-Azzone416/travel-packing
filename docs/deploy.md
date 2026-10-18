@@ -20,9 +20,14 @@ prebuilt output.
 4. A second check (`scripts/check-migration-target.ts`) looks at the GitHub environment's `DATABASE_URL_UNPOOLED`, the secret
    the migrate and seed steps actually use: in a preview run it must NOT be `PRODUCTION_DB_HOST`, in a production run it
    MUST be. Then migrations run as their own logged step over the **direct** connection (`npm run db:migrate:remote`).
-5. Preview only: `npm run db:seed -- --yes` loads the synthetic sample set (see the seed guard in `docs/schema.md`).
-6. `vercel deploy --prebuilt`, then the smoke test (`scripts/smoke-test.ts`): `/sign-in` answers 200 and `/` redirects
-   a signed-out visitor to `/sign-in`.
+5. Preview only: `npm run db:seed:preview` (`scripts/seed-preview.ts`). With `PREVIEW_SEED_OWNER_ID` set it loads the
+   synthetic sample set for that one owner (see the seed guard in `docs/schema.md`). With it **not** set it skips the
+   seed, says so in the log and on the run summary page ("preview seed SKIPPED"), and the run carries on: see
+   [First preview bootstrap](#first-preview-bootstrap). A set-but-invalid id fails the run with a message that does not
+   repeat it. Production runs never reach this step, and the script refuses anything but `TARGET=preview` as well.
+6. `vercel deploy --prebuilt`, then the smoke test (`scripts/smoke-test.ts`), which needs no account or session: every
+   public auth page answers 200 (`/sign-in`, `/access-denied`, and any page added to the public list in
+   `src/server/auth/public-paths.ts`, such as sign-up in #27) and `/` redirects a signed-out visitor to `/sign-in`.
 
 The Vercel CLI version is pinned in the workflow (`VERCEL_CLI_VERSION`); `@neondatabase/auth` is pinned to an exact
 version in `package.json`. Bump either in a PR.
@@ -32,6 +37,25 @@ version in `package.json`. Bump either in a PR.
 - **Preview data is reset on every `develop` push.** The preview job re-runs the seed, which restores the sample trips and
   sets the preview owner's staples back to the defaults. Anything entered by hand in the preview is lost, by design.
 - The seed only runs in the preview job, against `PREVIEW_DB_HOST` (its allowlist), and refuses production runtimes.
+- A remote seed always needs an explicit owner id; the `seed-owner` stand-in exists for throwaway local databases only.
+
+## First preview bootstrap
+
+The sample trips must belong to a real Better Auth user, and that user can only be created once the sign-up screens are
+deployed. So the first preview run happens **without** `PREVIEW_SEED_OWNER_ID`, on purpose:
+
+1. Leave `PREVIEW_SEED_OWNER_ID` unset. Merge to `develop` (or re-run the workflow). It migrates the preview database,
+   skips the seed (visible as "preview seed SKIPPED" in the log and on the run summary), deploys, and smoke-tests the
+   public auth pages. Nothing creates an auth user, and nothing uses an email, a fixture id or a production identity.
+2. Open the preview, sign up as the owner (the screens are #27; until they ship, create the user in the Neon Auth
+   console for the **preview** project) and verify the email.
+3. Copy that user's id from Neon Auth into the `preview` environment variable `PREVIEW_SEED_OWNER_ID`.
+4. Re-run the `Deploy to Vercel` workflow on `develop`. It now seeds the sample trips for that owner only. Re-running is
+   safe: the seed replaces its own sample trips and leaves everything else alone.
+
+If the id is wrong (an email, the stand-in id, something that is not an id), the run fails at the seed step with
+"PREVIEW_SEED_OWNER_ID is not a Better Auth user id" and nothing is written. Logs never show database URLs, tokens,
+emails or user ids.
 
 ## What Caroline must set (for #29)
 
@@ -45,7 +69,7 @@ GitHub **environment `preview`**:
 
 - secret `DATABASE_URL_UNPOOLED` — the **preview** Neon branch's direct connection string;
 - variable `PREVIEW_DB_HOST` — that preview database's host name (the seed allowlist);
-- variable `PREVIEW_SEED_OWNER_ID` — the sign-in id of the preview owner whose account should see the sample trips;
+- variable `PREVIEW_SEED_OWNER_ID` — the Better Auth user id of the preview owner whose account should see the sample trips. **Leave it unset for the first run** ([First preview bootstrap](#first-preview-bootstrap)); set it after the owner has signed up and verified;
 - secret `VERCEL_AUTOMATION_BYPASS_SECRET` — only if Vercel deployment protection is on for previews.
 
 In both GitHub environments, restrict deployment branches (`preview`: `develop` only; `production`: `main` only), so a
@@ -178,13 +202,16 @@ jobs:
           echo "Migrating the $TARGET database"
           npm run db:migrate:remote
 
-      - name: Seed synthetic data (preview only)
+      # Preview only. An unset PREVIEW_SEED_OWNER_ID is the first-preview bootstrap: the step logs a visible skip and the run
+      # continues (the owner cannot exist until the sign-up screens are deployed). Never reads the production secret.
+      - name: Seed synthetic data (preview only; skipped until the owner id exists)
         if: github.ref_name != 'main'
         env:
           SEED_DATABASE_URL: ${{ secrets.DATABASE_URL_UNPOOLED }}
           SEED_ALLOWED_HOSTS: ${{ vars.PREVIEW_DB_HOST }}
           SEED_OWNER_ID: ${{ vars.PREVIEW_SEED_OWNER_ID }}
-        run: npm run db:seed -- --yes
+          PRODUCTION_DB_HOST: ${{ vars.PRODUCTION_DB_HOST }}
+        run: npm run db:seed:preview
 
       - name: Deploy
         id: deploy
