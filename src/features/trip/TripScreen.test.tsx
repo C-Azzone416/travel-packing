@@ -1148,6 +1148,82 @@ describe("changing the theme", () => {
   });
 });
 
+describe("a form submitted twice while saving saves once", () => {
+  // Enter in a field submits the form even though the button is disabled, so the forms ignore a submit while saving.
+  const submitTwice = () => {
+    const form = screen.getByRole("dialog").querySelector("form") as HTMLFormElement;
+    fireEvent.submit(form);
+    fireEvent.submit(form);
+  };
+
+  it("item editor", async () => {
+    const gate = deferred<void>();
+    const calls = vi.fn();
+    const { user } = setup("san-diego", (base) => ({
+      ...base,
+      editItem: async (id, itemId, edit) => {
+        calls(itemId);
+        await gate.promise;
+        return base.editItem(id, itemId, edit);
+      },
+    }));
+    await ready();
+    await user.click(within(row("sunglasses")).getByRole("button", { name: "Edit Sunglasses" }));
+    submitTwice();
+    await waitFor(() => expect(calls).toHaveBeenCalledTimes(1));
+    submitTwice();
+    expect(calls).toHaveBeenCalledTimes(1);
+    await act(async () => gate.resolve());
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(calls).toHaveBeenCalledTimes(1);
+  });
+
+  it("add Bathroom item", async () => {
+    const gate = deferred<void>();
+    const calls = vi.fn();
+    const { user } = setup("san-diego", (base) => ({
+      ...base,
+      addToiletryItem: async (id, input) => {
+        calls(input.name);
+        await gate.promise;
+        return base.addToiletryItem(id, input);
+      },
+    }));
+    await ready();
+    await user.click(screen.getByRole("button", { name: "＋ Add a Bathroom item" }));
+    await user.type(screen.getByLabelText("Item name"), "Face wash");
+    submitTwice();
+    await waitFor(() => expect(calls).toHaveBeenCalledTimes(1));
+    submitTwice();
+    expect(calls).toHaveBeenCalledTimes(1);
+    await act(async () => gate.resolve());
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(calls).toHaveBeenCalledTimes(1);
+  });
+
+  it("preferences", async () => {
+    const gate = deferred<void>();
+    const calls = vi.fn();
+    const { user } = setup("san-diego", (base) => ({
+      ...base,
+      updatePreferences: async (id, config) => {
+        calls(config);
+        await gate.promise;
+        return base.updatePreferences(id, config);
+      },
+    }));
+    await ready();
+    await user.click(screen.getByRole("button", { name: "Edit preferences" }));
+    submitTwice();
+    await waitFor(() => expect(calls).toHaveBeenCalledTimes(1));
+    submitTwice();
+    expect(calls).toHaveBeenCalledTimes(1);
+    await act(async () => gate.resolve());
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(calls).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("the theme sheet's failure message", () => {
   it("is cleared as soon as Save is pressed again, while the retry is still pending", async () => {
     const gate = deferred<void>();
