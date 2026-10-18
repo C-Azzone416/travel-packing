@@ -8,7 +8,7 @@ const NOW = new Date("2026-10-16T12:00:00");
 
 const ready = (page: Page) => page.getByRole("button", { name: "I’m ready to go" });
 const notReady = (page: Page) => page.getByRole("button", { name: "Mark as not ready" });
-const unpacked = (page: Page) => page.getByRole("button", { name: /^Fix: unpacked/ });
+const unpacked = (page: Page) => page.getByRole("button", { name: /^Mark packed/ });
 
 async function openReview(page: Page, trip: "San Diego" | "Lisbon", id: "san-diego" | "lisbon") {
   await page.clock.setFixedTime(NOW);

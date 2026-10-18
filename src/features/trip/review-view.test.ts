@@ -99,6 +99,13 @@ describe("revocationReason", () => {
     );
   });
 
+  it("does not blame the bag on a trip that has no toiletries", () => {
+    const bare = noToiletries(ready);
+    expect(revocationReason(bare, { ...bare, ready: false, toiletryBagPacked: false })).toBe(
+      "your list changed",
+    );
+  });
+
   it("falls back to a general reason for any other revoking change", () => {
     expect(revocationReason(ready, { ...ready, ready: false })).toBe("your list changed");
   });

@@ -64,7 +64,7 @@ export function revocationReason(before: LifecycleTrip, after: LifecycleTrip): s
     return was !== undefined && item.packed < was.packed;
   });
   if (lessPacked) return "an item was unchecked";
-  if (before.toiletryBagPacked && !after.toiletryBagPacked) {
+  if (toiletryItems(before).length > 0 && before.toiletryBagPacked && !after.toiletryBagPacked) {
     return "the toiletry bag is no longer in the suitcase";
   }
   return "your list changed";

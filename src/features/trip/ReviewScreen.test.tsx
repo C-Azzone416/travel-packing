@@ -258,8 +258,8 @@ describe("corrections on the review", () => {
   it("fixing an unpacked row packs it and keeps focus on that row", async () => {
     const { user, source } = await setup();
     await title();
-    const fix = within(rowOf("tops")).getByRole("button", { name: "Fix: unpacked Everyday tops" });
-    expect(fix.textContent).toContain("Fix: unpacked");
+    const fix = within(rowOf("tops")).getByRole("button", { name: "Mark packed Everyday tops" });
+    expect(fix.textContent).toContain("Mark packed");
     fix.focus();
     await user.click(fix);
     await waitFor(() =>
@@ -286,7 +286,7 @@ describe("corrections on the review", () => {
     expect(screen.getByText("Packing", { selector: ".status-pill" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "I’m ready to go" })).toBeTruthy();
     expect(document.activeElement).toBe(
-      within(rowOf("tops")).getByRole("button", { name: "Fix: unpacked Everyday tops" }),
+      within(rowOf("tops")).getByRole("button", { name: "Mark packed Everyday tops" }),
     );
   });
 
@@ -299,7 +299,7 @@ describe("corrections on the review", () => {
     await title();
     const before = tripOf(source).items.find((item) => item.id === "tops")!.packed;
     await user.click(
-      within(rowOf("tops")).getByRole("button", { name: "Fix: unpacked Everyday tops" }),
+      within(rowOf("tops")).getByRole("button", { name: "Mark packed Everyday tops" }),
     );
     expect(await screen.findByRole("button", { name: /couldn.t save/i })).toBeTruthy();
     expect(togglePacked).toHaveBeenCalledTimes(1);
@@ -366,14 +366,14 @@ describe("the toiletry bag step", () => {
     const remaining = tripOf(source).items.find(
       (item) => item.groupId === "toiletry-bag" && item.packed < item.qty,
     )!;
-    await user.click(within(rowOf(remaining.id)).getByRole("button", { name: /^Fix: unpacked/ }));
+    await user.click(within(rowOf(remaining.id)).getByRole("button", { name: /^Mark packed/ }));
     const dialog = await screen.findByRole("dialog", { name: "Toiletry bag in suitcase?" });
     await user.click(within(dialog).getByRole("button", { name: "Not yet" }));
     await user.click(within(rowOf(remaining.id)).getByRole("button", { name: /mark unpacked$/ }));
-    await user.click(within(rowOf(remaining.id)).getByRole("button", { name: /^Fix: unpacked/ }));
+    await user.click(within(rowOf(remaining.id)).getByRole("button", { name: /^Mark packed/ }));
     await waitFor(() =>
       expect(
-        within(rowOf(remaining.id)).queryByRole("button", { name: /^Fix: unpacked/ }),
+        within(rowOf(remaining.id)).queryByRole("button", { name: /^Mark packed/ }),
       ).toBeNull(),
     );
     expect(screen.queryByRole("dialog")).toBeNull();

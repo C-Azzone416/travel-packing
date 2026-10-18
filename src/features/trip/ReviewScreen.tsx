@@ -59,14 +59,14 @@ function ReviewRows({
             <button
               type="button"
               className={buttonClassName({
-                variant: complete ? "secondary" : "primary",
+                variant: "secondary",
                 small: true,
               })}
               aria-disabled={busy}
               {...{ [FOCUS_ATTR]: item.id }}
               onClick={() => !busy && onToggle(item)}
             >
-              {complete ? "Packed ✓" : "Fix: unpacked"}{" "}
+              {complete ? "Packed ✓" : "Mark packed"}{" "}
               <span className="sr-only">
                 {item.name}
                 {complete ? ", mark unpacked" : ""}
