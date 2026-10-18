@@ -15,9 +15,11 @@ import { TripsSourceError, type TripChange } from "@/features/trips/trips-source
 import { useTripsSource } from "@/features/trips/TripsSourceProvider";
 import { formatDays, formatRange } from "@/features/trips/view";
 import { AddToiletryForm } from "./AddToiletryForm";
+import { themeFor } from "@/domain/themes";
 import { ItemEditor } from "./ItemEditor";
 import { PackRow } from "./PackRow";
 import { PreferencesForm } from "./PreferencesForm";
+import { ThemeSheet } from "./ThemeSheet";
 import { ToiletrySection } from "./ToiletrySection";
 import {
   bagGate,
@@ -29,6 +31,7 @@ import {
   visibleItems,
   type PackFilter,
 } from "./trip-view";
+import { revocationReason } from "./review-view";
 import { WeatherCard, WeatherDialog } from "./Weather";
 
 /** Taps on a quantity stepper settle for this long before one write carries the final count. */
@@ -45,7 +48,8 @@ type Dialog =
   | { kind: "add-toiletry" }
   | { kind: "bag" }
   | { kind: "weather" }
-  | { kind: "preferences" };
+  | { kind: "preferences" }
+  | { kind: "theme" };
 
 interface ActOptions {
   /** The row this change is for, so a failure shows "Not saved · Retry" beside it. */
@@ -56,6 +60,8 @@ interface ActOptions {
   staples?: boolean;
   announce?: (change: TripChange) => string;
   after?: (change: TripChange) => void;
+  /** The write failed: a dialog can say so itself, since the top-bar chip is out of reach behind it. */
+  onFail?: () => void;
 }
 
 function ListSection({
@@ -106,7 +112,10 @@ export function TripScreen({ tripId }: { tripId: string }) {
   const [submitting, setSubmitting] = useState(false);
   const [failedRows, setFailedRows] = useState<ReadonlySet<string>>(new Set());
   const [announcement, setAnnouncement] = useState("");
+  const [themeFailed, setThemeFailed] = useState(false);
   const bagPromptDismissed = useRef(false);
+  // The last trip the server confirmed, so a change that takes the trip out of Ready can say so.
+  const confirmed = useRef<LifecycleTrip | null>(null);
   const retries = useRef(
     new Map<string, { write: () => Promise<TripChange>; options: ActOptions }>(),
   );
@@ -125,6 +134,7 @@ export function TripScreen({ tripId }: { tripId: string }) {
       ([trip, owned]) => {
         if (cancelled) return;
         setStaples(owned);
+        confirmed.current = trip;
         setLoad({ phase: "ready", trip });
       },
       { read: true },
@@ -148,7 +158,10 @@ export function TripScreen({ tripId }: { tripId: string }) {
     (write: () => Promise<TripChange>, options: ActOptions = {}): Promise<void> => {
       if (options.modal) setSubmitting(true);
       return track(write, (change) => {
+        const reason = confirmed.current ? revocationReason(confirmed.current, change.trip) : null;
+        confirmed.current = change.trip;
         setLoad({ phase: "ready", trip: change.trip });
+        if (reason) toast.show(`No longer ready: ${reason}`);
         if (options.row) {
           retries.current.delete(options.row);
           setFailedRows((current) => new Set([...current].filter((id) => id !== options.row)));
@@ -161,6 +174,7 @@ export function TripScreen({ tripId }: { tripId: string }) {
       })
         .then(() => undefined)
         .catch(() => {
+          options.onFail?.();
           if (!options.row) return;
           const row = options.row;
           retries.current.set(row, { write, options });
@@ -168,7 +182,7 @@ export function TripScreen({ tripId }: { tripId: string }) {
         })
         .finally(() => setSubmitting(false));
     },
-    [source, track],
+    [source, toast, track],
   );
 
   const settle = useCallback((id: string, value: number) => {
@@ -323,6 +337,14 @@ export function TripScreen({ tripId }: { tripId: string }) {
           ) : (
             <StatusBadge status="draft">Packing</StatusBadge>
           )}
+          <Button
+            variant="secondary"
+            small
+            className="change-theme"
+            onClick={() => setDialog({ kind: "theme" })}
+          >
+            Change theme
+          </Button>
         </div>
       </div>
 
@@ -528,6 +550,26 @@ export function TripScreen({ tripId }: { tripId: string }) {
           onSave={(config) =>
             void act(() => source.updatePreferences(tripId, config), { modal: true, after: close })
           }
+        />
+      ) : null}
+      {dialog?.kind === "theme" ? (
+        <ThemeSheet
+          current={trip.theme}
+          saving={submitting}
+          failed={themeFailed}
+          onClose={() => {
+            setThemeFailed(false);
+            close();
+          }}
+          onSave={(theme) => {
+            setThemeFailed(false);
+            void act(() => source.setTheme(tripId, theme), {
+              modal: true,
+              onFail: () => setThemeFailed(true),
+              announce: (change) => `Theme changed to ${themeFor(change.trip.theme).label}.`,
+              after: close,
+            });
+          }}
         />
       ) : null}
       {dialog?.kind === "weather" ? (

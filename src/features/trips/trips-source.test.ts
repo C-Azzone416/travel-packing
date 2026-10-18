@@ -159,6 +159,27 @@ describe("per-trip commands", () => {
     },
   );
 
+  it("setTheme changes only the theme, validated, and a ready trip stays ready", async () => {
+    const { source } = setup();
+    const before = (await source.getTrip("lisbon"))!;
+    const change = await source.setTheme("lisbon", "home");
+    expect(change.trip).toEqual({ ...before, theme: "home" });
+    expect(change.trip.ready).toBe(true);
+    expect(change.signals).toEqual({ promptBagPlacement: false, reviewPrompt: false });
+    expect((await source.getTrip("lisbon")).theme).toBe("home");
+    // Every other trip is untouched.
+    expect((await source.getTrip("san-diego")).theme).toBe("beach");
+  });
+
+  it("setTheme refuses an unknown theme (INVALID_INPUT) or an unknown trip (NOT_FOUND) and changes nothing", async () => {
+    const { source } = setup();
+    const before = source.snapshot();
+    for (const theme of ["volcano", "", "Beach", null, undefined, 3])
+      await expect(source.setTheme("lisbon", theme as never)).rejects.toThrow("INVALID_INPUT");
+    await expect(source.setTheme("nope", "city")).rejects.toThrow("NOT_FOUND");
+    expect(source.snapshot()).toBe(before);
+  });
+
   it("toggles, increments and decrements packed counts, storing the changed trip", async () => {
     const { source } = setup();
     const start = item(sanDiego(source), "tops").packed;

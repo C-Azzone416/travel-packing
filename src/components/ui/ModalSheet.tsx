@@ -49,9 +49,12 @@ export function ModalSheet({
     document.body.style.overflow = "hidden";
     const dialog = dialogRef.current as HTMLDivElement;
     // The close button comes first in the DOM, but a person opening a form wants to start in the form.
-    const start = [...dialog.querySelectorAll<HTMLElement>(FOCUSABLE)].find(
-      (node) => !node.hasAttribute("data-modal-close"),
-    );
+    // A control can ask to be first (a radio group asks for its checked option).
+    const start =
+      dialog.querySelector<HTMLElement>("[data-modal-autofocus]") ??
+      [...dialog.querySelectorAll<HTMLElement>(FOCUSABLE)].find(
+        (node) => !node.hasAttribute("data-modal-close"),
+      );
     (start ?? dialog).focus();
     // Everything else on the page is inert while the dialog is open, so focus and assistive tech stay inside
     // it. Anything that was already inert is left exactly as it was.

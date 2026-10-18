@@ -1753,6 +1753,29 @@ input:disabled {
   font-size: 18px;
 }
 
+/* A button that is not available yet (aria-disabled, still focusable so its reason can be reached) must look it:
+   Seafoam-soft with muted text, no pointer. (#17) */
+.button[aria-disabled="true"],
+.button[aria-disabled="true"]:hover {
+  border-color: var(--line);
+  background: var(--seafoam-soft);
+  color: var(--muted-text);
+  box-shadow: none;
+  cursor: default;
+}
+/* Review: the reason sits on its own line under the Ready button, and the back arrow is a link that looks like the
+   shared back button on every other screen. */
+.review-actions .ready-blocker {
+  flex: 1 0 100%;
+  margin: 0;
+}
+a.back {
+  display: inline-grid;
+  place-items: center;
+  text-decoration: none;
+  color: var(--ink);
+}
+
 /* Trip theme picker (#48): a native radio group of six tiles. 2 columns on a phone, 3 from 660px. */
 .theme-picker {
   min-width: 0;
@@ -1850,4 +1873,30 @@ input:disabled {
 .theme-tile:has(input:focus-visible) {
   outline: 3px solid var(--teal);
   outline-offset: 2px;
+}
+
+/* "Change theme": on a phone it sits on the header's bottom row beside the status chip, so the copy panel stays short
+   and the picture shows; from 660px it sits inside the copy panel under the trip's details. */
+.change-theme {
+  grid-column: 2;
+  justify-self: end;
+  align-self: center;
+  min-height: 44px;
+  margin: 0;
+  background-color: rgba(245, 247, 242, 0.92);
+}
+@media (min-width: 660px) {
+  .change-theme {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    justify-self: start;
+    align-self: end;
+    margin: 0 0 13px 15px;
+    z-index: 1;
+  }
+  /* Panel and button share row 2, so the button sits in the panel's bottom padding. */
+  .destination-head-copy {
+    grid-row: 2;
+    padding-bottom: 67px;
+  }
 }
