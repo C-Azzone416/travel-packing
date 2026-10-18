@@ -203,6 +203,21 @@ describe("adding a staple", () => {
     expect(source.staplesSnapshot()).toHaveLength(before);
   });
 
+  it.each(["2.5", "0", "-1", "31"])("refuses the quantity %s and saves nothing", async (bad) => {
+    const upsertStaple = vi.fn();
+    const { user } = setup((base) => ({ ...base, upsertStaple }));
+    await title();
+    await user.click(screen.getByRole("button", { name: /Add/ }));
+    const dialog = screen.getByRole("dialog");
+    await user.type(within(dialog).getByLabelText("Item name"), "Hat");
+    const qty = within(dialog).getByLabelText("Quantity");
+    await user.clear(qty);
+    await user.type(qty, bad);
+    await user.click(within(dialog).getByRole("button", { name: "Add staple" }));
+    expect(within(dialog).getByRole("alert").textContent).toBe("Enter a quantity from 1 to 30.");
+    expect(upsertStaple).not.toHaveBeenCalled();
+  });
+
   it("treats a name of only spaces as empty: asks for a name and saves nothing", async () => {
     const upsertStaple = vi.fn();
     const { user, source } = setup((base) => ({ ...base, upsertStaple }));
