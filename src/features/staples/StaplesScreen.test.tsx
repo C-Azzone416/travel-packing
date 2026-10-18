@@ -32,7 +32,12 @@ function setup(wrap?: (base: Memory) => TripsSource) {
   return { user, source: base };
 }
 
-const title = () => screen.findByRole("heading", { name: "Every trip starts here", level: 1 });
+// The heading is on screen while the staples are still loading, so "the screen is ready" means the filter is there too.
+const title = async () => {
+  const heading = await screen.findByRole("heading", { name: "Every trip starts here", level: 1 });
+  await screen.findByRole("group", { name: "Filter staples" });
+  return heading;
+};
 const section = (name: string) => screen.getByRole("region", { name });
 const live = () => screen.getByRole("status", { name: "Staples updates" });
 const rowFor = (id: string) => document.querySelector(`[data-staple-id="${id}"]`) as HTMLElement;
