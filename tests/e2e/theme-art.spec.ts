@@ -3,7 +3,7 @@ import { test } from "@playwright/test";
 // Design approves each theme illustration from rendered crops at four sizes: the card on a phone and on desktop, and
 // the trip header on a phone and on desktop (#48). The crops use the same fit as the app: cover, anchored at the focal
 // point (72% across, 58% down). This renders the shipped files directly, so it needs no trips.
-const THEMES = ["travel"] as const;
+const THEMES = ["travel", "city", "beach", "outdoors", "theme_park", "home"] as const;
 const CROPS = [
   ["card-phone", 354, 118],
   ["card-desktop", 524, 148],

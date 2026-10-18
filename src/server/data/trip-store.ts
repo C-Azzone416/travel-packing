@@ -4,6 +4,7 @@
 
 import { and, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
+import type { ThemeId } from "../../domain/themes";
 import type { Trip, TripConfig, TripItem } from "../../domain/trip";
 import type { Db } from "../db/retention";
 import * as schema from "../db/schema";
@@ -36,6 +37,7 @@ export interface StoredTrip extends Trip {
   place?: StoredPlace | null;
   copiedFrom: string | null;
   archived: boolean;
+  theme: ThemeId;
   deletedAt: Date | null;
 }
 
@@ -197,6 +199,7 @@ function toStoredTrip(
     },
     copiedFrom: row.copiedFrom,
     archived: row.archived,
+    theme: row.theme,
     deletedAt: row.deletedAt,
   };
 }
@@ -237,6 +240,7 @@ export async function insertTrip(db: Db, ownerId: string, trip: StoredTrip): Pro
       ready: trip.ready,
       archived: trip.archived,
       copiedFrom: trip.copiedFrom,
+      theme: trip.theme,
     });
     await writeChildren(tx as Db, ownerId, trip);
   });
@@ -260,6 +264,7 @@ export async function saveTrip(db: Db, ownerId: string, trip: StoredTrip): Promi
         toiletryBagPacked: trip.toiletryBagPacked,
         ready: trip.ready,
         archived: trip.archived,
+        theme: trip.theme,
         updatedAt: new Date(),
       })
       .where(

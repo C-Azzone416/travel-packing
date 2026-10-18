@@ -177,6 +177,7 @@ const OPERATIONS: Operation[] = [
     (tripId) =>
       service.updateTripPreferences(context(), { tripId, config: { ...CONFIG, laundry: true } }),
   ],
+  ["setTripTheme", (tripId) => service.setTripTheme(context(), { tripId, theme: "beach" })],
   ["acceptTripWeather", (tripId) => service.acceptTripWeather(context(), { tripId })],
   ["skipTripWeather", (tripId) => service.skipTripWeather(context(), { tripId })],
   ["reviewTripWeatherAgain", (tripId) => service.reviewTripWeatherAgain(context(), { tripId })],
@@ -867,6 +868,83 @@ describe("trip lifecycle", () => {
       expect(error).toMatchObject({ code: "INVALID_INPUT" });
       expect(error?.fields).toEqual(fields);
       expect(await countTrips()).toBe(0);
+    });
+  });
+
+  describe("trip themes (#48)", () => {
+    const input = { location: LOCATION, start: "2030-03-15", end: "2030-03-20", config: CONFIG };
+
+    it("a new trip is Travel unless a theme is given, and a given theme is stored", async () => {
+      expect(data(await service.createTrip(context(), input)).theme).toBe("travel");
+      const beach = data(await service.createTrip(context(), { ...input, theme: "beach" }));
+      expect(beach.theme).toBe("beach");
+      expect(data(await service.getTrip(context(), { tripId: beach.id })).theme).toBe("beach");
+    });
+
+    it.each(["volcano", "", "Beach", "BEACH", null, 3, {}])(
+      "createTrip refuses the theme %j and creates nothing",
+      async (theme) => {
+        expect(errorOf(await service.createTrip(context(), { ...input, theme }))?.code).toBe(
+          "INVALID_INPUT",
+        );
+        expect(await countTrips()).toBe(0);
+      },
+    );
+
+    it("a copy starts from the source's theme, unless the draft chose another", async () => {
+      const source = await packedTrip({ theme: "outdoors" });
+      const same = data(
+        await service.copyTrip(context(), {
+          sourceId: source.id,
+          location: LOCATION,
+          start: "2030-07-01",
+          end: "2030-07-04",
+        }),
+      );
+      expect(same.theme).toBe("outdoors");
+      const other = data(
+        await service.copyTrip(context(), {
+          sourceId: source.id,
+          location: LOCATION,
+          start: "2030-07-01",
+          end: "2030-07-04",
+          theme: "theme_park",
+        }),
+      );
+      expect(other.theme).toBe("theme_park");
+      expect(
+        errorOf(
+          await service.copyTrip(context(), {
+            sourceId: source.id,
+            location: LOCATION,
+            start: "2030-07-01",
+            end: "2030-07-04",
+            theme: "volcano",
+          }),
+        )?.code,
+      ).toBe("INVALID_INPUT");
+    });
+
+    it("setTripTheme changes only the theme, validated server-side, for the owner's own trip", async () => {
+      const trip = await packedTrip({});
+      const changed = data(
+        await service.setTripTheme(context(), { tripId: trip.id, theme: "home" }),
+      ).trip;
+      expect(changed.theme).toBe("home");
+      expect({ ...changed, theme: trip.theme }).toMatchObject({
+        id: trip.id,
+        destination: trip.destination,
+        ready: trip.ready,
+        start: trip.start,
+      });
+      expect(changed.items.map((entry) => [entry.id, entry.packed])).toEqual(
+        trip.items.map((entry) => [entry.id, entry.packed]),
+      );
+      for (const theme of ["volcano", "", null, undefined])
+        expect(
+          errorOf(await service.setTripTheme(context(), { tripId: trip.id, theme }))?.code,
+        ).toBe("INVALID_INPUT");
+      expect(data(await service.getTrip(context(), { tripId: trip.id })).theme).toBe("home");
     });
   });
 
