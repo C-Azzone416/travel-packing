@@ -90,6 +90,25 @@ describe("createSignInLimits", () => {
     expect(limits.blocked("fresh@b.test", "8.8.8.8")).toBe(false);
   });
 
+  it("a success clears only the pair: failures still count toward the email and address backstops", () => {
+    const limits = createSignInLimits(1, () => 0);
+    // Backstops are 5x (email) and 4x (address) of 1. Fail 4 times from distinct addresses and distinct emails so no pair is
+    // ever at its own limit, succeed each time on the same pair, and the backstops must still fill up.
+    for (let i = 0; i < EMAIL_BACKSTOP_FACTOR; i += 1) {
+      fail(limits, "owner@b.test", `10.0.0.${i}`);
+      limits.recordSuccess("owner@b.test", `10.0.0.${i}`);
+    }
+    // Every pair was cleared, but the email has now failed 5 times in the window: blocked from a fresh address.
+    expect(limits.blocked("owner@b.test", "10.9.9.9")).toBe(true);
+
+    const byAddress = createSignInLimits(1, () => 0);
+    for (let i = 0; i < ADDRESS_ALLOWANCE_FACTOR; i += 1) {
+      fail(byAddress, `u${i}@b.test`, "9.9.9.9");
+      byAddress.recordSuccess(`u${i}@b.test`, "9.9.9.9");
+    }
+    expect(byAddress.blocked("fresh@b.test", "9.9.9.9")).toBe(true);
+  });
+
   it("ignores email case and surrounding space", () => {
     const limits = createSignInLimits(1, () => 0);
     fail(limits, " A@b.test ", "1.1.1.1");
