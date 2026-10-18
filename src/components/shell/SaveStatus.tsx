@@ -10,6 +10,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { Button } from "@/components/ui/Button";
+import { ModalSheet } from "@/components/ui/ModalSheet";
 import { SaveChip, type SaveStatus } from "./SaveChip";
 
 // "Saving…" appears only if a write takes longer than this, to avoid flicker (#31).
@@ -40,6 +42,8 @@ interface SaveStatusApi {
     onSuccess?: (result: T) => void,
     options?: TrackOptions,
   ) => Promise<T>;
+  /** When the last write succeeded (a read never counts), or null if nothing has been saved yet this visit. */
+  lastSavedAt: Date | null;
   /** Re-run the last FAILED write only. A newer successful write clears it, so stale writes never replay. */
   retry: () => void;
 }
@@ -60,6 +64,7 @@ const ANNOUNCE: Record<SaveStatus, string> = {
 
 export function SaveStatusProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<SaveStatus>("saved");
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const pending = useRef(0);
   const lastFailed = useRef<PendingWrite | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -106,6 +111,7 @@ export function SaveStatusProvider({ children }: { children: ReactNode }) {
           failed.current = false;
           if (pending.current === 0) setStatus("saved");
         }
+        if (!read) setLastSavedAt(new Date());
         onSuccess?.(result);
         return result;
       } catch (error) {
@@ -127,7 +133,21 @@ export function SaveStatusProvider({ children }: { children: ReactNode }) {
       }).catch(() => {});
   }, [track]);
 
-  const api = useMemo<SaveStatusApi>(() => ({ status, track, retry }), [status, track, retry]);
+  const api = useMemo<SaveStatusApi>(
+    () => ({ status, lastSavedAt, track, retry }),
+    [status, lastSavedAt, track, retry],
+  );
+
+  // While a change is unsaved, leaving the page asks first (design's #31).
+  useEffect(() => {
+    if (status !== "error") return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [status]);
 
   return (
     <SaveStatusContext.Provider value={api}>
@@ -145,5 +165,34 @@ export function SaveStatusProvider({ children }: { children: ReactNode }) {
 // The top-bar chip, driven by whatever writes are in flight.
 export function ConnectedSaveChip() {
   const { status, retry } = useSaveStatus();
-  return <SaveChip status={status} onRetry={retry} />;
+  const [open, setOpen] = useState(false);
+  const close = () => setOpen(false);
+  return (
+    <>
+      <SaveChip status={status} onOpenError={() => setOpen(true)} />
+      <ModalSheet
+        open={open && status === "error"}
+        title="Couldn’t save"
+        description="Your last change hasn’t been saved. We’ll keep it on screen while you retry."
+        onClose={close}
+        actions={
+          <>
+            <Button variant="secondary" onClick={close}>
+              Dismiss
+            </Button>
+            <Button
+              onClick={() => {
+                close();
+                retry();
+              }}
+            >
+              Retry
+            </Button>
+          </>
+        }
+      >
+        {null}
+      </ModalSheet>
+    </>
+  );
 }

@@ -96,6 +96,11 @@ describe("loading and errors", () => {
       expect(screen.getByText("Couldn’t load your trips.")).toBeTruthy();
       const chip = screen.getByRole("button", { name: "Couldn't save, retry" });
       act(() => chip.click());
+      act(() =>
+        within(screen.getByRole("dialog", { name: "Couldn’t save" }))
+          .getByRole("button", { name: "Retry" })
+          .click(),
+      );
       expect(load).toHaveBeenCalledTimes(2);
       const everSaid: string[] = [];
       for (let waited = 0; waited < 2000; waited += 100) {
@@ -141,6 +146,11 @@ describe("loading and errors", () => {
     const { user } = setup(undefined, () => ({ ...base, load }));
     await screen.findByText("Couldn’t load your trips.");
     await user.click(screen.getByRole("button", { name: "Couldn't save, retry" }));
+    await user.click(
+      within(screen.getByRole("dialog", { name: "Couldn’t save" })).getByRole("button", {
+        name: "Retry",
+      }),
+    );
     await waitFor(() => expect(load).toHaveBeenCalledTimes(2));
   });
 
@@ -359,6 +369,11 @@ describe("archive and restore", () => {
       (screen.getByRole("button", { name: "Archive: San Diego" }) as HTMLButtonElement).disabled,
     ).toBe(false);
     await user.click(screen.getByRole("button", { name: "Couldn't save, retry" }));
+    await user.click(
+      within(screen.getByRole("dialog", { name: "Couldn’t save" })).getByRole("button", {
+        name: "Retry",
+      }),
+    );
     await waitFor(() => expect(screen.queryByRole("heading", { name: "San Diego" })).toBeNull());
     expect(screen.getByRole("link", { name: "Saved" })).toBeTruthy();
   });
