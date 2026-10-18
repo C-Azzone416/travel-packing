@@ -31,7 +31,9 @@ test("nothing is claimed saved before anything was, and 'Last saved' appears aft
   page,
 }) => {
   await openSettings(page);
-  await expect(page.getByText("Nothing saved yet this visit.")).toBeVisible();
+  await expect(
+    page.getByText("No changes yet this visit. Changes you make are saved as you go."),
+  ).toBeVisible();
   await page
     .getByRole("navigation", { name: "Primary navigation" })
     .getByRole("link", { name: "Trips" })
@@ -77,7 +79,8 @@ test("a failed save shows Error everywhere, never claims Saved, and Retry recove
     .click();
   await expect(page.getByText(/Your last change hasn’t been saved/).first()).toBeVisible();
   await expect(page.getByText("Everything you changed is saved.")).toHaveCount(0);
-  await expect(page.getByText("Nothing saved yet this visit.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Retry", exact: true })).toBeVisible();
+  await expect(page.getByText(/^Last saved/)).toHaveCount(0);
   await page.screenshot({
     path: `test-results/screenshots/${testInfo.project.name}-settings-error.png`,
     fullPage: true,
