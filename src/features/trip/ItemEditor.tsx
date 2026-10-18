@@ -57,6 +57,8 @@ export function ItemEditor({
 
   function submit(event: FormEvent) {
     event.preventDefault();
+    // The button is disabled while saving, but Enter in a field submits the form too: one save only.
+    if (saving) return;
     if (name.trim() === "") {
       setNameError(true);
       return;
