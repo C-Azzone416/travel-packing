@@ -6,6 +6,7 @@ export type AuthEvent =
   | "sign-in-succeeded"
   | "sign-in-failed"
   | "sign-in-denied"
+  | "sign-in-rate-limited"
   | "sign-out"
   | "unauthenticated"
   | "forbidden"

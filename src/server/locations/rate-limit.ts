@@ -12,6 +12,10 @@ export type RateDecision = { ok: true } | { ok: false; retryAfterMs: number };
 
 export interface RateLimiter {
   consume(key: string): RateDecision;
+  /** Whether `key` is at its limit right now, WITHOUT counting a hit. */
+  peek(key: string): RateDecision;
+  /** Forget everything counted for `key`. */
+  clear(key: string): void;
 }
 
 export function createRateLimiter({
@@ -22,6 +26,16 @@ export function createRateLimiter({
   const hits = new Map<string, number[]>();
 
   return {
+    peek(key) {
+      const time = now();
+      const recent = (hits.get(key) ?? []).filter((at) => time - at < windowMs);
+      return recent.length >= limit
+        ? { ok: false, retryAfterMs: windowMs - (time - recent[0]) }
+        : { ok: true };
+    },
+    clear(key) {
+      hits.delete(key);
+    },
     consume(key) {
       const time = now();
       const recent = (hits.get(key) ?? []).filter((at) => time - at < windowMs);

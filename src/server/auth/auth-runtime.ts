@@ -1,6 +1,7 @@
 // Runtime wiring: picks the provider from environment configuration. Fails closed: if configuration is
 // missing or invalid, the app is "unavailable" (nobody can sign in, every request is unauthenticated).
 
+import { logWarning } from "@/server/redact";
 import { parseAllowlist, type Allowlist } from "./allowlist";
 import { loadAuthConfig } from "./config";
 import { createNeonAuthProvider } from "./neon-adapter";
@@ -41,7 +42,7 @@ async function buildE2eAuth(env: Record<string, string | undefined>): Promise<Ru
   if (process.env.NEXT_PUBLIC_E2E_BUILD === "1") {
     const { createE2eAuthProvider, e2eAuthEnabled } = await import("@/server/auth/e2e-provider");
     if (e2eAuthEnabled(env)) {
-      console.warn("auth: e2e fake sign-in enabled (e2e builds only; never on Vercel)");
+      logWarning("auth: e2e fake sign-in enabled (e2e builds only; never on Vercel)");
       return {
         provider: createE2eAuthProvider(env),
         allowlist: parseAllowlist(env.OWNER_EMAIL_ALLOWLIST),
@@ -58,7 +59,7 @@ async function buildAuth(env: Record<string, string | undefined>): Promise<Runti
   const loaded = loadAuthConfig(env);
   if (!loaded.ok) {
     // Names of missing settings only; never values.
-    console.warn(`auth unavailable: ${loaded.problems.join("; ")}`);
+    logWarning(`auth unavailable: ${loaded.problems.join("; ")}`);
     return unavailableAuth();
   }
   const { baseUrl, cookieSecret, allowlist } = loaded.config;

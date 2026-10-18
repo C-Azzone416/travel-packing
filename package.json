@@ -23,6 +23,7 @@
     "db:migrate:remote": "tsx scripts/db-migrate-remote.ts",
     "db:seed": "tsx scripts/db-seed.ts",
     "check:repo-hygiene": "tsx scripts/check-repo-hygiene.ts",
+    "check:client-bundle": "tsx scripts/check-client-bundle.ts",
     "check:deploy-env": "tsx scripts/check-deploy-env.ts",
     "check:migration-target": "tsx scripts/check-migration-target.ts",
     "smoke": "tsx scripts/smoke-test.ts"
