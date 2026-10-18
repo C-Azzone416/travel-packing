@@ -1218,6 +1218,53 @@ describe("a form submitted twice while saving saves once", () => {
   });
 });
 
+describe("the theme sheet's failure message", () => {
+  it("is cleared as soon as Save is pressed again, while the retry is still pending", async () => {
+    const gate = deferred<void>();
+    let attempts = 0;
+    const { user } = setup("san-diego", (base) => ({
+      ...base,
+      setTheme: async (id, theme) => {
+        attempts += 1;
+        if (attempts === 1) throw new Error("nope");
+        await gate.promise;
+        return base.setTheme(id, theme);
+      },
+    }));
+    await ready();
+    await user.click(screen.getByRole("button", { name: "Change theme" }));
+    await user.click(screen.getByRole("radio", { name: "City" }));
+    await user.click(screen.getByRole("button", { name: "Save theme" }));
+    const sheet = screen.getByRole("dialog", { name: "Change theme" });
+    expect((await within(sheet).findByRole("alert")).textContent).toMatch(
+      /Couldn’t save the theme/,
+    );
+    await user.click(within(sheet).getByRole("button", { name: "Save theme" }));
+    // The retry is in flight: the old message is gone and Save is waiting.
+    expect(within(sheet).queryByRole("alert")).toBeNull();
+    expect(within(sheet).getByRole("button", { name: "Save theme" }).hasAttribute("disabled")).toBe(
+      true,
+    );
+    await act(async () => gate.resolve());
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("is also cleared when the sheet is closed, so reopening starts clean", async () => {
+    const { user } = setup("san-diego", (base) => ({
+      ...base,
+      setTheme: () => Promise.reject(new Error("nope")),
+    }));
+    await ready();
+    await user.click(screen.getByRole("button", { name: "Change theme" }));
+    await user.click(screen.getByRole("radio", { name: "City" }));
+    await user.click(screen.getByRole("button", { name: "Save theme" }));
+    await within(screen.getByRole("dialog")).findByRole("alert");
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await user.click(screen.getByRole("button", { name: "Change theme" }));
+    expect(within(screen.getByRole("dialog")).queryByRole("alert")).toBeNull();
+  });
+});
+
 describe("closing dialogs without saving", () => {
   const closeButton = () => screen.queryByRole("button", { name: "Close dialog" });
 
@@ -1361,4 +1408,49 @@ describe("edges", () => {
     expect(screen.queryByRole("heading", { name: "Pack last" })).toBeNull();
     expect(screen.getByRole("heading", { name: "Everyday & occasion items" })).toBeTruthy();
   });
+});
+
+describe("Ready is never revoked silently", () => {
+  it("says why when unchecking an item takes a Ready trip back to packing", async () => {
+    const { user, source } = setup("lisbon");
+    await ready("Lisbon");
+    expect(screen.getByText("Ready", { selector: ".status-pill" })).toBeTruthy();
+    await user.click(
+      within(row("tops")).getByRole("button", { name: "Mark Everyday tops unpacked" }),
+    );
+    expect(await screen.findByText("No longer ready: an item was unchecked")).toBeTruthy();
+    expect(tripOf(source, "lisbon").ready).toBe(false);
+    expect(screen.getByText("Packing", { selector: ".status-pill" })).toBeTruthy();
+  });
+
+  it("says nothing when a change leaves the trip as it was", async () => {
+    const { user } = setup("san-diego");
+    await ready();
+    await user.click(within(row("tops")).getByRole("button", { name: "Pack all Everyday tops" }));
+    await waitFor(() => expect(screen.getByText("Everyday tops 2 of 2 packed")).toBeTruthy());
+    expect(screen.queryByText(/No longer ready/)).toBeNull();
+  });
+});
+
+describe("the 'No longer ready' toast is for the change that revoked Ready, not later ones", () => {
+  it("shows once, then stays quiet for the next change", async () => {
+    const { user, source } = setup("lisbon");
+    await ready("Lisbon");
+    await user.click(
+      within(row("tops")).getByRole("button", { name: "Mark Everyday tops unpacked" }),
+    );
+    expect(await screen.findByText("No longer ready: an item was unchecked")).toBeTruthy();
+    expect(tripOf(source, "lisbon").ready).toBe(false);
+    // Let that toast expire, then change the (no longer Ready) trip twice more.
+    await waitFor(() => expect(screen.queryByText(/No longer ready/)).toBeNull(), {
+      timeout: 6000,
+    });
+    await user.click(within(row("tops")).getByRole("button", { name: "Pack all Everyday tops" }));
+    await within(row("tops")).findByRole("button", { name: "Mark Everyday tops unpacked" });
+    await user.click(
+      within(row("tops")).getByRole("button", { name: "Mark Everyday tops unpacked" }),
+    );
+    await within(row("tops")).findByRole("button", { name: "Pack all Everyday tops" });
+    expect(screen.queryByText(/No longer ready/)).toBeNull();
+  }, 20_000);
 });
