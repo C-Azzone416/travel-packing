@@ -27,6 +27,8 @@ export function PreferencesForm({ config, saving, onClose, onSave }: Preferences
 
   function submit(event: FormEvent) {
     event.preventDefault();
+    // The button is disabled while saving, but Enter in a field submits the form too: one save only.
+    if (saving) return;
     onSave(draft);
   }
 
