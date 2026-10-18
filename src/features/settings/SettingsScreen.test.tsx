@@ -1,13 +1,17 @@
 // @vitest-environment jsdom
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useEffect } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { SaveStatusProvider, useSaveStatus } from "@/components/shell/SaveStatus";
 import { lastSavedText, SettingsScreen } from "./SettingsScreen";
 
 let tracker: ReturnType<typeof useSaveStatus>;
 function Capture() {
-  tracker = useSaveStatus();
+  const value = useSaveStatus();
+  useEffect(() => {
+    tracker = value;
+  });
   return null;
 }
 
