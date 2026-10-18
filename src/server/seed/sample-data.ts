@@ -4,6 +4,7 @@
 
 import { createHash } from "node:crypto";
 import { buildTripItems, DEFAULT_STAPLES, forecastLabel } from "../../domain/calc";
+import type { ThemeId } from "../../domain/themes";
 import type { TripConfig, TripItem } from "../../domain/trip";
 import type { StoredTrip } from "../data/trip-store";
 
@@ -62,6 +63,7 @@ function sampleTrip(
   end: string,
   config: TripConfig,
   today: string,
+  theme: ThemeId,
 ): StoredTrip {
   const built = buildTripItems({ ...config, start, end }, DEFAULT_STAPLES);
   return {
@@ -86,6 +88,7 @@ function sampleTrip(
     },
     copiedFrom: null,
     archived: false,
+    theme,
     deletedAt: null,
   };
 }
@@ -100,6 +103,7 @@ export function sanDiegoTrip(ownerId: string, today: string): StoredTrip {
     addDays(start, TRIP_LENGTH_DAYS - 1),
     SAMPLE_CONFIG,
     today,
+    "beach",
   );
   const partial: Record<string, number> = {
     tops: 1,
@@ -126,6 +130,7 @@ export function lisbonTrip(ownerId: string, today: string): StoredTrip {
     addDays(start, TRIP_LENGTH_DAYS - 1),
     { ...SAMPLE_CONFIG, laundry: true, spare: false },
     today,
+    "city",
   );
   const umbrella: TripItem = {
     id: "weather-umbrella",

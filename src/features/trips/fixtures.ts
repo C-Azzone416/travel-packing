@@ -50,6 +50,7 @@ export function sampleLifecycleState(): LifecycleState {
     DEFAULT_STAPLES,
     deps("san-diego"),
   );
+  sanDiego.theme = "beach";
   sanDiego.items = sanDiego.items.map((item) =>
     ["tops", "underwear", "socks", "sleepwear", "sunglasses"].includes(item.id)
       ? { ...item, packed: Math.min(item.qty, item.id === "underwear" ? 2 : 1) }
@@ -65,6 +66,7 @@ export function sampleLifecycleState(): LifecycleState {
     DEFAULT_STAPLES,
     deps("lisbon"),
   );
+  lisbon.theme = "city";
   lisbon.items = lisbon.items.map((item) => ({ ...item, packed: item.qty }));
   lisbon.toiletryBagPacked = true;
   lisbon.ready = true;

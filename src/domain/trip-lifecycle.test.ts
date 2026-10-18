@@ -16,6 +16,7 @@ import {
   selectDraftLocation,
   setDraftConfig,
   setDraftDates,
+  setDraftTheme,
   startCopyDraft,
   startDraft,
   undoRemoveTrip,
@@ -124,6 +125,7 @@ describe("drafts", () => {
       start: "2030-04-01",
       end: "2030-04-05",
       config: CONFIG,
+      theme: "travel",
     });
     config.laundry = true;
     expect(draft.config.laundry).toBe(false);
@@ -432,6 +434,48 @@ describe("buildTrip", () => {
   });
 });
 
+describe("themes", () => {
+  it("a new draft is Travel, and choosing a theme changes only the theme", () => {
+    const draft = startDraft(CONFIG, "2030-04-01", "2030-04-05");
+    expect(draft.theme).toBe("travel");
+    const chosen = setDraftTheme(draft, "beach");
+    expect(chosen).toEqual({ ...draft, theme: "beach" });
+    expect(draft.theme).toBe("travel");
+  });
+
+  it("a draft can start on a theme", () => {
+    expect(startDraft(CONFIG, "2030-04-01", "2030-04-05", "city").theme).toBe("city");
+  });
+
+  it("saving gives the trip the draft's theme (Travel by default)", () => {
+    const place = {
+      id: "p",
+      city: "Anywhere",
+      region: "",
+      country: "Land",
+      countryCode: "LD",
+      label: "Anywhere, Land",
+    };
+    const build = (theme?: Parameters<typeof setDraftTheme>[1]) => {
+      const base = selectDraftLocation(startDraft(CONFIG, "2030-04-01", "2030-04-05"), place);
+      const state = beginDraft(emptyLifecycleState(), theme ? setDraftTheme(base, theme) : base);
+      const saved = saveDraft(state, STAPLES, makeDeps());
+      if (!saved.ok) throw new Error(saved.reason);
+      return saved.trip;
+    };
+    expect(build().theme).toBe("travel");
+    expect(build("outdoors").theme).toBe("outdoors");
+  });
+
+  it("a copy starts from the source's theme and the draft can still change it", () => {
+    const source = { ...savedTrip(), theme: "theme_park" as const };
+    const draft = startCopyDraft(source, "2030-07-01", "2030-07-04");
+    expect(draft.theme).toBe("theme_park");
+    expect(setDraftTheme(draft, "home").theme).toBe("home");
+    expect(source.theme).toBe("theme_park");
+  });
+});
+
 describe("copy", () => {
   function progressedSource(): LifecycleTrip {
     const base = savedTrip();
@@ -457,6 +501,7 @@ describe("copy", () => {
       start: "2030-07-01",
       end: "2030-07-04",
       config: source.config,
+      theme: source.theme,
     });
     expect(draft.config).not.toBe(source.config);
     const state = beginDraft({ trips: [source], deletedTrips: [], draft: null }, draft);

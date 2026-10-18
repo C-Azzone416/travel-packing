@@ -55,6 +55,7 @@ export function makeStoredTrip(overrides: Partial<StoredTrip> = {}): StoredTrip 
     weather: { status: "pending", label: "Seasonal outlook", suggestion: "Compact umbrella" },
     copiedFrom: null,
     archived: false,
+    theme: "travel",
     deletedAt: null,
     ...overrides,
   };

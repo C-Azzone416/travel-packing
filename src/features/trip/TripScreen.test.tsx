@@ -786,7 +786,7 @@ describe("preferences and Ready", () => {
     expect(screen.getByText("3 everyday days")).toBeTruthy();
   });
 
-  it("a trip with no confirmed location has no place line and uses the fallback art", async () => {
+  it("a trip with no confirmed location has no place line, and its header art is still its theme", async () => {
     const state = sampleLifecycleState();
     state.trips[0] = { ...state.trips[0], location: null };
     const base = createMemoryTripsSource(state, { now: () => 1 });
@@ -797,7 +797,7 @@ describe("preferences and Ready", () => {
     );
     await ready();
     expect(screen.getByText("Oct 23 – Oct 27 · 5 days")).toBeTruthy();
-    expect(document.querySelector("[data-art-key]")?.getAttribute("data-art-key")).toBe("fallback");
+    expect(document.querySelector("[data-art-key]")?.getAttribute("data-art-key")).toBe("beach");
   });
 
   it("a one-day trip says '1 day'", async () => {
