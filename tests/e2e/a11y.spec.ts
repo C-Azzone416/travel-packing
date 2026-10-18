@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { OTHER_EMAIL, signIn, signInAsOwner } from "./helpers/auth";
 import { expectAccessible } from "./helpers/a11y";
 
@@ -408,6 +408,27 @@ test.describe("more states", () => {
   });
 });
 
+// The badge never touches the text before it. On a wide row it sits on the category line with a gap of at least 6px;
+// when the line is too narrow it wraps below that line instead. Either way it is below the name.
+async function expectBadgeClear(row: Locator): Promise<{ sameLine: boolean }> {
+  const name = (await row.locator(".item-name").boundingBox())!;
+  const badge = (await row.locator(".timing-tag").boundingBox())!;
+  // The text right before the badge: everything in .item-meta up to the badge, last client rect.
+  const last = await row.locator(".item-meta").evaluate((node) => {
+    const range = document.createRange();
+    range.setStart(node, 0);
+    range.setEndBefore(node.querySelector(".timing-tag")!);
+    const rects = Array.from(range.getClientRects());
+    const box = rects[rects.length - 1];
+    return { right: box.right, top: box.top, bottom: box.bottom };
+  });
+  const sameLine = badge.y < last.bottom - 1 && badge.y + badge.height > last.top + 1;
+  if (sameLine) expect(badge.x - last.right).toBeGreaterThanOrEqual(6);
+  else expect(badge.y).toBeGreaterThanOrEqual(last.bottom - 1);
+  expect(badge.y).toBeGreaterThanOrEqual(name.y + name.height - 1);
+  return { sameLine };
+}
+
 test.describe("design's known items", () => {
   test("the error chip stays on one line, and the Pack last badge keeps its distance", async ({
     page,
@@ -426,21 +447,18 @@ test.describe("design's known items", () => {
     await page.getByRole("link", { name: "Keep packing: San Diego" }).click();
     const row = page.locator('[data-item-id="last-toothbrush"]');
     await expect(row).toBeVisible();
-    const name = (await row.locator(".item-name").boundingBox())!;
-    const badge = (await row.locator(".timing-tag").boundingBox())!;
-    // The badge never touches the text before it. On a wide row it sits on the category line with a gap of at least
-    // 6px; when the line is too narrow it wraps below that line instead. Either way it is below the name.
-    const last = await row.locator(".item-meta").evaluate((node) => {
-      const range = document.createRange();
-      range.selectNodeContents(node.firstChild as Node);
-      const rects = Array.from(range.getClientRects());
-      const box = rects[rects.length - 1];
-      return { right: box.right, top: box.top, bottom: box.bottom };
-    });
-    const sameLine = badge.y < last.bottom - 1 && badge.y + badge.height > last.top + 1;
-    if (sameLine) expect(badge.x - last.right).toBeGreaterThanOrEqual(6);
-    else expect(badge.y).toBeGreaterThanOrEqual(last.bottom - 1);
-    expect(badge.y).toBeGreaterThanOrEqual(name.y + name.height - 1);
+    await expectBadgeClear(row);
+  });
+
+  test("on a wide row the Pack last badge sits on the category line, 6px clear of the text", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await openDashboard(page);
+    await page.getByRole("link", { name: "Keep packing: San Diego" }).click();
+    const row = page.locator('[data-item-id="last-toothbrush"]');
+    await expect(row).toBeVisible();
+    expect((await expectBadgeClear(row)).sameLine).toBe(true);
   });
 
   test("group labels are the same size as field labels", async ({ page }) => {
