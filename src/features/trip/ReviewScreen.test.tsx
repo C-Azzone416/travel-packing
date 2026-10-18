@@ -275,6 +275,24 @@ describe("corrections on the review", () => {
     expect(document.activeElement).toBe(done);
   });
 
+  it("puts focus back on the corrected row even if the page lost it while saving", async () => {
+    const { user } = await setup("san-diego", undefined, (base) => ({
+      ...base,
+      togglePacked: async (tripId, itemId) => {
+        const change = await base.togglePacked(tripId, itemId);
+        // Whatever re-rendering does to focus, the user must land back on the row they were correcting.
+        (document.activeElement as HTMLElement | null)?.blur();
+        return change;
+      },
+    }));
+    await title();
+    await user.click(within(rowOf("tops")).getByRole("button", { name: /^Mark packed/ }));
+    const done = await within(rowOf("tops")).findByRole("button", {
+      name: "Packed ✓ Everyday tops, mark unpacked",
+    });
+    await waitFor(() => expect(document.activeElement).toBe(done));
+  });
+
   it("unchecking on a Ready trip takes it out of Ready with a visible reason, and focus stays on the row", async () => {
     const { user, source } = await setup("lisbon");
     await screen.findByRole("heading", { name: "Review your bag" });
