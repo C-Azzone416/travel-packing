@@ -1168,7 +1168,7 @@ describe("a form submitted twice while saving saves once", () => {
       },
     }));
     await ready();
-    await user.click(within(row("sunglasses")).getByRole("button", { name: "Edit Sunglasses" }));
+    await user.click(within(row("sunglasses")).getByRole("button", { name: /^Sunglasses / }));
     submitTwice();
     await waitFor(() => expect(calls).toHaveBeenCalledTimes(1));
     submitTwice();
