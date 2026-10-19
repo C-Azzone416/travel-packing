@@ -1,8 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterAll, describe, expect, it } from "vitest";
 import {
   checkDeployEnv,
   checkMigrationTarget,
   hostOf,
+  parseBuildEnvFile,
   parseEnvFile,
   productionHost,
   PRODUCTION_HOST_FORMAT,
@@ -243,17 +248,6 @@ describe("checkDeployEnv: values that vercel pull could not read", () => {
     },
   );
 
-  it("rejects the marker for production as well, so a broken pull cannot reach a build", () => {
-    const problems = checkDeployEnv(
-      "production",
-      { ...production, DATABASE_URL: MARKER },
-      PROD_HOST,
-    );
-    expect(problems).toEqual([
-      expect.stringContaining("DATABASE_URL is Vercel's redaction marker"),
-    ]);
-  });
-
   it("reports every redacted variable at once", () => {
     const all = Object.fromEntries(REQUIRED.map((name) => [name, MARKER]));
     const problems = checkDeployEnv("preview", { ...good, ...all }, PROD_HOST);
@@ -357,7 +351,93 @@ describe("checkDeployEnv: values that vercel pull could not read", () => {
   });
 });
 
-describe("parseEnvFile (reads the file the way vercel build's dotenv 4 reader does)", () => {
+// What a PRODUCTION run said before #85 added the marker, URL and allowlist rules, captured from develop's validator
+// (the preview-only rules must not change a production result; extending them is follow-up work).
+describe("checkDeployEnv: a production run is checked exactly as before the preview-only rules", () => {
+  const M = "[SENSITIVE]";
+  const prodBase = {
+    DATABASE_URL: "postgres://u:p@ep-prod-1-pooler.us-east-2.aws.neon.tech/db",
+    DATABASE_URL_UNPOOLED: `postgres://u:p@${PROD_HOST}/db`,
+    NEON_AUTH_BASE_URL: "https://auth.example.test",
+    NEON_AUTH_COOKIE_SECRET: "s".repeat(32),
+    OWNER_EMAIL_ALLOWLIST: "a@example.test",
+  };
+  const onProductionHost =
+    "does not point at PRODUCTION_DB_HOST; production must use its own database";
+  const tooShort =
+    "NEON_AUTH_COOKIE_SECRET is shorter than 32 characters, so sign-in would not work";
+
+  it.each([
+    ["a good environment", prodBase, []],
+    [
+      "every variable the marker",
+      Object.fromEntries(Object.keys(prodBase).map((name) => [name, M])),
+      [tooShort, `DATABASE_URL ${onProductionHost}`, `DATABASE_URL_UNPOOLED ${onProductionHost}`],
+    ],
+    [
+      "the database URLs the marker",
+      { ...prodBase, DATABASE_URL: M, DATABASE_URL_UNPOOLED: M },
+      [`DATABASE_URL ${onProductionHost}`, `DATABASE_URL_UNPOOLED ${onProductionHost}`],
+    ],
+    ["the cookie secret the marker", { ...prodBase, NEON_AUTH_COOKIE_SECRET: M }, [tooShort]],
+    [
+      "the allowlist the marker (not rejected for production)",
+      { ...prodBase, OWNER_EMAIL_ALLOWLIST: M },
+      [],
+    ],
+    [
+      "unparseable database URLs",
+      { ...prodBase, DATABASE_URL: "garbage", DATABASE_URL_UNPOOLED: "https://x.test/db" },
+      [`DATABASE_URL ${onProductionHost}`, `DATABASE_URL_UNPOOLED ${onProductionHost}`],
+    ],
+    [
+      "a malformed allowlist (not rejected for production)",
+      { ...prodBase, OWNER_EMAIL_ALLOWLIST: "not-an-email,,;" },
+      [],
+    ],
+    ["a short cookie secret", { ...prodBase, NEON_AUTH_COOKIE_SECRET: "short" }, [tooShort]],
+    [
+      "a database URL on another host",
+      { ...prodBase, DATABASE_URL: "postgres://u:p@ep-other-9.x.test/db" },
+      [`DATABASE_URL ${onProductionHost}`],
+    ],
+  ])("%s", (_name, env, expected) => {
+    expect(checkDeployEnv("production", env, PROD_HOST)).toEqual(expected);
+  });
+
+  it("the same inputs are judged by the stricter rules only for a preview", () => {
+    const marked = { ...good, OWNER_EMAIL_ALLOWLIST: M };
+    expect(
+      checkDeployEnv("production", { ...production, OWNER_EMAIL_ALLOWLIST: M }, PROD_HOST),
+    ).toEqual([]);
+    expect(checkDeployEnv("preview", marked, PROD_HOST)).toHaveLength(1);
+  });
+});
+
+describe("parseEnvFile (production's reader, unchanged)", () => {
+  it("reads quoted and bare values, skips comments and junk, strips export", () => {
+    const text = [
+      "# comment",
+      'A="one"',
+      "B='two'",
+      "C=three",
+      "export D=four",
+      "not a line",
+      'E=""',
+      'F="',
+    ].join("\r\n");
+    expect(parseEnvFile(text)).toEqual({
+      A: "one",
+      B: "two",
+      C: "three",
+      D: "four",
+      E: "",
+      F: '"',
+    });
+  });
+});
+
+describe("parseBuildEnvFile (reads the file the way vercel build's dotenv 4 reader does)", () => {
   it("reads quoted and bare values, skips comments and junk, and does not treat `export` as an assignment", () => {
     const text = [
       "# comment",
@@ -370,7 +450,7 @@ describe("parseEnvFile (reads the file the way vercel build's dotenv 4 reader do
       'F="',
       "G = spaced  ",
     ].join("\r\n");
-    expect(parseEnvFile(text)).toEqual({
+    expect(parseBuildEnvFile(text)).toEqual({
       A: "one",
       B: "two",
       C: "three",
@@ -382,7 +462,7 @@ describe("parseEnvFile (reads the file the way vercel build's dotenv 4 reader do
 
   it("turns \\n into a newline inside double quotes only, and strips one quote from each end", () => {
     expect(
-      parseEnvFile('A="x\\ny"\nB=x\\ny\nC=\'x\\ny\'\nD=""q""\nE="$HOME #not-a-comment"'),
+      parseBuildEnvFile('A="x\\ny"\nB=x\\ny\nC=\'x\\ny\'\nD=""q""\nE="$HOME #not-a-comment"'),
     ).toEqual({
       A: "x\ny",
       B: "x\\ny",
@@ -453,5 +533,52 @@ describe("checkMigrationTarget", () => {
     const lines = checkMigrationTarget("preview", production, PROD_HOST).join(" ");
     expect(lines).not.toContain(PROD_HOST);
     expect(lines).not.toContain("u:p");
+  });
+});
+
+describe("scripts/check-deploy-env.ts reads each target's file with that target's reader", () => {
+  const dir = mkdtempSync(join(tmpdir(), "check-env-"));
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+  const tsx = join(process.cwd(), "node_modules", ".bin", "tsx");
+  const script = join(process.cwd(), "scripts", "check-deploy-env.ts");
+
+  // `export KEY=...` lines: the way production's file was always read, but not an assignment to vercel build's reader.
+  const exported = (url: string, unpooled: string) =>
+    [
+      `export DATABASE_URL="${url}"`,
+      `export DATABASE_URL_UNPOOLED="${unpooled}"`,
+      'export NEON_AUTH_BASE_URL="https://auth.example.test"',
+      `export NEON_AUTH_COOKIE_SECRET="${"s".repeat(32)}"`,
+      'export OWNER_EMAIL_ALLOWLIST="a@example.test"',
+      'export LOCATION_PROVIDER="open-meteo"',
+    ].join("\n");
+
+  function run(target: string, text: string, host: string) {
+    const file = join(dir, `${target}.env`);
+    writeFileSync(file, text);
+    return spawnSync(tsx, [script, target, file], {
+      env: { PATH: process.env.PATH, PRODUCTION_DB_HOST: host } as unknown as NodeJS.ProcessEnv,
+      encoding: "utf8",
+    });
+  }
+
+  it("production: the unchanged reader (export lines count) and the unchanged rules", () => {
+    const result = run(
+      "production",
+      exported(`postgres://u:p@${PROD_HOST}/db`, `postgres://u:p@${PROD_HOST}/db`),
+      PROD_HOST,
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe("deploy env: ok for production\n");
+  });
+
+  it("preview: the build's reader (export lines are not assignments, so nothing is set)", () => {
+    const result = run(
+      "preview",
+      exported("postgres://u:p@ep-prev-1.x.test/db", "postgres://u:p@ep-prev-1.x.test/db"),
+      PROD_HOST,
+    );
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("DATABASE_URL is not set");
   });
 });

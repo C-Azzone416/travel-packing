@@ -3,7 +3,7 @@
 // GitHub `preview` environment's secrets (the workflow hands them in through step `env:` from `secrets.*` only, so
 // GitHub masks them). Nothing here ever returns, logs or throws a value: every message names the variable alone.
 
-import { parseEnvFile } from "./deploy-env";
+import { parseBuildEnvFile } from "./deploy-env";
 
 type Env = Record<string, string | undefined>;
 
@@ -18,7 +18,7 @@ export const INJECTED_SECRETS = [
 export type InjectionResult = { ok: true; text: string } | { ok: false; problems: string[] };
 
 /**
- * `vercel build` reads the file with dotenv 4.0.0 (see parseEnvFile): one assignment per line, and inside double quotes
+ * `vercel build` reads the file with dotenv 4.0.0 (see parseBuildEnvFile): one assignment per line, and inside double quotes
  * the two characters `\n` mean a newline. So a value is written as KEY="value" with each real newline written as `\n`;
  * `"`, `\`, `$` and `#` need no escaping there (that reader neither expands `$` nor treats `#` as a comment, and strips a
  * single quote from each end only). Some values cannot be represented at all, and are refused instead of written wrong.
@@ -85,6 +85,6 @@ function assigns(line: string, name: string): boolean {
 
 /** What the build's reader will see for the injected names, to prove the file round-trips (used by tests and the script). */
 export function readBack(text: string): Env {
-  const parsed = parseEnvFile(text);
+  const parsed = parseBuildEnvFile(text);
   return Object.fromEntries(INJECTED_SECRETS.map((name) => [name, parsed[name]]));
 }

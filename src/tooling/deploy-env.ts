@@ -143,12 +143,15 @@ export function checkDeployEnv(
       }
     }
   }
-  // A Vercel Secret that `vercel pull` could not read arrives as the redaction marker. Name it for every variable, and
-  // judge the rest of that variable no further (the marker would only produce misleading length/URL complaints).
+  // PREVIEW ONLY (#20): a Vercel Secret that `vercel pull` could not read arrives as the redaction marker. Name it for
+  // every variable, and judge the rest of that variable no further (the marker would only produce misleading length/URL
+  // complaints). A production run is checked exactly as before these rules existed; extending them to production is
+  // follow-up work for when Production work resumes.
+  const strict = target === "preview";
   const redacted = new Set<string>();
   for (const name of REQUIRED) {
     if (!present(env, name)) problems.push(`${name} is not set`);
-    else if (isRedacted(env[name])) {
+    else if (strict && isRedacted(env[name])) {
       redacted.add(name);
       problems.push(
         `${name} is Vercel's redaction marker (a Secret that vercel pull cannot read); the real value must be injected first`,
@@ -165,14 +168,16 @@ export function checkDeployEnv(
       `NEON_AUTH_COOKIE_SECRET is shorter than ${MIN_COOKIE_SECRET_LENGTH} characters, so sign-in would not work`,
     );
   }
-  for (const name of ["DATABASE_URL", "DATABASE_URL_UNPOOLED"] as const) {
-    if (present(env, name) && !redacted.has(name) && !isPostgresUrl(env[name])) {
-      problems.push(`${name} is not a Postgres connection URL`);
+  if (strict) {
+    for (const name of ["DATABASE_URL", "DATABASE_URL_UNPOOLED"] as const) {
+      if (present(env, name) && !redacted.has(name) && !isPostgresUrl(env[name])) {
+        problems.push(`${name} is not a Postgres connection URL`);
+      }
     }
-  }
-  if (present(env, "OWNER_EMAIL_ALLOWLIST") && !redacted.has("OWNER_EMAIL_ALLOWLIST")) {
-    const problem = allowlistProblem(env.OWNER_EMAIL_ALLOWLIST);
-    if (problem) problems.push(`OWNER_EMAIL_ALLOWLIST ${problem}`);
+    if (present(env, "OWNER_EMAIL_ALLOWLIST") && !redacted.has("OWNER_EMAIL_ALLOWLIST")) {
+      const problem = allowlistProblem(env.OWNER_EMAIL_ALLOWLIST);
+      if (problem) problems.push(`OWNER_EMAIL_ALLOWLIST ${problem}`);
+    }
   }
   // Production may leave the provider unset (search off) or use the real one; any other value is a mistake.
   const provider = env.LOCATION_PROVIDER?.trim();
@@ -211,8 +216,7 @@ export function checkDeployEnv(
       problems.push(PRODUCTION_HOST_FORMAT);
     } else {
       for (const name of ["DATABASE_URL", "DATABASE_URL_UNPOOLED"] as const) {
-        // A marker or an unparseable URL is already reported above; only a real URL can be on the wrong host.
-        if (isPostgresUrl(env[name]) && hostOf(env[name]) !== prodHost) {
+        if (present(env, name) && hostOf(env[name]) !== prodHost) {
           problems.push(
             `${name} does not point at PRODUCTION_DB_HOST; production must use its own database`,
           );
@@ -223,13 +227,26 @@ export function checkDeployEnv(
   return problems;
 }
 
-/**
- * Reads the file `vercel pull` writes exactly the way `vercel build` does: Vercel CLI 64.5.0 loads it with dotenv 4.0.0
- * (a line-by-line KEY=value reader). In particular a double-quoted value turns the two characters `\n` into a newline,
- * one quote is stripped from each end, the result is trimmed, and `export KEY=...` and `#` comment lines are not
- * assignments. Checking what the build will actually see is the point, so keep this in step with the pinned CLI.
- */
+/** Minimal dotenv reader for the file `vercel pull` writes (KEY="value" lines, # comments). Used for a production check. */
 export function parseEnvFile(text: string): Env {
+  const env: Env = {};
+  for (const line of text.split(/\r?\n/)) {
+    const match = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/.exec(line);
+    if (!match) continue;
+    let value = match[2];
+    if (value.length >= 2 && /^(["']).*\1$/.test(value)) value = value.slice(1, -1);
+    env[match[1]] = value;
+  }
+  return env;
+}
+
+/**
+ * PREVIEW (#20): reads the file `vercel pull` writes exactly the way `vercel build` does. Vercel CLI 64.5.0 loads it with
+ * dotenv 4.0.0 (a line-by-line KEY=value reader). In particular a double-quoted value turns the two characters `\n` into
+ * a newline, one quote is stripped from each end, the result is trimmed, and `export KEY=...` and `#` comment lines are
+ * not assignments. Checking what the build will actually see is the point, so keep this in step with the pinned CLI.
+ */
+export function parseBuildEnvFile(text: string): Env {
   const env: Env = {};
   for (const line of text.split("\n")) {
     const match = /^\s*([\w.-]+)\s*=\s*(.*)?\s*$/.exec(line);

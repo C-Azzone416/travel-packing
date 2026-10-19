@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { checkDeployEnv, parseEnvFile, REDACTION_MARKER } from "./deploy-env";
+import { checkDeployEnv, parseBuildEnvFile, REDACTION_MARKER } from "./deploy-env";
 import { formatEnvLine, INJECTED_SECRETS, injectSecrets, readBack } from "./preview-secrets";
 
 // The reader `vercel build` uses (Vercel CLI 64.5.0 bundles dotenv@4.0.0), copied verbatim as an independent oracle so
@@ -78,9 +78,9 @@ describe("injectSecrets", () => {
     const base = { LOCATION_PROVIDER: "open-meteo" };
     const prod = "ep-prod-9.us-east-2.aws.neon.tech";
     expect(
-      checkDeployEnv("preview", { ...base, ...parseEnvFile(PULLED) }, prod).join("\n"),
+      checkDeployEnv("preview", { ...base, ...parseBuildEnvFile(PULLED) }, prod).join("\n"),
     ).toMatch(/redaction marker/);
-    expect(checkDeployEnv("preview", parseEnvFile(inject(PULLED, SECRETS)), prod)).toEqual([]);
+    expect(checkDeployEnv("preview", parseBuildEnvFile(inject(PULLED, SECRETS)), prod)).toEqual([]);
   });
 
   it("appends an entry the pull did not write, and drops duplicate lines for the same name", () => {
@@ -127,7 +127,7 @@ describe("what the build reads back (the real dotenv 4 reader as the oracle)", (
   ])("round-trips a value with %s", (_name, value) => {
     const text = inject(PULLED, { ...SECRETS, NEON_AUTH_COOKIE_SECRET: value });
     expect(dotenv4Parse(text).NEON_AUTH_COOKIE_SECRET).toBe(value);
-    expect(parseEnvFile(text).NEON_AUTH_COOKIE_SECRET).toBe(value);
+    expect(parseBuildEnvFile(text).NEON_AUTH_COOKIE_SECRET).toBe(value);
     // The other entries are unaffected by the odd one.
     expect(dotenv4Parse(text).DATABASE_URL).toBe(SECRETS.DATABASE_URL);
   });

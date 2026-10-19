@@ -14,10 +14,12 @@ workflow (`.github/workflows/deploy-vercel.yml`) builds with a pinned Vercel CLI
    GitHub `preview` environment (see [Preview secrets](#preview-secrets)). Then `scripts/check-deploy-env.ts` checks the
    file the build will use. It prints variable **names** only, and fails when:
    - any test-only variable is present (`NEXT_PUBLIC_E2E_BUILD`, anything starting with `AUTH_E2E_`, `E2E_DATABASE_URL`, `SEED_DATABASE_URL`, `OPEN_METEO_GEOCODING_URL`);
-   - a required variable is missing, or any required variable is still Vercel's redaction marker (`[SENSITIVE]`, what
-     `vercel pull` writes for a Secret it cannot read), or `NEON_AUTH_COOKIE_SECRET` is shorter than the 32 characters
-     sign-in needs, or either database URL is not a `postgres://` / `postgresql://` URL with a host, or
-     `OWNER_EMAIL_ALLOWLIST` is empty or is not a comma-separated list of well-formed emails;
+   - a required variable is missing, or `NEON_AUTH_COOKIE_SECRET` is shorter than the 32 characters sign-in needs;
+   - **preview only:** any required variable is still Vercel's redaction marker (`[SENSITIVE]`, what `vercel pull` writes
+     for a Secret it cannot read), or either database URL is not a `postgres://` / `postgresql://` URL with a host, or
+     `OWNER_EMAIL_ALLOWLIST` is empty or is not a comma-separated list of well-formed emails. A preview file is also read
+     the way `vercel build` reads it. A production run is checked exactly as before; extending these checks to
+     production is a follow-up for when Production work resumes;
    - `LOCATION_PROVIDER` is set to anything but `open-meteo` (required in preview; optional in production, where unset
      means location search is off);
    - `PRODUCTION_DB_HOST` is unset or is not a bare host name (a full connection URL is refused, never guessed at), or `DATABASE_URL` /
@@ -130,9 +132,9 @@ and the build (`scripts/inject-preview-secrets.ts`).
 - Fails closed: if any of the four is missing, empty, or cannot be written to the file faithfully (leading or trailing
   whitespace, a carriage return, or a literal backslash followed by `n`), the run stops and names only the variable.
   Quotes, backslashes, `$`, `#` and newlines inside a value are written correctly for the reader `vercel build` uses.
-- The validator (step 2) then checks the injected file: no variable may still be the redaction marker, both database URLs
-  must be Postgres URLs, the preview database must not be on `PRODUCTION_DB_HOST`, the allowlist must be well-formed
-  emails and the cookie secret at least 32 characters.
+- The validator (step 2) then checks the injected file (preview only, see above): no variable may still be the
+  redaction marker, both database URLs must be Postgres URLs, the preview database must not be on `PRODUCTION_DB_HOST`,
+  the allowlist must be well-formed emails and the cookie secret at least 32 characters.
 - **Production is untouched**: the step does not run for a production deploy, which never receives these secrets from
   this step (its handling of Secrets is a separate, deferred piece of work).
 - **Rotating a preview secret means updating BOTH places together**: the Vercel Preview Secret (what the running preview
