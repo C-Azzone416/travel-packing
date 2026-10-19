@@ -75,11 +75,12 @@ describe("logAllowlistLoaded", () => {
   it("logs the entry count and the fingerprint", () => {
     const lines: string[] = [];
     setAuthLogSink((line) => lines.push(line));
-    logAllowlistLoaded(2, "0123456789ab");
+    logAllowlistLoaded(2, "0123456789ab", 1);
     expect(JSON.parse(lines[0])).toEqual({
       scope: "auth",
       event: "allowlist-loaded",
       entries: 2,
+      malformed: 1,
       fingerprint: "0123456789ab",
     });
   });
@@ -95,6 +96,7 @@ describe("logAllowlistLoaded", () => {
         scope: "auth",
         event: "allowlist-loaded",
         entries: -1,
+        malformed: 0,
         fingerprint: "invalid",
       });
       expect(line).not.toContain("owner");

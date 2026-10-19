@@ -33,7 +33,7 @@ try {
     process.env.NEON_AUTH_COOKIE_SECRET ?? "",
   );
   console.log(
-    `preview secrets: allowlist ${allowlist.entries} entries, fingerprint ${allowlist.fingerprint}`,
+    `preview secrets: allowlist ${allowlist.entries} entries (${allowlist.malformed} malformed), fingerprint ${allowlist.fingerprint}`,
   );
 } catch {
   // Never print the error: it could carry a value.

@@ -87,17 +87,20 @@ export function logAuthEvent(event: AuthEvent, detail?: ProviderDetail): void {
 }
 
 /**
- * Logged once when the auth runtime starts: how many addresses the deployed allowlist holds and a keyed fingerprint of it
- * (see allowlist-fingerprint.ts). Never the addresses. Anything that is not a small count and 12 hex characters is dropped.
+ * Logged once when the auth runtime starts: how many addresses the deployed allowlist holds, how many of those are not plain
+ * addresses (a paste artifact such as quotes can never match a real sign-up), and a keyed fingerprint of it (see
+ * allowlist-fingerprint.ts). Never the addresses. Anything that is not a small count and 12 hex characters is dropped.
  */
-export function logAllowlistLoaded(count: number, fingerprint: string): void {
-  const safeCount = Number.isInteger(count) && count >= 0 && count <= 9999 ? count : -1;
+export function logAllowlistLoaded(count: number, fingerprint: string, malformed = 0): void {
+  const small = (value: number) =>
+    Number.isInteger(value) && value >= 0 && value <= 9999 ? value : -1;
   const safePrint = /^[0-9a-f]{12}$/.test(fingerprint) ? fingerprint : "invalid";
   sink(
     JSON.stringify({
       scope: "auth",
       event: "allowlist-loaded",
-      entries: safeCount,
+      entries: small(count),
+      malformed: small(malformed),
       fingerprint: safePrint,
     }),
   );

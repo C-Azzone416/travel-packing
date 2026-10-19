@@ -1,6 +1,8 @@
 // Checks the environment Vercel hands a deploy (the output of `vercel pull`) BEFORE anything is built or migrated.
 // It reports variable NAMES only, never values: a value could be a connection string or a secret.
 
+import { isPlainEmail } from "../server/auth/allowlist";
+
 export type DeployTarget = "preview" | "production";
 type Env = Record<string, string | undefined>;
 
@@ -51,15 +53,13 @@ export function isPostgresUrl(value: string | undefined): boolean {
   }
 }
 
-const EMAIL = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
-
 /** Null when the allowlist is a non-empty, comma-separated list of well-formed emails (no blank entries). */
 export function allowlistProblem(value: string | undefined): string | null {
   const raw = (value ?? "").trim();
   if (raw === "") return "is empty";
   const entries = raw.split(",").map((entry) => entry.trim());
   if (entries.some((entry) => entry === "")) return "has an empty entry (check the commas)";
-  if (entries.some((entry) => !EMAIL.test(entry)))
+  if (entries.some((entry) => !isPlainEmail(entry)))
     return "has an entry that is not a well-formed email address";
   return null;
 }

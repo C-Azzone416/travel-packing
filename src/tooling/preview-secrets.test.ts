@@ -242,9 +242,11 @@ describe("the script", () => {
     );
     expect(result.stdout).toBe(
       "preview secrets: injected DATABASE_URL, DATABASE_URL_UNPOOLED, OWNER_EMAIL_ALLOWLIST, NEON_AUTH_COOKIE_SECRET (values not shown)\n" +
-        `preview secrets: allowlist ${expectedPrint.entries} entries, fingerprint ${expectedPrint.fingerprint}\n`,
+        `preview secrets: allowlist ${expectedPrint.entries} entries (${expectedPrint.malformed} malformed), fingerprint ${expectedPrint.fingerprint}\n`,
     );
-    expect(result.stdout).toMatch(/allowlist 2 entries, fingerprint [0-9a-f]{12}\n$/);
+    expect(result.stdout).toMatch(
+      /allowlist 2 entries \(0 malformed\), fingerprint [0-9a-f]{12}\n$/,
+    );
     expect(`${result.stdout}${result.stderr}`).not.toMatch(/postgres|example\.test|kkkk/);
     expect(dotenv4Parse(readFileSync(file, "utf8"))).toMatchObject(SECRETS);
     expect(statSync(file).mode & 0o077).toBe(0);

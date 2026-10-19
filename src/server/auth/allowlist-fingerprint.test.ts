@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseAllowlist } from "./allowlist";
-import { allowlistFingerprint, describeAllowlist } from "./allowlist-fingerprint";
+import { allowlistFingerprint, describeAllowlist, malformedEntries } from "./allowlist-fingerprint";
 
 const SECRET = "k".repeat(40);
 
@@ -45,6 +45,7 @@ describe("describeAllowlist", () => {
   it("counts the entries and fingerprints them the way the app parses the raw value", () => {
     const described = describeAllowlist("A@example.test, b@example.test;", SECRET);
     expect(described.entries).toBe(2);
+    expect(described.malformed).toBe(0);
     expect(described.fingerprint).toBe(
       allowlistFingerprint(parseAllowlist("a@example.test b@example.test"), SECRET),
     );
@@ -53,5 +54,21 @@ describe("describeAllowlist", () => {
   it("reports an empty or missing allowlist as zero entries", () => {
     expect(describeAllowlist(undefined, SECRET).entries).toBe(0);
     expect(describeAllowlist("  ,; ", SECRET).entries).toBe(0);
+  });
+});
+
+describe("malformedEntries", () => {
+  it("counts entries that are not plain addresses, and nothing else", () => {
+    expect(malformedEntries(parseAllowlist("a@example.test, b@example.test"))).toBe(0);
+    expect(
+      malformedEntries(parseAllowlist('"a@example.test", <b@example.test> c@example.test')),
+    ).toBe(2);
+    expect(malformedEntries(parseAllowlist(""))).toBe(0);
+  });
+
+  it("is reported by describeAllowlist for a value pasted with quotes, without the entry", () => {
+    const described = describeAllowlist('"owner@example.test"', SECRET);
+    expect(described).toMatchObject({ entries: 1, malformed: 1 });
+    expect(JSON.stringify(described)).not.toMatch(/owner|example/);
   });
 });

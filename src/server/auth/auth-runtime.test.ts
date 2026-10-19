@@ -97,6 +97,7 @@ describe("getAuth", () => {
       scope: "auth",
       event: "allowlist-loaded",
       entries: 1,
+      malformed: 0,
       fingerprint: allowlistFingerprint(new Set(["owner@example.test"]), SECRET),
     });
     expect(logged.join("")).not.toMatch(/owner@example/);

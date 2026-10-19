@@ -155,11 +155,14 @@ Both copies of `OWNER_EMAIL_ALLOWLIST` (and the cookie secret) are write-only se
 **fingerprints** instead (#93): a 12-character keyed digest (HMAC, keyed from `NEON_AUTH_COOKIE_SECRET`) of the normalized, sorted
 addresses, plus a count. It contains no address and cannot be tested against guessed addresses without the cookie secret.
 
-- GitHub's copy: the deploy log's step "Inject the Preview secrets" prints `allowlist N entries, fingerprint <12 hex>`.
-- Vercel's copy: the running app logs `{"scope":"auth","event":"allowlist-loaded","entries":N,"fingerprint":"<12 hex>"}` once when it starts.
+- GitHub's copy: the deploy log's step "Inject the Preview secrets" prints `allowlist N entries (M malformed), fingerprint <12 hex>`.
+- Vercel's copy: the running app logs `{"scope":"auth","event":"allowlist-loaded","entries":N,"malformed":M,"fingerprint":"<12 hex>"}` once when it starts.
   Read it with `vercel logs --deployment <url> --query allowlist-loaded` (or the project's Logs page, filter `allowlist-loaded`) after the first request.
 - Same fingerprint: the two copies match. Different: the allowlist **or the cookie secret** differs between Vercel and GitHub; rotate
   both together (see above). `entries: 0` means the allowlist is empty or unset in that copy.
+  `malformed` counts entries that are not plain addresses (for example wrapped in quotes or angle brackets from a paste, or with a `mailto:` prefix):
+  such an entry can never equal the address someone signs up with, so `malformed` above 0 on the Vercel side is the first thing to fix (set the value
+  as bare addresses separated by commas). The preview deploy check refuses such an entry in GitHub's copy.
 
 This is deliberately not an HTTP endpoint (a public "is this address allowed?" check would be an oracle). Whether the deployed app
 admits a particular address is shown by the sign-up events in docs/auth-screens.md ("Why did no code arrive?").

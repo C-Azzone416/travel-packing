@@ -68,7 +68,7 @@ the allowlist:
 | `…-skipped-cooldown`                                                       | A code for this address was requested in the last 30 seconds (limits are per server instance, in memory); the provider was not called.                                                                                                                             |
 | `…-skipped-limit`                                                          | The address or caller hit an hourly cap; the provider was not called.                                                                                                                                                                                              |
 
-Once per server start the app also logs `allowlist-loaded` with the number of addresses and a **keyed fingerprint** of the allowlist. The
+Once per server start the app also logs `allowlist-loaded` with the number of addresses, how many of them are **malformed** (not a plain address: quoted, in angle brackets, `mailto:`...; such an entry can never match a real sign-up) and a **keyed fingerprint** of the allowlist. The
 deploy job prints the fingerprint of the GitHub copy in the step "Inject the Preview secrets" (`allowlist N entries, fingerprint …`):
 if the two match, Vercel and GitHub hold the same allowlist and cookie secret (see docs/deploy.md). No page or endpoint answers
 "is this address allowed?".

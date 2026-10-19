@@ -315,6 +315,12 @@ describe("checkDeployEnv: values that vercel pull could not read", () => {
     ["whitespace instead of commas", "a@example.test b@example.test", false],
     ["semicolons instead of commas", "a@example.test;b@example.test", false],
     ["a display-name style entry", "Name <a@example.test>", false],
+    ["an entry wrapped in double quotes", '"a@example.test"', false],
+    ["an entry wrapped in single quotes", "'a@example.test'", false],
+    ["an entry wrapped in angle brackets", "<a@example.test>", false],
+    ["an entry with a mailto: prefix", "mailto:a@example.test", false],
+    ["one good and one quoted entry", 'a@example.test,"b@example.test"', false],
+    ["plus-addressing and a subdomain", "first.last+tag@mail.example.co", true],
   ])("validates OWNER_EMAIL_ALLOWLIST: %s", (_name, value, ok) => {
     const problems = checkDeployEnv(
       "preview",

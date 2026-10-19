@@ -12,7 +12,7 @@
 //   It answers "are the two copies the same?" and nothing about any address, and no endpoint serves it.
 
 import { createHmac } from "node:crypto";
-import { parseAllowlist, type Allowlist } from "./allowlist";
+import { isPlainEmail, parseAllowlist, type Allowlist } from "./allowlist";
 
 const FINGERPRINT_LENGTH = 12;
 
@@ -30,11 +30,20 @@ export function allowlistFingerprint(allowlist: Allowlist, cookieSecret: string)
     .slice(0, FINGERPRINT_LENGTH);
 }
 
-/** The count and fingerprint of an OWNER_EMAIL_ALLOWLIST value, parsed the way the app parses it. */
+/** How many entries are not plain addresses (quoted, wrapped in brackets, a stray word...). A count only, never the entry. */
+export function malformedEntries(allowlist: Allowlist): number {
+  return [...allowlist].filter((entry) => !isPlainEmail(entry)).length;
+}
+
+/** The count, the number of malformed entries and the fingerprint of an OWNER_EMAIL_ALLOWLIST value, parsed the way the app parses it. */
 export function describeAllowlist(
   raw: string | undefined,
   cookieSecret: string,
-): { entries: number; fingerprint: string } {
+): { entries: number; malformed: number; fingerprint: string } {
   const allowlist = parseAllowlist(raw);
-  return { entries: allowlist.size, fingerprint: allowlistFingerprint(allowlist, cookieSecret) };
+  return {
+    entries: allowlist.size,
+    malformed: malformedEntries(allowlist),
+    fingerprint: allowlistFingerprint(allowlist, cookieSecret),
+  };
 }
