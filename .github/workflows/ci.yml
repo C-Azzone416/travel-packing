@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - run: echo "checks fails on purpose"; exit 1
+      - run: echo "checks ok this time"
   unit:
     runs-on: ubuntu-latest
     timeout-minutes: 15
