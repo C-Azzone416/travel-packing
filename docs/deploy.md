@@ -47,13 +47,14 @@ version in `package.json`. Bump either in a PR.
 The sample trips must belong to a real Better Auth user, and that user can only be created once the sign-up screens are
 deployed. So the first preview run happens **without** `PREVIEW_SEED_OWNER_ID`, on purpose:
 
-1. Leave `PREVIEW_SEED_OWNER_ID` unset. Merge to `develop` (or re-run the workflow). It migrates the preview database,
+1. Leave `PREVIEW_SEED_OWNER_ID` unset. Merge to `develop`. It migrates the preview database,
    skips the seed (visible as "preview seed SKIPPED" in the log and on the run summary), deploys, and smoke-tests the
    public auth pages. Nothing creates an auth user, and nothing uses an email, a fixture id or a production identity.
 2. Open the preview, sign up as the owner (the screens are #27; until they ship, create the user in the Neon Auth
    console for the **preview** project) and verify the email.
 3. Copy that user's id from Neon Auth into the `preview` environment variable `PREVIEW_SEED_OWNER_ID`.
-4. Re-run the `Deploy to Vercel` workflow on `develop`. It now seeds the sample trips for that owner only. Re-running is
+4. Open the latest `Deploy to Vercel` run on `develop` (Actions) and choose **Re-run all jobs**. (Do not use `Run workflow` on
+   `develop`: the gate refuses a manual run anywhere but `main`, by design.) It now seeds the sample trips for that owner only. Re-running is
    safe: the seed replaces its own sample trips and leaves everything else alone.
 
 If the id is wrong (an email, the stand-in id, something that is not an id), the run fails at the seed step with
@@ -62,7 +63,15 @@ emails or user ids.
 
 ## What Caroline must set (for #29)
 
-GitHub, repository level (already exist): secret `VERCEL_TOKEN`, variables `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`.
+GitHub, repository level (already exist): variables `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`.
+
+**`VERCEL_TOKEN`: store it as a secret in each GitHub environment (`preview` AND `production`), not at repository level.**
+A repository-level secret can be read by a workflow on any branch, which would let a pushed branch use it. Be plain
+about what this does and does not buy: a Vercel token is not scoped to an environment, so the token the preview job
+holds can also deploy to production's Vercel project. Environment secrets only stop other branches from reading it. The
+remaining controls are that only the two Vercel steps (pull and deploy) read it, the Vercel CLI is pinned, and nothing
+else in the job sees it (`npm run check:workflows` enforces the first). Use a token limited to this one project if
+Vercel offers that on your plan, and rotate it if it may have been exposed.
 
 GitHub repository variable: `PRODUCTION_DB_HOST` — the production database's bare host name, such as
 `ep-xxxx.us-east-2.aws.neon.tech` (not a URL; not a secret). Previews refuse
@@ -114,8 +123,13 @@ GitHub's required reviewers are not available on this plan, so the gate is expli
 - **Only the repository owner**: both the person who started the run and the person who re-ran it must be the owner.
 - A manual run from any other branch, any other event, a blank/short/wrong SHA or a different person is refused by the
   `gate` job, before any secret or environment is touched. Refusals name the rule, never the typed value.
-- The `production` environment is restricted to `main`, an independent second lock: even a run whose gate were edited
-  on another branch cannot reach production's secrets. Keep `main` protected so only reviewed changes reach it.
+- The `production` environment is restricted to `main`, an independent second lock **on production's database secret and
+  environment**: a run whose gate was edited on another branch cannot use them. It does not protect the Vercel token (see
+  above: that token can deploy to either target, so keep it in the environments and out of the repository secrets). Keep
+  `main` protected so only reviewed changes reach it.
+- The owner check is on the GitHub **account**. It stops other people. It does not stop anything that holds the owner's
+  own credentials (for example an agent session signed in as the owner), and the typed SHA is a safeguard against
+  mistakes, not proof that a human typed it. Treat the owner's GitHub login and tokens as the production key.
 - After the gate, the run still waits for green CI on that commit, checks the Vercel variables and that
   `DATABASE_URL_UNPOOLED` is production's own database, migrates, deploys and smoke-tests. It never seeds production.
 
