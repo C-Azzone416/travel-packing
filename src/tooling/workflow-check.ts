@@ -171,3 +171,37 @@ export function checkDeployWorkflow(workflow: string): string[] {
     problems.push("PRODUCTION_DB_HOST must be passed to the host checks");
   return problems;
 }
+
+/** The CI job needs room for a slow runner: a healthy run is ~18.5 minutes, and a cancelled run stops the deploy that waits on it. */
+export const MIN_CI_TIMEOUT_MINUTES = 35;
+
+/**
+ * The deploy waits for CI on the same commit, so the timeouts must nest: the ci job's timeout is generous, the deploy's wait
+ * outlasts it (so the wait cannot give up while CI is still running), and the deploy job outlasts its own wait.
+ * Returns the broken rules (empty when fine).
+ */
+export function checkTimeoutHeadroom(ci: string, deploy: string): string[] {
+  const problems: string[] = [];
+  const ciTimeout = Number(/^ {4}timeout-minutes:\s*(\d+)/m.exec(ci)?.[1] ?? NaN);
+  if (!(ciTimeout >= MIN_CI_TIMEOUT_MINUTES)) {
+    problems.push(`the ci job's timeout-minutes must be at least ${MIN_CI_TIMEOUT_MINUTES}`);
+  }
+  const attempts = Number(/seq 1 (\d+)/.exec(deploy)?.[1] ?? NaN);
+  const sleepSeconds = Number(/pending\) sleep (\d+)/.exec(deploy)?.[1] ?? NaN);
+  const waitMinutes = (attempts * sleepSeconds) / 60;
+  if (!(waitMinutes >= ciTimeout + 5)) {
+    problems.push(
+      "the deploy's wait for CI must outlast the ci job's timeout by at least 5 minutes",
+    );
+  }
+  // The deploy job (the one with the wait in it) must outlast its wait with room for the build, migration and deploy.
+  const deployJobTimeout = Number(
+    /^ {2}deploy:[\s\S]*?^ {4}timeout-minutes:\s*(\d+)/m.exec(deploy)?.[1] ?? NaN,
+  );
+  if (!(deployJobTimeout >= waitMinutes + 15)) {
+    problems.push(
+      "the deploy job's timeout-minutes must outlast its wait for CI by at least 15 minutes",
+    );
+  }
+  return problems;
+}
