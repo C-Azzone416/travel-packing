@@ -57,3 +57,10 @@ export async function signInAsOwner(page: Page, email = ownerEmailFor(test.info(
   await signIn(page, email);
   await expect(page).toHaveURL(/\/$/);
 }
+
+/** Everyone the e2e database counts as having set their password through a link (#83): all allowlisted except the newcomers. */
+export const SETUP_COMPLETE_EMAILS = [
+  OWNER_EMAIL,
+  ...PROJECT_NAMES.map(ownerEmailFor),
+  SECOND_EMAIL,
+];

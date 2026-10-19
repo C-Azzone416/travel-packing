@@ -7,6 +7,7 @@ export const SIGN_UP_PATH = "/sign-up";
 export const VERIFY_PATH = "/verify";
 export const FORGOT_PASSWORD_PATH = "/forgot-password";
 export const RESET_PASSWORD_PATH = "/reset-password";
+export const FINISH_SETUP_PATH = "/finish-setup";
 
 /** Everything else is protected. */
 export const PUBLIC_PATHS: readonly string[] = [
@@ -16,4 +17,5 @@ export const PUBLIC_PATHS: readonly string[] = [
   VERIFY_PATH,
   FORGOT_PASSWORD_PATH,
   RESET_PASSWORD_PATH,
+  FINISH_SETUP_PATH,
 ];

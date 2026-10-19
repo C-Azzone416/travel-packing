@@ -94,6 +94,40 @@ const UNVERIFIED_CASES = [
   ],
 ] as const;
 
+describe("getSession: when the session was made", () => {
+  const sessionWith = (createdAt: unknown) =>
+    fakeNeon({ session: { data: { user: VERIFIED_USER, session: { createdAt } } } as never });
+
+  it.each([
+    ["an ISO string", "2026-10-19T05:00:00.000Z", Date.parse("2026-10-19T05:00:00.000Z")],
+    ["a Date", new Date(1_700_000_000_000), 1_700_000_000_000],
+    ["a number of milliseconds", 1_700_000_000_000, 1_700_000_000_000],
+  ])("reads createdAt as %s", async (_name, createdAt, expected) => {
+    const { neon } = sessionWith(createdAt);
+    expect(await createNeonAuthProvider(neon).getSession()).toEqual({
+      userId: "u1",
+      email: "owner@example.test",
+      issuedAt: expected,
+    });
+  });
+
+  it.each([
+    ["missing", undefined],
+    ["not a date", "yesterday"],
+    ["an object", {}],
+    ["null", null],
+  ])(
+    "leaves issuedAt out when createdAt is %s (the setup gate then refuses the session)",
+    async (_name, createdAt) => {
+      const { neon } = sessionWith(createdAt);
+      expect(await createNeonAuthProvider(neon).getSession()).toEqual({
+        userId: "u1",
+        email: "owner@example.test",
+      });
+    },
+  );
+});
+
 describe("getSession", () => {
   it("maps a verified SDK user to a session", async () => {
     const { neon } = fakeNeon({ session: { data: { user: VERIFIED_USER } } });

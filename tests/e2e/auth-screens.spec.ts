@@ -8,8 +8,10 @@ import {
   signInAsOwner,
 } from "./helpers/auth";
 import {
+  createVerifiedAccount,
   nextNewcomerSlot,
   resetAccount,
+  resetLinkPath,
   resetToken,
   verificationCode,
   wrongCodeFor,
@@ -18,7 +20,10 @@ import {
 // Sign-up, verification code, resend, forgot and reset password (#27) against the real server with the e2e-only fake
 // provider. Codes and links come from the fake "inbox" (tests/e2e/helpers/inbox.ts); none is in source or a log.
 const NEW_PASSWORD = "a-new-password-1";
+/** Typed at sign-up. It is never usable: the password that counts is the one chosen through the emailed link. */
 const FIRST_PASSWORD = "my-first-password";
+/** Chosen through the "finish setting up" link. */
+const SET_PASSWORD = "my-chosen-password";
 
 let email: string;
 test.beforeEach(({}, testInfo) => {
@@ -48,8 +53,19 @@ async function enterCode(page: Page, code: string) {
 
 const WRONG = /That code isn't right or has expired/;
 
+/** Opens the link emailed to this address and chooses a password with it (the "Set your password" screen). */
+async function finishSetup(page: Page, address = email, password = SET_PASSWORD) {
+  const link = resetLinkPath(address);
+  expect(link, "a setup link was emailed").not.toBeNull();
+  await page.goto(link ?? "/");
+  await expect(heading(page, "Set your password")).toBeFocused();
+  await page.getByLabel("New password", { exact: true }).fill(password);
+  await page.getByRole("button", { name: "Set password" }).click();
+  await expect(page).toHaveURL(/\/sign-in\?notice=password-set$/);
+}
+
 test.describe("sign-up and verification", () => {
-  test("a new person signs up, confirms the code, signs in, and reaches the app", async ({
+  test("a new person signs up, confirms the code, chooses a password through the emailed link, signs in, and reaches the app", async ({
     page,
   }) => {
     await signUp(page);
@@ -66,14 +82,60 @@ test.describe("sign-up and verification", () => {
     const code = verificationCode(email);
     expect(code).toMatch(/^\d{6}$/);
     await enterCode(page, code ?? "");
-    // The e2e provider does not start a session on verifying, so the person signs in with their own password.
-    await expect(page).toHaveURL(/\/sign-in\?notice=verified$/);
-    await expect(page.getByRole("status").filter({ hasText: "Email confirmed" })).toBeVisible();
-    await page.getByLabel("Email").fill(email);
-    await page.getByLabel("Password", { exact: true }).fill(FIRST_PASSWORD);
-    await page.getByRole("button", { name: "Sign in" }).click();
+    // A right code starts no session. The person is told to check their email for the link that sets the password.
+    await expect(page).toHaveURL(/\/finish-setup$/);
+    await expect(heading(page, "Check your email to finish setting up")).toBeFocused();
+    await expect(page.getByText(`We've sent a link to ${email}.`)).toBeVisible();
+    await page.goto("/");
+    await expect(page).toHaveURL(/\/sign-in$/);
+
+    await finishSetup(page);
+    await expect(
+      page.getByRole("status").filter({ hasText: "Password set. Sign in with your new password." }),
+    ).toBeVisible();
+    // Setting the password does not sign anyone in; the person signs in with it.
+    await page.goto("/");
+    await expect(page).toHaveURL(/\/sign-in$/);
+    await signIn(page, email, SET_PASSWORD);
     await expect(page).toHaveURL(/\/$/);
     await expect(page.getByRole("link", { name: /go to trips/i })).toBeVisible();
+  });
+
+  test("a password chosen by someone else BEFORE the owner verified can never sign in", async ({
+    page,
+  }) => {
+    const ATTACKER_PASSWORD = "the-attackers-password";
+    // 1. Someone who knows the address signs up first, with their own password.
+    await signUp(page, email, ATTACKER_PASSWORD);
+    // 2. The real owner signs up with the same address and their own password: the screen looks the same, nothing is applied.
+    await signUp(page, email, SET_PASSWORD);
+    // 3. The owner enters the mailed code, so the address is now verified, with the attacker's password on the account.
+    await enterCode(page, verificationCode(email) ?? "");
+    await expect(page).toHaveURL(/\/finish-setup$/);
+
+    // 4. The attacker's password opens nothing: not sign-in, not the app, not a session cookie.
+    await signIn(page, email, ATTACKER_PASSWORD);
+    await expect(page).toHaveURL(/\/finish-setup$/);
+    await expect(heading(page, "Check your email to finish setting up")).toBeVisible();
+    expect(await page.context().cookies()).toEqual(
+      expect.not.arrayContaining([expect.objectContaining({ name: "e2e-auth-session" })]),
+    );
+    await page.goto("/");
+    await expect(page).toHaveURL(/\/sign-in$/);
+    // ...and the owner's own typed password was never applied, so it does not work either.
+    await signIn(page, email, SET_PASSWORD);
+    await expect(page.locator("form p[role='alert']")).toContainText(
+      "Email or password is incorrect.",
+    );
+
+    // 5. The owner uses the emailed link and chooses a password. The attacker's is gone for good.
+    await finishSetup(page, email, NEW_PASSWORD);
+    await signIn(page, email, ATTACKER_PASSWORD);
+    await expect(page.locator("form p[role='alert']")).toContainText(
+      "Email or password is incorrect.",
+    );
+    await signIn(page, email, NEW_PASSWORD);
+    await expect(page).toHaveURL(/\/$/);
   });
 
   test("the code step: a wrong code, then the right one; the field is one input with a numeric keypad", async ({
@@ -107,7 +169,7 @@ test.describe("sign-up and verification", () => {
     await expect(page).toHaveURL(/\/verify$/);
 
     await enterCode(page, verificationCode(email) ?? "");
-    await expect(page).toHaveURL(/\/sign-in\?notice=verified$/);
+    await expect(page).toHaveURL(/\/finish-setup$/);
   });
 
   test("an empty code asks for the code and counts nothing", async ({ page }) => {
@@ -189,11 +251,8 @@ test.describe("sign-up and verification", () => {
 });
 
 test.describe("forgot and reset password", () => {
-  async function ownAccount(page: Page) {
-    await signUp(page);
-    await enterCode(page, verificationCode(email) ?? "");
-    await expect(page).toHaveURL(/\/sign-in\?notice=verified$/);
-  }
+  // An existing, verified account whose password was chosen earlier; forgot-password is what these tests are about.
+  const ownAccount = async () => createVerifiedAccount(email, SET_PASSWORD);
 
   async function forgot(page: Page, address: string) {
     await page.goto("/forgot-password");
@@ -203,7 +262,7 @@ test.describe("forgot and reset password", () => {
   }
 
   test("the same answer for an address with an account and one without", async ({ page }) => {
-    await ownAccount(page);
+    await ownAccount();
     await forgot(page, email);
     await expect(
       page.getByText(
@@ -227,10 +286,11 @@ test.describe("forgot and reset password", () => {
   test("a reset link sets a new password once; the old one stops working; the link cannot be reused", async ({
     page,
   }) => {
-    await ownAccount(page);
+    await ownAccount();
     await forgot(page, email);
+    const link = resetLinkPath(email) ?? "";
     const token = resetToken(email) ?? "";
-    await page.goto(`/reset-password?token=${token}`);
+    await page.goto(link);
     await expect(heading(page, "Choose a new password")).toBeFocused();
     await expect(page.getByText("At least 8 characters.")).toBeVisible();
 
@@ -250,7 +310,7 @@ test.describe("forgot and reset password", () => {
     await page.goto("/");
     await expect(page).toHaveURL(/\/sign-in$/);
 
-    await signIn(page, email, FIRST_PASSWORD);
+    await signIn(page, email, SET_PASSWORD);
     await expect(page.locator("form p[role='alert']")).toContainText(
       "Email or password is incorrect.",
     );
@@ -258,7 +318,7 @@ test.describe("forgot and reset password", () => {
     await expect(page).toHaveURL(/\/$/);
 
     await page.context().clearCookies();
-    await page.goto(`/reset-password?token=${token}`);
+    await page.goto(link);
     await page.getByLabel("New password", { exact: true }).fill("another-password-2");
     await page.getByRole("button", { name: "Update password" }).click();
     await expect(page).toHaveURL(/\/reset-password\?error=invalid$/);
@@ -291,7 +351,13 @@ test.describe("forgot and reset password", () => {
 
 test.describe("the account screens", () => {
   test("every one is reachable signed out and sits outside the app shell", async ({ page }) => {
-    for (const path of ["/sign-up", "/verify", "/forgot-password", "/reset-password"]) {
+    for (const path of [
+      "/sign-up",
+      "/verify",
+      "/forgot-password",
+      "/reset-password",
+      "/finish-setup",
+    ]) {
       const response = await page.goto(path);
       expect(response?.status(), path).toBe(200);
       await expect(page).toHaveURL(new RegExp(`${path}$`));
@@ -304,7 +370,7 @@ test.describe("the account screens", () => {
     page,
   }) => {
     await signInAsOwner(page);
-    for (const path of ["/sign-up", "/verify", "/forgot-password"]) {
+    for (const path of ["/sign-up", "/verify", "/forgot-password", "/finish-setup"]) {
       await page.goto(path);
       await expect(page).toHaveURL(/\/$/);
     }
@@ -358,6 +424,7 @@ test.describe("the account screens", () => {
     await visit("/reset-password", [
       () => page.getByRole("link", { name: "Send a new reset link" }),
     ]);
+    await visit("/finish-setup", [() => page.getByRole("link", { name: "Send me a link" })]);
   });
 });
 
@@ -418,6 +485,54 @@ test.describe("accessibility and screenshots", () => {
     await page.context().clearCookies();
     await page.goto("/verify");
     await check("verify-no-address", "verify without a remembered address");
+  });
+
+  test("the finish-setup and set-password screens are captured (#83)", async ({
+    page,
+  }, testInfo) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    const check = async (name: string, label: string) => {
+      await expectAccessible(page, `account screen: ${label}`);
+      await page.screenshot({
+        path: `test-results/screenshots/${testInfo.project.name}-auth-${name}.png`,
+        fullPage: true,
+      });
+    };
+
+    await page.clock.install();
+    await signUp(page);
+    await enterCode(page, verificationCode(email) ?? "");
+    await expect(page).toHaveURL(/\/finish-setup$/);
+    await expect(page.getByText(/You can request another link in \d+s/)).toBeVisible();
+    await check("finish-setup-cooldown", "finish setup while the resend gap runs");
+    await page.clock.runFor(31_000);
+    await expect(page.getByRole("button", { name: "Send the link again" })).toBeVisible();
+    await check("finish-setup", "finish setup, idle");
+
+    // The link's setup variant: the first password after signing up.
+    const link = resetLinkPath(email) ?? "";
+    expect(link).toContain("setup=1");
+    await page.goto(link);
+    await check("set-password", "set password form");
+    await page.getByLabel("New password", { exact: true }).fill("short");
+    await page.getByRole("button", { name: "Set password" }).click();
+    await expect(page.locator("#password-error")).toBeVisible();
+    await check("set-password-error", "set password with a short password");
+
+    await page.goto("/reset-password?setup=1&error=INVALID_TOKEN");
+    await check("link-invalid", "setup link not valid");
+
+    await signIn(page, "nobody@example.test", "not-the-password");
+    await expect(page.locator("form p[role='alert']")).toContainText(
+      "If you just signed up, check your email for a link to finish setting up",
+    );
+    await expect(
+      page.locator("form p[role='alert']").getByRole("link", { name: "reset your password" }),
+    ).toHaveAttribute("href", "/forgot-password");
+    await check("sign-in-error-hint", "sign-in with the generic error and its hint");
+
+    await page.goto("/sign-in?notice=password-set");
+    await check("sign-in-password-set", "sign-in with the Password set banner");
   });
 
   test("the locked and expired states are captured too", async ({ page }, testInfo) => {

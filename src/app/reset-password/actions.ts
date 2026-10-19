@@ -23,11 +23,19 @@ export async function resetAction(_previous: FormState, formData: FormData): Pro
   if (!auth.available) return state({ error: UNAVAILABLE });
 
   const outcome = await withMinimumDuration(() =>
-    resetOwnerPassword(auth, field(formData, "token"), formData.get("password")),
+    resetOwnerPassword(
+      auth,
+      field(formData, "token"),
+      formData.get("password"),
+      field(formData, "for"),
+    ),
   );
   switch (outcome.status) {
     case "ok":
-      redirect(`${SIGN_IN_PATH}?notice=password-updated`);
+      // The wording of the notice follows the link's variant; nothing else about the reset depends on it.
+      redirect(
+        `${SIGN_IN_PATH}?notice=${field(formData, "variant") === "setup" ? "password-set" : "password-updated"}`,
+      );
     case "invalid-link":
       redirect(`${RESET_PASSWORD_PATH}?error=invalid`);
     case "weak-password":

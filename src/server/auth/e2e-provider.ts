@@ -33,11 +33,19 @@ function sessionFile(env: Env, token: string): string {
   return join(env.AUTH_E2E_STATE_DIR ?? "", token);
 }
 
-/** The email behind a token, or null for anything that was not minted by a sign-in and not signed out since. */
-function emailFor(env: Env, token: string | undefined): string | null {
+/**
+ * The email behind a token and when the session was made, or null for anything that was not minted by a sign-in and not
+ * signed out since. The file holds the address, a newline, and the creation time in ms (what a real provider reports as
+ * the session's createdAt).
+ */
+function sessionFor(
+  env: Env,
+  token: string | undefined,
+): { email: string; issuedAt: number } | null {
   if (!token || !TOKEN_PATTERN.test(token)) return null;
   try {
-    return readFileSync(sessionFile(env, token), "utf8").trim() || null;
+    const [email, made] = readFileSync(sessionFile(env, token), "utf8").trim().split("\n");
+    return email ? { email, issuedAt: Number(made) || 0 } : null;
   } catch {
     return null;
   }
@@ -46,7 +54,7 @@ function emailFor(env: Env, token: string | undefined): string | null {
 /**
  * Sign-up, verification and reset for browser tests. Accounts and "emailed" codes and links are files in the state dir,
  * so a test can read the email the way a person would open their inbox: `inbox-verify-<hex of the address>` holds the
- * latest verification code and `inbox-reset-<hex of the address>` the latest reset token (the link's `?token=`). Codes
+ * latest verification code and `inbox-reset-<hex of the address>` the latest reset link as JSON (`token` and `redirectTo`). Codes
  * and tokens are random per run and live only in that temp dir (never in source, logs or fixtures).
  * Five wrong guesses lock a code (a new code clears the lock); a used code or token is gone.
  */
@@ -83,12 +91,15 @@ function mailCode(env: Env, email: string): void {
   writeFileSync(inboxFile(env, "verify", email), `${code}:0`);
 }
 
-/** "Emails" a reset link: a fresh single-use token, mapped back to the address, and left in the reset inbox. */
-function mailResetLink(env: Env, email: string): void {
+/**
+ * "Emails" a reset link: a fresh single-use token, mapped back to the address, and left in the reset inbox together with the
+ * return address the app asked for, as the real provider would build the link (`redirectTo` + `?token=` / `&token=`).
+ */
+function mailResetLink(env: Env, email: string, redirectTo: string): void {
   mkdirSync(stateDirOf(env), { recursive: true });
   const token = randomBytes(24).toString("hex");
   writeFileSync(tokenFile(env, token), email);
-  writeFileSync(inboxFile(env, "reset", email), token);
+  writeFileSync(inboxFile(env, "reset", email), JSON.stringify({ token, redirectTo }));
 }
 
 /** Checks `code` against the pending verification code; counts wrong guesses and locks after the limit. */
@@ -120,17 +131,20 @@ function spendToken(env: Env, token: string): string | null {
 async function startSession(env: Env, email: string) {
   const token = randomBytes(32).toString("hex");
   mkdirSync(env.AUTH_E2E_STATE_DIR ?? "", { recursive: true });
-  writeFileSync(sessionFile(env, token), email);
+  const issuedAt = Date.now();
+  writeFileSync(sessionFile(env, token), `${email}\n${issuedAt}`);
   (await cookies()).set(E2E_COOKIE, token, { httpOnly: true, sameSite: "lax", path: "/" });
-  return { ok: true as const, session: { userId: `e2e-${email}`, email } };
+  return { ok: true as const, session: { userId: `e2e-${email}`, email, issuedAt } };
 }
 
 /** Any email signs in if it knows the shared synthetic password; the allowlist decides who gets in. */
 export function createE2eAuthProvider(env: Env): AuthProvider {
   return {
     async getSession(): Promise<AuthSession | null> {
-      const email = emailFor(env, (await cookies()).get(E2E_COOKIE)?.value);
-      return email ? { userId: `e2e-${email}`, email } : null;
+      const found = sessionFor(env, (await cookies()).get(E2E_COOKIE)?.value);
+      return found
+        ? { userId: `e2e-${found.email}`, email: found.email, issuedAt: found.issuedAt }
+        : null;
     },
     async signUp(email, password) {
       if (password.length < 8) return { ok: false, reason: "weak-password" };
@@ -152,8 +166,8 @@ export function createE2eAuthProvider(env: Env): AuthProvider {
       if (readAccount(env, email)?.verified === false) mailCode(env, email);
       return { ok: true };
     },
-    async requestPasswordReset(email) {
-      if (readAccount(env, email)) mailResetLink(env, email);
+    async requestPasswordReset(email, redirectTo) {
+      if (readAccount(env, email)) mailResetLink(env, email, redirectTo);
       return { ok: true };
     },
     async resetPassword(token, newPassword) {

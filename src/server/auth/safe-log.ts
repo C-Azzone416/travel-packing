@@ -7,6 +7,8 @@ export type AuthEvent =
   | "sign-in-failed"
   | "sign-in-denied"
   | "sign-in-unverified"
+  | "sign-in-setup-pending"
+  | "account-setup-completed"
   | "sign-in-rate-limited"
   | "sign-up-requested"
   | "sign-up-failed"

@@ -66,12 +66,12 @@ describe("createE2eAuthProvider", () => {
   it("signs in with the synthetic password and keeps an unguessable token, not the email, in the cookie", async () => {
     expect(await provider.signInWithPassword(OWNER, env.AUTH_E2E_PASSWORD)).toEqual({
       ok: true,
-      session: { userId: `e2e-${OWNER}`, email: OWNER },
+      session: { userId: `e2e-${OWNER}`, email: OWNER, issuedAt: expect.any(Number) },
     });
     const token = jar.get(E2E_COOKIE) ?? "";
     expect(token).toMatch(/^[0-9a-f]{64}$/);
     expect(token).not.toContain("owner");
-    expect(await provider.getSession()).toEqual({ userId: `e2e-${OWNER}`, email: OWNER });
+    expect(await provider.getSession()).toMatchObject({ userId: `e2e-${OWNER}`, email: OWNER });
   });
 
   it("mints a different token for every sign-in, and each session keeps its own email", async () => {
@@ -159,7 +159,7 @@ describe("createE2eAuthProvider", () => {
         const valid = "f".repeat(64);
         planted(join(dir, valid));
         jar.set(E2E_COOKIE, valid);
-        expect(await provider.getSession()).toEqual({ userId: `e2e-${OWNER}`, email: OWNER });
+        expect(await provider.getSession()).toMatchObject({ userId: `e2e-${OWNER}`, email: OWNER });
       });
     });
 
@@ -212,7 +212,12 @@ describe("the e2e account flows", () => {
   const inbox = (kind: "verify" | "reset", email = EMAIL) =>
     join(dir, `inbox-${kind}-${hex(email)}`);
   const code = (email = EMAIL) => readFileSync(inbox("verify", email), "utf8").split(":")[0];
-  const token = (email = EMAIL) => readFileSync(inbox("reset", email), "utf8");
+  const mailed = (email = EMAIL) =>
+    JSON.parse(readFileSync(inbox("reset", email), "utf8")) as {
+      token: string;
+      redirectTo: string;
+    };
+  const token = (email = EMAIL) => mailed(email).token;
   const wrongCode = () => (code() === "000000" ? "000001" : "000000");
   const redirectTo = "https://app.example.test/reset-password";
 
@@ -270,6 +275,13 @@ describe("the e2e account flows", () => {
     rmSync(inbox("verify"));
     expect(await provider.resendVerificationCode(EMAIL)).toEqual({ ok: true });
     expect(code()).toMatch(/^\d{6}$/);
+  });
+
+  it("leaves the return address the app asked for next to the token, as the real provider builds the link", async () => {
+    await verifiedAccount();
+    await provider.requestPasswordReset(EMAIL, `${redirectTo}?for=sealed.value.mac`);
+    expect(mailed().redirectTo).toBe(`${redirectTo}?for=sealed.value.mac`);
+    expect(mailed().token).toMatch(/^[0-9a-f]{48}$/);
   });
 
   it("resets a password with the emailed token, once, and answers an unknown address the same", async () => {

@@ -1,6 +1,11 @@
 import { defineConfig } from "@playwright/test";
 import { join } from "node:path";
-import { ALLOWLISTED_EMAILS, E2E_PASSWORD, SEEDED_OWNER_IDS } from "./tests/e2e/helpers/auth";
+import {
+  ALLOWLISTED_EMAILS,
+  E2E_PASSWORD,
+  SEEDED_OWNER_IDS,
+  SETUP_COMPLETE_EMAILS,
+} from "./tests/e2e/helpers/auth";
 import { E2E_DATABASE_URL } from "./tests/e2e/helpers/database";
 import { E2E_DB_PORT, FAKE_GEOCODER_PORT, OPEN_METEO_PORT, PORT } from "./tests/e2e/support/ports";
 
@@ -38,7 +43,13 @@ export default defineConfig({
       port: E2E_DB_PORT,
       reuseExistingServer: false,
       timeout: 60_000,
-      env: { E2E_DB_PORT: String(E2E_DB_PORT), E2E_SEED_OWNERS: SEEDED_OWNER_IDS.join(",") },
+      env: {
+        E2E_DB_PORT: String(E2E_DB_PORT),
+        E2E_SEED_OWNERS: SEEDED_OWNER_IDS.join(","),
+        E2E_SETUP_EMAILS: SETUP_COMPLETE_EMAILS.join(","),
+        // Keys the setup records the same way the app does in an e2e build (its sign-in password).
+        E2E_SETUP_SECRET: E2E_PASSWORD,
+      },
     },
     {
       command: `npm run build && npm run start -- --port ${PORT}`,

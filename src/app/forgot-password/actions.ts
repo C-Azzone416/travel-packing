@@ -23,11 +23,11 @@ export async function forgotAction(
     sent: null,
     ...changes,
   });
-  const { auth, limits, address, resetUrl } = await accountContext();
-  if (!auth.available || !resetUrl) return state({ error: UNAVAILABLE });
+  const { auth, limits, address, resetRedirect } = await accountContext();
+  if (!auth.available || !resetRedirect) return state({ error: UNAVAILABLE });
 
   const outcome = await withMinimumDuration(() =>
-    requestPasswordReset(auth, limits, address, email, resetUrl),
+    requestPasswordReset(auth, limits, address, email, resetRedirect),
   );
   switch (outcome.status) {
     case "invalid-email":
@@ -55,11 +55,11 @@ export async function resendResetAction(
     status,
     cooldownSeconds,
   });
-  const { auth, limits, address, resetUrl } = await accountContext();
-  if (!auth.available || !resetUrl) return reply("error");
+  const { auth, limits, address, resetRedirect } = await accountContext();
+  if (!auth.available || !resetRedirect) return reply("error");
   const email = field(formData, "email");
   const outcome = await withMinimumDuration(() =>
-    requestPasswordReset(auth, limits, address, email, resetUrl),
+    requestPasswordReset(auth, limits, address, email, resetRedirect),
   );
   switch (outcome.status) {
     case "ok":

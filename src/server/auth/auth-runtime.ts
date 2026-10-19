@@ -1,10 +1,19 @@
 // Runtime wiring: picks the provider from environment configuration. Fails closed: if configuration is
 // missing or invalid, the app is "unavailable" (nobody can sign in, every request is unauthenticated).
 
+import { getAppDb } from "@/server/db/app-db";
 import { logWarning } from "@/server/redact";
 import { parseAllowlist, type Allowlist } from "./allowlist";
 import { loadAuthConfig } from "./config";
+import {
+  NOTHING_SET_UP,
+  createDbSetupStore,
+  setupDigestKey,
+  withSetupGate,
+  type AccountSetupStore,
+} from "./account-setup";
 import { createNeonAuthProvider } from "./neon-adapter";
+import { NO_SEALS, createSetupSeals, sealKey, type SetupSeals } from "./setup-seal";
 import { logAuthEvent } from "./safe-log";
 import type { AuthProvider } from "./types";
 
@@ -13,6 +22,10 @@ export interface RuntimeAuth {
   allowlist: Allowlist;
   /** False when configuration is missing/invalid and everything is denied. */
   available: boolean;
+  /** Which accounts have had their password set through an emailed link (#83). The provider above already enforces it. */
+  setup: AccountSetupStore;
+  /** Signs and opens the "this link is for <address>" value on reset links. */
+  seals: SetupSeals;
 }
 
 const unavailableProvider: AuthProvider = {
@@ -41,7 +54,13 @@ const unavailableProvider: AuthProvider = {
 };
 
 export function unavailableAuth(): RuntimeAuth {
-  return { provider: unavailableProvider, allowlist: new Set(), available: false };
+  return {
+    provider: unavailableProvider,
+    allowlist: new Set(),
+    available: false,
+    setup: NOTHING_SET_UP,
+    seals: NO_SEALS,
+  };
 }
 
 /**
@@ -53,23 +72,58 @@ export function unavailableAuth(): RuntimeAuth {
  *  2. RUNTIME OPT-IN: AUTH_E2E_FAKE=1 and AUTH_E2E_PASSWORD must be set.
  *  3. NEVER ON VERCEL: refused whenever Vercel's own `VERCEL` variable is present (production and preview).
  */
-async function buildE2eAuth(env: Record<string, string | undefined>): Promise<RuntimeAuth | null> {
+async function buildE2eAuth(
+  env: Record<string, string | undefined>,
+  setup: AccountSetupStore,
+): Promise<RuntimeAuth | null> {
   if (process.env.NEXT_PUBLIC_E2E_BUILD === "1") {
     const { createE2eAuthProvider, e2eAuthEnabled } = await import("@/server/auth/e2e-provider");
     if (e2eAuthEnabled(env)) {
       logWarning("auth: e2e fake sign-in enabled (e2e builds only; never on Vercel)");
       return {
-        provider: createE2eAuthProvider(env),
+        provider: withSetupGate(
+          createE2eAuthProvider(env),
+          setup,
+          parseAllowlist(env.OWNER_EMAIL_ALLOWLIST),
+        ),
         allowlist: parseAllowlist(env.OWNER_EMAIL_ALLOWLIST),
         available: true,
+        setup,
+        // Any non-empty secret signs the e2e links; the fake password is already required to be set.
+        seals: createSetupSeals(sealKey(env.AUTH_E2E_PASSWORD ?? "")),
       };
     }
   }
   return null;
 }
 
-async function buildAuth(env: Record<string, string | undefined>): Promise<RuntimeAuth> {
-  const e2e = await buildE2eAuth(env);
+/** Where "has this account been set up?" lives: the app database, or an injected store (tests). */
+export interface AuthRuntimeDeps {
+  setupStore?: AccountSetupStore;
+}
+
+/**
+ * Where "has this account been set up?" is recorded: the app database (records are keyed with a key derived from the
+ * secret in use, so they cannot be tested against known addresses), or an injected store (tests). Null when there is none.
+ */
+async function openSetupStores(
+  env: Record<string, string | undefined>,
+  deps: AuthRuntimeDeps,
+): Promise<((secret: string) => AccountSetupStore) | null> {
+  if (deps.setupStore) {
+    const injected = deps.setupStore;
+    return () => injected;
+  }
+  const db = await getAppDb(env);
+  return db ? (secret) => createDbSetupStore(db, setupDigestKey(secret)) : null;
+}
+
+async function buildAuth(
+  env: Record<string, string | undefined>,
+  deps: AuthRuntimeDeps,
+): Promise<RuntimeAuth> {
+  const storeFor = await openSetupStores(env, deps);
+  const e2e = storeFor ? await buildE2eAuth(env, storeFor(env.AUTH_E2E_PASSWORD ?? "")) : null;
   if (e2e) return e2e;
   const loaded = loadAuthConfig(env);
   if (!loaded.ok) {
@@ -77,12 +131,25 @@ async function buildAuth(env: Record<string, string | undefined>): Promise<Runti
     logWarning(`auth unavailable: ${loaded.problems.join("; ")}`);
     return unavailableAuth();
   }
+  // Without the database nobody can be known to have finished setting up, so nobody can sign in (the app has no data
+  // without it either): fail closed and say so, by name only.
+  if (!storeFor) {
+    logWarning("auth unavailable: DATABASE_URL is not set");
+    return unavailableAuth();
+  }
   const { baseUrl, cookieSecret, allowlist } = loaded.config;
+  const setup = storeFor(cookieSecret);
   try {
     // Loaded lazily so unit tests and builds without configuration never touch the SDK.
     const { createNeonAuth } = await import("@neondatabase/auth/next/server");
     const neon = createNeonAuth({ baseUrl, cookies: { secret: cookieSecret } });
-    return { provider: createNeonAuthProvider(neon), allowlist, available: true };
+    return {
+      provider: withSetupGate(createNeonAuthProvider(neon), setup, allowlist),
+      allowlist,
+      available: true,
+      setup,
+      seals: createSetupSeals(sealKey(cookieSecret)),
+    };
   } catch {
     logAuthEvent("provider-error");
     return unavailableAuth();
@@ -94,8 +161,9 @@ let cached: Promise<RuntimeAuth> | undefined;
 /** The process-wide auth runtime (built once from process.env). */
 export function getAuth(
   env: Record<string, string | undefined> = process.env,
+  deps: AuthRuntimeDeps = {},
 ): Promise<RuntimeAuth> {
-  cached ??= buildAuth(env);
+  cached ??= buildAuth(env, deps);
   return cached;
 }
 

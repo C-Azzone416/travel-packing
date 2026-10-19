@@ -8,11 +8,20 @@ import { resetPasswordUrl } from "@/server/auth/request-origin";
 
 export async function accountContext() {
   const [auth, requestHeaders] = await Promise.all([getAuth(), headers()]);
+  const resetUrl = resetPasswordUrl(requestHeaders);
   return {
     auth,
     limits: flowLimits(),
     address: clientAddress(requestHeaders),
-    resetUrl: resetPasswordUrl(requestHeaders),
+    /**
+     * The return address for a reset link made for one address: the app's /reset-password page plus a seal naming that
+     * address, so using the link can record which account was set up (#83). Null if the host cannot be worked out.
+     */
+    resetRedirect: resetUrl ? (email: string) => `${resetUrl}?for=${auth.seals.seal(email)}` : null,
+    /** The same, for the link that finishes sign-up; `setup=1` only changes the wording on the reset page (never behaviour). */
+    setupRedirect: resetUrl
+      ? (email: string) => `${resetUrl}?for=${auth.seals.seal(email)}&setup=1`
+      : null,
   };
 }
 

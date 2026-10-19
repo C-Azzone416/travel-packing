@@ -14,6 +14,7 @@ const EXPECTED_TAGS = [
   "0001_progress_clamp_trigger",
   "0002_location_columns",
   "0003_trip_theme",
+  "0004_account_setups",
 ];
 
 // One in-memory Postgres for the file; each test starts from an empty public schema.
@@ -70,6 +71,7 @@ describe("migrateUp", () => {
     expect(await migrateUp(client, migrations)).toEqual(EXPECTED_TAGS);
     expect(await appliedMigrations(client)).toEqual(EXPECTED_TAGS);
     expect(await userTables()).toEqual([
+      "account_setups",
       "staples",
       "trip_item_progress",
       "trip_items",
@@ -128,7 +130,8 @@ describe("migrateDown", () => {
 
   it("rolls back only the requested number of steps, newest first", async () => {
     await migrateUp(client, migrations);
-    expect(await migrateDown(client, migrations, 3)).toEqual([
+    expect(await migrateDown(client, migrations, 4)).toEqual([
+      EXPECTED_TAGS[4],
       EXPECTED_TAGS[3],
       EXPECTED_TAGS[2],
       EXPECTED_TAGS[1],
@@ -157,7 +160,11 @@ describe("migrateDown", () => {
     ];
     await migrateUp(client, migrations);
     expect(await tripColumns()).toEqual(expect.arrayContaining(added));
-    expect(await migrateDown(client, migrations, 2)).toEqual([EXPECTED_TAGS[3], EXPECTED_TAGS[2]]);
+    expect(await migrateDown(client, migrations, 3)).toEqual([
+      EXPECTED_TAGS[4],
+      EXPECTED_TAGS[3],
+      EXPECTED_TAGS[2],
+    ]);
     const remaining = await tripColumns();
     for (const column of added) expect(remaining).not.toContain(column);
     expect(remaining).toEqual(
@@ -183,17 +190,26 @@ describe("migrateDown", () => {
        INSERT INTO "trips" ("owner_id","destination","start_date","end_date","days","daily_days")
        VALUES ('u1','Anywhere','2030-04-01','2030-04-03',3,1)`,
     );
-    await migrateUp(client, migrations);
+    await migrateUp(client, migrations.slice(0, 4));
     const [column] = await themeColumn();
     expect(column.is_nullable).toBe("NO");
     expect(column.column_default).toContain("travel");
     const old = await client.query<{ theme: string }>(`SELECT theme FROM trips`);
     expect(old.rows).toEqual([{ theme: "travel" }]);
     await expect(client.query(`UPDATE trips SET theme = 'volcano'`)).rejects.toThrow();
-    expect(await migrateDown(client, migrations, 1)).toEqual([EXPECTED_TAGS[3]]);
+    expect(await migrateDown(client, migrations.slice(0, 4), 1)).toEqual([EXPECTED_TAGS[3]]);
     expect(await themeColumn()).toEqual([]);
     expect(await userTypes()).not.toContain("trip_theme");
-    expect(await migrateUp(client, migrations)).toEqual([EXPECTED_TAGS[3]]);
+    expect(await migrateUp(client, migrations.slice(0, 4))).toEqual([EXPECTED_TAGS[3]]);
+  });
+
+  it("rolling back just the account setups drops the table, and up restores it empty", async () => {
+    await migrateUp(client, migrations);
+    await client.exec(`INSERT INTO "account_setups" ("email_digest") VALUES ('abc')`);
+    expect(await migrateDown(client, migrations, 1)).toEqual([EXPECTED_TAGS[4]]);
+    expect(await userTables()).not.toContain("account_setups");
+    expect(await migrateUp(client, migrations)).toEqual([EXPECTED_TAGS[4]]);
+    expect((await client.query(`SELECT * FROM "account_setups"`)).rows).toEqual([]);
   });
 
   it("does nothing on an empty database", async () => {

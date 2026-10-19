@@ -2,6 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { FinishSetupView } from "./FinishSetupView";
 import { ForgotForm } from "./ForgotForm";
 import { InvalidLinkView } from "./InvalidLinkView";
 import { ResetForm } from "./ResetForm";
@@ -272,7 +273,7 @@ describe("ForgotForm", () => {
 describe("ResetForm", () => {
   it("has one new-password field with its rule, the Show toggle, and the token as a hidden field", async () => {
     const action = vi.fn(async () => form());
-    render(<ResetForm token="fake-token-one" action={action} />);
+    render(<ResetForm token="fake-token-one" sealed="seal.value.mac" action={action} />);
     expect(screen.getByRole("heading", { level: 1, name: "Choose a new password" })).toBeTruthy();
     const password = screen.getByLabelText("New password") as HTMLInputElement;
     expect(password.autocomplete).toBe("new-password");
@@ -286,6 +287,7 @@ describe("ResetForm", () => {
     await userEvent.setup().click(screen.getByRole("button", { name: "Update password" }));
     const sent = action.mock.calls[0] as unknown as [FormState, FormData];
     expect(sent[1].get("token")).toBe("fake-token-one");
+    expect(sent[1].get("for")).toBe("seal.value.mac");
     expect(sent[1].get("password")).toBe("a-new-password");
   });
 
@@ -293,6 +295,7 @@ describe("ResetForm", () => {
     render(
       <ResetForm
         token="fake-token-one"
+        sealed="seal.value.mac"
         action={vi.fn(async () =>
           form({ fieldErrors: { password: "Password must be at least 8 characters." } }),
         )}
@@ -302,6 +305,64 @@ describe("ResetForm", () => {
     const field = await screen.findByLabelText("New password");
     expect(field.getAttribute("aria-invalid")).toBe("true");
     expect(within(document.body).getByText(/at least 8 characters\./)).toBeTruthy();
+  });
+});
+
+describe("ResetForm, setup variant", () => {
+  it("says 'Set your password' and 'Set password', with the same field, rule and Show control", async () => {
+    const action = vi.fn(async () => form());
+    render(
+      <ResetForm token="fake-token-one" sealed="seal.value.mac" variant="setup" action={action} />,
+    );
+    expect(screen.getByRole("heading", { level: 1, name: "Set your password" })).toBeTruthy();
+    expect(screen.getByLabelText("New password")).toBeTruthy();
+    expect(document.getElementById("password-hint")?.textContent).toBe("At least 8 characters.");
+    expect(screen.getByRole("button", { name: "Show password" })).toBeTruthy();
+    await userEvent.setup().type(screen.getByLabelText("New password"), "a-new-password");
+    await userEvent.setup().click(screen.getByRole("button", { name: "Set password" }));
+    const sent = action.mock.calls[0] as unknown as [FormState, FormData];
+    expect(sent[1].get("variant")).toBe("setup");
+    expect(sent[1].get("for")).toBe("seal.value.mac");
+  });
+});
+
+describe("FinishSetupView", () => {
+  const props = {
+    email: "owner@example.test" as string | null,
+    initialCooldown: 0,
+    resendAction: resend,
+  };
+
+  it("tells the person to check their email, names where the link went, and offers it again", () => {
+    render(<FinishSetupView {...props} />);
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Check your email to finish setting up" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "We've sent a link to owner@example.test. Open it to choose your password. It expires in 1 hour.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Send the link again" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Back to sign in" }).getAttribute("href")).toBe(
+      "/sign-in",
+    );
+    expect(document.activeElement).toBe(screen.getByRole("heading", { level: 1 }));
+  });
+
+  it("starts with the resend gap running when a link was just sent", () => {
+    render(<FinishSetupView {...props} initialCooldown={12} />);
+    expect(screen.getByText("You can request another link in 12s")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Send the link again" })).toBeNull();
+  });
+
+  it("without an address offers a new link from the forgot-password screen instead", () => {
+    render(<FinishSetupView {...props} email={null} />);
+    expect(screen.getByText(/Open the link we emailed to choose your password/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Send me a link" }).getAttribute("href")).toBe(
+      "/forgot-password",
+    );
+    expect(screen.queryByRole("button", { name: "Send the link again" })).toBeNull();
   });
 });
 

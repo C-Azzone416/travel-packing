@@ -8,6 +8,8 @@ export interface FakeUser {
   userId: string;
   /** False = right password but the address is not verified yet (sign-in reports `unverified`). Default true. */
   verified?: boolean;
+  /** True = verified, right password, but the password was never set through an emailed link (#83): `unfinished`. */
+  unfinished?: boolean;
 }
 
 /** Records of the account-flow calls, and what each call answers (set in a test; the default is success). */
@@ -59,7 +61,8 @@ export function createFakeAuth(users: FakeUser[] = []): FakeAuth {
       const user = users.find((entry) => entry.email === email && entry.password === password);
       if (!user) return { ok: false };
       if (user.verified === false) return { ok: false, unverified: true };
-      fake.current = { userId: user.userId, email: user.email };
+      if (user.unfinished) return { ok: false, unfinished: true };
+      fake.current = { userId: user.userId, email: user.email, issuedAt: Date.now() };
       return { ok: true, session: fake.current };
     },
     async signOut() {
