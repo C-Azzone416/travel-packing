@@ -33,16 +33,25 @@ export function checkDeployWorkflow(workflow: string): string[] {
     /^( *)- name: Inject the Preview secrets[^\n]*\n((?:\1 {2}.*\n|\n)*)/m.exec(workflow)?.[0] ??
     "";
 
-  // Triggers: a push deploys preview only; production is a manual run.
+  // Triggers: the preview deploy is called by ci.yml (never a trigger of its own); production is a manual run.
   const on = workflow.slice(workflow.search(/^on:/m), workflow.search(/^concurrency:/m));
   if (!/^on:/m.test(workflow) || on.length === 0) problems.push("no `on:` block");
-  if (/^\s*-\s*main\s*$/m.test(on)) problems.push("a push to main must not trigger a deploy");
-  if (!/^\s*-\s*develop\s*$/m.test(on)) problems.push("a push to develop must deploy the preview");
+  if (/^\s*push:/m.test(on))
+    problems.push("a push must not trigger the deploy workflow directly; ci.yml calls it after CI");
+  if (!/^\s*workflow_call:/m.test(on))
+    problems.push("the preview deploy must be callable from ci.yml (workflow_call)");
   if (!/^\s*workflow_dispatch:/m.test(on))
     problems.push("production needs the manual workflow_dispatch trigger");
   if (/pull_request/.test(workflow))
     problems.push("a pull request must never trigger a deploy workflow");
   if (/secrets:\s*inherit/.test(workflow)) problems.push("secrets must not be inherited");
+  if (/\bsleep\b|seq 1 /.test(workflow))
+    problems.push("the deploy must not poll or wait for CI (it is billed idle time)");
+  const requireCi = /- name: Require green CI[^\n]*\n((?: {8}.*\n)*)/.exec(workflow)?.[1] ?? "";
+  if (!/if:\s*github\.event_name == 'workflow_dispatch'/.test(requireCi))
+    problems.push("the CI check must guard the manual (production) run");
+  if (!/scripts\/require-ci\.ts/.test(requireCi))
+    problems.push("the CI check must run scripts/require-ci.ts");
 
   // The gate decides the target and holds no secret and no environment.
   const gate = jobBody(workflow, "gate");
@@ -204,36 +213,125 @@ export function checkDeployWorkflow(workflow: string): string[] {
   return problems;
 }
 
-/** The CI job needs room for a slow runner: a healthy run is ~18.5 minutes, and a cancelled run stops the deploy that waits on it. */
+/** The ci job needs room for a slow runner: a healthy full run is ~19 minutes, and a cancelled run stops the deploy that follows it. */
 export const MIN_CI_TIMEOUT_MINUTES = 35;
 
 /**
- * The deploy waits for CI on the same commit, so the timeouts must nest: the ci job's timeout is generous, the deploy's wait
- * outlasts it (so the wait cannot give up while CI is still running), and the deploy job outlasts its own wait.
- * Returns the broken rules (empty when fine).
+ * What must be true of `.github/workflows/ci.yml` (#91). Returns the broken rules (empty when fine).
+ * The shape is deliberate: one job named `ci` (extra jobs cost whole billed minutes and the review gate reads this name),
+ * gitleaks inside it, the heavy steps gated on the mode, a draft ending red, and a native-`needs` deploy on develop pushes only.
  */
-export function checkTimeoutHeadroom(ci: string, deploy: string): string[] {
+export function checkCiWorkflow(workflow: string): string[] {
   const problems: string[] = [];
-  const ciTimeout = Number(/^ {4}timeout-minutes:\s*(\d+)/m.exec(ci)?.[1] ?? NaN);
-  if (!(ciTimeout >= MIN_CI_TIMEOUT_MINUTES)) {
-    problems.push(`the ci job's timeout-minutes must be at least ${MIN_CI_TIMEOUT_MINUTES}`);
-  }
-  const attempts = Number(/seq 1 (\d+)/.exec(deploy)?.[1] ?? NaN);
-  const sleepSeconds = Number(/pending\) sleep (\d+)/.exec(deploy)?.[1] ?? NaN);
-  const waitMinutes = (attempts * sleepSeconds) / 60;
-  if (!(waitMinutes >= ciTimeout + 5)) {
+  const ci = jobBody(workflow, "ci");
+  const deploy = jobBody(workflow, "deploy");
+  const jobNames = [...workflow.matchAll(/^ {2}([A-Za-z0-9_-]+):\s*$/gm)].map((m) => m[1]);
+  const jobsStart = workflow.search(/^jobs:/m);
+  const jobs = jobNames.filter((_, i) => {
+    const at = [...workflow.matchAll(/^ {2}([A-Za-z0-9_-]+):\s*$/gm)][i].index ?? 0;
+    return at > jobsStart;
+  });
+
+  if (!ci) problems.push("the job must be named `ci`");
+  if (jobs.some((name) => name !== "ci" && name !== "deploy"))
     problems.push(
-      "the deploy's wait for CI must outlast the ci job's timeout by at least 5 minutes",
+      "the workflow may have only the `ci` and `deploy` jobs (every extra job bills a minute)",
     );
-  }
-  // The deploy job (the one with the wait in it) must outlast its wait with room for the build, migration and deploy.
-  const deployJobTimeout = Number(
-    /^ {2}deploy:[\s\S]*?^ {4}timeout-minutes:\s*(\d+)/m.exec(deploy)?.[1] ?? NaN,
-  );
-  if (!(deployJobTimeout >= waitMinutes + 15)) {
+  if (!/^\s*pull_request:/m.test(workflow) || !/^\s*push:/m.test(workflow))
+    problems.push("ci must run on pull requests and on pushes");
+  if (!/ready_for_review/.test(workflow))
+    problems.push("marking a draft ready must run the full validation (ready_for_review)");
+
+  const concurrency = /^concurrency:\n((?: {2}.*\n)*)/m.exec(workflow)?.[1] ?? "";
+  if (
+    !/cancel-in-progress:\s*\$\{\{\s*github\.event_name == 'pull_request'\s*\}\}/.test(concurrency)
+  )
     problems.push(
-      "the deploy job's timeout-minutes must outlast its wait for CI by at least 15 minutes",
+      "only pull request runs may be cancelled by a newer push (a develop push may be deploying)",
     );
+
+  if (ci) {
+    const timeout = Number(/^ {4}timeout-minutes:\s*(\d+)/m.exec(ci)?.[1] ?? NaN);
+    if (!(timeout >= MIN_CI_TIMEOUT_MINUTES))
+      problems.push(`the ci job's timeout-minutes must be at least ${MIN_CI_TIMEOUT_MINUTES}`);
+    if (/secrets\.(?!GITHUB_TOKEN\b)/.test(ci))
+      problems.push("the ci job must read no secret but GITHUB_TOKEN");
+    if (/secrets:\s*inherit/.test(ci)) problems.push("the ci job must not inherit secrets");
+    if (!/gitleaks\/gitleaks-action@[0-9a-f]{40}/.test(ci))
+      problems.push("secret scanning (gitleaks) must run inside the ci job");
+    if (!/fetch-depth:\s*0/.test(ci))
+      problems.push("gitleaks needs the full history (fetch-depth: 0)");
+    const gitleaks = ci.indexOf("gitleaks/gitleaks-action");
+    const install = ci.indexOf("npm ci");
+    if (gitleaks >= 0 && install >= 0 && gitleaks > install)
+      problems.push("gitleaks must run before the install, so a leak fails the run first");
+    if (!/scripts\/ci-mode\.ts/.test(ci)) problems.push("the mode step is missing");
+    // Every step that costs real time must be skipped outside full mode; the cheap checks must not be.
+    for (const heavy of [
+      "npm run test:coverage",
+      "npm run build",
+      "npm run build:webpack",
+      "check:no-e2e-in-build",
+      "check:client-bundle",
+      "playwright install",
+      "npm run test:e2e",
+    ]) {
+      if (!ci.includes(heavy)) {
+        problems.push(`the ${heavy} step is missing`);
+        continue;
+      }
+      // Every step that runs it (the bundle checks run twice, once per bundler).
+      const ungated = stepsOf(ci, heavy).some(
+        (step) => !/if:[^\n]*steps\.mode\.outputs\.mode == 'full'/.test(step),
+      );
+      if (ungated) problems.push(`the ${heavy} step must run only in full mode`);
+    }
+    for (const cheap of [
+      "check:repo-hygiene",
+      "actionlint",
+      "check:workflows",
+      "npm audit",
+      "npm run lint",
+      "npm run typecheck",
+    ]) {
+      if (!ci.includes(cheap)) problems.push(`the ${cheap} check is missing`);
+      else if (stepsOf(ci, cheap).some((step) => /steps\.mode/.test(step)))
+        problems.push(`the ${cheap} check must run in every mode`);
+    }
+    if (!/npm audit --omit=dev --audit-level=high/.test(ci))
+      problems.push("the dependency audit must fail on high severity");
+    const finish = stepsOf(ci, "full validation not run")[0] ?? "";
+    if (!/if:\s*steps\.mode\.outputs\.mode == 'quick'/.test(finish) || !/exit 1/.test(finish))
+      problems.push("a quick (draft) run must end red");
+    if (ci.lastIndexOf("- name:") !== ci.indexOf("- name: Draft pull request")) {
+      problems.push("the red finish for a quick run must be the last step of the job");
+    }
   }
+
+  if (!deploy) problems.push("the deploy job is missing");
+  else {
+    if (!/^\s+needs:\s*ci\s*$/m.test(deploy)) problems.push("the deploy job must need ci");
+    if (
+      !/if:\s*github\.event_name == 'push' && github\.ref == 'refs\/heads\/develop'\s*$/m.test(
+        deploy,
+      )
+    )
+      problems.push("the deploy job must run only for a push to develop");
+    if (!/uses:\s*\.\/\.github\/workflows\/deploy-vercel\.yml\s*$/m.test(deploy))
+      problems.push("the deploy job must call the deploy workflow in this repository");
+    if (!/secrets:\s*inherit/.test(deploy))
+      problems.push("the deploy job must pass its secrets to the called workflow");
+    if (/with:/.test(deploy)) problems.push("the deploy job must pass no inputs (no release_sha)");
+    if (/\bsleep\b|gh run/.test(deploy)) problems.push("the deploy job must not poll for CI");
+  }
+  if ((workflow.match(/secrets:\s*inherit/g) ?? []).length > 1)
+    problems.push("secrets may be inherited by the deploy job only");
   return problems;
+}
+
+/** The text of every step whose name or command contains `needle` (each from its `- name:` line to the next step). */
+function stepsOf(job: string, needle: string): string[] {
+  return job
+    .split(/^(?= {6}(?:- |#))/m)
+    .filter((chunk) => /^ {6}- /.test(chunk) && chunk.includes(needle));
 }

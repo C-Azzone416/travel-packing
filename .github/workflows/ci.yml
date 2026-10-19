@@ -1,12 +1,20 @@
 name: CI
 
-# #3 — quality gates for every PR to develop/main. No repository secrets are
-# used; tests never touch a real database. Deployment is separate (#20).
+# #3, #91 — quality gates for every PR to develop/main, and the preview deploy after a green push to develop. One job, on
+# purpose: every job pays for checkout, Node and `npm ci` and rounds up to a whole billed minute, so splitting the work
+# costs more minutes than it saves (docs/ci.md has the measurements). No repository secrets are used by the `ci` job;
+# tests never touch a real database. The job is named `ci` and must stay so: the review gate and the production
+# release check read it by name.
+#
+# A draft pull request runs the cheap checks only (and its `ci` ends red on purpose, so a draft can never be mistaken
+# for validated); a ready pull request, and a push to develop or main, run everything. A push to develop whose files are
+# byte-identical to a pull request head that already passed the full run reuses that result.
 on:
   pull_request:
     branches:
       - develop
       - main
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches:
       - develop
@@ -15,19 +23,31 @@ on:
 permissions:
   contents: read
 
+# A newer push to a pull request cancels its older run. A push to develop must never cancel a run that is deploying.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   ci:
     runs-on: ubuntu-latest
-    # A healthy run takes about 18.5 minutes, but slow runners (a browser install that takes 3x as long, say) have pushed it past
-    # 20, and the deploy waits on this run, so a timeout here stops a deploy. Keep this well above a slow run (see
-    # `npm run check:workflows`, which also keeps the deploy's wait longer than this).
+    # A healthy full run takes about 19 minutes, but slow runners have pushed it past 20. Keep this well above a slow run
+    # (`npm run check:workflows` enforces the minimum).
     timeout-minutes: 40
+    permissions:
+      contents: read
+      pull-requests: read # gitleaks lists a pull request's commits; the mode step lists the pull requests of a commit
+      actions: read # the mode step reads earlier `ci` runs
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # gitleaks scans history
+
+      # Secret scanning, first so a leaked secret fails the run before anything else spends a minute. Same pinned action
+      # and settings the separate gitleaks workflow had; nothing about the scan is weaker.
+      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -36,6 +56,17 @@ jobs:
 
       - name: Install
         run: npm ci
+
+      # quick (draft pull request), full, or reused (identical files already fully validated). Fails safe to full.
+      - name: Decide how much to run
+        id: mode
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }} # the draft flag is read live: the event payload can be stale
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: npx tsx scripts/ci-mode.ts
 
       # Fails on any committed file over 1 MiB or any local database, build, test, dependency, or env file.
       - name: Repository hygiene
@@ -73,11 +104,12 @@ jobs:
       # An explicit `shell: bash` enables pipefail (the default shell does
       # not), so piping through tee cannot mask that failure.
       - name: Test with coverage
+        if: steps.mode.outputs.mode == 'full'
         shell: bash
         run: npm run test:coverage 2>&1 | tee coverage-summary.txt
 
       - name: Coverage summary
-        if: always()
+        if: always() && steps.mode.outputs.mode == 'full'
         run: |
           {
             echo '## Coverage'
@@ -87,36 +119,44 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Build
+        if: steps.mode.outputs.mode == 'full'
         run: npm run build
 
       # The e2e-only fake sign-in must not be in a deployable build. This build is made without
       # NEXT_PUBLIC_E2E_BUILD, exactly like production; the e2e step below rebuilds with it.
       - name: Verify the e2e-only sign-in is not in the build
+        if: steps.mode.outputs.mode == 'full'
         run: npm run check:no-e2e-in-build
 
       # Nothing the browser can download may name a server secret, hold a secret-shaped value, or contain server-only
       # code (#22). The scan's own tests inject a fake secret and require it to fail.
       - name: Scan the client bundle for secrets and server-only code
+        if: steps.mode.outputs.mode == 'full'
         run: npm run check:client-bundle
 
       # The same guarantee must hold for the webpack bundler (`next build --webpack`), not only Turbopack.
       - name: Build with webpack
+        if: steps.mode.outputs.mode == 'full'
         run: npm run build:webpack
 
       - name: Verify the e2e-only sign-in is not in the webpack build
+        if: steps.mode.outputs.mode == 'full'
         run: npm run check:no-e2e-in-build
 
       - name: Scan the webpack client bundle
+        if: steps.mode.outputs.mode == 'full'
         run: npm run check:client-bundle
 
       - name: Install Playwright browsers
+        if: steps.mode.outputs.mode == 'full'
         run: npx playwright install --with-deps chromium
 
       - name: E2E (phone + desktop)
+        if: steps.mode.outputs.mode == 'full'
         run: npm run test:e2e
 
       - name: Upload coverage
-        if: always()
+        if: always() && steps.mode.outputs.mode == 'full'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage
@@ -126,7 +166,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload Playwright report
-        if: always()
+        if: always() && steps.mode.outputs.mode == 'full'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: playwright-report
@@ -134,3 +174,23 @@ jobs:
             playwright-report/
             test-results/
           if-no-files-found: ignore
+
+      # A draft ends red on purpose: the cheap checks above passed, but the full validation did not run, and a green `ci`
+      # must always mean the full validation passed. Mark the pull request ready for review to run it.
+      - name: Draft pull request (full validation not run)
+        if: steps.mode.outputs.mode == 'quick'
+        run: |
+          echo "::error::Cheap checks passed, but the full validation did not run on this draft. Mark the pull request ready for review to run it."
+          exit 1
+
+  # The preview deploy runs after, and only after, a green full-or-reused `ci` on a push to develop. Native `needs:` means
+  # no job sits polling for CI (and billing for it). The deploy workflow is the same file the manual production run uses;
+  # it decides its own target from this event (a push to develop can only mean preview) and never deploys production here.
+  deploy:
+    needs: ci
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/deploy-vercel.yml
+    secrets: inherit

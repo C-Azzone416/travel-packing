@@ -2,14 +2,15 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  checkCiWorkflow,
   checkDeployWorkflow,
-  checkTimeoutHeadroom,
   MIN_CI_TIMEOUT_MINUTES,
   unpinnedActions,
 } from "./workflow-check";
 
 const DIR = join(process.cwd(), ".github", "workflows");
 const deploy = readFileSync(join(DIR, "deploy-vercel.yml"), "utf8");
+const ci = readFileSync(join(DIR, "ci.yml"), "utf8");
 
 /** The real file with one edit; the edit must change something, so a mutant cannot silently be a no-op. */
 function mutate(from: string | RegExp, to: string): string {
@@ -66,12 +67,30 @@ function movedInjection(): string {
 describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
   it.each([
     [
-      "a push to main deploys",
-      mutate("      - develop\n", "      - develop\n      - main\n"),
-      /push to main/,
+      "a push triggers the deploy directly",
+      mutate("on:\n", "on:\n  push:\n    branches:\n      - develop\n"),
+      /push must not trigger/,
     ],
-    ["develop no longer deploys", mutate("      - develop\n", ""), /push to develop/],
+    ["not callable from ci.yml", mutate("  workflow_call:", "  other_call:"), /workflow_call/],
     ["no manual trigger", mutate("  workflow_dispatch:", "  other_trigger:"), /workflow_dispatch/],
+    [
+      "a polling wait for CI",
+      mutate(
+        "        run: npx tsx scripts/require-ci.ts",
+        "        run: sleep 30; npx tsx scripts/require-ci.ts",
+      ),
+      /poll or wait/,
+    ],
+    [
+      "the CI check runs for previews too",
+      mutate("        if: github.event_name == 'workflow_dispatch'\n", ""),
+      /guard the manual/,
+    ],
+    [
+      "the CI check is not the exact-commit script",
+      mutate("scripts/require-ci.ts", "scripts/other.ts"),
+      /require-ci/,
+    ],
     ["a pull request trigger", mutate("on:\n", "on:\n  pull_request:\n"), /pull request/],
     ["inherited secrets", `${deploy}\n    secrets: inherit\n`, /inherited/],
     [
@@ -267,55 +286,141 @@ describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
   });
 });
 
-describe("checkTimeoutHeadroom: the deploy waits on CI, so the timeouts nest", () => {
-  const ci = readFileSync(join(DIR, "ci.yml"), "utf8");
+describe("checkCiWorkflow", () => {
+  const mutateCi = (from: string | RegExp, to: string) => {
+    const mutated = ci.replace(from, to);
+    expect(mutated).not.toBe(ci);
+    return mutated;
+  };
 
-  it("holds for the real workflows, with CI given at least the minimum", () => {
-    expect(checkTimeoutHeadroom(ci, deploy)).toEqual([]);
+  it("holds for the real workflow, with a timeout of at least the minimum", () => {
+    expect(checkCiWorkflow(ci)).toEqual([]);
     expect(Number(/^ {4}timeout-minutes:\s*(\d+)/m.exec(ci)?.[1])).toBeGreaterThanOrEqual(
       MIN_CI_TIMEOUT_MINUTES,
     );
   });
 
   it.each([
+    ["the job renamed", mutateCi(/^ {2}ci:/m, "  checks:"), /named `ci`/],
     [
-      "the old 20-minute ci timeout",
-      ci.replace(/^( {4}timeout-minutes:\s*)\d+/m, "$120"),
-      /ci job's timeout/,
+      "an extra job",
+      `${ci}\n  lint:\n    runs-on: ubuntu-latest\n    steps: []\n`,
+      /only the `ci` and `deploy` jobs/,
+    ],
+    ["no ready_for_review", mutateCi(", ready_for_review", ""), /ready_for_review/],
+    [
+      "a develop push that cancels a deploy",
+      mutateCi(
+        "cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
+        "cancel-in-progress: true",
+      ),
+      /may be cancelled/,
+    ],
+    ["a short timeout", mutateCi(/^( {4}timeout-minutes:\s*)\d+/m, "$120"), /timeout-minutes/],
+    ["no timeout", mutateCi(/^ {4}timeout-minutes:.*\n/m, ""), /timeout-minutes/],
+    [
+      "the ci job reads a secret",
+      mutateCi(
+        "          GH_TOKEN: ${{ github.token }}",
+        "          GH_TOKEN: ${{ secrets.VERCEL_TOKEN }}",
+      ),
+      /no secret but GITHUB_TOKEN/,
     ],
     [
-      "a ci timeout just under the minimum",
-      ci.replace(/^( {4}timeout-minutes:\s*)\d+/m, "$134"),
-      /ci job's timeout/,
+      "gitleaks removed",
+      mutateCi(/ {6}- uses: gitleaks[^\n]*\n {8}env:\n {10}GITHUB_TOKEN[^\n]*\n\n/, ""),
+      /gitleaks\) must run inside/,
     ],
-    ["no ci timeout at all", ci.replace(/^ {4}timeout-minutes:.*\n/m, ""), /ci job's timeout/],
-  ])("fails with %s", (_name, brokenCi, message) => {
-    expect(checkTimeoutHeadroom(brokenCi, deploy).join("\n")).toMatch(message);
+    ["a shallow checkout", mutateCi(/ {8}with:\n {10}fetch-depth: 0[^\n]*\n/, ""), /full history/],
+    [
+      "gitleaks after the install",
+      mutateCi(
+        "      - name: Install\n        run: npm ci\n",
+        "      - name: Install\n        run: npm ci\n      - run: true # gitleaks/gitleaks-action\n",
+      ).replace(/(gitleaks\/gitleaks-action@[0-9a-f]{40})/, "other/action@" + "0".repeat(40)),
+      /gitleaks/,
+    ],
+    ["no mode step", mutateCi("scripts/ci-mode.ts", "scripts/other.ts"), /mode step is missing/],
+    [
+      "coverage runs in every mode",
+      mutateCi(/(- name: Test with coverage\n) {8}if:[^\n]*\n/, "$1"),
+      /test:coverage step must run only in full mode/,
+    ],
+    [
+      "e2e runs in every mode",
+      mutateCi(/(- name: E2E \(phone \+ desktop\)\n) {8}if:[^\n]*\n/, "$1"),
+      /test:e2e step must run only in full mode/,
+    ],
+    [
+      "the webpack bundle scan runs in every mode",
+      mutateCi(/(- name: Scan the webpack client bundle\n) {8}if:[^\n]*\n/, "$1"),
+      /check:client-bundle step must run only in full mode/,
+    ],
+    ["the audit is gone", mutateCi("npm audit --omit=dev --audit-level=high", "true"), /audit/],
+    [
+      "lint only in full mode",
+      mutateCi(
+        "      - name: Lint\n",
+        "      - name: Lint\n        if: steps.mode.outputs.mode == 'full'\n",
+      ),
+      /lint check must run in every mode/,
+    ],
+    [
+      "a draft that passes",
+      mutateCi("          exit 1", "          exit 0"),
+      /quick \(draft\) run must end red/,
+    ],
+    [
+      "a draft check that is not last",
+      `${ci.replace(/\n {2}deploy:[\s\S]*$/, "")}      - name: After\n        run: true\n\n${ci.slice(ci.indexOf("  deploy:"))}`,
+      /must be the last step/,
+    ],
+    ["the deploy does not need ci", mutateCi("    needs: ci\n", ""), /deploy job must need ci/],
+    [
+      "the deploy runs on pull requests",
+      mutateCi(
+        "    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'",
+        "    if: github.event_name == 'push'",
+      ),
+      /only for a push to develop/,
+    ],
+    [
+      "the deploy calls something else",
+      mutateCi("./.github/workflows/deploy-vercel.yml", "./.github/workflows/other.yml"),
+      /call the deploy workflow/,
+    ],
+    ["the deploy gets no secrets", mutateCi("    secrets: inherit\n", ""), /pass its secrets/],
+    [
+      "the deploy passes a release sha",
+      mutateCi(
+        "    secrets: inherit\n",
+        "    secrets: inherit\n    with:\n      release_sha: abc\n",
+      ),
+      /no inputs/,
+    ],
+    [
+      "secrets inherited by the ci job too",
+      mutateCi(
+        "    permissions:\n      contents: read\n      pull-requests",
+        "    secrets: inherit\n    permissions:\n      contents: read\n      pull-requests",
+      ),
+      /ci job must not inherit/,
+    ],
+    [
+      "the deploy polls",
+      mutateCi(
+        "    uses: ./.github/workflows/deploy-vercel.yml",
+        "    uses: ./.github/workflows/deploy-vercel.yml\n    # gh run list",
+      ),
+      /poll/,
+    ],
+  ])("fails with %s", (_name, workflow, message) => {
+    expect(checkCiWorkflow(workflow).join("\n")).toMatch(message);
   });
 
-  it.each([
-    [
-      "the old 40-attempt wait (20 minutes)",
-      deploy.replace("seq 1 100", "seq 1 40"),
-      /wait for CI must outlast/,
-    ],
-    [
-      "a wait that only equals the ci timeout",
-      deploy.replace("seq 1 100", "seq 1 80"),
-      /wait for CI must outlast/,
-    ],
-    ["a wait with no loop", deploy.replace("seq 1 100", "seq x"), /wait for CI must outlast/],
-    [
-      "a deploy job that would time out inside its own wait",
-      deploy.replace(/^( {4}timeout-minutes:\s*)75/m, "$130"),
-      /deploy job's timeout/,
-    ],
-    [
-      "a deploy job timeout just short of the headroom",
-      deploy.replace(/^( {4}timeout-minutes:\s*)75/m, "$164"),
-      /deploy job's timeout/,
-    ],
-  ])("fails with %s", (_name, brokenDeploy, message) => {
-    expect(checkTimeoutHeadroom(ci, brokenDeploy).join("\n")).toMatch(message);
+  it("flags a missing deploy job", () => {
+    expect(checkCiWorkflow(ci.slice(0, ci.indexOf("  deploy:"))).join("\n")).toMatch(
+      /deploy job is missing/,
+    );
   });
 });

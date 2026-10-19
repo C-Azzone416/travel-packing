@@ -15,6 +15,7 @@
     "test": "vitest run --coverage",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
+    "ci:gate": "tsx scripts/require-ci.ts",
     "db:generate": "drizzle-kit generate",
     "db:check": "drizzle-kit check",
     "db:migrate": "tsx scripts/db-migrate.ts",

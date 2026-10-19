@@ -3,8 +3,8 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  checkCiWorkflow,
   checkDeployWorkflow,
-  checkTimeoutHeadroom,
   unpinnedActions,
 } from "../src/tooling/workflow-check";
 
@@ -15,17 +15,10 @@ for (const file of readdirSync(dir).filter((name) => /\.ya?ml$/.test(name))) {
   const problems = [
     ...unpinnedActions(text),
     ...(file === "deploy-vercel.yml" ? checkDeployWorkflow(text) : []),
+    ...(file === "ci.yml" ? checkCiWorkflow(text) : []),
   ];
   for (const problem of problems) console.error(`${file}: ${problem}`);
   if (problems.length) failed = true;
   else console.log(`${file}: ok`);
 }
-// The deploy waits on CI, so their timeouts have to nest.
-const timeoutProblems = checkTimeoutHeadroom(
-  readFileSync(join(dir, "ci.yml"), "utf8"),
-  readFileSync(join(dir, "deploy-vercel.yml"), "utf8"),
-);
-for (const problem of timeoutProblems) console.error(`timeouts: ${problem}`);
-if (timeoutProblems.length) failed = true;
-else console.log("timeouts: ok");
 process.exit(failed ? 1 : 0);
