@@ -24,6 +24,7 @@
     "db:seed": "tsx scripts/db-seed.ts",
     "db:seed:preview": "tsx scripts/seed-preview.ts",
     "check:repo-hygiene": "tsx scripts/check-repo-hygiene.ts",
+    "check:workflows": "tsx scripts/check-workflows.ts",
     "check:client-bundle": "tsx scripts/check-client-bundle.ts",
     "check:deploy-env": "tsx scripts/check-deploy-env.ts",
     "check:migration-target": "tsx scripts/check-migration-target.ts",
