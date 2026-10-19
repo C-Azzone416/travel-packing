@@ -10,6 +10,9 @@ workflow (`.github/workflows/deploy-vercel.yml`) builds with a pinned Vercel CLI
    [Production release gate](#production-release-gate). Everything below runs in the `deploy` job, in the GitHub
    environment the gate chose.
 1. Waits for the `ci` workflow to pass on the same commit (fails if it failed or never finishes).
+   The timeouts nest on purpose (`npm run check:workflows` enforces it): the `ci` job may run up to 40 minutes (a healthy run takes about
+   18.5, but a slow runner can double a step), this wait lasts up to 50, and the deploy job's own limit is 75, so a slow CI run is waited for
+   rather than cancelling a deploy.
 2. `vercel pull` for the target. **Preview only:** the four Vercel Secrets are then written into the pulled file from the
    GitHub `preview` environment (see [Preview secrets](#preview-secrets)). Then `scripts/check-deploy-env.ts` checks the
    file the build will use. It prints variable **names** only, and fails when:

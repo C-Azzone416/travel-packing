@@ -62,7 +62,7 @@ jobs:
   deploy:
     needs: gate
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 75 # includes the wait for CI below (up to 50 minutes) plus the build, migration and deploy
     environment: ${{ needs.gate.outputs.target }}
     env:
       TARGET: ${{ needs.gate.outputs.target }}
@@ -81,7 +81,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          for _ in $(seq 1 40); do
+          for _ in $(seq 1 100); do
             conclusion=$(gh run list --workflow ci.yml --commit "$GITHUB_SHA" --json status,conclusion \
               --jq '[.[] | select(.status == "completed")] | first | .conclusion // "pending"')
             echo "ci for $GITHUB_SHA: $conclusion"
