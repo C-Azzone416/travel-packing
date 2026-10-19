@@ -8,6 +8,7 @@
 //
 // Only the preview job may get here: TARGET must be exactly "preview". Output is states and variable names only.
 
+import { PRODUCTION_HOST_FORMAT, productionHost } from "../../tooling/deploy-env";
 import { normalizeHost } from "./guard";
 import { DEFAULT_OWNER_ID } from "./cli";
 
@@ -65,9 +66,10 @@ export async function runPreviewSeed(env: Env, deps: PreviewSeedDeps): Promise<n
   }
 
   // The seed's own guard checks the allowlist; this adds the one thing only the deploy knows: where production is.
-  const production = normalizeHost(env.PRODUCTION_DB_HOST ?? "");
-  if (production === "")
+  const production = productionHost(env.PRODUCTION_DB_HOST);
+  if (production === "missing")
     return refuse("PRODUCTION_DB_HOST is not set, so the target cannot be checked");
+  if (production === "invalid") return refuse(PRODUCTION_HOST_FORMAT);
   const target = hostOf(env.SEED_DATABASE_URL);
   if (target === null) return refuse("SEED_DATABASE_URL is not set or is not a connection URL");
   if (target === production) return refuse("the seed target is the production database host");

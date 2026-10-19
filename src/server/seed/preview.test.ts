@@ -110,6 +110,17 @@ describe("runPreviewSeed: host guards", () => {
 
   it.each([
     ["no PRODUCTION_DB_HOST", { PRODUCTION_DB_HOST: undefined }, /PRODUCTION_DB_HOST is not set/],
+    ["a blank PRODUCTION_DB_HOST", { PRODUCTION_DB_HOST: "  " }, /PRODUCTION_DB_HOST is not set/],
+    [
+      "a PRODUCTION_DB_HOST that is a connection URL",
+      { PRODUCTION_DB_HOST: "postgres://u:p@ep-preview-1.us-west-2.aws.neon.tech/neondb" },
+      /PRODUCTION_DB_HOST must be a bare host name/,
+    ],
+    [
+      "a PRODUCTION_DB_HOST with a port",
+      { PRODUCTION_DB_HOST: "ep-prod-9.us-east-2.aws.neon.tech:5432" },
+      /PRODUCTION_DB_HOST must be a bare host name/,
+    ],
     ["no SEED_DATABASE_URL", { SEED_DATABASE_URL: undefined }, /SEED_DATABASE_URL is not set/],
     ["an unreadable SEED_DATABASE_URL", { SEED_DATABASE_URL: "not a url" }, /not a connection URL/],
   ])("fails closed with %s", async (_name, patch, message) => {
