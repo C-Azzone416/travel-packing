@@ -5,16 +5,17 @@ Design basis: plan §18 "Suggested logical data sets" and §20 items 5–6 (item
 
 ## Tables
 
-| Table                 | Plan data set       | Purpose                                                                                      |
-| --------------------- | ------------------- | -------------------------------------------------------------------------------------------- |
-| `users`               | users               | App-side mirror of the auth user (id supplied by the auth provider, #9). Owner of every row. |
-| `staples`             | staples             | Future-trip defaults. Versioned on their own (`version`). Never referenced by trip rows.     |
-| `trips`               | trips               | One saved trip; also carries Ready, toiletry-bag placement, archive flag, `deleted_at`.      |
-| `trip_preferences`    | trip_preferences    | The preferences a trip was calculated from, plus suggestion memory / suppressed suggestions. |
-| `trip_items`          | trip_items          | Immutable snapshot of each item on a trip.                                                   |
-| `trip_item_progress`  | trip_item_progress  | Mutable packed counts, kept apart from the item snapshot.                                    |
-| `weather_suggestions` | weather_suggestions | The simulated weather suggestion for a trip (one row per trip).                              |
-| _(recently deleted)_  | —                   | Not a table: `trips.deleted_at` (see Recoverable delete).                                    |
+| Table                 | Plan data set       | Purpose                                                                                                        |
+| --------------------- | ------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `users`               | users               | App-side mirror of the auth user (id supplied by the auth provider, #9). Owner of every row.                   |
+| `account_setups`      | (auth, #83)         | Addresses whose password was set through an emailed link (digest of the email). Not owner data: no `owner_id`. |
+| `staples`             | staples             | Future-trip defaults. Versioned on their own (`version`). Never referenced by trip rows.                       |
+| `trips`               | trips               | One saved trip; also carries Ready, toiletry-bag placement, archive flag, `deleted_at`.                        |
+| `trip_preferences`    | trip_preferences    | The preferences a trip was calculated from, plus suggestion memory / suppressed suggestions.                   |
+| `trip_items`          | trip_items          | Immutable snapshot of each item on a trip.                                                                     |
+| `trip_item_progress`  | trip_item_progress  | Mutable packed counts, kept apart from the item snapshot.                                                      |
+| `weather_suggestions` | weather_suggestions | The simulated weather suggestion for a trip (one row per trip).                                                |
+| _(recently deleted)_  | —                   | Not a table: `trips.deleted_at` (see Recoverable delete).                                                      |
 
 Export/backup metadata (the last logical data set) is not modelled; it waits on the export decisions in plan §19.
 
@@ -28,7 +29,9 @@ users 1──* trips ──* trip_items ──1 trip_item_progress
                └── copied_from ──> trips   (self reference, ON DELETE SET NULL)
 ```
 
-Every table has a non-null `owner_id` referencing `users.id` (`ON DELETE CASCADE`).
+Every table except `account_setups` has a non-null `owner_id` referencing `users.id` (`ON DELETE CASCADE`). `account_setups` is
+auth bookkeeping keyed by a SHA-256 digest of the normalized email (there is no user id before the first session, and the app keeps
+no raw addresses); it is only added to, by the reset-link flow (`docs/auth-screens.md`).
 
 ### Ownership is enforced by the keys
 

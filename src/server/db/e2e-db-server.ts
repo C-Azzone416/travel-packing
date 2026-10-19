@@ -6,6 +6,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { PGLiteSocketServer } from "@electric-sql/pglite-socket";
 import { drizzle } from "drizzle-orm/pglite";
 import { join } from "node:path";
+import { emailDigest } from "../auth/account-setup";
 import { assertSeedAllowed } from "../seed/guard";
 import { SAMPLE_TODAY } from "../seed/sample-data";
 import { seedSyntheticData } from "../seed/seed";
@@ -25,6 +26,8 @@ export interface E2eDbOptions {
   port: number;
   /** Owners to seed with the synthetic sample set (ids as the e2e sign-in produces them). */
   seedOwners: string[];
+  /** Addresses that count as having set their password through a link (#83), so the seeded owners can sign in. */
+  setupEmails?: string[];
   /** The run date the sample trips are relative to. Fixed by default so a pinned-clock e2e run is deterministic. */
   today?: string;
   env?: Record<string, string | undefined>;
@@ -33,6 +36,7 @@ export interface E2eDbOptions {
 export async function startE2eDbServer({
   port,
   seedOwners,
+  setupEmails = [],
   today = SAMPLE_TODAY,
   env = process.env,
 }: E2eDbOptions): Promise<E2eDbServer> {
@@ -42,6 +46,9 @@ export async function startE2eDbServer({
   await migrateUp(client, loadMigrations(join(process.cwd(), "drizzle")));
   const db = drizzle(client, { schema }) as unknown as Db;
   for (const owner of seedOwners) await seedSyntheticData(db, owner, today);
+  for (const email of setupEmails) {
+    await db.insert(schema.accountSetups).values({ emailDigest: emailDigest(email) });
+  }
 
   const server = new PGLiteSocketServer({ db: client, port, host: "127.0.0.1", maxConnections: 8 });
   await server.start();

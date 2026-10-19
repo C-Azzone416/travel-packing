@@ -9,6 +9,7 @@ import {
 import * as service from "../data/service";
 import { sampleTripId } from "../seed/sample-data";
 import { closeE2eDb, createE2eDb, e2eDatabaseEnabled, E2E_DB_DRIVER_MARKER } from "./e2e-driver";
+import { createDbSetupStore } from "../auth/account-setup";
 import { startE2eDbServer, type E2eDbServer } from "./e2e-db-server";
 import type { Db } from "./retention";
 
@@ -21,7 +22,11 @@ const open = () => {
 };
 
 beforeAll(async () => {
-  server = await startE2eDbServer({ port: 0, seedOwners: [OWNER.userId] });
+  server = await startE2eDbServer({
+    port: 0,
+    seedOwners: [OWNER.userId],
+    setupEmails: ["Seeded@Example.test"],
+  });
 });
 // Each test opens its own single-connection pools; closing them keeps the server's connection count honest.
 afterEach(async () => {
@@ -50,6 +55,14 @@ describe("e2e database server (real Postgres wire protocol over PGlite)", () => 
     expect(result.ok && result.data.map((trip) => trip.id)).toContain(
       sampleTripId(OWNER.userId, "lisbon"),
     );
+  });
+
+  it("starts with the listed addresses counted as set up (#83) and nobody else", async () => {
+    const store = createDbSetupStore(open());
+    expect(await store.isComplete("seeded@example.test")).toBe(true);
+    expect(await store.isComplete("newcomer@example.test")).toBe(false);
+    await store.markComplete("newcomer@example.test");
+    expect(await store.isComplete("newcomer@example.test")).toBe(true);
   });
 
   it("writes through the data layer persist, including transactions, and survive a new connection pool", async () => {

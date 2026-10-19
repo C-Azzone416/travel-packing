@@ -71,7 +71,7 @@ beforeEach(() => {
   setup = createMemorySetupStore();
   setAuthLogSink(() => {});
   auth = {
-    provider: withSetupGate(createE2eAuthProvider(env), setup),
+    provider: withSetupGate(createE2eAuthProvider(env), setup, parseAllowlist(OWNER)),
     allowlist: parseAllowlist(OWNER),
     setup,
     seals,

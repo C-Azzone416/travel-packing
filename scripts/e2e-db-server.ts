@@ -9,7 +9,14 @@ const owners = (process.env.E2E_SEED_OWNERS ?? "e2e-owner@example.test")
   .split(",")
   .map((owner) => owner.trim());
 
-startE2eDbServer({ port, seedOwners: owners })
+// The addresses whose password counts as set through a link, so the seeded owners can sign in (#83). Newcomers are not
+// listed: they become set up only by using a link, as in production.
+const setupEmails = (process.env.E2E_SETUP_EMAILS ?? "")
+  .split(",")
+  .map((email) => email.trim())
+  .filter(Boolean);
+
+startE2eDbServer({ port, seedOwners: owners, setupEmails })
   .then((server) => {
     console.log(`e2e database ready on port ${server.port}`);
     const stop = () => void server.stop().then(() => process.exit(0));

@@ -7,10 +7,7 @@ import { withMinimumDuration } from "@/server/auth/min-duration";
 import { pendingEmail } from "@/server/auth/pending-email";
 
 /** Send the "finish setting up" link again to the remembered address, with the same 30-second gap as every other send. */
-export async function resendSetupAction(
-  previous: ResendState,
-  _formData: FormData,
-): Promise<ResendState> {
+export async function resendSetupAction(previous: ResendState): Promise<ResendState> {
   const reply = (status: ResendState["status"], cooldownSeconds = 0): ResendState => ({
     nonce: previous.nonce + 1,
     status,

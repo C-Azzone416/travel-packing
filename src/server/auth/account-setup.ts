@@ -14,7 +14,7 @@ import { createHash } from "node:crypto";
 import { eq } from "drizzle-orm";
 import type { Db } from "@/server/db/retention";
 import { accountSetups } from "@/server/db/schema";
-import { normalizeEmail } from "./allowlist";
+import { isAllowed, normalizeEmail, type Allowlist } from "./allowlist";
 import { logAuthEvent } from "./safe-log";
 import type { AuthProvider } from "./types";
 
@@ -71,13 +71,20 @@ export const NOTHING_SET_UP: AccountSetupStore = {
 };
 
 /**
- * Wraps a provider so a session only exists for an account that has been set up. Fails closed: a store error is "not set up".
+ * Wraps a provider so a session only exists for an allowlisted account that has been set up. Fails closed: a store error is "not set up".
  * "Set up" is permanent, so a positive answer is remembered for the life of the process (one lookup per address, not one
  * per request).
  */
-export function withSetupGate(provider: AuthProvider, store: AccountSetupStore): AuthProvider {
+export function withSetupGate(
+  provider: AuthProvider,
+  store: AccountSetupStore,
+  allowlist: Allowlist,
+): AuthProvider {
   const known = new Set<string>();
   async function isSetUp(email: string): Promise<boolean> {
+    // An address that is not allowlisted never gets in whatever its setup says; leave it to the allowlist's own denial (the
+    // access-denied screen and the signed-out session), exactly as before this gate existed.
+    if (!isAllowed(allowlist, email)) return true;
     const key = normalizeEmail(email);
     if (known.has(key)) return true;
     try {

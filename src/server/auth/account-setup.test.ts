@@ -10,9 +10,11 @@ import {
   withSetupGate,
   type AccountSetupStore,
 } from "./account-setup";
+import { parseAllowlist } from "./allowlist";
 import { setAuthLogSink } from "./safe-log";
 
 const OWNER = { email: "owner@example.test", password: "owner-password", userId: "u1" };
+const allowlist = parseAllowlist("owner@example.test");
 let fake: FakeAuth;
 let logged: string[];
 beforeEach(() => {
@@ -80,7 +82,7 @@ describe("stores", () => {
 
 describe("withSetupGate", () => {
   it("gives no session to a verified account that was never set up, and signs the attempt out", async () => {
-    const gated = withSetupGate(fake, createMemorySetupStore());
+    const gated = withSetupGate(fake, createMemorySetupStore(), allowlist);
     // The "attacker's" pre-registered password is right and the address is verified: still no session.
     expect(await gated.signInWithPassword(OWNER.email, OWNER.password)).toEqual({
       ok: false,
@@ -94,12 +96,12 @@ describe("withSetupGate", () => {
 
   it("denies a session that already exists (one minted by calling the auth service directly)", async () => {
     fake.current = { userId: "u1", email: OWNER.email };
-    const gated = withSetupGate(fake, createMemorySetupStore());
+    const gated = withSetupGate(fake, createMemorySetupStore(), allowlist);
     expect(await gated.getSession()).toBeNull();
   });
 
   it("lets a set-up account sign in and keep its session", async () => {
-    const gated = withSetupGate(fake, createMemorySetupStore([OWNER.email]));
+    const gated = withSetupGate(fake, createMemorySetupStore([OWNER.email]), allowlist);
     expect(await gated.signInWithPassword(OWNER.email, OWNER.password)).toEqual({
       ok: true,
       session: { userId: "u1", email: OWNER.email },
@@ -110,7 +112,7 @@ describe("withSetupGate", () => {
 
   it("starts allowing the account the moment it is marked set up", async () => {
     const store = createMemorySetupStore();
-    const gated = withSetupGate(fake, store);
+    const gated = withSetupGate(fake, store, allowlist);
     expect(await gated.signInWithPassword(OWNER.email, OWNER.password)).toMatchObject({
       unfinished: true,
     });
@@ -124,13 +126,17 @@ describe("withSetupGate", () => {
       { email: "b@example.test", password: "pw", userId: "u2" },
     ]);
     let asked = 0;
-    const gated = withSetupGate(users, {
-      isComplete: async () => {
-        asked += 1;
-        return true;
+    const gated = withSetupGate(
+      users,
+      {
+        isComplete: async () => {
+          asked += 1;
+          return true;
+        },
+        markComplete: async () => {},
       },
-      markComplete: async () => {},
-    });
+      allowlist,
+    );
     expect(await gated.signInWithPassword(OWNER.email, OWNER.password)).toEqual({
       ok: false,
       unverified: true,
@@ -146,7 +152,7 @@ describe("withSetupGate", () => {
       },
       markComplete: async () => {},
     };
-    const gated = withSetupGate(fake, broken);
+    const gated = withSetupGate(fake, broken, allowlist);
     expect(await gated.signInWithPassword(OWNER.email, OWNER.password)).toMatchObject({
       unfinished: true,
     });
@@ -158,7 +164,7 @@ describe("withSetupGate", () => {
 
   it("still ends the attempt when signing out fails", async () => {
     fake.failNextSignOut = true;
-    const gated = withSetupGate(fake, createMemorySetupStore());
+    const gated = withSetupGate(fake, createMemorySetupStore(), allowlist);
     expect(await gated.signInWithPassword(OWNER.email, OWNER.password)).toMatchObject({
       unfinished: true,
     });
@@ -174,7 +180,7 @@ describe("withSetupGate", () => {
       },
       markComplete: async () => {},
     };
-    const gated = withSetupGate(fake, store);
+    const gated = withSetupGate(fake, store, allowlist);
     fake.current = { userId: "u1", email: OWNER.email };
     for (let i = 0; i < 5; i += 1) await gated.getSession();
     expect(asked).toBe(1);
@@ -182,7 +188,7 @@ describe("withSetupGate", () => {
 
   it("does not remember a negative answer: a newly set-up account gets in at once", async () => {
     const store = createMemorySetupStore();
-    const gated = withSetupGate(fake, store);
+    const gated = withSetupGate(fake, store, allowlist);
     fake.current = { userId: "u1", email: OWNER.email };
     expect(await gated.getSession()).toBeNull();
     expect(await gated.getSession()).toBeNull();
@@ -190,8 +196,20 @@ describe("withSetupGate", () => {
     expect(await gated.getSession()).not.toBeNull();
   });
 
+  it("leaves an address that is not allowlisted to the allowlist's own denial, whatever its setup says", async () => {
+    const stranger = { email: "stranger@example.test", password: "pw", userId: "u9" };
+    const users = createFakeAuth([stranger]);
+    const gated = withSetupGate(users, createMemorySetupStore(), allowlist);
+    // Passed through untouched: the allowlist check (sign-in, guard) refuses it exactly as it did before this gate.
+    expect(await gated.signInWithPassword(stranger.email, stranger.password)).toMatchObject({
+      ok: true,
+    });
+    expect(await gated.getSession()).toEqual({ userId: "u9", email: stranger.email });
+    expect(users.signOutCalls).toBe(0);
+  });
+
   it("leaves every other provider call as it was", async () => {
-    const gated = withSetupGate(fake, createMemorySetupStore());
+    const gated = withSetupGate(fake, createMemorySetupStore(), allowlist);
     await gated.signUp("a@example.test", "a-long-password");
     await gated.verifyEmail("a@example.test", "123456");
     await gated.requestPasswordReset("a@example.test", "https://a.test/r");

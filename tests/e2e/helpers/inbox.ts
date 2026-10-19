@@ -22,10 +22,27 @@ export function verificationCode(email: string): string | null {
   return existsSync(file) ? readFileSync(file, "utf8").split(":")[0] : null;
 }
 
-/** The reset-link token most recently emailed to this address, or null if none was sent. */
-export function resetToken(email: string): string | null {
+/**
+ * The reset (or "finish setting up") link most recently emailed to this address, as the path and query a browser would open,
+ * or null if none was sent. The e2e provider keeps the return address the app asked for and the token separately, and this
+ * joins them the way the real provider builds the link (`redirectTo` + `?token=` / `&token=`).
+ */
+export function resetLinkPath(email: string): string | null {
   const file = join(STATE_DIR, `inbox-reset-${hex(email)}`);
-  return existsSync(file) ? readFileSync(file, "utf8") : null;
+  if (!existsSync(file)) return null;
+  const { token, redirectTo } = JSON.parse(readFileSync(file, "utf8")) as {
+    token: string;
+    redirectTo: string;
+  };
+  const url = new URL(redirectTo);
+  url.searchParams.set("token", token);
+  return `${url.pathname}${url.search}`;
+}
+
+/** Just the token of that link. */
+export function resetToken(email: string): string | null {
+  const path = resetLinkPath(email);
+  return path ? new URL(path, "http://x.test").searchParams.get("token") : null;
 }
 
 /** A six-digit code that is not the current one. */
@@ -40,4 +57,17 @@ export function nextNewcomerSlot(): number {
   const slot = existsSync(file) ? Number(readFileSync(file, "utf8")) || 0 : 0;
   writeFileSync(file, String(slot + 1));
   return slot;
+}
+
+/**
+ * Puts a verified account straight into the e2e provider (no sign-up, so no code or link is mailed and no 30-second gap
+ * starts). For tests of forgot-password, which need an existing account but not the sign-up journey. The account still has
+ * to be "set up" through a link before anyone can sign in to it, exactly like any other.
+ */
+export function createVerifiedAccount(email: string, password: string): void {
+  mkdirSync(STATE_DIR, { recursive: true });
+  writeFileSync(
+    join(STATE_DIR, `acct-${hex(email)}`),
+    JSON.stringify({ password, verified: true }),
+  );
 }

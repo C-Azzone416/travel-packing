@@ -397,7 +397,7 @@ describe("resetAction", () => {
 });
 
 describe("resendSetupAction", () => {
-  const resend = (previous = INITIAL_RESEND) => resendSetupAction(previous, data({}));
+  const resend = (previous = INITIAL_RESEND) => resendSetupAction(previous);
 
   it("sends the setup link again to the remembered address, with the same 30-second gap", async () => {
     jar.set("cw-pending-email", OWNER);

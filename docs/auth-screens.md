@@ -10,21 +10,25 @@ the two server controls from #9 are unchanged and still decide everything.
    value or a non-boolean has no session at all.
 2. **The session email must be in `OWNER_EMAIL_ALLOWLIST`** (`guard.ts`), checked at the proxy and again in every data-layer
    entry point.
+3. **The account's password must have been set through an emailed link** (#83, `account-setup.ts`). See
+   [Pre-registration](#pre-registration-closed-by-setting-the-password-through-the-emailed-link).
 
 `src/server/auth/unverified-denial.test.ts` runs an allowlisted address with `emailVerified` false / null / missing / `"true"` / `1`
 through page routes (proxy), API routes, the place-search route, server actions (`withOwner`), the data layer (`run`, which is
 refused before the database is touched) and sign-in. Nothing here weakens either control: signing up, verifying and resetting
 never create a session on their own, and a verified address that is not allowlisted is signed straight back out.
+`src/server/auth/pre-registration.test.ts` does the same for the third control.
 
 ## Screens and routes (all public)
 
-| Route                     | What it does                                                                                                                               |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `/sign-up`                | Email + password. Always continues to `/verify`.                                                                                           |
-| `/verify`                 | Enter the 6-digit code. "Send a new code" with a 30-second gap. "Use a different email" goes back to sign-up.                              |
-| `/forgot-password`        | Email, then always "Check your email". "Send it again" with the same 30-second gap.                                                        |
-| `/reset-password?token=…` | Choose a new password. A missing, wrong, expired or used token shows "This link isn’t valid" with no form.                                 |
-| `/sign-in`                | Gains "Forgot password?", "Create an account", and a status notice (`?notice=password-updated` or `verified`; any other value is ignored). |
+| Route                           | What it does                                                                                                                                                                                             |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/sign-up`                      | Email + password. Always continues to `/verify`.                                                                                                                                                         |
+| `/verify`                       | Enter the 6-digit code. "Send a new code" with a 30-second gap. "Use a different email" goes back to sign-up. A right code goes to `/finish-setup`.                                                      |
+| `/finish-setup`                 | "Check your email to finish setting up" (#83): the link that chooses the password was emailed. "Send the link again" with the 30-second gap.                                                             |
+| `/forgot-password`              | Email, then always "Check your email". "Send it again" with the same 30-second gap.                                                                                                                      |
+| `/reset-password?for=…&token=…` | Choose a new password; with `&setup=1` (the link from `/finish-setup`) the same screen reads "Set your password". A missing, wrong, expired or used token shows "This link isn’t valid" with no form.    |
+| `/sign-in`                      | Gains "Forgot password?", "Create an account", a status notice (`?notice=password-updated`, `password-set` or `verified`; any other value is ignored), and one neutral sentence under the generic error. |
 
 The address being verified is remembered in a 30-minute `httpOnly` cookie (`cw-pending-email`), never in the URL, so it does not end up
 in history, a shared link or an access log. It grants nothing. With no cookie, `/verify` asks for the address as well.
@@ -49,19 +53,23 @@ in history, a shared link or an access log. It grants nothing. With no cookie, `
   take the same time.
 - Logs are a closed set of event codes (`safe-log.ts`); no address, code, token or password is ever logged. Tests assert it.
 
-## Verification, then what?
+## Verification, then what? (#83)
 
-After a valid code the app asks the provider for the session. If verifying started one (Better Auth's auto sign-in), the allowlist is
-checked and the person lands in the app. If not, they go to `/sign-in?notice=verified` and sign in with the password they chose. **Which
-of the two production does is not knowable until the first real sign-up**; both paths are tested and neither skips a control.
+A right sign-up code **never signs anyone in**, however the provider behaves. The app ends any session the provider started, emails a
+link to the verified address, and shows "Check your email to finish setting up". The person chooses their password through that link,
+signs in with it, and only then has a session. Signing in before that (right password, verified address, link never used) also gives no
+session; it sends the link again and shows the same screen.
 
-Signing in with the right password for an unverified address sends a fresh code and goes to `/verify` (the person just proved the
-password, so nothing is revealed). A wrong password stays the one generic error.
+Signing in with the right password for an _unverified_ address sends a fresh code and goes to `/verify`. A wrong password, or any
+address the app has never heard of, stays the one generic error, with one neutral sentence under it (the same for everyone) pointing to
+the emailed link and to "reset your password".
 
 ## Reset: link, not code
 
 Design specified a reset **link**. The adapter calls the provider's `requestPasswordReset({ email, redirectTo })` with the app's own
-`/reset-password` URL, and later `resetPassword({ token, newPassword })`. The page never validates a token on load: a usable-looking
+`/reset-password` URL plus `?for=<seal>` (and `&setup=1` for the sign-up link), and later `resetPassword({ token, newPassword })`.
+The provider is expected to append `token=` to that return address; if it glues it on with a second `?`, the page splits it back out
+(`link-params.ts`) instead of rejecting a good link. **Confirm this against the first real email.** The page never validates a token on load: a usable-looking
 `?token=` shows the form, anything else shows the invalid-link screen, and a token the provider rejects on submit redirects to
 `/reset-password?error=invalid` so the token is gone from the address. The page sends `Referrer-Policy: no-referrer`.
 
@@ -76,24 +84,39 @@ trusted origin of the project (otherwise `redirectTo` is refused and the emailed
 A successful reset signs out _this browser_ and does not sign anyone in. Ending the person's **other** sessions is the provider's job
 (its reset endpoint decides); the app cannot enumerate another browser's sessions. Worth confirming alongside the item above.
 
-## Pre-registration: sign up before the owner does
+## Pre-registration: closed by setting the password through the emailed link
 
-Sign-up is open for any address on `OWNER_EMAIL_ALLOWLIST` (an address that is not on it never reaches the provider, so a stranger
-cannot register themselves). That leaves one gap, and it is the provider's behaviour, not something the app can see: **anyone who
-knows the owner's email could sign up with it first, with their own password.** The code goes to the owner's inbox, so they cannot
-verify it, but if the owner later enters that code, the account becomes verified **with the other person's password**.
+The gap (found reviewing #81): sign-up is open for any address on `OWNER_EMAIL_ALLOWLIST`, so **anyone who knows the owner's email
+could sign up with it first, with their own password.** The code goes to the owner's inbox, so they cannot verify it, but when the
+owner later enters that code the account becomes verified **with the other person's password**. The Neon Auth sign-up endpoint is
+public per project, so this exists with or without the app's screens.
 
-What to do, until Caroline decides on a stronger fix:
+How it is closed (#83): being verified is no longer enough to sign in. The app also requires a record that the account's password was
+set **through a link that only the inbox owner receives**:
 
-- **Sign up as the owner first**, before the address is known to anyone else, or create the user in the Neon Auth console. This is in
-  the first-deploy runbook (`docs/deploy.md`, First preview bootstrap).
-- **If the password you chose does not work right after you verify, use "Forgot password?" at once.** That replaces whatever
-  password the account has.
-- A code you did not ask for is a sign someone is trying: do not enter it.
+- The record is the table `account_setups` (a SHA-256 digest of the normalized address; no raw address is stored). It is added to,
+  never removed from, and is created **only** when a reset link is used successfully: the "finish setting up" link after sign-up, or any
+  forgot-password link.
+- Sign-in is refused for an allowlisted address with no record. This is enforced by wrapping the auth provider (`withSetupGate`), so the
+  proxy, server actions and the data layer all see it, and so does a session the attacker minted by calling the auth service directly
+  with the password they registered: the app reads that session and refuses it.
+- The link carries `?for=<seal>`: the address, signed with a server secret and expiring with the link, so using the link records
+  **which** account was set up (the provider's reset call does not say). Only the app can make a seal and it is only ever emailed to the
+  address it names. A missing or altered seal still changes the password but records nothing.
+- An address that is not allowlisted is untouched by all of this: it never reaches the provider, and the existing access-denied
+  behaviour for a valid-but-not-allowed account is unchanged.
 
-Stronger options (Caroline's call, not made here): force a reset link after the sign-up code (so the person who controls the inbox
-always sets the final password), or confirm that Neon replaces an unverified user's password when the same address signs up again
-(the app cannot test that without a live project).
+So the attacker's password can never sign in: before verification the account is unverified; after, it is not set up; and using the
+link replaces it. The owner does **not** need to sign up first or use the Neon console. `pre-registration.test.ts` runs the whole
+attack against a real account model (and fails without the gate), and `auth-screens.spec.ts` does the same in the browser.
+
+Limits of this protection, stated plainly:
+
+- It protects **sign-in to the app**. The provider's own public sign-in still accepts the attacker's password for a verified account;
+  that can only matter to the app, which refuses it.
+- If the owner never uses the emailed link, nobody can sign in (the attacker included). "Send the link again" and "Forgot password?"
+  both send one.
+- The setup records live in the app database. With no database, nobody can sign in (the app has no data either).
 
 ## What the tests cover, and what they cannot
 

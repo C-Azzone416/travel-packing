@@ -80,7 +80,11 @@ async function buildE2eAuth(
     if (e2eAuthEnabled(env)) {
       logWarning("auth: e2e fake sign-in enabled (e2e builds only; never on Vercel)");
       return {
-        provider: withSetupGate(createE2eAuthProvider(env), setup),
+        provider: withSetupGate(
+          createE2eAuthProvider(env),
+          setup,
+          parseAllowlist(env.OWNER_EMAIL_ALLOWLIST),
+        ),
         allowlist: parseAllowlist(env.OWNER_EMAIL_ALLOWLIST),
         available: true,
         setup,
@@ -131,7 +135,7 @@ async function buildAuth(
     const { createNeonAuth } = await import("@neondatabase/auth/next/server");
     const neon = createNeonAuth({ baseUrl, cookies: { secret: cookieSecret } });
     return {
-      provider: withSetupGate(createNeonAuthProvider(neon), setup),
+      provider: withSetupGate(createNeonAuthProvider(neon), setup, allowlist),
       allowlist,
       available: true,
       setup,
