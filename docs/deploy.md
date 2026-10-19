@@ -50,8 +50,10 @@ deployed. So the first preview run happens **without** `PREVIEW_SEED_OWNER_ID`, 
 1. Leave `PREVIEW_SEED_OWNER_ID` unset. Merge to `develop`. It migrates the preview database,
    skips the seed (visible as "preview seed SKIPPED" in the log and on the run summary), deploys, and smoke-tests the
    public auth pages. Nothing creates an auth user, and nothing uses an email, a fixture id or a production identity.
-2. Open the preview, sign up as the owner (the screens are #27; until they ship, create the user in the Neon Auth
-   console for the **preview** project) and verify the email.
+2. Open the preview, sign up as the owner at `/sign-up` and verify the email with the code (the screens are #27;
+   [what they do, and the pre-registration risk](auth-screens.md#pre-registration-sign-up-before-the-owner-does)). **Do this
+   yourself, first, before the address is known to anyone else**, or create the user in the Neon Auth console for the
+   **preview** project. If the password you chose does not work right after you verify, use "Forgot password?" at once.
 3. Copy that user's id from Neon Auth into the `preview` environment variable `PREVIEW_SEED_OWNER_ID`.
 4. Open the latest `Deploy to Vercel` run on `develop` (Actions) and choose **Re-run all jobs**. (Do not use `Run workflow` on
    `develop`: the gate refuses a manual run anywhere but `main`, by design.) It now seeds the sample trips for that owner only. Re-running is

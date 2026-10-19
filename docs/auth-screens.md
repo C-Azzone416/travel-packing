@@ -76,6 +76,25 @@ trusted origin of the project (otherwise `redirectTo` is refused and the emailed
 A successful reset signs out _this browser_ and does not sign anyone in. Ending the person's **other** sessions is the provider's job
 (its reset endpoint decides); the app cannot enumerate another browser's sessions. Worth confirming alongside the item above.
 
+## Pre-registration: sign up before the owner does
+
+Sign-up is open for any address on `OWNER_EMAIL_ALLOWLIST` (an address that is not on it never reaches the provider, so a stranger
+cannot register themselves). That leaves one gap, and it is the provider's behaviour, not something the app can see: **anyone who
+knows the owner's email could sign up with it first, with their own password.** The code goes to the owner's inbox, so they cannot
+verify it, but if the owner later enters that code, the account becomes verified **with the other person's password**.
+
+What to do, until Caroline decides on a stronger fix:
+
+- **Sign up as the owner first**, before the address is known to anyone else, or create the user in the Neon Auth console. This is in
+  the first-deploy runbook (`docs/deploy.md`, First preview bootstrap).
+- **If the password you chose does not work right after you verify, use "Forgot password?" at once.** That replaces whatever
+  password the account has.
+- A code you did not ask for is a sign someone is trying: do not enter it.
+
+Stronger options (Caroline's call, not made here): force a reset link after the sign-up code (so the person who controls the inbox
+always sets the final password), or confirm that Neon replaces an unverified user's password when the same address signs up again
+(the app cannot test that without a live project).
+
 ## What the tests cover, and what they cannot
 
 - Unit/DOM: adapter mapping and error classification, flow services, limits, the timing floor, the pending-address cookie, the actions,
