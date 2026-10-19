@@ -108,6 +108,11 @@ jobs:
       # so these four are written into the pulled file from the GitHub `preview` environment's secrets. They reach the script only
       # through this step's env: (from secrets.*, so GitHub masks them) and are never printed. The step does not run for a
       # production deploy, which never receives them. Rotating one means updating Vercel AND the GitHub preview environment.
+      # Which builder the build uses depends on the project's settings (framework preset and build/output/root/install
+      # overrides), which live in Vercel, not the repo. Print those five settings (never anything else from the file).
+      - name: Show the Vercel project's build settings
+        run: npx tsx scripts/print-project-settings.ts
+
       - name: Inject the Preview secrets (values not shown)
         if: env.TARGET == 'preview'
         env:
@@ -127,6 +132,10 @@ jobs:
       - name: Build
         run: |
           if [ "$TARGET" = production ]; then vercel build --prod; else vercel build; fi
+
+      # An output without server functions deploys "fine" and then answers every request with a 404; stop before uploading it.
+      - name: The build output has server functions
+        run: npx tsx scripts/check-build-output.ts
 
       - name: No test-only code in the build
         run: npm run check:no-e2e-in-build
@@ -157,18 +166,27 @@ jobs:
           PRODUCTION_DB_HOST: ${{ vars.PRODUCTION_DB_HOST }}
         run: npm run db:seed:preview
 
+      # Preview deploys name their target outright: without it Vercel assigns a project's FIRST deployment to production. The CLI's
+      # own output (it prints which kind it made) is kept for the next step, which fails the run if the target is not the one meant.
       - name: Deploy
         id: deploy
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
+          log="$RUNNER_TEMP/deploy.log"
+          status=0
           if [ "$TARGET" = production ]; then
-            url=$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")
+            url=$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN" 2>"$log") || status=$?
           else
-            url=$(vercel deploy --prebuilt --token="$VERCEL_TOKEN")
+            url=$(vercel deploy --prebuilt --target=preview --token="$VERCEL_TOKEN" 2>"$log") || status=$?
           fi
+          cat "$log" >&2
+          if [ "$status" -ne 0 ]; then exit "$status"; fi
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "Deployed ($TARGET): $url" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check the deployment landed in the right environment
+        run: npx tsx scripts/check-deploy-target.ts "$TARGET" "$RUNNER_TEMP/deploy.log"
 
       - name: Smoke test
         env:

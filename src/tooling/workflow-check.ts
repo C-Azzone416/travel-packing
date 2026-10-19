@@ -147,6 +147,38 @@ export function checkDeployWorkflow(workflow: string): string[] {
     }
   }
 
+  // The project's build settings are printed after the pull (they decide the builder), before the build.
+  const settingsAt = workflow.indexOf("scripts/print-project-settings.ts");
+  if (!(pull >= 0 && pull < settingsAt && settingsAt < workflow.indexOf("vercel build"))) {
+    problems.push("the project settings must be printed after vercel pull and before the build");
+  }
+
+  // The build output is checked for server functions after the build and before anything is uploaded.
+  const buildAt = workflow.indexOf("vercel build");
+  const outputCheckAt = workflow.indexOf("scripts/check-build-output.ts");
+  const uploadAt = workflow.indexOf("vercel deploy --prebuilt");
+  if (!(buildAt >= 0 && buildAt < outputCheckAt && outputCheckAt < uploadAt)) {
+    problems.push("the build output check must run after the build and before the deploy");
+  }
+
+  // The deploy names its target outright (Vercel assigns a project's FIRST deployment to production when none is given), and
+  // a check of the CLI's own output runs after it and before the smoke test.
+  if (!/vercel deploy --prebuilt --target=preview\b/.test(workflow)) {
+    problems.push("a preview deploy must pass --target=preview");
+  }
+  if (!/vercel deploy --prebuilt --prod\b/.test(workflow)) {
+    problems.push("a production deploy must pass --prod");
+  }
+  if (/vercel deploy --prebuilt --token/.test(workflow)) {
+    problems.push("no deploy may leave its target to Vercel's default");
+  }
+  const deployAt = workflow.indexOf("vercel deploy --prebuilt");
+  const targetCheckAt = workflow.indexOf("scripts/check-deploy-target.ts");
+  const smokeAt = workflow.indexOf("scripts/smoke-test.ts");
+  if (!(deployAt >= 0 && deployAt < targetCheckAt && targetCheckAt < smokeAt)) {
+    problems.push("the deploy target check must run after the deploy and before the smoke test");
+  }
+
   // Safety steps and pins.
   for (const step of [
     "check-deploy-env",

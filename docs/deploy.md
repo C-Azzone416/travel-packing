@@ -13,7 +13,8 @@ workflow (`.github/workflows/deploy-vercel.yml`) builds with a pinned Vercel CLI
    The timeouts nest on purpose (`npm run check:workflows` enforces it): the `ci` job may run up to 40 minutes (a healthy run takes about
    18.5, but a slow runner can double a step), this wait lasts up to 50, and the deploy job's own limit is 75, so a slow CI run is waited for
    rather than cancelling a deploy.
-2. `vercel pull` for the target. **Preview only:** the four Vercel Secrets are then written into the pulled file from the
+2. `vercel pull` for the target, then the five build settings that decide which builder `vercel build` uses (framework, build command,
+   output directory, root directory, install command; settings only, never the ids) are printed to the log. The repo's `vercel.json` names the framework (`nextjs`) so the repo, not the dashboard, decides the builder. **Preview only:** the four Vercel Secrets are then written into the pulled file from the
    GitHub `preview` environment (see [Preview secrets](#preview-secrets)). Then `scripts/check-deploy-env.ts` checks the
    file the build will use. It prints variable **names** only, and fails when:
    - any test-only variable is present (`NEXT_PUBLIC_E2E_BUILD`, anything starting with `AUTH_E2E_`, `E2E_DATABASE_URL`, `SEED_DATABASE_URL`, `OPEN_METEO_GEOCODING_URL`);
@@ -27,7 +28,8 @@ workflow (`.github/workflows/deploy-vercel.yml`) builds with a pinned Vercel CLI
      means location search is off);
    - `PRODUCTION_DB_HOST` is unset or is not a bare host name (a full connection URL is refused, never guessed at), or `DATABASE_URL` /
      `DATABASE_URL_UNPOOLED` point at the production database host.
-3. `vercel build`, then `npm run check:no-e2e-in-build` (the fake sign-in, the e2e driver and the sample fixtures must
+3. `vercel build`, then `scripts/check-build-output.ts` (the output must contain server functions: an output without them deploys "fine" and
+   answers every request with a 404), then `npm run check:no-e2e-in-build` (the fake sign-in, the e2e driver and the sample fixtures must
    not be in the output).
 4. A second check (`scripts/check-migration-target.ts`) looks at the GitHub environment's `DATABASE_URL_UNPOOLED`, the secret
    the migrate and seed steps actually use: in a preview run it must NOT be `PRODUCTION_DB_HOST`, in a production run it
@@ -37,9 +39,11 @@ workflow (`.github/workflows/deploy-vercel.yml`) builds with a pinned Vercel CLI
    seed, says so in the log and on the run summary page ("preview seed SKIPPED"), and the run carries on: see
    [First preview bootstrap](#first-preview-bootstrap). A set-but-invalid id fails the run with a message that does not
    repeat it. Production runs never reach this step, and the script refuses anything but `TARGET=preview` as well.
-6. `vercel deploy --prebuilt`, then the smoke test (`scripts/smoke-test.ts`), which needs no account or session: every
+6. `vercel deploy --prebuilt` (a preview names its target with `--target=preview`: Vercel assigns a project's **first** deployment to
+   production when none is given), then `scripts/check-deploy-target.ts` reads the CLI's own output and **fails the run if a preview run
+   created a Production deployment** (or a production run a Preview one), then the smoke test (`scripts/smoke-test.ts`), which needs no account or session: every
    public auth page answers 200 (`/sign-in`, `/access-denied`, and any page added to the public list in
-   `src/server/auth/public-paths.ts`, such as sign-up in #27) and `/` redirects a signed-out visitor to `/sign-in`.
+   `src/server/auth/public-paths.ts`, such as sign-up in #27) and `/` redirects a signed-out visitor to `/sign-in`. When a check fails it also prints the response's `x-vercel-error` and `x-vercel-id` headers and the first 200 characters of its body (never the request headers, the `Location` header or the bypass secret), which tells a Vercel platform error from the app's own answer.
 
 The Vercel CLI version is pinned in the workflow (`VERCEL_CLI_VERSION`); `@neondatabase/auth` is pinned to an exact
 version in `package.json`. Bump either in a PR.

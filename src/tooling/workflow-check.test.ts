@@ -159,6 +159,36 @@ describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
       /NEON_AUTH_COOKIE_SECRET must be injected from secrets|secrets\.\* only/,
     ],
     [
+      "the project settings never printed",
+      mutate("scripts/print-project-settings.ts", "scripts/other.ts"),
+      /project settings must be printed after vercel pull and before the build/,
+    ],
+    [
+      "no check of the build output",
+      mutate("scripts/check-build-output.ts", "scripts/other.ts"),
+      /build output check must run after the build and before the deploy/,
+    ],
+    [
+      "a preview deploy that leaves its target to Vercel",
+      mutate("vercel deploy --prebuilt --target=preview", "vercel deploy --prebuilt"),
+      /preview deploy must pass --target=preview/,
+    ],
+    [
+      "a production deploy without --prod",
+      mutate("vercel deploy --prebuilt --prod", "vercel deploy --prebuilt --target=production"),
+      /production deploy must pass --prod/,
+    ],
+    [
+      "no check of where the deployment landed",
+      mutate("scripts/check-deploy-target.ts", "scripts/other.ts"),
+      /deploy target check must run after the deploy and before the smoke test/,
+    ],
+    [
+      "the target check after the smoke test",
+      mutate(/(- name: Check the deployment landed[^\n]*\n\s+run: [^\n]*\n\n)([\s\S]*)$/, "$2\n$1"),
+      /deploy target check must run after the deploy and before the smoke test/,
+    ],
+    [
       "an extra command beside the injection script",
       mutate(
         'run: npx tsx scripts/inject-preview-secrets.ts ".vercel/.env.${TARGET}.local"',

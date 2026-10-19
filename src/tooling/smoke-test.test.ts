@@ -55,7 +55,7 @@ describe("smokeTest", () => {
   ])("fails when the protected page gives %s", async (_name, response) => {
     const result = await smokeTest("https://x.test", fakeFetch({ ...healthy(), "/": response }));
     expect(result.ok).toBe(false);
-    expect(result.lines.at(-1)).toMatch(/^FAIL \/:/);
+    expect(result.lines.find((line) => line.startsWith("FAIL /:"))).toBeTruthy();
   });
 
   it("fails, without echoing the error, when the site does not answer", async () => {
@@ -101,5 +101,101 @@ describe("smokeTest", () => {
     );
     expect(result.ok).toBe(false);
     expect(result.lines[1]).toBe("FAIL /access-denied: 307 (expected 200)");
+  });
+});
+
+describe("smokeTest: what a failing response reveals", () => {
+  const platform404 = () =>
+    new Response("The page could not be found\n\nNOT_FOUND", {
+      status: 404,
+      headers: {
+        "x-vercel-error": "NOT_FOUND",
+        "x-vercel-id": "pdx1::abc-123",
+        "set-cookie": "secret=1",
+      },
+    });
+  const failing = (): Routes => ({ ...healthy(), "/sign-in": platform404() });
+
+  it("prints the status, x-vercel-error, x-vercel-id and the start of the body for a failing check", async () => {
+    const result = await smokeTest("https://x.test", fakeFetch(failing()));
+    expect(result.ok).toBe(false);
+    expect(result.lines.slice(0, 4)).toEqual([
+      "FAIL /sign-in: 404 (expected 200)",
+      "     x-vercel-error: NOT_FOUND",
+      "     x-vercel-id: pdx1::abc-123",
+      "     body: The page could not be found NOT_FOUND",
+    ]);
+  });
+
+  it("prints nothing extra for passing checks", async () => {
+    const result = await smokeTest("https://x.test", fakeFetch(healthy()));
+    expect(result.lines.every((line) => /^ok {3}/.test(line))).toBe(true);
+  });
+
+  it("says (none) and (empty) when the response carries neither", async () => {
+    const result = await smokeTest(
+      "https://x.test",
+      fakeFetch({ ...healthy(), "/sign-in": new Response(null, { status: 500 }) }),
+    );
+    expect(result.lines.slice(0, 4)).toEqual([
+      "FAIL /sign-in: 500 (expected 200)",
+      "     x-vercel-error: (none)",
+      "     x-vercel-id: (none)",
+      "     body: (empty)",
+    ]);
+  });
+
+  it("cuts the body at 200 characters and puts it on one line", async () => {
+    const long = `${"a".repeat(150)}\n\n\t${"b".repeat(150)}`;
+    const result = await smokeTest(
+      "https://x.test",
+      fakeFetch({ ...healthy(), "/sign-in": new Response(long, { status: 404 }) }),
+    );
+    const body = result.lines[3].replace("     body: ", "");
+    expect(body).toBe(`${"a".repeat(150)} ${"b".repeat(47)}`);
+    expect(result.lines[3]).not.toMatch(/[\n\t]/);
+  });
+
+  it("never prints the bypass secret, even if the response echoes it, nor other response headers", async () => {
+    const echo = new Response("you sent s3cret-value in a header", {
+      status: 404,
+      headers: { "x-vercel-id": "id-s3cret-value", location: "https://vercel.com/sso?nonce=zzz" },
+    });
+    const result = await smokeTest(
+      "https://x.test",
+      fakeFetch({ ...healthy(), "/sign-in": echo }),
+      {
+        bypassSecret: "s3cret-value",
+      },
+    );
+    const text = result.lines.join("\n");
+    expect(text).not.toContain("s3cret-value");
+    expect(text).toContain("body: you sent *** in a header");
+    expect(text).toContain("x-vercel-id: id-***");
+    expect(text).not.toMatch(/nonce|sso|set-cookie/);
+  });
+
+  it("still reports a redirect that goes the wrong way, without printing where it goes", async () => {
+    const result = await smokeTest(
+      "https://x.test",
+      fakeFetch({ ...healthy(), "/": redirect("https://vercel.com/sso-api?nonce=zzz") }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.lines.join("\n")).not.toMatch(/nonce|sso-api/);
+    expect(result.lines.find((line) => line.startsWith("FAIL /:"))).toBeTruthy();
+  });
+
+  it("survives a body that cannot be read", async () => {
+    const unreadable = new Response("x", { status: 404 });
+    Object.defineProperty(unreadable, "text", {
+      value: async () => {
+        throw new Error("stream error");
+      },
+    });
+    const result = await smokeTest(
+      "https://x.test",
+      fakeFetch({ ...healthy(), "/sign-in": unreadable }),
+    );
+    expect(result.lines[3]).toBe("     body: (empty)");
   });
 });
