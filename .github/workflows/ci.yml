@@ -151,10 +151,9 @@ jobs:
         if: steps.mode.outputs.mode == 'full'
         run: npx playwright install --with-deps chromium
 
-      # Phone and desktop run side by side in this one job (each with its own ports and database).
       - name: E2E (phone + desktop)
         if: steps.mode.outputs.mode == 'full'
-        run: npm run test:e2e:parallel
+        run: npm run test:e2e
 
       - name: Upload coverage
         if: always() && steps.mode.outputs.mode == 'full'

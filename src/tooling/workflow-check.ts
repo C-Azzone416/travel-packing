@@ -274,7 +274,7 @@ export function checkCiWorkflow(workflow: string): string[] {
       "check:no-e2e-in-build",
       "check:client-bundle",
       "playwright install",
-      "npm run test:e2e:parallel",
+      "npm run test:e2e",
     ]) {
       if (!ci.includes(heavy)) {
         problems.push(`the ${heavy} step is missing`);

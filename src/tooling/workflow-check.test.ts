@@ -349,7 +349,7 @@ describe("checkCiWorkflow", () => {
     [
       "e2e runs in every mode",
       mutateCi(/(- name: E2E \(phone \+ desktop\)\n) {8}if:[^\n]*\n/, "$1"),
-      /test:e2e:parallel step must run only in full mode/,
+      /test:e2e step must run only in full mode/,
     ],
     [
       "the webpack bundle scan runs in every mode",

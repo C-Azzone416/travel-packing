@@ -14,7 +14,8 @@ Everything here is built around that.
   `deploy-vercel.yml`. There is no job waiting on CI. Production is still a manual run on `main` by the owner, with the
   typed SHA (docs/deploy.md).
 - **Concurrency:** a new push to a pull request cancels its older run. A push to `develop` never cancels a run (it may be deploying).
-- phone and desktop e2e run side by side inside the job (`npm run test:e2e:parallel`); vitest uses threads.
+- vitest uses threads (about 19% less CPU, same tests and coverage). Running the phone and desktop e2e side by side was tried and
+  failed on the 2-core runner (the app's server could not keep up, 21 minutes and mass failures), so e2e stays sequential.
 
 ## Modes
 
@@ -36,9 +37,9 @@ Marking a draft ready (`ready_for_review`) starts the full run.
 ## Working with it (this is how to stay cheap)
 
 1. **Open pull requests as drafts.** Push as often as you like; each push costs the quick run (a few minutes), not the full one.
-2. **Batch pushes.** Commit locally, run `npm run lint`, `npm run typecheck`, `npm test` and `npm run test:e2e:parallel`
+2. **Batch pushes.** Commit locally, run `npm run lint`, `npm run typecheck`, `npm test` and `npm run test:e2e`
    yourself, and push once when it is coherent. Do not push to see whether CI passes.
-3. **Mark ready once.** That run is the full validation. After review feedback, push the fix as one commit.
+3. **Mark ready once, and not in the same minute as a push.** That run is the full validation. (Events can arrive out of order; the mode step reads the live draft flag, but a push and a ready click together still start two runs.) After review feedback, push the fix as one commit.
 4. **Rerun failed jobs only when the failure is not yours** (an infrastructure error). A rerun repeats the whole job and bills it
    again. Never rerun to "see if it is flaky": fix or quarantine the flake.
 5. Before merging, `npm run ci:gate -- <pr number>` confirms the latest `ci` run on the pull request's head is green.

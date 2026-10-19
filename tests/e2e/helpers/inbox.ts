@@ -51,10 +51,8 @@ export function wrongCodeFor(email: string): string {
 }
 
 /** The next unused slot in the newcomer pool (a counter in the temp state dir, so retries never reuse a slot too soon). */
-export function nextNewcomerSlot(project: string): number {
-  // One counter per project: the two projects can run at the same time (scripts/run-e2e-parallel.ts), and each only needs
-  // its own slots to be distinct.
-  const file = join(STATE_DIR, `newcomer-slot-${project}`);
+export function nextNewcomerSlot(): number {
+  const file = join(STATE_DIR, "newcomer-slot");
   mkdirSync(STATE_DIR, { recursive: true });
   const slot = existsSync(file) ? Number(readFileSync(file, "utf8")) || 0 : 0;
   writeFileSync(file, String(slot + 1));

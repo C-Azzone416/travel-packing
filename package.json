@@ -15,7 +15,6 @@
     "test": "vitest run --coverage",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
-    "test:e2e:parallel": "tsx scripts/run-e2e-parallel.ts",
     "ci:gate": "tsx scripts/require-ci.ts",
     "db:generate": "drizzle-kit generate",
     "db:check": "drizzle-kit check",
