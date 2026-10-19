@@ -110,7 +110,17 @@ export function checkDeployWorkflow(workflow: string): string[] {
   if (!/VERCEL_CLI_VERSION:\s*\d+\.\d+\.\d+\b/.test(workflow))
     problems.push("the Vercel CLI version must be pinned");
   if (/@latest\b/.test(workflow)) problems.push("nothing may be installed at @latest");
-  if (!/vars\.PRODUCTION_DB_HOST/.test(workflow))
-    problems.push("PRODUCTION_DB_HOST must be passed to the host checks");
+  if (!/secrets\.PRODUCTION_DB_HOST/.test(workflow)) {
+    problems.push("PRODUCTION_DB_HOST must be passed to the host checks, from the secret store");
+  }
+  // GitHub prints step env values in the log and masks only secrets, so these two must never come from variables.
+  for (const name of ["PRODUCTION_DB_HOST", "PREVIEW_SEED_OWNER_ID"]) {
+    if (new RegExp(`vars\\.${name}\\b`).test(workflow)) {
+      problems.push(`${name} must be a secret, not a variable (variables are printed in the log)`);
+    }
+  }
+  if (!/secrets\.PREVIEW_SEED_OWNER_ID/.test(workflow)) {
+    problems.push("the seed step must read PREVIEW_SEED_OWNER_ID as a secret");
+  }
   return problems;
 }

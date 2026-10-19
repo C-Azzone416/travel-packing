@@ -29,6 +29,8 @@ env:
   VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
   VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
 
+# GitHub prints every step's `env:` values in the run log and masks only secret values. So the production host name and the
+# preview owner's user id are read from the secret store here (they show as ***), never from variables, which print.
 jobs:
   # Decides what this run may deploy before any secret or protected environment is in reach. Fails the run otherwise.
   gate:
@@ -106,7 +108,7 @@ jobs:
 
       - name: Check the deploy environment (names only, no values)
         env:
-          PRODUCTION_DB_HOST: ${{ vars.PRODUCTION_DB_HOST }}
+          PRODUCTION_DB_HOST: ${{ secrets.PRODUCTION_DB_HOST }}
         run: npx tsx scripts/check-deploy-env.ts "$TARGET" ".vercel/.env.${TARGET}.local"
 
       # `vercel build` works from the files `vercel pull` wrote; it needs no token (so the build, which runs project
@@ -123,7 +125,7 @@ jobs:
       - name: Check the migration target
         env:
           DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
-          PRODUCTION_DB_HOST: ${{ vars.PRODUCTION_DB_HOST }}
+          PRODUCTION_DB_HOST: ${{ secrets.PRODUCTION_DB_HOST }}
         run: npx tsx scripts/check-migration-target.ts "$TARGET"
 
       - name: Apply database migrations
@@ -140,8 +142,8 @@ jobs:
         env:
           SEED_DATABASE_URL: ${{ secrets.DATABASE_URL_UNPOOLED }}
           SEED_ALLOWED_HOSTS: ${{ vars.PREVIEW_DB_HOST }}
-          SEED_OWNER_ID: ${{ vars.PREVIEW_SEED_OWNER_ID }}
-          PRODUCTION_DB_HOST: ${{ vars.PRODUCTION_DB_HOST }}
+          SEED_OWNER_ID: ${{ secrets.PREVIEW_SEED_OWNER_ID }}
+          PRODUCTION_DB_HOST: ${{ secrets.PRODUCTION_DB_HOST }}
         run: npm run db:seed:preview
 
       - name: Deploy

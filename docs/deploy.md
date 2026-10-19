@@ -52,7 +52,7 @@ deployed. So the first preview run happens **without** `PREVIEW_SEED_OWNER_ID`, 
    public auth pages. Nothing creates an auth user, and nothing uses an email, a fixture id or a production identity.
 2. Open the preview, sign up as the owner (the screens are #27; until they ship, create the user in the Neon Auth
    console for the **preview** project) and verify the email.
-3. Copy that user's id from Neon Auth into the `preview` environment variable `PREVIEW_SEED_OWNER_ID`.
+3. Copy that user's id from Neon Auth into the `preview` environment **secret** `PREVIEW_SEED_OWNER_ID`.
 4. Open the latest `Deploy to Vercel` run on `develop` (Actions) and choose **Re-run all jobs**. (Do not use `Run workflow` on
    `develop`: the gate refuses a manual run anywhere but `main`, by design.) It now seeds the sample trips for that owner only. Re-running is
    safe: the seed replaces its own sample trips and leaves everything else alone.
@@ -73,15 +73,18 @@ remaining controls are that only the two Vercel steps (pull and deploy) read it,
 else in the job sees it (`npm run check:workflows` enforces the first). Use a token limited to this one project if
 Vercel offers that on your plan, and rotate it if it may have been exposed.
 
-GitHub repository variable: `PRODUCTION_DB_HOST` — the production database's bare host name, such as
-`ep-xxxx.us-east-2.aws.neon.tech` (not a URL; not a secret). Previews refuse
-to deploy if their database has this host.
+GitHub repository **secret** `PRODUCTION_DB_HOST` — the production database's bare host name, such as
+`ep-xxxx.us-east-2.aws.neon.tech` (not a URL). Previews refuse to deploy if their database has this host. It is a
+secret only so the run log masks it: GitHub prints every step's `env:` values in the log and masks secrets alone, so a
+variable would show the production host (and, for `PREVIEW_SEED_OWNER_ID`, the preview owner's user id) on every step.
+If `PRODUCTION_DB_HOST` already exists as a repository variable, create the secret with the same value and delete the
+variable. `PREVIEW_DB_HOST` stays a variable: it is the preview host, which is fine to print.
 
 GitHub **environment `preview`**:
 
 - secret `DATABASE_URL_UNPOOLED` — the **preview** Neon branch's direct connection string;
 - variable `PREVIEW_DB_HOST` — that preview database's host name (the seed allowlist);
-- variable `PREVIEW_SEED_OWNER_ID` — the Better Auth user id of the preview owner whose account should see the sample trips. **Leave it unset for the first run** ([First preview bootstrap](#first-preview-bootstrap)); set it after the owner has signed up and verified;
+- **secret** `PREVIEW_SEED_OWNER_ID` — the Better Auth user id of the preview owner whose account should see the sample trips. **Leave it unset for the first run** ([First preview bootstrap](#first-preview-bootstrap)); set it after the owner has signed up and verified;
 - secret `VERCEL_AUTOMATION_BYPASS_SECRET` — only if Vercel deployment protection is on for previews.
 
 In both GitHub environments, restrict deployment branches (`preview`: `develop` only; `production`: `main` only), so a
