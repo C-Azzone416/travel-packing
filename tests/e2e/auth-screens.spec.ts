@@ -27,7 +27,7 @@ const SET_PASSWORD = "my-chosen-password";
 
 let email: string;
 test.beforeEach(({}, testInfo) => {
-  email = newcomerEmailFor(testInfo.project.name, nextNewcomerSlot());
+  email = newcomerEmailFor(testInfo.project.name, nextNewcomerSlot(testInfo.project.name));
   resetAccount(email);
   resetAccount(STRANGER_EMAIL);
 });

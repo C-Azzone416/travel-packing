@@ -1,18 +1,19 @@
 # Deploying (runbook for #20 / #29)
 
-A push to `develop` deploys a **preview**. **Production** is released by hand, never by a push (see
-[Production release gate](#production-release-gate)). Vercel's GitHub integration is not used: the `Deploy to Vercel`
-workflow (`.github/workflows/deploy-vercel.yml`) builds with a pinned Vercel CLI and deploys the prebuilt output.
+A push to `develop` deploys a **preview**, after a green `ci` on that push: `ci.yml` has a `deploy` job (`needs: ci`) that
+calls the deploy workflow, so nothing waits idle for CI (idle waiting is billed; see [docs/ci.md](ci.md)). **Production**
+is released by hand, never by a push (see [Production release gate](#production-release-gate)). Vercel's GitHub
+integration is not used: the `Deploy to Vercel` workflow (`.github/workflows/deploy-vercel.yml`, triggered only by that call and
+by a manual run) builds with a pinned Vercel CLI and deploys the prebuilt output.
 
 ## What each run does
 
 0. The `gate` job (no secrets, no environment) decides the target, or fails the run: see
    [Production release gate](#production-release-gate). Everything below runs in the `deploy` job, in the GitHub
    environment the gate chose.
-1. Waits for the `ci` workflow to pass on the same commit (fails if it failed or never finishes).
-   The timeouts nest on purpose (`npm run check:workflows` enforces it): the `ci` job may run up to 40 minutes (a healthy run takes about
-   18.5, but a slow runner can double a step), this wait lasts up to 50, and the deploy job's own limit is 75, so a slow CI run is waited for
-   rather than cancelling a deploy.
+1. **Preview:** CI already passed on this exact push (the caller's `needs: ci`). **Production:** a single look, with no waiting
+   (`scripts/require-ci.ts`): the latest `ci` run on the typed commit must be complete and green, or the run stops.
+   The same check is available to anyone before a merge: `npm run ci:gate -- <pr number or full sha>`.
 2. `vercel pull` for the target, then the five build settings that decide which builder `vercel build` uses (framework, build command,
    output directory, root directory, install command; settings only, never the ids) are printed to the log. The repo's `vercel.json` names the framework (`nextjs`) so the repo, not the dashboard, decides the builder. **Preview only:** the four Vercel Secrets are then written into the pulled file from the
    GitHub `preview` environment (see [Preview secrets](#preview-secrets)). Then `scripts/check-deploy-env.ts` checks the
@@ -173,7 +174,7 @@ GitHub's required reviewers are not available on this plan, so the gate is expli
 - The owner check is on the GitHub **account**. It stops other people. It does not stop anything that holds the owner's
   own credentials (for example an agent session signed in as the owner), and the typed SHA is a safeguard against
   mistakes, not proof that a human typed it. Treat the owner's GitHub login and tokens as the production key.
-- After the gate, the run still waits for green CI on that commit, checks the Vercel variables and that
+- After the gate, the run still checks (once, without waiting) that CI is green on that commit, checks the Vercel variables and that
   `DATABASE_URL_UNPOOLED` is production's own database, migrates, deploys and smoke-tests. It never seeds production.
 
 To release: merge to `main` (by the normal reviewed path), copy the commit SHA, run the workflow as above.

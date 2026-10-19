@@ -1,14 +1,19 @@
 name: Deploy to Vercel
 
-# A push to develop deploys a preview, automatically. Production is NEVER deployed by a push: it is released by hand, with
-# a manual run ("Run workflow") on main by the repository owner who types the full SHA of the commit being released (the
-# `gate` job below enforces it; see "Production release gate" in docs/deploy.md). No direct GitHub-Vercel integration.
+# The preview deploy is CALLED by ci.yml (its `deploy` job, `needs: ci`) after a green push to develop, so there is no
+# second workflow polling for CI. Production is NEVER deployed by a push: it is released by hand, with a manual run
+# ("Run workflow") on main by the repository owner who types the full SHA of the commit being released (the `gate` job
+# below enforces it; see "Production release gate" in docs/deploy.md). In a called workflow the event, ref and sha are the
+# caller's, so the gate sees a push to develop and can only choose preview. No direct GitHub-Vercel integration.
 # Each deploy runs in the GitHub environment `preview` or `production` (each restricted to its branch), and each holds
 # its OWN DATABASE_URL_UNPOOLED secret, so a preview run can never read production's.
 on:
-  push:
-    branches:
-      - develop
+  workflow_call:
+    inputs:
+      release_sha:
+        description: Production only (never passed by the caller). The full SHA of the commit being released.
+        required: false
+        type: string
   workflow_dispatch:
     inputs:
       release_sha:
@@ -62,7 +67,7 @@ jobs:
   deploy:
     needs: gate
     runs-on: ubuntu-latest
-    timeout-minutes: 75 # includes the wait for CI below (up to 50 minutes) plus the build, migration and deploy
+    timeout-minutes: 30 # the build, migration and deploy; the CI check below is a single look, not a wait
     environment: ${{ needs.gate.outputs.target }}
     env:
       TARGET: ${{ needs.gate.outputs.target }}
@@ -77,22 +82,13 @@ jobs:
       - name: Install
         run: npm ci
 
-      - name: Require green CI for this commit
+      # A preview deploy only exists after `ci` passed (the caller's `needs: ci`). A manual production run has no such
+      # guarantee, so it looks once, at this exact commit: a green, completed, latest `ci` run, or it stops. No waiting.
+      - name: Require green CI for this commit (production)
+        if: github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          for _ in $(seq 1 100); do
-            conclusion=$(gh run list --workflow ci.yml --commit "$GITHUB_SHA" --json status,conclusion \
-              --jq '[.[] | select(.status == "completed")] | first | .conclusion // "pending"')
-            echo "ci for $GITHUB_SHA: $conclusion"
-            case "$conclusion" in
-              success) exit 0 ;;
-              pending) sleep 30 ;;
-              *) echo "CI did not succeed; not deploying." >&2; exit 1 ;;
-            esac
-          done
-          echo "Timed out waiting for CI." >&2
-          exit 1
+        run: npx tsx scripts/require-ci.ts "$GITHUB_SHA"
 
       - name: Install Vercel CLI (pinned)
         run: npm install --global "vercel@${VERCEL_CLI_VERSION}"
