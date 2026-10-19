@@ -16,8 +16,26 @@ export const PROJECT_NAMES = ["phone", "desktop"] as const;
  */
 export const ownerEmailFor = (project: string) => `owner-${project}@example.test`;
 
-/** Everyone the e2e server allowlists: the shared owner, one owner per project, and the second (unseeded) user. */
-export const ALLOWLISTED_EMAILS = [OWNER_EMAIL, ...PROJECT_NAMES.map(ownerEmailFor), SECOND_EMAIL];
+/**
+ * One person per project who signs UP during the test (#27). Allowlisted so the code can succeed, never seeded, and
+ * reset at the start of every test (tests/e2e/helpers/inbox.ts) so each run begins with no account.
+ */
+export const NEWCOMER_POOL = 40;
+/** A different newcomer per test (the 30-second gap and hourly cap are per address), cycling through an allowlisted pool. */
+export const newcomerEmailFor = (project: string, slot: number) =>
+  `newcomer-${project}-${slot % NEWCOMER_POOL}@example.test`;
+/** Never allowlisted: the sign-up, code and reset screens must treat this address exactly like an allowed one. */
+export const STRANGER_EMAIL = "stranger@example.test";
+
+/** Everyone the e2e server allowlists: the shared owner, one owner per project, the second (unseeded) user, and the newcomers. */
+export const ALLOWLISTED_EMAILS = [
+  OWNER_EMAIL,
+  ...PROJECT_NAMES.map(ownerEmailFor),
+  SECOND_EMAIL,
+  ...PROJECT_NAMES.flatMap((project) =>
+    Array.from({ length: NEWCOMER_POOL }, (_, slot) => newcomerEmailFor(project, slot)),
+  ),
+];
 
 /** The owners whose sample trips are seeded, by the user id the fake sign-in produces ("e2e-" + email). */
 export const SEEDED_OWNER_IDS = [OWNER_EMAIL, ...PROJECT_NAMES.map(ownerEmailFor)].map(

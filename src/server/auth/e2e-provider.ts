@@ -7,11 +7,11 @@
 // bundles, and concurrent test workers all see the same state without races). A forged, tampered, or signed-out
 // token has no file and is rejected, so knowing the owner's email is not enough.
 
-import { randomBytes } from "node:crypto";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { randomBytes, randomInt } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { cookies } from "next/headers";
-import type { AuthProvider, AuthSession } from "./types";
+import type { AuthProvider, AuthSession, FlowResult } from "./types";
 
 export const E2E_COOKIE = "e2e-auth-session";
 
@@ -43,6 +43,88 @@ function emailFor(env: Env, token: string | undefined): string | null {
   }
 }
 
+/**
+ * Sign-up, verification and reset for browser tests. Accounts and "emailed" codes and links are files in the state dir,
+ * so a test can read the email the way a person would open their inbox: `inbox-verify-<hex of the address>` holds the
+ * latest verification code and `inbox-reset-<hex of the address>` the latest reset token (the link's `?token=`). Codes
+ * and tokens are random per run and live only in that temp dir (never in source, logs or fixtures).
+ * Five wrong guesses lock a code (a new code clears the lock); a used code or token is gone.
+ */
+const MAX_CODE_ATTEMPTS = 5;
+type CodeKind = "verify" | "reset";
+const hex = (email: string) => Buffer.from(email.trim().toLowerCase()).toString("hex");
+const stateDirOf = (env: Env) => env.AUTH_E2E_STATE_DIR ?? "";
+const accountFile = (env: Env, email: string) => join(stateDirOf(env), `acct-${hex(email)}`);
+const inboxFile = (env: Env, kind: CodeKind, email: string) =>
+  join(stateDirOf(env), `inbox-${kind}-${hex(email)}`);
+const tokenFile = (env: Env, token: string) => join(stateDirOf(env), `rtoken-${token}`);
+
+interface E2eAccount {
+  password: string;
+  verified: boolean;
+}
+
+function readAccount(env: Env, email: string): E2eAccount | null {
+  try {
+    return JSON.parse(readFileSync(accountFile(env, email), "utf8")) as E2eAccount;
+  } catch {
+    return null;
+  }
+}
+
+function writeAccount(env: Env, email: string, account: E2eAccount): void {
+  mkdirSync(stateDirOf(env), { recursive: true });
+  writeFileSync(accountFile(env, email), JSON.stringify(account));
+}
+
+function mailCode(env: Env, email: string): void {
+  mkdirSync(stateDirOf(env), { recursive: true });
+  const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
+  writeFileSync(inboxFile(env, "verify", email), `${code}:0`);
+}
+
+/** "Emails" a reset link: a fresh single-use token, mapped back to the address, and left in the reset inbox. */
+function mailResetLink(env: Env, email: string): void {
+  mkdirSync(stateDirOf(env), { recursive: true });
+  const token = randomBytes(24).toString("hex");
+  writeFileSync(tokenFile(env, token), email);
+  writeFileSync(inboxFile(env, "reset", email), token);
+}
+
+/** Checks `code` against the pending verification code; counts wrong guesses and locks after the limit. */
+function checkCode(env: Env, email: string, code: string): FlowResult<"invalid" | "locked"> {
+  const file = inboxFile(env, "verify", email);
+  if (!existsSync(file)) return { ok: false, reason: "invalid" };
+  const [expected, attempts] = readFileSync(file, "utf8").split(":");
+  if (Number(attempts) >= MAX_CODE_ATTEMPTS) return { ok: false, reason: "locked" };
+  if (code !== expected) {
+    writeFileSync(file, `${expected}:${Number(attempts) + 1}`);
+    return { ok: false, reason: "invalid" };
+  }
+  rmSync(file, { force: true });
+  return { ok: true };
+}
+
+/** Uses up a reset token, returning the address it was for. Unknown, malformed or used tokens give null. */
+function spendToken(env: Env, token: string): string | null {
+  if (!/^[0-9a-f]{48}$/.test(token)) return null;
+  try {
+    const email = readFileSync(tokenFile(env, token), "utf8");
+    rmSync(tokenFile(env, token), { force: true });
+    return email;
+  } catch {
+    return null;
+  }
+}
+
+async function startSession(env: Env, email: string) {
+  const token = randomBytes(32).toString("hex");
+  mkdirSync(env.AUTH_E2E_STATE_DIR ?? "", { recursive: true });
+  writeFileSync(sessionFile(env, token), email);
+  (await cookies()).set(E2E_COOKIE, token, { httpOnly: true, sameSite: "lax", path: "/" });
+  return { ok: true as const, session: { userId: `e2e-${email}`, email } };
+}
+
 /** Any email signs in if it knows the shared synthetic password; the allowlist decides who gets in. */
 export function createE2eAuthProvider(env: Env): AuthProvider {
   return {
@@ -50,13 +132,47 @@ export function createE2eAuthProvider(env: Env): AuthProvider {
       const email = emailFor(env, (await cookies()).get(E2E_COOKIE)?.value);
       return email ? { userId: `e2e-${email}`, email } : null;
     },
+    async signUp(email, password) {
+      if (password.length < 8) return { ok: false, reason: "weak-password" };
+      // A taken address looks like a new account, as with the real provider: nothing is created or mailed.
+      if (!readAccount(env, email)) {
+        writeAccount(env, email, { password, verified: false });
+        mailCode(env, email);
+      }
+      return { ok: true };
+    },
+    async verifyEmail(email, code) {
+      const checked = checkCode(env, email, code);
+      const account = readAccount(env, email);
+      if (checked.ok && account) writeAccount(env, email, { ...account, verified: true });
+      return checked;
+    },
+    async resendVerificationCode(email) {
+      // A new code replaces the old one and clears the wrong-guess count.
+      if (readAccount(env, email)?.verified === false) mailCode(env, email);
+      return { ok: true };
+    },
+    async requestPasswordReset(email) {
+      if (readAccount(env, email)) mailResetLink(env, email);
+      return { ok: true };
+    },
+    async resetPassword(token, newPassword) {
+      if (newPassword.length < 8) return { ok: false, reason: "weak-password" };
+      const email = spendToken(env, token);
+      const account = email ? readAccount(env, email) : null;
+      if (!email || !account) return { ok: false, reason: "invalid" };
+      writeAccount(env, email, { ...account, password: newPassword });
+      return { ok: true };
+    },
     async signInWithPassword(email, password) {
+      // A person who signed up here signs in with their own password, and only once verified.
+      const account = readAccount(env, email);
+      if (account) {
+        if (password !== account.password) return { ok: false };
+        return account.verified ? startSession(env, email) : { ok: false, unverified: true };
+      }
       if (!env.AUTH_E2E_PASSWORD || password !== env.AUTH_E2E_PASSWORD) return { ok: false };
-      const token = randomBytes(32).toString("hex");
-      mkdirSync(env.AUTH_E2E_STATE_DIR ?? "", { recursive: true });
-      writeFileSync(sessionFile(env, token), email);
-      (await cookies()).set(E2E_COOKIE, token, { httpOnly: true, sameSite: "lax", path: "/" });
-      return { ok: true, session: { userId: `e2e-${email}`, email } };
+      return startSession(env, email);
     },
     async signOut() {
       const jar = await cookies();

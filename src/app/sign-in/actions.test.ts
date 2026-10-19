@@ -4,6 +4,7 @@ import { parseAllowlist } from "@/server/auth/allowlist";
 
 const fake = createFakeAuth([
   { email: "owner@example.test", password: "pw-owner", userId: "u1" },
+  { email: "pending@example.test", password: "pw-pending", userId: "u3", verified: false },
   { email: "intruder@example.test", password: "pw-intruder", userId: "u2" },
 ]);
 let available = true;
@@ -16,8 +17,14 @@ vi.mock("@/server/auth/auth-runtime", () => ({
   }),
 }));
 let forwardedFor: string | null = "203.0.113.7";
+const jar = new Map<string, string>();
 vi.mock("next/headers", () => ({
   headers: async () => new Headers(forwardedFor ? { "x-forwarded-for": forwardedFor } : {}),
+  cookies: async () => ({
+    get: (name: string) => (jar.has(name) ? { name, value: jar.get(name) } : undefined),
+    set: (name: string, value: string) => void jar.set(name, value),
+    delete: (name: string) => void jar.delete(name),
+  }),
 }));
 vi.mock("next/navigation", () => ({
   redirect: (path: string) => {
@@ -26,6 +33,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { signInAction, signOutAction } from "./actions";
+import { resetFlowLimits } from "@/server/auth/flow-limits";
 import { resetSignInLimits } from "@/server/auth/sign-in-limit";
 import { setAuthLogSink } from "@/server/auth/safe-log";
 import { INVALID_CREDENTIALS_MESSAGE, RATE_LIMITED_MESSAGE, UNAVAILABLE_MESSAGE } from "./state";
@@ -38,11 +46,41 @@ const form = (email: string, password: string) => {
 };
 
 beforeEach(() => {
+  jar.clear();
+  resetFlowLimits();
   fake.current = null;
   available = true;
   forwardedFor = "203.0.113.7";
   resetSignInLimits();
   setAuthLogSink(() => {});
+});
+
+describe("signInAction with an unverified account", () => {
+  it("sends the person to the code screen with a new code, remembering the address", async () => {
+    await expect(
+      signInAction({ error: null }, form("  pending@example.test ", "pw-pending")),
+    ).rejects.toThrow("NEXT_REDIRECT:/verify");
+    expect(fake.current).toBeNull();
+    expect(jar.get("cw-pending-email")).toBe("pending@example.test");
+  });
+
+  it("is not counted as a failed attempt (the password was right)", async () => {
+    for (let i = 0; i < 12; i += 1) {
+      await expect(
+        signInAction({ error: null }, form("pending@example.test", "pw-pending")),
+      ).rejects.toThrow("NEXT_REDIRECT:/verify");
+    }
+    await expect(
+      signInAction({ error: null }, form("owner@example.test", "pw-owner")),
+    ).rejects.toThrow("NEXT_REDIRECT:/");
+  });
+
+  it("still gives the generic error for a wrong password on the same account", async () => {
+    expect(await signInAction({ error: null }, form("pending@example.test", "wrong"))).toEqual({
+      error: INVALID_CREDENTIALS_MESSAGE,
+    });
+    expect(jar.size).toBe(0);
+  });
 });
 
 describe("signInAction", () => {

@@ -2,8 +2,12 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { resendVerificationCode } from "@/server/auth/account-flows";
 import { getAuth } from "@/server/auth/auth-runtime";
+import { flowLimits } from "@/server/auth/flow-limits";
+import { rememberPendingEmail } from "@/server/auth/pending-email";
 import { ACCESS_DENIED_PATH, SIGN_IN_PATH } from "@/server/auth/proxy-handler";
+import { VERIFY_PATH } from "@/server/auth/public-paths";
 import { logAuthEvent } from "@/server/auth/safe-log";
 import { signInOwner, signOutOwner } from "@/server/auth/sign-in";
 import { clientAddress, signInLimits } from "@/server/auth/sign-in-limit";
@@ -34,6 +38,14 @@ export async function signInAction(
   if (outcome === "ok") {
     limits.recordSuccess(email, address);
     redirect("/");
+  }
+  if (outcome === "unverified") {
+    // The password was right but the address was never confirmed: send a fresh code and go to the code screen. This
+    // reveals nothing the person could not already know, since they just proved the password.
+    limits.recordSuccess(email, address);
+    await resendVerificationCode(auth, flowLimits(), address, email);
+    await rememberPendingEmail(email.trim().toLowerCase());
+    redirect(VERIFY_PATH);
   }
   limits.recordFailure(email, address);
   if (outcome === "denied") redirect(ACCESS_DENIED_PATH);

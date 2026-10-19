@@ -1736,6 +1736,88 @@ input:disabled {
   color: var(--danger);
   font-weight: 700;
 }
+/* Account screens (#27): helper text, links, field problems, the status notice, the code input and the resend row.
+   Targets are at least 44px; helper and problem text is at least 14px; problems carry an icon, never colour alone. */
+.auth-helper {
+  margin: 8px 0 0;
+  color: var(--muted-text);
+  font-size: 16px;
+}
+.field-hint {
+  margin: 0;
+  color: var(--muted-text);
+  font-size: 14px;
+}
+.field-problem {
+  margin: 0;
+  color: var(--danger);
+  font-size: 14px;
+  font-weight: 700;
+}
+.field input[aria-invalid="true"] {
+  border: 2px solid var(--danger);
+  box-shadow: none;
+}
+.auth-notice {
+  margin: 12px 0 0;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: var(--seafoam-soft);
+  color: var(--ink);
+  font-weight: 700;
+}
+.auth-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--teal-dark);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.auth-link-button {
+  border: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.forgot-link {
+  justify-self: end;
+}
+.auth-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 12px 0 0;
+  color: var(--muted-text);
+}
+.field input.code-input {
+  min-height: 48px;
+  padding: 8px 14px;
+  font-size: 24px;
+  letter-spacing: 0.3em;
+  text-align: center;
+}
+.resend-row {
+  display: grid;
+  margin-top: 8px;
+}
+.resend-wait,
+.resend-note {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin: 0;
+  color: var(--muted-text);
+  font-size: 14px;
+}
+.resend-note {
+  color: var(--danger);
+  font-weight: 700;
+}
 .spinner {
   width: 16px;
   height: 16px;

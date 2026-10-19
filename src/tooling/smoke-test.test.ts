@@ -15,8 +15,7 @@ function fakeFetch(routes: Routes, seen: { url: string; headers: Record<string, 
 const redirect = (location: string, status = 307) =>
   new Response(null, { status, headers: { location } });
 const healthy = (): Routes => ({
-  "/sign-in": new Response("ok", { status: 200 }),
-  "/access-denied": new Response("ok", { status: 200 }),
+  ...Object.fromEntries(PUBLIC_PATHS.map((path) => [path, new Response("ok", { status: 200 })])),
   "/": redirect("/sign-in"),
 });
 
@@ -27,6 +26,10 @@ describe("smokeTest", () => {
     expect(result.lines).toEqual([
       "ok   /sign-in: 200 (expected 200)",
       "ok   /access-denied: 200 (expected 200)",
+      "ok   /sign-up: 200 (expected 200)",
+      "ok   /verify: 200 (expected 200)",
+      "ok   /forgot-password: 200 (expected 200)",
+      "ok   /reset-password: 200 (expected 200)",
       "ok   /: 307 (expected a redirect to /sign-in when signed out)",
     ]);
   });
@@ -51,18 +54,19 @@ describe("smokeTest", () => {
   ])("fails when the protected page gives %s", async (_name, response) => {
     const result = await smokeTest("https://x.test", fakeFetch({ ...healthy(), "/": response }));
     expect(result.ok).toBe(false);
-    expect(result.lines[2]).toMatch(/^FAIL \/:/);
+    expect(result.lines.at(-1)).toMatch(/^FAIL \/:/);
   });
 
   it("fails, without echoing the error, when the site does not answer", async () => {
-    const result = await smokeTest(
-      "https://x.test",
-      fakeFetch({ "/sign-in": "throw", "/access-denied": "throw", "/": "throw" }),
-    );
+    const result = await smokeTest("https://x.test", fakeFetch({}));
     expect(result.ok).toBe(false);
     expect(result.lines).toEqual([
       "FAIL /sign-in: no response (expected 200)",
       "FAIL /access-denied: no response (expected 200)",
+      "FAIL /sign-up: no response (expected 200)",
+      "FAIL /verify: no response (expected 200)",
+      "FAIL /forgot-password: no response (expected 200)",
+      "FAIL /reset-password: no response (expected 200)",
       "FAIL /: no response (expected a redirect to /sign-in when signed out)",
     ]);
   });
@@ -78,7 +82,7 @@ describe("smokeTest", () => {
     expect(plain.map((s) => s.headers)).toEqual(plain.map(() => ({})));
   });
 
-  it("needs no owner session and checks every public auth page the gate allows (so a future sign-up page is covered)", async () => {
+  it("needs no owner session and checks every public auth page the gate allows (sign-up, verification, forgot and reset included)", async () => {
     const seen: { url: string; headers: Record<string, string> }[] = [];
     await smokeTest("https://x.test", fakeFetch(healthy(), seen));
     const paths = seen.map((s) => new URL(s.url).pathname);
