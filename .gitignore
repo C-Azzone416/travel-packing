@@ -22,3 +22,6 @@ next-env.d.ts
 
 # Local PGlite databases (seed, dev)
 .data/
+
+# Written by the gitleaks action in CI
+results.sarif
