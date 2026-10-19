@@ -1,6 +1,8 @@
 // Post-deploy smoke test: every public auth page answers 200 to a signed-out visitor (no owner session needed, so it
 // works on the first preview, before any account exists), and a protected page sends a signed-out visitor to sign-in.
-// Redirects are not followed, so a bounce is seen as a bounce. Nothing here prints more than the path and status.
+// Redirects are not followed, so a bounce is seen as a bounce. A passing check prints the path and status only. A failing
+// one also prints what tells a platform error from an app error: the x-vercel-error and x-vercel-id response headers and
+// the first 200 characters of the body. Request headers, the bypass secret and the Location header are never printed.
 
 import { PUBLIC_PATHS } from "../server/auth/public-paths";
 
@@ -17,6 +19,35 @@ export interface SmokeOptions {
 export interface SmokeResult {
   ok: boolean;
   lines: string[];
+}
+
+const BODY_PREVIEW_CHARS = 200;
+
+/** Printable form of a header value or body excerpt: one line, no control characters, the bypass secret masked. */
+function printable(value: string, bypassSecret?: string): string {
+  let text = value
+    .replace(/[\u0000-\u001f\u007f]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (bypassSecret) text = text.split(bypassSecret).join("***");
+  return text;
+}
+
+/** What a failing response says about itself, to tell a Vercel platform error from the app's own answer. */
+async function diagnostics(response: Response, bypassSecret?: string): Promise<string[]> {
+  const header = (name: string) =>
+    printable(response.headers.get(name) ?? "", bypassSecret) || "(none)";
+  let body = "";
+  try {
+    body = printable((await response.text()).slice(0, BODY_PREVIEW_CHARS), bypassSecret);
+  } catch {
+    body = "";
+  }
+  return [
+    `     x-vercel-error: ${header("x-vercel-error")}`,
+    `     x-vercel-id: ${header("x-vercel-id")}`,
+    `     body: ${body === "" ? "(empty)" : body}`,
+  ];
 }
 
 export async function smokeTest(
@@ -36,7 +67,10 @@ export async function smokeTest(
       const response = await fetchImpl(`${base}${path}`, { redirect: "manual", headers });
       const pass = passes(response);
       lines.push(`${pass ? "ok  " : "FAIL"} ${path}: ${response.status} (${expectation})`);
-      if (!pass) ok = false;
+      if (!pass) {
+        ok = false;
+        lines.push(...(await diagnostics(response, bypassSecret)));
+      }
     } catch {
       lines.push(`FAIL ${path}: no response (${expectation})`);
       ok = false;

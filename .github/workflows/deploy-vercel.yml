@@ -157,18 +157,27 @@ jobs:
           PRODUCTION_DB_HOST: ${{ vars.PRODUCTION_DB_HOST }}
         run: npm run db:seed:preview
 
+      # Preview deploys name their target outright: without it Vercel assigns a project's FIRST deployment to production. The CLI's
+      # own output (it prints which kind it made) is kept for the next step, which fails the run if the target is not the one meant.
       - name: Deploy
         id: deploy
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
+          log="$RUNNER_TEMP/deploy.log"
+          status=0
           if [ "$TARGET" = production ]; then
-            url=$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")
+            url=$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN" 2>"$log") || status=$?
           else
-            url=$(vercel deploy --prebuilt --token="$VERCEL_TOKEN")
+            url=$(vercel deploy --prebuilt --target=preview --token="$VERCEL_TOKEN" 2>"$log") || status=$?
           fi
+          cat "$log" >&2
+          if [ "$status" -ne 0 ]; then exit "$status"; fi
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "Deployed ($TARGET): $url" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check the deployment landed in the right environment
+        run: npx tsx scripts/check-deploy-target.ts "$TARGET" "$RUNNER_TEMP/deploy.log"
 
       - name: Smoke test
         env:

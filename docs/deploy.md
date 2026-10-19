@@ -34,9 +34,11 @@ workflow (`.github/workflows/deploy-vercel.yml`) builds with a pinned Vercel CLI
    seed, says so in the log and on the run summary page ("preview seed SKIPPED"), and the run carries on: see
    [First preview bootstrap](#first-preview-bootstrap). A set-but-invalid id fails the run with a message that does not
    repeat it. Production runs never reach this step, and the script refuses anything but `TARGET=preview` as well.
-6. `vercel deploy --prebuilt`, then the smoke test (`scripts/smoke-test.ts`), which needs no account or session: every
+6. `vercel deploy --prebuilt` (a preview names its target with `--target=preview`: Vercel assigns a project's **first** deployment to
+   production when none is given), then `scripts/check-deploy-target.ts` reads the CLI's own output and **fails the run if a preview run
+   created a Production deployment** (or a production run a Preview one), then the smoke test (`scripts/smoke-test.ts`), which needs no account or session: every
    public auth page answers 200 (`/sign-in`, `/access-denied`, and any page added to the public list in
-   `src/server/auth/public-paths.ts`, such as sign-up in #27) and `/` redirects a signed-out visitor to `/sign-in`.
+   `src/server/auth/public-paths.ts`, such as sign-up in #27) and `/` redirects a signed-out visitor to `/sign-in`. When a check fails it also prints the response's `x-vercel-error` and `x-vercel-id` headers and the first 200 characters of its body (never the request headers, the `Location` header or the bypass secret), which tells a Vercel platform error from the app's own answer.
 
 The Vercel CLI version is pinned in the workflow (`VERCEL_CLI_VERSION`); `@neondatabase/auth` is pinned to an exact
 version in `package.json`. Bump either in a PR.

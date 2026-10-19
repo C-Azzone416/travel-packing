@@ -147,6 +147,24 @@ export function checkDeployWorkflow(workflow: string): string[] {
     }
   }
 
+  // The deploy names its target outright (Vercel assigns a project's FIRST deployment to production when none is given), and
+  // a check of the CLI's own output runs after it and before the smoke test.
+  if (!/vercel deploy --prebuilt --target=preview\b/.test(workflow)) {
+    problems.push("a preview deploy must pass --target=preview");
+  }
+  if (!/vercel deploy --prebuilt --prod\b/.test(workflow)) {
+    problems.push("a production deploy must pass --prod");
+  }
+  if (/vercel deploy --prebuilt --token/.test(workflow)) {
+    problems.push("no deploy may leave its target to Vercel's default");
+  }
+  const deployAt = workflow.indexOf("vercel deploy --prebuilt");
+  const targetCheckAt = workflow.indexOf("scripts/check-deploy-target.ts");
+  const smokeAt = workflow.indexOf("scripts/smoke-test.ts");
+  if (!(deployAt >= 0 && deployAt < targetCheckAt && targetCheckAt < smokeAt)) {
+    problems.push("the deploy target check must run after the deploy and before the smoke test");
+  }
+
   // Safety steps and pins.
   for (const step of [
     "check-deploy-env",
