@@ -104,6 +104,19 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: vercel pull --yes --environment="$TARGET" --token="$VERCEL_TOKEN"
 
+      # Preview only. `vercel pull` cannot read a Vercel Secret (they are write-only) and writes a redaction marker in its place,
+      # so these four are written into the pulled file from the GitHub `preview` environment's secrets. They reach the script only
+      # through this step's env: (from secrets.*, so GitHub masks them) and are never printed. The step does not run for a
+      # production deploy, which never receives them. Rotating one means updating Vercel AND the GitHub preview environment.
+      - name: Inject the Preview secrets (values not shown)
+        if: env.TARGET == 'preview'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+          OWNER_EMAIL_ALLOWLIST: ${{ secrets.OWNER_EMAIL_ALLOWLIST }}
+          NEON_AUTH_COOKIE_SECRET: ${{ secrets.NEON_AUTH_COOKIE_SECRET }}
+        run: npx tsx scripts/inject-preview-secrets.ts ".vercel/.env.${TARGET}.local"
+
       - name: Check the deploy environment (names only, no values)
         env:
           PRODUCTION_DB_HOST: ${{ vars.PRODUCTION_DB_HOST }}

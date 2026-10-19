@@ -1,5 +1,5 @@
 // Usage: tsx scripts/check-deploy-env.ts <preview|production> <path to the file `vercel pull` wrote>
-// Reads PRODUCTION_DB_HOST from the environment (a repository variable). Prints variable names only.
+// Reads PRODUCTION_DB_HOST from the environment. Run it AFTER the preview secrets are injected (see inject-preview-secrets.ts). Prints variable names only.
 
 import { readFileSync } from "node:fs";
 import { checkDeployEnv, parseEnvFile, type DeployTarget } from "../src/tooling/deploy-env";

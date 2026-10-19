@@ -228,8 +228,137 @@ describe("hostOf", () => {
   });
 });
 
-describe("parseEnvFile", () => {
-  it("reads quoted and bare values, skips comments and junk, strips export", () => {
+describe("checkDeployEnv: values that vercel pull could not read", () => {
+  const MARKER = "[SENSITIVE]";
+
+  it.each(REQUIRED)(
+    "rejects Vercel's redaction marker for %s, naming only the variable",
+    (name) => {
+      for (const marker of [MARKER, `  ${MARKER} `, MARKER.toLowerCase()]) {
+        const problems = checkDeployEnv("preview", { ...good, [name]: marker }, PROD_HOST);
+        expect(problems).toEqual([
+          `${name} is Vercel's redaction marker (a Secret that vercel pull cannot read); the real value must be injected first`,
+        ]);
+      }
+    },
+  );
+
+  it("rejects the marker for production as well, so a broken pull cannot reach a build", () => {
+    const problems = checkDeployEnv(
+      "production",
+      { ...production, DATABASE_URL: MARKER },
+      PROD_HOST,
+    );
+    expect(problems).toEqual([
+      expect.stringContaining("DATABASE_URL is Vercel's redaction marker"),
+    ]);
+  });
+
+  it("reports every redacted variable at once", () => {
+    const all = Object.fromEntries(REQUIRED.map((name) => [name, MARKER]));
+    const problems = checkDeployEnv("preview", { ...good, ...all }, PROD_HOST);
+    expect(problems).toHaveLength(REQUIRED.length);
+  });
+
+  it("does not also complain that the marker is too short or not a URL", () => {
+    const problems = checkDeployEnv(
+      "preview",
+      { ...good, NEON_AUTH_COOKIE_SECRET: MARKER },
+      PROD_HOST,
+    );
+    expect(problems.join("\n")).not.toMatch(/shorter/);
+  });
+
+  it.each(["DATABASE_URL", "DATABASE_URL_UNPOOLED"] as const)(
+    "requires %s to be a Postgres connection URL",
+    (name) => {
+      for (const value of [
+        "not a url",
+        "ep-prev-1.us-east-2.aws.neon.tech/db",
+        "https://ep-prev-1.us-east-2.aws.neon.tech/db",
+        "mysql://u:p@ep-prev-1.us-east-2.aws.neon.tech/db",
+        "postgres:///db",
+      ]) {
+        expect(checkDeployEnv("preview", { ...good, [name]: value }, PROD_HOST)).toEqual([
+          `${name} is not a Postgres connection URL`,
+        ]);
+      }
+      expect(
+        checkDeployEnv(
+          "preview",
+          { ...good, [name]: "postgresql://u:p@ep-prev-1.x.test/db" },
+          PROD_HOST,
+        ),
+      ).toEqual([]);
+    },
+  );
+
+  it("never prints the value of an unparseable URL", () => {
+    const problems = checkDeployEnv(
+      "preview",
+      { ...good, DATABASE_URL: "secret-garbage-value" },
+      PROD_HOST,
+    );
+    expect(problems.join("\n")).not.toContain("secret-garbage-value");
+  });
+
+  it("still catches a preview database on the production host", () => {
+    const onProd = { ...good, DATABASE_URL_UNPOOLED: `postgres://u:p@${PROD_HOST}/db` };
+    expect(checkDeployEnv("preview", onProd, PROD_HOST)).toEqual([
+      "DATABASE_URL_UNPOOLED points at the production database host; previews must use their own",
+    ]);
+  });
+
+  it.each([
+    ["a single well-formed email", "a@example.test", true],
+    ["several emails with spaces around the commas", "a@example.test , b@example.test", true],
+    ["an empty list", "", false],
+    ["only commas", ",", false],
+    ["a trailing comma", "a@example.test,", false],
+    ["a doubled comma", "a@example.test,,b@example.test", false],
+    ["an entry with no @", "a.example.test", false],
+    ["an entry with no domain dot", "a@localhost", false],
+    ["whitespace instead of commas", "a@example.test b@example.test", false],
+    ["semicolons instead of commas", "a@example.test;b@example.test", false],
+    ["a display-name style entry", "Name <a@example.test>", false],
+  ])("validates OWNER_EMAIL_ALLOWLIST: %s", (_name, value, ok) => {
+    const problems = checkDeployEnv(
+      "preview",
+      { ...good, OWNER_EMAIL_ALLOWLIST: value },
+      PROD_HOST,
+    );
+    if (ok) expect(problems).toEqual([]);
+    else if (value.trim() === "") expect(problems).toEqual(["OWNER_EMAIL_ALLOWLIST is not set"]);
+    else if (/,\s*(,|$)|^\s*,/.test(value)) {
+      expect(problems).toEqual(["OWNER_EMAIL_ALLOWLIST has an empty entry (check the commas)"]);
+    } else {
+      expect(problems).toEqual([
+        "OWNER_EMAIL_ALLOWLIST has an entry that is not a well-formed email address",
+      ]);
+    }
+  });
+
+  it("never prints an email address from the allowlist", () => {
+    const problems = checkDeployEnv(
+      "preview",
+      { ...good, OWNER_EMAIL_ALLOWLIST: "secret.person@example.test," },
+      PROD_HOST,
+    );
+    expect(problems.join("\n")).not.toMatch(/secret\.person|example\.test/);
+  });
+
+  it("requires NEON_AUTH_COOKIE_SECRET to be at least 32 characters", () => {
+    expect(
+      checkDeployEnv("preview", { ...good, NEON_AUTH_COOKIE_SECRET: "s".repeat(31) }, PROD_HOST),
+    ).toEqual(["NEON_AUTH_COOKIE_SECRET is shorter than 32 characters, so sign-in would not work"]);
+    expect(
+      checkDeployEnv("preview", { ...good, NEON_AUTH_COOKIE_SECRET: "s".repeat(32) }, PROD_HOST),
+    ).toEqual([]);
+  });
+});
+
+describe("parseEnvFile (reads the file the way vercel build's dotenv 4 reader does)", () => {
+  it("reads quoted and bare values, skips comments and junk, and does not treat `export` as an assignment", () => {
     const text = [
       "# comment",
       'A="one"',
@@ -239,14 +368,27 @@ describe("parseEnvFile", () => {
       "not a line",
       'E=""',
       'F="',
+      "G = spaced  ",
     ].join("\r\n");
     expect(parseEnvFile(text)).toEqual({
       A: "one",
       B: "two",
       C: "three",
-      D: "four",
       E: "",
-      F: '"',
+      F: "",
+      G: "spaced",
+    });
+  });
+
+  it("turns \\n into a newline inside double quotes only, and strips one quote from each end", () => {
+    expect(
+      parseEnvFile('A="x\\ny"\nB=x\\ny\nC=\'x\\ny\'\nD=""q""\nE="$HOME #not-a-comment"'),
+    ).toEqual({
+      A: "x\ny",
+      B: "x\\ny",
+      C: "x\\ny",
+      D: '"q"',
+      E: "$HOME #not-a-comment",
     });
   });
 });
