@@ -59,6 +59,8 @@ let auth: Parameters<typeof signInOwner>[0] & {
 };
 let limits = createFlowLimits();
 const seals = createSetupSeals("s".repeat(40));
+/** Real people sign in seconds after setting up; the tests need a clock tick between the two (a session must be strictly newer). */
+const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
 const redirectTo = (email: string) =>
   `https://app.example.test/reset-password?for=${seals.seal(email)}&setup=1`;
 
@@ -108,6 +110,7 @@ describe("a password chosen by someone else before the owner verified", () => {
     expect((await setup.completedAt(OWNER)) !== null).toBe(true);
 
     // 7. The attacker's password is gone for good; the owner's works.
+    await tick();
     expect(await signInOwner(auth, OWNER, ATTACKER_PASSWORD)).toBe("invalid");
     expect(await signInOwner(auth, OWNER, OWNER_PASSWORD)).toBe("ok");
     expect((await authorizeOwner(auth.provider, auth.allowlist)).status).toBe("ok");

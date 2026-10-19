@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createMigratedDb } from "../db/__fixtures__/db";
 import type { Db } from "../db/retention";
@@ -7,12 +8,14 @@ import {
   createDbSetupStore,
   createMemorySetupStore,
   emailDigest,
+  setupDigestKey,
   withSetupGate,
   type AccountSetupStore,
 } from "./account-setup";
 import { parseAllowlist } from "./allowlist";
 import { setAuthLogSink } from "./safe-log";
 
+const DB_KEY = setupDigestKey("a-secret-of-some-length");
 const OWNER = { email: "owner@example.test", password: "owner-password", userId: "u1" };
 const allowlist = parseAllowlist("owner@example.test");
 let fake: FakeAuth;
@@ -26,11 +29,32 @@ afterEach(() => setAuthLogSink());
 const events = () => logged.map((line) => (JSON.parse(line) as { event: string }).event);
 
 describe("emailDigest", () => {
-  it("is a SHA-256 hex of the normalized address, so the stored value is not the address", () => {
-    expect(emailDigest("  Owner@Example.TEST ")).toBe(emailDigest("owner@example.test"));
-    expect(emailDigest("owner@example.test")).toMatch(/^[0-9a-f]{64}$/);
-    expect(emailDigest("owner@example.test")).not.toContain("owner");
-    expect(emailDigest("a@example.test")).not.toBe(emailDigest("b@example.test"));
+  const key = setupDigestKey("a-secret-of-some-length");
+
+  it("is a keyed hex digest of the normalized address, so the stored value is not the address", () => {
+    expect(emailDigest("  Owner@Example.TEST ", key)).toBe(emailDigest("owner@example.test", key));
+    expect(emailDigest("owner@example.test", key)).toMatch(/^[0-9a-f]{64}$/);
+    expect(emailDigest("owner@example.test", key)).not.toContain("owner");
+    expect(emailDigest("a@example.test", key)).not.toBe(emailDigest("b@example.test", key));
+  });
+
+  it("cannot be reproduced without the key, so a leaked table cannot be tested against known addresses", () => {
+    const plain = createHash("sha256").update("owner@example.test").digest("hex");
+    expect(emailDigest("owner@example.test", key)).not.toBe(plain);
+    expect(emailDigest("owner@example.test", key)).not.toBe(
+      emailDigest("owner@example.test", setupDigestKey("another-secret-of-length")),
+    );
+  });
+
+  it("derives the key from the secret with a label, never using the secret itself", () => {
+    expect(setupDigestKey("a-secret-of-some-length")).toMatch(/^[0-9a-f]{64}$/);
+    expect(setupDigestKey("a-secret-of-some-length")).not.toContain("secret");
+    expect(setupDigestKey("a-secret-of-some-length")).toBe(
+      setupDigestKey("a-secret-of-some-length"),
+    );
+    expect(setupDigestKey("a-secret-of-some-length")).not.toBe(
+      setupDigestKey("another-secret-of-length"),
+    );
   });
 });
 
@@ -55,7 +79,7 @@ describe("stores", () => {
     let store: AccountSetupStore;
     beforeAll(async () => {
       ctx = await createMigratedDb();
-      store = createDbSetupStore(ctx.db as unknown as Db);
+      store = createDbSetupStore(ctx.db as unknown as Db, DB_KEY);
     });
     afterAll(async () => {
       await ctx.client.close();
@@ -74,7 +98,7 @@ describe("stores", () => {
       const rows = await ctx.client.query<{ email_digest: string }>(
         `SELECT email_digest FROM account_setups`,
       );
-      expect(rows.rows).toEqual([{ email_digest: emailDigest("owner@example.test") }]);
+      expect(rows.rows).toEqual([{ email_digest: emailDigest("owner@example.test", DB_KEY) }]);
       expect(JSON.stringify(rows.rows)).not.toContain("example.test");
     });
   });
@@ -213,11 +237,13 @@ describe("withSetupGate", () => {
       expect(await gated.getSession()).toBeNull();
     });
 
-    it("lets a session made at or after the setup through", async () => {
+    it("refuses a session made in the same instant as the setup, and lets a later one through", async () => {
       const store = stores();
       await store.markComplete(OWNER.email);
       const gated = withSetupGate(fake, store, allowlist);
-      for (const issuedAt of [SETUP_AT, SETUP_AT + 1, SETUP_AT + 3_600_000]) {
+      fake.current = { userId: "u1", email: OWNER.email, issuedAt: SETUP_AT };
+      expect(await gated.getSession()).toBeNull();
+      for (const issuedAt of [SETUP_AT + 1, SETUP_AT + 3_600_000]) {
         fake.current = { userId: "u1", email: OWNER.email, issuedAt };
         expect(await gated.getSession()).toEqual({ userId: "u1", email: OWNER.email, issuedAt });
       }

@@ -94,14 +94,14 @@ public per project, so this exists with or without the app's screens.
 How it is closed (#83): being verified is no longer enough to sign in. The app also requires a record that the account's password was
 set **through a link that only the inbox owner receives**:
 
-- The record is the table `account_setups` (a SHA-256 digest of the normalized address; no raw address is stored). It is added to,
+- The record is the table `account_setups` (an HMAC-SHA-256 digest of the normalized address, keyed from `NEON_AUTH_COOKIE_SECRET`; no raw address is stored). It is added to,
   never removed from, and is created **only** when a reset link is used successfully: the "finish setting up" link after sign-up, or any
   forgot-password link.
 - Sign-in is refused for an allowlisted address with no record. This is enforced by wrapping the auth provider (`withSetupGate`), so the
   proxy, server actions and the data layer all see it, and so does a session the attacker minted by calling the auth service directly
   with the password they registered: the app reads that session and refuses it.
 - **A session made before the setup stays dead after it.** The record keeps when the setup happened, and the provider says when each
-  session was created (Better Auth's `session.createdAt`, read by the adapter). The gate refuses a session created before the setup,
+  session was created (Better Auth's `session.createdAt`, read by the adapter). The gate refuses a session created at or before the setup,
   or one that does not say when it was made. Without this, an attacker who signed in at the provider with the pre-registered password
   and kept the cookie would get the owner's session the moment the owner used the link (QA's finding on #84). `pre-registration.test.ts`
   covers it. It does not rely on the provider revoking sessions on reset (nor on that being configured).
@@ -117,9 +117,10 @@ attack against a real account model (and fails without the gate), and `auth-scre
 
 Limits of this protection, stated plainly:
 
-- The seal is signed with a key derived from `NEON_AUTH_COOKIE_SECRET` (not the secret itself). The address digest is a plain SHA-256: if
-  the database leaked, a known address could be tested against it (an HMAC would stop that, at the cost of every record becoming invalid
-  whenever the secret rotates). Keep the project's trusted origins exact: a forged Host header would otherwise also leak a valid seal.
+- The seal and the address digest are keyed with separate keys derived from `NEON_AUTH_COOKIE_SECRET` (labelled HMAC derivations; the
+  secret itself signs nothing), so a leaked table cannot be tested against known addresses. **Rotating that secret makes every setup
+  record unreadable**: everyone then uses an emailed link once more (it signs everyone out anyway). Keep the project's trusted origins
+  exact: a forged Host header would otherwise also leak a valid seal.
 - It protects **sign-in to the app**. The provider's own public sign-in still accepts the attacker's password for a verified account;
   that can only matter to the app, which refuses it.
 - If the owner never uses the emailed link, nobody can sign in (the attacker included). "Send the link again" and "Forgot password?"

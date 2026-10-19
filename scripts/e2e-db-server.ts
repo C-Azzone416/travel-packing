@@ -16,7 +16,12 @@ const setupEmails = (process.env.E2E_SETUP_EMAILS ?? "")
   .map((email) => email.trim())
   .filter(Boolean);
 
-startE2eDbServer({ port, seedOwners: owners, setupEmails })
+startE2eDbServer({
+  port,
+  seedOwners: owners,
+  setupEmails,
+  setupSecret: process.env.E2E_SETUP_SECRET ?? "",
+})
   .then((server) => {
     console.log(`e2e database ready on port ${server.port}`);
     const stop = () => void server.stop().then(() => process.exit(0));

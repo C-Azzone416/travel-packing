@@ -9,7 +9,7 @@ import {
 import * as service from "../data/service";
 import { sampleTripId } from "../seed/sample-data";
 import { closeE2eDb, createE2eDb, e2eDatabaseEnabled, E2E_DB_DRIVER_MARKER } from "./e2e-driver";
-import { createDbSetupStore } from "../auth/account-setup";
+import { createDbSetupStore, setupDigestKey } from "../auth/account-setup";
 import { startE2eDbServer, type E2eDbServer } from "./e2e-db-server";
 import type { Db } from "./retention";
 
@@ -26,6 +26,7 @@ beforeAll(async () => {
     port: 0,
     seedOwners: [OWNER.userId],
     setupEmails: ["Seeded@Example.test"],
+    setupSecret: "an-e2e-secret",
   });
 });
 // Each test opens its own single-connection pools; closing them keeps the server's connection count honest.
@@ -58,7 +59,7 @@ describe("e2e database server (real Postgres wire protocol over PGlite)", () => 
   });
 
   it("starts with the listed addresses counted as set up (#83) and nobody else", async () => {
-    const store = createDbSetupStore(open());
+    const store = createDbSetupStore(open(), setupDigestKey("an-e2e-secret"));
     expect((await store.completedAt("seeded@example.test")) !== null).toBe(true);
     expect((await store.completedAt("newcomer@example.test")) !== null).toBe(false);
     await store.markComplete("newcomer@example.test");

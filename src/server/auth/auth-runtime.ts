@@ -8,6 +8,7 @@ import { loadAuthConfig } from "./config";
 import {
   NOTHING_SET_UP,
   createDbSetupStore,
+  setupDigestKey,
   withSetupGate,
   type AccountSetupStore,
 } from "./account-setup";
@@ -101,21 +102,28 @@ export interface AuthRuntimeDeps {
   setupStore?: AccountSetupStore;
 }
 
-async function openSetupStore(
+/**
+ * Where "has this account been set up?" is recorded: the app database (records are keyed with a key derived from the
+ * secret in use, so they cannot be tested against known addresses), or an injected store (tests). Null when there is none.
+ */
+async function openSetupStores(
   env: Record<string, string | undefined>,
   deps: AuthRuntimeDeps,
-): Promise<AccountSetupStore | null> {
-  if (deps.setupStore) return deps.setupStore;
+): Promise<((secret: string) => AccountSetupStore) | null> {
+  if (deps.setupStore) {
+    const injected = deps.setupStore;
+    return () => injected;
+  }
   const db = await getAppDb(env);
-  return db ? createDbSetupStore(db) : null;
+  return db ? (secret) => createDbSetupStore(db, setupDigestKey(secret)) : null;
 }
 
 async function buildAuth(
   env: Record<string, string | undefined>,
   deps: AuthRuntimeDeps,
 ): Promise<RuntimeAuth> {
-  const setup = await openSetupStore(env, deps);
-  const e2e = setup ? await buildE2eAuth(env, setup) : null;
+  const storeFor = await openSetupStores(env, deps);
+  const e2e = storeFor ? await buildE2eAuth(env, storeFor(env.AUTH_E2E_PASSWORD ?? "")) : null;
   if (e2e) return e2e;
   const loaded = loadAuthConfig(env);
   if (!loaded.ok) {
@@ -125,11 +133,12 @@ async function buildAuth(
   }
   // Without the database nobody can be known to have finished setting up, so nobody can sign in (the app has no data
   // without it either): fail closed and say so, by name only.
-  if (!setup) {
+  if (!storeFor) {
     logWarning("auth unavailable: DATABASE_URL is not set");
     return unavailableAuth();
   }
   const { baseUrl, cookieSecret, allowlist } = loaded.config;
+  const setup = storeFor(cookieSecret);
   try {
     // Loaded lazily so unit tests and builds without configuration never touch the SDK.
     const { createNeonAuth } = await import("@neondatabase/auth/next/server");

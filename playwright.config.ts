@@ -47,6 +47,8 @@ export default defineConfig({
         E2E_DB_PORT: String(E2E_DB_PORT),
         E2E_SEED_OWNERS: SEEDED_OWNER_IDS.join(","),
         E2E_SETUP_EMAILS: SETUP_COMPLETE_EMAILS.join(","),
+        // Keys the setup records the same way the app does in an e2e build (its sign-in password).
+        E2E_SETUP_SECRET: E2E_PASSWORD,
       },
     },
     {

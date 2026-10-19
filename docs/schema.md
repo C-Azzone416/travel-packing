@@ -30,7 +30,7 @@ users 1──* trips ──* trip_items ──1 trip_item_progress
 ```
 
 Every table except `account_setups` has a non-null `owner_id` referencing `users.id` (`ON DELETE CASCADE`). `account_setups` is
-auth bookkeeping keyed by a SHA-256 digest of the normalized email (there is no user id before the first session, and the app keeps
+auth bookkeeping keyed by an HMAC digest of the normalized email (there is no user id before the first session, and the app keeps
 no raw addresses); it is only added to, by the reset-link flow (`docs/auth-screens.md`).
 
 ### Ownership is enforced by the keys

@@ -10,7 +10,7 @@
 // The record is a SHA-256 digest of the normalized email (there is no user id before the first session, and the app keeps
 // no raw addresses). It is only ever added, never removed.
 
-import { createHash } from "node:crypto";
+import { createHmac } from "node:crypto";
 import { eq } from "drizzle-orm";
 import type { Db } from "@/server/db/retention";
 import { accountSetups } from "@/server/db/schema";
@@ -25,41 +25,47 @@ export interface AccountSetupStore {
   markComplete(email: string): Promise<void>;
 }
 
-export const emailDigest = (email: string) =>
-  createHash("sha256").update(normalizeEmail(email)).digest("hex");
+/** The HMAC key for digests, derived from the app secret with a fixed label so the secret itself is never used directly. */
+export const setupDigestKey = (secret: string) =>
+  createHmac("sha256", secret).update("carrywell:account-setup-digest:v1").digest("hex");
 
-export function createDbSetupStore(db: Db): AccountSetupStore {
+export const emailDigest = (email: string, key: string) =>
+  createHmac("sha256", key).update(normalizeEmail(email)).digest("hex");
+
+export function createDbSetupStore(db: Db, key: string): AccountSetupStore {
   return {
     async completedAt(email) {
       const rows = await db
         .select({ at: accountSetups.completedAt })
         .from(accountSetups)
-        .where(eq(accountSetups.emailDigest, emailDigest(email)))
+        .where(eq(accountSetups.emailDigest, emailDigest(email, key)))
         .limit(1);
       return rows.length > 0 ? rows[0].at.getTime() : null;
     },
     async markComplete(email) {
       await db
         .insert(accountSetups)
-        .values({ emailDigest: emailDigest(email) })
+        .values({ emailDigest: emailDigest(email, key) })
         .onConflictDoNothing();
     },
   };
 }
 
 /** For tests: an in-memory store, optionally starting with some addresses already set up (at time 0, so any session counts). */
+export const TEST_DIGEST_KEY = "test-digest-key";
 export function createMemorySetupStore(
   complete: string[] = [],
   now: () => number = Date.now,
 ): AccountSetupStore & { digests: Map<string, number> } {
-  const digests = new Map<string, number>(complete.map((email) => [emailDigest(email), 0]));
+  const digest = (email: string) => emailDigest(email, TEST_DIGEST_KEY);
+  const digests = new Map<string, number>(complete.map((email) => [digest(email), 0]));
   return {
     digests,
     async completedAt(email) {
-      return digests.get(emailDigest(email)) ?? null;
+      return digests.get(digest(email)) ?? null;
     },
     async markComplete(email) {
-      if (!digests.has(emailDigest(email))) digests.set(emailDigest(email), now());
+      if (!digests.has(digest(email))) digests.set(digest(email), now());
     },
   };
 }
@@ -108,9 +114,10 @@ export function withSetupGate(
       if (!session) return null;
       const at = await setUpAt(session.email);
       if (at === null) return null;
-      // A session made before the password was set through the link may have been opened with a password chosen by someone
-      // else (pre-registration): it stays refused after the link is used. One that does not say when it was made is refused too.
-      if (at > 0 && !(session.issuedAt !== undefined && session.issuedAt >= at)) return null;
+      // A session made at or before the moment the password was set through the link may have been opened with a password
+      // chosen by someone else (pre-registration): it stays refused after the link is used. One that does not say when it was
+      // made is refused too.
+      if (at > 0 && !(session.issuedAt !== undefined && session.issuedAt > at)) return null;
       return session;
     },
     async signInWithPassword(email, password) {
