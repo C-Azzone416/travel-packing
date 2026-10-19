@@ -154,6 +154,22 @@ describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
       /NEON_AUTH_COOKIE_SECRET must be injected from secrets|secrets\.\* only/,
     ],
     [
+      "an extra command beside the injection script",
+      mutate(
+        'run: npx tsx scripts/inject-preview-secrets.ts ".vercel/.env.${TARGET}.local"',
+        'run: npx tsx scripts/inject-preview-secrets.ts ".vercel/.env.${TARGET}.local" && env',
+      ),
+      /exactly the injection script/,
+    ],
+    [
+      "the injection script run on a different file",
+      mutate(
+        'inject-preview-secrets.ts ".vercel/.env.${TARGET}.local"',
+        "inject-preview-secrets.ts other.env",
+      ),
+      /exactly the injection script/,
+    ],
+    [
       "an extra non-secret value in the injection step",
       mutate(
         "NEON_AUTH_COOKIE_SECRET: ${{ secrets.NEON_AUTH_COOKIE_SECRET }}",

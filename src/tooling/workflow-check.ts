@@ -111,6 +111,16 @@ export function checkDeployWorkflow(workflow: string): string[] {
     if (!/^\s+if:\s*env\.TARGET == 'preview'\s*$/m.test(injection)) {
       problems.push("the secret injection must run only when TARGET is preview");
     }
+    // The step does one thing: run the script on the pulled file. Nothing else may sit beside it that could echo a value.
+    const runLines = [...injection.matchAll(/^\s+run:\s*(.*)$/gm)].map((match) => match[1].trim());
+    if (
+      runLines.length !== 1 ||
+      runLines[0] !== 'npx tsx scripts/inject-preview-secrets.ts ".vercel/.env.${TARGET}.local"'
+    ) {
+      problems.push(
+        "the secret injection step must run exactly the injection script on the pulled preview file",
+      );
+    }
     for (const name of [
       "DATABASE_URL",
       "DATABASE_URL_UNPOOLED",

@@ -17,7 +17,7 @@ workflow (`.github/workflows/deploy-vercel.yml`) builds with a pinned Vercel CLI
    - a required variable is missing, or `NEON_AUTH_COOKIE_SECRET` is shorter than the 32 characters sign-in needs;
    - **preview only:** any required variable is still Vercel's redaction marker (`[SENSITIVE]`, what `vercel pull` writes
      for a Secret it cannot read), or either database URL is not a `postgres://` / `postgresql://` URL with a host, or
-     `OWNER_EMAIL_ALLOWLIST` is empty or is not a comma-separated list of well-formed emails. A preview file is also read
+     `OWNER_EMAIL_ALLOWLIST` is empty or is not a comma-separated list of well-formed emails. (The app itself also accepts `;` or spaces between addresses; the preview check insists on commas so the list is read the same way everywhere.) A preview file is also read
      the way `vercel build` reads it. A production run is checked exactly as before; extending these checks to
      production is a follow-up for when Production work resumes;
    - `LOCATION_PROVIDER` is set to anything but `open-meteo` (required in preview; optional in production, where unset
