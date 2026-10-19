@@ -4,7 +4,9 @@ import { describe, expect, it } from "vitest";
 import {
   checkDeployWorkflow,
   checkTimeoutHeadroom,
-  MIN_CI_TIMEOUT_MINUTES,
+  ciJobs,
+  criticalPathMinutes,
+  MIN_CI_CRITICAL_PATH_MINUTES,
   unpinnedActions,
 } from "./workflow-check";
 
@@ -237,28 +239,144 @@ describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
   });
 });
 
+describe("ciJobs and criticalPathMinutes", () => {
+  const sample = `name: X
+jobs:
+  a:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps: []
+  b:
+    needs: a
+    timeout-minutes: 7
+  c:
+    needs: [a, b]
+    timeout-minutes: 3
+  d:
+    needs: [c]
+  loose:
+    timeout-minutes: 20
+`;
+
+  it("reads each job's timeout and its needs, from a single name or an inline list", () => {
+    expect(ciJobs(sample)).toEqual([
+      { id: "a", timeout: 5, needs: [] },
+      { id: "b", timeout: 7, needs: ["a"] },
+      { id: "c", timeout: 3, needs: ["a", "b"] },
+      { id: "d", timeout: null, needs: ["c"] },
+      { id: "loose", timeout: 20, needs: [] },
+    ]);
+  });
+
+  it("finds no jobs in a file without a jobs block", () => {
+    expect(ciJobs("name: X\non: push\n")).toEqual([]);
+  });
+
+  it("the critical path is the longest chain of timeouts through needs, not the sum of every job", () => {
+    // a(5) -> b(7) -> c(3) -> d(none) = 15; the unconnected job is 20 on its own.
+    expect(criticalPathMinutes(ciJobs(sample).filter((job) => job.id !== "loose"))).toBe(15);
+    expect(criticalPathMinutes(ciJobs(sample))).toBe(20);
+    expect(criticalPathMinutes([])).toBe(0);
+  });
+
+  it("survives a needs cycle and a need that names no job", () => {
+    const cyclic = [
+      { id: "x", timeout: 4, needs: ["y"] },
+      { id: "y", timeout: 6, needs: ["x", "ghost"] },
+    ];
+    expect(criticalPathMinutes(cyclic)).toBeGreaterThan(0);
+    expect(criticalPathMinutes(cyclic)).toBeLessThanOrEqual(10);
+  });
+});
+
 describe("checkTimeoutHeadroom: the deploy waits on CI, so the timeouts nest", () => {
   const ci = readFileSync(join(DIR, "ci.yml"), "utf8");
+  const jobs = ciJobs(ci);
 
-  it("holds for the real workflows, with CI given at least the minimum", () => {
+  /** The real ci.yml with one edit inside one job; the edit must change something. */
+  function editJob(job: string, from: string | RegExp, to: string): string {
+    const start = ci.search(new RegExp(`^ {2}${job}:\\s*$`, "m"));
+    expect(start).toBeGreaterThanOrEqual(0);
+    const rest = ci.slice(start + 1);
+    const next = rest.search(/^ {2}[A-Za-z0-9_-]+:\s*$/m);
+    const body = next < 0 ? rest : rest.slice(0, next);
+    const edited = body.replace(from, to);
+    expect(edited).not.toBe(body);
+    return ci.slice(0, start + 1) + edited + (next < 0 ? "" : rest.slice(next));
+  }
+
+  it("holds for the real workflows", () => {
     expect(checkTimeoutHeadroom(ci, deploy)).toEqual([]);
-    expect(Number(/^ {4}timeout-minutes:\s*(\d+)/m.exec(ci)?.[1])).toBeGreaterThanOrEqual(
-      MIN_CI_TIMEOUT_MINUTES,
+  });
+
+  it("the real ci.yml is the shape the issue asks for: parallel jobs, an e2e matrix, one required summary", () => {
+    expect(jobs.map((job) => job.id)).toEqual([
+      "checks",
+      "unit",
+      "build",
+      "e2e-build",
+      "e2e",
+      "ci",
+    ]);
+    expect(jobs.find((job) => job.id === "e2e")?.needs).toEqual(["e2e-build"]);
+    expect(jobs.find((job) => job.id === "ci")?.needs.sort()).toEqual(
+      jobs
+        .filter((job) => job.id !== "ci")
+        .map((job) => job.id)
+        .sort(),
     );
+    expect(criticalPathMinutes(jobs)).toBeGreaterThanOrEqual(MIN_CI_CRITICAL_PATH_MINUTES);
+    expect(ci).toMatch(/project: \[phone, desktop\]/);
+    expect(ci).toMatch(/fail-fast: false/);
   });
 
   it.each([
     [
-      "the old 20-minute ci timeout",
-      ci.replace(/^( {4}timeout-minutes:\s*)\d+/m, "$120"),
-      /ci job's timeout/,
+      "a job with no timeout",
+      editJob("unit", /^ {4}timeout-minutes:.*\n/m, ""),
+      /unit job has no timeout/,
     ],
     [
-      "a ci timeout just under the minimum",
-      ci.replace(/^( {4}timeout-minutes:\s*)\d+/m, "$134"),
-      /ci job's timeout/,
+      "the e2e job with no timeout",
+      editJob("e2e", /^ {4}timeout-minutes:.*\n/m, ""),
+      /e2e job has no timeout/,
     ],
-    ["no ci timeout at all", ci.replace(/^ {4}timeout-minutes:.*\n/m, ""), /ci job's timeout/],
+    [
+      "timeouts too tight for a slow runner (the slowest chain under the minimum)",
+      editJob("e2e", /^( {4}timeout-minutes:\s*)\d+/m, "$15"),
+      /slowest chain of ci jobs/,
+    ],
+    ["no jobs at all", "name: CI\non: push\n", /no jobs/],
+  ])("fails with %s", (_name, brokenCi, message) => {
+    expect(checkTimeoutHeadroom(brokenCi, deploy).join("\n")).toMatch(message);
+  });
+
+  it.each([
+    [
+      "a summary that forgets a job (a failure there would not fail CI)",
+      editJob("ci", /needs: \[[^\]]*\]/, "needs: [checks, unit, build, e2e-build]"),
+      /must wait for every other job \(not: e2e\)/,
+    ],
+    [
+      "a summary that forgets two jobs",
+      editJob("ci", /needs: \[[^\]]*\]/, "needs: [checks, unit, build]"),
+      /not: e2e-build, e2e\)/,
+    ],
+    [
+      "a summary that would be skipped when a job fails",
+      editJob("ci", /^ {4}if: always\(\)\n/m, ""),
+      /if: always\(\)/,
+    ],
+    [
+      "a summary with a different condition",
+      editJob("ci", "if: always()", "if: success()"),
+      /if: always\(\)/,
+    ],
+    [
+      "no summary job at all",
+      ci.replace(/^ {2}ci:\s*$/m, "  summary:"),
+      /required `ci` job is missing/,
+    ],
   ])("fails with %s", (_name, brokenCi, message) => {
     expect(checkTimeoutHeadroom(brokenCi, deploy).join("\n")).toMatch(message);
   });
@@ -270,8 +388,8 @@ describe("checkTimeoutHeadroom: the deploy waits on CI, so the timeouts nest", (
       /wait for CI must outlast/,
     ],
     [
-      "a wait that only equals the ci timeout",
-      deploy.replace("seq 1 100", "seq 1 80"),
+      "a wait that only equals the slowest chain",
+      deploy.replace("seq 1 100", "seq 1 70"),
       /wait for CI must outlast/,
     ],
     ["a wait with no loop", deploy.replace("seq 1 100", "seq x"), /wait for CI must outlast/],
@@ -287,5 +405,11 @@ describe("checkTimeoutHeadroom: the deploy waits on CI, so the timeouts nest", (
     ],
   ])("fails with %s", (_name, brokenDeploy, message) => {
     expect(checkTimeoutHeadroom(ci, brokenDeploy).join("\n")).toMatch(message);
+  });
+
+  it("the deploy's own wait for CI still reads the whole workflow's result for the exact commit", () => {
+    // `gh run list --workflow ci.yml --commit $GITHUB_SHA` reports the WORKFLOW run, which fails when the `ci` summary fails.
+    expect(deploy).toMatch(/gh run list --workflow ci\.yml --commit "\$GITHUB_SHA"/);
+    expect(deploy).toMatch(/success\) exit 0/);
   });
 });

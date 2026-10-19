@@ -172,26 +172,114 @@ export function checkDeployWorkflow(workflow: string): string[] {
   return problems;
 }
 
-/** The CI job needs room for a slow runner: a healthy run is ~18.5 minutes, and a cancelled run stops the deploy that waits on it. */
-export const MIN_CI_TIMEOUT_MINUTES = 35;
+/** One job of ci.yml as far as the contract cares: its timeout and what it waits for. */
+export interface CiJob {
+  id: string;
+  /** `timeout-minutes`, or null when the job has none (GitHub would then let it run for six hours). */
+  timeout: number | null;
+  needs: string[];
+}
 
 /**
- * The deploy waits for CI on the same commit, so the timeouts must nest: the ci job's timeout is generous, the deploy's wait
- * outlasts it (so the wait cannot give up while CI is still running), and the deploy job outlasts its own wait.
+ * The jobs of a workflow file. Plain text, like the rest of this file: a job is a two-space-indented key under `jobs:`, and
+ * `needs:` is read from a single line (`needs: a` or `needs: [a, b]`); a multi-line list would read as no needs, and the
+ * `ci` rule below would then fail loudly rather than pass quietly.
+ */
+export function ciJobs(workflow: string): CiJob[] {
+  const start = workflow.search(/^jobs:\s*$/m);
+  if (start < 0) return [];
+  const body = workflow.slice(start).split("\n").slice(1).join("\n");
+  const heads = [...body.matchAll(/^ {2}([A-Za-z0-9_-]+):\s*$/gm)];
+  return heads.map((head, index) => {
+    const end = index + 1 < heads.length ? heads[index + 1].index : body.length;
+    const text = body.slice(head.index, end);
+    const timeout = /^ {4}timeout-minutes:\s*(\d+)/m.exec(text)?.[1];
+    const needs = /^ {4}needs:\s*(.+)$/m.exec(text)?.[1] ?? "";
+    return {
+      id: head[1],
+      timeout: timeout === undefined ? null : Number(timeout),
+      needs: needs
+        .replace(/[[\]]/g, "")
+        .split(",")
+        .map((name) => name.trim())
+        .filter(Boolean),
+    };
+  });
+}
+
+/** The longest chain of job timeouts through `needs`: the most CI can take before every job in the chain has timed out. */
+export function criticalPathMinutes(jobs: CiJob[]): number {
+  const byId = new Map(jobs.map((job) => [job.id, job]));
+  const memo = new Map<string, number>();
+  const longest = (id: string, seen: ReadonlySet<string>): number => {
+    const cached = memo.get(id);
+    if (cached !== undefined) return cached;
+    const job = byId.get(id);
+    if (!job || seen.has(id)) return 0;
+    const next = new Set(seen).add(id);
+    const before = Math.max(0, ...job.needs.map((need) => longest(need, next)));
+    const total = (job.timeout ?? 0) + before;
+    memo.set(id, total);
+    return total;
+  };
+  return Math.max(0, ...jobs.map((job) => longest(job.id, new Set())));
+}
+
+/**
+ * The slowest chain of CI jobs needs room for a slow runner: healthy, CI takes under ten minutes, but a cancelled run stops the
+ * deploy that waits on it (a single job's timeout is what cancelled the 18.5-minute serial run twice).
+ */
+export const MIN_CI_CRITICAL_PATH_MINUTES = 30;
+
+/** The one job branch protection requires and the deploy waits on (#87). Its name must never change. */
+export const REQUIRED_CI_JOB = "ci";
+
+/**
+ * The deploy waits for CI on the same commit, so the timeouts must nest, and the summary job must really summarise:
+ * - every ci.yml job has a timeout, and the slowest chain of them is generous;
+ * - the deploy's wait outlasts that chain (so the wait cannot give up while CI is still running);
+ * - the deploy job outlasts its own wait;
+ * - the required `ci` job waits for EVERY other job and runs even when one fails (a skipped required check counts as a pass).
  * Returns the broken rules (empty when fine).
  */
 export function checkTimeoutHeadroom(ci: string, deploy: string): string[] {
   const problems: string[] = [];
-  const ciTimeout = Number(/^ {4}timeout-minutes:\s*(\d+)/m.exec(ci)?.[1] ?? NaN);
-  if (!(ciTimeout >= MIN_CI_TIMEOUT_MINUTES)) {
-    problems.push(`the ci job's timeout-minutes must be at least ${MIN_CI_TIMEOUT_MINUTES}`);
+  const jobs = ciJobs(ci);
+  if (jobs.length === 0) problems.push("ci.yml has no jobs");
+  for (const job of jobs) {
+    if (job.timeout === null) problems.push(`the ${job.id} job has no timeout-minutes`);
   }
+  const criticalPath = criticalPathMinutes(jobs);
+  if (!(criticalPath >= MIN_CI_CRITICAL_PATH_MINUTES)) {
+    problems.push(
+      `the slowest chain of ci jobs must have timeouts adding up to at least ${MIN_CI_CRITICAL_PATH_MINUTES} minutes`,
+    );
+  }
+
+  const summary = jobs.find((job) => job.id === REQUIRED_CI_JOB);
+  if (!summary) problems.push(`the required \`${REQUIRED_CI_JOB}\` job is missing`);
+  else {
+    const others = jobs.filter((job) => job.id !== REQUIRED_CI_JOB).map((job) => job.id);
+    const missing = others.filter((id) => !summary.needs.includes(id));
+    if (missing.length > 0) {
+      problems.push(
+        `the ${REQUIRED_CI_JOB} job must wait for every other job (not: ${missing.join(", ")})`,
+      );
+    }
+    const body = ci.slice(ci.search(new RegExp(`^ {2}${REQUIRED_CI_JOB}:\\s*$`, "m")));
+    if (!/^ {4}if:\s*always\(\)\s*$/m.test(body)) {
+      problems.push(
+        `the ${REQUIRED_CI_JOB} job must run with \`if: always()\`, or a failure above it would skip it`,
+      );
+    }
+  }
+
   const attempts = Number(/seq 1 (\d+)/.exec(deploy)?.[1] ?? NaN);
   const sleepSeconds = Number(/pending\) sleep (\d+)/.exec(deploy)?.[1] ?? NaN);
   const waitMinutes = (attempts * sleepSeconds) / 60;
-  if (!(waitMinutes >= ciTimeout + 5)) {
+  if (!(waitMinutes >= criticalPath + 5)) {
     problems.push(
-      "the deploy's wait for CI must outlast the ci job's timeout by at least 5 minutes",
+      "the deploy's wait for CI must outlast the slowest chain of ci job timeouts by at least 5 minutes",
     );
   }
   // The deploy job (the one with the wait in it) must outlast its wait with room for the build, migration and deploy.
