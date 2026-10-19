@@ -77,6 +77,21 @@ describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
     ["a pull request trigger", mutate("on:\n", "on:\n  pull_request:\n"), /pull request/],
     ["inherited secrets", `${deploy}\n    secrets: inherit\n`, /inherited/],
     [
+      "a step that downloads an artifact (the e2e build must never reach the deploy)",
+      `${deploy}\n      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2\n`,
+      /must not download an artifact/,
+    ],
+    [
+      "a reference to the e2e build",
+      `${deploy}\n      # reuse the e2e-build output\n`,
+      /must not download an artifact/,
+    ],
+    [
+      "the e2e build flag",
+      `${deploy}\n          NEXT_PUBLIC_E2E_BUILD: "1"\n`,
+      /must not download an artifact/,
+    ],
+    [
       "the gate reads a secret",
       mutate(
         "      - name: Install\n        run: npm ci\n\n      - name: Release",
@@ -327,6 +342,7 @@ describe("checkTimeoutHeadroom: the deploy waits on CI, so the timeouts nest", (
     );
     expect(criticalPathMinutes(jobs)).toBeGreaterThanOrEqual(MIN_CI_CRITICAL_PATH_MINUTES);
     expect(ci).toMatch(/project: \[phone, desktop\]/);
+    expect(ci).toMatch(/shard: \[1, 2\]/);
     expect(ci).toMatch(/fail-fast: false/);
   });
 

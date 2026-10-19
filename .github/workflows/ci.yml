@@ -185,10 +185,10 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
-  # Phone and desktop at the same time. Each is its own runner with its own database (the e2e database is started per run, in
-  # memory), so the two never share state; the tests already sign in as a different owner per project.
+  # Phone and desktop at the same time, each in two shards. Every runner has its own database (started per run, in memory), so
+  # none share state; the tests already sign in as a different owner per project, and each starts from a freshly seeded owner.
   e2e:
-    name: e2e (${{ matrix.project }})
+    name: e2e (${{ matrix.project }} ${{ matrix.shard }}/2)
     needs: e2e-build
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -196,6 +196,7 @@ jobs:
       fail-fast: false
       matrix:
         project: [phone, desktop]
+        shard: [1, 2]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -232,17 +233,18 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       # E2E_PREBUILT makes Playwright start the downloaded build instead of building again (playwright.config.ts).
-      - name: E2E (${{ matrix.project }})
+      - name: E2E (${{ matrix.project }} ${{ matrix.shard }}/2)
         env:
           E2E_PREBUILT: "1"
           E2E_PROJECT: ${{ matrix.project }}
-        run: npx playwright test --project="$E2E_PROJECT"
+          E2E_SHARD: ${{ matrix.shard }}
+        run: npx playwright test --project="$E2E_PROJECT" --shard="$E2E_SHARD/2"
 
       - name: Upload Playwright report
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: playwright-report-${{ matrix.project }}
+          name: playwright-report-${{ matrix.project }}-${{ matrix.shard }}
           path: |
             playwright-report/
             test-results/

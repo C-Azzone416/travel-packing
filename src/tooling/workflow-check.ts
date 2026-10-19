@@ -147,6 +147,14 @@ export function checkDeployWorkflow(workflow: string): string[] {
     }
   }
 
+  // The deploy builds its own production build. The e2e build CI makes (and hands to the browser tests as an artifact) carries
+  // the test-only sign-in, so nothing here may download an artifact or name that build (#87).
+  if (/download-artifact|e2e-build|NEXT_PUBLIC_E2E_BUILD/.test(workflow)) {
+    problems.push(
+      "the deploy must not download an artifact or use the e2e build: it makes its own production build",
+    );
+  }
+
   // Safety steps and pins.
   for (const step of [
     "check-deploy-env",
