@@ -108,6 +108,11 @@ jobs:
       # so these four are written into the pulled file from the GitHub `preview` environment's secrets. They reach the script only
       # through this step's env: (from secrets.*, so GitHub masks them) and are never printed. The step does not run for a
       # production deploy, which never receives them. Rotating one means updating Vercel AND the GitHub preview environment.
+      # Which builder the build uses depends on the project's settings (framework preset and build/output/root/install
+      # overrides), which live in Vercel, not the repo. Print those five settings (never anything else from the file).
+      - name: Show the Vercel project's build settings
+        run: npx tsx scripts/print-project-settings.ts
+
       - name: Inject the Preview secrets (values not shown)
         if: env.TARGET == 'preview'
         env:

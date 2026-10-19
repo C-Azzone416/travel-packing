@@ -147,6 +147,12 @@ export function checkDeployWorkflow(workflow: string): string[] {
     }
   }
 
+  // The project's build settings are printed after the pull (they decide the builder), before the build.
+  const settingsAt = workflow.indexOf("scripts/print-project-settings.ts");
+  if (!(pull >= 0 && pull < settingsAt && settingsAt < workflow.indexOf("vercel build"))) {
+    problems.push("the project settings must be printed after vercel pull and before the build");
+  }
+
   // The build output is checked for server functions after the build and before anything is uploaded.
   const buildAt = workflow.indexOf("vercel build");
   const outputCheckAt = workflow.indexOf("scripts/check-build-output.ts");

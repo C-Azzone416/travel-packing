@@ -13,7 +13,8 @@ workflow (`.github/workflows/deploy-vercel.yml`) builds with a pinned Vercel CLI
    The timeouts nest on purpose (`npm run check:workflows` enforces it): the `ci` job may run up to 40 minutes (a healthy run takes about
    18.5, but a slow runner can double a step), this wait lasts up to 50, and the deploy job's own limit is 75, so a slow CI run is waited for
    rather than cancelling a deploy.
-2. `vercel pull` for the target. **Preview only:** the four Vercel Secrets are then written into the pulled file from the
+2. `vercel pull` for the target, then the five build settings that decide which builder `vercel build` uses (framework, build command,
+   output directory, root directory, install command; settings only, never the ids) are printed to the log. The repo's `vercel.json` names the framework (`nextjs`) so the repo, not the dashboard, decides the builder. **Preview only:** the four Vercel Secrets are then written into the pulled file from the
    GitHub `preview` environment (see [Preview secrets](#preview-secrets)). Then `scripts/check-deploy-env.ts` checks the
    file the build will use. It prints variable **names** only, and fails when:
    - any test-only variable is present (`NEXT_PUBLIC_E2E_BUILD`, anything starting with `AUTH_E2E_`, `E2E_DATABASE_URL`, `SEED_DATABASE_URL`, `OPEN_METEO_GEOCODING_URL`);

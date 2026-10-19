@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { buildOutputProblems } from "./build-output";
+import { buildOutputProblems, buildOutputSummary } from "./build-output";
 
 const root = mkdtempSync(join(tmpdir(), "build-output-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -92,5 +92,59 @@ describe("buildOutputProblems", () => {
     expect(buildOutputProblems(dir)).toEqual([
       "the build output has no server functions, so every route would 404",
     ]);
+  });
+});
+
+describe("buildOutputSummary", () => {
+  it("counts the function bundles, totals the size and names the framework in config.json", () => {
+    const dir = output([
+      "functions/a.func/index.js",
+      "functions/api/b.func/index.js",
+      "static/x.txt",
+    ]);
+    writeFileSync(
+      join(dir, "config.json"),
+      JSON.stringify({ framework: { slug: "nextjs", version: "16.4.2" } }),
+    );
+    writeFileSync(join(dir, "static", "big.bin"), Buffer.alloc(1024 * 1024));
+    expect(buildOutputSummary(dir)).toEqual([
+      "build output summary: 2 function bundles, 1.0 MB in total (symlinks followed)",
+      "build output summary: config.json framework: nextjs 16.4.2",
+    ]);
+  });
+
+  it("says so when config.json names no framework, has only a slug, or cannot be read", () => {
+    const none = output(["functions/a.func/"]);
+    writeFileSync(join(none, "config.json"), "{}");
+    expect(buildOutputSummary(none)[1]).toBe(
+      "build output summary: config.json framework: (none named)",
+    );
+    const slugOnly = output(["config.json"]);
+    writeFileSync(join(slugOnly, "config.json"), JSON.stringify({ framework: { slug: "other" } }));
+    expect(buildOutputSummary(slugOnly)[1]).toBe(
+      "build output summary: config.json framework: other",
+    );
+    const bad = output(["functions/"]);
+    writeFileSync(join(bad, "config.json"), "{ nope");
+    expect(buildOutputSummary(bad)[1]).toBe(
+      "build output summary: config.json framework: (config.json unreadable)",
+    );
+    expect(buildOutputSummary(output([]))[1]).toBe(
+      "build output summary: config.json framework: (config.json unreadable)",
+    );
+  });
+
+  it("reports an output of zero functions plainly, and a missing directory", () => {
+    expect(buildOutputSummary(output(["config.json", "static/index.html"]))[0]).toBe(
+      "build output summary: 0 function bundles, 0.0 MB in total (symlinks followed)",
+    );
+    expect(buildOutputSummary(join(root, "gone"))).toEqual([
+      "build output summary: the directory does not exist",
+    ]);
+  });
+
+  it("never prints a path or a file name", () => {
+    const dir = output(["functions/secret-route-name.func/index.js", "config.json"]);
+    expect(buildOutputSummary(dir).join(" ")).not.toMatch(/secret-route-name|out-/);
   });
 });

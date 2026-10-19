@@ -159,6 +159,11 @@ describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
       /NEON_AUTH_COOKIE_SECRET must be injected from secrets|secrets\.\* only/,
     ],
     [
+      "the project settings never printed",
+      mutate("scripts/print-project-settings.ts", "scripts/other.ts"),
+      /project settings must be printed after vercel pull and before the build/,
+    ],
+    [
       "no check of the build output",
       mutate("scripts/check-build-output.ts", "scripts/other.ts"),
       /build output check must run after the build and before the deploy/,
