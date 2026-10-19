@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getAuth } from "@/server/auth/auth-runtime";
 import { authorizeOwner } from "@/server/auth/guard";
-import { EMAIL_CONFIRMED, PASSWORD_UPDATED } from "@/features/auth/copy";
+import { EMAIL_CONFIRMED, PASSWORD_SET, PASSWORD_UPDATED } from "@/features/auth/copy";
 import { SignInForm } from "./SignInForm";
 
 export const metadata = { title: "Sign in" };
@@ -10,6 +10,7 @@ export const dynamic = "force-dynamic";
 
 const NOTICES: Record<string, string> = {
   "password-updated": PASSWORD_UPDATED,
+  "password-set": PASSWORD_SET,
   verified: EMAIL_CONFIRMED,
 };
 

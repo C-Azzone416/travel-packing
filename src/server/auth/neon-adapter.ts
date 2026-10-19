@@ -21,7 +21,10 @@ interface NeonCallResult {
 
 /** The subset of the SDK this adapter uses. */
 export interface NeonAuthLike {
-  getSession(): Promise<{ data?: { user?: NeonUser | null } | null; error?: unknown } | null>;
+  getSession(): Promise<{
+    data?: { user?: NeonUser | null; session?: { createdAt?: unknown } | null } | null;
+    error?: unknown;
+  } | null>;
   signIn: {
     email(input: {
       email: string;
@@ -94,17 +97,24 @@ const displayName = (email: string) => email.split("@")[0] || "Owner";
  * (false, null, missing): if sign-up is open, anyone could register the owner's address with their own password,
  * and an unverified address proves nothing about who owns it. The allowlist is only meaningful for a verified email.
  */
-function toSession(user: NeonUser | null | undefined): AuthSession | null {
-  return user?.id && user.email && user.emailVerified === true
-    ? { userId: user.id, email: user.email }
-    : null;
+function toSession(user: NeonUser | null | undefined, created?: unknown): AuthSession | null {
+  if (!(user?.id && user.email && user.emailVerified === true)) return null;
+  const issuedAt =
+    created instanceof Date || typeof created === "string" || typeof created === "number"
+      ? new Date(created).getTime()
+      : Number.NaN;
+  return {
+    userId: user.id,
+    email: user.email,
+    ...(Number.isFinite(issuedAt) ? { issuedAt } : {}),
+  };
 }
 
 export function createNeonAuthProvider(neon: NeonAuthLike): AuthProvider {
   return {
     async getSession() {
       const result = await neon.getSession();
-      return result?.error ? null : toSession(result?.data?.user);
+      return result?.error ? null : toSession(result?.data?.user, result?.data?.session?.createdAt);
     },
     async signInWithPassword(email, password): Promise<SignInResult> {
       try {

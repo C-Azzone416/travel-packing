@@ -13,8 +13,8 @@ import {
 import type { FormState, ResendState } from "@/features/auth/state";
 import { cleanEmail, resendVerificationCode, verifyOwnerEmail } from "@/server/auth/account-flows";
 import { withMinimumDuration } from "@/server/auth/min-duration";
-import { forgetPendingEmail, pendingEmail } from "@/server/auth/pending-email";
-import { ACCESS_DENIED_PATH, SIGN_IN_PATH } from "@/server/auth/public-paths";
+import { pendingEmail, rememberPendingEmail } from "@/server/auth/pending-email";
+import { FINISH_SETUP_PATH } from "@/server/auth/public-paths";
 
 /** The address being verified: the remembered one, else what was typed. */
 async function addressFor(formData: FormData): Promise<string> {
@@ -34,22 +34,18 @@ export async function verifyAction(_previous: FormState, formData: FormData): Pr
     ...(field(formData, "code").trim() ? {} : { code: MISSING_CODE }),
   };
   if (Object.keys(fieldErrors).length > 0) return state({ fieldErrors });
-  const { auth, limits } = await accountContext();
-  if (!auth.available) return state({ error: UNAVAILABLE });
+  const { auth, limits, address, setupRedirect } = await accountContext();
+  // The link that finishes setting up is sent as part of verifying, so refuse up front if it could not be made.
+  if (!auth.available || !setupRedirect) return state({ error: UNAVAILABLE });
 
   const outcome = await withMinimumDuration(() =>
-    verifyOwnerEmail(auth, limits, email, field(formData, "code")),
+    verifyOwnerEmail(auth, limits, address, email, field(formData, "code"), setupRedirect),
   );
   switch (outcome.status) {
-    case "signed-in":
-      await forgetPendingEmail();
-      redirect("/");
-    case "verified":
-      await forgetPendingEmail();
-      redirect(`${SIGN_IN_PATH}?notice=verified`);
-    case "denied":
-      await forgetPendingEmail();
-      redirect(ACCESS_DENIED_PATH);
+    case "finish-setup":
+      // A right code starts no session: the person now chooses their password through the emailed link (#83).
+      await rememberPendingEmail(outcome.email);
+      redirect(FINISH_SETUP_PATH);
     case "invalid":
       return state({ code: field(formData, "code"), fieldErrors: { code: WRONG_CODE } });
     case "locked":

@@ -8,15 +8,26 @@
 //      created, mailed or verified, and the code step simply never succeeds (design addendum on #27). This also keeps
 //      strangers from filling the auth project's user table and mailbox.
 //   3. Verification and the allowlist stay the gate. Nothing here grants access: a session exists only if the provider
-//      reports a verified email (neon-adapter), and a verified address that is not allowlisted is signed straight back
-//      out, exactly as sign-in does.
+//      reports a verified email (neon-adapter), the address is allowlisted, and (#83) the password was set through an
+//      emailed link (account-setup.ts).
+//   4. A sign-up code never signs anyone in (#83). It proves the inbox, then the person must choose their password through
+//      a link emailed to that inbox, so a password set by someone else before verification can never be used.
 
+import type { AccountSetupStore } from "./account-setup";
 import { isAllowed, normalizeEmail, type Allowlist } from "./allowlist";
 import { RESEND_COOLDOWN_SECONDS, type CodeKind, type FlowLimits } from "./flow-limits";
 import { logAuthEvent } from "./safe-log";
+import type { SetupSeals } from "./setup-seal";
 import type { AuthProvider } from "./types";
 
 type Auth = { provider: AuthProvider; allowlist: Allowlist };
+/** What finishing a setup needs on top of Auth: where "set up" is recorded, and how a link names its address. */
+type SetupAuth = Auth & { setup: AccountSetupStore; seals: SetupSeals };
+
+/** The return address for a reset link: fixed, or made for the address it is sent to (so the link can name it). */
+export type RedirectTo = string | ((email: string) => string);
+const redirectFor = (redirectTo: RedirectTo, email: string) =>
+  typeof redirectTo === "function" ? redirectTo(email) : redirectTo;
 
 export const MIN_PASSWORD_LENGTH = 8;
 export const MAX_PASSWORD_LENGTH = 128;
@@ -156,31 +167,31 @@ export const resendVerificationCode = (
     auth.provider.resendVerificationCode(clean),
   );
 
-/** `redirectTo` is the app's own /reset-password URL; the emailed link brings the person back to it with a token. */
+/**
+ * `redirectTo` is the app's own /reset-password URL (or a function making it for the address); the emailed link brings the
+ * person back to it with a token. The same link serves "forgot password" and "finish setting up".
+ */
 export const requestPasswordReset = (
   auth: Auth,
   limits: FlowLimits,
   address: string,
   email: unknown,
-  redirectTo: string,
+  redirectTo: RedirectTo,
 ) =>
   sendTo(auth, limits, address, "reset", email, (clean) =>
-    auth.provider.requestPasswordReset(clean, redirectTo),
+    auth.provider.requestPasswordReset(clean, redirectFor(redirectTo, clean)),
   );
 
 // ---- verification --------------------------------------------------------------------------------------------------------
 
 /**
- * - signed-in: verified and the address is allowlisted; the provider already started the session
- * - verified: verified, but no session yet; the person signs in with the password they chose
- * - denied: verified, but not on the allowlist; the session (if any) has been ended
+ * - finish-setup: the code was right. No session was started (any the provider made is ended); a link to choose the password
+ *   has been emailed (or was just sent), and the person is told to check their email
  * - invalid: wrong, expired, used or missing code (one message for all of them)
  * - locked: five wrong codes; a new code is needed
  */
 export type VerifyOutcome =
-  | { status: "signed-in" }
-  | { status: "verified" }
-  | { status: "denied" }
+  | { status: "finish-setup"; email: string; cooldownSeconds: number }
   | { status: "invalid" }
   | { status: "locked" }
   | RateLimited
@@ -189,8 +200,10 @@ export type VerifyOutcome =
 export async function verifyOwnerEmail(
   auth: Auth,
   limits: FlowLimits,
+  address: string,
   emailInput: unknown,
   codeInput: unknown,
+  redirectTo: RedirectTo,
 ): Promise<VerifyOutcome> {
   const email = cleanEmail(emailInput);
   if (!email) return { status: "invalid" };
@@ -216,26 +229,25 @@ export async function verifyOwnerEmail(
   }
   limits.clearGuesses(email);
   logAuthEvent("verification-succeeded");
-  // Whether verifying also signs the person in is up to the provider; ask rather than assume. getSession only ever
-  // returns a verified session, and the allowlist still applies to it.
-  let session;
+  // The address is now verified, but the password on the account is whatever was typed at sign-up, by whoever typed it. So no
+  // session comes out of this step, however the provider behaves (it may sign the person in on its own): end any it made,
+  // and make the person choose a password through a link emailed to this inbox.
   try {
-    session = await auth.provider.getSession();
+    await auth.provider.signOut();
   } catch {
     logAuthEvent("provider-error");
-    return { status: "verified" };
   }
-  if (!session) return { status: "verified" };
-  if (!isAllowed(auth.allowlist, session.email)) {
-    logAuthEvent("verification-denied");
-    try {
-      await auth.provider.signOut();
-    } catch {
-      logAuthEvent("provider-error");
-    }
-    return { status: "denied" };
-  }
-  return { status: "signed-in" };
+  const sent = await sendTo(auth, limits, address, "reset", email, (clean) =>
+    auth.provider.requestPasswordReset(clean, redirectFor(redirectTo, clean)),
+  );
+  // A link that is already on its way (asked a moment ago), a cap, or an outage all end up on the same screen: "check your
+  // email", with a resend that says what is wrong if it is not working.
+  return {
+    status: "finish-setup",
+    email,
+    cooldownSeconds:
+      sent.status === "ok" ? sent.cooldownSeconds : limits.cooldownRemaining("reset", email),
+  };
 }
 
 // ---- reset ---------------------------------------------------------------------------------------------------------------
@@ -252,14 +264,17 @@ export type ResetOutcome =
   | { status: "unavailable" };
 
 /**
- * Choose a new password with the token from the emailed link. Success ends this browser's session and does NOT sign
- * anyone in: the person signs in with the new password, so verification and the allowlist are checked again. Ending
+ * Choose a new password with the token from the emailed link, and record that the account is set up. Success ends this
+ * browser's session and does NOT sign anyone in: the person signs in with the new password, so verification and the
+ * allowlist are checked again. Ending
  * OTHER sessions is the provider's job (its reset endpoint); see docs/auth-screens.md.
  */
 export async function resetOwnerPassword(
-  auth: Auth,
+  auth: SetupAuth,
   tokenInput: unknown,
   newPassword: unknown,
+  /** The `for` value from the link: a seal naming the address the link was emailed to. */
+  sealedAddress?: unknown,
 ): Promise<ResetOutcome> {
   const problem = passwordProblem(newPassword);
   if (problem) return { status: "weak-password", problem };
@@ -279,6 +294,18 @@ export async function resetOwnerPassword(
     await auth.provider.signOut();
   } catch {
     logAuthEvent("provider-error");
+  }
+  // Using a link proves the inbox, so this is the moment the account counts as set up (#83). Only the app can make the seal,
+  // it is only ever emailed to the address it names, and only allowlisted addresses are ever recorded. Without a good seal
+  // (an old link) the password still changes, but the account stays "not set up" until a new link is used.
+  const address = auth.seals.open(sealedAddress);
+  if (address && isAllowed(auth.allowlist, address)) {
+    try {
+      await auth.setup.markComplete(address);
+      logAuthEvent("account-setup-completed");
+    } catch {
+      logAuthEvent("provider-error");
+    }
   }
   logAuthEvent("password-reset-succeeded");
   return { status: "ok" };

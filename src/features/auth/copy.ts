@@ -32,6 +32,17 @@ export const verifyHelper = (email: string) =>
 export const forgotSentHelper = (email: string) =>
   `If there's an account for ${email}, we've sent a link to reset your password. It expires in ${RESET_LIFETIME_HOURS} hour.`;
 
+/** After a right sign-up code, or a sign-in with the right password before it was set through a link (#83). */
+export const FINISH_SETUP_TITLE = "Check your email to finish setting up";
+export const finishSetupHelper = (email: string | null) =>
+  email
+    ? `We've sent a link to ${email}. Open it to choose your password. It expires in ${RESET_LIFETIME_HOURS} hour.`
+    : "Open the link we emailed to choose your password. If you can't find it, we can send another.";
+export const PASSWORD_SET = "Password set. Sign in with your new password.";
+/** Added under the one generic sign-in error, the same for every address (so it says nothing about any account). */
+export const SIGN_IN_HINT_BEFORE =
+  "If you just signed up, check your email for a link to finish setting up, or ";
+
 /** The resend control's words for a code ("verify") and for a link ("reset"). */
 export const RESEND_COPY = {
   verify: {
@@ -39,6 +50,12 @@ export const RESEND_COPY = {
     wait: (seconds: number) => `You can request another code in ${seconds}s`,
     sent: `New code sent. You can request another in ${RESEND_COOLDOWN_SECONDS} seconds.`,
     ready: "You can request a new code now.",
+  },
+  setup: {
+    button: "Send the link again",
+    wait: (seconds: number) => `You can request another link in ${seconds}s`,
+    sent: `Link sent again. You can request another in ${RESEND_COOLDOWN_SECONDS} seconds.`,
+    ready: "You can request a new link now.",
   },
   reset: {
     button: "Send it again",

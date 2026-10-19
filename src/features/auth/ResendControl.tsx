@@ -18,7 +18,7 @@ export function ResendControl({
   email,
   initialCooldown = 0,
 }: {
-  kind: "verify" | "reset";
+  kind: "verify" | "reset" | "setup";
   action: (previous: ResendState, formData: FormData) => Promise<ResendState>;
   /** Sent along when the page does not already know the address (it is otherwise remembered server-side). */
   email?: string;

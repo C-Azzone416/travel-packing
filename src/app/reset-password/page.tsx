@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { InvalidLinkView } from "@/features/auth/InvalidLinkView";
+import { readLinkParams } from "@/features/auth/link-params";
 import { ResetForm } from "@/features/auth/ResetForm";
 import { cleanToken } from "@/server/auth/account-flows";
 import { resetAction } from "./actions";
@@ -19,7 +20,15 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>;
  */
 export default async function ResetPasswordPage({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
-  const token = typeof params.token === "string" ? cleanToken(params.token) : null;
+  const { token: rawToken, sealed } = readLinkParams(params);
+  const token = cleanToken(rawToken);
   if (!token || params.error !== undefined) return <InvalidLinkView />;
-  return <ResetForm token={token} action={resetAction} />;
+  return (
+    <ResetForm
+      token={token}
+      sealed={sealed}
+      variant={params.setup === "1" ? "setup" : "reset"}
+      action={resetAction}
+    />
+  );
 }
