@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemorySetupStore } from "./account-setup";
 import { getAuth, resetAuthRuntime, unavailableAuth } from "./auth-runtime";
+import { allowlistFingerprint } from "./allowlist-fingerprint";
 import { setAuthLogSink } from "./safe-log";
 
 vi.mock("next/headers", () => ({
@@ -84,14 +85,39 @@ describe("getAuth", () => {
     expect(await auth.provider.getSession()).toEqual({ userId: "u1", email: "owner@example.test" });
   });
 
+  it("logs the allowlist's size and keyed fingerprint once at start, and never an address", async () => {
+    createNeonAuth.mockImplementation(() => ({
+      getSession: async () => ({ data: null, error: null }),
+    }));
+    await getAuth(env, { setupStore: createMemorySetupStore(["owner@example.test"]) });
+    const loadedLines = logged.filter((line) => line.includes("allowlist-loaded"));
+    expect(loadedLines).toHaveLength(1);
+    const parsed = JSON.parse(loadedLines[0]) as Record<string, unknown>;
+    expect(parsed).toEqual({
+      scope: "auth",
+      event: "allowlist-loaded",
+      entries: 1,
+      malformed: 0,
+      fingerprint: allowlistFingerprint(new Set(["owner@example.test"]), SECRET),
+    });
+    expect(logged.join("")).not.toMatch(/owner@example/);
+    await getAuth(env);
+    expect(logged.filter((line) => line.includes("allowlist-loaded"))).toHaveLength(1);
+  });
+
   it("fails closed if the SDK cannot be constructed", async () => {
     createNeonAuth.mockImplementation(() => {
       throw new Error(`bad config ${SECRET}`);
     });
     const auth = await getAuth(env, { setupStore: createMemorySetupStore() });
     expect(auth.available).toBe(false);
-    expect(logged).toEqual([JSON.stringify({ scope: "auth", event: "provider-error" })]);
+    // The allowlist is logged as a count and a fingerprint first (never an address), then the failure.
+    expect(logged.map((line) => (JSON.parse(line) as { event: string }).event)).toEqual([
+      "allowlist-loaded",
+      "provider-error",
+    ]);
     expect(logged.join("")).not.toContain(SECRET);
+    expect(logged.join("")).not.toContain("owner@example.test");
   });
 
   it("fails closed, by name only, when there is no database to record who has finished setting up", async () => {

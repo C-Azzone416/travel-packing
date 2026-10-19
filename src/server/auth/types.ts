@@ -31,8 +31,17 @@ export type SignInResult =
  */
 export type FlowFailure = "weak-password" | "invalid" | "locked" | "too-many" | "unavailable";
 
+/**
+ * A provider call that answered with a client error (a 4xx) which the screens deliberately treat as success, so an address's
+ * state is never revealed. Kept only so the server can log WHAT happened (status and machine code, never a message).
+ */
+export interface ProviderRejection {
+  status: number;
+  code: string;
+}
+
 export type FlowResult<Reason extends FlowFailure = FlowFailure> =
-  { ok: true } | { ok: false; reason: Reason };
+  { ok: true; rejected?: ProviderRejection } | { ok: false; reason: Reason };
 
 export interface AuthProvider {
   /** The current request's session, or null when signed out. */
