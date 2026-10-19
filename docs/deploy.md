@@ -27,7 +27,8 @@ workflow (`.github/workflows/deploy-vercel.yml`) builds with a pinned Vercel CLI
      means location search is off);
    - `PRODUCTION_DB_HOST` is unset or is not a bare host name (a full connection URL is refused, never guessed at), or `DATABASE_URL` /
      `DATABASE_URL_UNPOOLED` point at the production database host.
-3. `vercel build`, then `npm run check:no-e2e-in-build` (the fake sign-in, the e2e driver and the sample fixtures must
+3. `vercel build`, then `scripts/check-build-output.ts` (the output must contain server functions: an output without them deploys "fine" and
+   answers every request with a 404), then `npm run check:no-e2e-in-build` (the fake sign-in, the e2e driver and the sample fixtures must
    not be in the output).
 4. A second check (`scripts/check-migration-target.ts`) looks at the GitHub environment's `DATABASE_URL_UNPOOLED`, the secret
    the migrate and seed steps actually use: in a preview run it must NOT be `PRODUCTION_DB_HOST`, in a production run it

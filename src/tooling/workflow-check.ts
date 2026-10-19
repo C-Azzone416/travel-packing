@@ -147,6 +147,14 @@ export function checkDeployWorkflow(workflow: string): string[] {
     }
   }
 
+  // The build output is checked for server functions after the build and before anything is uploaded.
+  const buildAt = workflow.indexOf("vercel build");
+  const outputCheckAt = workflow.indexOf("scripts/check-build-output.ts");
+  const uploadAt = workflow.indexOf("vercel deploy --prebuilt");
+  if (!(buildAt >= 0 && buildAt < outputCheckAt && outputCheckAt < uploadAt)) {
+    problems.push("the build output check must run after the build and before the deploy");
+  }
+
   // The deploy names its target outright (Vercel assigns a project's FIRST deployment to production when none is given), and
   // a check of the CLI's own output runs after it and before the smoke test.
   if (!/vercel deploy --prebuilt --target=preview\b/.test(workflow)) {
