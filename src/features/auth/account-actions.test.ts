@@ -1,13 +1,23 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createFakeAuth } from "@/server/auth/__fixtures__/fake-auth";
+import { createMemorySetupStore } from "@/server/auth/account-setup";
 import { parseAllowlist } from "@/server/auth/allowlist";
+import { createSetupSeals } from "@/server/auth/setup-seal";
 
 const OWNER = "owner@example.test";
 const STRANGER = "stranger@example.test";
 const fake = createFakeAuth();
+const setup = createMemorySetupStore();
+const seals = createSetupSeals("s".repeat(40));
 let available = true;
 vi.mock("@/server/auth/auth-runtime", () => ({
-  getAuth: async () => ({ provider: fake, allowlist: parseAllowlist(OWNER), available }),
+  getAuth: async () => ({
+    provider: fake,
+    allowlist: parseAllowlist(OWNER),
+    available,
+    setup,
+    seals,
+  }),
 }));
 let headerValues: Record<string, string> = {};
 const jar = new Map<string, string>();
@@ -28,8 +38,10 @@ vi.mock("next/navigation", () => ({
 import { forgotAction, resendResetAction } from "@/app/forgot-password/actions";
 import { resetAction } from "@/app/reset-password/actions";
 import { signUpAction } from "@/app/sign-up/actions";
+import { resendSetupAction } from "@/app/finish-setup/actions";
 import { resendVerifyAction, verifyAction } from "@/app/verify/actions";
 import { resetFlowLimits } from "@/server/auth/flow-limits";
+const limitsReset = () => resetFlowLimits();
 import { setAuthLogSink } from "@/server/auth/safe-log";
 import { INITIAL_FORGOT, INITIAL_FORM, INITIAL_RESEND } from "./state";
 
@@ -41,6 +53,7 @@ const data = (fields: Record<string, string>) => {
 const calls = () => fake.flows.calls.map((call) => call.method);
 
 beforeEach(() => {
+  setup.digests.clear();
   vi.stubEnv("AUTH_FLOW_MIN_MS", "0");
   jar.clear();
   resetFlowLimits();
@@ -135,24 +148,36 @@ describe("signUpAction", () => {
 describe("verifyAction", () => {
   const submit = (fields: Record<string, string>) => verifyAction(INITIAL_FORM, data(fields));
 
-  it("signs in and goes to the app when verifying starts a session", async () => {
+  it("never signs in: a right code goes to 'check your email' and asks for the link that sets the password", async () => {
     jar.set("cw-pending-email", OWNER);
+    // Even if the provider signs the person in on its own, no session comes out of this step.
     fake.flows.sessionAfterVerify = { userId: "u1", email: OWNER };
-    await expect(submit({ code: "123 456" })).rejects.toThrow("NEXT_REDIRECT:/");
-    expect(jar.has("cw-pending-email")).toBe(false);
+    await expect(submit({ code: "123 456" })).rejects.toThrow("NEXT_REDIRECT:/finish-setup");
+    expect(calls()).toEqual(["verifyEmail", "requestPasswordReset"]);
+    const [, link] = fake.flows.calls[1].args as string[];
+    expect(link.startsWith("https://app.example.test/reset-password?for=")).toBe(true);
+    expect(seals.open(new URL(link).searchParams.get("for"))).toBe(OWNER);
+    expect(fake.current).toBeNull();
+    expect(jar.get("cw-pending-email")).toBe(OWNER);
+    expect(setup.digests.size).toBe(0);
   });
 
-  it("goes to sign-in with a notice when verifying leaves no session", async () => {
+  it("refuses up front, before using the code, when the link could not be made", async () => {
     jar.set("cw-pending-email", OWNER);
-    await expect(submit({ code: "123456" })).rejects.toThrow(
-      "NEXT_REDIRECT:/sign-in?notice=verified",
-    );
-    expect(jar.has("cw-pending-email")).toBe(false);
+    headerValues = {};
+    expect(await submit({ code: "123456" })).toMatchObject({
+      error: "Something went wrong on our side. Try again in a moment.",
+    });
+    expect(calls()).toEqual([]);
   });
 
   it("uses the typed address when none is remembered", async () => {
-    await expect(submit({ email: OWNER, code: "123456" })).rejects.toThrow("NEXT_REDIRECT");
+    await expect(submit({ email: OWNER, code: "123456" })).rejects.toThrow(
+      "NEXT_REDIRECT:/finish-setup",
+    );
     expect(fake.flows.calls[0]).toEqual({ method: "verifyEmail", args: [OWNER, "123456"] });
+    expect(jar.get("cw-pending-email")).toBe(OWNER);
+    jar.clear();
     expect(await submit({ email: "nope", code: "123456" })).toMatchObject({
       fieldErrors: { email: "Enter a valid email address." },
     });
@@ -258,10 +283,13 @@ describe("forgotAction", () => {
 
   it("asks the provider to return the link to this app's reset page", async () => {
     await submit(OWNER);
-    expect(fake.flows.calls[0]).toEqual({
-      method: "requestPasswordReset",
-      args: [OWNER, "https://app.example.test/reset-password"],
-    });
+    const [email, link] = fake.flows.calls[0].args as string[];
+    expect(fake.flows.calls[0].method).toBe("requestPasswordReset");
+    expect(email).toBe(OWNER);
+    // The link names the address it is for, with a seal only the app can make.
+    const url = new URL(link);
+    expect(`${url.origin}${url.pathname}`).toBe("https://app.example.test/reset-password");
+    expect(seals.open(url.searchParams.get("for"))).toBe(OWNER);
   });
 
   it("answers a repeat inside the gap the same way, with the time left", async () => {
@@ -314,13 +342,25 @@ describe("resetAction", () => {
 
   it("changes the password and goes to sign-in with a notice, signing nobody in", async () => {
     fake.current = { userId: "u1", email: OWNER };
-    await expect(submit({ token: "fake-token-one", password: "new-password-1" })).rejects.toThrow(
-      "NEXT_REDIRECT:/sign-in?notice=password-updated",
-    );
+    await expect(
+      submit({ token: "fake-token-one", password: "new-password-1", for: seals.seal(OWNER) }),
+    ).rejects.toThrow("NEXT_REDIRECT:/sign-in?notice=password-updated");
     expect(fake.flows.calls).toEqual([
       { method: "resetPassword", args: ["fake-token-one", "new-password-1"] },
     ]);
     expect(fake.current).toBeNull();
+    // Using the link is what counts the account as set up.
+    expect(await setup.isComplete(OWNER)).toBe(true);
+  });
+
+  it("changes the password but records nothing when the link has no valid seal", async () => {
+    await expect(
+      submit({ token: "fake-token-one", password: "new-password-1", for: "forged" }),
+    ).rejects.toThrow("NEXT_REDIRECT:/sign-in?notice=password-updated");
+    await expect(submit({ token: "fake-token-one", password: "new-password-1" })).rejects.toThrow(
+      "NEXT_REDIRECT:/sign-in?notice=password-updated",
+    );
+    expect(setup.digests.size).toBe(0);
   });
 
   it("sends a link that no longer works to the 'not valid' screen, without the token in the address", async () => {
@@ -353,5 +393,39 @@ describe("resetAction", () => {
     expect(await submit({ token: "fake-token-one", password: "new-password-1" })).toMatchObject({
       error: "Something went wrong on our side. Try again in a moment.",
     });
+  });
+});
+
+describe("resendSetupAction", () => {
+  const resend = (previous = INITIAL_RESEND) => resendSetupAction(previous, data({}));
+
+  it("sends the setup link again to the remembered address, with the same 30-second gap", async () => {
+    jar.set("cw-pending-email", OWNER);
+    const first = await resend();
+    expect(first).toEqual({ nonce: 1, status: "sent", cooldownSeconds: 30 });
+    expect(calls()).toEqual(["requestPasswordReset"]);
+    const second = await resend(first);
+    expect(second).toMatchObject({ nonce: 2, status: "cooldown" });
+    expect(calls()).toHaveLength(1);
+  });
+
+  it("answers an address that is not allowed exactly the same, and sends nothing", async () => {
+    jar.set("cw-pending-email", STRANGER);
+    expect(await resend()).toEqual({ nonce: 1, status: "sent", cooldownSeconds: 30 });
+    expect(calls()).toEqual([]);
+  });
+
+  it("reports a missing address, an outage, a missing return address and a cap as an error or limit", async () => {
+    expect(await resend()).toMatchObject({ status: "error" });
+    jar.set("cw-pending-email", OWNER);
+    fake.flows.answers.requestPasswordReset = { ok: false, reason: "too-many" };
+    expect(await resend()).toMatchObject({ status: "limited" });
+    fake.flows.answers.requestPasswordReset = { ok: false, reason: "unavailable" };
+    limitsReset();
+    expect(await resend()).toMatchObject({ status: "error" });
+    headerValues = {};
+    expect(await resend()).toMatchObject({ status: "error" });
+    available = false;
+    expect(await resend()).toMatchObject({ status: "error" });
   });
 });

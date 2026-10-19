@@ -32,7 +32,9 @@ vi.mock("@/app/forgot-password/actions", () => ({
   resendResetAction: vi.fn(),
 }));
 vi.mock("@/app/reset-password/actions", () => ({ resetAction: vi.fn() }));
+vi.mock("@/app/finish-setup/actions", () => ({ resendSetupAction: vi.fn() }));
 
+import FinishSetupPage from "@/app/finish-setup/page";
 import ForgotPasswordPage from "@/app/forgot-password/page";
 import ResetPasswordPage, { metadata as resetMetadata } from "@/app/reset-password/page";
 import SignUpPage from "@/app/sign-up/page";
@@ -52,6 +54,7 @@ describe.each([
   ["sign-up", () => SignUpPage(), "Create your account"],
   ["verify", () => VerifyPage(), "Confirm your email"],
   ["forgot-password", () => ForgotPasswordPage(), "Reset your password"],
+  ["finish-setup", () => FinishSetupPage(), "Check your email to finish setting up"],
 ])("the %s page", (_name, page, title) => {
   it("is shown to a signed-out visitor", async () => {
     expect(await html(page())).toContain(title);
@@ -94,6 +97,25 @@ describe("the verify page", () => {
   });
 });
 
+describe("the finish-setup page", () => {
+  it("names the address the link went to and shows the time left on the resend gap", async () => {
+    jar.set("cw-pending-email", "owner@example.test");
+    flowLimits().send("reset", "owner@example.test", "1.1.1.1");
+    const markup = await html(FinishSetupPage());
+    expect(markup).toContain(
+      "We&#x27;ve sent a link to owner@example.test. Open it to choose your password.",
+    );
+    expect(markup).toMatch(/You can request another link in (29|30)s/);
+  });
+
+  it("without a remembered address says so in general terms and offers a new link", async () => {
+    const markup = await html(FinishSetupPage());
+    expect(markup).toContain("Open the link we emailed");
+    expect(markup).toContain('href="/forgot-password"');
+    expect(markup).not.toContain("Send the link again");
+  });
+});
+
 describe("the reset-password page", () => {
   const page = (params: Record<string, string | string[]>) =>
     html(ResetPasswordPage({ searchParams: Promise.resolve(params) }));
@@ -116,6 +138,29 @@ describe("the reset-password page", () => {
     expect(markup).toContain("This link isn’t valid");
     expect(markup).not.toContain("<form");
     expect(markup).not.toContain("nope");
+  });
+
+  it("shows 'Set your password' for the link that finishes sign-up, and 'Choose a new password' otherwise", async () => {
+    const setupMarkup = await page({ token: "fake-token-one", for: "seal.value.mac", setup: "1" });
+    expect(setupMarkup).toContain("Set your password");
+    expect(setupMarkup).toContain(">Set password<");
+    expect(setupMarkup).toContain('name="variant" value="setup"');
+    expect(setupMarkup).toContain('name="for" value="seal.value.mac"');
+    const resetMarkup = await page({ token: "fake-token-one", for: "seal.value.mac" });
+    expect(resetMarkup).toContain("Choose a new password");
+    expect(resetMarkup).toContain(">Update password<");
+  });
+
+  it("shows the same 'not valid' screen for the setup variant", async () => {
+    const markup = await page({ setup: "1", error: "INVALID_TOKEN" });
+    expect(markup).toContain("This link isn’t valid");
+    expect(markup).not.toContain("<form");
+  });
+
+  it("recovers a token the provider glued onto the seal", async () => {
+    const markup = await page({ for: "seal.value.mac?token=fake-token-one" });
+    expect(markup).toContain('name="token" value="fake-token-one"');
+    expect(markup).toContain('name="for" value="seal.value.mac"');
   });
 
   it("keeps the one-time token from being passed on to other sites", () => {

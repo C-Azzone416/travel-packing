@@ -12,9 +12,11 @@ import {
   signUpOwner,
   verifyOwnerEmail,
 } from "./account-flows";
+import { createMemorySetupStore, type AccountSetupStore } from "./account-setup";
 import { parseAllowlist } from "./allowlist";
 import { CODE_GUESSES, createFlowLimits, type FlowLimits } from "./flow-limits";
 import { setAuthLogSink } from "./safe-log";
+import { createSetupSeals } from "./setup-seal";
 
 const OWNER_EMAIL = "owner@example.test";
 const STRANGER = "stranger@example.test";
@@ -25,7 +27,14 @@ const REDIRECT = "https://app.example.test/reset-password";
 let fake: FakeAuth;
 let limits: FlowLimits;
 let logged: string[];
-let auth: { provider: FakeAuth; allowlist: ReturnType<typeof parseAllowlist> };
+let setup: ReturnType<typeof createMemorySetupStore>;
+const seals = createSetupSeals("s".repeat(40));
+let auth: {
+  provider: FakeAuth;
+  allowlist: ReturnType<typeof parseAllowlist>;
+  setup: AccountSetupStore;
+  seals: typeof seals;
+};
 let time: number;
 
 beforeEach(() => {
@@ -34,7 +43,8 @@ beforeEach(() => {
   limits = createFlowLimits(() => time);
   logged = [];
   setAuthLogSink((line) => logged.push(line));
-  auth = { provider: fake, allowlist };
+  setup = createMemorySetupStore();
+  auth = { provider: fake, allowlist, setup, seals };
 });
 afterEach(() => setAuthLogSink());
 
@@ -155,7 +165,7 @@ describe("signUpOwner", () => {
 
   it("logs codes only: no address, password, code or token ever appears in a log line", async () => {
     await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL, PASSWORD);
-    await verifyOwnerEmail(auth, limits, OWNER_EMAIL, "123456");
+    await verifyOwnerEmail(auth, limits, "1.1.1.1", OWNER_EMAIL, "123456", REDIRECT);
     await requestPasswordReset(auth, limits, "1.1.1.1", OWNER_EMAIL, REDIRECT);
     await resetOwnerPassword(auth, "fake-token-one", "new-password-1");
     const text = logged.join("\n");
@@ -253,115 +263,114 @@ describe("sending codes and links", () => {
 });
 
 describe("verifyOwnerEmail", () => {
-  it("signs the owner in when verifying starts a session for an allowlisted address", async () => {
+  const verify = (email: string = OWNER_EMAIL, code: unknown = "123456", address = "1.1.1.1") =>
+    verifyOwnerEmail(auth, limits, address, email, code, REDIRECT);
+
+  it("never signs anyone in: a right code ends whatever session the provider made and asks for the link", async () => {
+    // Even if the provider signs the person in on its own after verifying, the sign-up password is not trusted.
     fake.flows.sessionAfterVerify = { userId: "u1", email: OWNER_EMAIL };
-    expect(await verifyOwnerEmail(auth, limits, OWNER_EMAIL, "123 456")).toEqual({
-      status: "signed-in",
+    expect(await verify(" Owner@Example.test", "123 456")).toEqual({
+      status: "finish-setup",
+      email: OWNER_EMAIL,
+      cooldownSeconds: 30,
     });
-    expect(fake.flows.calls).toEqual([{ method: "verifyEmail", args: [OWNER_EMAIL, "123456"] }]);
-    expect(events()).toEqual(["verification-succeeded"]);
-  });
-
-  it("sends the person to sign in when verifying leaves no session", async () => {
-    expect(await verifyOwnerEmail(auth, limits, OWNER_EMAIL, "123456")).toEqual({
-      status: "verified",
-    });
-    expect(fake.current).toBeNull();
-  });
-
-  it("keeps the allowlist: a verified stranger is signed straight back out", async () => {
-    // The provider is only asked about allowlisted addresses, so a stranger's session can only come from elsewhere;
-    // the check still holds if one ever appears.
-    fake.flows.sessionAfterVerify = { userId: "u2", email: STRANGER };
-    expect(await verifyOwnerEmail(auth, limits, OWNER_EMAIL, "123456")).toEqual({
-      status: "denied",
-    });
+    expect(fake.flows.calls).toEqual([
+      { method: "verifyEmail", args: [OWNER_EMAIL, "123456"] },
+      { method: "requestPasswordReset", args: [OWNER_EMAIL, REDIRECT] },
+    ]);
     expect(fake.signOutCalls).toBe(1);
     expect(fake.current).toBeNull();
-    expect(events()).toEqual(["verification-succeeded", "verification-denied"]);
+    expect(events()).toEqual(["verification-succeeded", "password-reset-requested"]);
   });
 
-  it("still denies when ending the session fails, and logs only a code", async () => {
-    fake.flows.sessionAfterVerify = { userId: "u2", email: STRANGER };
+  it("asks the provider for the link with a return address made for this address", async () => {
+    const redirectTo = (email: string) => `${REDIRECT}?for=${seals.seal(email)}`;
+    await verifyOwnerEmail(auth, limits, "1.1.1.1", OWNER_EMAIL, "123456", redirectTo);
+    const args = fake.flows.calls[1].args as string[];
+    expect(seals.open(new URL(args[1]).searchParams.get("for"))).toBe(OWNER_EMAIL);
+  });
+
+  it("does not record the account as set up: only using the link does that", async () => {
+    await verify();
+    expect(await setup.isComplete(OWNER_EMAIL)).toBe(false);
+  });
+
+  it("still ends in 'check your email' when the link cannot be sent right now, with the time left on the gap", async () => {
+    fake.flows.answers.requestPasswordReset = { ok: false, reason: "unavailable" };
+    expect(await verify()).toMatchObject({ status: "finish-setup", email: OWNER_EMAIL });
+    fake.flows.answers.verifyEmail = { ok: true };
+  });
+
+  it("does not send a second link when one was asked for a moment ago", async () => {
+    await requestPasswordReset(auth, limits, "1.1.1.1", OWNER_EMAIL, REDIRECT);
+    wait(10_000);
+    fake.flows.calls.length = 0;
+    const outcome = await verify();
+    expect(outcome).toEqual({ status: "finish-setup", email: OWNER_EMAIL, cooldownSeconds: 20 });
+    expect(methods()).toEqual(["verifyEmail"]);
+  });
+
+  it("when ending the provider's session fails it still goes on to the link, logging only a code", async () => {
     fake.failNextSignOut = true;
-    expect((await verifyOwnerEmail(auth, limits, OWNER_EMAIL, "123456")).status).toBe("denied");
+    expect((await verify()).status).toBe("finish-setup");
     expect(events()).toContain("provider-error");
-    expect(logged.join()).not.toContain("stranger");
-  });
-
-  it("treats a failing session read after verifying as verified, not signed in", async () => {
-    fake.failNextGetSession = true;
-    expect((await verifyOwnerEmail(auth, limits, OWNER_EMAIL, "123456")).status).toBe("verified");
-    expect(events()).toContain("provider-error");
+    expect(methods()).toEqual(["verifyEmail", "requestPasswordReset"]);
   });
 
   it("never succeeds for an address that is not on the allowlist, and asks the provider nothing", async () => {
-    expect(await verifyOwnerEmail(auth, limits, STRANGER, "123456")).toEqual({ status: "invalid" });
+    expect(await verify(STRANGER)).toEqual({ status: "invalid" });
     expect(methods()).toEqual([]);
-    for (let i = 0; i < CODE_GUESSES - 1; i += 1)
-      await verifyOwnerEmail(auth, limits, STRANGER, "123456");
+    for (let i = 0; i < CODE_GUESSES - 1; i += 1) await verify(STRANGER);
     // The lock arrives on the same schedule as for a real address.
-    expect(await verifyOwnerEmail(auth, limits, STRANGER, "123456")).toEqual({ status: "locked" });
+    expect(await verify(STRANGER)).toEqual({ status: "locked" });
   });
 
   it("gives one answer for a wrong, expired, used or malformed code", async () => {
     fake.flows.answers.verifyEmail = { ok: false, reason: "invalid" };
-    expect(await verifyOwnerEmail(auth, limits, OWNER_EMAIL, "123456")).toEqual({
-      status: "invalid",
-    });
-    expect(await verifyOwnerEmail(auth, limits, OWNER_EMAIL, "abc")).toEqual({ status: "invalid" });
-    expect(await verifyOwnerEmail(auth, limits, "not-an-email", "123456")).toEqual({
-      status: "invalid",
-    });
-    expect(await verifyOwnerEmail(auth, limits, OWNER_EMAIL, undefined)).toEqual({
-      status: "invalid",
-    });
+    expect(await verify(OWNER_EMAIL, "123456")).toEqual({ status: "invalid" });
+    expect(await verify(OWNER_EMAIL, "abc")).toEqual({ status: "invalid" });
+    expect(await verify("not-an-email", "123456")).toEqual({ status: "invalid" });
+    expect(await verify(OWNER_EMAIL, null)).toEqual({ status: "invalid" });
     expect(methods()).toEqual(["verifyEmail"]);
   });
 
   it("locks after five wrong codes, before the provider is asked again", async () => {
     fake.flows.answers.verifyEmail = { ok: false, reason: "invalid" };
     for (let i = 0; i < CODE_GUESSES; i += 1) {
-      expect((await verifyOwnerEmail(auth, limits, OWNER_EMAIL, "111111")).status).toBe("invalid");
+      expect((await verify(OWNER_EMAIL, "111111")).status).toBe("invalid");
     }
     fake.flows.answers.verifyEmail = { ok: true };
-    expect(await verifyOwnerEmail(auth, limits, OWNER_EMAIL, "123456")).toEqual({
-      status: "locked",
-    });
+    expect(await verify()).toEqual({ status: "locked" });
     expect(methods()).toHaveLength(CODE_GUESSES);
   });
 
   it("clears the guess count on success", async () => {
     fake.flows.answers.verifyEmail = { ok: false, reason: "invalid" };
-    for (let i = 0; i < CODE_GUESSES - 1; i += 1) {
-      await verifyOwnerEmail(auth, limits, OWNER_EMAIL, "111111");
-    }
+    for (let i = 0; i < CODE_GUESSES - 1; i += 1) await verify(OWNER_EMAIL, "111111");
     fake.flows.answers.verifyEmail = { ok: true };
-    await verifyOwnerEmail(auth, limits, OWNER_EMAIL, "123456");
+    await verify();
     expect(limits.guessBlocked(OWNER_EMAIL).ok).toBe(true);
   });
 
   it("reports the provider's own lock, its limit, and its outage", async () => {
     fake.flows.answers.verifyEmail = { ok: false, reason: "locked" };
-    expect(await verifyOwnerEmail(auth, limits, OWNER_EMAIL, "123456")).toEqual({
-      status: "locked",
-    });
+    expect(await verify()).toEqual({ status: "locked" });
     fake.flows.answers.verifyEmail = { ok: false, reason: "too-many" };
-    expect(await verifyOwnerEmail(auth, limits, OWNER_EMAIL, "123456")).toEqual({
-      status: "rate-limited",
-    });
+    expect(await verify()).toEqual({ status: "rate-limited" });
     fake.flows.answers.verifyEmail = { ok: false, reason: "unavailable" };
     for (let i = 0; i < CODE_GUESSES + 2; i += 1) {
-      expect(await verifyOwnerEmail(auth, limits, OWNER_EMAIL, "123456")).toEqual({
-        status: "unavailable",
-      });
+      expect(await verify()).toEqual({ status: "unavailable" });
     }
   });
 });
 
 describe("resetOwnerPassword", () => {
-  const reset = (token: unknown = "fake-token-one", password: unknown = "new-password-1") =>
-    resetOwnerPassword(auth, token, password);
+  const seal = () => seals.seal(OWNER_EMAIL);
+  const reset = (
+    token: unknown = "fake-token-one",
+    password: unknown = "new-password-1",
+    sealed: unknown = seal(),
+  ) => resetOwnerPassword(auth, token, password, sealed);
 
   it("sets the new password, ends this browser's session, and does not sign anyone in", async () => {
     fake.current = { userId: "u1", email: OWNER_EMAIL };
@@ -371,13 +380,59 @@ describe("resetOwnerPassword", () => {
     ]);
     expect(fake.signOutCalls).toBe(1);
     expect(fake.current).toBeNull();
-    expect(events()).toEqual(["password-reset-succeeded"]);
+    expect(events()).toEqual(["account-setup-completed", "password-reset-succeeded"]);
+  });
+
+  it("records the account named by the link as set up, and only then", async () => {
+    expect(await setup.isComplete(OWNER_EMAIL)).toBe(false);
+    await reset();
+    expect(await setup.isComplete(OWNER_EMAIL)).toBe(true);
+  });
+
+  it.each([
+    ["no seal", null],
+    ["an empty seal", ""],
+    ["a seal made with another secret", createSetupSeals("t".repeat(40)).seal(OWNER_EMAIL)],
+    ["a tampered seal", seals.seal(OWNER_EMAIL).replace(/.$/, "A")],
+    ["a seal that is not text", { not: "text" }],
+  ])("changes the password but records nothing for %s", async (_name, sealed) => {
+    expect(await reset("fake-token-one", "new-password-1", sealed)).toEqual({ status: "ok" });
+    expect(setup.digests.size).toBe(0);
+  });
+
+  it("never records an address that is not on the allowlist", async () => {
+    expect(await reset("fake-token-one", "new-password-1", seals.seal(STRANGER))).toEqual({
+      status: "ok",
+    });
+    expect(setup.digests.size).toBe(0);
+  });
+
+  it("does not record anything when the password was not changed", async () => {
+    fake.flows.answers.resetPassword = { ok: false, reason: "invalid" };
+    await reset();
+    expect(setup.digests.size).toBe(0);
+  });
+
+  it("still succeeds when recording fails, logging only a code (a new link will fix it)", async () => {
+    auth.setup = {
+      isComplete: async () => false,
+      markComplete: async () => {
+        throw new Error("db down for owner@example.test");
+      },
+    };
+    expect(await reset()).toEqual({ status: "ok" });
+    expect(events()).toEqual(["provider-error", "password-reset-succeeded"]);
+    expect(logged.join()).not.toContain("owner@example.test");
   });
 
   it("still succeeds when ending the session fails", async () => {
     fake.failNextSignOut = true;
     expect(await reset()).toEqual({ status: "ok" });
-    expect(events()).toEqual(["provider-error", "password-reset-succeeded"]);
+    expect(events()).toEqual([
+      "provider-error",
+      "account-setup-completed",
+      "password-reset-succeeded",
+    ]);
   });
 
   it("checks the password before the token is used", async () => {

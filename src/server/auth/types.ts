@@ -10,8 +10,10 @@ export interface AuthSession {
 /**
  * `unverified` means the password was RIGHT but the address is not verified yet. It is only ever reported after the
  * password matched, so it tells a caller nothing about accounts they cannot already sign in to.
+ * `unfinished` is the same for a verified address whose password was never set through an emailed link (#83): no session.
  */
-export type SignInResult = { ok: true; session: AuthSession } | { ok: false; unverified?: true };
+export type SignInResult =
+  { ok: true; session: AuthSession } | { ok: false; unverified?: true; unfinished?: true };
 
 /**
  * Why a sign-up, code, or reset step failed, in terms the UI may show. Deliberately small: nothing here says whether an

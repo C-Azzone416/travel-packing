@@ -212,7 +212,12 @@ describe("the e2e account flows", () => {
   const inbox = (kind: "verify" | "reset", email = EMAIL) =>
     join(dir, `inbox-${kind}-${hex(email)}`);
   const code = (email = EMAIL) => readFileSync(inbox("verify", email), "utf8").split(":")[0];
-  const token = (email = EMAIL) => readFileSync(inbox("reset", email), "utf8");
+  const mailed = (email = EMAIL) =>
+    JSON.parse(readFileSync(inbox("reset", email), "utf8")) as {
+      token: string;
+      redirectTo: string;
+    };
+  const token = (email = EMAIL) => mailed(email).token;
   const wrongCode = () => (code() === "000000" ? "000001" : "000000");
   const redirectTo = "https://app.example.test/reset-password";
 
@@ -270,6 +275,13 @@ describe("the e2e account flows", () => {
     rmSync(inbox("verify"));
     expect(await provider.resendVerificationCode(EMAIL)).toEqual({ ok: true });
     expect(code()).toMatch(/^\d{6}$/);
+  });
+
+  it("leaves the return address the app asked for next to the token, as the real provider builds the link", async () => {
+    await verifiedAccount();
+    await provider.requestPasswordReset(EMAIL, `${redirectTo}?for=sealed.value.mac`);
+    expect(mailed().redirectTo).toBe(`${redirectTo}?for=sealed.value.mac`);
+    expect(mailed().token).toMatch(/^[0-9a-f]{48}$/);
   });
 
   it("resets a password with the emailed token, once, and answers an unknown address the same", async () => {

@@ -7,6 +7,8 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { SIGN_IN_HINT_BEFORE } from "@/features/auth/copy";
+import { INVALID_CREDENTIALS_MESSAGE } from "./state";
 
 export interface SignInViewProps {
   action: (formData: FormData) => void;
@@ -84,6 +86,16 @@ export function SignInView({
             <p className="auth-error" role="alert">
               <span aria-hidden="true">⚠ </span>
               {error}
+              {error === INVALID_CREDENTIALS_MESSAGE ? (
+                <>
+                  {" "}
+                  {SIGN_IN_HINT_BEFORE}
+                  <Link className="auth-link inline-link" href="/forgot-password">
+                    reset your password
+                  </Link>
+                  .
+                </>
+              ) : null}
             </p>
           ) : null}
 

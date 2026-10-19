@@ -46,7 +46,7 @@ function emailFor(env: Env, token: string | undefined): string | null {
 /**
  * Sign-up, verification and reset for browser tests. Accounts and "emailed" codes and links are files in the state dir,
  * so a test can read the email the way a person would open their inbox: `inbox-verify-<hex of the address>` holds the
- * latest verification code and `inbox-reset-<hex of the address>` the latest reset token (the link's `?token=`). Codes
+ * latest verification code and `inbox-reset-<hex of the address>` the latest reset link as JSON (`token` and `redirectTo`). Codes
  * and tokens are random per run and live only in that temp dir (never in source, logs or fixtures).
  * Five wrong guesses lock a code (a new code clears the lock); a used code or token is gone.
  */
@@ -83,12 +83,15 @@ function mailCode(env: Env, email: string): void {
   writeFileSync(inboxFile(env, "verify", email), `${code}:0`);
 }
 
-/** "Emails" a reset link: a fresh single-use token, mapped back to the address, and left in the reset inbox. */
-function mailResetLink(env: Env, email: string): void {
+/**
+ * "Emails" a reset link: a fresh single-use token, mapped back to the address, and left in the reset inbox together with the
+ * return address the app asked for, as the real provider would build the link (`redirectTo` + `?token=` / `&token=`).
+ */
+function mailResetLink(env: Env, email: string, redirectTo: string): void {
   mkdirSync(stateDirOf(env), { recursive: true });
   const token = randomBytes(24).toString("hex");
   writeFileSync(tokenFile(env, token), email);
-  writeFileSync(inboxFile(env, "reset", email), token);
+  writeFileSync(inboxFile(env, "reset", email), JSON.stringify({ token, redirectTo }));
 }
 
 /** Checks `code` against the pending verification code; counts wrong guesses and locks after the limit. */
@@ -152,8 +155,8 @@ export function createE2eAuthProvider(env: Env): AuthProvider {
       if (readAccount(env, email)?.verified === false) mailCode(env, email);
       return { ok: true };
     },
-    async requestPasswordReset(email) {
-      if (readAccount(env, email)) mailResetLink(env, email);
+    async requestPasswordReset(email, redirectTo) {
+      if (readAccount(env, email)) mailResetLink(env, email, redirectTo);
       return { ok: true };
     },
     async resetPassword(token, newPassword) {

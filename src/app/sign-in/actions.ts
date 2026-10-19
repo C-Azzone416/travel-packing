@@ -2,12 +2,13 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { resendVerificationCode } from "@/server/auth/account-flows";
+import { requestPasswordReset, resendVerificationCode } from "@/server/auth/account-flows";
 import { getAuth } from "@/server/auth/auth-runtime";
 import { flowLimits } from "@/server/auth/flow-limits";
 import { rememberPendingEmail } from "@/server/auth/pending-email";
 import { ACCESS_DENIED_PATH, SIGN_IN_PATH } from "@/server/auth/proxy-handler";
-import { VERIFY_PATH } from "@/server/auth/public-paths";
+import { FINISH_SETUP_PATH, VERIFY_PATH } from "@/server/auth/public-paths";
+import { resetPasswordUrl } from "@/server/auth/request-origin";
 import { logAuthEvent } from "@/server/auth/safe-log";
 import { signInOwner, signOutOwner } from "@/server/auth/sign-in";
 import { clientAddress, signInLimits } from "@/server/auth/sign-in-limit";
@@ -46,6 +47,19 @@ export async function signInAction(
     await resendVerificationCode(auth, flowLimits(), address, email);
     await rememberPendingEmail(email.trim().toLowerCase());
     redirect(VERIFY_PATH);
+  }
+  if (outcome === "unfinished") {
+    // The password was right and the address verified, but its password was never set through an emailed link (#83): no
+    // session. Send that link and say "check your email". As with an unverified account, the person just proved the password.
+    limits.recordSuccess(email, address);
+    const url = resetPasswordUrl(await headers());
+    if (url) {
+      await requestPasswordReset(auth, flowLimits(), address, email, (clean) => {
+        return `${url}?for=${auth.seals.seal(clean)}&setup=1`;
+      });
+    }
+    await rememberPendingEmail(email.trim().toLowerCase());
+    redirect(FINISH_SETUP_PATH);
   }
   limits.recordFailure(email, address);
   if (outcome === "denied") redirect(ACCESS_DENIED_PATH);

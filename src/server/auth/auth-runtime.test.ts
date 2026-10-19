@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createMemorySetupStore } from "./account-setup";
 import { getAuth, resetAuthRuntime, unavailableAuth } from "./auth-runtime";
 import { setAuthLogSink } from "./safe-log";
 
@@ -73,7 +74,7 @@ describe("getAuth", () => {
       signIn: { email: async () => ({ data: null, error: { message: "x" } }) },
       signOut: async () => {},
     });
-    const auth = await getAuth(env);
+    const auth = await getAuth(env, { setupStore: createMemorySetupStore(["owner@example.test"]) });
     expect(createNeonAuth).toHaveBeenCalledWith({
       baseUrl: "https://auth.example.test",
       cookies: { secret: SECRET },
@@ -87,10 +88,42 @@ describe("getAuth", () => {
     createNeonAuth.mockImplementation(() => {
       throw new Error(`bad config ${SECRET}`);
     });
-    const auth = await getAuth(env);
+    const auth = await getAuth(env, { setupStore: createMemorySetupStore() });
     expect(auth.available).toBe(false);
     expect(logged).toEqual([JSON.stringify({ scope: "auth", event: "provider-error" })]);
     expect(logged.join("")).not.toContain(SECRET);
+  });
+
+  it("fails closed, by name only, when there is no database to record who has finished setting up", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const auth = await getAuth(env);
+    expect(auth.available).toBe(false);
+    expect(createNeonAuth).not.toHaveBeenCalled();
+    expect(String(warn.mock.calls[0][0])).toContain("auth unavailable: DATABASE_URL is not set");
+  });
+
+  it("only gives a session to an account that has been set up through an emailed link", async () => {
+    createNeonAuth.mockReturnValue({
+      getSession: async () => ({
+        data: { user: { id: "u1", email: "owner@example.test", emailVerified: true } },
+      }),
+      signIn: { email: async () => ({ data: null, error: { message: "x" } }) },
+      signOut: async () => {},
+    });
+    const setupStore = createMemorySetupStore();
+    const auth = await getAuth(env, { setupStore });
+    expect(await auth.provider.getSession()).toBeNull();
+    await auth.setup.markComplete("Owner@Example.test");
+    expect(await auth.provider.getSession()).toEqual({ userId: "u1", email: "owner@example.test" });
+  });
+
+  it("signs and opens the setup-link seals with the cookie secret", async () => {
+    createNeonAuth.mockReturnValue({});
+    const auth = await getAuth(env, { setupStore: createMemorySetupStore() });
+    const sealed = auth.seals.seal("Owner@Example.test");
+    expect(auth.seals.open(sealed)).toBe("owner@example.test");
+    expect(unavailableAuth().seals.open(sealed)).toBeNull();
+    expect(unavailableAuth().seals.seal("owner@example.test")).toBe("");
   });
 
   it("builds once per process until reset", async () => {
@@ -133,7 +166,7 @@ describe("getAuth", () => {
     it("is used only when the build flag, the opt-in, and a non-Vercel runtime all hold; the allowlist still applies", async () => {
       vi.stubEnv("NEXT_PUBLIC_E2E_BUILD", "1");
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-      const auth = await getAuth(e2eEnv);
+      const auth = await getAuth(e2eEnv, { setupStore: createMemorySetupStore() });
       expect(auth.available).toBe(true);
       expect([...auth.allowlist]).toEqual(["owner@example.test"]);
       expect(createNeonAuth).not.toHaveBeenCalled();
