@@ -14,7 +14,8 @@ import {
 } from "./account-setup";
 import { createNeonAuthProvider } from "./neon-adapter";
 import { NO_SEALS, createSetupSeals, sealKey, type SetupSeals } from "./setup-seal";
-import { logAuthEvent } from "./safe-log";
+import { allowlistFingerprint } from "./allowlist-fingerprint";
+import { logAllowlistLoaded, logAuthEvent } from "./safe-log";
 import type { AuthProvider } from "./types";
 
 export interface RuntimeAuth {
@@ -138,6 +139,9 @@ async function buildAuth(
     return unavailableAuth();
   }
   const { baseUrl, cookieSecret, allowlist } = loaded.config;
+  // Once per start: how many addresses this deployment's allowlist holds and its keyed fingerprint (never an address), so
+  // the copy the app runs with can be compared with the deploy's copy (docs/deploy.md).
+  logAllowlistLoaded(allowlist.size, allowlistFingerprint(allowlist, cookieSecret));
   const setup = storeFor(cookieSecret);
   try {
     // Loaded lazily so unit tests and builds without configuration never touch the SDK.

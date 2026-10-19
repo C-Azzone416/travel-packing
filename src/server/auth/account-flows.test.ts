@@ -93,7 +93,7 @@ describe("signUpOwner", () => {
     });
     expect(fake.flows.calls).toEqual([{ method: "signUp", args: [OWNER_EMAIL, PASSWORD] }]);
     expect(fake.current).toBeNull();
-    expect(events()).toEqual(["sign-up-requested"]);
+    expect(events()).toEqual(["sign-up-provider-ok", "sign-up-requested"]);
   });
 
   it("answers an address that is not on the allowlist the same way, and creates and sends nothing", async () => {
@@ -101,7 +101,12 @@ describe("signUpOwner", () => {
     const other = await signUpOwner(auth, limits, "2.2.2.2", STRANGER, PASSWORD);
     expect(other).toEqual({ ...allowed, email: STRANGER });
     expect(methods()).toEqual(["signUp"]);
-    expect(events()).toEqual(["sign-up-requested", "sign-up-requested"]);
+    expect(events()).toEqual([
+      "sign-up-provider-ok",
+      "sign-up-requested",
+      "sign-up-skipped-allowlist",
+      "sign-up-requested",
+    ]);
   });
 
   it("never grants a session, whoever signs up", async () => {
@@ -183,7 +188,7 @@ describe("sending codes and links", () => {
       cooldownSeconds: 30,
     });
     expect(fake.flows.calls).toEqual([{ method: "resendVerificationCode", args: [OWNER_EMAIL] }]);
-    expect(events()).toEqual(["code-sent"]);
+    expect(events()).toEqual(["code-send-provider-ok", "code-sent"]);
   });
 
   it("asks for a reset link that returns to the app's reset page", async () => {
@@ -195,7 +200,7 @@ describe("sending codes and links", () => {
     expect(fake.flows.calls).toEqual([
       { method: "requestPasswordReset", args: [OWNER_EMAIL, REDIRECT] },
     ]);
-    expect(events()).toEqual(["password-reset-requested"]);
+    expect(events()).toEqual(["reset-send-provider-ok", "password-reset-requested"]);
   });
 
   it.each([
@@ -280,7 +285,11 @@ describe("verifyOwnerEmail", () => {
     ]);
     expect(fake.signOutCalls).toBe(1);
     expect(fake.current).toBeNull();
-    expect(events()).toEqual(["verification-succeeded", "password-reset-requested"]);
+    expect(events()).toEqual([
+      "verification-succeeded",
+      "reset-send-provider-ok",
+      "password-reset-requested",
+    ]);
   });
 
   it("asks the provider for the link with a return address made for this address", async () => {
@@ -465,5 +474,94 @@ describe("resetOwnerPassword", () => {
     await reset();
     expect(await fake.getSession()).toBeNull();
     expect(methods()).toEqual(["resetPassword"]);
+  });
+});
+
+describe("why a sign-up, code or link did or did not reach the provider (server-only, #93)", () => {
+  const eventsWithDetail = () => logged.map((line) => JSON.parse(line) as Record<string, unknown>);
+
+  it("tells a provider success from an allowlist skip, a cooldown skip and an hourly-limit skip, with one answer for the browser", async () => {
+    const answers: unknown[] = [];
+    // 1. allowlisted, first request: the provider is called
+    answers.push(await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL, PASSWORD));
+    // 2. the same address again inside the 30-second gap: skipped for the cooldown
+    answers.push(await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL, PASSWORD));
+    // 3. a stranger: skipped for the allowlist
+    answers.push(await signUpOwner(auth, limits, "1.1.1.1", STRANGER, PASSWORD));
+    expect(
+      events().filter((event) => event.startsWith("sign-up-") && event !== "sign-up-requested"),
+    ).toEqual(["sign-up-provider-ok", "sign-up-skipped-cooldown", "sign-up-skipped-allowlist"]);
+    // 4. five more spaced-out sends exhaust the hourly cap for that address; the next is skipped for the limit
+    for (let i = 0; i < 4; i += 1) {
+      wait(31_000);
+      await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL, PASSWORD);
+    }
+    wait(31_000);
+    logged = [];
+    answers.push(await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL, PASSWORD));
+    expect(events()).toEqual(["sign-up-skipped-limit", "sign-up-requested"]);
+    // In every case the person is sent on to the code screen with the same shape of answer.
+    for (const answer of answers)
+      expect(answer).toMatchObject({ status: "ok", cooldownSeconds: expect.any(Number) });
+  });
+
+  it("logs a provider that refused the call (a 4xx the screen treats as success) apart from a real success, with status and code only", async () => {
+    fake.flows.answers.signUp = { ok: true, rejected: { status: 403, code: "invalid_origin" } };
+    const answer = await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL, PASSWORD);
+    expect(answer).toEqual({ status: "ok", email: OWNER_EMAIL, cooldownSeconds: 30 });
+    expect(eventsWithDetail()).toEqual([
+      { scope: "auth", event: "sign-up-provider-rejected", status: 403, code: "INVALID_ORIGIN" },
+      { scope: "auth", event: "sign-up-requested" },
+    ]);
+  });
+
+  it("turns a provider code that is not a plain machine code into OTHER and drops an impossible status", async () => {
+    fake.flows.answers.signUp = {
+      ok: true,
+      rejected: { status: 7, code: "Email owner@example.test taken!" },
+    };
+    await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL, PASSWORD);
+    expect(eventsWithDetail()[0]).toEqual({
+      scope: "auth",
+      event: "sign-up-provider-rejected",
+      code: "OTHER",
+    });
+  });
+
+  it("logs a failed provider call as before", async () => {
+    fake.flows.answers.signUp = { ok: false, reason: "unavailable" };
+    await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL, PASSWORD);
+    expect(events()).toEqual(["sign-up-failed"]);
+  });
+
+  it("tells the same apart for a resent code and for a reset link", async () => {
+    await resendVerificationCode(auth, limits, "1.1.1.1", OWNER_EMAIL);
+    await resendVerificationCode(auth, limits, "1.1.1.1", OWNER_EMAIL);
+    await resendVerificationCode(auth, limits, "1.1.1.1", STRANGER);
+    fake.flows.answers.requestPasswordReset = {
+      ok: true,
+      rejected: { status: 403, code: "INVALID_REDIRECT_URL" },
+    };
+    await requestPasswordReset(auth, limits, "1.1.1.1", OWNER_EMAIL, REDIRECT);
+    fake.flows.answers.resendVerificationCode = { ok: false, reason: "unavailable" };
+    wait(31_000);
+    await resendVerificationCode(auth, limits, "1.1.1.1", OWNER_EMAIL);
+    expect(events().filter((event) => /^(code|reset)-send/.test(event))).toEqual([
+      "code-send-provider-ok",
+      "code-send-skipped-cooldown",
+      "code-send-skipped-allowlist",
+      "reset-send-provider-rejected",
+      "code-send-provider-failed",
+    ]);
+  });
+
+  it("never writes an address, a password, a code or the allowlist into any of these lines", async () => {
+    fake.flows.answers.signUp = { ok: true, rejected: { status: 403, code: "INVALID_ORIGIN" } };
+    await signUpOwner(auth, limits, "9.9.9.9", OWNER_EMAIL, PASSWORD);
+    await signUpOwner(auth, limits, "9.9.9.9", STRANGER, PASSWORD);
+    await resendVerificationCode(auth, limits, "9.9.9.9", OWNER_EMAIL);
+    await requestPasswordReset(auth, limits, "9.9.9.9", STRANGER, REDIRECT);
+    const text = logged.join("\n");
+    expect(text).not.toMatch(/example\.test|a-long-password|9\.9\.9\.9|owner|stranger/i);
   });
 });

@@ -6,7 +6,14 @@
 // auth-runtime.ts. Enabling it in production is blocked on #27.
 
 import { logAuthEvent } from "./safe-log";
-import type { AuthProvider, AuthSession, FlowFailure, FlowResult, SignInResult } from "./types";
+import type {
+  AuthProvider,
+  AuthSession,
+  FlowFailure,
+  FlowResult,
+  ProviderRejection,
+  SignInResult,
+} from "./types";
 
 interface NeonUser {
   id?: string | null;
@@ -65,14 +72,22 @@ function classifyFailure(error: NonNullable<NeonCallResult["error"]>): FlowFailu
   return "invalid";
 }
 
+/** The two safe facts about a provider error: its HTTP status (0 when it has none) and its machine code ("" when it has none). */
+function rejectionOf(error: NonNullable<NeonCallResult["error"]>): ProviderRejection {
+  return {
+    status: typeof error.status === "number" ? error.status : 0,
+    code: typeof error.code === "string" ? error.code : "",
+  };
+}
+
 /** Runs one provider call and folds a thrown error into "unavailable"; only the code is logged. */
 async function flowCall<Reason extends FlowFailure>(
   call: () => Promise<NeonCallResult | null>,
-  onFailure: (reason: FlowFailure) => FlowResult<Reason>,
+  onFailure: (reason: FlowFailure, rejection?: ProviderRejection) => FlowResult<Reason>,
 ): Promise<FlowResult<Reason>> {
   try {
     const result = await call();
-    if (result?.error) return onFailure(classifyFailure(result.error));
+    if (result?.error) return onFailure(classifyFailure(result.error), rejectionOf(result.error));
     return result ? { ok: true } : onFailure("unavailable");
   } catch {
     logAuthEvent("provider-error");
@@ -134,12 +149,13 @@ export function createNeonAuthProvider(neon: NeonAuthLike): AuthProvider {
     async signUp(email, password) {
       return flowCall(
         () => neon.signUp.email({ email, password, name: displayName(email) }),
-        (reason): FlowResult<"weak-password" | "unavailable"> =>
+        (reason, rejection): FlowResult<"weak-password" | "unavailable"> =>
           // A taken address (and any other client error) must look exactly like a new account: the verification step
-          // follows either way, so the screen never says which addresses are registered.
+          // follows either way, so the screen never says which addresses are registered. The rejection (status and code)
+          // rides along only so the SERVER can log that the provider refused the call.
           reason === "weak-password" || reason === "unavailable"
             ? { ok: false, reason }
-            : { ok: true },
+            : { ok: true, ...(rejection ? { rejected: rejection } : {}) },
       );
     },
     async verifyEmail(email, otp) {
@@ -183,8 +199,10 @@ export function createNeonAuthProvider(neon: NeonAuthLike): AuthProvider {
 function sendOnly(
   call: () => Promise<NeonCallResult | null>,
 ): Promise<FlowResult<"too-many" | "unavailable">> {
-  return flowCall(call, (reason): FlowResult<"too-many" | "unavailable"> =>
-    reason === "too-many" || reason === "unavailable" ? { ok: false, reason } : { ok: true },
+  return flowCall(call, (reason, rejection): FlowResult<"too-many" | "unavailable"> =>
+    reason === "too-many" || reason === "unavailable"
+      ? { ok: false, reason }
+      : { ok: true, ...(rejection ? { rejected: rejection } : {}) },
   );
 }
 
