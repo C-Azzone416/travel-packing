@@ -46,6 +46,18 @@ describe("unpinnedActions", () => {
   });
 });
 
+/** The real workflow with the injection step moved to after the env check (wrong order). */
+function movedInjection(): string {
+  const block =
+    /( {6}# Preview only\. `vercel pull`[\s\S]*?inject-preview-secrets\.ts[^\n]*\n\n)/.exec(
+      deploy,
+    )?.[1];
+  expect(block).toBeTruthy();
+  const anchor = "      # `vercel build` works";
+  expect(deploy).toContain(anchor);
+  return deploy.replace(block as string, "").replace(anchor, `${block}${anchor}`);
+}
+
 describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
   it.each([
     [
@@ -100,8 +112,75 @@ describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
     ["the raw seed command", mutate("db:seed:preview", "db:seed"), /only `db:seed:preview`/],
     [
       "an unconditional seed",
-      mutate("        if: env.TARGET == 'preview'\n", ""),
+      mutate(/(- name: Seed synthetic data[^\n]*\n)\s+if: env\.TARGET == 'preview'\n/, "$1"),
       /seed step must run only when TARGET is preview/,
+    ],
+    [
+      "no secret injection step",
+      mutate(
+        / {6}- name: Inject the Preview secrets[\s\S]*?inject-preview-secrets\.ts[^\n]*\n\n/,
+        "",
+      ),
+      /injection step is missing/,
+    ],
+    ["the injection after the env check", movedInjection(), /after vercel pull and before/],
+    [
+      "an unconditional injection",
+      mutate(/(- name: Inject the Preview secrets[^\n]*\n)\s+if: env\.TARGET == 'preview'\n/, "$1"),
+      /injection must run only when TARGET is preview/,
+    ],
+    [
+      "an injection for production too",
+      mutate(
+        /(- name: Inject the Preview secrets[^\n]*\n\s+if: )env\.TARGET == 'preview'/,
+        "$1always()",
+      ),
+      /injection must run only when TARGET is preview/,
+    ],
+    [
+      "an injected value from a variable",
+      mutate(
+        "OWNER_EMAIL_ALLOWLIST: ${{ secrets.OWNER_EMAIL_ALLOWLIST }}",
+        "OWNER_EMAIL_ALLOWLIST: ${{ vars.OWNER_EMAIL_ALLOWLIST }}",
+      ),
+      /OWNER_EMAIL_ALLOWLIST must be injected from secrets/,
+    ],
+    [
+      "an injected literal value",
+      mutate(
+        "NEON_AUTH_COOKIE_SECRET: ${{ secrets.NEON_AUTH_COOKIE_SECRET }}",
+        "NEON_AUTH_COOKIE_SECRET: hunter2",
+      ),
+      /NEON_AUTH_COOKIE_SECRET must be injected from secrets|secrets\.\* only/,
+    ],
+    [
+      "an extra command beside the injection script",
+      mutate(
+        'run: npx tsx scripts/inject-preview-secrets.ts ".vercel/.env.${TARGET}.local"',
+        'run: npx tsx scripts/inject-preview-secrets.ts ".vercel/.env.${TARGET}.local" && env',
+      ),
+      /exactly the injection script/,
+    ],
+    [
+      "the injection script run on a different file",
+      mutate(
+        'inject-preview-secrets.ts ".vercel/.env.${TARGET}.local"',
+        "inject-preview-secrets.ts other.env",
+      ),
+      /exactly the injection script/,
+    ],
+    [
+      "an extra non-secret value in the injection step",
+      mutate(
+        "NEON_AUTH_COOKIE_SECRET: ${{ secrets.NEON_AUTH_COOKIE_SECRET }}",
+        "NEON_AUTH_COOKIE_SECRET: ${{ secrets.NEON_AUTH_COOKIE_SECRET }}\n          EXTRA: ${{ vars.X }}",
+      ),
+      /secrets\.\* only/,
+    ],
+    [
+      "an injected secret read by another step",
+      `${deploy.trimEnd()}\n        X: \${{ secrets.DATABASE_URL }}\n`,
+      /secrets\.DATABASE_URL must be read only by the secret injection step/,
     ],
     ["a third Vercel token use", `${deploy}\n# ${"secrets"}.VERCEL_TOKEN\n`, /exactly two steps/],
     ["the pooled URL", `${deploy}\n          DATABASE_URL: x\n`, /never the pooled/],
