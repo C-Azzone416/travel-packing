@@ -81,6 +81,9 @@ describe("stores", () => {
       ctx = await createMigratedDb();
       store = createDbSetupStore(ctx.db as unknown as Db, DB_KEY);
     });
+    beforeEach(async () => {
+      await ctx.client.exec('TRUNCATE TABLE "account_setups"');
+    });
     afterAll(async () => {
       await ctx.client.close();
     });
@@ -90,6 +93,36 @@ describe("stores", () => {
       await store.markComplete("Owner@Example.test");
       expect((await store.completedAt("owner@example.test")) !== null).toBe(true);
       expect((await store.completedAt("someone-else@example.test")) !== null).toBe(false);
+    });
+
+    it("returns the time the row was written, never 0 or null (0 would mean 'no age requirement')", async () => {
+      const before = Date.now();
+      await store.markComplete("timed@example.test");
+      const at = await store.completedAt("timed@example.test");
+      expect(at).not.toBeNull();
+      expect(at).toBeGreaterThan(0);
+      // The database's clock and this one agree to within seconds.
+      expect(Math.abs((at ?? 0) - before)).toBeLessThan(5_000);
+    });
+
+    it("keeps the first time when an address is marked again", async () => {
+      await store.markComplete("again@example.test");
+      const first = await store.completedAt("again@example.test");
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      await store.markComplete("again@example.test");
+      expect(await store.completedAt("again@example.test")).toBe(first);
+    });
+
+    it("drives the gate: a session made before the recorded time is refused, a later one is not", async () => {
+      await store.markComplete(OWNER.email);
+      const at = (await store.completedAt(OWNER.email)) ?? 0;
+      const gated = withSetupGate(fake, store, allowlist);
+      fake.current = { userId: "u1", email: OWNER.email, issuedAt: at - 1_000 };
+      expect(await gated.getSession()).toBeNull();
+      fake.current = { userId: "u1", email: OWNER.email, issuedAt: at };
+      expect(await gated.getSession()).toBeNull();
+      fake.current = { userId: "u1", email: OWNER.email, issuedAt: at + 1_000 };
+      expect(await gated.getSession()).toMatchObject({ email: OWNER.email });
     });
 
     it("marking twice is harmless, and stores a digest, never the address", async () => {
