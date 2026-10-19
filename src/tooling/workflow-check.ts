@@ -29,6 +29,9 @@ function jobBody(workflow: string, job: string): string | null {
 export function checkDeployWorkflow(workflow: string): string[] {
   const problems: string[] = [];
   const count = (pattern: RegExp) => (workflow.match(pattern) ?? []).length;
+  const injection =
+    /^( *)- name: Inject the Preview secrets[^\n]*\n((?:\1 {2}.*\n|\n)*)/m.exec(workflow)?.[0] ??
+    "";
 
   // Triggers: a push deploys preview only; production is a manual run.
   const on = workflow.slice(workflow.search(/^on:/m), workflow.search(/^concurrency:/m));
@@ -85,10 +88,64 @@ export function checkDeployWorkflow(workflow: string): string[] {
   if (firstSecretLine >= 0 && deployLine >= 0 && firstSecretLine < deployLine) {
     problems.push("secrets may only be read in the deploy job");
   }
-  if (/\bDATABASE_URL\s*:/.test(workflow))
+  // The injection step names DATABASE_URL as one of the four it writes; that is the only place the pooled name may appear.
+  if (/\bDATABASE_URL\s*:/.test(workflow.replace(injection, "")))
     problems.push("migrations must use DATABASE_URL_UNPOOLED, never the pooled URL");
   if (!/secrets\.DATABASE_URL_UNPOOLED/.test(workflow))
     problems.push("the direct database URL secret is not used");
+
+  // The Preview secret injection (vercel pull cannot read Vercel Secrets): after the pull, before the check and the build,
+  // preview only, and the values come from secrets.* alone.
+  const stepStart = (needle: string) => workflow.indexOf(needle);
+  const pull = stepStart("vercel pull --yes");
+  const inject = stepStart("scripts/inject-preview-secrets.ts");
+  const checkEnv = stepStart("scripts/check-deploy-env.ts");
+  const build = stepStart("vercel build");
+  if (inject < 0) problems.push("the Preview secret injection step is missing");
+  else {
+    if (!(pull >= 0 && pull < inject && inject < checkEnv && checkEnv < build)) {
+      problems.push(
+        "the secret injection must run after vercel pull and before the env check and the build",
+      );
+    }
+    if (!/^\s+if:\s*env\.TARGET == 'preview'\s*$/m.test(injection)) {
+      problems.push("the secret injection must run only when TARGET is preview");
+    }
+    // The step does one thing: run the script on the pulled file. Nothing else may sit beside it that could echo a value.
+    const runLines = [...injection.matchAll(/^\s+run:\s*(.*)$/gm)].map((match) => match[1].trim());
+    if (
+      runLines.length !== 1 ||
+      runLines[0] !== 'npx tsx scripts/inject-preview-secrets.ts ".vercel/.env.${TARGET}.local"'
+    ) {
+      problems.push(
+        "the secret injection step must run exactly the injection script on the pulled preview file",
+      );
+    }
+    for (const name of [
+      "DATABASE_URL",
+      "DATABASE_URL_UNPOOLED",
+      "OWNER_EMAIL_ALLOWLIST",
+      "NEON_AUTH_COOKIE_SECRET",
+    ]) {
+      if (
+        !new RegExp(`^\\s+${name}:\\s*\\$\\{\\{\\s*secrets\\.${name}\\s*\\}\\}\\s*$`, "m").test(
+          injection,
+        )
+      ) {
+        problems.push(`${name} must be injected from secrets.${name}`);
+      }
+    }
+    const values = [...injection.matchAll(/^\s+[A-Z_]+:\s*(.+)$/gm)].map((match) => match[1]);
+    if (values.some((value) => !/^\$\{\{\s*secrets\.[A-Z_]+\s*\}\}$/.test(value.trim()))) {
+      problems.push("the secret injection may take values from secrets.* only");
+    }
+  }
+  // Those four secret names are read in that one step and nowhere else (the migration URL is the one reuse).
+  for (const name of ["DATABASE_URL", "OWNER_EMAIL_ALLOWLIST", "NEON_AUTH_COOKIE_SECRET"]) {
+    if (count(new RegExp(`secrets\\.${name}\\b`, "g")) > 1) {
+      problems.push(`secrets.${name} must be read only by the secret injection step`);
+    }
+  }
 
   // Safety steps and pins.
   for (const step of [
