@@ -22,7 +22,10 @@ concurrency:
 jobs:
   ci:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # A healthy run takes about 18.5 minutes, but slow runners (a browser install that takes 3x as long, say) have pushed it past
+    # 20, and the deploy waits on this run, so a timeout here stops a deploy. Keep this well above a slow run (see
+    # `npm run check:workflows`, which also keeps the deploy's wait longer than this).
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 

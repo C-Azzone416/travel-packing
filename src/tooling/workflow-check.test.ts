@@ -1,7 +1,12 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { checkDeployWorkflow, unpinnedActions } from "./workflow-check";
+import {
+  checkDeployWorkflow,
+  checkTimeoutHeadroom,
+  MIN_CI_TIMEOUT_MINUTES,
+  unpinnedActions,
+} from "./workflow-check";
 
 const DIR = join(process.cwd(), ".github", "workflows");
 const deploy = readFileSync(join(DIR, "deploy-vercel.yml"), "utf8");
@@ -249,5 +254,58 @@ describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
     expect(checkDeployWorkflow(reordered).join("\n")).toMatch(
       /check-migration-target step is missing|checked before/,
     );
+  });
+});
+
+describe("checkTimeoutHeadroom: the deploy waits on CI, so the timeouts nest", () => {
+  const ci = readFileSync(join(DIR, "ci.yml"), "utf8");
+
+  it("holds for the real workflows, with CI given at least the minimum", () => {
+    expect(checkTimeoutHeadroom(ci, deploy)).toEqual([]);
+    expect(Number(/^ {4}timeout-minutes:\s*(\d+)/m.exec(ci)?.[1])).toBeGreaterThanOrEqual(
+      MIN_CI_TIMEOUT_MINUTES,
+    );
+  });
+
+  it.each([
+    [
+      "the old 20-minute ci timeout",
+      ci.replace(/^( {4}timeout-minutes:\s*)\d+/m, "$120"),
+      /ci job's timeout/,
+    ],
+    [
+      "a ci timeout just under the minimum",
+      ci.replace(/^( {4}timeout-minutes:\s*)\d+/m, "$134"),
+      /ci job's timeout/,
+    ],
+    ["no ci timeout at all", ci.replace(/^ {4}timeout-minutes:.*\n/m, ""), /ci job's timeout/],
+  ])("fails with %s", (_name, brokenCi, message) => {
+    expect(checkTimeoutHeadroom(brokenCi, deploy).join("\n")).toMatch(message);
+  });
+
+  it.each([
+    [
+      "the old 40-attempt wait (20 minutes)",
+      deploy.replace("seq 1 100", "seq 1 40"),
+      /wait for CI must outlast/,
+    ],
+    [
+      "a wait that only equals the ci timeout",
+      deploy.replace("seq 1 100", "seq 1 80"),
+      /wait for CI must outlast/,
+    ],
+    ["a wait with no loop", deploy.replace("seq 1 100", "seq x"), /wait for CI must outlast/],
+    [
+      "a deploy job that would time out inside its own wait",
+      deploy.replace(/^( {4}timeout-minutes:\s*)75/m, "$130"),
+      /deploy job's timeout/,
+    ],
+    [
+      "a deploy job timeout just short of the headroom",
+      deploy.replace(/^( {4}timeout-minutes:\s*)75/m, "$164"),
+      /deploy job's timeout/,
+    ],
+  ])("fails with %s", (_name, brokenDeploy, message) => {
+    expect(checkTimeoutHeadroom(ci, brokenDeploy).join("\n")).toMatch(message);
   });
 });
