@@ -1,0 +1,164 @@
+name: Deploy to Vercel
+
+# A push to develop deploys a preview, automatically. Production is NEVER deployed by a push: it is released by hand, with
+# a manual run ("Run workflow") on main by the repository owner who types the full SHA of the commit being released (the
+# `gate` job below enforces it; see "Production release gate" in docs/deploy.md). No direct GitHub-Vercel integration.
+# Each deploy runs in the GitHub environment `preview` or `production` (each restricted to its branch), and each holds
+# its OWN DATABASE_URL_UNPOOLED secret, so a preview run can never read production's.
+on:
+  push:
+    branches:
+      - develop
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: Production only. Type the full 40-character SHA of the commit on main being released.
+        required: false
+        type: string
+
+concurrency:
+  group: deploy-${{ github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read # to read the `ci` result for this commit
+
+env:
+  VERCEL_CLI_VERSION: 64.5.0 # pinned (never a moving tag)
+  VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+
+jobs:
+  # Decides what this run may deploy before any secret or protected environment is in reach. Fails the run otherwise.
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      target: ${{ steps.gate.outputs.target }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Release gate (which target may this run deploy?)
+        id: gate
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          SHA: ${{ github.sha }}
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: npx tsx scripts/release-gate.ts
+
+  deploy:
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: ${{ needs.gate.outputs.target }}
+    env:
+      TARGET: ${{ needs.gate.outputs.target }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Require green CI for this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for _ in $(seq 1 40); do
+            conclusion=$(gh run list --workflow ci.yml --commit "$GITHUB_SHA" --json status,conclusion \
+              --jq '[.[] | select(.status == "completed")] | first | .conclusion // "pending"')
+            echo "ci for $GITHUB_SHA: $conclusion"
+            case "$conclusion" in
+              success) exit 0 ;;
+              pending) sleep 30 ;;
+              *) echo "CI did not succeed; not deploying." >&2; exit 1 ;;
+            esac
+          done
+          echo "Timed out waiting for CI." >&2
+          exit 1
+
+      - name: Install Vercel CLI (pinned)
+        run: npm install --global "vercel@${VERCEL_CLI_VERSION}"
+
+      # VERCEL_TOKEN can deploy to production, so only the two Vercel steps that talk to Vercel (pull and deploy) get it (not `npm ci`, whose
+      # install scripts run before this point, nor the build, migrate or seed steps).
+      - name: Pull Vercel environment
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: vercel pull --yes --environment="$TARGET" --token="$VERCEL_TOKEN"
+
+      - name: Check the deploy environment (names only, no values)
+        env:
+          PRODUCTION_DB_HOST: ${{ vars.PRODUCTION_DB_HOST }}
+        run: npx tsx scripts/check-deploy-env.ts "$TARGET" ".vercel/.env.${TARGET}.local"
+
+      # `vercel build` works from the files `vercel pull` wrote; it needs no token (so the build, which runs project
+      # code, never sees one).
+      - name: Build
+        run: |
+          if [ "$TARGET" = production ]; then vercel build --prod; else vercel build; fi
+
+      - name: No test-only code in the build
+        run: npm run check:no-e2e-in-build
+
+      # The migrate and seed steps use the GitHub environment's secret, which the Vercel env check never sees. Prove it
+      # points at the right database first: not production in a preview run, production in a production run.
+      - name: Check the migration target
+        env:
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+          PRODUCTION_DB_HOST: ${{ vars.PRODUCTION_DB_HOST }}
+        run: npx tsx scripts/check-migration-target.ts "$TARGET"
+
+      - name: Apply database migrations
+        env:
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+        run: |
+          echo "Migrating the $TARGET database"
+          npm run db:migrate:remote
+
+      # Preview only. An unset PREVIEW_SEED_OWNER_ID is the first-preview bootstrap: the step logs a visible skip and the run
+      # continues (the owner cannot exist until the sign-up screens are deployed). Never reads the production secret.
+      - name: Seed synthetic data (preview only; skipped until the owner id exists)
+        if: env.TARGET == 'preview'
+        env:
+          SEED_DATABASE_URL: ${{ secrets.DATABASE_URL_UNPOOLED }}
+          SEED_ALLOWED_HOSTS: ${{ vars.PREVIEW_DB_HOST }}
+          SEED_OWNER_ID: ${{ vars.PREVIEW_SEED_OWNER_ID }}
+          PRODUCTION_DB_HOST: ${{ vars.PRODUCTION_DB_HOST }}
+        run: npm run db:seed:preview
+
+      - name: Deploy
+        id: deploy
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ "$TARGET" = production ]; then
+            url=$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")
+          else
+            url=$(vercel deploy --prebuilt --token="$VERCEL_TOKEN")
+          fi
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Deployed ($TARGET): $url" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Smoke test
+        env:
+          DEPLOY_URL: ${{ steps.deploy.outputs.url }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: npx tsx scripts/smoke-test.ts "$DEPLOY_URL"

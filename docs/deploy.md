@@ -1,11 +1,14 @@
 # Deploying (runbook for #20 / #29)
 
-`develop` deploys a **preview**; `main` deploys **production**. Vercel's GitHub integration is not used: the
-`Deploy to Vercel` workflow (`.github/workflows/deploy-vercel.yml`) builds with a pinned Vercel CLI and deploys the
-prebuilt output.
+A push to `develop` deploys a **preview**. **Production** is released by hand, never by a push (see
+[Production release gate](#production-release-gate)). Vercel's GitHub integration is not used: the `Deploy to Vercel`
+workflow (`.github/workflows/deploy-vercel.yml`) builds with a pinned Vercel CLI and deploys the prebuilt output.
 
 ## What each run does
 
+0. The `gate` job (no secrets, no environment) decides the target, or fails the run: see
+   [Production release gate](#production-release-gate). Everything below runs in the `deploy` job, in the GitHub
+   environment the gate chose.
 1. Waits for the `ci` workflow to pass on the same commit (fails if it failed or never finishes).
 2. `vercel pull` for the target, then `scripts/check-deploy-env.ts` checks the pulled variables. It prints variable
    **names** only, and fails when:
@@ -44,13 +47,14 @@ version in `package.json`. Bump either in a PR.
 The sample trips must belong to a real Better Auth user, and that user can only be created once the sign-up screens are
 deployed. So the first preview run happens **without** `PREVIEW_SEED_OWNER_ID`, on purpose:
 
-1. Leave `PREVIEW_SEED_OWNER_ID` unset. Merge to `develop` (or re-run the workflow). It migrates the preview database,
+1. Leave `PREVIEW_SEED_OWNER_ID` unset. Merge to `develop`. It migrates the preview database,
    skips the seed (visible as "preview seed SKIPPED" in the log and on the run summary), deploys, and smoke-tests the
    public auth pages. Nothing creates an auth user, and nothing uses an email, a fixture id or a production identity.
 2. Open the preview, sign up as the owner (the screens are #27; until they ship, create the user in the Neon Auth
    console for the **preview** project) and verify the email.
 3. Copy that user's id from Neon Auth into the `preview` environment variable `PREVIEW_SEED_OWNER_ID`.
-4. Re-run the `Deploy to Vercel` workflow on `develop`. It now seeds the sample trips for that owner only. Re-running is
+4. Open the latest `Deploy to Vercel` run on `develop` (Actions) and choose **Re-run all jobs**. (Do not use `Run workflow` on
+   `develop`: the gate refuses a manual run anywhere but `main`, by design.) It now seeds the sample trips for that owner only. Re-running is
    safe: the seed replaces its own sample trips and leaves everything else alone.
 
 If the id is wrong (an email, the stand-in id, something that is not an id), the run fails at the seed step with
@@ -59,7 +63,15 @@ emails or user ids.
 
 ## What Caroline must set (for #29)
 
-GitHub, repository level (already exist): secret `VERCEL_TOKEN`, variables `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`.
+GitHub, repository level (already exist): variables `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`.
+
+**`VERCEL_TOKEN`: store it as a secret in each GitHub environment (`preview` AND `production`), not at repository level.**
+A repository-level secret can be read by a workflow on any branch, which would let a pushed branch use it. Be plain
+about what this does and does not buy: a Vercel token is not scoped to an environment, so the token the preview job
+holds can also deploy to production's Vercel project. Environment secrets only stop other branches from reading it. The
+remaining controls are that only the two Vercel steps (pull and deploy) read it, the Vercel CLI is pinned, and nothing
+else in the job sees it (`npm run check:workflows` enforces the first). Use a token limited to this one project if
+Vercel offers that on your plan, and rotate it if it may have been exposed.
 
 GitHub repository variable: `PRODUCTION_DB_HOST` — the production database's bare host name, such as
 `ep-xxxx.us-east-2.aws.neon.tech` (not a URL; not a secret). Previews refuse
@@ -75,9 +87,10 @@ GitHub **environment `preview`**:
 In both GitHub environments, restrict deployment branches (`preview`: `develop` only; `production`: `main` only), so a
 branch or pull request can never pick up an environment's secrets.
 
-GitHub **environment `production`**: add **required reviewers** (this is the manual approval for every production
-deploy and migration), and the secret `DATABASE_URL_UNPOOLED` for the **production** database. Production secrets
-exist only in this environment, so the preview job can never read them.
+GitHub **environment `production`**: the secret `DATABASE_URL_UNPOOLED` for the **production** database. Production
+secrets exist only in this environment, so the preview job can never read them. (GitHub's native required reviewers are
+not available on this plan, so the approval is the explicit gate below; if the plan ever allows required reviewers,
+add them as a second lock, not a replacement.)
 
 Vercel project environment variables, per environment (Preview and Production get different values):
 
@@ -98,137 +111,37 @@ production `DATABASE_URL` to the Preview environment.
 The production database starts empty (migrations only). Any seeding of production needs Caroline's explicit approval;
 the seed guard refuses production runtimes, so it is a deliberate manual step, not part of the pipeline.
 
+## Production release gate
+
+GitHub's required reviewers are not available on this plan, so the gate is explicit and lives in the workflow
+(`scripts/release-gate.ts`, tested in `src/tooling/release-gate.test.ts`):
+
+- **A push to `main` does not deploy production.** Only a push to `develop` deploys (the preview).
+- **Production is a manual run**: Actions, `Deploy to Vercel`, `Run workflow`, branch **`main`**, and type the **full
+  40-character SHA** of the commit being released into `release_sha`. It must equal the tip of `main` at the moment
+  of the run (if `main` moved since you copied it, the run refuses and nothing deploys).
+- **Only the repository owner**: both the person who started the run and the person who re-ran it must be the owner.
+- A manual run from any other branch, any other event, a blank/short/wrong SHA or a different person is refused by the
+  `gate` job, before any secret or environment is touched. Refusals name the rule, never the typed value.
+- The `production` environment is restricted to `main`, an independent second lock **on production's database secret and
+  environment**: a run whose gate was edited on another branch cannot use them. It does not protect the Vercel token (see
+  above: that token can deploy to either target, so keep it in the environments and out of the repository secrets). Keep
+  `main` protected so only reviewed changes reach it.
+- The owner check is on the GitHub **account**. It stops other people. It does not stop anything that holds the owner's
+  own credentials (for example an agent session signed in as the owner), and the typed SHA is a safeguard against
+  mistakes, not proof that a human typed it. Treat the owner's GitHub login and tokens as the production key.
+- After the gate, the run still waits for green CI on that commit, checks the Vercel variables and that
+  `DATABASE_URL_UNPOOLED` is production's own database, migrates, deploys and smoke-tests. It never seeds production.
+
+To release: merge to `main` (by the normal reviewed path), copy the commit SHA, run the workflow as above.
+
 ## The workflow file
 
-`.github/workflows/deploy-vercel.yml` could not be committed from the agent session that wrote this (the session's
-permission check blocked writing a deploy workflow), so the reviewed text is here. A maintainer adds it verbatim to
-`.github/workflows/deploy-vercel.yml`; nothing else in this PR depends on it being present.
-
-```yaml
-name: Deploy to Vercel
-
-# develop deploys a preview, main deploys production. No direct GitHub-Vercel integration. Each job runs in the GitHub
-# environment `preview` or `production`; production is held for manual approval (required reviewers), and each
-# environment holds its OWN DATABASE_URL_UNPOOLED secret, so the preview job can never read production's.
-on:
-  push:
-    branches:
-      - develop
-      - main
-
-concurrency:
-  group: deploy-${{ github.ref_name }}
-  cancel-in-progress: false
-
-permissions:
-  contents: read
-  actions: read # to read the `ci` result for this commit
-
-env:
-  VERCEL_CLI_VERSION: 64.5.0 # pinned; never @latest
-  VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
-  VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
-  TARGET: ${{ github.ref_name == 'main' && 'production' || 'preview' }}
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    environment: ${{ github.ref_name == 'main' && 'production' || 'preview' }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-
-      - name: Install
-        run: npm ci
-
-      - name: Require green CI for this commit
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          for attempt in $(seq 1 40); do
-            conclusion=$(gh run list --workflow ci.yml --commit "$GITHUB_SHA" --json status,conclusion \
-              --jq '[.[] | select(.status == "completed")] | first | .conclusion // "pending"')
-            echo "ci for $GITHUB_SHA: $conclusion"
-            case "$conclusion" in
-              success) exit 0 ;;
-              pending) sleep 30 ;;
-              *) echo "CI did not succeed; not deploying." >&2; exit 1 ;;
-            esac
-          done
-          echo "Timed out waiting for CI." >&2
-          exit 1
-
-      - name: Install Vercel CLI (pinned)
-        run: npm install --global "vercel@${VERCEL_CLI_VERSION}"
-
-      # VERCEL_TOKEN can deploy to production, so only the two Vercel steps that talk to Vercel (pull and deploy) get it (not `npm ci`, whose
-      # install scripts run before this point, nor the build, migrate or seed steps).
-      - name: Pull Vercel environment
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: vercel pull --yes --environment="$TARGET" --token="$VERCEL_TOKEN"
-
-      - name: Check the deploy environment (names only, no values)
-        env:
-          PRODUCTION_DB_HOST: ${{ vars.PRODUCTION_DB_HOST }}
-        run: npx tsx scripts/check-deploy-env.ts "$TARGET" ".vercel/.env.${TARGET}.local"
-
-      # `vercel build` works from the files `vercel pull` wrote; it needs no token (so the build, which runs project
-      # code, never sees one).
-      - name: Build
-        run: |
-          if [ "$TARGET" = production ]; then vercel build --prod; else vercel build; fi
-
-      - name: No test-only code in the build
-        run: npm run check:no-e2e-in-build
-
-      # The migrate and seed steps use the GitHub environment's secret, which the Vercel env check never sees. Prove it
-      # points at the right database first: not production in a preview run, production in a production run.
-      - name: Check the migration target
-        env:
-          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
-          PRODUCTION_DB_HOST: ${{ vars.PRODUCTION_DB_HOST }}
-        run: npx tsx scripts/check-migration-target.ts "$TARGET"
-
-      - name: Apply database migrations
-        env:
-          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
-        run: |
-          echo "Migrating the $TARGET database"
-          npm run db:migrate:remote
-
-      # Preview only. An unset PREVIEW_SEED_OWNER_ID is the first-preview bootstrap: the step logs a visible skip and the run
-      # continues (the owner cannot exist until the sign-up screens are deployed). Never reads the production secret.
-      - name: Seed synthetic data (preview only; skipped until the owner id exists)
-        if: github.ref_name != 'main'
-        env:
-          SEED_DATABASE_URL: ${{ secrets.DATABASE_URL_UNPOOLED }}
-          SEED_ALLOWED_HOSTS: ${{ vars.PREVIEW_DB_HOST }}
-          SEED_OWNER_ID: ${{ vars.PREVIEW_SEED_OWNER_ID }}
-          PRODUCTION_DB_HOST: ${{ vars.PRODUCTION_DB_HOST }}
-        run: npm run db:seed:preview
-
-      - name: Deploy
-        id: deploy
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: |
-          if [ "$TARGET" = production ]; then
-            url=$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")
-          else
-            url=$(vercel deploy --prebuilt --token="$VERCEL_TOKEN")
-          fi
-          echo "url=$url" >> "$GITHUB_OUTPUT"
-          echo "Deployed ($TARGET): $url" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Smoke test
-        env:
-          DEPLOY_URL: ${{ steps.deploy.outputs.url }}
-          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
-        run: npx tsx scripts/smoke-test.ts "$DEPLOY_URL"
-```
+The reviewed workflow is `.github/workflows/deploy-vercel.yml` (the file is the source of truth; this page no longer
+carries a copy). CI keeps it honest without printing any value: `actionlint` (a pinned release, verified by SHA-256)
+checks syntax and expressions, and `npm run check:workflows` (`src/tooling/workflow-check.ts`) requires every action in
+every workflow to be pinned to a full commit SHA and enforces the deploy contract: a push to `main` cannot trigger a
+deploy, the gate holds no secret or environment, the deploy job's environment and `TARGET` come from the gate,
+`VERCEL_TOKEN` is read by exactly the pull and deploy steps, only the direct `DATABASE_URL_UNPOOLED` is used, the
+migration target is checked before migrating or seeding, and the only seed in the pipeline is the preview-only
+`db:seed:preview`.
