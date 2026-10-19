@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
+import { describeAllowlist } from "../server/auth/allowlist-fingerprint";
 import { checkDeployEnv, parseBuildEnvFile, REDACTION_MARKER } from "./deploy-env";
 import { formatEnvLine, INJECTED_SECRETS, injectSecrets, readBack } from "./preview-secrets";
 
@@ -235,8 +236,16 @@ describe("the script", () => {
     writeFileSync(file, PULLED);
     const result = run(file, { TARGET: "preview", ...SECRETS });
     expect(result.status).toBe(0);
+    const expectedPrint = describeAllowlist(
+      SECRETS.OWNER_EMAIL_ALLOWLIST,
+      SECRETS.NEON_AUTH_COOKIE_SECRET,
+    );
     expect(result.stdout).toBe(
-      "preview secrets: injected DATABASE_URL, DATABASE_URL_UNPOOLED, OWNER_EMAIL_ALLOWLIST, NEON_AUTH_COOKIE_SECRET (values not shown)\n",
+      "preview secrets: injected DATABASE_URL, DATABASE_URL_UNPOOLED, OWNER_EMAIL_ALLOWLIST, NEON_AUTH_COOKIE_SECRET (values not shown)\n" +
+        `preview secrets: allowlist ${expectedPrint.entries} entries (${expectedPrint.malformed} malformed), fingerprint ${expectedPrint.fingerprint}\n`,
+    );
+    expect(result.stdout).toMatch(
+      /allowlist 2 entries \(0 malformed\), fingerprint [0-9a-f]{12}\n$/,
     );
     expect(`${result.stdout}${result.stderr}`).not.toMatch(/postgres|example\.test|kkkk/);
     expect(dotenv4Parse(readFileSync(file, "utf8"))).toMatchObject(SECRETS);

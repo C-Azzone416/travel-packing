@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isAllowed, normalizeEmail, parseAllowlist } from "./allowlist";
+import { isAllowed, normalizeEmail, parseAllowlist, isPlainEmail } from "./allowlist";
 
 describe("parseAllowlist", () => {
   it.each([
@@ -48,5 +48,31 @@ describe("isAllowed", () => {
 describe("normalizeEmail", () => {
   it("trims and lowercases", () => {
     expect(normalizeEmail("  A@B.Test ")).toBe("a@b.test");
+  });
+});
+
+describe("isPlainEmail", () => {
+  it.each([
+    "owner@example.test",
+    "  Owner@Example.TEST ",
+    "first.last+tag@sub.example.co",
+    "o_w-n%er@exa-mple.org",
+    "dev@azzones.net",
+  ])("accepts %s", (entry) => expect(isPlainEmail(entry)).toBe(true));
+
+  it.each([
+    ["wrapped in double quotes", '"owner@example.test"'],
+    ["wrapped in single quotes", "'owner@example.test'"],
+    ["wrapped in angle brackets", "<owner@example.test>"],
+    ["with a display name", "Owner <owner@example.test>"],
+    ["with a mailto: prefix", "mailto:owner@example.test"],
+    ["without a domain dot", "owner@localhost"],
+    ["with a numeric top-level domain", "owner@example.123"],
+    ["with no @", "owner.example.test"],
+    ["with two @", "a@b@example.test"],
+    ["with a trailing dot", "owner@example.test."],
+    ["empty", ""],
+  ])("rejects an entry %s, which could never equal a real sign-up address", (_name, entry) => {
+    expect(isPlainEmail(entry)).toBe(false);
   });
 });

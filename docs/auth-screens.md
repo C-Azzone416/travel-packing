@@ -53,6 +53,26 @@ in history, a shared link or an access log. It grants nothing. With no cookie, `
   take the same time.
 - Logs are a closed set of event codes (`safe-log.ts`); no address, code, token or password is ever logged. Tests assert it.
 
+## Why did no code arrive? (server-side events, #93)
+
+The browser answer is the same whether or not a code was sent (see above), so the **server log** says what happened. Each sign-up,
+resend and reset request logs exactly one of these lines (JSON, `scope: "auth"`), and never an address, password, code, token, secret or
+the allowlist:
+
+| Event                                                                      | Meaning                                                                                                                                                                                                                                                            |
+| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `sign-up-provider-ok` / `code-send-provider-ok` / `reset-send-provider-ok` | The provider was called and accepted the request.                                                                                                                                                                                                                  |
+| `…-provider-rejected` (with `status` and `code`)                           | The provider answered with a client error (a 4xx). The screen still shows success, but **no code was sent**. `code` is the provider's machine code, e.g. `INVALID_ORIGIN` (the app's URL is not one of the auth project's trusted domains), `USER_ALREADY_EXISTS`. |
+| `…-provider-failed` / `sign-up-failed`                                     | The provider was unreachable or returned a server error. The screen shows an error.                                                                                                                                                                                |
+| `…-skipped-allowlist`                                                      | The address is not on the deployed `OWNER_EMAIL_ALLOWLIST`; the provider was not called.                                                                                                                                                                           |
+| `…-skipped-cooldown`                                                       | A code for this address was requested in the last 30 seconds (limits are per server instance, in memory); the provider was not called.                                                                                                                             |
+| `…-skipped-limit`                                                          | The address or caller hit an hourly cap; the provider was not called.                                                                                                                                                                                              |
+
+Once per server start the app also logs `allowlist-loaded` with the number of addresses, how many of them are **malformed** (not a plain address: quoted, in angle brackets, `mailto:`...; such an entry can never match a real sign-up) and a **keyed fingerprint** of the allowlist. The
+deploy job prints the fingerprint of the GitHub copy in the step "Inject the Preview secrets" (`allowlist N entries, fingerprint …`):
+if the two match, Vercel and GitHub hold the same allowlist and cookie secret (see docs/deploy.md). No page or endpoint answers
+"is this address allowed?".
+
 ## Verification, then what? (#83)
 
 A right sign-up code **never signs anyone in**, however the provider behaves. The app ends any session the provider started, emails a

@@ -240,14 +240,22 @@ describe("account flows", () => {
     });
 
     it("reports a taken address (or any other client error) as success so it cannot be told apart", async () => {
-      for (const failure of [fail(422, "USER_ALREADY_EXISTS"), fail(400), fail(403)]) {
+      // The screen sees "ok" for all of these; the status and machine code ride along only for the server's log.
+      const expected = [
+        [fail(422, "USER_ALREADY_EXISTS"), { status: 422, code: "USER_ALREADY_EXISTS" }],
+        [fail(400), { status: 400, code: "SOME_CODE" }],
+        [fail(403, "INVALID_ORIGIN"), { status: 403, code: "INVALID_ORIGIN" }],
+      ] as const;
+      for (const [failure, rejected] of expected) {
         const { neon } = fakeNeon({ signUp: failure });
         expect(
           await createNeonAuthProvider(neon).signUp("a@example.test", "a-long-password"),
-        ).toEqual({
-          ok: true,
-        });
+        ).toEqual({ ok: true, rejected });
       }
+      const created = fakeNeon({});
+      expect(
+        await createNeonAuthProvider(created.neon).signUp("a@example.test", "a-long-password"),
+      ).toEqual({ ok: true });
     });
 
     it("surfaces a refused password and an outage, and nothing else", async () => {
@@ -340,9 +348,13 @@ describe("account flows", () => {
     it("reports success for an unknown address, and only limits and outages as failures", async () => {
       const unknown = fakeNeon({ sendOtp: fail(404, "USER_NOT_FOUND"), requestReset: fail(404) });
       const provider = createNeonAuthProvider(unknown.neon);
-      expect(await provider.resendVerificationCode("x@example.test")).toEqual({ ok: true });
+      expect(await provider.resendVerificationCode("x@example.test")).toEqual({
+        ok: true,
+        rejected: { status: 404, code: "USER_NOT_FOUND" },
+      });
       expect(await provider.requestPasswordReset("x@example.test", "https://a.test/r")).toEqual({
         ok: true,
+        rejected: { status: 404, code: "SOME_CODE" },
       });
       const limited = fakeNeon({ sendOtp: fail(429), requestReset: fail(429) });
       expect(

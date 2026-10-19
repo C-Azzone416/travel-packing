@@ -102,9 +102,16 @@ export async function signUpOwner(
     return { status: "rate-limited" };
   }
   // The first send counts toward the 30-second gap. If a code was just sent (or the hourly cap is reached) the screen
-  // still moves on, and nothing more is sent.
-  const mayCreate = limits.send("verify", email, address).ok && isAllowed(auth.allowlist, email);
-  if (mayCreate) {
+  // still moves on, and nothing more is sent. WHY nothing was sent is logged below (server-only, no address, no secret):
+  // the browser gets the same answer in every case.
+  const allowance = limits.send("verify", email, address);
+  if (!allowance.ok) {
+    logAuthEvent(
+      allowance.reason === "cooldown" ? "sign-up-skipped-cooldown" : "sign-up-skipped-limit",
+    );
+  } else if (!isAllowed(auth.allowlist, email)) {
+    logAuthEvent("sign-up-skipped-allowlist");
+  } else {
     const result = await auth.provider.signUp(email, password as string);
     if (!result.ok) {
       logAuthEvent("sign-up-failed");
@@ -112,6 +119,10 @@ export async function signUpOwner(
         ? { status: "weak-password", problem: "provider" }
         : { status: "unavailable" };
     }
+    // The provider answered. A client error (a 4xx, e.g. an untrusted origin or a taken address) looks like success to the
+    // person, but it did not send a code, so it is logged apart from a real success.
+    if (result.rejected) logAuthEvent("sign-up-provider-rejected", result.rejected);
+    else logAuthEvent("sign-up-provider-ok");
     limits.clearGuesses(email);
   }
   logAuthEvent("sign-up-requested");
@@ -138,19 +149,26 @@ async function sendTo(
 ): Promise<SendOutcome> {
   const email = cleanEmail(emailInput);
   if (!email) return { status: "invalid-email" };
+  const label = kind === "verify" ? "code-send" : "reset-send";
   const allowance = limits.send(kind, email, address);
   if (!allowance.ok) {
     logAuthEvent("flow-rate-limited");
+    logAuthEvent(`${label}-skipped-${allowance.reason === "cooldown" ? "cooldown" : "limit"}`);
     return allowance.reason === "cooldown"
       ? { status: "cooldown", retryAfterSeconds: allowance.retryAfterSeconds }
       : { status: "rate-limited" };
   }
-  if (isAllowed(auth.allowlist, email)) {
+  if (!isAllowed(auth.allowlist, email)) {
+    logAuthEvent(`${label}-skipped-allowlist`);
+  } else {
     const result = await send(email);
     if (!result.ok) {
+      logAuthEvent(`${label}-provider-failed`);
       // A provider limit reads the same as ours; the 30-second gap just started either way.
       return result.reason === "too-many" ? { status: "rate-limited" } : { status: "unavailable" };
     }
+    if (result.rejected) logAuthEvent(`${label}-provider-rejected`, result.rejected);
+    else logAuthEvent(`${label}-provider-ok`);
     if (kind === "verify") limits.clearGuesses(email);
   }
   logAuthEvent(kind === "verify" ? "code-sent" : "password-reset-requested");
