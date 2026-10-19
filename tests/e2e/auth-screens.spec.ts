@@ -54,6 +54,8 @@ test.describe("sign-up and verification", () => {
   }) => {
     await signUp(page);
     await expect(heading(page, "Check your email")).toBeFocused();
+    // The heading takes focus on arrival but is not a control, so it shows no focus ring.
+    await expect(heading(page, "Check your email")).toHaveCSS("outline-style", "none");
     await expect(page.getByText(`If ${email} can be used to sign up`)).toBeVisible();
 
     // Unverified: nothing in the app is reachable yet, and signing in is not possible.

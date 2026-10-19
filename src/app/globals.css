@@ -1684,6 +1684,10 @@ input:disabled {
 .auth-card h1 {
   font-size: clamp(26px, 6vw, 32px);
 }
+/* The heading takes focus when a screen appears (so assistive tech starts there); it is not interactive, so it shows no ring. */
+.auth-card h1[tabindex="-1"]:focus {
+  outline: none;
+}
 .auth-card .button.block {
   margin-top: 4px;
 }
