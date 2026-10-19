@@ -350,7 +350,7 @@ describe("resetAction", () => {
     ]);
     expect(fake.current).toBeNull();
     // Using the link is what counts the account as set up.
-    expect(await setup.isComplete(OWNER)).toBe(true);
+    expect((await setup.completedAt(OWNER)) !== null).toBe(true);
   });
 
   it("changes the password but records nothing when the link has no valid seal", async () => {

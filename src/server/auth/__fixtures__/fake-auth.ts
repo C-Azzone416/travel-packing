@@ -62,7 +62,7 @@ export function createFakeAuth(users: FakeUser[] = []): FakeAuth {
       if (!user) return { ok: false };
       if (user.verified === false) return { ok: false, unverified: true };
       if (user.unfinished) return { ok: false, unfinished: true };
-      fake.current = { userId: user.userId, email: user.email };
+      fake.current = { userId: user.userId, email: user.email, issuedAt: Date.now() };
       return { ok: true, session: fake.current };
     },
     async signOut() {

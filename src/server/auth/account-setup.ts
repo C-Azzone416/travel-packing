@@ -19,7 +19,8 @@ import { logAuthEvent } from "./safe-log";
 import type { AuthProvider } from "./types";
 
 export interface AccountSetupStore {
-  isComplete(email: string): Promise<boolean>;
+  /** When this address's password was set through an emailed link (ms since the epoch), or null if it never was. */
+  completedAt(email: string): Promise<number | null>;
   /** Records that this address's password was set through an emailed link. Safe to repeat. */
   markComplete(email: string): Promise<void>;
 }
@@ -29,13 +30,13 @@ export const emailDigest = (email: string) =>
 
 export function createDbSetupStore(db: Db): AccountSetupStore {
   return {
-    async isComplete(email) {
+    async completedAt(email) {
       const rows = await db
-        .select({ digest: accountSetups.emailDigest })
+        .select({ at: accountSetups.completedAt })
         .from(accountSetups)
         .where(eq(accountSetups.emailDigest, emailDigest(email)))
         .limit(1);
-      return rows.length > 0;
+      return rows.length > 0 ? rows[0].at.getTime() : null;
     },
     async markComplete(email) {
       await db
@@ -46,26 +47,27 @@ export function createDbSetupStore(db: Db): AccountSetupStore {
   };
 }
 
-/** For tests: an in-memory store, optionally starting with some addresses already set up. */
-export function createMemorySetupStore(complete: string[] = []): AccountSetupStore & {
-  digests: Set<string>;
-} {
-  const digests = new Set(complete.map(emailDigest));
+/** For tests: an in-memory store, optionally starting with some addresses already set up (at time 0, so any session counts). */
+export function createMemorySetupStore(
+  complete: string[] = [],
+  now: () => number = Date.now,
+): AccountSetupStore & { digests: Map<string, number> } {
+  const digests = new Map<string, number>(complete.map((email) => [emailDigest(email), 0]));
   return {
     digests,
-    async isComplete(email) {
-      return digests.has(emailDigest(email));
+    async completedAt(email) {
+      return digests.get(emailDigest(email)) ?? null;
     },
     async markComplete(email) {
-      digests.add(emailDigest(email));
+      if (!digests.has(emailDigest(email))) digests.set(emailDigest(email), now());
     },
   };
 }
 
 /** The store used when no database exists: nothing is ever set up, so nobody can sign in. */
 export const NOTHING_SET_UP: AccountSetupStore = {
-  async isComplete() {
-    return false;
+  async completedAt() {
+    return null;
   },
   async markComplete() {},
 };
@@ -80,31 +82,41 @@ export function withSetupGate(
   store: AccountSetupStore,
   allowlist: Allowlist,
 ): AuthProvider {
-  const known = new Set<string>();
-  async function isSetUp(email: string): Promise<boolean> {
+  const known = new Map<string, number>();
+  /** When the account was set up (0 = no requirement), or null if it is not set up. */
+  async function setUpAt(email: string): Promise<number | null> {
     // An address that is not allowlisted never gets in whatever its setup says; leave it to the allowlist's own denial (the
     // access-denied screen and the signed-out session), exactly as before this gate existed.
-    if (!isAllowed(allowlist, email)) return true;
+    if (!isAllowed(allowlist, email)) return 0;
     const key = normalizeEmail(email);
-    if (known.has(key)) return true;
+    const cached = known.get(key);
+    if (cached !== undefined) return cached;
+    let at: number | null;
     try {
-      if (!(await store.isComplete(email))) return false;
+      at = await store.completedAt(email);
     } catch {
       logAuthEvent("provider-error");
-      return false;
+      return null;
     }
-    known.add(key);
-    return true;
+    if (at !== null) known.set(key, at);
+    return at;
   }
   return {
     ...provider,
     async getSession() {
       const session = await provider.getSession();
-      return session && (await isSetUp(session.email)) ? session : null;
+      if (!session) return null;
+      const at = await setUpAt(session.email);
+      if (at === null) return null;
+      // A session made before the password was set through the link may have been opened with a password chosen by someone
+      // else (pre-registration): it stays refused after the link is used. One that does not say when it was made is refused too.
+      if (at > 0 && !(session.issuedAt !== undefined && session.issuedAt >= at)) return null;
+      return session;
     },
     async signInWithPassword(email, password) {
       const result = await provider.signInWithPassword(email, password);
-      if (!result.ok || (await isSetUp(result.session.email))) return result;
+      // A session made by this very call is newer than any setup, so only "was it ever set up" matters here.
+      if (!result.ok || (await setUpAt(result.session.email)) !== null) return result;
       // Right password, verified address, but never set up through a link: no session, and nothing says why beyond "finish".
       logAuthEvent("sign-in-setup-pending");
       try {

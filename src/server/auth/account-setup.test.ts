@@ -38,16 +38,16 @@ describe("stores", () => {
   describe("memory", () => {
     it("remembers set-up addresses, case-insensitively, and never forgets", async () => {
       const store = createMemorySetupStore(["Owner@Example.test"]);
-      expect(await store.isComplete("owner@example.test")).toBe(true);
-      expect(await store.isComplete("other@example.test")).toBe(false);
+      expect((await store.completedAt("owner@example.test")) !== null).toBe(true);
+      expect((await store.completedAt("other@example.test")) !== null).toBe(false);
       await store.markComplete("Other@Example.test");
-      expect(await store.isComplete("other@example.test")).toBe(true);
+      expect((await store.completedAt("other@example.test")) !== null).toBe(true);
     });
   });
 
   it("the no-database store has nobody set up and records nothing", async () => {
     await NOTHING_SET_UP.markComplete("owner@example.test");
-    expect(await NOTHING_SET_UP.isComplete("owner@example.test")).toBe(false);
+    expect((await NOTHING_SET_UP.completedAt("owner@example.test")) !== null).toBe(false);
   });
 
   describe("database", () => {
@@ -62,10 +62,10 @@ describe("stores", () => {
     });
 
     it("has nobody set up to begin with, then remembers an address once it is marked", async () => {
-      expect(await store.isComplete("owner@example.test")).toBe(false);
+      expect((await store.completedAt("owner@example.test")) !== null).toBe(false);
       await store.markComplete("Owner@Example.test");
-      expect(await store.isComplete("owner@example.test")).toBe(true);
-      expect(await store.isComplete("someone-else@example.test")).toBe(false);
+      expect((await store.completedAt("owner@example.test")) !== null).toBe(true);
+      expect((await store.completedAt("someone-else@example.test")) !== null).toBe(false);
     });
 
     it("marking twice is harmless, and stores a digest, never the address", async () => {
@@ -102,11 +102,11 @@ describe("withSetupGate", () => {
 
   it("lets a set-up account sign in and keep its session", async () => {
     const gated = withSetupGate(fake, createMemorySetupStore([OWNER.email]), allowlist);
-    expect(await gated.signInWithPassword(OWNER.email, OWNER.password)).toEqual({
+    expect(await gated.signInWithPassword(OWNER.email, OWNER.password)).toMatchObject({
       ok: true,
       session: { userId: "u1", email: OWNER.email },
     });
-    expect(await gated.getSession()).toEqual({ userId: "u1", email: OWNER.email });
+    expect(await gated.getSession()).toMatchObject({ userId: "u1", email: OWNER.email });
     expect(fake.signOutCalls).toBe(0);
   });
 
@@ -129,9 +129,9 @@ describe("withSetupGate", () => {
     const gated = withSetupGate(
       users,
       {
-        isComplete: async () => {
+        completedAt: async () => {
           asked += 1;
-          return true;
+          return 0;
         },
         markComplete: async () => {},
       },
@@ -147,7 +147,7 @@ describe("withSetupGate", () => {
 
   it("fails closed when the store errors, logging only a code", async () => {
     const broken: AccountSetupStore = {
-      isComplete: async () => {
+      completedAt: async () => {
         throw new Error("connection to db for owner@example.test refused");
       },
       markComplete: async () => {},
@@ -174,9 +174,9 @@ describe("withSetupGate", () => {
   it("remembers a positive answer, so the store is asked once per address, not once per request", async () => {
     let asked = 0;
     const store: AccountSetupStore = {
-      isComplete: async () => {
+      completedAt: async () => {
         asked += 1;
-        return true;
+        return 0;
       },
       markComplete: async () => {},
     };
@@ -187,13 +187,56 @@ describe("withSetupGate", () => {
   });
 
   it("does not remember a negative answer: a newly set-up account gets in at once", async () => {
-    const store = createMemorySetupStore();
+    // Recorded at time 0 (no requirement on when sessions were made), so only "was it ever set up" is being tested.
+    const store = createMemorySetupStore([], () => 0);
     const gated = withSetupGate(fake, store, allowlist);
     fake.current = { userId: "u1", email: OWNER.email };
     expect(await gated.getSession()).toBeNull();
     expect(await gated.getSession()).toBeNull();
     await store.markComplete(OWNER.email);
     expect(await gated.getSession()).not.toBeNull();
+  });
+
+  describe("a session made before the password was set through the link", () => {
+    const SETUP_AT = 1_000_000;
+    const stores = () => createMemorySetupStore([], () => SETUP_AT);
+
+    it("stays refused after the link is used, however it was made", async () => {
+      const store = stores();
+      await store.markComplete(OWNER.email);
+      const gated = withSetupGate(fake, store, allowlist);
+      // Minted with the pre-registered password before the owner finished setting up: older than the setup.
+      fake.current = { userId: "u1", email: OWNER.email, issuedAt: SETUP_AT - 1 };
+      expect(await gated.getSession()).toBeNull();
+      // One that does not say when it was made cannot be shown to be newer, so it is refused too.
+      fake.current = { userId: "u1", email: OWNER.email };
+      expect(await gated.getSession()).toBeNull();
+    });
+
+    it("lets a session made at or after the setup through", async () => {
+      const store = stores();
+      await store.markComplete(OWNER.email);
+      const gated = withSetupGate(fake, store, allowlist);
+      for (const issuedAt of [SETUP_AT, SETUP_AT + 1, SETUP_AT + 3_600_000]) {
+        fake.current = { userId: "u1", email: OWNER.email, issuedAt };
+        expect(await gated.getSession()).toEqual({ userId: "u1", email: OWNER.email, issuedAt });
+      }
+    });
+
+    it("makes no demand of an address that was set up before sessions carried a time (time 0)", async () => {
+      const gated = withSetupGate(fake, createMemorySetupStore([OWNER.email]), allowlist);
+      fake.current = { userId: "u1", email: OWNER.email };
+      expect(await gated.getSession()).not.toBeNull();
+    });
+
+    it("applies the moment the setup is recorded, even for a session the gate already looked at", async () => {
+      const store = stores();
+      const gated = withSetupGate(fake, store, allowlist);
+      fake.current = { userId: "u1", email: OWNER.email, issuedAt: SETUP_AT - 500 };
+      expect(await gated.getSession()).toBeNull();
+      await store.markComplete(OWNER.email);
+      expect(await gated.getSession()).toBeNull();
+    });
   });
 
   it("leaves an address that is not allowlisted to the allowlist's own denial, whatever its setup says", async () => {
@@ -204,7 +247,7 @@ describe("withSetupGate", () => {
     expect(await gated.signInWithPassword(stranger.email, stranger.password)).toMatchObject({
       ok: true,
     });
-    expect(await gated.getSession()).toEqual({ userId: "u9", email: stranger.email });
+    expect(await gated.getSession()).toMatchObject({ userId: "u9", email: stranger.email });
     expect(users.signOutCalls).toBe(0);
   });
 

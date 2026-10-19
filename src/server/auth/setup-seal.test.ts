@@ -1,6 +1,6 @@
 import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { SEAL_LIFETIME_MS, NO_SEALS, createSetupSeals } from "./setup-seal";
+import { SEAL_LIFETIME_MS, NO_SEALS, createSetupSeals, sealKey } from "./setup-seal";
 
 const SECRET = "s".repeat(40);
 
@@ -24,7 +24,7 @@ describe("setup seals", () => {
     for (const tampered of [
       `${other}.${expires}.${mac}`,
       `${name}.${Number(expires) + 1}.${mac}`,
-      `${name}.${expires}.${mac.slice(0, -1)}A`,
+      `${name}.${expires}.${mac.slice(0, -1)}${mac.endsWith("A") ? "B" : "A"}`,
       `${name}.${expires}.`,
       `${name}.${expires}`,
       `${name}.${expires}.${mac}.extra`,
@@ -59,6 +59,13 @@ describe("setup seals", () => {
     const notAnAddress = Buffer.from("nobody").toString("base64url");
     expect(seals.open(sign(`${notAnAddress}.${Date.now() + 10_000}`))).toBeNull();
     expect(seals.open(sign(`${Buffer.from("a@b.c").toString("base64url")}.soon`))).toBeNull();
+  });
+
+  it("the key is derived from the app secret and differs from it", () => {
+    expect(sealKey(SECRET)).toMatch(/^[0-9a-f]{64}$/);
+    expect(sealKey(SECRET)).not.toBe(SECRET);
+    expect(sealKey(SECRET)).toBe(sealKey(SECRET));
+    expect(sealKey(SECRET)).not.toBe(sealKey("t".repeat(40)));
   });
 
   it("the no-secret runtime seals nothing and opens nothing", () => {

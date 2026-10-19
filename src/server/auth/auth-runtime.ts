@@ -12,7 +12,7 @@ import {
   type AccountSetupStore,
 } from "./account-setup";
 import { createNeonAuthProvider } from "./neon-adapter";
-import { NO_SEALS, createSetupSeals, type SetupSeals } from "./setup-seal";
+import { NO_SEALS, createSetupSeals, sealKey, type SetupSeals } from "./setup-seal";
 import { logAuthEvent } from "./safe-log";
 import type { AuthProvider } from "./types";
 
@@ -89,7 +89,7 @@ async function buildE2eAuth(
         available: true,
         setup,
         // Any non-empty secret signs the e2e links; the fake password is already required to be set.
-        seals: createSetupSeals(env.AUTH_E2E_PASSWORD ?? ""),
+        seals: createSetupSeals(sealKey(env.AUTH_E2E_PASSWORD ?? "")),
       };
     }
   }
@@ -139,7 +139,7 @@ async function buildAuth(
       allowlist,
       available: true,
       setup,
-      seals: createSetupSeals(cookieSecret),
+      seals: createSetupSeals(sealKey(cookieSecret)),
     };
   } catch {
     logAuthEvent("provider-error");

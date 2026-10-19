@@ -66,12 +66,12 @@ describe("createE2eAuthProvider", () => {
   it("signs in with the synthetic password and keeps an unguessable token, not the email, in the cookie", async () => {
     expect(await provider.signInWithPassword(OWNER, env.AUTH_E2E_PASSWORD)).toEqual({
       ok: true,
-      session: { userId: `e2e-${OWNER}`, email: OWNER },
+      session: { userId: `e2e-${OWNER}`, email: OWNER, issuedAt: expect.any(Number) },
     });
     const token = jar.get(E2E_COOKIE) ?? "";
     expect(token).toMatch(/^[0-9a-f]{64}$/);
     expect(token).not.toContain("owner");
-    expect(await provider.getSession()).toEqual({ userId: `e2e-${OWNER}`, email: OWNER });
+    expect(await provider.getSession()).toMatchObject({ userId: `e2e-${OWNER}`, email: OWNER });
   });
 
   it("mints a different token for every sign-in, and each session keeps its own email", async () => {
@@ -159,7 +159,7 @@ describe("createE2eAuthProvider", () => {
         const valid = "f".repeat(64);
         planted(join(dir, valid));
         jar.set(E2E_COOKIE, valid);
-        expect(await provider.getSession()).toEqual({ userId: `e2e-${OWNER}`, email: OWNER });
+        expect(await provider.getSession()).toMatchObject({ userId: `e2e-${OWNER}`, email: OWNER });
       });
     });
 

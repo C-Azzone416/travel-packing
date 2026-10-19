@@ -8,6 +8,10 @@ import { normalizeEmail } from "./allowlist";
 
 export const SEAL_LIFETIME_MS = 2 * 60 * 60 * 1000;
 
+/** A key for seals derived from the app secret, so the cookie secret itself is never used to sign anything else. */
+export const sealKey = (secret: string) =>
+  createHmac("sha256", secret).update("carrywell:setup-seal:v1").digest("hex");
+
 export interface SetupSeals {
   seal(email: string): string;
   /** The address a seal names, or null for a missing, altered or expired one. */

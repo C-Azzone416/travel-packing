@@ -33,11 +33,19 @@ function sessionFile(env: Env, token: string): string {
   return join(env.AUTH_E2E_STATE_DIR ?? "", token);
 }
 
-/** The email behind a token, or null for anything that was not minted by a sign-in and not signed out since. */
-function emailFor(env: Env, token: string | undefined): string | null {
+/**
+ * The email behind a token and when the session was made, or null for anything that was not minted by a sign-in and not
+ * signed out since. The file holds the address, a newline, and the creation time in ms (what a real provider reports as
+ * the session's createdAt).
+ */
+function sessionFor(
+  env: Env,
+  token: string | undefined,
+): { email: string; issuedAt: number } | null {
   if (!token || !TOKEN_PATTERN.test(token)) return null;
   try {
-    return readFileSync(sessionFile(env, token), "utf8").trim() || null;
+    const [email, made] = readFileSync(sessionFile(env, token), "utf8").trim().split("\n");
+    return email ? { email, issuedAt: Number(made) || 0 } : null;
   } catch {
     return null;
   }
@@ -123,17 +131,20 @@ function spendToken(env: Env, token: string): string | null {
 async function startSession(env: Env, email: string) {
   const token = randomBytes(32).toString("hex");
   mkdirSync(env.AUTH_E2E_STATE_DIR ?? "", { recursive: true });
-  writeFileSync(sessionFile(env, token), email);
+  const issuedAt = Date.now();
+  writeFileSync(sessionFile(env, token), `${email}\n${issuedAt}`);
   (await cookies()).set(E2E_COOKIE, token, { httpOnly: true, sameSite: "lax", path: "/" });
-  return { ok: true as const, session: { userId: `e2e-${email}`, email } };
+  return { ok: true as const, session: { userId: `e2e-${email}`, email, issuedAt } };
 }
 
 /** Any email signs in if it knows the shared synthetic password; the allowlist decides who gets in. */
 export function createE2eAuthProvider(env: Env): AuthProvider {
   return {
     async getSession(): Promise<AuthSession | null> {
-      const email = emailFor(env, (await cookies()).get(E2E_COOKIE)?.value);
-      return email ? { userId: `e2e-${email}`, email } : null;
+      const found = sessionFor(env, (await cookies()).get(E2E_COOKIE)?.value);
+      return found
+        ? { userId: `e2e-${found.email}`, email: found.email, issuedAt: found.issuedAt }
+        : null;
     },
     async signUp(email, password) {
       if (password.length < 8) return { ok: false, reason: "weak-password" };

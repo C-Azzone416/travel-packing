@@ -59,10 +59,10 @@ describe("e2e database server (real Postgres wire protocol over PGlite)", () => 
 
   it("starts with the listed addresses counted as set up (#83) and nobody else", async () => {
     const store = createDbSetupStore(open());
-    expect(await store.isComplete("seeded@example.test")).toBe(true);
-    expect(await store.isComplete("newcomer@example.test")).toBe(false);
+    expect((await store.completedAt("seeded@example.test")) !== null).toBe(true);
+    expect((await store.completedAt("newcomer@example.test")) !== null).toBe(false);
     await store.markComplete("newcomer@example.test");
-    expect(await store.isComplete("newcomer@example.test")).toBe(true);
+    expect((await store.completedAt("newcomer@example.test")) !== null).toBe(true);
   });
 
   it("writes through the data layer persist, including transactions, and survive a new connection pool", async () => {

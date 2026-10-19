@@ -292,7 +292,7 @@ describe("verifyOwnerEmail", () => {
 
   it("does not record the account as set up: only using the link does that", async () => {
     await verify();
-    expect(await setup.isComplete(OWNER_EMAIL)).toBe(false);
+    expect((await setup.completedAt(OWNER_EMAIL)) !== null).toBe(false);
   });
 
   it("still ends in 'check your email' when the link cannot be sent right now, with the time left on the gap", async () => {
@@ -384,16 +384,16 @@ describe("resetOwnerPassword", () => {
   });
 
   it("records the account named by the link as set up, and only then", async () => {
-    expect(await setup.isComplete(OWNER_EMAIL)).toBe(false);
+    expect((await setup.completedAt(OWNER_EMAIL)) !== null).toBe(false);
     await reset();
-    expect(await setup.isComplete(OWNER_EMAIL)).toBe(true);
+    expect((await setup.completedAt(OWNER_EMAIL)) !== null).toBe(true);
   });
 
   it.each([
     ["no seal", null],
     ["an empty seal", ""],
     ["a seal made with another secret", createSetupSeals("t".repeat(40)).seal(OWNER_EMAIL)],
-    ["a tampered seal", seals.seal(OWNER_EMAIL).replace(/.$/, "A")],
+    ["a tampered seal", `${seals.seal(OWNER_EMAIL)}x`],
     ["a seal that is not text", { not: "text" }],
   ])("changes the password but records nothing for %s", async (_name, sealed) => {
     expect(await reset("fake-token-one", "new-password-1", sealed)).toEqual({ status: "ok" });
@@ -415,7 +415,7 @@ describe("resetOwnerPassword", () => {
 
   it("still succeeds when recording fails, logging only a code (a new link will fix it)", async () => {
     auth.setup = {
-      isComplete: async () => false,
+      completedAt: async () => null,
       markComplete: async () => {
         throw new Error("db down for owner@example.test");
       },

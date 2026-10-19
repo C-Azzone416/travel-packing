@@ -103,18 +103,29 @@ describe("getAuth", () => {
   });
 
   it("only gives a session to an account that has been set up through an emailed link", async () => {
+    let sessionCreatedAt = 1_000;
     createNeonAuth.mockReturnValue({
       getSession: async () => ({
-        data: { user: { id: "u1", email: "owner@example.test", emailVerified: true } },
+        data: {
+          user: { id: "u1", email: "owner@example.test", emailVerified: true },
+          session: { createdAt: new Date(sessionCreatedAt).toISOString() },
+        },
       }),
       signIn: { email: async () => ({ data: null, error: { message: "x" } }) },
       signOut: async () => {},
     });
-    const setupStore = createMemorySetupStore();
+    const setupStore = createMemorySetupStore([], () => 5_000);
     const auth = await getAuth(env, { setupStore });
     expect(await auth.provider.getSession()).toBeNull();
     await auth.setup.markComplete("Owner@Example.test");
-    expect(await auth.provider.getSession()).toEqual({ userId: "u1", email: "owner@example.test" });
+    // The provider's session says when it was made (createdAt); one made before the setup is refused, one after is not.
+    expect(await auth.provider.getSession()).toBeNull();
+    sessionCreatedAt = 6_000;
+    expect(await auth.provider.getSession()).toEqual({
+      userId: "u1",
+      email: "owner@example.test",
+      issuedAt: 6_000,
+    });
   });
 
   it("signs and opens the setup-link seals with the cookie secret", async () => {

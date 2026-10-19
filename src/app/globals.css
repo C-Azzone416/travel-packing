@@ -1787,6 +1787,11 @@ input:disabled {
   font-weight: 700;
   cursor: pointer;
 }
+/* A link inside a sentence reads inline (design's note on #84), not as its own 44px row. */
+.auth-link.inline-link {
+  display: inline;
+  min-height: 0;
+}
 .forgot-link {
   justify-self: end;
 }

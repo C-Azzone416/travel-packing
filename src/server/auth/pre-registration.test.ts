@@ -105,7 +105,7 @@ describe("a password chosen by someone else before the owner verified", () => {
     // 6. The link went to the owner's inbox. Using it replaces the password and records the account as set up.
     const { token, sealed } = emailedLink();
     expect(await resetOwnerPassword(auth, token, OWNER_PASSWORD, sealed)).toEqual({ status: "ok" });
-    expect(await setup.isComplete(OWNER)).toBe(true);
+    expect((await setup.completedAt(OWNER)) !== null).toBe(true);
 
     // 7. The attacker's password is gone for good; the owner's works.
     expect(await signInOwner(auth, OWNER, ATTACKER_PASSWORD)).toBe("invalid");
@@ -122,6 +122,40 @@ describe("a password chosen by someone else before the owner verified", () => {
     // ...but the app, reading that very session, refuses it.
     expect(await auth.provider.getSession()).toBeNull();
     expect((await authorizeOwner(auth.provider, auth.allowlist)).status).toBe("unauthenticated");
+  });
+
+  it("keeps a session the attacker minted BEFORE setup dead after the owner completes the link", async () => {
+    // Memory time stands in for the setup record's clock; sessions carry the provider's own creation time.
+    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+    await signUpOwner(auth, limits, "6.6.6.6", OWNER, ATTACKER_PASSWORD);
+    await verifyOwnerEmail(auth, limits, "1.1.1.1", OWNER, code(), redirectTo);
+
+    // The attacker signs in at the provider with the pre-registered password and keeps the session cookie.
+    const raw = createE2eAuthProvider(env);
+    expect(await raw.signInWithPassword(OWNER, ATTACKER_PASSWORD)).toMatchObject({ ok: true });
+    const attackerCookie = jar.get("e2e-auth-session");
+    expect(await auth.provider.getSession()).toBeNull();
+
+    // The owner, in another browser, completes the emailed link.
+    await wait(10);
+    jar.clear();
+    const { token, sealed } = emailedLink();
+    expect(await resetOwnerPassword(auth, token, OWNER_PASSWORD, sealed)).toEqual({ status: "ok" });
+    expect(await setup.completedAt(OWNER)).not.toBeNull();
+
+    // THE POINT: the attacker's old session must not come back to life now that the account counts as set up.
+    jar.set("e2e-auth-session", attackerCookie ?? "");
+    expect(await auth.provider.getSession()).toBeNull();
+    expect((await authorizeOwner(auth.provider, auth.allowlist)).status).toBe("unauthenticated");
+
+    // The owner signs in with their new password and gets a session that works.
+    await wait(10);
+    jar.clear();
+    expect(await signInOwner(auth, OWNER, OWNER_PASSWORD)).toBe("ok");
+    expect((await authorizeOwner(auth.provider, auth.allowlist)).status).toBe("ok");
+    // ...and the attacker's cookie is still dead next to it.
+    jar.set("e2e-auth-session", attackerCookie ?? "");
+    expect(await auth.provider.getSession()).toBeNull();
   });
 
   it("gets no further by asking for a reset link: it goes to the owner's inbox, not to the attacker", async () => {

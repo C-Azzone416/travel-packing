@@ -100,6 +100,11 @@ set **through a link that only the inbox owner receives**:
 - Sign-in is refused for an allowlisted address with no record. This is enforced by wrapping the auth provider (`withSetupGate`), so the
   proxy, server actions and the data layer all see it, and so does a session the attacker minted by calling the auth service directly
   with the password they registered: the app reads that session and refuses it.
+- **A session made before the setup stays dead after it.** The record keeps when the setup happened, and the provider says when each
+  session was created (Better Auth's `session.createdAt`, read by the adapter). The gate refuses a session created before the setup,
+  or one that does not say when it was made. Without this, an attacker who signed in at the provider with the pre-registered password
+  and kept the cookie would get the owner's session the moment the owner used the link (QA's finding on #84). `pre-registration.test.ts`
+  covers it. It does not rely on the provider revoking sessions on reset (nor on that being configured).
 - The link carries `?for=<seal>`: the address, signed with a server secret and expiring with the link, so using the link records
   **which** account was set up (the provider's reset call does not say). Only the app can make a seal and it is only ever emailed to the
   address it names. A missing or altered seal still changes the password but records nothing.
@@ -112,6 +117,9 @@ attack against a real account model (and fails without the gate), and `auth-scre
 
 Limits of this protection, stated plainly:
 
+- The seal is signed with a key derived from `NEON_AUTH_COOKIE_SECRET` (not the secret itself). The address digest is a plain SHA-256: if
+  the database leaked, a known address could be tested against it (an HMAC would stop that, at the cost of every record becoming invalid
+  whenever the secret rotates). Keep the project's trusted origins exact: a forged Host header would otherwise also leak a valid seal.
 - It protects **sign-in to the app**. The provider's own public sign-in still accepts the attacker's password for a verified account;
   that can only matter to the app, which refuses it.
 - If the owner never uses the emailed link, nobody can sign in (the attacker included). "Send the link again" and "Forgot password?"
