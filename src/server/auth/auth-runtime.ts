@@ -22,6 +22,21 @@ const unavailableProvider: AuthProvider = {
   async signInWithPassword() {
     return { ok: false };
   },
+  async signUp() {
+    return { ok: false, reason: "unavailable" };
+  },
+  async verifyEmail() {
+    return { ok: false, reason: "unavailable" };
+  },
+  async resendVerificationCode() {
+    return { ok: false, reason: "unavailable" };
+  },
+  async requestPasswordReset() {
+    return { ok: false, reason: "unavailable" };
+  },
+  async resetPassword() {
+    return { ok: false, reason: "unavailable" };
+  },
   async signOut() {},
 };
 

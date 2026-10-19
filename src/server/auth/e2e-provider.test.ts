@@ -1,4 +1,12 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -193,6 +201,106 @@ describe("createE2eAuthProvider", () => {
       jar.set(E2E_COOKIE, "../../x");
       await expect(provider.signOut()).resolves.toBeUndefined();
       expect(jar.has(E2E_COOKIE)).toBe(false);
+    });
+  });
+});
+
+describe("the e2e account flows", () => {
+  const provider = createE2eAuthProvider(env);
+  const EMAIL = "newcomer@example.test";
+  const hex = (email: string) => Buffer.from(email).toString("hex");
+  const inbox = (kind: "verify" | "reset", email = EMAIL) =>
+    join(dir, `inbox-${kind}-${hex(email)}`);
+  const code = (email = EMAIL) => readFileSync(inbox("verify", email), "utf8").split(":")[0];
+  const token = (email = EMAIL) => readFileSync(inbox("reset", email), "utf8");
+  const wrongCode = () => (code() === "000000" ? "000001" : "000000");
+  const redirectTo = "https://app.example.test/reset-password";
+
+  async function verifiedAccount(password = "my-own-password") {
+    await provider.signUp(EMAIL, password);
+    await provider.verifyEmail(EMAIL, code());
+  }
+
+  it("signs up unverified, mails a code, and says 'unverified' until the code is used", async () => {
+    expect(await provider.signUp(EMAIL, "my-own-password")).toEqual({ ok: true });
+    expect(code()).toMatch(/^\d{6}$/);
+    expect(await provider.signInWithPassword(EMAIL, "my-own-password")).toEqual({
+      ok: false,
+      unverified: true,
+    });
+    expect(await provider.signInWithPassword(EMAIL, "wrong-password")).toEqual({ ok: false });
+    expect(await provider.verifyEmail(EMAIL, code())).toEqual({ ok: true });
+    expect(existsSync(inbox("verify"))).toBe(false);
+    expect(await provider.getSession()).toBeNull();
+    expect(await provider.signInWithPassword(EMAIL, "my-own-password")).toMatchObject({ ok: true });
+    // Their own password only: the shared synthetic one no longer opens this account.
+    await provider.signOut();
+    expect(await provider.signInWithPassword(EMAIL, env.AUTH_E2E_PASSWORD)).toEqual({ ok: false });
+  });
+
+  it("refuses a short password, and a taken address changes nothing and looks like success", async () => {
+    expect(await provider.signUp(EMAIL, "short")).toEqual({ ok: false, reason: "weak-password" });
+    await verifiedAccount();
+    expect(await provider.signUp(EMAIL, "someone-elses-pw")).toEqual({ ok: true });
+    expect(existsSync(inbox("verify"))).toBe(false);
+    expect(await provider.signInWithPassword(EMAIL, "my-own-password")).toMatchObject({ ok: true });
+  });
+
+  it("counts wrong codes, locks after five, and a new code clears the lock", async () => {
+    await provider.signUp(EMAIL, "my-own-password");
+    for (let i = 0; i < 5; i += 1) {
+      expect(await provider.verifyEmail(EMAIL, wrongCode())).toEqual({
+        ok: false,
+        reason: "invalid",
+      });
+    }
+    expect(await provider.verifyEmail(EMAIL, code())).toEqual({ ok: false, reason: "locked" });
+    await provider.resendVerificationCode(EMAIL);
+    expect(await provider.verifyEmail(EMAIL, code())).toEqual({ ok: true });
+    expect(await provider.verifyEmail("nobody@example.test", "123456")).toEqual({
+      ok: false,
+      reason: "invalid",
+    });
+  });
+
+  it("resends a fresh code only to an unverified account, and reports success either way", async () => {
+    expect(await provider.resendVerificationCode("nobody@example.test")).toEqual({ ok: true });
+    expect(existsSync(inbox("verify", "nobody@example.test"))).toBe(false);
+    await provider.signUp(EMAIL, "my-own-password");
+    rmSync(inbox("verify"));
+    expect(await provider.resendVerificationCode(EMAIL)).toEqual({ ok: true });
+    expect(code()).toMatch(/^\d{6}$/);
+  });
+
+  it("resets a password with the emailed token, once, and answers an unknown address the same", async () => {
+    await verifiedAccount();
+    expect(await provider.requestPasswordReset("nobody@example.test", redirectTo)).toEqual({
+      ok: true,
+    });
+    expect(existsSync(inbox("reset", "nobody@example.test"))).toBe(false);
+    expect(await provider.requestPasswordReset(EMAIL, redirectTo)).toEqual({ ok: true });
+    const emailed = token();
+    expect(await provider.resetPassword(emailed, "short")).toEqual({
+      ok: false,
+      reason: "weak-password",
+    });
+    expect(await provider.resetPassword("0".repeat(48), "brand-new-password")).toEqual({
+      ok: false,
+      reason: "invalid",
+    });
+    expect(await provider.resetPassword("not a token", "brand-new-password")).toEqual({
+      ok: false,
+      reason: "invalid",
+    });
+    // The weak-password try above did not spend the token; this one does.
+    expect(await provider.resetPassword(emailed, "brand-new-password")).toEqual({ ok: true });
+    expect(await provider.resetPassword(emailed, "another-password-1")).toEqual({
+      ok: false,
+      reason: "invalid",
+    });
+    expect(await provider.signInWithPassword(EMAIL, "my-own-password")).toEqual({ ok: false });
+    expect(await provider.signInWithPassword(EMAIL, "brand-new-password")).toMatchObject({
+      ok: true,
     });
   });
 });

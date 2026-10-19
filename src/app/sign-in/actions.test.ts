@@ -4,6 +4,8 @@ import { parseAllowlist } from "@/server/auth/allowlist";
 
 const fake = createFakeAuth([
   { email: "owner@example.test", password: "pw-owner", userId: "u1" },
+  { email: "pending@example.test", password: "pw-pending", userId: "u3", verified: false },
+  { email: "waiting@example.test", password: "pw-waiting", userId: "u4", verified: false },
   { email: "intruder@example.test", password: "pw-intruder", userId: "u2" },
 ]);
 let available = true;
@@ -11,13 +13,19 @@ let available = true;
 vi.mock("@/server/auth/auth-runtime", () => ({
   getAuth: async () => ({
     provider: fake,
-    allowlist: parseAllowlist("owner@example.test"),
+    allowlist: parseAllowlist("owner@example.test, waiting@example.test"),
     available,
   }),
 }));
 let forwardedFor: string | null = "203.0.113.7";
+const jar = new Map<string, string>();
 vi.mock("next/headers", () => ({
   headers: async () => new Headers(forwardedFor ? { "x-forwarded-for": forwardedFor } : {}),
+  cookies: async () => ({
+    get: (name: string) => (jar.has(name) ? { name, value: jar.get(name) } : undefined),
+    set: (name: string, value: string) => void jar.set(name, value),
+    delete: (name: string) => void jar.delete(name),
+  }),
 }));
 vi.mock("next/navigation", () => ({
   redirect: (path: string) => {
@@ -26,6 +34,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { signInAction, signOutAction } from "./actions";
+import { resetFlowLimits } from "@/server/auth/flow-limits";
 import { resetSignInLimits } from "@/server/auth/sign-in-limit";
 import { setAuthLogSink } from "@/server/auth/safe-log";
 import { INVALID_CREDENTIALS_MESSAGE, RATE_LIMITED_MESSAGE, UNAVAILABLE_MESSAGE } from "./state";
@@ -38,11 +47,89 @@ const form = (email: string, password: string) => {
 };
 
 beforeEach(() => {
+  jar.clear();
+  resetFlowLimits();
   fake.current = null;
   available = true;
   forwardedFor = "203.0.113.7";
   resetSignInLimits();
   setAuthLogSink(() => {});
+});
+
+describe("signInAction with an unverified account", () => {
+  // This is the recovery path for an expired or lost code: the person proves the password and gets a fresh code.
+  it("sends a fresh code to an allowlisted address, remembers it, and goes to the code screen", async () => {
+    fake.flows.calls.length = 0;
+    await expect(
+      signInAction({ error: null }, form(" Waiting@Example.test ".toLowerCase(), "pw-waiting")),
+    ).rejects.toThrow("NEXT_REDIRECT:/verify");
+    expect(fake.flows.calls).toEqual([
+      { method: "resendVerificationCode", args: ["waiting@example.test"] },
+    ]);
+    expect(jar.get("cw-pending-email")).toBe("waiting@example.test");
+    expect(fake.current).toBeNull();
+  });
+
+  it("sends nothing for an address that is not on the allowlist, but behaves the same on screen", async () => {
+    fake.flows.calls.length = 0;
+    await expect(
+      signInAction({ error: null }, form("pending@example.test", "pw-pending")),
+    ).rejects.toThrow("NEXT_REDIRECT:/verify");
+    expect(fake.flows.calls).toEqual([]);
+  });
+
+  it("holds a second request inside the 30-second gap without sending another code", async () => {
+    fake.flows.calls.length = 0;
+    for (let i = 0; i < 2; i += 1) {
+      await expect(
+        signInAction({ error: null }, form("waiting@example.test", "pw-waiting")),
+      ).rejects.toThrow("NEXT_REDIRECT:/verify");
+    }
+    expect(fake.flows.calls).toHaveLength(1);
+  });
+
+  it("clears the failed-attempt count for the pair, because the password was right", async () => {
+    for (let i = 0; i < 9; i += 1) {
+      expect(await signInAction({ error: null }, form("waiting@example.test", "wrong"))).toEqual({
+        error: INVALID_CREDENTIALS_MESSAGE,
+      });
+    }
+    await expect(
+      signInAction({ error: null }, form("waiting@example.test", "pw-waiting")),
+    ).rejects.toThrow("NEXT_REDIRECT:/verify");
+    // Nine more wrong passwords would have tripped the limit of ten had the count not been cleared.
+    for (let i = 0; i < 9; i += 1) {
+      expect(await signInAction({ error: null }, form("waiting@example.test", "wrong"))).toEqual({
+        error: INVALID_CREDENTIALS_MESSAGE,
+      });
+    }
+  });
+
+  it("sends the person to the code screen with a new code, remembering the address", async () => {
+    await expect(
+      signInAction({ error: null }, form("  pending@example.test ", "pw-pending")),
+    ).rejects.toThrow("NEXT_REDIRECT:/verify");
+    expect(fake.current).toBeNull();
+    expect(jar.get("cw-pending-email")).toBe("pending@example.test");
+  });
+
+  it("is not counted as a failed attempt (the password was right)", async () => {
+    for (let i = 0; i < 12; i += 1) {
+      await expect(
+        signInAction({ error: null }, form("pending@example.test", "pw-pending")),
+      ).rejects.toThrow("NEXT_REDIRECT:/verify");
+    }
+    await expect(
+      signInAction({ error: null }, form("owner@example.test", "pw-owner")),
+    ).rejects.toThrow("NEXT_REDIRECT:/");
+  });
+
+  it("still gives the generic error for a wrong password on the same account", async () => {
+    expect(await signInAction({ error: null }, form("pending@example.test", "wrong"))).toEqual({
+      error: INVALID_CREDENTIALS_MESSAGE,
+    });
+    expect(jar.size).toBe(0);
+  });
 });
 
 describe("signInAction", () => {

@@ -41,6 +41,16 @@ describe("unavailableAuth", () => {
     expect(await auth.provider.signInWithPassword("a@example.test", "pw")).toEqual({ ok: false });
     await expect(auth.provider.signOut()).resolves.toBeUndefined();
   });
+
+  it("cannot sign up, verify, send a code or link, or reset a password", async () => {
+    const { provider } = unavailableAuth();
+    const down = { ok: false, reason: "unavailable" };
+    expect(await provider.signUp("a@example.test", "a-long-password")).toEqual(down);
+    expect(await provider.verifyEmail("a@example.test", "123456")).toEqual(down);
+    expect(await provider.resendVerificationCode("a@example.test")).toEqual(down);
+    expect(await provider.requestPasswordReset("a@example.test", "https://a.test/r")).toEqual(down);
+    expect(await provider.resetPassword("fake-token-one", "a-long-password")).toEqual(down);
+  });
 });
 
 describe("getAuth", () => {

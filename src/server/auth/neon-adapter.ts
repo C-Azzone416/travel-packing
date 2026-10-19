@@ -6,12 +6,17 @@
 // auth-runtime.ts. Enabling it in production is blocked on #27.
 
 import { logAuthEvent } from "./safe-log";
-import type { AuthProvider, AuthSession, SignInResult } from "./types";
+import type { AuthProvider, AuthSession, FlowFailure, FlowResult, SignInResult } from "./types";
 
 interface NeonUser {
   id?: string | null;
   email?: string | null;
   emailVerified?: boolean | null;
+}
+
+interface NeonCallResult {
+  data?: unknown;
+  error?: { code?: unknown; status?: unknown } | null;
 }
 
 /** The subset of the SDK this adapter uses. */
@@ -23,8 +28,66 @@ export interface NeonAuthLike {
       password: string;
     }): Promise<{ data?: { user?: NeonUser | null } | null; error?: unknown } | null>;
   };
+  requestPasswordReset(input: {
+    email: string;
+    redirectTo: string;
+  }): Promise<NeonCallResult | null>;
+  resetPassword(input: { newPassword: string; token: string }): Promise<NeonCallResult | null>;
+  signUp: {
+    email(input: { email: string; password: string; name: string }): Promise<NeonCallResult | null>;
+  };
+  emailOtp: {
+    sendVerificationOtp(input: {
+      email: string;
+      type: "email-verification";
+    }): Promise<NeonCallResult | null>;
+    verifyEmail(input: { email: string; otp: string }): Promise<NeonCallResult | null>;
+  };
   signOut(): Promise<unknown>;
 }
+
+/**
+ * What a failed provider call means, from its status and code alone (never its message, which may echo input).
+ * Network failures, 5xx, and anything without a status are "unavailable"; 429 and attempt-limit codes are
+ * "too-many"; password-length codes are "weak-password"; every other client error is "invalid".
+ */
+function classifyFailure(error: NonNullable<NeonCallResult["error"]>): FlowFailure {
+  const code = typeof error.code === "string" ? error.code.toUpperCase() : "";
+  const status = typeof error.status === "number" ? error.status : 0;
+  if (code.includes("TOO_MANY")) return "locked";
+  if (status === 429) return "too-many";
+  if (code.startsWith("PASSWORD_") || code.includes("PASSWORD_TOO")) return "weak-password";
+  if (status === 0 || status >= 500 || code.startsWith("NETWORK") || code === "INTERNAL_ERROR")
+    return "unavailable";
+  return "invalid";
+}
+
+/** Runs one provider call and folds a thrown error into "unavailable"; only the code is logged. */
+async function flowCall<Reason extends FlowFailure>(
+  call: () => Promise<NeonCallResult | null>,
+  onFailure: (reason: FlowFailure) => FlowResult<Reason>,
+): Promise<FlowResult<Reason>> {
+  try {
+    const result = await call();
+    if (result?.error) return onFailure(classifyFailure(result.error));
+    return result ? { ok: true } : onFailure("unavailable");
+  } catch {
+    logAuthEvent("provider-error");
+    return onFailure("unavailable");
+  }
+}
+
+/** A refused-because-it-was-wrong reason the step's caller cannot show becomes "invalid" (the safe default). */
+function narrow<Reason extends FlowFailure>(
+  reason: FlowFailure,
+  allowed: readonly Reason[],
+  fallback: Reason,
+): Reason {
+  return (allowed as readonly FlowFailure[]).includes(reason) ? (reason as Reason) : fallback;
+}
+
+/** The sign-up form asks only for email and password; the provider requires a display name, so use the address's local part. */
+const displayName = (email: string) => email.split("@")[0] || "Owner";
 
 /**
  * A user is a session only with an id, an email, and `emailVerified === true`. Fail closed on anything else
@@ -46,16 +109,77 @@ export function createNeonAuthProvider(neon: NeonAuthLike): AuthProvider {
     async signInWithPassword(email, password): Promise<SignInResult> {
       try {
         const result = await neon.signIn.email({ email, password });
-        const session = result?.error ? null : toSession(result?.data?.user);
-        return session ? { ok: true, session } : { ok: false };
+        if (result?.error)
+          return isUnverifiedError(result.error) ? { ok: false, unverified: true } : { ok: false };
+        const session = toSession(result?.data?.user);
+        if (session) return { ok: true, session };
+        // The provider accepted the password but the address is not verified (or it says nothing): no session either way.
+        return result?.data?.user?.id ? { ok: false, unverified: true } : { ok: false };
       } catch {
         // Network and API failures look like a failed sign-in to the caller; nothing from the error is logged.
         logAuthEvent("provider-error");
         return { ok: false };
       }
     },
+    async signUp(email, password) {
+      return flowCall(
+        () => neon.signUp.email({ email, password, name: displayName(email) }),
+        (reason): FlowResult<"weak-password" | "unavailable"> =>
+          // A taken address (and any other client error) must look exactly like a new account: the verification step
+          // follows either way, so the screen never says which addresses are registered.
+          reason === "weak-password" || reason === "unavailable"
+            ? { ok: false, reason }
+            : { ok: true },
+      );
+    },
+    async verifyEmail(email, otp) {
+      return flowCall(
+        () => neon.emailOtp.verifyEmail({ email, otp }),
+        (reason) => ({
+          ok: false,
+          reason: narrow(
+            reason,
+            ["invalid", "locked", "too-many", "unavailable"] as const,
+            "invalid",
+          ),
+        }),
+      );
+    },
+    async resendVerificationCode(email) {
+      return sendOnly(() =>
+        neon.emailOtp.sendVerificationOtp({ email, type: "email-verification" }),
+      );
+    },
+    async requestPasswordReset(email, redirectTo) {
+      return sendOnly(() => neon.requestPasswordReset({ email, redirectTo }));
+    },
+    async resetPassword(token, newPassword) {
+      return flowCall(
+        () => neon.resetPassword({ token, newPassword }),
+        (reason) => ({
+          ok: false,
+          // A token that is wrong, expired or used is one "invalid"; "locked" has no meaning for a token.
+          reason: narrow(reason, ["weak-password", "too-many", "unavailable"] as const, "invalid"),
+        }),
+      );
+    },
     async signOut() {
       await neon.signOut();
     },
   };
+}
+
+/** Asking for a code or link reports success for every address the provider accepts; only limits and outages are shown. */
+function sendOnly(
+  call: () => Promise<NeonCallResult | null>,
+): Promise<FlowResult<"too-many" | "unavailable">> {
+  return flowCall(call, (reason): FlowResult<"too-many" | "unavailable"> =>
+    reason === "too-many" || reason === "unavailable" ? { ok: false, reason } : { ok: true },
+  );
+}
+
+/** The provider's "right password, address not verified yet" answer (a 403 with EMAIL_NOT_VERIFIED). */
+function isUnverifiedError(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null)?.code;
+  return typeof code === "string" && code.toUpperCase() === "EMAIL_NOT_VERIFIED";
 }
