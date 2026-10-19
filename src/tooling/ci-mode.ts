@@ -113,3 +113,12 @@ export async function decideMode(
     return { mode: "full", reason: "full validation: the earlier result could not be checked" };
   }
 }
+
+/**
+ * Whether the pull request is a draft RIGHT NOW. The event payload is a snapshot, and events can arrive out of order (a push
+ * and "ready for review" a second apart): a stale "draft" payload on the newest run would leave a ready pull request with
+ * only the quick checks. So the live answer wins; when it cannot be read, the answer is "not a draft", which runs everything.
+ */
+export function resolveDraft(live: string | null): boolean {
+  return live?.trim() === "true";
+}

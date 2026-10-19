@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { CiRun } from "./ci-gate";
-import { chooseReuse, decideMode, initialMode, type Candidate, type Lookups } from "./ci-mode";
+import {
+  chooseReuse,
+  decideMode,
+  initialMode,
+  resolveDraft,
+  type Candidate,
+  type Lookups,
+} from "./ci-mode";
 
 const PUSHED = "1".repeat(40);
 const TREE = "2".repeat(40);
@@ -221,5 +228,17 @@ describe("decideMode", () => {
       mode: "full",
       reason: "full validation: the earlier result could not be checked",
     });
+  });
+});
+
+describe("resolveDraft", () => {
+  it("is a draft only when the live answer says exactly so", () => {
+    expect(resolveDraft("true")).toBe(true);
+    expect(resolveDraft("true\n")).toBe(true);
+    expect(resolveDraft("false")).toBe(false);
+  });
+
+  it("fails safe to full validation when the live answer is missing or odd", () => {
+    for (const odd of [null, "", "null", "TRUE?", "yes"]) expect(resolveDraft(odd)).toBe(false);
   });
 });
