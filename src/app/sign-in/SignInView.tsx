@@ -1,7 +1,9 @@
 // Presentational sign-in card (design spec #31): a single centered card on Linen, "Welcome back", Email and
-// Password (with show/hide), an inline error above the button, no sign-up link, standard autocomplete
-// attributes so password managers work, and a loading state that disables the form.
+// Password (with show/hide), an inline error above the button, standard autocomplete attributes so password
+// managers work, and a loading state that disables the form. #27 adds "Forgot password?", a link to create an
+// account, and a status notice when the person arrives from the reset or verification screens.
 
+import Link from "next/link";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -14,6 +16,8 @@ export interface SignInViewProps {
   onTogglePassword: () => void;
   /** Optional decorative art above the card (must use alt="" so assistive tech ignores it). */
   banner?: ReactNode;
+  /** A status message from a screen the person just came from ("Password updated…"). */
+  notice?: string | null;
 }
 
 export function SignInView({
@@ -23,6 +27,7 @@ export function SignInView({
   showPassword,
   onTogglePassword,
   banner,
+  notice,
 }: SignInViewProps) {
   return (
     <main className="auth-screen">
@@ -30,6 +35,11 @@ export function SignInView({
       <Card as="section" padded className="auth-card" aria-labelledby="sign-in-title">
         <p className="eyebrow">Carrywell</p>
         <h1 id="sign-in-title">Welcome back</h1>
+        {notice ? (
+          <p className="auth-notice" role="status">
+            {notice}
+          </p>
+        ) : null}
         <form className="auth-form" action={action} noValidate>
           <div className="field">
             <label htmlFor="email">Email</label>
@@ -65,6 +75,9 @@ export function SignInView({
                 Show password
               </Button>
             </div>
+            <Link className="auth-link forgot-link" href="/forgot-password">
+              Forgot password?
+            </Link>
           </div>
 
           {error ? (
@@ -85,6 +98,12 @@ export function SignInView({
             )}
           </Button>
         </form>
+        <p className="auth-links">
+          New here?{" "}
+          <Link className="auth-link" href="/sign-up">
+            Create an account
+          </Link>
+        </p>
       </Card>
     </main>
   );

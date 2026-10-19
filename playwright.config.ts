@@ -18,6 +18,10 @@ const e2eEnv = {
   LOCATION_SEARCHES_PER_MINUTE: "1000",
   // Every e2e test signs in as one of a few owners from one address; production keeps the default of 10 per 15 minutes.
   SIGN_IN_ATTEMPTS_PER_15_MIN: "10000",
+  // The account screens wait out a floor so an allowed and an unlisted address take the same time (#27); tests skip it.
+  AUTH_FLOW_MIN_MS: "0",
+  // Every e2e test signs up from one address; production keeps the default of 10 sign-ups an hour per caller.
+  AUTH_FLOW_CALLERS_PER_HOUR: "10000",
 };
 
 // Servers are never reused: reusing whatever happens to be listening could silently test another checkout's code.

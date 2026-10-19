@@ -14,6 +14,9 @@ export interface A11yOptions {
 }
 
 export async function expectAccessible(page: Page, label: string, options: A11yOptions = {}) {
+  // The title streams in with the page; checking before it arrives reports a missing <title> that is not a real problem
+  // (it failed once in CI on a screen reached by a redirect).
+  await expect(page).toHaveTitle(/.+/);
   // Animations would make contrast depend on the instant of the check.
   await page.emulateMedia({ reducedMotion: "reduce" });
   let builder = new AxeBuilder({ page }).withTags(TAGS);

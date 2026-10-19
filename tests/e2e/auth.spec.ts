@@ -17,11 +17,18 @@ test.describe("signed out", () => {
     expect(response.headers()["cache-control"]).toBe("no-store");
   });
 
-  test("the sign-in screen has no sign-up link and a working show/hide toggle", async ({
+  test("the sign-in screen links to the account screens and has a working show/hide toggle", async ({
     page,
   }) => {
     await page.goto("/sign-in");
-    await expect(page.getByRole("link", { name: /sign up|create account/i })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Forgot password?" })).toHaveAttribute(
+      "href",
+      "/forgot-password",
+    );
+    await expect(page.getByRole("link", { name: "Create an account" })).toHaveAttribute(
+      "href",
+      "/sign-up",
+    );
     const password = page.getByLabel("Password", { exact: true });
     await expect(password).toHaveAttribute("type", "password");
     const toggle = page.getByRole("button", { name: "Show password" });
