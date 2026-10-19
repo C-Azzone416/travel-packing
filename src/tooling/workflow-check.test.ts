@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -427,5 +428,55 @@ describe("checkTimeoutHeadroom: the deploy waits on CI, so the timeouts nest", (
     // `gh run list --workflow ci.yml --commit $GITHUB_SHA` reports the WORKFLOW run, which fails when the `ci` summary fails.
     expect(deploy).toMatch(/gh run list --workflow ci\.yml --commit "\$GITHUB_SHA"/);
     expect(deploy).toMatch(/success\) exit 0/);
+  });
+});
+
+describe("the `ci` summary job really turns red unless every job succeeded (#87)", () => {
+  const ci = readFileSync(join(DIR, "ci.yml"), "utf8");
+  // The exact script the real workflow runs, taken from the file, run the way GitHub runs `run:` steps (bash -e).
+  const script = (() => {
+    const body = ci.slice(ci.search(/^ {2}ci:\s*$/m));
+    const at = body.indexOf("run: |\n");
+    expect(at).toBeGreaterThan(0);
+    return body
+      .slice(at + "run: |\n".length)
+      .split("\n")
+      .filter((line) => line.startsWith("          "))
+      .map((line) => line.slice(10))
+      .join("\n");
+  })();
+  const jobs = ciJobs(ci)
+    .filter((job) => job.id !== "ci")
+    .map((job) => job.id);
+  const needs = (results: Record<string, string>) =>
+    JSON.stringify(
+      Object.fromEntries(jobs.map((id) => [id, { result: results[id] ?? "success", outputs: {} }])),
+    );
+  const run = (json: string) =>
+    spawnSync("bash", ["-e", "-c", script], {
+      env: { ...process.env, NEEDS: json },
+      encoding: "utf8",
+    });
+
+  it("passes when every job succeeded, and lists each job's result", () => {
+    const result = run(needs({}));
+    expect(result.status).toBe(0);
+    for (const id of jobs) expect(result.stdout).toContain(`${id}: success`);
+  });
+
+  it.each(["failure", "cancelled", "skipped"])(
+    "fails when any one job's result is %s, whichever job it is",
+    (outcome) => {
+      for (const id of jobs) {
+        const result = run(needs({ [id]: outcome }));
+        expect(result.status, `${id} ${outcome}`).not.toBe(0);
+        expect(result.stdout).toContain(`${id}: ${outcome}`);
+      }
+    },
+  );
+
+  it("fails when several jobs fail, and when there is nothing to check but a missing result", () => {
+    expect(run(needs({ unit: "failure", e2e: "cancelled" })).status).not.toBe(0);
+    expect(run(JSON.stringify({ unit: {}, checks: { result: "success" } })).status).not.toBe(0);
   });
 });
