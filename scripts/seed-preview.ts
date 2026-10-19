@@ -12,4 +12,11 @@ runPreviewSeed(process.env, {
   summary: (line) => {
     if (summaryFile) appendFileSync(summaryFile, `${line}\n`);
   },
-}).then((code) => process.exit(code));
+}).then(
+  (code) => process.exit(code),
+  // Whatever went wrong, say so without its text (it could hold a connection string) and fail the step.
+  () => {
+    console.error("preview seed failed");
+    process.exit(1);
+  },
+);
