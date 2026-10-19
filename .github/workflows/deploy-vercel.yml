@@ -81,7 +81,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          for attempt in $(seq 1 40); do
+          for _ in $(seq 1 40); do
             conclusion=$(gh run list --workflow ci.yml --commit "$GITHUB_SHA" --json status,conclusion \
               --jq '[.[] | select(.status == "completed")] | first | .conclusion // "pending"')
             echo "ci for $GITHUB_SHA: $conclusion"
