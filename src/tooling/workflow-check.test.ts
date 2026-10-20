@@ -64,6 +64,17 @@ function movedInjection(): string {
   return deploy.replace(block as string, "").replace(anchor, `${block}${anchor}`);
 }
 
+/** The real workflow with the whole alias section moved in front of the first smoke test (wrong order). */
+function aliasBeforeSmoke(): string {
+  const start = deploy.indexOf("      # ---- the stable Preview alias");
+  expect(start).toBeGreaterThan(0);
+  const block = deploy.slice(start);
+  const withoutBlock = deploy.slice(0, start).trimEnd() + "\n";
+  const smoke = "      - name: Smoke test\n";
+  expect(withoutBlock).toContain(smoke);
+  return withoutBlock.replace(smoke, `${block}\n${smoke}`);
+}
+
 describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
   it.each([
     [
@@ -188,6 +199,82 @@ describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
       /build output check must run after the build and before the deploy/,
     ],
     [
+      "a second step that moves the alias",
+      `${deploy.trimEnd()}\n      - name: Move it again\n        run: vercel alias set "$DEPLOY_URL" "$PREVIEW_ALIAS"\n`,
+      /alias must be set by exactly one step/,
+    ],
+    [
+      "the alias set for something other than the deployed URL",
+      mutate(
+        'vercel alias set "$DEPLOY_URL" "$PREVIEW_ALIAS"',
+        'vercel alias set "$OLD_URL" "$PREVIEW_ALIAS"',
+      ),
+      /assign the deployed URL to PREVIEW_ALIAS/,
+    ],
+    [
+      "the alias set without checking the develop head",
+      mutate(
+        " && steps.alias_head.outputs.assign == 'true'\n        env:\n          VERCEL_TOKEN",
+        "\n        env:\n          VERCEL_TOKEN",
+      ),
+      /still the develop head/,
+    ],
+    [
+      "the alias set for a production run too",
+      mutate(
+        "if: env.TARGET == 'preview' && steps.alias_head.outputs.assign == 'true'\n        env:\n          VERCEL_TOKEN",
+        "if: steps.alias_head.outputs.assign == 'true'\n        env:\n          VERCEL_TOKEN",
+      ),
+      /still the develop head/,
+    ],
+    [
+      "a step that runs after a failure",
+      mutate(
+        "- name: Smoke test the alias\n        if:",
+        "- name: Smoke test the alias\n        if: always() &&",
+      ),
+      /must not move then/,
+    ],
+    [
+      "a step that continues past a failure",
+      mutate(
+        "- name: Assign the stable Preview alias\n",
+        "- name: Assign the stable Preview alias\n        continue-on-error: true\n",
+      ),
+      /must not move then/,
+    ],
+    [
+      "the develop head check dropped",
+      mutate("scripts/check-alias-head.ts", "scripts/other.ts"),
+      /order must be: smoke test, develop head check, alias set/,
+    ],
+    [
+      "the alias block moved ahead of the first smoke test",
+      aliasBeforeSmoke(),
+      /order must be: smoke test, develop head check, alias set/,
+    ],
+    [
+      "no smoke test of the alias itself",
+      mutate(
+        'scripts/smoke-test.ts "https://${PREVIEW_ALIAS}"',
+        'scripts/smoke-test.ts "$DEPLOY_URL"',
+      ),
+      /alias itself must be smoke-tested/,
+    ],
+    [
+      "a different alias name",
+      mutate(
+        "PREVIEW_ALIAS: travel-packing-preview.vercel.app",
+        "PREVIEW_ALIAS: other-name.vercel.app",
+      ),
+      /PREVIEW_ALIAS must be travel-packing-preview.vercel.app/,
+    ],
+    [
+      "a fourth Vercel token use",
+      `${deploy.trimEnd()}\n        X: \${{ secrets.VERCEL_TOKEN }}\n`,
+      /exactly three steps/,
+    ],
+    [
       "a preview deploy that leaves its target to Vercel",
       mutate("vercel deploy --prebuilt --target=preview", "vercel deploy --prebuilt"),
       /preview deploy must pass --target=preview/,
@@ -236,7 +323,7 @@ describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
       `${deploy.trimEnd()}\n        X: \${{ secrets.DATABASE_URL }}\n`,
       /secrets\.DATABASE_URL must be read only by the secret injection step/,
     ],
-    ["a third Vercel token use", `${deploy}\n# ${"secrets"}.VERCEL_TOKEN\n`, /exactly two steps/],
+    ["a third Vercel token use", `${deploy}\n# ${"secrets"}.VERCEL_TOKEN\n`, /exactly three steps/],
     ["the pooled URL", `${deploy}\n          DATABASE_URL: x\n`, /never the pooled/],
     [
       "no direct URL secret",

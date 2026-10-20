@@ -125,6 +125,29 @@ Vercel project environment variables, per environment (Preview and Production ge
 Never set `NEXT_PUBLIC_E2E_BUILD`, `AUTH_E2E_*`, `E2E_DATABASE_URL` or `OPEN_METEO_GEOCODING_URL` in Vercel or GitHub. Never expose the
 production `DATABASE_URL` to the Preview environment.
 
+## The stable Preview address (#96)
+
+Every deploy gets its own `travel-packing-<hash>-….vercel.app` URL, which is no use as a sign-in or reset-link address (the auth
+project has to trust each origin it serves). So after a good preview deploy the workflow points ONE stable name,
+`https://travel-packing-preview.vercel.app`, at it (`vercel alias set`, with the existing `VERCEL_TOKEN`; the first run creates the name,
+and if Vercel refuses it the step fails loudly and nothing else changes).
+
+The alias moves only when all of this holds, in this order, in the same job:
+
+1. the build, the deploy, the "landed in the right environment" check and the **smoke test of the deployment URL** all passed (a failed
+   step ends the job; no later step runs `always()` or continues past a failure, and `check:workflows` forbids both);
+2. it is a **preview** run (production never gets an alias);
+3. **this run's commit is still the `develop` head**. Deploys are serialized by the workflow's concurrency group and never cancelled, so an older
+   run can finish after a newer push; it then skips the alias with a notice (`alias skipped: develop has moved on...`) and the newer run moves it.
+   A head that cannot be read fails the step, loudly, with the alias untouched (`scripts/check-alias-head.ts`, `src/tooling/alias-head.ts`);
+
+then the alias itself is **smoke-tested** (the same checks as the deployment URL).
+
+On Preview (`VERCEL_ENV=preview` at runtime) the app builds its reset-link return address from that stable origin and ignores the host the
+request arrived on (`src/server/auth/request-origin.ts`), so no per-deployment URL reaches an emailed link. Everywhere else (production, local) it is
+still derived from the request. The Neon Auth Preview project must trust exactly `https://travel-packing-preview.vercel.app` (add it under
+trusted domains); that is a Neon setting, not part of the workflow.
+
 ## Preview secrets
 
 `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `OWNER_EMAIL_ALLOWLIST` and `NEON_AUTH_COOKIE_SECRET` are stored in Vercel as
