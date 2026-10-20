@@ -120,6 +120,8 @@ test(
   "a11y: the stops step and the edit route sheet have no violations",
   DEVICE,
   async ({ page }) => {
+    // Builds a 3-stop trip, saves it, opens it and runs axe on three screens: more than the default 30 s on a slow phone runner.
+    test.slow();
     await openDashboard(page);
     await createThreeStopTrip(page);
     await expectAccessible(page, "stops step");
