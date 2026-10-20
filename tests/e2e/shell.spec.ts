@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
+import { DEVICE } from "./helpers/device";
 
 // Every screen is behind sign-in; these tests run as the allowlisted owner (e2e-only fake sign-in).
 test.beforeEach(async ({ page }) => {
@@ -12,31 +13,33 @@ const SCREENS = [
   { label: "Settings", path: "/settings", title: "Settings · Carrywell" },
 ];
 
-test("navigation reaches all three screens with titles, current state and focus on main", async ({
-  page,
-}) => {
-  const nav = page.getByRole("navigation", { name: "Primary navigation" });
-  await expect(nav.getByRole("link")).toHaveCount(3);
-  // Start on Trips, so every click below is a real route change.
-  for (const screen of [...SCREENS.slice(1), SCREENS[0]]) {
-    await nav.getByRole("link", { name: screen.label }).click();
-    await expect(page).toHaveURL(screen.path);
-    await expect(page).toHaveTitle(screen.title);
-    // Trips and Staples lead with their prototype headlines; Settings leads with its name.
-    const heading =
-      screen.label === "Trips"
-        ? "Pack for the trip, not the anxiety."
-        : screen.label === "Staples"
-          ? "Every trip starts here"
-          : screen.label;
-    await expect(page.getByRole("heading", { name: heading, level: 1 })).toBeVisible();
-    await expect(nav.getByRole("link", { name: screen.label })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
-    await expect(page.locator("main")).toBeFocused();
-  }
-});
+test(
+  "navigation reaches all three screens with titles, current state and focus on main",
+  DEVICE,
+  async ({ page }) => {
+    const nav = page.getByRole("navigation", { name: "Primary navigation" });
+    await expect(nav.getByRole("link")).toHaveCount(3);
+    // Start on Trips, so every click below is a real route change.
+    for (const screen of [...SCREENS.slice(1), SCREENS[0]]) {
+      await nav.getByRole("link", { name: screen.label }).click();
+      await expect(page).toHaveURL(screen.path);
+      await expect(page).toHaveTitle(screen.title);
+      // Trips and Staples lead with their prototype headlines; Settings leads with its name.
+      const heading =
+        screen.label === "Trips"
+          ? "Pack for the trip, not the anxiety."
+          : screen.label === "Staples"
+            ? "Every trip starts here"
+            : screen.label;
+      await expect(page.getByRole("heading", { name: heading, level: 1 })).toBeVisible();
+      await expect(nav.getByRole("link", { name: screen.label })).toHaveAttribute(
+        "aria-current",
+        "page",
+      );
+      await expect(page.locator("main")).toBeFocused();
+    }
+  },
+);
 
 test("skip link is the first tab stop and jumps to main", async ({ page }) => {
   await page.keyboard.press("Tab");
@@ -57,7 +60,7 @@ test("keyboard focus is clearly visible", async ({ page }) => {
   expect(outline).toEqual({ width: "3px", style: "solid", color: "rgb(22, 109, 122)" });
 });
 
-test("touch targets are at least 44px", async ({ page }) => {
+test("touch targets are at least 44px", DEVICE, async ({ page }) => {
   const targets = [
     page.getByRole("link", { name: /go to trips/i }),
     page.getByRole("link", { name: "Saved" }),
@@ -70,7 +73,7 @@ test("touch targets are at least 44px", async ({ page }) => {
   }
 });
 
-test("no horizontal scroll at 320px", async ({ page }) => {
+test("no horizontal scroll at 320px", DEVICE, async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 640 });
   for (const screen of SCREENS) {
     await page.goto(screen.path);
@@ -81,24 +84,26 @@ test("no horizontal scroll at 320px", async ({ page }) => {
   }
 });
 
-test("navigation is a bottom bar on phones and a side rail on desktop", async ({
-  page,
-}, testInfo) => {
-  const box = await page.getByRole("navigation", { name: "Primary navigation" }).boundingBox();
-  const viewport = page.viewportSize()!;
-  if (testInfo.project.name === "phone") {
-    expect(box!.y + box!.height).toBeGreaterThan(viewport.height - 24);
-    expect(box!.width).toBeGreaterThan(viewport.width / 2);
-  } else {
-    expect(box!.x).toBeLessThan(40);
-    expect(box!.width).toBeLessThan(120);
-    // The rail never overlaps the page content.
-    const main = await page.locator("main").boundingBox();
-    expect(main!.x).toBeGreaterThanOrEqual(box!.x + box!.width);
-  }
-});
+test(
+  "navigation is a bottom bar on phones and a side rail on desktop",
+  DEVICE,
+  async ({ page }, testInfo) => {
+    const box = await page.getByRole("navigation", { name: "Primary navigation" }).boundingBox();
+    const viewport = page.viewportSize()!;
+    if (testInfo.project.name === "phone") {
+      expect(box!.y + box!.height).toBeGreaterThan(viewport.height - 24);
+      expect(box!.width).toBeGreaterThan(viewport.width / 2);
+    } else {
+      expect(box!.x).toBeLessThan(40);
+      expect(box!.width).toBeLessThan(120);
+      // The rail never overlaps the page content.
+      const main = await page.locator("main").boundingBox();
+      expect(main!.x).toBeGreaterThanOrEqual(box!.x + box!.width);
+    }
+  },
+);
 
-test("screenshots of each screen", async ({ page }, testInfo) => {
+test("screenshots of each screen", DEVICE, async ({ page }, testInfo) => {
   // Reduced motion skips the entrance animation so captures are the final frame.
   await page.emulateMedia({ reducedMotion: "reduce" });
   for (const screen of SCREENS) {

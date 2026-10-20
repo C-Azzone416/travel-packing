@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
+import { DEVICE } from "./helpers/device";
 
 // The Staples screen against a REAL Postgres (#18): what it shows after a reload is what was stored. Each test starts
 // from this project's freshly seeded owner (the default staples, San Diego partly packed, Lisbon Ready).
@@ -152,29 +153,31 @@ test("one owner's staples are not another's", async ({ page, browser }) => {
   }
 });
 
-test("controls are 44px targets on phone and nothing scrolls sideways", async ({
-  page,
-}, testInfo) => {
-  await openStaples(page);
-  if (testInfo.project.name === "phone") {
-    for (const control of [
-      page.getByRole("button", { name: "All" }),
-      page.getByRole("button", { name: "Pack last" }),
-      staple(page, "underwear").getByRole("button", { name: "Edit Underwear" }),
-      page.getByRole("button", { name: /Add/ }),
-    ]) {
-      await expect(control).toBeVisible();
-      // Layout can land a hair under 44 (43.99997); a target is 44px for every practical purpose.
-      expect(Math.round((await control.boundingBox())!.height)).toBeGreaterThanOrEqual(44);
+test(
+  "controls are 44px targets on phone and nothing scrolls sideways",
+  DEVICE,
+  async ({ page }, testInfo) => {
+    await openStaples(page);
+    if (testInfo.project.name === "phone") {
+      for (const control of [
+        page.getByRole("button", { name: "All" }),
+        page.getByRole("button", { name: "Pack last" }),
+        staple(page, "underwear").getByRole("button", { name: "Edit Underwear" }),
+        page.getByRole("button", { name: /Add/ }),
+      ]) {
+        await expect(control).toBeVisible();
+        // Layout can land a hair under 44 (43.99997); a target is 44px for every practical purpose.
+        expect(Math.round((await control.boundingBox())!.height)).toBeGreaterThanOrEqual(44);
+      }
     }
-  }
-  const overflow = await page.evaluate(
-    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-  );
-  expect(overflow).toBeLessThanOrEqual(0);
-});
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+  },
+);
 
-test("screenshots of the staples screen", async ({ page }, testInfo) => {
+test("screenshots of the staples screen", DEVICE, async ({ page }, testInfo) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   const shot = (name: string, fullPage = true) =>
     page.screenshot({

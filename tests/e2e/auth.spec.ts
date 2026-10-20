@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { OTHER_EMAIL, OWNER_EMAIL, signIn, signInAsOwner } from "./helpers/auth";
+import { DEVICE } from "./helpers/device";
 
 test.describe("signed out", () => {
   test("a protected page redirects to sign-in", async ({ page }) => {
@@ -17,28 +18,30 @@ test.describe("signed out", () => {
     expect(response.headers()["cache-control"]).toBe("no-store");
   });
 
-  test("the sign-in screen links to the account screens and has a working show/hide toggle", async ({
-    page,
-  }) => {
-    await page.goto("/sign-in");
-    await expect(page.getByRole("link", { name: "Forgot password?" })).toHaveAttribute(
-      "href",
-      "/forgot-password",
-    );
-    await expect(page.getByRole("link", { name: "Create an account" })).toHaveAttribute(
-      "href",
-      "/sign-up",
-    );
-    const password = page.getByLabel("Password", { exact: true });
-    await expect(password).toHaveAttribute("type", "password");
-    const toggle = page.getByRole("button", { name: "Show password" });
-    await toggle.click();
-    await expect(password).toHaveAttribute("type", "text");
-    await expect(toggle).toHaveAttribute("aria-pressed", "true");
-    await toggle.click();
-    await expect(password).toHaveAttribute("type", "password");
-    await expect(toggle).toHaveAttribute("aria-pressed", "false");
-  });
+  test(
+    "the sign-in screen links to the account screens and has a working show/hide toggle",
+    DEVICE,
+    async ({ page }) => {
+      await page.goto("/sign-in");
+      await expect(page.getByRole("link", { name: "Forgot password?" })).toHaveAttribute(
+        "href",
+        "/forgot-password",
+      );
+      await expect(page.getByRole("link", { name: "Create an account" })).toHaveAttribute(
+        "href",
+        "/sign-up",
+      );
+      const password = page.getByLabel("Password", { exact: true });
+      await expect(password).toHaveAttribute("type", "password");
+      const toggle = page.getByRole("button", { name: "Show password" });
+      await toggle.click();
+      await expect(password).toHaveAttribute("type", "text");
+      await expect(toggle).toHaveAttribute("aria-pressed", "true");
+      await toggle.click();
+      await expect(password).toHaveAttribute("type", "password");
+      await expect(toggle).toHaveAttribute("aria-pressed", "false");
+    },
+  );
 
   test("a wrong password shows one generic error and stays on sign-in", async ({ page }) => {
     await signIn(page, OWNER_EMAIL, "wrong-password");
@@ -69,18 +72,20 @@ test.describe("allowlist", () => {
 });
 
 test.describe("auth screens stand alone", () => {
-  test("sign-in and access-denied show no app chrome (no top bar, no navigation, no skip link)", async ({
-    page,
-  }) => {
-    await page.goto("/sign-in");
-    await expect(page.getByRole("navigation")).toHaveCount(0);
-    await expect(page.getByRole("link", { name: "Skip to main content" })).toHaveCount(0);
-    await expect(page.locator("header.topbar")).toHaveCount(0);
-    await signIn(page, OTHER_EMAIL);
-    await expect(page).toHaveURL(/\/access-denied$/);
-    await expect(page.getByRole("navigation")).toHaveCount(0);
-    await expect(page.locator("header.topbar")).toHaveCount(0);
-  });
+  test(
+    "sign-in and access-denied show no app chrome (no top bar, no navigation, no skip link)",
+    DEVICE,
+    async ({ page }) => {
+      await page.goto("/sign-in");
+      await expect(page.getByRole("navigation")).toHaveCount(0);
+      await expect(page.getByRole("link", { name: "Skip to main content" })).toHaveCount(0);
+      await expect(page.locator("header.topbar")).toHaveCount(0);
+      await signIn(page, OTHER_EMAIL);
+      await expect(page).toHaveURL(/\/access-denied$/);
+      await expect(page.getByRole("navigation")).toHaveCount(0);
+      await expect(page.locator("header.topbar")).toHaveCount(0);
+    },
+  );
 
   test("a client cannot hide the app chrome on a protected page by sending the marker header", async ({
     page,
@@ -91,25 +96,27 @@ test.describe("auth screens stand alone", () => {
     await expect(page.getByRole("navigation", { name: "Primary navigation" })).toBeVisible();
   });
 
-  test("controls meet the 44px target size and keep the card within the viewport", async ({
-    page,
-  }) => {
-    await page.goto("/sign-in");
-    for (const name of ["Show password", "Sign in"]) {
-      const box = await page.getByRole("button", { name }).boundingBox();
-      expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
-    }
-    for (const label of ["Email", "Password"]) {
-      const box = await page.getByLabel(label, { exact: true }).boundingBox();
-      expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
-    }
-    const overflow = await page.evaluate(
-      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-    );
-    expect(overflow).toBeLessThanOrEqual(0);
-  });
+  test(
+    "controls meet the 44px target size and keep the card within the viewport",
+    DEVICE,
+    async ({ page }) => {
+      await page.goto("/sign-in");
+      for (const name of ["Show password", "Sign in"]) {
+        const box = await page.getByRole("button", { name }).boundingBox();
+        expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+      }
+      for (const label of ["Email", "Password"]) {
+        const box = await page.getByLabel(label, { exact: true }).boundingBox();
+        expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+      }
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      expect(overflow).toBeLessThanOrEqual(0);
+    },
+  );
 
-  test("screenshots of the auth screens", async ({ page }, testInfo) => {
+  test("screenshots of the auth screens", DEVICE, async ({ page }, testInfo) => {
     const shot = (name: string) =>
       page.screenshot({
         path: `test-results/screenshots/${testInfo.project.name}-${name}.png`,
@@ -156,11 +163,13 @@ test.describe("e2e sign-in session is unforgeable", () => {
   });
 });
 
-test("Email and Password fields are the same width (the show/hide toggle sits on its own line)", async ({
-  page,
-}) => {
-  await page.goto("/sign-in");
-  const email = await page.getByLabel("Email").boundingBox();
-  const password = await page.getByLabel("Password", { exact: true }).boundingBox();
-  expect(Math.abs((email?.width ?? 0) - (password?.width ?? 1))).toBeLessThanOrEqual(1);
-});
+test(
+  "Email and Password fields are the same width (the show/hide toggle sits on its own line)",
+  DEVICE,
+  async ({ page }) => {
+    await page.goto("/sign-in");
+    const email = await page.getByLabel("Email").boundingBox();
+    const password = await page.getByLabel("Password", { exact: true }).boundingBox();
+    expect(Math.abs((email?.width ?? 0) - (password?.width ?? 1))).toBeLessThanOrEqual(1);
+  },
+);

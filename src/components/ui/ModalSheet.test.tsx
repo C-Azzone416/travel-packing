@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -67,6 +67,89 @@ describe("ModalSheet", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(document.activeElement).toBe(opener);
     expect(document.body.style.overflow).toBe("");
+  });
+
+  it("gives focus back to the pressed control when the browser never focused it (Safari does not focus a tapped button)", async () => {
+    render(<Harness />);
+    const opener = screen.getByRole("button", { name: "Open" });
+    // fireEvent.click presses the button without focusing it, as a tap does in Safari: activeElement stays <body>.
+    fireEvent.click(opener);
+    expect(document.activeElement).not.toBe(opener);
+    await userEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(opener);
+  });
+
+  it("also when focus sits on an ancestor of the pressed control (Safari after a route change focuses <main>)", async () => {
+    render(
+      <main tabIndex={-1} data-testid="main">
+        <Harness />
+      </main>,
+    );
+    screen.getByTestId("main").focus();
+    const opener = screen.getByRole("button", { name: "Open" });
+    fireEvent.click(opener);
+    expect(document.activeElement).not.toBe(opener);
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    expect(document.activeElement).toBe(opener);
+  });
+
+  it("leaves focus alone when something unrelated has focus (the pressed control is not what had it)", () => {
+    render(
+      <>
+        <button data-testid="pressed">Pressed</button>
+        <input data-testid="typing" aria-label="Typing" />
+        <Harness />
+      </>,
+    );
+    fireEvent.click(screen.getByTestId("pressed"));
+    const typing = screen.getByTestId("typing");
+    typing.focus();
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    // The Open button was the latest press and focus is on the field (not an ancestor of it), so the field keeps its place.
+    expect(document.activeElement).toBe(typing);
+  });
+
+  it("ignores a press from long ago when a sheet is opened by code", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const old = document.createElement("button");
+      document.body.append(old);
+      fireEvent.click(old);
+      vi.setSystemTime(Date.now() + 11_000);
+      const main = document.createElement("main");
+      main.tabIndex = -1;
+      document.body.append(main);
+      main.focus();
+      const { unmount } = render(
+        <ModalSheet open title="Opened by code" onClose={() => {}}>
+          x
+        </ModalSheet>,
+      );
+      unmount();
+      expect(document.activeElement).toBe(main);
+      old.remove();
+      main.remove();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not try to refocus a pressed control that has since left the page", () => {
+    const gone = document.createElement("button");
+    document.body.append(gone);
+    fireEvent.click(gone);
+    gone.remove();
+    const { unmount } = render(
+      <ModalSheet open title="Opened by code" onClose={() => {}}>
+        x
+      </ModalSheet>,
+    );
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    unmount();
+    expect(document.activeElement).toBe(document.body);
   });
 
   it("copes with an opener that is not an HTML element (nothing to restore)", async () => {
