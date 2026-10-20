@@ -24,6 +24,17 @@ const actions = vi.hoisted(() => {
     getTripAction: vi.fn().mockResolvedValue({ ok: true, trip }),
     listStaplesAction: vi.fn().mockResolvedValue({ ok: true, staples: [] }),
     upsertStapleAction: vi.fn().mockResolvedValue({ ok: true, staples: [] }),
+    listWeatherSuggestionsAction: vi.fn().mockResolvedValue({ ok: true, suggestions: [] }),
+    applyWeatherReviewAction: vi.fn().mockResolvedValue(change),
+    getWeatherSettingsAction: vi.fn().mockResolvedValue({
+      ok: true,
+      settings: { optedIn: false, temperatureUnit: "F" },
+    }),
+    updateWeatherSettingsAction: vi.fn().mockResolvedValue({
+      ok: true,
+      settings: { optedIn: true, temperatureUnit: "F" },
+    }),
+    fetchTripWeather: vi.fn().mockResolvedValue({ kind: "ready", stops: [] }),
     commands: Object.fromEntries(
       [
         "setPackedAction",
@@ -56,8 +67,15 @@ vi.mock("./trip-actions", () => ({
   getTripAction: actions.getTripAction,
   listStaplesAction: actions.listStaplesAction,
   upsertStapleAction: actions.upsertStapleAction,
+  listWeatherSuggestionsAction: actions.listWeatherSuggestionsAction,
+  applyWeatherReviewAction: actions.applyWeatherReviewAction,
   ...actions.commands,
 }));
+vi.mock("@/features/settings/weather-actions", () => ({
+  getWeatherSettingsAction: actions.getWeatherSettingsAction,
+  updateWeatherSettingsAction: actions.updateWeatherSettingsAction,
+}));
+vi.mock("./weather-client", () => ({ fetchTripWeather: actions.fetchTripWeather }));
 actions.loadTripsAction.mockResolvedValue({
   ok: true,
   state: { trips: [{ id: "from-the-server" }], deletedTrips: [], draft: null },
@@ -255,7 +273,9 @@ describe("TripsSourceProvider", () => {
           <Capture onSource={(source) => (captured = source)} />
         </TripsSourceProvider>,
       );
-      expect(WIRING.map(([name]) => name).sort()).toEqual(Object.keys(captured).sort());
+      expect([...WIRING.map(([name]) => name), "weather"].sort()).toEqual(
+        Object.keys(captured).sort(),
+      );
     });
 
     it.each(WIRING)("%s", async (_name, call, target, args) => {

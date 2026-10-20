@@ -12,6 +12,7 @@ import type { ThemeId } from "@/domain/themes";
 import type { Staple, TripConfig, Scope } from "@/domain/trip";
 import type { LifecycleTrip } from "@/domain/trip-lifecycle";
 import type { TripStop } from "@/domain/trip-stops";
+import type { WeatherAppliedChange } from "@/domain/weather/apply";
 import { ACCESS_DENIED_PATH, SIGN_IN_PATH } from "@/server/auth/proxy-handler";
 import type { DataContext } from "@/server/data/context";
 import type { ErrorCode, Result } from "@/server/data/result";
@@ -19,11 +20,19 @@ import { getDataContext } from "@/server/data/runtime";
 import * as service from "@/server/data/service";
 import { toLifecycleTrip } from "@/server/trips/to-lifecycle";
 import type { NewToiletryItem } from "./trips-source";
+import type { WeatherSuggestionState } from "@/server/data/weather-store";
 
 export type TripReadResult = { ok: true; trip: LifecycleTrip } | { ok: false; code: ErrorCode };
 export type StaplesReadResult = { ok: true; staples: Staple[] } | { ok: false; code: ErrorCode };
 export type TripCommandResult =
   { ok: true; trip: LifecycleTrip; signals: Signals } | { ok: false; code: ErrorCode };
+export type WeatherSuggestionsResult =
+  { ok: true; suggestions: WeatherSuggestionState[] } | { ok: false; code: ErrorCode };
+export type AcceptedWeatherDecision = WeatherAppliedChange & { ruleSignature: string };
+export interface SkippedWeatherDecision {
+  semanticId: string;
+  ruleSignature: string;
+}
 
 const NO_SIGNALS: Signals = { promptBagPlacement: false, reviewPrompt: false };
 
@@ -208,4 +217,23 @@ export async function setStopsAction(
       }),
     (trip) => ({ ok: true as const, trip: toLifecycleTrip(trip), signals: NO_SIGNALS }),
   ) as Promise<TripCommandResult>;
+}
+
+export async function listWeatherSuggestionsAction(
+  tripId: string,
+): Promise<WeatherSuggestionsResult> {
+  return withContext(
+    (context) => service.listTripWeatherSuggestions(context, { tripId }),
+    (suggestions) => ({ ok: true as const, suggestions }),
+  ) as Promise<WeatherSuggestionsResult>;
+}
+
+export async function applyWeatherReviewAction(
+  tripId: string,
+  accepted: AcceptedWeatherDecision[],
+  skipped: SkippedWeatherDecision[],
+): Promise<TripCommandResult> {
+  return command((context) =>
+    service.applyTripWeatherReview(context, { tripId, accepted, skipped }),
+  );
 }

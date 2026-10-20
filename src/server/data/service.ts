@@ -27,6 +27,7 @@ import {
   type Signals,
 } from "../../domain/readiness";
 import type { Staple } from "../../domain/trip";
+import { applyWeatherChanges } from "../../domain/weather/apply";
 import {
   beginDraft,
   emptyLifecycleState,
@@ -559,4 +560,40 @@ export function setTripWeatherSuggestion(
     }
     return listWeatherSuggestions(scope.db, scope.ownerId, tripId);
   });
+}
+
+/**
+ * Apply the checked review rows and persist checked/skipped rule signatures in one owner-scoped transaction.
+ * The request contains recommendation decisions, never raw weather observations.
+ */
+export function applyTripWeatherReview(
+  context: DataContext,
+  input: unknown,
+): Promise<Result<TripResult>> {
+  return run(context, inputs.weatherReviewInput, input, async (scope, request) =>
+    scope.db.transaction(async (tx) => {
+      const txScope: OwnerScope = { db: tx as OwnerScope["db"], ownerId: scope.ownerId };
+      if (!(await lockTrip(txScope.db, txScope.ownerId, request.tripId))) refuse(fail("NOT_FOUND"));
+      const current = await mustLoad(txScope, request.tripId);
+      const trip = applyWeatherChanges(current, request.accepted);
+      if (trip !== current && !(await saveTrip(txScope.db, txScope.ownerId, trip))) {
+        refuse(fail("NOT_FOUND"));
+      }
+      for (const decision of request.accepted) {
+        await writeWeatherSuggestion(txScope.db, txScope.ownerId, request.tripId, {
+          semanticId: decision.semanticId,
+          status: "accepted",
+          ruleSignature: decision.ruleSignature,
+        });
+      }
+      for (const decision of request.skipped) {
+        await writeWeatherSuggestion(txScope.db, txScope.ownerId, request.tripId, {
+          semanticId: decision.semanticId,
+          status: "skipped",
+          ruleSignature: decision.ruleSignature,
+        });
+      }
+      return { trip };
+    }),
+  );
 }

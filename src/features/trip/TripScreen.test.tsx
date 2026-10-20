@@ -10,6 +10,7 @@ import {
   type TripsSource,
 } from "@/features/trips/trips-source";
 import { TripsSourceProvider } from "@/features/trips/TripsSourceProvider";
+import type { StopWeather } from "@/domain/weather/types";
 import { TripScreen } from "./TripScreen";
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/trips/san-diego" }));
@@ -55,6 +56,71 @@ function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((res) => (resolve = res));
   return { promise, resolve };
+}
+
+function withWeather(base: ReturnType<typeof memory>, optedIn = false) {
+  let weatherOptIn = optedIn;
+  const weather: StopWeather[] = [
+    {
+      stopIndex: 0,
+      status: "ok",
+      days: [
+        {
+          date: "2026-09-04",
+          stopIndex: 0,
+          source: "forecast",
+          highC: 20,
+          lowC: 16,
+          precipProbability: 0.8,
+          precipMm: 4,
+          snowCm: 0,
+          uvIndexMax: 1,
+          sunshineHours: 1,
+        },
+      ],
+    },
+  ];
+  const getTripWeather = vi.fn().mockResolvedValue({ kind: "ready", stops: weather });
+  const listSuggestions = vi.fn().mockResolvedValue([]);
+  const updateSettings = vi.fn(async (change: { weatherOptIn?: boolean }) => {
+    weatherOptIn = change.weatherOptIn ?? weatherOptIn;
+    return { weatherOptIn, temperatureUnit: "F" as const };
+  });
+  const applyReview = vi.fn(async (id: string, _accepted: unknown[], _skipped: unknown[]) => {
+    void [_accepted, _skipped];
+    const change = await base.acceptWeather(id);
+    return {
+      ...change,
+      trip: {
+        ...change.trip,
+        stops: change.trip.stops.map((stop) => ({
+          ...stop,
+          location: { ...stop.location, latitude: 38.72, longitude: -9.14 },
+        })),
+      },
+    };
+  });
+  const source: TripsSource = {
+    ...base,
+    getTrip: async (id) => {
+      const trip = await base.getTrip(id);
+      return {
+        ...trip,
+        stops: trip.stops.map((stop) => ({
+          ...stop,
+          location: { ...stop.location, latitude: 38.72, longitude: -9.14 },
+        })),
+      };
+    },
+    weather: {
+      getSettings: async () => ({ weatherOptIn, temperatureUnit: "F" }),
+      updateSettings,
+      getTripWeather,
+      listSuggestions,
+      applyReview,
+    },
+  };
+  return { source, getTripWeather, updateSettings, applyReview, listSuggestions };
 }
 
 describe("loading and states", () => {
@@ -677,49 +743,70 @@ describe("item editor", () => {
 });
 
 describe("weather", () => {
-  it("shows the pending suggestion as simulated, and nothing changes until it is accepted", async () => {
-    const { user, source } = setup("lisbon");
+  it("asks with the privacy copy and makes no provider call until the person opts in", async () => {
+    let wired!: ReturnType<typeof withWeather>;
+    const { user } = setup("lisbon", (base) => {
+      wired = withWeather(base);
+      return wired.source;
+    });
     await ready("Lisbon");
-    expect(screen.getByText("Simulated · Seasonal outlook")).toBeTruthy();
-    expect(screen.getAllByText(/simulated suggestion, not a real forecast/).length).toBeGreaterThan(
-      0,
-    );
-    await user.click(screen.getByRole("button", { name: "Review suggestion" }));
-    const dialog = screen.getByRole("dialog", { name: "Add a compact umbrella?" });
-    expect(
-      within(dialog).getByText("Accepting changes your list, so Ready will turn off."),
-    ).toBeTruthy();
-    await user.keyboard("{Escape}");
-    expect(tripOf(source, "lisbon").weather.status).toBe("pending");
-    expect(tripOf(source, "lisbon").ready).toBe(true);
+    expect(await screen.findByText("Get weather for your stops?")).toBeTruthy();
+    expect(screen.getByText(/Only map coordinates and dates are sent to Open-Meteo/)).toBeTruthy();
+    expect(wired.getTripWeather).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Get weather" }));
+    await waitFor(() => expect(wired.getTripWeather).toHaveBeenCalledWith("lisbon"));
+    expect(await screen.findByText("Forecast")).toBeTruthy();
+    expect(screen.getByText(/Weather data by Open-Meteo.com/)).toBeTruthy();
   });
 
-  it("accepting adds exactly one umbrella and revokes Ready", async () => {
-    const { user, source } = setup("lisbon");
+  it("reviews real recommendation diffs, applies selected changes and revokes Ready", async () => {
+    let wired!: ReturnType<typeof withWeather>;
+    const { user, source } = setup("lisbon", (base) => {
+      wired = withWeather(base, true);
+      return wired.source;
+    });
     await ready("Lisbon");
-    await user.click(screen.getByRole("button", { name: "Review suggestion" }));
-    await user.click(screen.getByRole("button", { name: "Accept umbrella" }));
-    await waitFor(() => expect(row("weather-umbrella")).toBeTruthy());
-    expect(
-      tripOf(source, "lisbon").items.filter((item) => item.id === "weather-umbrella"),
-    ).toHaveLength(1);
+    await user.click(await screen.findByRole("button", { name: "Review" }));
+    const dialog = screen.getByRole("dialog", { name: "Weather changes" });
+    expect(within(dialog).getByText(/takes this trip out of Ready/)).toBeTruthy();
+    expect(within(dialog).getByText("Add Compact umbrella")).toBeTruthy();
+    await user.click(within(dialog).getByRole("button", { name: /Add selected/ }));
+    await waitFor(() => expect(wired.applyReview).toHaveBeenCalledTimes(1));
+    expect(wired.applyReview.mock.calls[0][0]).toBe("lisbon");
+    expect(wired.applyReview.mock.calls[0][1]).toEqual(
+      expect.arrayContaining([expect.objectContaining({ semanticId: "weather-umbrella" })]),
+    );
     expect(tripOf(source, "lisbon").ready).toBe(false);
-    expect(screen.getByText("Simulated · accepted")).toBeTruthy();
     expect(screen.queryByText("You’re ready to go.")).toBeNull();
   });
 
-  it("does not warn about Ready for a trip that is not Ready, and Skip changes only the weather state; Review again reopens it", async () => {
-    const { user, source } = setup();
-    await ready();
-    await user.click(screen.getByRole("button", { name: "Review suggestion" }));
-    const dialog = screen.getByRole("dialog", { name: "Add a compact umbrella?" });
-    expect(within(dialog).queryByText(/Ready will turn off/)).toBeNull();
+  it("persists skipped signatures and can turn weather off without a provider call", async () => {
+    let wired!: ReturnType<typeof withWeather>;
+    const { user, view } = setup("lisbon", (base) => {
+      wired = withWeather(base, true);
+      return wired.source;
+    });
+    await ready("Lisbon");
+    await user.click(await screen.findByRole("button", { name: "Review" }));
+    const dialog = screen.getByRole("dialog", { name: "Weather changes" });
     await user.click(within(dialog).getByRole("button", { name: "Skip" }));
-    await waitFor(() => expect(screen.getByText("Simulated · skipped")).toBeTruthy());
-    expect(tripOf(source).items.some((item) => item.id === "weather-umbrella")).toBe(false);
-    await user.click(screen.getByRole("button", { name: "Review again" }));
-    expect(await screen.findByRole("dialog", { name: "Add a compact umbrella?" })).toBeTruthy();
-    expect(tripOf(source).weather.status).toBe("pending");
+    await waitFor(() => expect(wired.applyReview).toHaveBeenCalledTimes(1));
+    expect(wired.applyReview.mock.calls[0][1]).toEqual([]);
+    expect(wired.applyReview.mock.calls[0][2]).toEqual(
+      expect.arrayContaining([expect.objectContaining({ semanticId: "weather-umbrella" })]),
+    );
+
+    view.unmount();
+    // Turning off is exercised from the first-run Not now choice, which also dismisses this trip's prompt.
+    let off!: ReturnType<typeof withWeather>;
+    const second = setup("lisbon", (base) => {
+      off = withWeather(base);
+      return off.source;
+    });
+    await ready("Lisbon");
+    await second.user.click(screen.getByRole("button", { name: "Not now" }));
+    await waitFor(() => expect(off.updateSettings).toHaveBeenCalledWith({ weatherOptIn: false }));
+    expect(off.getTripWeather).not.toHaveBeenCalled();
   });
 });
 
@@ -1314,7 +1401,7 @@ describe("closing dialogs without saving", () => {
     expect(source.snapshot()).toBe(before);
   });
 
-  it("dialogs with their own safe choice have no close button: the remove confirm, the bag prompt and the weather dialog", async () => {
+  it("a remove confirmation with its own safe choice has no close button", async () => {
     const { user } = setup();
     await ready();
     await user.click(within(row("nice-shoes")).getByRole("button", { name: /^Dress shoes / }));
@@ -1323,10 +1410,6 @@ describe("closing dialogs without saving", () => {
     expect(closeButton()).toBeNull();
     await user.click(screen.getByRole("button", { name: "Keep item" }));
     await user.keyboard("{Escape}");
-
-    await user.click(screen.getByRole("button", { name: "Review suggestion" }));
-    expect(screen.getByRole("dialog", { name: "Add a compact umbrella?" })).toBeTruthy();
-    expect(closeButton()).toBeNull();
   });
 });
 

@@ -11,6 +11,7 @@ import {
 } from "./actions";
 import { createServerTripsSource } from "./server-source";
 import {
+  applyWeatherReviewAction,
   acceptWeatherAction,
   addToiletryItemAction,
   confirmBagPlacementAction,
@@ -19,6 +20,7 @@ import {
   getTripAction,
   incrementPackedAction,
   listStaplesAction,
+  listWeatherSuggestionsAction,
   markNotReadyAction,
   markReadyAction,
   removeItemAction,
@@ -33,6 +35,11 @@ import {
   upsertStapleAction,
 } from "./trip-actions";
 import type { TripsSource } from "./trips-source";
+import {
+  getWeatherSettingsAction,
+  updateWeatherSettingsAction,
+} from "@/features/settings/weather-actions";
+import { fetchTripWeather } from "./weather-client";
 
 const TripsSourceContext = createContext<TripsSource | null>(null);
 
@@ -85,6 +92,13 @@ export function TripsSourceProvider({
           updatePreferences: updatePreferencesAction,
           setTheme: setThemeAction,
           setStops: setStopsAction,
+        },
+        {
+          getSettings: getWeatherSettingsAction,
+          updateSettings: updateWeatherSettingsAction,
+          getTripWeather: fetchTripWeather,
+          listSuggestions: listWeatherSuggestionsAction,
+          applyReview: applyWeatherReviewAction,
         },
       ),
   );

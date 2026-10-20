@@ -7,7 +7,17 @@ import type { ItemEdit } from "@/domain/item-ops";
 import type { ThemeId } from "@/domain/themes";
 import type { Scope, Staple, TripConfig } from "@/domain/trip";
 import type { TripStop } from "@/domain/trip-stops";
-import type { StaplesReadResult, TripCommandResult, TripReadResult } from "./trip-actions";
+import type {
+  AcceptedWeatherDecision,
+  SkippedWeatherDecision,
+  StaplesReadResult,
+  TripCommandResult,
+  TripReadResult,
+  WeatherSuggestionsResult,
+} from "./trip-actions";
+import type { WeatherSettingsResult } from "../settings/weather-actions";
+import type { WeatherFetchResult } from "./weather-client";
+import type { WeatherSettings, WeatherSuggestionState } from "@/server/data/weather-store";
 import {
   TripsSourceError,
   type NewToiletryItem,
@@ -48,6 +58,18 @@ export interface TripActions {
   setStops(tripId: string, stops: TripStop[]): Promise<TripCommandResult>;
 }
 
+export interface WeatherActions {
+  getSettings(): Promise<WeatherSettingsResult>;
+  updateSettings(change: Partial<WeatherSettings>): Promise<WeatherSettingsResult>;
+  getTripWeather(tripId: string): Promise<WeatherFetchResult>;
+  listSuggestions(tripId: string): Promise<WeatherSuggestionsResult>;
+  applyReview(
+    tripId: string,
+    accepted: AcceptedWeatherDecision[],
+    skipped: SkippedWeatherDecision[],
+  ): Promise<TripCommandResult>;
+}
+
 /** A failed action becomes a TripsSourceError carrying only the error code (never data). */
 async function unwrap(pending: Promise<TripsActionResult>): Promise<LifecycleState> {
   const result = await pending;
@@ -79,8 +101,28 @@ async function unwrapStaples(pending: Promise<StaplesReadResult>): Promise<Stapl
   return result.staples;
 }
 
-export function createServerTripsSource(actions: TripsActions, trip: TripActions): TripsSource {
-  return {
+async function unwrapWeatherSettings(
+  pending: Promise<WeatherSettingsResult>,
+): Promise<WeatherSettings> {
+  const result = await pending;
+  if (!result.ok) throw new TripsSourceError(result.code);
+  return result.settings;
+}
+
+async function unwrapWeatherSuggestions(
+  pending: Promise<WeatherSuggestionsResult>,
+): Promise<WeatherSuggestionState[]> {
+  const result = await pending;
+  if (!result.ok) throw new TripsSourceError(result.code);
+  return result.suggestions;
+}
+
+export function createServerTripsSource(
+  actions: TripsActions,
+  trip: TripActions,
+  weather?: WeatherActions,
+): TripsSource {
+  const source: TripsSource = {
     load: () => unwrap(actions.load()),
     archive: (id) => unwrap(actions.archive(id)),
     restore: (id) => unwrap(actions.restore(id)),
@@ -109,4 +151,17 @@ export function createServerTripsSource(actions: TripsActions, trip: TripActions
     setTheme: (id, theme) => unwrapChange(trip.setTheme(id, theme)),
     setStops: (id, stops) => unwrapChange(trip.setStops(id, stops)),
   };
+
+  if (weather) {
+    source.weather = {
+      getSettings: () => unwrapWeatherSettings(weather.getSettings()),
+      updateSettings: (change) => unwrapWeatherSettings(weather.updateSettings(change)),
+      getTripWeather: (id) => weather.getTripWeather(id),
+      listSuggestions: (id) => unwrapWeatherSuggestions(weather.listSuggestions(id)),
+      applyReview: (id, accepted, skipped) =>
+        unwrapChange(weather.applyReview(id, accepted, skipped)),
+    };
+  }
+
+  return source;
 }

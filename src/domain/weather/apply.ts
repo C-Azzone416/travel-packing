@@ -1,6 +1,5 @@
-import type { LifecycleTrip } from "../trip-lifecycle";
 import { TOILETRY_GROUP_ID } from "../toiletry-bag";
-import type { TripItem } from "../trip";
+import type { Trip, TripItem } from "../trip";
 import type { Suggestion } from "../calc";
 import type { WeatherSuggestion } from "./recommend";
 
@@ -24,7 +23,7 @@ const CLOTHING_IDS = new Set([
 ]);
 
 /** Apply only the changes the person checked in the review sheet. Skipped-state persistence is handled separately. */
-export function applyWeatherChanges<T extends LifecycleTrip>(
+export function applyWeatherChanges<T extends Trip>(
   trip: T,
   changes: readonly WeatherAppliedChange[],
 ): T {

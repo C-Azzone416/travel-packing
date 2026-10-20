@@ -11,6 +11,8 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useToast } from "@/components/ui/Toast";
 import type { Staple, TripItem } from "@/domain/trip";
 import type { LifecycleTrip } from "@/domain/trip-lifecycle";
+import { diffRecommendations, type WeatherChange } from "@/domain/weather/diff";
+import { recommendPacking } from "@/domain/weather/recommend";
 import { TripsSourceError, type TripChange } from "@/features/trips/trips-source";
 import { useTripsSource } from "@/features/trips/TripsSourceProvider";
 import { RouteText } from "@/features/trips/RouteText";
@@ -34,7 +36,9 @@ import {
   type PackFilter,
 } from "./trip-view";
 import { revocationReason } from "./review-view";
-import { WeatherCard, WeatherDialog } from "./Weather";
+import { ReviewSheet } from "./ReviewSheet";
+import { WeatherPanel, type WeatherPanelState } from "./WeatherPanel";
+import type { WeatherSettings, WeatherSuggestionState } from "@/server/data/weather-store";
 
 /** Taps on a quantity stepper settle for this long before one write carries the final count. */
 export const PACK_DEBOUNCE_MS = 300;
@@ -49,10 +53,15 @@ type Dialog =
   | { kind: "edit"; itemId: string }
   | { kind: "add-toiletry" }
   | { kind: "bag" }
-  | { kind: "weather" }
   | { kind: "preferences" }
   | { kind: "theme" }
   | { kind: "route" };
+
+interface WeatherExperience {
+  settings: WeatherSettings;
+  panel: WeatherPanelState;
+  suggestions: WeatherSuggestionState[];
+}
 
 interface ActOptions {
   /** The row this change is for, so a failure shows "Not saved · Retry" beside it. */
@@ -117,6 +126,10 @@ export function TripScreen({ tripId }: { tripId: string }) {
   const [announcement, setAnnouncement] = useState("");
   const [themeFailed, setThemeFailed] = useState(false);
   const [routeFailed, setRouteFailed] = useState(false);
+  const [weather, setWeather] = useState<WeatherExperience | null>(null);
+  const [weatherReviewOpen, setWeatherReviewOpen] = useState(false);
+  const [weatherReviewError, setWeatherReviewError] = useState(false);
+  const weatherRequest = useRef(0);
   const bagPromptDismissed = useRef(false);
   // The last trip the server confirmed, so a change that takes the trip out of Ready can say so.
   const confirmed = useRef<LifecycleTrip | null>(null);
@@ -130,6 +143,58 @@ export function TripScreen({ tripId }: { tripId: string }) {
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const chains = useRef(new Map<string, Promise<void>>());
 
+  const loadWeather = useCallback(
+    async (trip: LifecycleTrip, knownSettings?: WeatherSettings) => {
+      const weatherSource = source.weather;
+      if (!weatherSource) {
+        setWeather(null);
+        return;
+      }
+      const request = ++weatherRequest.current;
+      try {
+        const [settings, suggestions] = await Promise.all([
+          knownSettings ?? weatherSource.getSettings(),
+          weatherSource.listSuggestions(trip.id),
+        ]);
+        if (request !== weatherRequest.current) return;
+        if (!settings.weatherOptIn) {
+          setWeather({
+            settings,
+            panel: { kind: trip.weather.status === "pending" ? "prompt" : "off" },
+            suggestions,
+          });
+          return;
+        }
+        setWeather({ settings, panel: { kind: "loading" }, suggestions });
+        const result = await weatherSource.getTripWeather(trip.id);
+        if (request !== weatherRequest.current) return;
+        if (result.kind === "offline") {
+          setWeather({ settings, panel: { kind: "offline" }, suggestions });
+          return;
+        }
+        setWeather({
+          settings,
+          panel:
+            result.kind === "ready"
+              ? { kind: "ready", stops: result.stops }
+              : {
+                  kind: "ready",
+                  stops: trip.stops.map((_, stopIndex) => ({
+                    stopIndex,
+                    status: "unavailable" as const,
+                    days: [],
+                  })),
+                },
+          suggestions,
+        });
+      } catch {
+        if (request !== weatherRequest.current) return;
+        setWeather(null);
+      }
+    },
+    [source],
+  );
+
   useEffect(() => {
     let cancelled = false;
     // Opening a trip is a read: it never shows "Saving…", but a failure shows Error and Retry.
@@ -140,6 +205,7 @@ export function TripScreen({ tripId }: { tripId: string }) {
         setStaples(owned);
         confirmed.current = trip;
         setLoad({ phase: "ready", trip });
+        void loadWeather(trip);
       },
       { read: true },
     ).catch((error: unknown) => {
@@ -156,7 +222,7 @@ export function TripScreen({ tripId }: { tripId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [source, track, tripId, reloads]);
+  }, [loadWeather, source, track, tripId, reloads]);
 
   const act = useCallback(
     (write: () => Promise<TripChange>, options: ActOptions = {}): Promise<void> => {
@@ -300,6 +366,94 @@ export function TripScreen({ tripId }: { tripId: string }) {
     : "";
   const editing =
     dialog?.kind === "edit" ? trip.items.find((entry) => entry.id === dialog.itemId) : undefined;
+  const weatherStops = trip.stops ?? [];
+  const weatherDays =
+    weather?.panel.kind === "ready" ? weather.panel.stops.flatMap((stop) => stop.days) : [];
+  const weatherRecommendation = recommendPacking({
+    days: weatherDays,
+    dayStopNames: weatherStops.map((stop) => stop.location.city),
+    config: { ...trip.config, start: trip.start, end: trip.end },
+    theme: trip.theme,
+  });
+  const suppressedWeather = Object.fromEntries(
+    (weather?.suggestions ?? [])
+      .filter((suggestion) => suggestion.status === "skipped")
+      .map((suggestion) => [suggestion.semanticId, suggestion.ruleSignature]),
+  );
+  const weatherChanges =
+    weather?.panel.kind === "ready"
+      ? diffRecommendations(trip.items, weatherRecommendation, suppressedWeather)
+      : [];
+
+  const setWeatherOptIn = async (weatherOptIn: boolean) => {
+    if (!source.weather || !weather) return;
+    try {
+      const settings = await source.weather.updateSettings({ weatherOptIn });
+      if (!weatherOptIn) {
+        setWeather({ ...weather, settings, panel: { kind: "off" } });
+        await act(() => source.skipWeather(tripId));
+        return;
+      }
+      await loadWeather(trip, settings);
+    } catch {
+      toast.show("Couldn’t update weather. Nothing was changed.");
+    }
+  };
+
+  const applyWeatherReview = (selected: WeatherChange[], skipped: WeatherChange[]) => {
+    if (!source.weather) return;
+    setWeatherReviewError(false);
+    void act(
+      () =>
+        source.weather!.applyReview(
+          tripId,
+          selected.map((change) => {
+            if (change.kind === "add") {
+              const { semanticId, name, category, qty, optional, groupId } = change.item;
+              return {
+                kind: "add" as const,
+                semanticId: change.semanticId,
+                ruleSignature: change.ruleSignature,
+                item: {
+                  semanticId,
+                  name,
+                  category,
+                  qty,
+                  optional,
+                  ...(groupId ? { groupId } : {}),
+                },
+              };
+            }
+            if (change.kind === "split") {
+              return {
+                kind: "split" as const,
+                semanticId: change.semanticId,
+                ruleSignature: change.ruleSignature,
+                clothing: change.clothing,
+              };
+            }
+            return {
+              kind: "remove" as const,
+              semanticId: change.semanticId,
+              ruleSignature: change.ruleSignature,
+            };
+          }),
+          skipped.map((change) => ({
+            semanticId: change.semanticId,
+            ruleSignature: change.ruleSignature,
+          })),
+        ),
+      {
+        modal: true,
+        onFail: () => setWeatherReviewError(true),
+        after: (change) => {
+          setWeatherReviewOpen(false);
+          toast.show("Packing list updated for the weather.");
+          void loadWeather(change.trip);
+        },
+      },
+    );
+  };
 
   const row = (item: TripItem) => (
     <PackRow
@@ -368,6 +522,23 @@ export function TripScreen({ tripId }: { tripId: string }) {
       <p className="sr-only" role="status" aria-label="Packing updates">
         {announcement}
       </p>
+
+      {weather && weatherStops.length > 0 ? (
+        <WeatherPanel
+          stops={weatherStops}
+          state={weather.panel}
+          unit={weather.settings.temperatureUnit}
+          changesCount={weatherChanges.length}
+          onOptIn={() => void setWeatherOptIn(true)}
+          onDecline={() => void setWeatherOptIn(false)}
+          onTurnOn={() => void setWeatherOptIn(true)}
+          onRefresh={() => void loadWeather(trip, weather.settings)}
+          onReview={() => {
+            setWeatherReviewError(false);
+            setWeatherReviewOpen(true);
+          }}
+        />
+      ) : null}
 
       <div className="trip-layout">
         <div>
@@ -498,15 +669,6 @@ export function TripScreen({ tripId }: { tripId: string }) {
               </div>
             </Card>
           ) : null}
-          <WeatherCard
-            weather={trip.weather}
-            onReview={() => setDialog({ kind: "weather" })}
-            onReviewAgain={() =>
-              void act(() => source.reviewWeatherAgain(tripId), {
-                after: () => setDialog({ kind: "weather" }),
-              })
-            }
-          />
           <Card padded>
             <h3>Trip math</h3>
             <p className="tiny muted">
@@ -609,18 +771,19 @@ export function TripScreen({ tripId }: { tripId: string }) {
           }}
         />
       ) : null}
-      {dialog?.kind === "weather" ? (
-        <WeatherDialog
-          suggestion={trip.weather.suggestion}
-          ready={trip.ready}
-          saving={submitting}
-          onClose={close}
-          onAccept={() =>
-            void act(() => source.acceptWeather(tripId), { modal: true, after: close })
-          }
-          onSkip={() => void act(() => source.skipWeather(tripId), { modal: true, after: close })}
-        />
-      ) : null}
+      <ReviewSheet
+        open={weatherReviewOpen}
+        changes={weatherChanges}
+        ready={trip.ready}
+        saving={submitting}
+        error={weatherReviewError}
+        legacyPacked={trip.items.some(
+          (item) => (item.id === "tops" || item.id === "bottoms") && item.packed > 0,
+        )}
+        onClose={() => setWeatherReviewOpen(false)}
+        onApply={applyWeatherReview}
+        onSkip={(changes) => applyWeatherReview([], changes)}
+      />
       <ModalSheet
         open={dialog?.kind === "bag"}
         title="Toiletry bag in suitcase?"
