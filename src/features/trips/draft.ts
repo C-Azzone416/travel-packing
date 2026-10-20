@@ -15,6 +15,7 @@ import {
   type TripDraft,
 } from "@/domain/trip-lifecycle";
 import type { TripConfig } from "@/domain/trip";
+import { fixSummary, stopProblems } from "./stops-draft";
 
 // The prototype's defaults for a brand-new trip (return outfit on).
 export const DEFAULT_TRIP_CONFIG: TripConfig = {
@@ -36,7 +37,11 @@ export function newDraft(): TripDraft {
 
 /** A copy keeps the source's preferences and asks for a new destination and dates. */
 export function copyDraft(source: LifecycleTrip): TripDraft {
-  return startCopyDraft(source, "", "");
+  // A multi-stop source keeps its route (the person picks the new first arrival and every stop shifts);
+  // a single-stop source starts empty, as before.
+  return source.stops.length > 1
+    ? startCopyDraft(source, source.start, source.end)
+    : startCopyDraft(source, "", "");
 }
 
 export function clampOccasions(value: number): number {
@@ -61,6 +66,10 @@ export function withDates(draft: TripDraft, start: string, end: string): DatesCh
 
 /** Why Continue is unavailable, in words, or null when the first step is complete. */
 export function continueBlocker(draft: TripDraft): string | null {
+  if (draft.stops && draft.stops.length > 1) {
+    const problems = stopProblems(draft.stops);
+    return problems.length ? fixSummary(problems.length) : null;
+  }
   if (!draft.location) return "Choose a destination from the list to continue.";
   if (!draft.start || !draft.end || !normalizeTripDates(draft.start, draft.end).valid) {
     return "Choose your departure and return dates to continue.";

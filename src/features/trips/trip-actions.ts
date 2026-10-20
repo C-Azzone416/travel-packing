@@ -11,6 +11,7 @@ import type { Signals } from "@/domain/readiness";
 import type { ThemeId } from "@/domain/themes";
 import type { Staple, TripConfig, Scope } from "@/domain/trip";
 import type { LifecycleTrip } from "@/domain/trip-lifecycle";
+import type { TripStop } from "@/domain/trip-stops";
 import { ACCESS_DENIED_PATH, SIGN_IN_PATH } from "@/server/auth/proxy-handler";
 import type { DataContext } from "@/server/data/context";
 import type { ErrorCode, Result } from "@/server/data/result";
@@ -188,4 +189,23 @@ export async function updatePreferencesAction(
   config: TripConfig,
 ): Promise<TripCommandResult> {
   return command((context) => service.updateTripPreferences(context, { tripId, config }));
+}
+
+/** Replace the trip's route. Only each stop's place id and its dates are sent; the server resolves the places. */
+export async function setStopsAction(
+  tripId: string,
+  stops: TripStop[],
+): Promise<TripCommandResult> {
+  return withContext(
+    (context) =>
+      service.setTripStops(context, {
+        tripId,
+        stops: stops.map((stop) => ({
+          location: { id: stop.location.id },
+          arrive: stop.arrive,
+          leave: stop.leave,
+        })),
+      }),
+    (trip) => ({ ok: true as const, trip: toLifecycleTrip(trip), signals: NO_SIGNALS }),
+  ) as Promise<TripCommandResult>;
 }

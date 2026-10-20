@@ -223,3 +223,38 @@ describe("quickViewModel", () => {
     expect(trip).toEqual(before);
   });
 });
+
+describe("route display (epic #107)", () => {
+  it("lists a multi-stop trip's cities, and nothing for a single destination", async () => {
+    const { routeCities } = await import("./view");
+    const stop = (city: string) => ({
+      location: { id: city, city, region: "", country: "", countryCode: "", label: city },
+      arrive: "2030-05-01",
+      leave: "2030-05-02",
+    });
+    expect(routeCities({ stops: [stop("A"), stop("B")] })).toEqual(["A", "B"]);
+    expect(routeCities({ stops: [stop("A")] })).toEqual([]);
+    expect(routeCities({ stops: [] })).toEqual([]);
+  });
+
+  it("shows a route that fits in full, and a long one as first, an ellipsis and last", async () => {
+    const { routeDisplay } = await import("./view");
+    expect(routeDisplay(["Lisbon", "Porto", "Madrid"])).toMatchObject({
+      cities: ["Lisbon", "Porto", "Madrid"],
+      shortened: false,
+      spoken: "Route: Lisbon, then Porto, then Madrid.",
+    });
+    const long = routeDisplay(["Lisbon", "Porto", "Madrid", "Barcelona", "Valencia"]);
+    expect(long).toMatchObject({ cities: ["Lisbon", "…", "Valencia"], shortened: true, count: 5 });
+    expect(routeDisplay(["Lisbon", "Porto", "Madrid", "Barcelona", "Valencia"], 80).shortened).toBe(
+      false,
+    );
+  });
+
+  it("never shortens a two-city route", async () => {
+    const { routeDisplay } = await import("./view");
+    expect(
+      routeDisplay(["A very long city name indeed", "Another very long city name"]).shortened,
+    ).toBe(false);
+  });
+});

@@ -50,6 +50,7 @@ const TRIP_COMMANDS = [
   "reviewWeatherAgain",
   "updatePreferences",
   "setTheme",
+  "setStops",
 ] as const;
 
 function tripActions(result: TripCommandResult = { ok: true, trip, signals }) {
@@ -107,6 +108,7 @@ describe("createServerTripsSource: per-trip commands", () => {
       reviewWeatherAgain: () => source.reviewWeatherAgain("t"),
       updatePreferences: () => source.updatePreferences("t", config),
       setTheme: () => source.setTheme("t", "beach"),
+      setStops: () => source.setStops("t", []),
     }) satisfies Record<(typeof TRIP_COMMANDS)[number], () => Promise<unknown>>;
 
   it("passes every command's arguments to the matching action and returns the trip and signals", async () => {
@@ -131,6 +133,7 @@ describe("createServerTripsSource: per-trip commands", () => {
       ["reviewWeatherAgain", "t"],
       ["updatePreferences", "t", config],
       ["setTheme", "t", "beach"],
+      ["setStops", "t", []],
     ]);
   });
 

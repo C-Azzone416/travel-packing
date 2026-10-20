@@ -26,6 +26,8 @@ export interface LocationPickerProps {
   onSelect: (location: SampleLocation) => void;
   onClear: () => void;
   allowCustom?: boolean;
+  /** The search box's label; a stop in a multi-stop route names itself ("Destination search, Stop 2"). */
+  label?: string;
 }
 
 // What the provider last answered, for one query and one attempt. Everything else (searching,
@@ -44,6 +46,7 @@ export function LocationPicker({
   onSelect,
   onClear,
   allowCustom = ALLOW_CUSTOM_DESTINATION,
+  label = "Destination search",
 }: LocationPickerProps) {
   const inputId = useId();
   const listId = useId();
@@ -130,7 +133,7 @@ export function LocationPicker({
   return (
     <div className="location-picker">
       <label className="field" htmlFor={inputId}>
-        Destination search
+        {label}
       </label>
       <input
         ref={inputRef}
