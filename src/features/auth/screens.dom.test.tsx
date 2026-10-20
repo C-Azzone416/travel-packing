@@ -195,12 +195,16 @@ describe("VerifyForm", () => {
     fireEvent.change(code, { target: { value: "111111" } });
     const select = vi.spyOn(code, "select");
     await userEvent.setup().click(screen.getByRole("button", { name: "Verify" }));
-    expect(code.getAttribute("aria-invalid")).toBe("true");
-    expect(document.getElementById("code-error")?.textContent).toContain(
-      "isn't right or has expired",
-    );
-    expect(document.activeElement).toBe(code);
-    expect(select).toHaveBeenCalled();
+    // The result, the focus move and the selection are applied after the action settles, so wait for each rather than reading
+    // them straight after the click (this raced under a busy machine).
+    await waitFor(() => {
+      expect(code.getAttribute("aria-invalid")).toBe("true");
+      expect(document.getElementById("code-error")?.textContent).toContain(
+        "isn't right or has expired",
+      );
+      expect(document.activeElement).toBe(code);
+      expect(select).toHaveBeenCalled();
+    });
     // The refused code is still there (React clears an uncontrolled form after an action).
     expect(code.value).toBe("111111");
   });
@@ -254,7 +258,7 @@ describe("ForgotForm", () => {
       ),
     ).toBeTruthy();
     expect(screen.queryByLabelText("Email")).toBeNull();
-    expect(document.activeElement).toBe(heading);
+    await waitFor(() => expect(document.activeElement).toBe(heading));
     expect(screen.getByText("You can send it again in 30s")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Back to sign in" })).toBeTruthy();
   });

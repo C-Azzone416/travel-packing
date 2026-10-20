@@ -47,7 +47,7 @@ CI confirms; it is not where bugs are found.
 - `npm run verify` runs what full-mode `ci` runs, cheapest first, stopping at the first failure: gitleaks (only if installed
   here; otherwise it says plainly that it was skipped), repo hygiene, actionlint (same rule), workflow contract, audit, lint,
   typecheck, unit tests with the 90% coverage gate, both production builds with their bundle scans, and phone + desktop e2e
-  (`CI=1`, port 3102). It ends with a short summary naming the head commit; paste it into the pull request.
+  (`CI=1`, default port 3102; an `E2E_PORT` / `E2E_DB_PORT` already set in your environment wins, so two verifies on one machine can run side by side: `E2E_PORT=3199 E2E_DB_PORT=5699 npm run verify`). It ends with a short summary naming the head commit; paste it into the pull request.
 - `npm run verify:quick` is everything before the builds (it still includes the unit tests and coverage gate).
 - A **pre-push hook** runs `verify:quick`. `npm install` turns it on (`prepare` points git at `.githooks`); nothing to
   install by hand and no dependency. Emergency bypass: `git push --no-verify`, then run `npm run verify` yourself before
