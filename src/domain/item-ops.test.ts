@@ -56,6 +56,7 @@ function makeTrip(overrides: Partial<Trip> = {}): Trip {
     id: "trip-a",
     start: "2030-03-01",
     end: "2030-03-08",
+    stops: [],
     config: { ...CONFIG },
     days: calculated.days,
     dailyDays: calculated.dailyDays,

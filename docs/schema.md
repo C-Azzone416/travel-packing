@@ -14,7 +14,8 @@ Design basis: plan §18 "Suggested logical data sets" and §20 items 5–6 (item
 | `trip_preferences`    | trip_preferences    | The preferences a trip was calculated from, plus suggestion memory / suppressed suggestions.                   |
 | `trip_items`          | trip_items          | Immutable snapshot of each item on a trip.                                                                     |
 | `trip_item_progress`  | trip_item_progress  | Mutable packed counts, kept apart from the item snapshot.                                                      |
-| `weather_suggestions` | weather_suggestions | The simulated weather suggestion for a trip (one row per trip).                                                |
+| `trip_stops`          | trips (stops)       | The ordered stops (1-6) of a trip: place, arrive and leave dates (epic #107).                                  |
+| `weather_suggestions` | weather_suggestions | The status of each weather suggestion on a trip: one row per (trip, semantic id), plus a short rule signature. |
 | _(recently deleted)_  | —                   | Not a table: `trips.deleted_at` (see Recoverable delete).                                                      |
 
 Export/backup metadata (the last logical data set) is not modelled; it waits on the export decisions in plan §19.
@@ -25,7 +26,8 @@ Export/backup metadata (the last logical data set) is not modelled; it waits on 
 users 1──* staples                         (no link to trip tables: snapshots)
 users 1──* trips ──* trip_items ──1 trip_item_progress
                ├──1 trip_preferences
-               ├──1 weather_suggestions
+               ├──* trip_stops            (unique (trip_id, position))
+               ├──* weather_suggestions   (unique (trip_id, semantic id))
                └── copied_from ──> trips   (self reference, ON DELETE SET NULL)
 ```
 
@@ -56,17 +58,20 @@ so quantity edits succeed instead of failing the cascade.
 
 ## Constraints
 
-| Rule                                   | Where                                                               |
-| -------------------------------------- | ------------------------------------------------------------------- |
-| `qty >= 1`                             | `staples_qty_positive`, `trip_items_qty_positive`                   |
-| `0 <= packed <= qty`                   | `trip_item_progress_packed_range`                                   |
-| `occasion_count` 1..8                  | `trip_preferences_occasion_count_range`                             |
-| `end_date >= start_date`               | `trips_dates_ordered`                                               |
-| `days >= 1`, `0 <= daily_days <= days` | `trips_days_positive`, `trips_daily_days_range`                     |
-| Non-blank names / destination          | `*_not_blank`                                                       |
-| `group_id` is null or `toiletry-bag`   | `staples_group_known`, `trip_items_group_known`                     |
-| Enums                                  | `item_section`, `staple_cadence`, `weather_status`, `item_category` |
-| Non-null owner on every row            | `owner_id NOT NULL` + FK to `users`                                 |
+| Rule                                   | Where                                                                              |
+| -------------------------------------- | ---------------------------------------------------------------------------------- |
+| `qty >= 1`                             | `staples_qty_positive`, `trip_items_qty_positive`                                  |
+| `0 <= packed <= qty`                   | `trip_item_progress_packed_range`                                                  |
+| `occasion_count` 1..8                  | `trip_preferences_occasion_count_range`                                            |
+| `end_date >= start_date`               | `trips_dates_ordered`                                                              |
+| `days >= 1`, `0 <= daily_days <= days` | `trips_days_positive`, `trips_daily_days_range`                                    |
+| Non-blank names / destination          | `*_not_blank`                                                                      |
+| `group_id` is null or `toiletry-bag`   | `staples_group_known`, `trip_items_group_known`                                    |
+| Stop `leave_date >= arrive_date`       | `trip_stops_dates_ordered` (a night per stop on multi-stop trips: `validateStops`) |
+| Stop place rules                       | `trip_stops_*` mirror the `trips_*` location checks                                |
+| Temperature unit `F` or `C`            | `users_temperature_unit_known`                                                     |
+| Enums                                  | `item_section`, `staple_cadence`, `weather_status`, `item_category`                |
+| Non-null owner on every row            | `owner_id NOT NULL` + FK to `users`                                                |
 
 `item_category` lists the strings the domain uses. The semantic category for everyday clothing is the single value
 `Clothing` (the plan's name); the prototype's calculator label `Clothes` was normalized to it (PM decision), and a
@@ -76,21 +81,27 @@ test fails if any category the calculator or default staples produce is missing 
 
 These reveal where and when someone travels. Keep them out of logs, analytics, fixtures, and client bundles.
 
-| Column                                                                           | Why                                                                   |
-| -------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `trips.start_date`, `trips.end_date`                                             | Exact travel dates                                                    |
-| `trips.destination`                                                              | Destination city                                                      |
-| `trips.location_id`, `trips.location_label`                                      | City / region / country                                               |
-| `trips.location_provider`, `trips.location_place_id`                             | Which provider place was chosen                                       |
-| `trips.location_region`, `trips.location_country`, `trips.location_country_code` | Region / country                                                      |
-| `trips.latitude`, `trips.longitude`                                              | **Most sensitive.** About 1 km (rounded to 2 decimals before storage) |
-| `trips.timezone`                                                                 | Narrows the destination                                               |
-| `trips.days`, `trips.daily_days`                                                 | Reveal trip length                                                    |
-| `trips.copied_from`                                                              | Links trips to each other                                             |
-| `trips.deleted_at`                                                               | Deletion time                                                         |
-| `trip_items.name` (and staple names)                                             | Packing habits                                                        |
-| `trip_preferences.*`                                                             | Packing habits                                                        |
-| `weather_suggestions.label`                                                      | Tied to a trip's timing                                               |
+| Column                                                                           | Why                                                                               |
+| -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `trips.start_date`, `trips.end_date`                                             | Exact travel dates                                                                |
+| `trips.destination`                                                              | Destination city                                                                  |
+| `trips.location_id`, `trips.location_label`                                      | City / region / country                                                           |
+| `trips.location_provider`, `trips.location_place_id`                             | Which provider place was chosen                                                   |
+| `trips.location_region`, `trips.location_country`, `trips.location_country_code` | Region / country                                                                  |
+| `trips.latitude`, `trips.longitude`                                              | **Most sensitive.** About 1 km (rounded to 2 decimals before storage)             |
+| `trips.timezone`                                                                 | Narrows the destination                                                           |
+| `trip_stops.city`, `trip_stops.location_*`                                       | Same class as `trips.location_*`: where the person goes, per stop                 |
+| `trip_stops.latitude`, `trip_stops.longitude`                                    | **Most sensitive**, as on trips (2 decimals; only for a provider place)           |
+| `trip_stops.arrive_date`, `trip_stops.leave_date`                                | Exact travel dates, per stop                                                      |
+| `trip_stops.timezone`                                                            | Narrows the destination                                                           |
+| `weather_suggestions.rule_signature`                                             | Short name of the rule that fired. Never raw weather                              |
+| `users.weather_opt_in`, `users.temperature_unit`                                 | Settings only; opt-in gates sending coordinates and dates to the weather provider |
+| `trips.days`, `trips.daily_days`                                                 | Reveal trip length                                                                |
+| `trips.copied_from`                                                              | Links trips to each other                                                         |
+| `trips.deleted_at`                                                               | Deletion time                                                                     |
+| `trip_items.name` (and staple names)                                             | Packing habits                                                                    |
+| `trip_preferences.*`                                                             | Packing habits                                                                    |
+| `weather_suggestions.label`                                                      | Tied to a trip's timing                                                           |
 
 `users.id` and `owner_id` identify the account holder.
 
@@ -181,3 +192,35 @@ and nothing else is trusted (extra fields are stripped by validation). The serve
 `LOCATION_PROVIDER=open-meteo`) and stores the canonical result, re-rounding coordinates itself. An unknown id is
 `INVALID_INPUT`; a lookup that is down is `UNAVAILABLE` and nothing is saved. The lookup happens before any database
 write. Provider calls never happen inside the data layer's SQL transaction, and the queries and places are never logged.
+
+## Trip stops (#109, epic #107)
+
+A trip has 1-6 ordered **stops** in `trip_stops` (`(trip_id, position)` is the key; the composite `(trip_id, owner_id)`
+foreign key cascades like every other child table). Each stop carries the same place columns and checks as
+`trips.location_*`, plus `city` (the route is built from city names; `trips.destination` is only the editable title and
+defaults to the route, "Lisbon → Porto"), and `arrive_date` / `leave_date`.
+
+- **Contiguity is the domain's job** (`validateStops` in `src/domain/trip-stops.ts`): a stop's leave date is the next
+  stop's arrive date (the travel day), every stop of a multi-stop trip is at least one night, at most six stops. A
+  **single stop may be a day trip** (leave = arrive), exactly as a trip with `start = end` is valid today; the database
+  check is therefore `leave_date >= arrive_date`.
+- `trips.start_date` / `end_date` are **stored and derived**: the data layer writes them as the first arrive and last
+  leave whenever stops are saved. `trips.location_*` keep the first stop's place (the single-destination view).
+- **Day to stop** (`stopIndexForDay`): day `d` belongs to the stop where `arrive <= d < leave`; the last day belongs to
+  the last stop, so a travel day counts toward the stop you arrive at.
+- Migration `0005` backfills **one stop per existing trip** from `start_date`, `end_date` and `location_*`, so existing
+  trips behave exactly as before. A trip written without stops (a single place on the trip row) gets its one stop from
+  the trip's own columns.
+- Entry points: `createTrip` / `copyTrip` take either the single-destination form (`location`, `start`, `end`) or
+  `stops` (a place **id**, arrive, leave each; places are resolved server-side, once per distinct id);
+  `setTripStops` replaces a saved trip's stops atomically and recalculates days and calculated items.
+
+## Weather settings and suggestion status (#109)
+
+- `users.weather_opt_in` (default false) and `users.temperature_unit` (`F` default, or `C`) are the person's settings
+  (`getWeatherSettings` / `updateWeatherSettings`). Until the person opts in, nothing is sent to a weather provider.
+- `weather_suggestions` is one row per `(trip_id, suggestion_semantic_id)` holding `status` and `rule_signature` (a
+  short text naming the rule that fired, at most 200 characters, **never raw weather**). The simulated umbrella row
+  was re-keyed in place (`weather-umbrella`) and still carries its legacy `label`. Entry points:
+  `listTripWeatherSuggestions` / `setTripWeatherSuggestion`, both owner-scoped (another owner's trip is `NOT_FOUND`).
+- Raw weather is not stored anywhere.
