@@ -3,6 +3,9 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   ciChecks,
+  ciE2eProjects,
+  e2eProjectParityProblems,
+  playwrightProjects,
   formatSummary,
   runSteps,
   stepEnvironment,
@@ -264,5 +267,38 @@ describe("stepEnvironment", () => {
   it("is what the e2e step relies on: its default port is the CI one", () => {
     const e2e = stepsFor("full").find((step) => step.label.startsWith("E2E"));
     expect(e2e?.env).toEqual({ CI: "1", E2E_PORT: "3102", E2E_PREBUILT: "1" });
+  });
+});
+
+describe("e2e project parity", () => {
+  const config = readFileSync(join(process.cwd(), "playwright.config.ts"), "utf8");
+
+  it("the real Playwright projects are the real CI matrix", () => {
+    expect(playwrightProjects(config)).toEqual(["phone", "desktop"]);
+    expect(ciE2eProjects(ci)).toEqual(["phone", "desktop"]);
+    expect(e2eProjectParityProblems(config, ci)).toEqual([]);
+  });
+
+  it("flags a project CI would never run", () => {
+    const extra = config.replace(
+      '{ name: "desktop"',
+      '{ name: "tablet", use: {} },\n    { name: "desktop"',
+    );
+    expect(extra).not.toBe(config);
+    expect(e2eProjectParityProblems(extra, ci).join("\n")).toMatch(/"tablet" does not run in CI/);
+  });
+
+  it("flags a CI project the config does not have", () => {
+    const renamed = config.replace('name: "phone"', 'name: "mobile"');
+    expect(renamed).not.toBe(config);
+    const problems = e2eProjectParityProblems(renamed, ci).join("\n");
+    expect(problems).toMatch(/"mobile" does not run in CI/);
+    expect(problems).toMatch(/CI runs the project "phone"/);
+  });
+
+  it("flags a config with no projects", () => {
+    expect(e2eProjectParityProblems("export default {};", ci).join("\n")).toMatch(
+      /no Playwright projects/,
+    );
   });
 });

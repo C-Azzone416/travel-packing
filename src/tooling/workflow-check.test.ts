@@ -665,10 +665,42 @@ describe("checkCiWorkflow", () => {
     ],
     [
       "a third e2e project",
-      inJob("e2e", "[phone, desktop]", "[phone, desktop, tablet]"),
-      /exactly the phone and desktop/,
+      inJob(
+        "e2e",
+        "      - project: phone\n",
+        "      - project: tablet\n        browser: webkit\n      - project: phone\n",
+      ),
+      /exactly phone on webkit/,
     ],
-    ["only phone", inJob("e2e", "[phone, desktop]", "[phone]"), /exactly the phone and desktop/],
+    [
+      "only phone",
+      inJob("e2e", /\n {10}- project: desktop\n {12}browser: chromium/, ""),
+      /exactly phone on webkit/,
+    ],
+    [
+      "phone run in chromium (not a real phone)",
+      inJob("e2e", /browser: webkit/, "browser: chromium"),
+      /exactly phone on webkit/,
+    ],
+    [
+      "desktop run in webkit",
+      inJob("e2e", /browser: chromium/, "browser: webkit"),
+      /exactly phone on webkit/,
+    ],
+    [
+      "an e2e job installing the wrong browser",
+      inJob(
+        "e2e",
+        'npx playwright install --with-deps "$BROWSER"',
+        "npx playwright install --with-deps chromium",
+      ),
+      /install its own browser/,
+    ],
+    [
+      "a cache shared by both browsers",
+      inJob("e2e", "-${{ matrix.browser }}-", "-"),
+      /cache key must include the browser/,
+    ],
     [
       "fail-fast",
       inJob("e2e", "fail-fast: false", "fail-fast: true"),

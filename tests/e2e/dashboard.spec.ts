@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
+import { DEVICE } from "./helpers/device";
 
 // A fixed clock keeps the seeded sample trips stable: San Diego upcoming, Lisbon past. (Trip ids are the real
 // database's uuids, so tests find a trip's panels by role/name or `aria-controls`, never by a fixture id.)
@@ -110,7 +111,7 @@ test("a failed theme image swaps to the neutral surface at the same size (deferr
   );
 });
 
-test("no horizontal scroll at 320px with a quick view open", async ({ page }) => {
+test("no horizontal scroll at 320px with a quick view open", DEVICE, async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 700 });
   await openDashboard(page);
   await card(page, "San Diego")
@@ -129,7 +130,7 @@ test("no horizontal scroll at 320px with a quick view open", async ({ page }) =>
   ).toBeLessThanOrEqual(0);
 });
 
-test("dashboard controls are keyboard operable with 44px targets", async ({ page }) => {
+test("dashboard controls are keyboard operable with 44px targets", DEVICE, async ({ page }) => {
   await openDashboard(page);
   for (const control of [
     tab(page, /Upcoming/),
@@ -152,7 +153,7 @@ test("dashboard controls are keyboard operable with 44px targets", async ({ page
   }
 });
 
-test("screenshots of the dashboard", async ({ page }, testInfo) => {
+test("screenshots of the dashboard", DEVICE, async ({ page }, testInfo) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await openDashboard(page);
   await card(page, "San Diego")
@@ -170,32 +171,34 @@ test("screenshots of the dashboard", async ({ page }, testInfo) => {
   });
 });
 
-test("on phones the hero sun clears the hero text, and the end of the page is never hidden behind the nav", async ({
-  page,
-}, testInfo) => {
-  test.skip(
-    testInfo.project.name !== "phone",
-    "the bottom nav and the corner sun are phone layouts",
-  );
-  await openDashboard(page);
-  const sun = (await page.locator(".sun").boundingBox())!;
-  for (const node of await page.locator(".hero-copy").locator("p, h1, .actions a").all()) {
-    const text = (await node.boundingBox())!;
-    const apart =
-      sun.x >= text.x + text.width ||
-      sun.x + sun.width <= text.x ||
-      sun.y >= text.y + text.height ||
-      sun.y + sun.height <= text.y;
-    expect(
-      apart,
-      `sun overlaps ${await node.evaluate((el) => el.tagName + "." + el.className)}`,
-    ).toBe(true);
-  }
+test(
+  "on phones the hero sun clears the hero text, and the end of the page is never hidden behind the nav",
+  DEVICE,
+  async ({ page }, testInfo) => {
+    test.skip(
+      testInfo.project.name !== "phone",
+      "the bottom nav and the corner sun are phone layouts",
+    );
+    await openDashboard(page);
+    const sun = (await page.locator(".sun").boundingBox())!;
+    for (const node of await page.locator(".hero-copy").locator("p, h1, .actions a").all()) {
+      const text = (await node.boundingBox())!;
+      const apart =
+        sun.x >= text.x + text.width ||
+        sun.x + sun.width <= text.x ||
+        sun.y >= text.y + text.height ||
+        sun.y + sun.height <= text.y;
+      expect(
+        apart,
+        `sun overlaps ${await node.evaluate((el) => el.tagName + "." + el.className)}`,
+      ).toBe(true);
+    }
 
-  await tab(page, /Past & archive/).click();
-  await expect(page.getByText("Nothing recently deleted.")).toBeVisible();
-  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
-  const nav = (await page.getByRole("navigation", { name: "Primary navigation" }).boundingBox())!;
-  const last = (await page.locator(".deleted-list").boundingBox())!;
-  expect(last.y + last.height).toBeLessThanOrEqual(nav.y);
-});
+    await tab(page, /Past & archive/).click();
+    await expect(page.getByText("Nothing recently deleted.")).toBeVisible();
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    const nav = (await page.getByRole("navigation", { name: "Primary navigation" }).boundingBox())!;
+    const last = (await page.locator(".deleted-list").boundingBox())!;
+    expect(last.y + last.height).toBeLessThanOrEqual(nav.y);
+  },
+);

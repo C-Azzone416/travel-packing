@@ -238,3 +238,33 @@ export function verifyParityProblems(
   }
   return problems;
 }
+
+/** The project names a Playwright config declares (`{ name: "phone", ... }` entries under `projects`). */
+export function playwrightProjects(config: string): string[] {
+  const start = config.indexOf("projects:");
+  if (start < 0) return [];
+  return [...config.slice(start).matchAll(/\bname:\s*"([a-z][a-z0-9-]*)"/g)].map((m) => m[1]);
+}
+
+/** The projects the CI e2e matrix runs (`- project: phone`). */
+export function ciE2eProjects(ci: string): string[] {
+  return [...ci.matchAll(/^ {10}- project:\s*(\S+)\s*$/gm)].map((m) => m[1]);
+}
+
+/**
+ * Empty when every Playwright project runs in CI and the other way round. `npm run verify` runs `npm run test:e2e` with no
+ * project filter, so it runs them all; this ties CI to the same list, so a project added to the config can never be skipped by CI
+ * (or by the local verify) without a failing check.
+ */
+export function e2eProjectParityProblems(config: string, ci: string): string[] {
+  const inConfig = playwrightProjects(config);
+  const inCi = ciE2eProjects(ci);
+  const problems: string[] = [];
+  for (const name of inConfig)
+    if (!inCi.includes(name)) problems.push(`the Playwright project "${name}" does not run in CI`);
+  for (const name of inCi)
+    if (!inConfig.includes(name))
+      problems.push(`CI runs the project "${name}", which playwright.config.ts does not declare`);
+  if (inConfig.length === 0) problems.push("no Playwright projects found in playwright.config.ts");
+  return problems;
+}

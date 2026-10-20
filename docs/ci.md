@@ -8,16 +8,16 @@ the mode logic below exists, and it still saves time.)
 
 Parallel jobs in one workflow (`.github/workflows/ci.yml`):
 
-| Job         | Runs in                 | What                                                                                                                      |
-| ----------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `mode`      | every run               | Decides `quick`, `full` or `reused` (below). Every heavy job waits for it, so they can never disagree.                    |
-| `checks`    | every run, at once      | gitleaks (full history, first), repo hygiene, actionlint, workflow contract, dependency audit, lint, typecheck.           |
-| `unit`      | full                    | Unit tests with the 90% coverage gate.                                                                                    |
-| `build`     | full                    | The production builds (Turbopack and webpack), each with the e2e-code check and the client-bundle secret scan.            |
-| `e2e-build` | full                    | The app built WITH the e2e-only code (`npm run build:e2e`), uploaded once as a one-day artifact. Never deployed.          |
-| `e2e`       | full, after e2e-build   | Phone and desktop, **at the same time, each on its own runner** with its own in-memory database; both download the build. |
-| `ci`        | always (`if: always()`) | **The one required check.** Needs every job above; see below.                                                             |
-| `deploy`    | push to `develop` only  | `needs: ci`, calls `deploy-vercel.yml`. Nothing waits idle for CI. Production stays a manual, owner-only, SHA-typed run.  |
+| Job         | Runs in                 | What                                                                                                                                                                                                                                       |
+| ----------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `mode`      | every run               | Decides `quick`, `full` or `reused` (below). Every heavy job waits for it, so they can never disagree.                                                                                                                                     |
+| `checks`    | every run, at once      | gitleaks (full history, first), repo hygiene, actionlint, workflow contract, dependency audit, lint, typecheck.                                                                                                                            |
+| `unit`      | full                    | Unit tests with the 90% coverage gate.                                                                                                                                                                                                     |
+| `build`     | full                    | The production builds (Turbopack and webpack), each with the e2e-code check and the client-bundle secret scan.                                                                                                                             |
+| `e2e-build` | full                    | The app built WITH the e2e-only code (`npm run build:e2e`), uploaded once as a one-day artifact. Never deployed.                                                                                                                           |
+| `e2e`       | full, after e2e-build   | Phone (a real iPhone profile in **WebKit**, the `@device` specs) and desktop (**Chromium**, every spec), **at the same time, each on its own runner** with its own in-memory database; both download the build. See [docs/e2e.md](e2e.md). |
+| `ci`        | always (`if: always()`) | **The one required check.** Needs every job above; see below.                                                                                                                                                                              |
+| `deploy`    | push to `develop` only  | `needs: ci`, calls `deploy-vercel.yml`. Nothing waits idle for CI. Production stays a manual, owner-only, SHA-typed run.                                                                                                                   |
 
 - **`ci` is the stable name** read by the review gate (`npm run ci:gate`), the production release check and the deploy. Adding or
   renaming the jobs above it never changes what is required. It decides from the mode: **full** needs every job `success` (a

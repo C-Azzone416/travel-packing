@@ -507,8 +507,23 @@ export function checkCiWorkflow(workflow: string): string[] {
   const e2e = body("e2e") ?? "";
   if (!jobNeeds(e2e).includes("e2e-build"))
     problems.push("the e2e job must need the e2e-build job");
-  if (!/^ {8}project:\s*\[\s*phone\s*,\s*desktop\s*\]\s*$/m.test(e2e))
-    problems.push("the e2e matrix must be exactly the phone and desktop projects");
+  const matrix = [...e2e.matchAll(/^ {10}- project:\s*(\S+)\s*\n {12}browser:\s*(\S+)\s*$/gm)].map(
+    (m) => `${m[1]}:${m[2]}`,
+  );
+  if (
+    matrix.join() !== "phone:webkit,desktop:chromium" ||
+    (e2e.match(/- project:/g) ?? []).length !== 2
+  )
+    problems.push(
+      "the e2e matrix must be exactly phone on webkit (a real iPhone profile) and desktop on chromium",
+    );
+  if (
+    !/BROWSER:\s*\$\{\{\s*matrix\.browser\s*\}\}/.test(e2e) ||
+    !/npx playwright install --with-deps "\$BROWSER"/.test(e2e)
+  )
+    problems.push("each e2e job must install its own browser (matrix.browser)");
+  if (!/key:\s*playwright-[^\n]*matrix\.browser/.test(e2e))
+    problems.push("the Playwright cache key must include the browser");
   if (!/fail-fast:\s*false/.test(e2e))
     problems.push("the e2e matrix must not cancel one project when the other fails");
   if (/^ {6}max-parallel:/m.test(e2e))

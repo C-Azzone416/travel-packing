@@ -248,7 +248,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        project: [phone, desktop]
+        include:
+          # A real phone: Playwright's iPhone profile runs in WebKit, the engine of every iPhone browser, on the @device specs.
+          - project: phone
+            browser: webkit
+          # Every spec, in Chromium at a desktop size.
+          - project: desktop
+            browser: chromium
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -279,10 +285,12 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+          key: playwright-${{ runner.os }}-${{ matrix.browser }}-${{ steps.playwright.outputs.version }}
 
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+      - name: Install Playwright browser
+        env:
+          BROWSER: ${{ matrix.browser }}
+        run: npx playwright install --with-deps "$BROWSER"
 
       # E2E_PREBUILT makes Playwright start the downloaded build instead of building again (playwright.config.ts).
       - name: E2E (${{ matrix.project }})
