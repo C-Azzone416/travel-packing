@@ -29,6 +29,13 @@ describe("fetchTripWeather", () => {
     await expect(
       fetchTripWeather("trip", vi.fn(async () => Response.json({ nope: [] })) as typeof fetch),
     ).resolves.toEqual({ kind: "unavailable" });
+    // Rows that are not objects at all.
+    await expect(
+      fetchTripWeather(
+        "trip",
+        vi.fn(async () => Response.json({ weather: [null, 3] })) as typeof fetch,
+      ),
+    ).resolves.toEqual({ kind: "unavailable" });
   });
 
   it("distinguishes an offline fetch failure from another network failure", async () => {

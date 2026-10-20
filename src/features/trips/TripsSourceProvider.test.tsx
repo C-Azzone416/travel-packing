@@ -272,6 +272,36 @@ describe("TripsSourceProvider", () => {
       return null;
     }
 
+    it("previews a draft with provider-minimal stops: dates and coordinates only, the last stop includes its leave day", async () => {
+      let captured!: TripsSource;
+      render(
+        <TripsSourceProvider>
+          <Capture onSource={(source) => (captured = source)} />
+        </TripsSourceProvider>,
+      );
+      actions.previewWeatherAction.mockClear();
+      const place = { id: "x", city: "A", region: "", country: "", countryCode: "", label: "A" };
+      await captured.weather!.previewDraft([
+        {
+          location: { ...place, latitude: 1.5, longitude: 2.5, city: "Secret name" },
+          arrive: "2030-05-01",
+          leave: "2030-05-03",
+        },
+        { location: place, arrive: "2030-05-03", leave: "2030-05-05" },
+      ]);
+      expect(actions.previewWeatherAction).toHaveBeenCalledWith([
+        {
+          stopIndex: 0,
+          arrive: "2030-05-01",
+          leave: "2030-05-03",
+          includeLeave: false,
+          latitude: 1.5,
+          longitude: 2.5,
+        },
+        { stopIndex: 1, arrive: "2030-05-03", leave: "2030-05-05", includeLeave: true },
+      ]);
+    });
+
     it("covers every method of the port", () => {
       let captured!: TripsSource;
       render(

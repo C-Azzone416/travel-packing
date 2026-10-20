@@ -98,6 +98,28 @@ describe("previewWeatherAction", () => {
     expect(fakes.getStopWeather).toHaveBeenCalledTimes(1);
   });
 
+  it("no context at all is unavailable", async () => {
+    fakes.getDataContext.mockResolvedValue(null);
+    await expect(previewWeatherAction([stop])).resolves.toEqual({ kind: "unavailable" });
+  });
+
+  it("sends a signed-out or unlisted person away, and calls no provider", async () => {
+    const { AuthFailure } = await import("@/server/auth/guard");
+    fakes.requireOwner.mockRejectedValue(new AuthFailure("UNAUTHENTICATED" as never));
+    await previewWeatherAction([stop]);
+    expect(fakes.redirect).toHaveBeenCalledWith(expect.stringContaining("sign-in"));
+    fakes.requireOwner.mockRejectedValue(new AuthFailure("FORBIDDEN" as never));
+    await previewWeatherAction([stop]);
+    expect(fakes.redirect).toHaveBeenLastCalledWith(expect.stringContaining("access-denied"));
+    expect(fakes.getStopWeather).not.toHaveBeenCalled();
+  });
+
+  it("an unexpected failure is unavailable, with nothing leaked", async () => {
+    fakes.readWeatherSettings.mockRejectedValue(new Error("database detail"));
+    await expect(previewWeatherAction([stop])).resolves.toEqual({ kind: "unavailable" });
+    expect(fakes.redirect).not.toHaveBeenCalled();
+  });
+
   it("returns unavailable when rate limited", async () => {
     fakes.consume.mockReturnValue({ ok: false, retryAfterMs: 1_000 });
     await expect(previewWeatherAction([stop])).resolves.toEqual({ kind: "unavailable" });

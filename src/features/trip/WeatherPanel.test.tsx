@@ -184,4 +184,94 @@ describe("WeatherPanel", () => {
       screen.getByText("No weather for custom places. Choose a map place to see it."),
     ).toBeTruthy();
   });
+
+  it("words the review count in the singular, and keeps Celsius unlabelled by a unit letter", () => {
+    render(<WeatherPanel {...props({ changesCount: 1, unit: "C" })} />);
+    expect(screen.getByText("1 weather change to review")).toBeTruthy();
+    expect(screen.getByText("High 30° · Low 20°")).toBeTruthy();
+    expect(screen.getByLabelText("Weather in degrees Celsius")).toBeTruthy();
+  });
+
+  it("describes snow, rain and sun, a one-night stop, and the rain line for forecast and typical rows", () => {
+    const one: TripStop[] = [
+      { ...stops[0], arrive: "2031-04-03", leave: "2031-04-04" },
+      { ...stops[1], arrive: "2031-04-04", leave: "2031-04-06" },
+      { ...stops[0], arrive: "2031-04-06", leave: "2031-04-08" },
+    ];
+    const rows: StopWeather[] = [
+      { stopIndex: 0, status: "ok", days: [day({ snowCm: 3, highC: -2, lowC: -8 })] },
+      {
+        stopIndex: 1,
+        status: "ok",
+        days: [day({ source: "typical", precipProbability: 0 })],
+      },
+      { stopIndex: 2, status: "ok", days: [day({ precipProbability: 0.9 })] },
+    ];
+    render(<WeatherPanel {...props({ stops: one, state: { kind: "ready", stops: rows } })} />);
+    expect(screen.getByText(/1 night$/)).toBeTruthy();
+    expect(screen.getByText("Rarely rains")).toBeTruthy();
+    expect(screen.getByText("Rain on 1 of 1 days")).toBeTruthy();
+    expect(screen.getByText("High 28° · Low 18°")).toBeTruthy();
+    expect(document.body.textContent).toContain("❄");
+    expect(document.body.textContent).toContain("☂");
+    expect(document.body.textContent).toContain("☀");
+  });
+
+  it("says 'No rain expected' for a dry forecast", () => {
+    render(
+      <WeatherPanel
+        {...props({
+          state: {
+            kind: "ready",
+            stops: [{ stopIndex: 0, status: "ok", days: [day({})] }, weather[1]],
+          },
+        })}
+      />,
+    );
+    expect(screen.getByText("No rain expected")).toBeTruthy();
+  });
+
+  it("a stop without coordinates says so; a stop the provider missed offers Try again", async () => {
+    const mixed: TripStop[] = [
+      {
+        ...stops[0],
+        location: { ...stops[0].location, latitude: undefined, longitude: undefined },
+      },
+      stops[1],
+    ];
+    const rows: StopWeather[] = [
+      { stopIndex: 0, status: "unavailable", days: [] },
+      { stopIndex: 1, status: "unavailable", days: [] },
+      ...[],
+    ];
+    const input = props({
+      stops: [...mixed],
+      state: {
+        kind: "ready",
+        stops: [rows[0], { stopIndex: 1, status: "ok", days: weather[1].days }],
+      },
+    });
+    const { rerender } = render(<WeatherPanel {...input} />);
+    expect(
+      screen.getByText("No weather for custom places. Choose a map place to see it."),
+    ).toBeTruthy();
+    rerender(
+      <WeatherPanel
+        {...input}
+        stops={[stops[0], stops[1]]}
+        state={{
+          kind: "ready",
+          stops: [rows[0], { stopIndex: 1, status: "ok", days: weather[1].days }],
+        }}
+      />,
+    );
+    expect(screen.getByText("Weather isn’t available right now.")).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(input.onRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("a stop with no row at all in the answer is unavailable", () => {
+    render(<WeatherPanel {...props({ state: { kind: "ready", stops: [weather[0]] } })} />);
+    expect(screen.getByText("Weather isn’t available right now.")).toBeTruthy();
+  });
 });

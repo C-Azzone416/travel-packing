@@ -129,6 +129,35 @@ describe("applyWeatherChanges", () => {
     expect(after.items.find((item) => item.id === "socks")?.packed).toBe(4);
   });
 
+  it("keeps a split line's toiletry group and optional flag, and falls back to its id", () => {
+    const after = applyWeatherChanges(trip(), [
+      {
+        kind: "split",
+        semanticId: "clothing-split",
+        clothing: [
+          { id: "tops-long", name: "Long-sleeve tops", category: "Clothing", qty: 2 },
+          {
+            id: "bottoms-shorts",
+            semanticId: "bottoms-shorts",
+            name: "Shorts",
+            category: "Clothing",
+            qty: 1,
+            optional: true,
+            groupId: "toiletry-bag",
+          },
+        ],
+      },
+    ]);
+    expect(after.items.find((item) => item.id === "tops-long")).toMatchObject({
+      optional: false,
+      packed: 0,
+    });
+    expect(after.items.find((item) => item.id === "bottoms-shorts")).toMatchObject({
+      optional: true,
+      groupId: "toiletry-bag",
+    });
+  });
+
   it("revokes toiletries placement when a weather toiletry is added", () => {
     const after = applyWeatherChanges(trip(), [add("weather-sunscreen", "toiletry-bag")]);
     expect(after.toiletryBagPacked).toBe(false);

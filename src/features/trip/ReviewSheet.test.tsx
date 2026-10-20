@@ -66,6 +66,22 @@ describe("ReviewSheet", () => {
     expect(onApply).toHaveBeenCalledWith([changes[0]], [changes[1]]);
   });
 
+  it("a single change can be unchecked and checked again", async () => {
+    const { onApply } = setup();
+    const dialog = screen.getByRole("dialog", { name: "Weather changes" });
+    const umbrella = within(dialog).getByRole("checkbox", { name: /Add Compact umbrella/ });
+    await userEvent.click(umbrella);
+    expect((umbrella as HTMLInputElement).checked).toBe(false);
+    expect(within(dialog).getByRole("button", { name: "Add selected" })).toHaveProperty(
+      "disabled",
+      true,
+    );
+    await userEvent.click(umbrella);
+    expect((umbrella as HTMLInputElement).checked).toBe(true);
+    await userEvent.click(within(dialog).getByRole("button", { name: "Add selected (1)" }));
+    expect(onApply).toHaveBeenCalledWith([changes[0]], [changes[1]]);
+  });
+
   it("supports select all, indeterminate selection, Skip and close", async () => {
     const { onApply, onSkip, onClose } = setup({ ready: false });
     const all = screen.getByRole("checkbox", { name: "Select all (2)" }) as HTMLInputElement;

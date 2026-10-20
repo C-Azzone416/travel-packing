@@ -74,7 +74,8 @@ function recommendationForDraft(
   });
 }
 
-function acceptedDecision(change: WeatherChange) {
+/** A draft has no saved weather lines yet, so a review of it never proposes a removal. */
+function acceptedDecision(change: Exclude<WeatherChange, { kind: "remove" }>) {
   if (change.kind === "add") {
     const { semanticId, name, category, qty, optional, groupId } = change.item;
     return {
@@ -91,18 +92,11 @@ function acceptedDecision(change: WeatherChange) {
       },
     };
   }
-  if (change.kind === "split") {
-    return {
-      kind: "split" as const,
-      semanticId: change.semanticId,
-      ruleSignature: change.ruleSignature,
-      clothing: change.clothing,
-    };
-  }
   return {
-    kind: "remove" as const,
+    kind: "split" as const,
     semanticId: change.semanticId,
     ruleSignature: change.ruleSignature,
+    clothing: change.clothing,
   };
 }
 
@@ -275,7 +269,15 @@ function FlowBody({
             end: draft.end,
           }).items;
           const changes = diffRecommendations(baseline, recommendation);
-          return source.weather.createTripWithReview(draft, changes.map(acceptedDecision));
+          return source.weather.createTripWithReview(
+            draft,
+            changes
+              .filter(
+                (change): change is Exclude<WeatherChange, { kind: "remove" }> =>
+                  change.kind !== "remove",
+              )
+              .map(acceptedDecision),
+          );
         }
         const created = await source.createTrip(draft);
         // "Not now" / weather off: the new trip starts with its weather prompt already answered, so the trip screen
