@@ -26,6 +26,10 @@ vi.mock("./actions", async () => {
     removeTripAction: (id: string) => ok(source.remove(id)),
     undoRemoveTripAction: (id: string) => ok(source.undoRemove(id)),
     createTripAction: async () => ({ ok: false as const, code: "INTERNAL" as const }),
+    createTripWithWeatherAction: async () => ({
+      ok: false as const,
+      code: "INTERNAL" as const,
+    }),
   };
 });
 

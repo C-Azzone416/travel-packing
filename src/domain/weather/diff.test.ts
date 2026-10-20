@@ -107,7 +107,22 @@ describe("diffRecommendations", () => {
     expect(diffRecommendations(saved, rec())[0]).toMatchObject({
       kind: "split",
       title: "Update clothing split",
+      reason: "Short-sleeve tops: 4 → 3, Long-sleeve tops: 2 → 3",
     });
+  });
+
+  it("an update names only the lines whose count changes, including a line that appears or goes away", () => {
+    const saved = [
+      { id: "tops-short", qty: 3 },
+      { id: "bottoms-shorts", qty: 2 },
+      { id: "bottoms-pants", qty: 0 },
+    ];
+    const reason = (diffRecommendations(saved, rec())[0] as { reason: string }).reason;
+    // tops-short is unchanged (3), tops-long is new (0 → 3), shorts go away (2 → 0), pants had none.
+    expect(reason).toBe("Long-sleeve tops: 0 → 3, Shorts: 2 → 0");
+    expect(reason).not.toContain("Short-sleeve tops");
+    expect(reason).not.toContain("Pants");
+    expect(reason).not.toMatch(/Everyday/);
   });
 
   it("marks the split userEdited when the person changed a clothing line", () => {

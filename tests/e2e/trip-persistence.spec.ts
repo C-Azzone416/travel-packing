@@ -124,21 +124,6 @@ test("changing a Ready trip revokes Ready, and that is stored too", async ({ pag
   await expect(page.getByText("You’re ready to go.")).toHaveCount(0);
 });
 
-test("accepting the weather suggestion adds one umbrella, and it is still there after a reload", async ({
-  page,
-}) => {
-  await openSanDiego(page);
-  await page.getByRole("button", { name: "Review suggestion" }).click();
-  await page
-    .getByRole("dialog", { name: "Add a compact umbrella?" })
-    .getByRole("button", { name: "Accept umbrella" })
-    .click();
-  await expect(row(page, "weather-umbrella")).toHaveCount(1);
-  await page.reload();
-  await expect(row(page, "weather-umbrella")).toHaveCount(1);
-  await expect(page.getByText("Simulated · accepted")).toBeVisible();
-});
-
 test("an edit and a removal are stored", async ({ page }) => {
   await openSanDiego(page);
   await row(page, "sunglasses")

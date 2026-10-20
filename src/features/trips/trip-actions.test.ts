@@ -21,6 +21,7 @@ vi.mock("next/navigation", () => ({
 
 import {
   acceptWeatherAction,
+  applyWeatherReviewAction,
   addToiletryItemAction,
   confirmBagPlacementAction,
   decrementPackedAction,
@@ -28,6 +29,7 @@ import {
   getTripAction,
   incrementPackedAction,
   listStaplesAction,
+  listWeatherSuggestionsAction,
   upsertStapleAction,
   markNotReadyAction,
   markReadyAction,
@@ -177,6 +179,73 @@ describe("bag, Ready and weather", () => {
     const accepted = changed(await acceptWeatherAction(trip.id));
     expect(accepted.trip.ready).toBe(false);
     expect(accepted.trip.items.filter((entry) => entry.id === "weather-umbrella")).toHaveLength(1);
+  });
+
+  it("applies checked weather review rows and persists checked/skipped signatures", async () => {
+    const trip = await packedTrip();
+    await confirmBagPlacementAction(trip.id);
+    await markReadyAction(trip.id);
+    const result = changed(
+      await applyWeatherReviewAction(
+        trip.id,
+        [
+          {
+            kind: "add",
+            semanticId: "weather-sunscreen",
+            ruleSignature: "sun-v1",
+            item: {
+              semanticId: "weather-sunscreen",
+              name: "Sunscreen",
+              category: "Bathroom",
+              qty: 1,
+              optional: false,
+              groupId: "toiletry-bag",
+            },
+          },
+        ],
+        [{ semanticId: "weather-swimsuit", ruleSignature: "heat-v1" }],
+      ),
+    );
+    expect(result.trip.items.find((entry) => entry.id === "weather-sunscreen")).toMatchObject({
+      name: "Sunscreen",
+      groupId: "toiletry-bag",
+    });
+    expect(result.trip.ready).toBe(false);
+    expect(result.trip.toiletryBagPacked).toBe(false);
+    const states = await listWeatherSuggestionsAction(trip.id);
+    if (!states.ok) throw new Error("expected ok");
+    expect(states.suggestions).toEqual(
+      expect.arrayContaining([
+        { semanticId: "weather-sunscreen", status: "accepted", ruleSignature: "sun-v1" },
+        { semanticId: "weather-swimsuit", status: "skipped", ruleSignature: "heat-v1" },
+      ]),
+    );
+  });
+
+  it("validates weather review payloads and owner-scopes suggestion reads", async () => {
+    const trip = await seedTrip(db(), OWNER.userId);
+    expect(
+      await applyWeatherReviewAction(
+        trip.id,
+        [
+          {
+            kind: "add",
+            semanticId: "weather-umbrella",
+            ruleSignature: "rain",
+            item: {
+              semanticId: "weather-umbrella",
+              name: "Compact umbrella",
+              category: "not-a-category",
+              qty: 1,
+              optional: false,
+            },
+          } as never,
+        ],
+        [],
+      ),
+    ).toEqual({ ok: false, code: "INVALID_INPUT" });
+    as(OTHER_OWNER);
+    expect(await listWeatherSuggestionsAction(trip.id)).toEqual({ ok: false, code: "NOT_FOUND" });
   });
 
   it("refuses Ready before everything is packed, with a REJECTED code and no change", async () => {

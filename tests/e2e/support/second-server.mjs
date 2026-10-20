@@ -26,6 +26,10 @@ const child = spawn("npx", ["next", "start", "--port", PORT], {
     ...process.env,
     LOCATION_PROVIDER: "open-meteo",
     OPEN_METEO_GEOCODING_URL: `http://127.0.0.1:${process.env.E2E_FAKE_GEO_PORT ?? 3102}/v1/search`,
+    // Weather comes from the same local fake (never the real service). Only an e2e build honors these URLs.
+    WEATHER_PROVIDER: "open-meteo",
+    OPEN_METEO_FORECAST_URL: `http://127.0.0.1:${process.env.E2E_FAKE_GEO_PORT ?? 3102}/v1/forecast`,
+    OPEN_METEO_ARCHIVE_URL: `http://127.0.0.1:${process.env.E2E_FAKE_GEO_PORT ?? 3102}/v1/archive`,
     NEXT_PUBLIC_E2E_BUILD: "1",
     AUTH_E2E_STATE_DIR:
       process.env.AUTH_E2E_STATE_DIR ?? join(process.cwd(), "test-results", "e2e-sessions"),

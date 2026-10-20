@@ -42,6 +42,9 @@ import {
 } from "@/domain/trip-lifecycle";
 import { routeLabel, tripDatesFromStops, validateStops, type TripStop } from "@/domain/trip-stops";
 import { localToday } from "@/lib/today";
+import type { WeatherSettings, WeatherSuggestionState } from "@/server/data/weather-store";
+import type { AcceptedWeatherDecision, SkippedWeatherDecision } from "./trip-actions";
+import type { WeatherFetchResult } from "./weather-client";
 
 /** A changed trip, with what the UI may offer next ("Put bag in suitcase", "Review your bag"). */
 export interface TripChange {
@@ -86,6 +89,23 @@ export interface TripsSource {
   setTheme(tripId: string, theme: ThemeId): Promise<TripChange>;
   /** Replace the trip's route (1-6 stops). Dates, day counts and calculated items follow; rejects an invalid route. */
   setStops(tripId: string, stops: TripStop[]): Promise<TripChange>;
+  /** Live weather integration exists on the real source. Memory/unit sources may leave it out. */
+  weather?: {
+    getSettings(): Promise<WeatherSettings>;
+    updateSettings(change: Partial<WeatherSettings>): Promise<WeatherSettings>;
+    getTripWeather(tripId: string): Promise<WeatherFetchResult>;
+    previewDraft(stops: TripStop[]): Promise<WeatherFetchResult>;
+    createTripWithReview(
+      draft: TripDraft,
+      accepted: AcceptedWeatherDecision[],
+    ): Promise<LifecycleTrip>;
+    listSuggestions(tripId: string): Promise<WeatherSuggestionState[]>;
+    applyReview(
+      tripId: string,
+      accepted: AcceptedWeatherDecision[],
+      skipped: SkippedWeatherDecision[],
+    ): Promise<TripChange>;
+  };
 }
 
 export class TripsSourceError extends Error {

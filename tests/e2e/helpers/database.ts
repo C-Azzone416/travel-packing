@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import { SAMPLE_TODAY } from "../../../src/server/seed/sample-data";
@@ -19,7 +19,26 @@ export async function resetOwnerData(ownerId: string): Promise<void> {
   try {
     const db = drizzle(pool, { schema }) as unknown as Db;
     await db.delete(schema.trips).where(eq(schema.trips.ownerId, ownerId));
+    // Weather starts opted out, in Fahrenheit, for every test (the choice lives on the user, not on a trip).
+    await db
+      .update(schema.users)
+      .set({ weatherOptIn: false, temperatureUnit: "F" })
+      .where(eq(schema.users.id, ownerId));
     await seedSyntheticData(db, ownerId, SAMPLE_TODAY);
+  } finally {
+    await pool.end();
+  }
+}
+
+/** Mark one of the owner's trips Ready directly (the weather review revokes it; getting there by packing is slow). */
+export async function markTripReady(ownerId: string, destination: string): Promise<void> {
+  const pool = new Pool({ connectionString: E2E_DATABASE_URL, max: 1 });
+  try {
+    const db = drizzle(pool, { schema }) as unknown as Db;
+    await db
+      .update(schema.trips)
+      .set({ ready: true })
+      .where(and(eq(schema.trips.ownerId, ownerId), eq(schema.trips.destination, destination)));
   } finally {
     await pool.end();
   }

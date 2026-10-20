@@ -192,17 +192,27 @@ function placeNames(matching: readonly DayWeather[], names: readonly string[]): 
 
 const BAND_ORDER: readonly ClothingBand[] = ["hot", "warm", "cool", "cold"];
 
-/** "Mostly warm days; 3 warm days in Lisbon". */
+/**
+ * "Mostly warm days", and, only when the garment's days span another band, "; 3 cool days in Porto" for the next most
+ * common band (design #108 §7.4). One band says it once; it never repeats itself.
+ */
 function clothingReason(matching: readonly DayWeather[], names: readonly string[]): string {
   if (matching.length === 0) return "Mostly cool days";
   const counts = BAND_ORDER.map(
     (band) => matching.filter((day) => classifyDay(day.highC) === band).length,
   );
   const mostly = BAND_ORDER[counts.indexOf(Math.max(...counts))];
-  const inBand = matching.filter((day) => classifyDay(day.highC) === mostly);
+  let reason = `Mostly ${mostly} days`;
+  const others = BAND_ORDER.map((band, at) => ({ band, count: counts[at] })).filter(
+    (entry) => entry.band !== mostly && entry.count > 0,
+  );
+  if (others.length === 0) return reason;
+  const other = others.reduce((best, entry) => (entry.count > best.count ? entry : best));
+  const inBand = matching.filter((day) => classifyDay(day.highC) === other.band);
   const [index, days] = byStop(inBand).sort(([, a], [, b]) => b.length - a.length)[0];
   const city = names[index] ? ` in ${names[index]}` : "";
-  return `Mostly ${mostly} days; ${days.length} ${mostly} days${city}`;
+  reason += `; ${days.length} ${other.band} days${city}`;
+  return reason;
 }
 
 export function legacyClothing(everydayLooks: number, laundry: boolean): Suggestion[] {

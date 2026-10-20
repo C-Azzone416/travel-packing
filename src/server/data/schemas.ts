@@ -141,3 +141,60 @@ export const weatherSuggestionInput = z.object({
   ruleSignature: z.string().max(200),
 });
 export const tripWeatherSuggestions = z.object({ tripId });
+
+const weatherDecisionState = z.object({
+  semanticId,
+  ruleSignature: z.string().max(200),
+});
+const weatherApplyItem = z.object({
+  semanticId,
+  name,
+  category: z.enum(ITEM_CATEGORIES),
+  qty,
+  optional: z.boolean(),
+  groupId: z.literal(TOILETRY_GROUP).optional(),
+});
+const weatherClothingLine = z.object({
+  id: semanticId,
+  semanticId: semanticId.optional(),
+  name,
+  category: z.enum(ITEM_CATEGORIES),
+  qty,
+  optional: z.boolean().optional(),
+  groupId: z.literal(TOILETRY_GROUP).optional(),
+});
+export const weatherAcceptedChange = z.discriminatedUnion("kind", [
+  weatherDecisionState.extend({ kind: z.literal("add"), item: weatherApplyItem }),
+  weatherDecisionState.extend({ kind: z.literal("remove") }),
+  weatherDecisionState.extend({
+    kind: z.literal("split"),
+    clothing: z.array(weatherClothingLine).min(1).max(4),
+  }),
+]);
+
+/** Review decisions contain rule signatures and item definitions, never raw weather. */
+export const weatherReviewInput = z.object({
+  tripId,
+  accepted: z.array(weatherAcceptedChange).max(20),
+  skipped: z.array(weatherDecisionState).max(20),
+});
+
+/** One atomic Shape-the-list save: create/copy the trip and persist the displayed weather rows together. */
+export const createTripWithWeatherInput = z
+  .object({
+    mode: z.enum(["create", "copy"]),
+    sourceId: tripId.nullable(),
+    ...routeFields,
+    config: tripConfig,
+    theme,
+    accepted: z.array(weatherAcceptedChange).max(20),
+  })
+  .superRefine((value, ctx) => {
+    oneRouteForm(value, ctx);
+    if (value.mode === "copy" && !value.sourceId) {
+      ctx.addIssue({ code: "custom", path: ["sourceId"], message: "Required" });
+    }
+    if (value.mode === "create" && value.sourceId) {
+      ctx.addIssue({ code: "custom", path: ["sourceId"], message: "Not allowed" });
+    }
+  });

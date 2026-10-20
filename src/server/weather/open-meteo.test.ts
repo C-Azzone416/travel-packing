@@ -133,6 +133,21 @@ describe("Open-Meteo forecast", () => {
   });
 });
 
+describe("Open-Meteo span cap", () => {
+  it("answers a stop longer than the cap as unavailable without asking the provider or building its days", async () => {
+    const doFetch = vi.fn<typeof fetch>();
+    const provider = createOpenMeteoWeatherProvider({ fetch: doFetch, now: () => TODAY });
+    const result = await provider.getStopWeather({
+      ...stop,
+      arrive: "2026-06-02",
+      leave: "9999-12-31",
+      includeLeave: true,
+    });
+    expect(result).toEqual({ stopIndex: 2, status: "unavailable", days: [] });
+    expect(doFetch).not.toHaveBeenCalled();
+  });
+});
+
 describe("Open-Meteo typical weather", () => {
   it("averages the same calendar dates over the previous five years", async () => {
     const sampleDates = Array.from({ length: 5 }, (_, offset) => `${2021 + offset}-07-01`);

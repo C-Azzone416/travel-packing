@@ -152,11 +152,8 @@ test.describe("trip screen", DEVICE, () => {
     await expectAccessible(page, "theme sheet");
   });
 
-  test("weather dialog and the toiletry bag prompt", async ({ page }) => {
+  test("the toiletry bag prompt", async ({ page }) => {
     await openSanDiego(page);
-    await page.getByRole("button", { name: "Review suggestion" }).click();
-    await expectAccessible(page, "weather dialog");
-    await page.getByRole("button", { name: "Skip" }).click();
     for (const id of [
       "nice-makeup",
       "last-toothbrush",

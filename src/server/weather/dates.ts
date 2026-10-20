@@ -16,10 +16,15 @@ export function addDays(value: string, count: number): string | null {
   return date ? formatDay(new Date(date.getTime() + count * DAY_MS)) : null;
 }
 
+/** The longest stop the weather code will build days for (about 13 months). Longer is refused, never expanded. */
+export const MAX_STOP_SPAN_DAYS = 400;
+
 export function stopDays(arrive: string, leave: string, includeLeave: boolean): string[] | null {
   const first = parseDay(arrive);
   const last = parseDay(leave);
   if (!first || !last || last < first) return null;
+  // One array entry per day: an unbounded span from a hand-made request would exhaust memory.
+  if ((last.getTime() - first.getTime()) / DAY_MS > MAX_STOP_SPAN_DAYS) return null;
   const end = last.getTime() + (includeLeave ? DAY_MS : 0);
   const days: string[] = [];
   for (let at = first.getTime(); at < end; at += DAY_MS) days.push(formatDay(new Date(at)));
