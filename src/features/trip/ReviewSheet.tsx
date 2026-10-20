@@ -30,7 +30,14 @@ function changeReason(change: WeatherChange): string {
   return change.userEdited ? `Offered only: ${change.reason}` : change.reason;
 }
 
-export function ReviewSheet({
+export function ReviewSheet(props: ReviewSheetProps) {
+  const resetKey = props.open
+    ? `open:${props.changes.map((change) => `${change.semanticId}:${change.ruleSignature}`).join("|")}`
+    : "closed";
+  return <ReviewSheetState key={resetKey} {...props} />;
+}
+
+function ReviewSheetState({
   open,
   changes,
   ready,
@@ -41,15 +48,11 @@ export function ReviewSheet({
   onApply,
   onSkip,
 }: ReviewSheetProps) {
-  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
-  const selectAll = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    setSelected(
+  const [selected, setSelected] = useState<ReadonlySet<string>>(
+    () =>
       new Set(changes.filter((change) => !change.userEdited).map((change) => change.semanticId)),
-    );
-  }, [changes, open]);
+  );
+  const selectAll = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (selectAll.current) {

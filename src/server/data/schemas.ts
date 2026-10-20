@@ -163,7 +163,7 @@ const weatherClothingLine = z.object({
   optional: z.boolean().optional(),
   groupId: z.literal(TOILETRY_GROUP).optional(),
 });
-const weatherAcceptedChange = z.discriminatedUnion("kind", [
+export const weatherAcceptedChange = z.discriminatedUnion("kind", [
   weatherDecisionState.extend({ kind: z.literal("add"), item: weatherApplyItem }),
   weatherDecisionState.extend({ kind: z.literal("remove") }),
   weatherDecisionState.extend({
@@ -178,3 +178,23 @@ export const weatherReviewInput = z.object({
   accepted: z.array(weatherAcceptedChange).max(20),
   skipped: z.array(weatherDecisionState).max(20),
 });
+
+/** One atomic Shape-the-list save: create/copy the trip and persist the displayed weather rows together. */
+export const createTripWithWeatherInput = z
+  .object({
+    mode: z.enum(["create", "copy"]),
+    sourceId: tripId.nullable(),
+    ...routeFields,
+    config: tripConfig,
+    theme,
+    accepted: z.array(weatherAcceptedChange).max(20),
+  })
+  .superRefine((value, ctx) => {
+    oneRouteForm(value, ctx);
+    if (value.mode === "copy" && !value.sourceId) {
+      ctx.addIssue({ code: "custom", path: ["sourceId"], message: "Required" });
+    }
+    if (value.mode === "create" && value.sourceId) {
+      ctx.addIssue({ code: "custom", path: ["sourceId"], message: "Not allowed" });
+    }
+  });

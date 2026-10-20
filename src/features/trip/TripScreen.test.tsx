@@ -116,6 +116,8 @@ function withWeather(base: ReturnType<typeof memory>, optedIn = false) {
       getSettings: async () => ({ weatherOptIn, temperatureUnit: "F" }),
       updateSettings,
       getTripWeather,
+      previewDraft: vi.fn().mockResolvedValue({ kind: "ready", stops: weather }),
+      createTripWithReview: vi.fn((draft) => base.createTrip(draft)),
       listSuggestions,
       applyReview,
     },

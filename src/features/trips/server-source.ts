@@ -62,6 +62,11 @@ export interface WeatherActions {
   getSettings(): Promise<WeatherSettingsResult>;
   updateSettings(change: Partial<WeatherSettings>): Promise<WeatherSettingsResult>;
   getTripWeather(tripId: string): Promise<WeatherFetchResult>;
+  previewDraft(stops: TripStop[]): Promise<WeatherFetchResult>;
+  createTripWithReview(
+    draft: TripDraft,
+    accepted: AcceptedWeatherDecision[],
+  ): Promise<CreateTripActionResult>;
   listSuggestions(tripId: string): Promise<WeatherSuggestionsResult>;
   applyReview(
     tripId: string,
@@ -157,6 +162,9 @@ export function createServerTripsSource(
       getSettings: () => unwrapWeatherSettings(weather.getSettings()),
       updateSettings: (change) => unwrapWeatherSettings(weather.updateSettings(change)),
       getTripWeather: (id) => weather.getTripWeather(id),
+      previewDraft: (stops) => weather.previewDraft(stops),
+      createTripWithReview: (draft, accepted) =>
+        unwrapTrip(weather.createTripWithReview(draft, accepted)),
       listSuggestions: (id) => unwrapWeatherSuggestions(weather.listSuggestions(id)),
       applyReview: (id, accepted, skipped) =>
         unwrapChange(weather.applyReview(id, accepted, skipped)),

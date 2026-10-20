@@ -94,6 +94,11 @@ export interface TripsSource {
     getSettings(): Promise<WeatherSettings>;
     updateSettings(change: Partial<WeatherSettings>): Promise<WeatherSettings>;
     getTripWeather(tripId: string): Promise<WeatherFetchResult>;
+    previewDraft(stops: TripStop[]): Promise<WeatherFetchResult>;
+    createTripWithReview(
+      draft: TripDraft,
+      accepted: AcceptedWeatherDecision[],
+    ): Promise<LifecycleTrip>;
     listSuggestions(tripId: string): Promise<WeatherSuggestionState[]>;
     applyReview(
       tripId: string,

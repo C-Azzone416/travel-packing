@@ -4,6 +4,7 @@ import { createContext, useContext, useState, type ReactNode } from "react";
 import {
   archiveTripAction,
   createTripAction,
+  createTripWithWeatherAction,
   loadTripsAction,
   removeTripAction,
   restoreTripAction,
@@ -40,6 +41,8 @@ import {
   updateWeatherSettingsAction,
 } from "@/features/settings/weather-actions";
 import { fetchTripWeather } from "./weather-client";
+import { previewWeatherAction } from "./weather-preview-action";
+import type { TripStop } from "@/domain/trip-stops";
 
 const TripsSourceContext = createContext<TripsSource | null>(null);
 
@@ -97,6 +100,22 @@ export function TripsSourceProvider({
           getSettings: getWeatherSettingsAction,
           updateSettings: updateWeatherSettingsAction,
           getTripWeather: fetchTripWeather,
+          previewDraft: (stops: TripStop[]) =>
+            previewWeatherAction(
+              stops.map((stop, stopIndex, all) => ({
+                stopIndex,
+                arrive: stop.arrive,
+                leave: stop.leave,
+                includeLeave: stopIndex === all.length - 1,
+                ...(stop.location.latitude === undefined
+                  ? {}
+                  : { latitude: stop.location.latitude }),
+                ...(stop.location.longitude === undefined
+                  ? {}
+                  : { longitude: stop.location.longitude }),
+              })),
+            ),
+          createTripWithReview: createTripWithWeatherAction,
           listSuggestions: listWeatherSuggestionsAction,
           applyReview: applyWeatherReviewAction,
         },

@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSaveStatus } from "@/components/shell/SaveStatus";
 import { Button, buttonClassName } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ModalSheet } from "@/components/ui/ModalSheet";
 import { Switch } from "@/components/ui/Switch";
 import { useToast } from "@/components/ui/Toast";
-import { calculateSuggestions, forecastLabel } from "@/domain/calc";
+import { calculateSuggestions } from "@/domain/calc";
 import { curatedLocationProvider } from "@/domain/location-provider";
 import { isCustomLocation } from "@/domain/locations";
 import {
@@ -23,6 +23,11 @@ import {
   type TripDraft,
 } from "@/domain/trip-lifecycle";
 import type { TripConfig } from "@/domain/trip";
+import type { TripStop } from "@/domain/trip-stops";
+import { diffRecommendations, type WeatherChange } from "@/domain/weather/diff";
+import { recommendPacking, type WeatherRecommendation } from "@/domain/weather/recommend";
+import type { StopWeather } from "@/domain/weather/types";
+import type { WeatherSettings } from "@/server/data/weather-store";
 import { localToday } from "@/lib/today";
 import {
   clampOccasions,
@@ -47,6 +52,59 @@ import { formatDays, formatRange } from "./view";
 type Step = "details" | "shape";
 
 const COPY_DATE_NOTICE = "Choose a new start date for the copy.";
+type DraftWeather =
+  | { kind: "hidden" }
+  | { kind: "prompt"; settings: WeatherSettings }
+  | { kind: "off"; settings: WeatherSettings }
+  | { kind: "loading"; settings: WeatherSettings }
+  | { kind: "offline"; settings: WeatherSettings }
+  | { kind: "unavailable"; settings: WeatherSettings }
+  | { kind: "ready"; settings: WeatherSettings; stops: StopWeather[] };
+
+function recommendationForDraft(
+  draft: TripDraft,
+  stops: StopWeather[],
+  route: TripStop[],
+): WeatherRecommendation {
+  return recommendPacking({
+    days: stops.flatMap((stop) => stop.days),
+    dayStopNames: route.map((stop) => stop.location.city),
+    config: { ...draft.config, start: draft.start, end: draft.end },
+    theme: draft.theme,
+  });
+}
+
+function acceptedDecision(change: WeatherChange) {
+  if (change.kind === "add") {
+    const { semanticId, name, category, qty, optional, groupId } = change.item;
+    return {
+      kind: "add" as const,
+      semanticId: change.semanticId,
+      ruleSignature: change.ruleSignature,
+      item: {
+        semanticId,
+        name,
+        category,
+        qty,
+        optional,
+        ...(groupId ? { groupId } : {}),
+      },
+    };
+  }
+  if (change.kind === "split") {
+    return {
+      kind: "split" as const,
+      semanticId: change.semanticId,
+      ruleSignature: change.ruleSignature,
+      clothing: change.clothing,
+    };
+  }
+  return {
+    kind: "remove" as const,
+    semanticId: change.semanticId,
+    ruleSignature: change.ruleSignature,
+  };
+}
 
 export interface TripFlowProps {
   copyId?: string;
@@ -134,12 +192,63 @@ function FlowBody({
   const [discarding, setDiscarding] = useState(false);
   const [saving, setSaving] = useState(false);
   const [announcement, setAnnouncement] = useState("");
+  const [weather, setWeather] = useState<DraftWeather>({ kind: "hidden" });
+
+  const previewStops = useMemo(
+    () =>
+      draftStops(draft)
+        .filter((stop): stop is typeof stop & { location: SampleLocation } =>
+          Boolean(stop.location),
+        )
+        .map<TripStop>((stop) => ({
+          location: stop.location,
+          arrive: stop.arrive,
+          leave: stop.leave,
+        })),
+    [draft],
+  );
+
+  const loadWeatherPreview = useCallback(
+    async (knownSettings?: WeatherSettings) => {
+      const weatherSource = source.weather;
+      if (!weatherSource || previewStops.length === 0) {
+        setWeather({ kind: "hidden" });
+        return;
+      }
+      if (previewStops.every((stop) => isCustomLocation(stop.location))) {
+        setWeather({ kind: "hidden" });
+        return;
+      }
+      try {
+        const settings = knownSettings ?? (await weatherSource.getSettings());
+        if (!settings.weatherOptIn) {
+          setWeather({ kind: "prompt", settings });
+          return;
+        }
+        setWeather({ kind: "loading", settings });
+        const result = await weatherSource.previewDraft(previewStops);
+        if (result.kind === "offline") {
+          setWeather({ kind: "offline", settings });
+        } else if (result.kind === "unavailable") {
+          setWeather({ kind: "unavailable", settings });
+        } else {
+          setWeather({ kind: "ready", settings, stops: result.stops });
+        }
+      } catch {
+        setWeather((current) =>
+          "settings" in current ? { kind: "unavailable", settings: current.settings } : current,
+        );
+      }
+    },
+    [previewStops, source],
+  );
 
   const multi = Boolean(draft.stops && draft.stops.length > 1);
   // A copy of a multi-stop trip starts on the source's dates; the person must move the first arrival (every stop shifts).
   const staleCopy = multi && from !== null && draft.start === from.start;
   const blocker = staleCopy ? "Choose a new start date for the copy." : continueBlocker(draft);
   const eyebrow = from ? `Copy of ${from.destination}` : "New trip";
+  void today;
 
   function requestCancel() {
     if (isDirty(draft, initial, query)) setDiscarding(true);
@@ -157,7 +266,19 @@ function FlowBody({
   function save() {
     setSaving(true);
     track(
-      () => source.createTrip(draft),
+      async () => {
+        if (source.weather && weather.kind === "ready") {
+          const recommendation = recommendationForDraft(draft, weather.stops, previewStops);
+          const baseline = calculateSuggestions({
+            ...draft.config,
+            start: draft.start,
+            end: draft.end,
+          }).items;
+          const changes = diffRecommendations(baseline, recommendation);
+          return source.weather.createTripWithReview(draft, changes.map(acceptedDecision));
+        }
+        return source.createTrip(draft);
+      },
       () => {
         toast.show("Trip saved");
         router.push("/");
@@ -165,6 +286,17 @@ function FlowBody({
     )
       .catch(() => undefined)
       .finally(() => setSaving(false));
+  }
+
+  async function setWeatherOptIn(weatherOptIn: boolean) {
+    if (!source.weather || weather.kind === "hidden") return;
+    try {
+      const settings = await source.weather.updateSettings({ weatherOptIn });
+      if (!weatherOptIn) setWeather({ kind: "off", settings });
+      else await loadWeatherPreview(settings);
+    } catch {
+      toast.show("Couldn’t update weather. Nothing was changed.");
+    }
   }
 
   const header = (title: string, lede: string, eyebrowText: string) => (
@@ -199,7 +331,10 @@ function FlowBody({
             noValidate
             onSubmit={(event) => {
               event.preventDefault();
-              if (!blocker) setStep("shape");
+              if (!blocker) {
+                setStep("shape");
+                void loadWeatherPreview();
+              }
             }}
           >
             {multi ? (
@@ -345,8 +480,13 @@ function FlowBody({
           header={header}
           saving={saving}
           announcement={announcement}
-          today={today}
+          weather={weather}
+          weatherRoute={previewStops}
           onChange={updateConfig}
+          onWeatherOptIn={(value) => void setWeatherOptIn(value)}
+          onWeatherRefresh={() =>
+            void loadWeatherPreview("settings" in weather ? weather.settings : undefined)
+          }
           onBack={() => setStep("details")}
           onSave={save}
           onCancel={requestCancel}
@@ -381,8 +521,11 @@ interface ShapeStepProps {
   header: (title: string, lede: string, eyebrow: string) => React.ReactNode;
   saving: boolean;
   announcement: string;
-  today: string;
+  weather: DraftWeather;
+  weatherRoute: TripStop[];
   onChange: (patch: Partial<TripConfig>) => void;
+  onWeatherOptIn: (value: boolean) => void;
+  onWeatherRefresh: () => void;
   onBack: () => void;
   onSave: () => void;
   onCancel: () => void;
@@ -394,8 +537,11 @@ function ShapeStep({
   header,
   saving,
   announcement,
-  today,
+  weather,
+  weatherRoute,
   onChange,
+  onWeatherOptIn,
+  onWeatherRefresh,
   onBack,
   onSave,
   onCancel,
@@ -407,8 +553,22 @@ function ShapeStep({
   const stops = draftStops(draft);
   const where =
     stops.length > 1 ? stops.map((stop) => stop.location?.city).join(" → ") : location.label;
-  const forecast =
-    location && !isCustomLocation(location) ? forecastLabel(draft.start, today) : null;
+  const weatherItems =
+    weather.kind === "ready"
+      ? calculateSuggestions(
+          { ...config, start: draft.start, end: draft.end },
+          {
+            days: weather.stops.flatMap((stop) => stop.days),
+            stopNames: weatherRoute.map((stop) => stop.location.city),
+            theme: draft.theme,
+          },
+        ).items
+      : calculated.items;
+  const weatherReasons = new Map(
+    weatherItems
+      .filter((item) => item.fromWeather && item.reason)
+      .map((item) => [item.id, item.reason as string]),
+  );
 
   return (
     <>
@@ -487,17 +647,67 @@ function ShapeStep({
               <span>RETURN SET</span>
             </div>
           </div>
-          {forecast ? (
+          {weather.kind === "prompt" ? (
             <div className="weather-card">
-              <span className="tag">Simulated · {forecast}</span>
-              <h3>Weather suggestions wait for you</h3>
+              <h3>Get weather for your stops?</h3>
               <p className="tiny muted">
-                You’ll get a review card before anything changes your list.
+                Only map coordinates and dates are sent to Open-Meteo. We never send your trip name,
+                your places’ names, or who you are.
               </p>
+              <p className="tiny muted">You can change this any time in Settings.</p>
+              <div className="weather-opt-actions">
+                <Button small onClick={() => onWeatherOptIn(true)}>
+                  Get weather
+                </Button>
+                <Button variant="secondary" small onClick={() => onWeatherOptIn(false)}>
+                  Not now
+                </Button>
+              </div>
+            </div>
+          ) : null}
+          {weather.kind === "off" ? (
+            <div className="weather-card">
+              <h3>Weather is off</h3>
+              <Button variant="ghost" small onClick={() => onWeatherOptIn(true)}>
+                Turn on
+              </Button>
+            </div>
+          ) : null}
+          {weather.kind === "loading" ? (
+            <div className="weather-card" aria-busy="true">
+              <h3>Loading weather…</h3>
+            </div>
+          ) : null}
+          {weather.kind === "offline" || weather.kind === "unavailable" ? (
+            <div className="weather-card">
+              <h3>{weather.kind === "offline" ? "You’re offline" : "Weather isn’t available"}</h3>
+              <p className="tiny muted">Your list still uses the standard packing calculation.</p>
+              <Button variant="ghost" small onClick={onWeatherRefresh}>
+                Try again
+              </Button>
+            </div>
+          ) : null}
+          {weather.kind === "ready" ? (
+            <div className="weather-card">
+              <span className="tag">Weather</span>
+              <h3>Weather is shaping this list</h3>
+              <p className="tiny muted">
+                {weather.stops.some((stop) => stop.days.some((day) => day.source === "typical"))
+                  ? "Forecast and typical conditions are reflected below."
+                  : "The forecast for your stops is reflected below."}
+              </p>
+              <a
+                className="tiny muted"
+                href="https://open-meteo.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Weather data by Open-Meteo.com
+              </a>
             </div>
           ) : null}
           <div className="review-group">
-            {calculated.items.map((item) => (
+            {weatherItems.map((item) => (
               <div key={item.id} className="review-row">
                 <div>
                   <strong>{item.name}</strong>
@@ -505,6 +715,11 @@ function ShapeStep({
                     {item.category}
                     {item.optional ? " · optional" : ""}
                   </div>
+                  {weatherReasons.has(item.id) ? (
+                    <div className="item-meta">
+                      <span className="tag">Weather</span> {weatherReasons.get(item.id)}
+                    </div>
+                  ) : null}
                 </div>
                 <span className="tag">{item.qty}</span>
               </div>

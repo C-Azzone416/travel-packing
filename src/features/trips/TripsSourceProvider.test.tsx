@@ -21,6 +21,7 @@ const actions = vi.hoisted(() => {
       ),
     ),
     createTripAction: vi.fn().mockResolvedValue({ ok: true, trip }),
+    createTripWithWeatherAction: vi.fn().mockResolvedValue({ ok: true, trip }),
     getTripAction: vi.fn().mockResolvedValue({ ok: true, trip }),
     listStaplesAction: vi.fn().mockResolvedValue({ ok: true, staples: [] }),
     upsertStapleAction: vi.fn().mockResolvedValue({ ok: true, staples: [] }),
@@ -35,6 +36,7 @@ const actions = vi.hoisted(() => {
       settings: { optedIn: true, temperatureUnit: "F" },
     }),
     fetchTripWeather: vi.fn().mockResolvedValue({ kind: "ready", stops: [] }),
+    previewWeatherAction: vi.fn().mockResolvedValue({ kind: "ready", stops: [] }),
     commands: Object.fromEntries(
       [
         "setPackedAction",
@@ -61,6 +63,7 @@ const actions = vi.hoisted(() => {
 vi.mock("./actions", () => ({
   loadTripsAction: actions.loadTripsAction,
   createTripAction: actions.createTripAction,
+  createTripWithWeatherAction: actions.createTripWithWeatherAction,
   ...actions.dashboard,
 }));
 vi.mock("./trip-actions", () => ({
@@ -76,6 +79,9 @@ vi.mock("@/features/settings/weather-actions", () => ({
   updateWeatherSettingsAction: actions.updateWeatherSettingsAction,
 }));
 vi.mock("./weather-client", () => ({ fetchTripWeather: actions.fetchTripWeather }));
+vi.mock("./weather-preview-action", () => ({
+  previewWeatherAction: actions.previewWeatherAction,
+}));
 actions.loadTripsAction.mockResolvedValue({
   ok: true,
   state: { trips: [{ id: "from-the-server" }], deletedTrips: [], draft: null },

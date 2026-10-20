@@ -25,11 +25,11 @@ async function runWeatherSettings(
   return { ok: false, code: result.error.code, settings: DEFAULT_WEATHER_SETTINGS };
 }
 
-export function getWeatherSettingsAction(): Promise<WeatherSettingsResult> {
+export async function getWeatherSettingsAction(): Promise<WeatherSettingsResult> {
   return runWeatherSettings();
 }
 
-export function updateWeatherSettingsAction(
+export async function updateWeatherSettingsAction(
   change: Partial<WeatherSettings>,
 ): Promise<WeatherSettingsResult> {
   return runWeatherSettings(change);
