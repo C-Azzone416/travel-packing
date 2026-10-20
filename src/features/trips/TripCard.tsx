@@ -70,7 +70,6 @@ export function TripCard({
         <div className="meta">
           <span>◷ {view.range}</span>
           <span>{formatDays(view.days)}</span>
-          {view.forecast ? <span>{view.forecast} · Simulated</span> : null}
         </div>
         <div
           className="progress-track"

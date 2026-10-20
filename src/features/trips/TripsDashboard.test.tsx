@@ -186,7 +186,8 @@ describe("upcoming view", () => {
     expect(within(sanDiego).getByText("California, United States")).toBeTruthy();
     expect(within(sanDiego).getByText(/Oct 23 – Oct 27/)).toBeTruthy();
     expect(within(sanDiego).getByText("5 days")).toBeTruthy();
-    expect(within(sanDiego).getByText("Close forecast · Simulated")).toBeTruthy();
+    // The card carries no weather copy (the old simulated "Close forecast" label is gone).
+    expect(within(sanDiego).queryByText(/forecast|Simulated/i)).toBeNull();
     expect(within(sanDiego).getByText("24 left to pack")).toBeTruthy();
     expect(within(sanDiego).getByText("6 of 30 packed")).toBeTruthy();
     const bar = within(sanDiego).getByRole("progressbar", { name: "San Diego packing progress" });

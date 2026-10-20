@@ -33,7 +33,7 @@ describe("formatRange", () => {
 });
 
 describe("tripCardView", () => {
-  it("describes an upcoming, partly packed trip with no eyebrow and a forecast", () => {
+  it("describes an upcoming, partly packed trip with no eyebrow and no weather copy", () => {
     const view = tripCardView(sanDiego(), TODAY, "upcoming");
     expect(view).toMatchObject({
       id: "san-diego",
@@ -47,7 +47,6 @@ describe("tripCardView", () => {
       percent: 20,
       range: "Oct 23 – Oct 27",
       days: 5,
-      forecast: "Close forecast",
       canArchive: true,
       canRestore: false,
     });
@@ -86,18 +85,14 @@ describe("tripCardView", () => {
     expect(tripCardView(endsToday, "2026-10-17", "archive").eyebrow).toBe("Past trip");
   });
 
-  it("hides the forecast for a trip that is already past, but keeps it for an archived future trip", () => {
-    expect(tripCardView(lisbon(), TODAY, "archive").forecast).toBeNull();
-    expect(tripCardView(withPatch(sanDiego(), { archived: true }), TODAY, "archive").forecast).toBe(
-      "Close forecast",
-    );
-    expect(tripCardView(sanDiego(), "2026-10-28", "archive").forecast).toBeNull();
+  it("carries no weather copy: the dashboard fetches no weather, so the card says nothing about the forecast", () => {
+    expect(tripCardView(sanDiego(), TODAY, "upcoming")).not.toHaveProperty("forecast");
+    expect(tripCardView(lisbon(), TODAY, "archive")).not.toHaveProperty("forecast");
   });
 
-  it("has no place and no forecast without a confirmed location", () => {
+  it("has no place without a confirmed location", () => {
     const view = tripCardView(withPatch(sanDiego(), { location: null }), TODAY, "upcoming");
     expect(view.place).toBeNull();
-    expect(view.forecast).toBeNull();
   });
 
   it("shows only the parts of the place that exist (no dangling comma for an empty country or region)", () => {
