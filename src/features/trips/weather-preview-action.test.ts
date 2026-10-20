@@ -65,6 +65,18 @@ describe("previewWeatherAction", () => {
     expect(fakes.getStopWeather).not.toHaveBeenCalled();
   });
 
+  it("accepts a stop at the span cap and refuses one day more, before any auth or provider work", async () => {
+    const atCap = { ...stop, arrive: "2026-01-01", leave: "2027-02-05" };
+    await expect(previewWeatherAction([atCap])).resolves.toMatchObject({ kind: "ready" });
+    fakes.getDataContext.mockClear();
+    const over = { ...stop, arrive: "2026-01-01", leave: "2027-02-06" };
+    await expect(previewWeatherAction([over])).resolves.toEqual({ kind: "unavailable" });
+    await expect(
+      previewWeatherAction([{ ...stop, arrive: "2026-01-01", leave: "9999-12-31" }]),
+    ).resolves.toEqual({ kind: "unavailable" });
+    expect(fakes.getDataContext).not.toHaveBeenCalled();
+  });
+
   it("makes no provider call while the owner is opted out", async () => {
     fakes.readWeatherSettings.mockResolvedValue({ weatherOptIn: false, temperatureUnit: "F" });
     await expect(previewWeatherAction([stop])).resolves.toEqual({ kind: "ready", stops: [] });

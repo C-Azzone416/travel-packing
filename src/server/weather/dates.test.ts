@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { addDays, isForecastDay, monthDay, parseDay, sameCalendarDay, stopDays } from "./dates";
+import {
+  addDays,
+  isForecastDay,
+  MAX_STOP_SPAN_DAYS,
+  monthDay,
+  parseDay,
+  sameCalendarDay,
+  stopDays,
+} from "./dates";
 
 describe("weather date helpers", () => {
   it("parses only real ISO calendar days", () => {
@@ -19,6 +27,16 @@ describe("weather date helpers", () => {
     ]);
     expect(stopDays("2026-06-03", "2026-06-01", true)).toBeNull();
     expect(stopDays("bad", "2026-06-01", true)).toBeNull();
+  });
+
+  it("refuses a span longer than the cap and builds one at the cap, so a request cannot ask for years of days", () => {
+    const arrive = "2026-01-01";
+    const atCap = addDays(arrive, MAX_STOP_SPAN_DAYS) as string;
+    const over = addDays(arrive, MAX_STOP_SPAN_DAYS + 1) as string;
+    expect(stopDays(arrive, atCap, false)).toHaveLength(MAX_STOP_SPAN_DAYS);
+    expect(stopDays(arrive, atCap, true)).toHaveLength(MAX_STOP_SPAN_DAYS + 1);
+    expect(stopDays(arrive, over, false)).toBeNull();
+    expect(stopDays(arrive, "9999-12-31", true)).toBeNull();
   });
 
   it("uses today through day 15 as the 16-day forecast range", () => {

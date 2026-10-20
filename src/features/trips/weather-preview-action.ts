@@ -7,20 +7,24 @@ import { ACCESS_DENIED_PATH, SIGN_IN_PATH } from "@/server/auth/proxy-handler";
 import { AuthFailure, requireOwner } from "@/server/auth/guard";
 import { getDataContext } from "@/server/data/runtime";
 import { readWeatherSettings } from "@/server/data/weather-store";
+import { stopDays } from "@/server/weather/dates";
 import { selectWeatherProvider } from "@/server/weather/provider-config";
 import { createWeatherRateLimiter } from "@/server/weather/rate-limit";
 import { unavailableStop, type WeatherStopInput } from "@/server/weather/provider";
 import type { WeatherFetchResult } from "./weather-client";
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-const stopInput = z.object({
-  stopIndex: z.number().int().min(0).max(5),
-  arrive: date,
-  leave: date,
-  includeLeave: z.boolean(),
-  latitude: z.number().finite().min(-90).max(90).optional(),
-  longitude: z.number().finite().min(-180).max(180).optional(),
-});
+const stopInput = z
+  .object({
+    stopIndex: z.number().int().min(0).max(5),
+    arrive: date,
+    leave: date,
+    includeLeave: z.boolean(),
+    latitude: z.number().finite().min(-90).max(90).optional(),
+    longitude: z.number().finite().min(-180).max(180).optional(),
+  })
+  // A real calendar span of at most MAX_STOP_SPAN_DAYS: a hand-made request cannot ask for years of days.
+  .refine((stop) => stopDays(stop.arrive, stop.leave, stop.includeLeave) !== null);
 const previewInput = z.array(stopInput).min(1).max(6);
 const limiter = createWeatherRateLimiter();
 
