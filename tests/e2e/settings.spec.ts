@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { ownerEmailFor, signInAsOwner } from "./helpers/auth";
+import { DEVICE } from "./helpers/device";
 
 // Settings and the truthful save states (#19), against the real app and database.
 const NOW = new Date("2026-10-16T12:00:00");
@@ -102,27 +103,29 @@ test("a failed save shows Error everywhere, never claims Saved, and Retry recove
   await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toHaveCount(0);
 });
 
-test("no Offline, Waiting or simulated-sync copy anywhere on Settings, at both sizes", async ({
-  page,
-}, testInfo) => {
-  await openSettings(page);
-  const text = await page.locator("body").innerText();
-  expect(text).not.toMatch(/offline|waiting|simulat|prototype|sample|reset/i);
-  if (testInfo.project.name === "phone") {
-    for (const control of [
-      page.getByRole("button", { name: "Sign out" }),
-      page.getByRole("link", { name: /Saved|Saving/ }),
-    ]) {
-      expect(Math.round((await control.boundingBox())!.height)).toBeGreaterThanOrEqual(44);
+test(
+  "no Offline, Waiting or simulated-sync copy anywhere on Settings, at both sizes",
+  DEVICE,
+  async ({ page }, testInfo) => {
+    await openSettings(page);
+    const text = await page.locator("body").innerText();
+    expect(text).not.toMatch(/offline|waiting|simulat|prototype|sample|reset/i);
+    if (testInfo.project.name === "phone") {
+      for (const control of [
+        page.getByRole("button", { name: "Sign out" }),
+        page.getByRole("link", { name: /Saved|Saving/ }),
+      ]) {
+        expect(Math.round((await control.boundingBox())!.height)).toBeGreaterThanOrEqual(44);
+      }
     }
-  }
-  const overflow = await page.evaluate(
-    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-  );
-  expect(overflow).toBeLessThanOrEqual(0);
-  await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.screenshot({
-    path: `test-results/screenshots/${testInfo.project.name}-settings.png`,
-    fullPage: true,
-  });
-});
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.screenshot({
+      path: `test-results/screenshots/${testInfo.project.name}-settings.png`,
+      fullPage: true,
+    });
+  },
+);

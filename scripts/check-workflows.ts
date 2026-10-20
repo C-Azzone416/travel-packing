@@ -8,7 +8,7 @@ import {
   checkDeployWorkflow,
   unpinnedActions,
 } from "../src/tooling/workflow-check";
-import { verifyParityProblems } from "../src/tooling/verify";
+import { e2eProjectParityProblems, verifyParityProblems } from "../src/tooling/verify";
 
 const dir = join(".github", "workflows");
 let failed = false;
@@ -17,7 +17,13 @@ for (const file of readdirSync(dir).filter((name) => /\.ya?ml$/.test(name))) {
   const problems = [
     ...unpinnedActions(text),
     ...(file === "deploy-vercel.yml" ? checkDeployWorkflow(text) : []),
-    ...(file === "ci.yml" ? [...checkCiWorkflow(text), ...verifyParityProblems(text)] : []),
+    ...(file === "ci.yml"
+      ? [
+          ...checkCiWorkflow(text),
+          ...verifyParityProblems(text),
+          ...e2eProjectParityProblems(readFileSync("playwright.config.ts", "utf8"), text),
+        ]
+      : []),
   ];
   for (const problem of problems) console.error(`${file}: ${problem}`);
   if (problems.length) failed = true;

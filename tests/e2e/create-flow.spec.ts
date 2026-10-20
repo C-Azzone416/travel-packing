@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { ownerEmailFor, signIn, signInAsOwner } from "./helpers/auth";
+import { DEVICE } from "./helpers/device";
 
 // Fixed clock: San Diego is upcoming, Lisbon is past. Trips are stored in the e2e database, so what a test saves
 // survives a reload and a new session; each test starts from the freshly seeded state (see signInAsOwner).
@@ -188,35 +189,37 @@ test("copy: a new trip with clear progress, and the source trip unchanged", asyn
   expect(await card(page, "San Diego").innerText()).toBe(before);
 });
 
-test("preference switches are keyboard operable with 44px targets, and no step scrolls sideways at 320px", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 320, height: 700 });
-  await openDashboard(page);
-  await page.getByRole("link", { name: /New trip/ }).click();
-  const overflow = () =>
-    page.evaluate(
-      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-    );
-  expect(await overflow()).toBeLessThanOrEqual(0);
-  await pick(page, "lon", /England/);
-  await setDates(page, "2026-11-12", "2026-11-16");
-  expect(await overflow()).toBeLessThanOrEqual(0);
-  await page.getByRole("button", { name: "Continue to packing preferences" }).click();
-  await expect(page.getByRole("heading", { name: "Shape the list" })).toBeVisible();
-  expect(await overflow()).toBeLessThanOrEqual(0);
+test(
+  "preference switches are keyboard operable with 44px targets, and no step scrolls sideways at 320px",
+  DEVICE,
+  async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 700 });
+    await openDashboard(page);
+    await page.getByRole("link", { name: /New trip/ }).click();
+    const overflow = () =>
+      page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+    expect(await overflow()).toBeLessThanOrEqual(0);
+    await pick(page, "lon", /England/);
+    await setDates(page, "2026-11-12", "2026-11-16");
+    expect(await overflow()).toBeLessThanOrEqual(0);
+    await page.getByRole("button", { name: "Continue to packing preferences" }).click();
+    await expect(page.getByRole("heading", { name: "Shape the list" })).toBeVisible();
+    expect(await overflow()).toBeLessThanOrEqual(0);
 
-  const laundry = page.getByRole("switch", { name: "Laundry access" });
-  await laundry.focus();
-  await page.keyboard.press("Space");
-  await expect(laundry).toBeChecked();
-  for (const control of await page.getByRole("switch").all()) {
-    const box = (await control.locator("xpath=..").boundingBox())!;
-    expect(box.height).toBeGreaterThanOrEqual(43.9);
-  }
-});
+    const laundry = page.getByRole("switch", { name: "Laundry access" });
+    await laundry.focus();
+    await page.keyboard.press("Space");
+    await expect(laundry).toBeChecked();
+    for (const control of await page.getByRole("switch").all()) {
+      const box = (await control.locator("xpath=..").boundingBox())!;
+      expect(box.height).toBeGreaterThanOrEqual(43.9);
+    }
+  },
+);
 
-test("screenshots of the create flow", async ({ page }, testInfo) => {
+test("screenshots of the create flow", DEVICE, async ({ page }, testInfo) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await openDashboard(page);
   await page.getByRole("link", { name: /New trip/ }).click();

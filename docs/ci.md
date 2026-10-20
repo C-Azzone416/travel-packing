@@ -1,25 +1,41 @@
-# CI and Actions minutes (#91)
+# CI (#3, #91, #98)
 
-GitHub bills Actions time per job, **rounded up to a whole minute**, from a monthly allowance with no overage budget.
-Everything here is built around that.
+The repository is public, so standard GitHub-hosted runner minutes are free. CI is built for **wall-clock time** without
+weakening a gate. (While the repo was private it was built to spend as few billed minutes as possible; that history is why
+the mode logic below exists, and it still saves time.)
 
 ## Shape
 
-- **One job, named `ci`.** Every extra job pays for checkout, Node and `npm ci` again (about a minute each, rounded) and
-  rounding adds up, so splitting costs more minutes than it saves (a four-way split measured about 29 rounded minutes
-  against about 20 for one job). Do not split it again without measured minutes. The name is read by the review gate and by
-  the production release check.
-- **Gitleaks is the first step of that job** (same pinned action, full history), not a separate workflow with its own minute.
-- **The preview deploy is a job in the same workflow** (`deploy`, `needs: ci`, only for a push to `develop`) that calls
-  `deploy-vercel.yml`. There is no job waiting on CI. Production is still a manual run on `main` by the owner, with the
-  typed SHA (docs/deploy.md).
+Parallel jobs in one workflow (`.github/workflows/ci.yml`):
+
+| Job         | Runs in                 | What                                                                                                                                                                                                                                       |
+| ----------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `mode`      | every run               | Decides `quick`, `full` or `reused` (below). Every heavy job waits for it, so they can never disagree.                                                                                                                                     |
+| `checks`    | every run, at once      | gitleaks (full history, first), repo hygiene, actionlint, workflow contract, dependency audit, lint, typecheck.                                                                                                                            |
+| `unit`      | full                    | Unit tests with the 90% coverage gate.                                                                                                                                                                                                     |
+| `build`     | full                    | The production builds (Turbopack and webpack), each with the e2e-code check and the client-bundle secret scan.                                                                                                                             |
+| `e2e-build` | full                    | The app built WITH the e2e-only code (`npm run build:e2e`), uploaded once as a one-day artifact. Never deployed.                                                                                                                           |
+| `e2e`       | full, after e2e-build   | Phone (a real iPhone profile in **WebKit**, the `@device` specs) and desktop (**Chromium**, every spec), **at the same time, each on its own runner** with its own in-memory database; both download the build. See [docs/e2e.md](e2e.md). |
+| `ci`        | always (`if: always()`) | **The one required check.** Needs every job above; see below.                                                                                                                                                                              |
+| `deploy`    | push to `develop` only  | `needs: ci`, calls `deploy-vercel.yml`. Nothing waits idle for CI. Production stays a manual, owner-only, SHA-typed run.                                                                                                                   |
+
+- **`ci` is the stable name** read by the review gate (`npm run ci:gate`), the production release check and the deploy. Adding or
+  renaming the jobs above it never changes what is required. It decides from the mode: **full** needs every job `success` (a
+  skipped or cancelled job is a failure); **reused** needs `mode` and `checks` to succeed, and the heavy jobs skipped on purpose
+  (or successful); **quick** (a draft) is always red. `src/tooling/workflow-check.test.ts` runs the real step script for every
+  combination.
+- Running phone and desktop on **one** 2-core runner was tried (#91) and broke the app's server; separate runners are what make
+  the split work. The browser download is cached by Playwright version.
 - **Concurrency:** a new push to a pull request cancels its older run. A push to `develop` never cancels a run (it may be deploying).
-- vitest uses threads (about 19% less CPU, same tests and coverage). Running the phone and desktop e2e side by side was tried and
-  failed on the 2-core runner (the app's server could not keep up, 21 minutes and mass failures), so e2e stays sequential.
+- vitest uses threads (about 19% less CPU, same tests and coverage).
+- Fork pull requests get no secrets (none of these jobs reads one but `GITHUB_TOKEN`), and the deploy runs only for a push to `develop`.
+- `npm run check:workflows` enforces all of this with a mutant test per rule: the job set, every heavy job gated on the mode, gitleaks
+  first, the e2e matrix being exactly phone and desktop on separate runners, the artifact being named, hidden-file-inclusive and
+  one-day, the production build never carrying the e2e flag, and the deploy workflow never touching an artifact.
 
 ## Modes
 
-The first step after install decides what this run does (`scripts/ci-mode.ts`, logic and tests in `src/tooling/ci-mode.ts`):
+The `mode` job decides what this run does (`scripts/ci-mode.ts`, logic and tests in `src/tooling/ci-mode.ts`):
 
 | Event                       | Mode                | What runs                                                                                                                                                                                                                                            |
 | --------------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -35,7 +51,7 @@ head only when develop has not moved since the head last contained it. If develo
 real git, including that the pull request's head is fetched by id into a clone that never had it.
 
 Full = the quick checks plus unit tests with the 90% coverage gate, both production builds (Turbopack and webpack) each with
-the e2e-code and client-bundle secret scans, and phone + desktop e2e (with the a11y checks).
+the e2e-code and client-bundle secret scans, and phone + desktop e2e (with the a11y checks), all as parallel jobs.
 
 A green `ci` therefore always means the full validation passed for that exact commit, or identical files did.
 Marking a draft ready (`ready_for_review`) starts the full run.
@@ -46,44 +62,54 @@ CI confirms; it is not where bugs are found.
 
 - `npm run verify` runs what full-mode `ci` runs, cheapest first, stopping at the first failure: gitleaks (only if installed
   here; otherwise it says plainly that it was skipped), repo hygiene, actionlint (same rule), workflow contract, audit, lint,
-  typecheck, unit tests with the 90% coverage gate, both production builds with their bundle scans, and phone + desktop e2e
-  (`CI=1`, default port 3102; an `E2E_PORT` / `E2E_DB_PORT` already set in your environment wins, so two verifies on one machine can run side by side: `E2E_PORT=3199 E2E_DB_PORT=5699 npm run verify`). It ends with a short summary naming the head commit; paste it into the pull request.
+  typecheck, unit tests with the 90% coverage gate, both production builds with their bundle scans, the e2e build, and phone + desktop e2e
+  run one after the other from that build (`CI=1`, default port 3102; an `E2E_PORT` / `E2E_DB_PORT` already set in your environment wins, so two verifies on one machine can run side by side: `E2E_PORT=3199 E2E_DB_PORT=5699 npm run verify`). It ends with a short summary naming the head commit; paste it into the pull request.
 - `npm run verify:quick` is everything before the builds (it still includes the unit tests and coverage gate).
 - A **pre-push hook** runs `verify:quick`. `npm install` turns it on (`prepare` points git at `.githooks`); nothing to
   install by hand and no dependency. Emergency bypass: `git push --no-verify`, then run `npm run verify` yourself before
   marking the PR ready.
-- `check:workflows` (so CI too) fails when `ci.yml` and `verify` run different checks or in a different order, so they cannot
+- `check:workflows` (so CI too) fails when `ci.yml` and `verify` run different checks or in a different order (`build:e2e`, then `test:e2e`), so they cannot
   drift. Adding a check means adding it to both (`src/tooling/verify.ts`).
 - The local run is in addition to CI, never instead of it.
 
-## Working with it (this is how to stay cheap)
+## Working with it
 
-1. **Run `npm run verify` before you mark a PR ready**, and paste its summary in the pull request template's line.
-2. **Open pull requests as drafts.** Each push costs the quick run (a few minutes), not the full one.
-3. **Batch pushes.** Commit locally, let the pre-push hook run, and push once when it is coherent. Do not push to see
-   whether CI passes.
+1. **Run `npm run verify` before you mark a PR ready**, and paste its summary in the pull request template's line. CI confirms;
+   it is not where bugs should be found, and a red full run costs everyone the wait.
+2. **Open pull requests as drafts.** Each push runs the quick checks only (a couple of minutes), not the full run.
+3. **Batch pushes.** Commit locally, let the pre-push hook run, and push when it is coherent.
 4. **Mark ready once, and not in the same minute as a push.** That run is the full validation. (Events can arrive out of
-   order; the mode step reads the live draft flag, but a push and a ready click together still start two runs.)
-5. **Rerun failed jobs only when the failure is not yours** (an infrastructure error). A rerun repeats the whole job and bills
-   it again. Never rerun to "see if it is flaky": fix or quarantine the flake.
+   order; the mode job reads the live draft flag, but a push and a ready click together still start two runs.)
+5. **Rerun failed jobs only when the failure is not yours** (an infrastructure error). Never rerun to "see if it is flaky":
+   fix or quarantine the flake.
 6. Before merging, `npm run ci:gate -- <pr number>` confirms the latest `ci` run on the pull request's head is green.
    Branch protection is not available on this plan, so that, plus review, is the gate.
 
-## Measured minutes
+## Wall time
 
-Rounded billed minutes, from each run's usage page.
+Before: a full `ci` run took about 19 minutes (one serial job, develop `6125273`).
 
-| Run                             | Before                                                         | After                            |
-| ------------------------------- | -------------------------------------------------------------- | -------------------------------- |
-| Pull request sync               | ~21 (ci 20 + gitleaks 1)                                       | see the pull request description |
-| Final-head (ready) pull request | ~21                                                            | see the pull request description |
-| Push to `develop`               | ~39 (ci 18, gate 1, deploy 19 mostly idle waiting, gitleaks 1) | see the pull request description |
-| Preview deploy alone            | ~20                                                            | see the pull request description |
+After (first green run on the parallel jobs, PR #104): **8 min 21 s** end to end. Per job (start offset, duration):
+
+| Job             | Starts at | Takes |
+| --------------- | --------: | ----: |
+| `mode`          |      +3 s |  46 s |
+| `checks`        |      +3 s |  71 s |
+| `build`         |     +52 s |  77 s |
+| `unit`          |     +51 s | 152 s |
+| `e2e-build`     |     +52 s |  66 s |
+| `e2e (desktop)` |    +120 s | 325 s |
+| `e2e (phone)`   |    +120 s | 376 s |
+| `ci`            |    +498 s |   2 s |
+
+The critical path is `mode` (46 s) then `e2e-build` (66 s) then the slower e2e job. Everything else finishes inside it.
 
 ## Guardrails
 
 `npm run check:workflows` (run in CI, with `actionlint`) fails when: an action is not pinned to a full SHA; `ci.yml` has a job
-besides `ci` and `deploy`; a heavy step is not skipped outside full mode or a cheap check is; gitleaks or the audit is
-removed; a draft would pass; the deploy does not need `ci` or can run for a pull request; the `ci` job reads a secret;
-cancellation could hit a develop run; or the deploy workflow polls or grows a `push` trigger. Each rule has a mutant test in
-`src/tooling/workflow-check.test.ts`.
+outside the set above; a heavy job is not gated on the mode or a cheap check is; gitleaks or the audit is weakened; the `ci`
+summary does not need every job, can be skipped, or would pass a draft; the e2e matrix is not exactly phone and desktop on
+separate runners, or one of them is sharded or serialised; the production build carries the e2e flag or uploads anything;
+the e2e artifact is wrong; any job reads a secret but `GITHUB_TOKEN`, or uses `continue-on-error`; the deploy does not need
+`ci` (and only `ci`), can run for a pull request, or polls; or the deploy workflow touches an artifact or grows a `push`
+trigger. Each rule has a mutant test in `src/tooling/workflow-check.test.ts`.

@@ -24,6 +24,7 @@
     "db:migrate": "tsx scripts/db-migrate.ts",
     "check:no-e2e-in-build": "tsx scripts/check-no-e2e-in-build.ts",
     "build:webpack": "next build --webpack",
+    "build:e2e": "NEXT_PUBLIC_E2E_BUILD=1 next build",
     "db:migrate:remote": "tsx scripts/db-migrate-remote.ts",
     "db:seed": "tsx scripts/db-seed.ts",
     "db:seed:preview": "tsx scripts/seed-preview.ts",

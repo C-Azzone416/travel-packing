@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { OTHER_EMAIL, signIn, signInAsOwner } from "./helpers/auth";
 import { expectAccessible } from "./helpers/a11y";
+import { DEVICE } from "./helpers/device";
 
 // Axe checks (#21) for every screen and every dialog, at both viewports (the two Playwright projects). Each state is
 // reached the way a person reaches it, against the real e2e database.
@@ -12,7 +13,7 @@ async function openDashboard(page: Page) {
   await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
 }
 
-test.describe("signed out", () => {
+test.describe("signed out", DEVICE, () => {
   test("sign-in", async ({ page }) => {
     await page.goto("/sign-in");
     await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
@@ -32,7 +33,7 @@ test.describe("signed out", () => {
   });
 });
 
-test.describe("dashboard", () => {
+test.describe("dashboard", DEVICE, () => {
   test("upcoming, with the quick view open", async ({ page }) => {
     await openDashboard(page);
     await expectAccessible(page, "dashboard upcoming");
@@ -67,7 +68,7 @@ test.describe("dashboard", () => {
   });
 });
 
-test.describe("create and copy", () => {
+test.describe("create and copy", DEVICE, () => {
   async function startTrip(page: Page) {
     await openDashboard(page);
     await page.getByRole("link", { name: /New trip/ }).click();
@@ -111,7 +112,7 @@ test.describe("create and copy", () => {
   });
 });
 
-test.describe("trip screen", () => {
+test.describe("trip screen", DEVICE, () => {
   async function openSanDiego(page: Page) {
     await openDashboard(page);
     await page.getByRole("link", { name: "Keep packing: San Diego" }).click();
@@ -189,7 +190,7 @@ test.describe("trip screen", () => {
   });
 });
 
-test.describe("review, settings and staples", () => {
+test.describe("review, settings and staples", DEVICE, () => {
   async function openReview(page: Page, lisbon: boolean) {
     await openDashboard(page);
     if (lisbon) {
@@ -227,7 +228,7 @@ test.describe("review, settings and staples", () => {
   });
 });
 
-test.describe("error states and toasts", () => {
+test.describe("error states and toasts", DEVICE, () => {
   const isAction = (request: { method(): string; url(): string }) => request.method() === "POST";
 
   test("a failed save: the error chip, its sheet, and Settings in the error state", async ({
@@ -330,7 +331,7 @@ test.describe("keyboard and focus", () => {
   });
 });
 
-test.describe("narrow screens and large text", () => {
+test.describe("narrow screens and large text", DEVICE, () => {
   test.use({ viewport: { width: 320, height: 700 } });
 
   test("nothing needs sideways scrolling at 320px on the main screens", async ({ page }) => {
@@ -367,7 +368,7 @@ test.describe("narrow screens and large text", () => {
   });
 });
 
-test.describe("more states", () => {
+test.describe("more states", DEVICE, () => {
   const isAction = (request: { method(): string }) => request.method() === "POST";
 
   test("the dashboard while it loads, and when it cannot load", async ({ page }) => {
@@ -429,7 +430,7 @@ async function expectBadgeClear(row: Locator): Promise<{ sameLine: boolean }> {
   return { sameLine };
 }
 
-test.describe("design's known items", () => {
+test.describe("design's known items", DEVICE, () => {
   test("the error chip stays on one line, and the Pack last badge keeps its distance", async ({
     page,
   }) => {
@@ -511,7 +512,7 @@ test.describe("design's known items", () => {
   });
 });
 
-test("screenshots of the visual fixes (after)", async ({ page }, testInfo) => {
+test("screenshots of the visual fixes (after)", DEVICE, async ({ page }, testInfo) => {
   const shot = (name: string, options: { fullPage?: boolean } = {}) =>
     page.screenshot({
       path: `test-results/screenshots/${testInfo.project.name}-a11y-${name}.png`,
@@ -562,7 +563,7 @@ test("screenshots of the visual fixes (after)", async ({ page }, testInfo) => {
   await shot("error-chip");
 });
 
-test.describe("staples", () => {
+test.describe("staples", DEVICE, () => {
   async function openStaples(page: Page) {
     await openDashboard(page);
     await page.goto("/staples");

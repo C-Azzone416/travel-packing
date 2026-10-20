@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
+import { DEVICE } from "./helpers/device";
 
 // Trip themes (#48) against the real e2e database: what a trip saves with is what its card shows after a reload.
 // The seeded sample trips are San Diego (Beach) and Lisbon (City).
@@ -117,7 +118,7 @@ test("a copy starts on the source trip's theme, and changing it does not touch t
   expect(await artKey(page, "San Diego")).toBe("beach");
 });
 
-test("the picker works at 320px with nothing scrolling sideways", async ({ page }) => {
+test("the picker works at 320px with nothing scrolling sideways", DEVICE, async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 700 });
   await openDashboard(page);
   await startTrip(page);
@@ -129,7 +130,7 @@ test("the picker works at 320px with nothing scrolling sideways", async ({ page 
   ).toBeLessThanOrEqual(0);
 });
 
-test("screenshots of the picker and of cards with themes", async ({ page }, testInfo) => {
+test("screenshots of the picker and of cards with themes", DEVICE, async ({ page }, testInfo) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await openDashboard(page);
   await page.screenshot({

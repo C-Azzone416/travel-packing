@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
+import { DEVICE } from "./helpers/device";
 
 // Parity with the approved prototype's browser test (reference/prototype/tests/browser.test.mjs), on the production app
 // and its real database. Most scenarios are covered by the feature specs; docs/parity.md maps EVERY prototype scenario to
@@ -185,7 +186,7 @@ test("copy: a remembered Bathroom item travels to the copy, with nothing checked
   await expect(page.getByText("Toiletry bag not ready to place")).toBeVisible();
 });
 
-test("a tour of every screen raises no uncaught browser errors", async ({ page }) => {
+test("a tour of every screen raises no uncaught browser errors", DEVICE, async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await openSanDiego(page);
@@ -193,6 +194,10 @@ test("a tour of every screen raises no uncaught browser errors", async ({ page }
   for (const path of ["/", "/staples", "/settings", `/trips/${id}`, `/trips/${id}/review`, "/"]) {
     await page.goto(path);
     await expect(page.locator("main")).toBeVisible();
+    // Next prefetches the linked screens once a page is up. Leaving while those requests are in flight cancels them, and WebKit
+    // reports the cancelled fetch as an unhandled "Fetch API cannot load ... due to access control checks" from the router, which
+    // is the browser unloading the page, not an error in the app. Let them finish before the next hard navigation.
+    await page.waitForLoadState("networkidle");
   }
   await page.getByRole("link", { name: /New trip/ }).click();
   await page.getByRole("combobox", { name: "Destination search" }).fill("lon");

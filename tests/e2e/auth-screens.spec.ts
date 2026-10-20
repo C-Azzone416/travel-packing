@@ -17,6 +17,7 @@ import {
   verificationCode,
   wrongCodeFor,
 } from "./helpers/inbox";
+import { DEVICE } from "./helpers/device";
 
 // Sign-up, verification code, resend, forgot and reset password (#27) against the real server with the e2e-only fake
 // provider. Codes and links come from the fake "inbox" (tests/e2e/helpers/inbox.ts); none is in source or a log.
@@ -41,11 +42,20 @@ async function signUp(page: Page, address = email) {
   await expect(page).toHaveURL(/\/verify$/);
 }
 
-/** Types the code and presses Verify, and waits for the server's answer so the next try never races the form reset. */
+/**
+ * Types the code and presses Verify, and waits for the server's answer so the next try never races the form reset.
+ * The form ignores a submit while the previous answer is still being applied (a deliberate double-submit guard), and on a slow
+ * runner a click can land in that window and do nothing. CI showed it: one of five wrong tries was swallowed, so the lock never came
+ * and the right code was accepted. So the code is typed and Verify pressed again until a request really goes out.
+ */
 async function enterCode(page: Page, code: string) {
-  await page.getByLabel("6-digit code").fill(code);
   const answered = page.waitForResponse((response) => response.request().method() === "POST");
-  await page.getByRole("button", { name: "Verify" }).click();
+  await expect(async () => {
+    await page.getByLabel("6-digit code").fill(code);
+    const sent = page.waitForRequest((request) => request.method() === "POST", { timeout: 1500 });
+    await page.getByRole("button", { name: "Verify" }).click();
+    await sent;
+  }).toPass({ timeout: 15_000 });
   await answered;
 }
 
@@ -137,39 +147,43 @@ test.describe("sign-up and verification", () => {
     await expect(page).toHaveURL(/\/$/);
   });
 
-  test("the code step: a wrong code, then the right one; the field is one input with a numeric keypad", async ({
-    page,
-  }) => {
-    await signUp(page);
-    const code = page.getByLabel("6-digit code");
-    await expect(code).toHaveAttribute("autocomplete", "one-time-code");
-    await expect(code).toHaveAttribute("inputmode", "numeric");
-    await expect(code).toHaveAttribute("maxlength", "6");
-    await expect(page.getByRole("textbox")).toHaveCount(1);
+  test(
+    "the code step: a wrong code, then the right one; the field is one input with a numeric keypad",
+    DEVICE,
+    async ({ page }) => {
+      await signUp(page);
+      const code = page.getByLabel("6-digit code");
+      await expect(code).toHaveAttribute("autocomplete", "one-time-code");
+      await expect(code).toHaveAttribute("inputmode", "numeric");
+      await expect(code).toHaveAttribute("maxlength", "6");
+      await expect(page.getByRole("textbox")).toHaveCount(1);
 
-    // A pasted code with spaces or dashes is cleaned before the length limit can cut a digit off it.
-    await code.focus();
-    await code.evaluate((input) => {
-      const data = new DataTransfer();
-      data.setData("text", "123 456");
-      input.dispatchEvent(
-        new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }),
+      // A pasted code with spaces or dashes is cleaned before the length limit can cut a digit off it.
+      await code.focus();
+      await code.evaluate((input) => {
+        const data = new DataTransfer();
+        data.setData("text", "123 456");
+        input.dispatchEvent(
+          new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }),
+        );
+      });
+      await expect(code).toHaveValue("123456");
+      await code.fill("");
+      await code.pressSequentially("12a3-4x56");
+      await expect(code).toHaveValue("123456");
+      await enterCode(page, wrongCodeFor(email));
+      await expect(page.locator("#code-error")).toContainText(
+        "That code isn't right or has expired",
       );
-    });
-    await expect(code).toHaveValue("123456");
-    await code.fill("");
-    await code.pressSequentially("12a3-4x56");
-    await expect(code).toHaveValue("123456");
-    await enterCode(page, wrongCodeFor(email));
-    await expect(page.locator("#code-error")).toContainText("That code isn't right or has expired");
-    await expect(code).toBeFocused();
-    await expect(code).toHaveAttribute("aria-invalid", "true");
-    await expect(code).toHaveAttribute("aria-describedby", /code-error/);
-    await expect(page).toHaveURL(/\/verify$/);
+      await expect(code).toBeFocused();
+      await expect(code).toHaveAttribute("aria-invalid", "true");
+      await expect(code).toHaveAttribute("aria-describedby", /code-error/);
+      await expect(page).toHaveURL(/\/verify$/);
 
-    await enterCode(page, verificationCode(email) ?? "");
-    await expect(page).toHaveURL(/\/finish-setup$/);
-  });
+      await enterCode(page, verificationCode(email) ?? "");
+      await expect(page).toHaveURL(/\/finish-setup$/);
+    },
+  );
 
   test("an empty code asks for the code and counts nothing", async ({ page }) => {
     await signUp(page);
@@ -341,21 +355,25 @@ test.describe("forgot and reset password", () => {
 });
 
 test.describe("the account screens", () => {
-  test("every one is reachable signed out and sits outside the app shell", async ({ page }) => {
-    for (const path of [
-      "/sign-up",
-      "/verify",
-      "/forgot-password",
-      "/reset-password",
-      "/finish-setup",
-    ]) {
-      const response = await page.goto(path);
-      expect(response?.status(), path).toBe(200);
-      await expect(page).toHaveURL(new RegExp(`${path}$`));
-      await expect(page.getByRole("navigation", { name: "Primary navigation" })).toHaveCount(0);
-      await expect(page.getByRole("link", { name: /go to trips/i })).toHaveCount(0);
-    }
-  });
+  test(
+    "every one is reachable signed out and sits outside the app shell",
+    DEVICE,
+    async ({ page }) => {
+      for (const path of [
+        "/sign-up",
+        "/verify",
+        "/forgot-password",
+        "/reset-password",
+        "/finish-setup",
+      ]) {
+        const response = await page.goto(path);
+        expect(response?.status(), path).toBe(200);
+        await expect(page).toHaveURL(new RegExp(`${path}$`));
+        await expect(page.getByRole("navigation", { name: "Primary navigation" })).toHaveCount(0);
+        await expect(page.getByRole("link", { name: /go to trips/i })).toHaveCount(0);
+      }
+    },
+  );
 
   test("a signed-in owner is sent to the app from the sign-up, verify and forgot screens", async ({
     page,
@@ -372,53 +390,55 @@ test.describe("the account screens", () => {
     await expect(page.locator('meta[name="referrer"]')).toHaveAttribute("content", "no-referrer");
   });
 
-  test("controls are 44px targets on phone and nothing scrolls sideways", async ({
-    page,
-  }, testInfo) => {
-    const visit = async (path: string, controls: (() => ReturnType<Page["locator"]>)[]) => {
-      await page.goto(path);
-      for (const control of controls) {
-        const box = await control().boundingBox();
-        if (testInfo.project.name === "phone") {
-          expect(
-            Math.round(box?.height ?? 0),
-            `${path} ${await control().innerText()}`,
-          ).toBeGreaterThanOrEqual(44);
+  test(
+    "controls are 44px targets on phone and nothing scrolls sideways",
+    DEVICE,
+    async ({ page }, testInfo) => {
+      const visit = async (path: string, controls: (() => ReturnType<Page["locator"]>)[]) => {
+        await page.goto(path);
+        for (const control of controls) {
+          const box = await control().boundingBox();
+          if (testInfo.project.name === "phone") {
+            expect(
+              Math.round(box?.height ?? 0),
+              `${path} ${await control().innerText()}`,
+            ).toBeGreaterThanOrEqual(44);
+          }
         }
-      }
-      const overflow = await page.evaluate(
-        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-      );
-      expect(overflow, path).toBeLessThanOrEqual(0);
-    };
-    await visit("/sign-in", [
-      () => page.getByRole("link", { name: "Forgot password?" }),
-      () => page.getByRole("link", { name: "Create an account" }),
-      () => page.getByRole("button", { name: "Show password" }),
-    ]);
-    await visit("/sign-up", [
-      () => page.getByRole("button", { name: "Create account" }),
-      () => page.getByRole("link", { name: "Sign in" }),
-    ]);
-    await visit("/verify", [
-      () => page.getByRole("button", { name: "Verify" }),
-      () => page.getByRole("link", { name: "Use a different email" }),
-    ]);
-    await visit("/forgot-password", [
-      () => page.getByRole("button", { name: "Send reset link" }),
-      () => page.getByRole("link", { name: "Back to sign in" }),
-    ]);
-    await visit(`/reset-password?token=${"a".repeat(48)}`, [
-      () => page.getByRole("button", { name: "Update password" }),
-    ]);
-    await visit("/reset-password", [
-      () => page.getByRole("link", { name: "Send a new reset link" }),
-    ]);
-    await visit("/finish-setup", [() => page.getByRole("link", { name: "Send me a link" })]);
-  });
+        const overflow = await page.evaluate(
+          () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        );
+        expect(overflow, path).toBeLessThanOrEqual(0);
+      };
+      await visit("/sign-in", [
+        () => page.getByRole("link", { name: "Forgot password?" }),
+        () => page.getByRole("link", { name: "Create an account" }),
+        () => page.getByRole("button", { name: "Show password" }),
+      ]);
+      await visit("/sign-up", [
+        () => page.getByRole("button", { name: "Create account" }),
+        () => page.getByRole("link", { name: "Sign in" }),
+      ]);
+      await visit("/verify", [
+        () => page.getByRole("button", { name: "Verify" }),
+        () => page.getByRole("link", { name: "Use a different email" }),
+      ]);
+      await visit("/forgot-password", [
+        () => page.getByRole("button", { name: "Send reset link" }),
+        () => page.getByRole("link", { name: "Back to sign in" }),
+      ]);
+      await visit(`/reset-password?token=${"a".repeat(48)}`, [
+        () => page.getByRole("button", { name: "Update password" }),
+      ]);
+      await visit("/reset-password", [
+        () => page.getByRole("link", { name: "Send a new reset link" }),
+      ]);
+      await visit("/finish-setup", [() => page.getByRole("link", { name: "Send me a link" })]);
+    },
+  );
 });
 
-test.describe("accessibility and screenshots", () => {
+test.describe("accessibility and screenshots", DEVICE, () => {
   test("axe finds nothing on any account screen or state, and the screens are captured", async ({
     page,
   }, testInfo) => {

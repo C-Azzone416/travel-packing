@@ -51,4 +51,17 @@ describe("pending email", () => {
     expect(jar.get(PENDING_EMAIL_COOKIE)?.options?.secure).toBe(false);
     vi.unstubAllEnvs();
   });
+
+  it("is still secure in a deployed build, and not in the e2e build that runs over plain http (WebKit refuses it there)", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_E2E_BUILD", "1");
+    await rememberPendingEmail("a@example.test");
+    expect(jar.get(PENDING_EMAIL_COOKIE)?.options?.secure).toBe(false);
+    for (const deployed of [undefined, "", "0", "true"]) {
+      vi.stubEnv("NEXT_PUBLIC_E2E_BUILD", deployed as string);
+      await rememberPendingEmail("a@example.test");
+      expect(jar.get(PENDING_EMAIL_COOKIE)?.options?.secure, String(deployed)).toBe(true);
+    }
+    vi.unstubAllEnvs();
+  });
 });

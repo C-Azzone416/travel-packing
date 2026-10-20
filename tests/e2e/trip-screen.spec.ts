@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
+import { DEVICE } from "./helpers/device";
 
 // Fixed clock: San Diego is upcoming and partly packed, Lisbon is past, fully packed and Ready. In-memory data
 // survives client-side navigation (links), not a reload, so every step navigates by clicking.
@@ -351,73 +352,77 @@ test("an unknown trip says so, with a way back", async ({ page }) => {
   await expect(page.getByRole("link", { name: "Back to trips" })).toHaveAttribute("href", "/");
 });
 
-test("rows are keyboard operable with 44px targets, and nothing scrolls sideways at 320px", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 320, height: 700 });
-  await openSanDiego(page);
-  expect(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-    ),
-  ).toBeLessThanOrEqual(0);
-  const underwear = row(page, "underwear");
-  const targets: [string, ReturnType<typeof underwear.getByRole>][] = [
-    ["check", underwear.getByRole("button", { name: "Pack all Underwear" })],
-    ["edit", underwear.getByRole("button", { name: /^Underwear / })],
-    ["increase", underwear.getByRole("button", { name: "Increase packed Underwear" })],
-    ["decrease", underwear.getByRole("button", { name: "Decrease packed Underwear" })],
-    ["filter", page.getByRole("button", { name: "Still to pack" })],
-  ];
-  for (const [label, control] of targets) {
-    const box = (await control.boundingBox())!;
-    expect(box.height, `${label} height`).toBeGreaterThanOrEqual(43.9);
-    expect(box.width, `${label} width`).toBeGreaterThanOrEqual(43.9);
-  }
-  await underwear.getByRole("button", { name: "Increase packed Underwear" }).focus();
-  await page.keyboard.press("Enter");
-  await expect(underwear).toContainText("3/4");
-  await underwear.getByRole("button", { name: /^Underwear / }).focus();
-  await page.keyboard.press("Enter");
-  const dialog = page.getByRole("dialog", { name: "Edit item" });
-  await expect(dialog.getByLabel("Item name")).toBeFocused();
-  await page.keyboard.press("Escape");
-  await expect(dialog).toHaveCount(0);
-  await expect(underwear.getByRole("button", { name: /^Underwear / })).toBeFocused();
-});
+test(
+  "rows are keyboard operable with 44px targets, and nothing scrolls sideways at 320px",
+  DEVICE,
+  async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 700 });
+    await openSanDiego(page);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      ),
+    ).toBeLessThanOrEqual(0);
+    const underwear = row(page, "underwear");
+    const targets: [string, ReturnType<typeof underwear.getByRole>][] = [
+      ["check", underwear.getByRole("button", { name: "Pack all Underwear" })],
+      ["edit", underwear.getByRole("button", { name: /^Underwear / })],
+      ["increase", underwear.getByRole("button", { name: "Increase packed Underwear" })],
+      ["decrease", underwear.getByRole("button", { name: "Decrease packed Underwear" })],
+      ["filter", page.getByRole("button", { name: "Still to pack" })],
+    ];
+    for (const [label, control] of targets) {
+      const box = (await control.boundingBox())!;
+      expect(box.height, `${label} height`).toBeGreaterThanOrEqual(43.9);
+      expect(box.width, `${label} width`).toBeGreaterThanOrEqual(43.9);
+    }
+    await underwear.getByRole("button", { name: "Increase packed Underwear" }).focus();
+    await page.keyboard.press("Enter");
+    await expect(underwear).toContainText("3/4");
+    await underwear.getByRole("button", { name: /^Underwear / }).focus();
+    await page.keyboard.press("Enter");
+    const dialog = page.getByRole("dialog", { name: "Edit item" });
+    await expect(dialog.getByLabel("Item name")).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await expect(underwear.getByRole("button", { name: /^Underwear / })).toBeFocused();
+  },
+);
 
-test("a sheet can be closed with its visible close button, and the bag button never wraps", async ({
-  page,
-}, testInfo) => {
-  await openSanDiego(page);
-  await row(page, "tops")
-    .getByRole("button", { name: /^Everyday tops / })
-    .click();
-  const close = page.getByRole("button", { name: "Close dialog" });
-  const box = (await close.boundingBox())!;
-  expect(box.width).toBeGreaterThanOrEqual(43.9);
-  expect(box.height).toBeGreaterThanOrEqual(43.9);
-  await close.click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(row(page, "tops").getByRole("button", { name: /^Everyday tops / })).toBeFocused();
-
-  for (const id of TOILETRIES)
-    await row(page, id)
-      .getByRole("button", { name: /^Pack all / })
+test(
+  "a sheet can be closed with its visible close button, and the bag button never wraps",
+  DEVICE,
+  async ({ page }, testInfo) => {
+    await openSanDiego(page);
+    await row(page, "tops")
+      .getByRole("button", { name: /^Everyday tops / })
       .click();
-  await page.getByRole("button", { name: "Not yet" }).click();
-  const put = page.getByRole("button", { name: "Put bag in suitcase" });
-  const card = page.locator(".bag-placement.pending");
-  const putBox = (await put.boundingBox())!;
-  const cardBox = (await card.boundingBox())!;
-  // One line of text: about 44-52px tall, whatever the width.
-  expect(putBox.height, testInfo.project.name).toBeLessThan(60);
-  if (testInfo.project.name === "phone") expect(putBox.width).toBeGreaterThan(cardBox.width - 40);
-});
+    const close = page.getByRole("button", { name: "Close dialog" });
+    const box = (await close.boundingBox())!;
+    expect(box.width).toBeGreaterThanOrEqual(43.9);
+    expect(box.height).toBeGreaterThanOrEqual(43.9);
+    await close.click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(row(page, "tops").getByRole("button", { name: /^Everyday tops / })).toBeFocused();
+
+    for (const id of TOILETRIES)
+      await row(page, id)
+        .getByRole("button", { name: /^Pack all / })
+        .click();
+    await page.getByRole("button", { name: "Not yet" }).click();
+    const put = page.getByRole("button", { name: "Put bag in suitcase" });
+    const card = page.locator(".bag-placement.pending");
+    const putBox = (await put.boundingBox())!;
+    const cardBox = (await card.boundingBox())!;
+    // One line of text: about 44-52px tall, whatever the width.
+    expect(putBox.height, testInfo.project.name).toBeLessThan(60);
+    if (testInfo.project.name === "phone") expect(putBox.width).toBeGreaterThan(cardBox.width - 40);
+  },
+);
 
 // Design's screenshot set for the trip screen. "Not saved · Retry" is not here: the in-memory source cannot fail, so
 // that state is covered by unit tests now and gets a real network-failure screenshot with the data-layer wiring.
-test("screenshots of the trip screen", async ({ page }, testInfo) => {
+test("screenshots of the trip screen", DEVICE, async ({ page }, testInfo) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   const shot = (name: string, fullPage = false) =>
     page.screenshot({
@@ -462,24 +467,26 @@ test("screenshots of the trip screen", async ({ page }, testInfo) => {
   await shot("preferences");
 });
 
-test("screenshots of the Ready trip, the weather card and its dialog", async ({
-  page,
-}, testInfo) => {
-  await page.emulateMedia({ reducedMotion: "reduce" });
-  const shot = (name: string) =>
-    page.screenshot({
-      path: `test-results/screenshots/${testInfo.project.name}-trip-${name}.png`,
-    });
-  await openLisbon(page);
-  await expect(page.getByText("You’re ready to go.")).toBeVisible();
-  await shot("ready");
+test(
+  "screenshots of the Ready trip, the weather card and its dialog",
+  DEVICE,
+  async ({ page }, testInfo) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    const shot = (name: string) =>
+      page.screenshot({
+        path: `test-results/screenshots/${testInfo.project.name}-trip-${name}.png`,
+      });
+    await openLisbon(page);
+    await expect(page.getByText("You’re ready to go.")).toBeVisible();
+    await shot("ready");
 
-  await page.getByRole("link", { name: "Back to trips" }).click();
-  await page.getByRole("link", { name: "Keep packing: San Diego" }).click();
-  await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
-  await page.getByRole("button", { name: "Review suggestion" }).scrollIntoViewIfNeeded();
-  await shot("weather-card");
-  await page.getByRole("button", { name: "Review suggestion" }).click();
-  await expect(page.getByRole("dialog", { name: "Add a compact umbrella?" })).toBeVisible();
-  await shot("weather-dialog");
-});
+    await page.getByRole("link", { name: "Back to trips" }).click();
+    await page.getByRole("link", { name: "Keep packing: San Diego" }).click();
+    await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
+    await page.getByRole("button", { name: "Review suggestion" }).scrollIntoViewIfNeeded();
+    await shot("weather-card");
+    await page.getByRole("button", { name: "Review suggestion" }).click();
+    await expect(page.getByRole("dialog", { name: "Add a compact umbrella?" })).toBeVisible();
+    await shot("weather-dialog");
+  },
+);

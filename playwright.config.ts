@@ -1,4 +1,4 @@
-import { defineConfig } from "@playwright/test";
+import { defineConfig, devices } from "@playwright/test";
 import { join } from "node:path";
 import {
   ALLOWLISTED_EMAILS,
@@ -29,6 +29,10 @@ const e2eEnv = {
   AUTH_FLOW_CALLERS_PER_HOUR: "10000",
 };
 
+// CI builds the e2e variant once (the `e2e-build` job) and hands it to each browser job, which sets E2E_PREBUILT=1 to start
+// that build instead of making another. Locally nothing sets it, so the app is built from your checkout as before.
+const prebuilt = process.env.E2E_PREBUILT === "1";
+
 // Servers are never reused: reusing whatever happens to be listening could silently test another checkout's code.
 export default defineConfig({
   testDir: "tests/e2e",
@@ -52,7 +56,9 @@ export default defineConfig({
       },
     },
     {
-      command: `npm run build && npm run start -- --port ${PORT}`,
+      command: prebuilt
+        ? `npm run start -- --port ${PORT}`
+        : `npm run build && npm run start -- --port ${PORT}`,
       url: `http://localhost:${PORT}`,
       reuseExistingServer: false,
       timeout: 180_000,
@@ -82,7 +88,12 @@ export default defineConfig({
   ],
   use: { baseURL: `http://localhost:${PORT}` },
   projects: [
-    { name: "phone", use: { browserName: "chromium", viewport: { width: 390, height: 844 } } },
+    // A real phone: Playwright's iPhone 15 profile (WebKit, mobile user agent, touch, 3x pixel ratio, the Safari viewport).
+    // It runs ONLY the specs tagged @device (tests/e2e/helpers/device.ts): the ones whose outcome depends on the device
+    // (layout, tap targets, overflow, navigation, sheets, accessibility at phone size, the golden path). The app's logic
+    // and data flows are the same on every device, so they run once, on desktop.
+    { name: "phone", grep: /@device/, use: { ...devices["iPhone 15"] } },
+    // Every test, in Chromium at a desktop size.
     { name: "desktop", use: { browserName: "chromium", viewport: { width: 1440, height: 1000 } } },
   ],
 });

@@ -6,6 +6,40 @@ import { createPortal } from "react-dom";
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+// Safari (macOS and iOS) does not focus a button, link or checkbox when it is clicked or tapped, so `document.activeElement` is
+// still whatever had focus before (<body>, or <main> after a route change) when a sheet opens from a tap. The control that was
+// pressed is remembered here (capture phase, so before any handler can remove it) so focus can go back to it when the sheet
+// closes. Chromium and Firefox focus the control itself, which gives the same answer.
+const CONTROL = 'a[href], button, input, select, textarea, summary, [role="button"], [tabindex]';
+/** A press older than this did not open the sheet that is opening now (a sheet opened by code, long after). */
+const PRESS_FRESH_MS = 10_000;
+let lastPressed: HTMLElement | null = null;
+let lastPressedAt = 0;
+if (typeof document !== "undefined") {
+  document.addEventListener(
+    "click",
+    (event) => {
+      lastPressed =
+        event.target instanceof Element ? event.target.closest<HTMLElement>(CONTROL) : null;
+      lastPressedAt = Date.now();
+    },
+    true,
+  );
+}
+
+/**
+ * What to give focus back to when a sheet closes. The control that was just pressed, when focus did not land on something else
+ * (it is still on <body>, or on an ancestor of the control as in Safari); otherwise whatever has focus.
+ */
+function openerNow(): HTMLElement | null {
+  const active = document.activeElement;
+  const focused = active instanceof HTMLElement && active !== document.body ? active : null;
+  const pressed =
+    lastPressed?.isConnected && Date.now() - lastPressedAt < PRESS_FRESH_MS ? lastPressed : null;
+  if (pressed && (!focused || focused.contains(pressed))) return pressed;
+  return focused;
+}
+
 export interface ModalSheetProps {
   open: boolean;
   title: string;
@@ -44,7 +78,7 @@ export function ModalSheet({
 
   useEffect(() => {
     if (!open) return;
-    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const opener = openerNow();
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const dialog = dialogRef.current as HTMLDivElement;
@@ -65,6 +99,8 @@ export function ModalSheet({
     return () => {
       for (const node of background) node.removeAttribute("inert");
       document.body.style.overflow = previousOverflow;
+      // WebKit works out inertness lazily: a control that was inside the inert page cannot take focus until the style is flushed.
+      void document.body.offsetHeight;
       opener?.focus();
     };
   }, [open]);
