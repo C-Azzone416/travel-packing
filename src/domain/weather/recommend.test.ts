@@ -6,6 +6,7 @@ import {
   classifyDay,
   defaultFormatRange,
   hasUsableWeather,
+  legacyClothing,
   lookFor,
   recommendPacking,
 } from "./recommend";
@@ -188,6 +189,54 @@ describe("clothing breakdown", () => {
       category: "Clothing",
     });
     expect(r.clothing[0].reason).toBe("Mostly hot days; 6 hot days in Lisbon");
+  });
+});
+
+describe("laundry quantities per garment type", () => {
+  // Oct 1-10 with the return outfit on: 8 everyday looks (departure and return days dropped).
+  const trip = (highs: (index: number) => number) =>
+    dates(10).map((d, i) => day(d, { highC: highs(i) }));
+  const longTrip = { end: "2026-10-10", laundry: true };
+
+  it("all cold, 8 looks: tops halve, bottoms quarter", () => {
+    expect(
+      qty(
+        recommend(
+          trip(() => 5),
+          longTrip,
+        ),
+      ),
+    ).toEqual({ "tops-long": 4, "bottoms-pants": 2 });
+  });
+  it("all cold, 9 looks: tops round up from a half", () => {
+    const nine = { end: "2026-10-11", laundry: true };
+    const days = dates(11).map((d) => day(d, { highC: 5 }));
+    expect(qty(recommend(days, nine))).toEqual({ "tops-long": 5, "bottoms-pants": 3 });
+  });
+  it("mixed hot and cold, 8 looks: each type uses its own count", () => {
+    // Daily days Oct 2-9: 4 hot (shorts) then 4 cold (pants).
+    const days = trip((i) => (i < 5 ? 30 : 5));
+    expect(qty(recommend(days, longTrip))).toEqual({
+      "tops-short": 2,
+      "tops-long": 2,
+      "bottoms-shorts": 1,
+      "bottoms-pants": 1,
+    });
+  });
+  it("uneven split, 8 looks: 5 hot and 3 cold", () => {
+    const days = trip((i) => (i < 6 ? 30 : 5));
+    expect(qty(recommend(days, longTrip))).toEqual({
+      "tops-short": 3,
+      "tops-long": 2,
+      "bottoms-shorts": 2,
+      "bottoms-pants": 1,
+    });
+  });
+  it("legacy fallback, 8 looks with laundry: 4 tops and 2 bottoms", () => {
+    expect(legacyClothing(8, true).map((l) => l.qty)).toEqual([4, 2]);
+    expect(legacyClothing(7, true).map((l) => l.qty)).toEqual([4, 2]);
+    expect(legacyClothing(8, false).map((l) => l.qty)).toEqual([8, 4]);
+    expect(legacyClothing(0, true).map((l) => l.qty)).toEqual([0, 0]);
   });
 });
 
