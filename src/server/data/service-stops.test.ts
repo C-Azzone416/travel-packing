@@ -458,6 +458,23 @@ describe("weather suggestion status", () => {
     );
   });
 
+  it("is NOT_FOUND for a trip in Recently deleted, for both reading and writing", async () => {
+    const trip = data(await create());
+    data(await service.removeTrip(context(), { tripId: trip.id }));
+    const input = {
+      tripId: trip.id,
+      semanticId: "weather-umbrella",
+      status: "skipped",
+      ruleSignature: "x",
+    };
+    expect(errorOf(await service.setTripWeatherSuggestion(context(), input))?.code).toBe(
+      "NOT_FOUND",
+    );
+    expect(
+      errorOf(await service.listTripWeatherSuggestions(context(), { tripId: trip.id }))?.code,
+    ).toBe("NOT_FOUND");
+  });
+
   it("refuses raw-weather-sized signatures, unknown statuses and a missing trip", async () => {
     const trip = data(await create());
     const base = {

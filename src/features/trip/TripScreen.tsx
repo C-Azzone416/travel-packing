@@ -13,9 +13,11 @@ import type { Staple, TripItem } from "@/domain/trip";
 import type { LifecycleTrip } from "@/domain/trip-lifecycle";
 import { TripsSourceError, type TripChange } from "@/features/trips/trips-source";
 import { useTripsSource } from "@/features/trips/TripsSourceProvider";
-import { formatDays, formatRange } from "@/features/trips/view";
+import { RouteText } from "@/features/trips/RouteText";
+import { formatDays, formatRange, routeCities, routeIsTitle } from "@/features/trips/view";
 import { AddToiletryForm } from "./AddToiletryForm";
 import { themeFor } from "@/domain/themes";
+import { EditRouteSheet } from "./EditRouteSheet";
 import { ItemEditor } from "./ItemEditor";
 import { PackRow } from "./PackRow";
 import { PreferencesForm } from "./PreferencesForm";
@@ -49,7 +51,8 @@ type Dialog =
   | { kind: "bag" }
   | { kind: "weather" }
   | { kind: "preferences" }
-  | { kind: "theme" };
+  | { kind: "theme" }
+  | { kind: "route" };
 
 interface ActOptions {
   /** The row this change is for, so a failure shows "Not saved · Retry" beside it. */
@@ -113,6 +116,7 @@ export function TripScreen({ tripId }: { tripId: string }) {
   const [failedRows, setFailedRows] = useState<ReadonlySet<string>>(new Set());
   const [announcement, setAnnouncement] = useState("");
   const [themeFailed, setThemeFailed] = useState(false);
+  const [routeFailed, setRouteFailed] = useState(false);
   const bagPromptDismissed = useRef(false);
   // The last trip the server confirmed, so a change that takes the trip out of Ready can say so.
   const confirmed = useRef<LifecycleTrip | null>(null);
@@ -327,10 +331,23 @@ export function TripScreen({ tripId }: { tripId: string }) {
           </Link>
           <div className="head-copy destination-head-copy">
             <h1>{trip.destination}</h1>
+            {routeCities(trip).length && !routeIsTitle(trip) ? (
+              <p className="route-chip">
+                <RouteText cities={routeCities(trip)} budget={64} />
+              </p>
+            ) : null}
             <p>
               {place ? `${place} · ` : ""}
               {formatRange(trip)} · {formatDays(trip.days)}
             </p>
+            <Button
+              variant="secondary"
+              small
+              className="edit-route"
+              onClick={() => setDialog({ kind: "route" })}
+            >
+              Edit route
+            </Button>
           </div>
           {trip.ready ? (
             <StatusBadge status="ready">Ready</StatusBadge>
@@ -567,6 +584,26 @@ export function TripScreen({ tripId }: { tripId: string }) {
               modal: true,
               onFail: () => setThemeFailed(true),
               announce: (change) => `Theme changed to ${themeFor(change.trip.theme).label}.`,
+              after: close,
+            });
+          }}
+        />
+      ) : null}
+      {dialog?.kind === "route" ? (
+        <EditRouteSheet
+          stops={trip.stops}
+          saving={submitting}
+          failed={routeFailed}
+          onClose={() => {
+            setRouteFailed(false);
+            close();
+          }}
+          onSave={(stops) => {
+            setRouteFailed(false);
+            void act(() => source.setStops(tripId, stops), {
+              modal: true,
+              onFail: () => setRouteFailed(true),
+              announce: () => "Route updated.",
               after: close,
             });
           }}

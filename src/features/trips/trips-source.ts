@@ -2,7 +2,7 @@
 // source without touching any screen. Per-trip commands mirror the data layer's entry points one for one
 // (togglePackedItem, editTripItem, ...), and each returns the changed trip plus the domain's signals.
 
-import { calculateSuggestions, DEFAULT_STAPLES } from "@/domain/calc";
+import { calculateSuggestions, DEFAULT_STAPLES, packingDays, tripDays } from "@/domain/calc";
 import {
   acceptWeather,
   addToiletryItem,
@@ -40,6 +40,7 @@ import {
   type LifecycleTrip,
   type TripDraft,
 } from "@/domain/trip-lifecycle";
+import { routeLabel, tripDatesFromStops, validateStops, type TripStop } from "@/domain/trip-stops";
 import { localToday } from "@/lib/today";
 
 /** A changed trip, with what the UI may offer next ("Put bag in suitcase", "Review your bag"). */
@@ -83,6 +84,8 @@ export interface TripsSource {
   updatePreferences(tripId: string, config: TripConfig): Promise<TripChange>;
   /** Change the trip's picture (#48). Only the six built-in themes are accepted; nothing else about the trip changes. */
   setTheme(tripId: string, theme: ThemeId): Promise<TripChange>;
+  /** Replace the trip's route (1-6 stops). Dates, day counts and calculated items follow; rejects an invalid route. */
+  setStops(tripId: string, stops: TripStop[]): Promise<TripChange>;
 }
 
 export class TripsSourceError extends Error {
@@ -211,6 +214,25 @@ export function createMemoryTripsSource(
     reviewWeatherAgain: (id) => direct(id, reviewWeatherAgain),
     updatePreferences: (id, config) =>
       direct(id, (trip) => recalculateSuggestions(trip, config, calculateSuggestions)),
+    setStops: (id, stops) =>
+      direct(id, (trip) => {
+        if (!validateStops(stops).ok) throw new TripsSourceError("INVALID_INPUT");
+        const { start, end } = tripDatesFromStops(stops);
+        const moved = recalculateSuggestions(
+          { ...trip, stops, start, end },
+          trip.config,
+          calculateSuggestions,
+        );
+        return {
+          ...moved,
+          days: tripDays(start, end),
+          dailyDays: packingDays(start, end),
+          // A title the person edited is theirs; one that is still the old route follows the new route.
+          destination:
+            trip.destination === routeLabel(trip.stops) ? routeLabel(stops) : trip.destination,
+          location: stops[0].location,
+        };
+      }),
     setTheme: (id, theme) => {
       if (!isThemeId(theme)) return Promise.reject(new TripsSourceError("INVALID_INPUT"));
       return direct(id, (trip) => ({ ...trip, theme }));

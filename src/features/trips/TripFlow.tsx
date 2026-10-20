@@ -13,8 +13,10 @@ import { calculateSuggestions, forecastLabel } from "@/domain/calc";
 import { curatedLocationProvider } from "@/domain/location-provider";
 import { isCustomLocation } from "@/domain/locations";
 import {
+  draftStops,
   selectDraftLocation,
   setDraftConfig,
+  setDraftStops,
   setDraftTheme,
   type LifecycleTrip,
   type SampleLocation,
@@ -36,11 +38,15 @@ import {
 } from "./draft";
 import { LocationPicker } from "./LocationPicker";
 import { useLocationProvider } from "./LocationProviderContext";
+import { StopList } from "./StopList";
+import { addStop } from "./stops-draft";
 import { ThemePicker } from "./ThemePicker";
 import { useTripsSource } from "./TripsSourceProvider";
 import { formatDays, formatRange } from "./view";
 
 type Step = "details" | "shape";
+
+const COPY_DATE_NOTICE = "Choose a new start date for the copy.";
 
 export interface TripFlowProps {
   copyId?: string;
@@ -129,7 +135,10 @@ function FlowBody({
   const [saving, setSaving] = useState(false);
   const [announcement, setAnnouncement] = useState("");
 
-  const blocker = continueBlocker(draft);
+  const multi = Boolean(draft.stops && draft.stops.length > 1);
+  // A copy of a multi-stop trip starts on the source's dates; the person must move the first arrival (every stop shifts).
+  const staleCopy = multi && from !== null && draft.start === from.start;
+  const blocker = staleCopy ? "Choose a new start date for the copy." : continueBlocker(draft);
   const eyebrow = from ? `Copy of ${from.destination}` : "New trip";
 
   function requestCancel() {
@@ -193,64 +202,103 @@ function FlowBody({
               if (!blocker) setStep("shape");
             }}
           >
-            <LocationPicker
-              provider={provider}
-              fallbackProvider={
-                provider === curatedLocationProvider ? undefined : curatedLocationProvider
-              }
-              allowCustom={allowCustom}
-              query={query}
-              onQueryChange={setQuery}
-              selected={draft.location}
-              onSelect={(location) => {
-                setDraft(selectDraftLocation(draft, location));
-                setQuery(
-                  location.id === "custom"
-                    ? location.label
-                    : `${location.city}, ${location.region}`,
-                );
-              }}
-              onClear={() => setDraft({ ...draft, location: null })}
-            />
-            <div className="two-col">
-              <label className="field">
-                Leave
-                <input
-                  name="start"
-                  type="date"
-                  value={draft.start}
-                  required
-                  aria-describedby="date-hint date-notice"
-                  onChange={(event) => {
-                    const change = withDates(draft, event.target.value, draft.end);
-                    setDraft(change.draft);
-                    setAdjusted(change.adjusted);
+            {multi ? (
+              <StopList
+                stops={draft.stops ?? []}
+                provider={provider}
+                fallbackProvider={
+                  provider === curatedLocationProvider ? undefined : curatedLocationProvider
+                }
+                allowCustom={allowCustom}
+                attempted={attempted}
+                firstQuery={query}
+                arriveNotice={staleCopy ? COPY_DATE_NOTICE : undefined}
+                onChange={(stops) => {
+                  const next = setDraftStops(draft, stops);
+                  setDraft(next);
+                  // Back to one stop: the single-destination search box shows the remaining place again.
+                  if (stops.length === 1 && stops[0].location) {
+                    const place = stops[0].location;
+                    setQuery(
+                      place.id === "custom" ? place.label : `${place.city}, ${place.region}`,
+                    );
+                  }
+                }}
+              />
+            ) : (
+              <>
+                <LocationPicker
+                  provider={provider}
+                  fallbackProvider={
+                    provider === curatedLocationProvider ? undefined : curatedLocationProvider
+                  }
+                  allowCustom={allowCustom}
+                  query={query}
+                  onQueryChange={setQuery}
+                  selected={draft.location}
+                  onSelect={(location) => {
+                    setDraft(selectDraftLocation(draft, location));
+                    setQuery(
+                      location.id === "custom"
+                        ? location.label
+                        : `${location.city}, ${location.region}`,
+                    );
                   }}
+                  onClear={() => setDraft({ ...draft, location: null })}
                 />
-              </label>
-              <label className="field">
-                Return
-                <input
-                  name="end"
-                  type="date"
-                  aria-describedby="date-hint date-notice"
-                  value={draft.end}
-                  min={draft.start || undefined}
-                  required
-                  onChange={(event) => {
-                    const change = withDates(draft, draft.start, event.target.value);
-                    setDraft(change.draft);
-                    setAdjusted(change.adjusted);
-                  }}
-                />
-              </label>
-            </div>
-            <div id="date-hint" className="tiny muted">
-              Same-day trips are allowed. Return cannot be before departure.
-            </div>
-            <p id="date-notice" className="notice" role="status" aria-label="Date notice">
-              {adjusted ? "Return date moved to match your departure." : ""}
-            </p>
+                <div className="two-col">
+                  <label className="field">
+                    Leave
+                    <input
+                      name="start"
+                      type="date"
+                      value={draft.start}
+                      required
+                      aria-describedby="date-hint date-notice"
+                      onChange={(event) => {
+                        const change = withDates(draft, event.target.value, draft.end);
+                        setDraft(change.draft);
+                        setAdjusted(change.adjusted);
+                      }}
+                    />
+                  </label>
+                  <label className="field">
+                    Return
+                    <input
+                      name="end"
+                      type="date"
+                      aria-describedby="date-hint date-notice"
+                      value={draft.end}
+                      min={draft.start || undefined}
+                      required
+                      onChange={(event) => {
+                        const change = withDates(draft, draft.start, event.target.value);
+                        setDraft(change.draft);
+                        setAdjusted(change.adjusted);
+                      }}
+                    />
+                  </label>
+                </div>
+                <div id="date-hint" className="tiny muted">
+                  Same-day trips are allowed. Return cannot be before departure.
+                </div>
+                <p id="date-notice" className="notice" role="status" aria-label="Date notice">
+                  {adjusted ? "Return date moved to match your departure." : ""}
+                </p>
+                <div className="add-stop-row">
+                  <Button
+                    variant="ghost"
+                    className="add-stop"
+                    onClick={() => setDraft(setDraftStops(draft, addStop(draftStops(draft))))}
+                  >
+                    + Add another stop
+                  </Button>
+                  <p className="tiny muted">
+                    Visiting more than one place? Add each stop in order.
+                  </p>
+                </div>
+              </>
+            )}
             {draft.location ? (
               <ThemePicker
                 value={draft.theme}
@@ -356,6 +404,9 @@ function ShapeStep({
   const calculated = calculateSuggestions({ ...config, start: draft.start, end: draft.end });
   // Step 2 is only reachable once a destination is confirmed (Continue is blocked without one).
   const location = draft.location as SampleLocation;
+  const stops = draftStops(draft);
+  const where =
+    stops.length > 1 ? stops.map((stop) => stop.location?.city).join(" → ") : location.label;
   const forecast =
     location && !isCustomLocation(location) ? forecastLabel(draft.start, today) : null;
 
@@ -363,7 +414,7 @@ function ShapeStep({
     <>
       {header(
         "Shape the list",
-        `${location.label} · ${formatRange(draft)} · ${formatDays(calculated.days)}`,
+        `${where} · ${formatRange(draft)} · ${formatDays(calculated.days)}`,
         eyebrow,
       )}
       <div className="builder-layout">

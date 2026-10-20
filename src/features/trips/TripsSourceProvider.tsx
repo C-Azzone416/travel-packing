@@ -24,6 +24,7 @@ import {
   removeItemAction,
   reviewWeatherAgainAction,
   setPackedAction,
+  setStopsAction,
   setThemeAction,
   skipWeatherAction,
   togglePackedAction,
@@ -83,6 +84,7 @@ export function TripsSourceProvider({
           reviewWeatherAgain: reviewWeatherAgainAction,
           updatePreferences: updatePreferencesAction,
           setTheme: setThemeAction,
+          setStops: setStopsAction,
         },
       ),
   );

@@ -2,7 +2,7 @@
 // status of each weather-driven suggestion on a trip (one row per trip and semantic id). Raw weather is never
 // stored; a suggestion keeps only its status and a short signature of the rule that fired. Every query is owner-scoped.
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import type { Db } from "../db/retention";
 import * as schema from "../db/schema";
 
@@ -79,8 +79,9 @@ export async function listWeatherSuggestions(
 }
 
 /**
- * Record the status of one suggestion on one of the owner's trips. Returns false when the trip is not the
- * owner's (the composite foreign key would refuse it too, but this answers without an error).
+ * Record the status of one suggestion on one of the owner's live trips. Returns false when the trip is not the
+ * owner's, or is in Recently deleted (the composite foreign key would refuse another owner's too, but this answers
+ * without an error).
  */
 export async function writeWeatherSuggestion(
   db: Db,
@@ -91,7 +92,13 @@ export async function writeWeatherSuggestion(
   const owned = await db
     .select({ id: schema.trips.id })
     .from(schema.trips)
-    .where(and(eq(schema.trips.id, tripId), eq(schema.trips.ownerId, ownerId)));
+    .where(
+      and(
+        eq(schema.trips.id, tripId),
+        eq(schema.trips.ownerId, ownerId),
+        isNull(schema.trips.deletedAt),
+      ),
+    );
   if (owned.length === 0) return false;
   await db
     .insert(schema.weatherSuggestions)

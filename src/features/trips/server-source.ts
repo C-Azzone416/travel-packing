@@ -6,6 +6,7 @@ import type { CreateTripActionResult, TripsActionResult } from "./actions";
 import type { ItemEdit } from "@/domain/item-ops";
 import type { ThemeId } from "@/domain/themes";
 import type { Scope, Staple, TripConfig } from "@/domain/trip";
+import type { TripStop } from "@/domain/trip-stops";
 import type { StaplesReadResult, TripCommandResult, TripReadResult } from "./trip-actions";
 import {
   TripsSourceError,
@@ -44,6 +45,7 @@ export interface TripActions {
   reviewWeatherAgain(tripId: string): Promise<TripCommandResult>;
   updatePreferences(tripId: string, config: TripConfig): Promise<TripCommandResult>;
   setTheme(tripId: string, theme: ThemeId): Promise<TripCommandResult>;
+  setStops(tripId: string, stops: TripStop[]): Promise<TripCommandResult>;
 }
 
 /** A failed action becomes a TripsSourceError carrying only the error code (never data). */
@@ -105,5 +107,6 @@ export function createServerTripsSource(actions: TripsActions, trip: TripActions
     reviewWeatherAgain: (id) => unwrapChange(trip.reviewWeatherAgain(id)),
     updatePreferences: (id, config) => unwrapChange(trip.updatePreferences(id, config)),
     setTheme: (id, theme) => unwrapChange(trip.setTheme(id, theme)),
+    setStops: (id, stops) => unwrapChange(trip.setStops(id, stops)),
   };
 }
