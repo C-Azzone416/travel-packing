@@ -152,6 +152,14 @@ describe("ReviewSheet", () => {
     expect(screen.queryByText(/Replaces Everyday/)).toBeNull();
   });
 
+  it("an apply failure offers a real Try again button that sends the same choice again", async () => {
+    const { onApply } = setup({ error: true });
+    const dialog = screen.getByRole("dialog", { name: "Weather changes" });
+    expect(within(dialog).getByText("Couldn’t add those. Nothing was changed.")).toBeTruthy();
+    await userEvent.click(within(dialog).getByRole("button", { name: "Try again" }));
+    expect(onApply).toHaveBeenCalledWith([changes[0]], [changes[1]]);
+  });
+
   it("disables apply when nothing is selected", async () => {
     setup({ changes: [changes[1]] });
     const apply = screen.getByRole("button", { name: "Add selected" }) as HTMLButtonElement;

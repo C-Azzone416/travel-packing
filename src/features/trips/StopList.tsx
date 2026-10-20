@@ -44,6 +44,34 @@ export interface StopListProps {
   attempted: boolean;
 }
 
+const iconProps = {
+  width: 20,
+  height: 20,
+  viewBox: "0 0 24 24",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 2,
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+  "aria-hidden": true,
+  focusable: false,
+};
+const ChevronUp = () => (
+  <svg {...iconProps}>
+    <path d="m6 15 6-6 6 6" />
+  </svg>
+);
+const ChevronDown = () => (
+  <svg {...iconProps}>
+    <path d="m6 9 6 6 6-6" />
+  </svg>
+);
+const TrashIcon = () => (
+  <svg {...iconProps}>
+    <path d="M4 7h16M10 11v6M14 11v6M6 7l1 12h10l1-12M9 7V4h6v3" />
+  </svg>
+);
+
 const queryOf = (location: SampleLocation) =>
   location.id === "custom" ? location.label : `${location.city}, ${location.region}`;
 
@@ -169,7 +197,7 @@ export function StopList({
                         aria-disabled={index === 0}
                         onClick={() => move(index, -1)}
                       >
-                        <span aria-hidden="true">↑</span>
+                        <ChevronUp />
                       </button>
                       <button
                         type="button"
@@ -178,7 +206,7 @@ export function StopList({
                         aria-disabled={index === stops.length - 1}
                         onClick={() => move(index, 1)}
                       >
-                        <span aria-hidden="true">↓</span>
+                        <ChevronDown />
                       </button>
                       <button
                         type="button"
@@ -186,7 +214,7 @@ export function StopList({
                         aria-label={`Remove ${name}`}
                         onClick={() => (stop.location ? setConfirming(index) : remove(index))}
                       >
-                        <span aria-hidden="true">🗑</span>
+                        <TrashIcon />
                       </button>
                     </div>
                   )}
@@ -259,14 +287,14 @@ export function StopList({
                       onChange={(event) => onChange(setLeave(stops, index, event.target.value))}
                     />
                   </label>
+                  {!single && nights !== null && nights >= 1 ? (
+                    <span className="nights-chip">{formatNights(nights)}</span>
+                  ) : null}
                 </div>
                 {index > 0 ? (
                   <p className="tiny muted" id={`${id}-arrive-help`}>
                     Same day you leave Stop {index}
                   </p>
-                ) : null}
-                {!single && nights !== null && nights >= 1 ? (
-                  <span className="nights-chip">{formatNights(nights)}</span>
                 ) : null}
                 {index === 0 && arriveNotice && !arriveProblem ? (
                   <p className="tiny field-error" id={`${id}-arrive-error`}>

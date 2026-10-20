@@ -106,6 +106,24 @@ describe("the stop cards", () => {
   });
 });
 
+describe("polish (#117)", () => {
+  it("the move and remove buttons carry SVG icons, not text glyphs or emoji", () => {
+    render(<Harness initial={THREE} />);
+    for (const name of ["Move Lisbon up", "Move Lisbon down", "Remove Lisbon"]) {
+      const button = screen.getByRole("button", { name });
+      expect(button.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
+      expect(button.textContent).toBe("");
+    }
+  });
+
+  it("the nights chip sits in the dates row, with the two dates", () => {
+    render(<Harness initial={THREE} />);
+    const row = card(1).querySelector(".stop-dates") as HTMLElement;
+    expect(row.querySelector(".nights-chip")?.textContent).toBe("3 nights");
+    expect(row.querySelectorAll("input")).toHaveLength(2);
+  });
+});
+
 describe("add, remove and reorder", () => {
   it("adds a stop that arrives the day the last one leaves, focuses its search and announces it", async () => {
     const user = userEvent.setup();

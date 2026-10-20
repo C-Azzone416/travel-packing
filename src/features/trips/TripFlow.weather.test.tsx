@@ -184,6 +184,17 @@ describe("weather on Shape the list", () => {
     expect(screen.getByText("Everyday tops", { selector: "strong" })).toBeTruthy();
   });
 
+  it("explains the weather-shaped list in a What's this? note", async () => {
+    const { user } = setup({ optedIn: true });
+    await toShape(user);
+    await screen.findByText("Your list uses the weather for Lisbon.");
+    const note = screen.getByText("What’s this?");
+    expect(note.closest("details")?.hasAttribute("open")).toBe(false);
+    await user.click(note);
+    expect(note.closest("details")?.hasAttribute("open")).toBe(true);
+    expect(screen.getByText(/Clothing is split by temperature/)).toBeTruthy();
+  });
+
   it("a failed opt-in says so and changes nothing", async () => {
     const { user, previewDraft } = setup({ updateFails: true });
     await toShape(user);
