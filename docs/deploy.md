@@ -129,7 +129,8 @@ production `DATABASE_URL` to the Preview environment.
 
 Every deploy gets its own `travel-packing-<hash>-….vercel.app` URL, which is no use as a sign-in or reset-link address (the auth
 project has to trust each origin it serves). So after a good preview deploy the workflow points ONE stable name,
-`https://travel-packing-preview.vercel.app`, at it (`vercel alias set`, with the existing `VERCEL_TOKEN`; the first run creates the name,
+`https://travel-packing-preview.vercel.app`, at it (`vercel alias set`, with the existing `VERCEL_TOKEN` and `--scope` set to `VERCEL_ORG_ID`: the command is not linked to the project, so
+without the scope it fails with "User not found."; the first run creates the name,
 and if Vercel refuses it the step fails loudly and nothing else changes).
 
 The alias moves only when all of this holds, in this order, in the same job:

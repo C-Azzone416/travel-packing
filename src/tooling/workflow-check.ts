@@ -64,7 +64,7 @@ export const ALIAS_SET_STEP = [
   "VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}",
   "DEPLOY_URL: ${{ steps.deploy.outputs.url }}",
   "run: |",
-  'vercel alias set "$DEPLOY_URL" "$PREVIEW_ALIAS" --token="$VERCEL_TOKEN"',
+  'vercel alias set "$DEPLOY_URL" "$PREVIEW_ALIAS" --scope="$VERCEL_ORG_ID" --token="$VERCEL_TOKEN"',
   'echo "Preview alias: https://$PREVIEW_ALIAS -> $DEPLOY_URL" >> "$GITHUB_STEP_SUMMARY"',
 ];
 export const ALIAS_SMOKE_STEP = [

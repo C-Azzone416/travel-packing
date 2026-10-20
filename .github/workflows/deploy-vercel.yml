@@ -205,13 +205,15 @@ jobs:
           head=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/develop" --jq .object.sha)
           npx tsx scripts/check-alias-head.ts "$GITHUB_SHA" "$head"
 
+      # `alias set` is not linked to the project, so (unlike pull and deploy) it cannot learn the team from the project files:
+      # without an explicit scope the CLI fails with "User not found." (first develop run, #96).
       - name: Assign the stable Preview alias
         if: env.TARGET == 'preview' && steps.alias_head.outputs.assign == 'true'
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           DEPLOY_URL: ${{ steps.deploy.outputs.url }}
         run: |
-          vercel alias set "$DEPLOY_URL" "$PREVIEW_ALIAS" --token="$VERCEL_TOKEN"
+          vercel alias set "$DEPLOY_URL" "$PREVIEW_ALIAS" --scope="$VERCEL_ORG_ID" --token="$VERCEL_TOKEN"
           echo "Preview alias: https://$PREVIEW_ALIAS -> $DEPLOY_URL" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Smoke test the alias
