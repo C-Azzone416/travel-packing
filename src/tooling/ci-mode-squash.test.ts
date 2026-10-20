@@ -13,9 +13,9 @@ import { decideMode, treeWithFetch, type Lookups } from "./ci-mode";
 let root: string;
 // Inside a git hook (the pre-push hook runs the unit tests), git exports GIT_DIR, GIT_INDEX_FILE and friends. They would
 // point these scratch repositories at the real one, so every git call here runs without any GIT_* variable.
-const cleanEnv: NodeJS.ProcessEnv = {};
-for (const [key, value] of Object.entries(process.env)) {
-  if (!key.startsWith("GIT_")) cleanEnv[key] = value;
+const cleanEnv: NodeJS.ProcessEnv = { ...process.env };
+for (const key of Object.keys(cleanEnv)) {
+  if (key.startsWith("GIT_")) delete cleanEnv[key];
 }
 const git = (cwd: string, ...args: string[]) =>
   execFileSync(
