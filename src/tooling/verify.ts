@@ -92,6 +92,18 @@ export const VERIFY_STEPS: readonly VerifyStep[] = [
   },
 ];
 
+/**
+ * A step's own environment (CI=1, E2E_PORT=3102 for the e2e step, so it matches CI) acts as DEFAULTS: anything already set in the
+ * caller's environment wins. That way two verifies on one machine can use different ports
+ * (`E2E_PORT=3199 E2E_DB_PORT=5699 npm run verify`) instead of colliding.
+ */
+export function stepEnvironment(
+  stepEnv: Record<string, string> | undefined,
+  processEnv: Record<string, string | undefined>,
+): NodeJS.ProcessEnv {
+  return { ...stepEnv, ...processEnv } as NodeJS.ProcessEnv;
+}
+
 export type Mode = "quick" | "full";
 
 export function stepsFor(mode: Mode, steps: readonly VerifyStep[] = VERIFY_STEPS): VerifyStep[] {

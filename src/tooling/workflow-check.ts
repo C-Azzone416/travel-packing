@@ -25,6 +25,56 @@ function jobBody(workflow: string, job: string): string | null {
   return next < 0 ? rest : rest.slice(0, next);
 }
 
+/**
+ * The meaningful lines of the step whose name starts with `namePrefix`: indentation, blank lines and comments dropped, in order.
+ * Null when there is no such step. Used to pin the few steps that guard the stable Preview alias to exactly what was reviewed.
+ */
+export function stepLines(workflow: string, namePrefix: string): string[] | null {
+  const lines = workflow.split("\n");
+  const start = lines.findIndex((line) => line.trim().startsWith(`- name: ${namePrefix}`));
+  if (start < 0) return null;
+  const indent = lines[start].length - lines[start].trimStart().length;
+  const out: string[] = [];
+  for (let index = start; index < lines.length; index += 1) {
+    const line = lines[index];
+    const trimmed = line.trim();
+    const own = line.length - line.trimStart().length;
+    if (index > start && trimmed !== "" && own <= indent) break;
+    if (trimmed === "" || trimmed.startsWith("#")) continue;
+    out.push(trimmed);
+  }
+  return out;
+}
+
+/** The three steps that decide whether the stable alias moves, exactly as reviewed (#96). Any change is a deliberate edit here. */
+export const ALIAS_HEAD_STEP = [
+  "- name: Is this run still the develop head? (preview only)",
+  "id: alias_head",
+  "if: env.TARGET == 'preview'",
+  "env:",
+  "GH_TOKEN: ${{ github.token }}",
+  "run: |",
+  'head=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/develop" --jq .object.sha)',
+  'npx tsx scripts/check-alias-head.ts "$GITHUB_SHA" "$head"',
+];
+export const ALIAS_SET_STEP = [
+  "- name: Assign the stable Preview alias",
+  "if: env.TARGET == 'preview' && steps.alias_head.outputs.assign == 'true'",
+  "env:",
+  "VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}",
+  "DEPLOY_URL: ${{ steps.deploy.outputs.url }}",
+  "run: |",
+  'vercel alias set "$DEPLOY_URL" "$PREVIEW_ALIAS" --token="$VERCEL_TOKEN"',
+  'echo "Preview alias: https://$PREVIEW_ALIAS -> $DEPLOY_URL" >> "$GITHUB_STEP_SUMMARY"',
+];
+export const ALIAS_SMOKE_STEP = [
+  "- name: Smoke test the alias",
+  "if: env.TARGET == 'preview' && steps.alias_head.outputs.assign == 'true'",
+  "env:",
+  "VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
+  'run: npx tsx scripts/smoke-test.ts "https://${PREVIEW_ALIAS}"',
+];
+
 /** What must be true of `.github/workflows/deploy-vercel.yml`. Returns the broken rules (empty when fine). */
 export function checkDeployWorkflow(workflow: string): string[] {
   const problems: string[] = [];
@@ -125,6 +175,24 @@ export function checkDeployWorkflow(workflow: string): string[] {
     !/id:\s*alias_head/.test(headStep)
   ) {
     problems.push("the develop head check must run for previews only and be the step alias_head");
+  }
+  // The guard steps are pinned to exactly what was reviewed: the head is read from heads/develop (not this run's own SHA, not another
+  // branch), compared with this run's SHA, and the alias is set to the deployed URL with the one reviewed command and nothing else.
+  for (const [prefix, expected, what] of [
+    ["Is this run still the develop head?", ALIAS_HEAD_STEP, "develop head check"],
+    ["Assign the stable Preview alias", ALIAS_SET_STEP, "alias assignment"],
+    ["Smoke test the alias", ALIAS_SMOKE_STEP, "alias smoke test"],
+  ] as const) {
+    const actual = stepLines(workflow, prefix);
+    if (
+      !actual ||
+      actual.length !== expected.length ||
+      actual.some((line, i) => line !== expected[i])
+    ) {
+      problems.push(
+        `the ${what} step must be exactly as reviewed (see ALIAS_*_STEP in workflow-check.ts)`,
+      );
+    }
   }
   const code = workflow
     .split("\n")

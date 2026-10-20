@@ -2,9 +2,11 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  ALIAS_HEAD_STEP,
   checkCiWorkflow,
   checkDeployWorkflow,
   MIN_CI_TIMEOUT_MINUTES,
+  stepLines,
   unpinnedActions,
 } from "./workflow-check";
 
@@ -197,6 +199,90 @@ describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
       "no check of the build output",
       mutate("scripts/check-build-output.ts", "scripts/other.ts"),
       /build output check must run after the build and before the deploy/,
+    ],
+    [
+      "a head check that compares the run with itself (the judge's mutant 1)",
+      mutate(/head=\$\(gh api [^\n]*\)\n/, "head=$GITHUB_SHA\n"),
+      /develop head check step must be exactly as reviewed/,
+    ],
+    [
+      "a head read from main (the judge's mutant 2)",
+      mutate("git/ref/heads/develop", "git/ref/heads/main"),
+      /develop head check step must be exactly as reviewed/,
+    ],
+    [
+      "a head read with the wrong jq field",
+      mutate("--jq .object.sha", "--jq .object.type"),
+      /develop head check step must be exactly as reviewed/,
+    ],
+    [
+      "a head check that compares another variable",
+      mutate('check-alias-head.ts "$GITHUB_SHA" "$head"', 'check-alias-head.ts "$head" "$head"'),
+      /develop head check step must be exactly as reviewed/,
+    ],
+    [
+      "a head check with an extra environment variable",
+      mutate(
+        "GH_TOKEN: ${{ github.token }}\n        run: |\n          head=",
+        "GH_TOKEN: ${{ github.token }}\n          EXTRA: 1\n        run: |\n          head=",
+      ),
+      /develop head check step must be exactly as reviewed/,
+    ],
+    [
+      "a head check using a secret token",
+      mutate(
+        "GH_TOKEN: ${{ github.token }}\n        run: |\n          head=",
+        "GH_TOKEN: ${{ secrets.VERCEL_TOKEN }}\n        run: |\n          head=",
+      ),
+      /develop head check step must be exactly as reviewed|exactly three steps/,
+    ],
+    [
+      "a head check that does something else afterwards",
+      mutate(
+        'npx tsx scripts/check-alias-head.ts "$GITHUB_SHA" "$head"',
+        'npx tsx scripts/check-alias-head.ts "$GITHUB_SHA" "$head" || true',
+      ),
+      /develop head check step must be exactly as reviewed/,
+    ],
+    [
+      "an alias pointed at a fixed URL (the judge's mutant 3)",
+      mutate(
+        "DEPLOY_URL: ${{ steps.deploy.outputs.url }}\n        run: |\n          vercel alias set",
+        "DEPLOY_URL: https://old-build.vercel.app\n        run: |\n          vercel alias set",
+      ),
+      /alias assignment step must be exactly as reviewed/,
+    ],
+    [
+      "an extra flag on vercel alias set",
+      mutate(
+        '"$PREVIEW_ALIAS" --token="$VERCEL_TOKEN"',
+        '"$PREVIEW_ALIAS" --scope other-team --token="$VERCEL_TOKEN"',
+      ),
+      /alias assignment step must be exactly as reviewed/,
+    ],
+    [
+      "an alias step with an extra command",
+      mutate(
+        '>> "$GITHUB_STEP_SUMMARY"\n\n      - name: Smoke test the alias',
+        '>> "$GITHUB_STEP_SUMMARY"\n          curl -s https://example.test\n\n      - name: Smoke test the alias',
+      ),
+      /alias assignment step must be exactly as reviewed/,
+    ],
+    [
+      "an alias smoke test that is allowed to fail",
+      mutate(
+        'smoke-test.ts "https://${PREVIEW_ALIAS}"',
+        'smoke-test.ts "https://${PREVIEW_ALIAS}" || true',
+      ),
+      /alias smoke test step must be exactly as reviewed/,
+    ],
+    [
+      "an alias smoke test with a different condition",
+      mutate(
+        "- name: Smoke test the alias\n        if: env.TARGET == 'preview' && steps.alias_head.outputs.assign == 'true'",
+        "- name: Smoke test the alias\n        if: env.TARGET == 'preview'",
+      ),
+      /alias smoke test step must be exactly as reviewed/,
     ],
     [
       "a second step that moves the alias",
@@ -509,5 +595,35 @@ describe("checkCiWorkflow", () => {
     expect(checkCiWorkflow(ci.slice(0, ci.indexOf("  deploy:"))).join("\n")).toMatch(
       /deploy job is missing/,
     );
+  });
+});
+
+describe("stepLines", () => {
+  const sample = [
+    "jobs:",
+    "  a:",
+    "    steps:",
+    "      # a comment",
+    "      - name: One",
+    "        id: first",
+    "",
+    "        # inner comment",
+    "        run: |",
+    "          echo   hi  ",
+    "      - name: Two",
+    "        run: echo two",
+  ].join("\n");
+
+  it("returns a step's meaningful lines, trimmed, without comments or blank lines", () => {
+    expect(stepLines(sample, "One")).toEqual(["- name: One", "id: first", "run: |", "echo   hi"]);
+    expect(stepLines(sample, "Two")).toEqual(["- name: Two", "run: echo two"]);
+  });
+
+  it("returns null when there is no such step", () => {
+    expect(stepLines(sample, "Three")).toBeNull();
+  });
+
+  it("pins the real workflow's three alias steps to the reviewed lines", () => {
+    expect(stepLines(deploy, "Is this run still the develop head?")).toEqual(ALIAS_HEAD_STEP);
   });
 });

@@ -2,7 +2,14 @@
 // Runs the checks the full-mode `ci` job runs (src/tooling/verify.ts), stops at the first failure and prints a summary
 // that can be pasted into a pull request. In addition to CI, never instead of it.
 import { spawnSync } from "node:child_process";
-import { formatSummary, runSteps, stepsFor, type Mode, type Runner } from "../src/tooling/verify";
+import {
+  formatSummary,
+  runSteps,
+  stepEnvironment,
+  stepsFor,
+  type Mode,
+  type Runner,
+} from "../src/tooling/verify";
 
 const mode: Mode = process.argv.includes("--quick") ? "quick" : "full";
 
@@ -14,7 +21,10 @@ const runner: Runner = {
   run(command, env) {
     const [file, ...args] = command;
     console.log(`\n> ${command.join(" ")}`);
-    return spawnSync(file, args, { stdio: "inherit", env: { ...process.env, ...env } }).status ?? 1;
+    return (
+      spawnSync(file, args, { stdio: "inherit", env: stepEnvironment(env, process.env) }).status ??
+      1
+    );
   },
   clock: () => Date.now() / 1000,
 };

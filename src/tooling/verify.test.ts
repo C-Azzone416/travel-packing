@@ -5,6 +5,7 @@ import {
   ciChecks,
   formatSummary,
   runSteps,
+  stepEnvironment,
   stepsFor,
   VERIFY_STEPS,
   verifyParityProblems,
@@ -230,5 +231,33 @@ describe("formatSummary", () => {
     const { runner } = fakeRunner({ failing: ["npm run typecheck --silent"] });
     const text = formatSummary("quick", runSteps(two, runner), "h", two.length);
     expect(text).toContain("1 later step not run");
+  });
+});
+
+describe("stepEnvironment", () => {
+  it("lets a step's own environment act as defaults only", () => {
+    expect(stepEnvironment({ CI: "1", E2E_PORT: "3102" }, { PATH: "/bin" })).toEqual({
+      CI: "1",
+      E2E_PORT: "3102",
+      PATH: "/bin",
+    });
+  });
+
+  it("lets the caller's environment win, so two verifies can run side by side on other ports", () => {
+    expect(
+      stepEnvironment(
+        { CI: "1", E2E_PORT: "3102" },
+        { E2E_PORT: "3199", E2E_DB_PORT: "5699", PATH: "/bin" },
+      ),
+    ).toEqual({ CI: "1", E2E_PORT: "3199", E2E_DB_PORT: "5699", PATH: "/bin" });
+  });
+
+  it("works for a step with no environment of its own", () => {
+    expect(stepEnvironment(undefined, { A: "1" })).toEqual({ A: "1" });
+  });
+
+  it("is what the e2e step relies on: its default port is the CI one", () => {
+    const e2e = stepsFor("full").find((step) => step.label.startsWith("E2E"));
+    expect(e2e?.env).toEqual({ CI: "1", E2E_PORT: "3102" });
   });
 });
