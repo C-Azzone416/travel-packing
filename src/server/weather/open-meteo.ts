@@ -35,7 +35,8 @@ interface DailyRecord {
   highC: number;
   lowC: number;
   precipProbability: number | null;
-  precipMm: number;
+  /** null: the provider had no value for this day. */
+  precipMm: number | null;
   snowCm: number;
   uvIndexMax: number | null;
   sunshineHours: number | null;
@@ -71,14 +72,15 @@ function parseDaily(body: unknown, source: WeatherSource): DailyRecord[] | null 
   const records: DailyRecord[] = [];
   for (const [index, date] of times.entries()) {
     if (typeof date !== "string") return null;
-    const highC = numberAt(daily.temperature_2m_max, index);
-    const lowC = numberAt(daily.temperature_2m_min, index);
-    const precipMm = numberAt(daily.precipitation_sum, index);
-    const snowCm = numberAt(daily.snowfall_sum, index);
+    const highC = numberAt(daily.temperature_2m_max, index, true);
+    const lowC = numberAt(daily.temperature_2m_min, index, true);
+    const precipMm = numberAt(daily.precipitation_sum, index, true);
+    const snowCm = numberAt(daily.snowfall_sum, index, true);
     const sunshineSeconds = numberAt(daily.sunshine_duration, index, true);
     const uvIndexMax = source === "forecast" ? numberAt(daily.uv_index_max, index, true) : null;
     const probability =
-      source === "forecast" ? numberAt(daily.precipitation_probability_max, index) : null;
+      source === "forecast" ? numberAt(daily.precipitation_probability_max, index, true) : null;
+    // A wrong type is a malformed response; a null is the provider saying "no value for this day".
     if (
       highC === undefined ||
       lowC === undefined ||
@@ -87,19 +89,21 @@ function parseDaily(body: unknown, source: WeatherSource): DailyRecord[] | null 
       sunshineSeconds === undefined ||
       uvIndexMax === undefined ||
       probability === undefined ||
-      precipMm < 0 ||
-      snowCm < 0 ||
+      (precipMm !== null && precipMm < 0) ||
+      (snowCm !== null && snowCm < 0) ||
       (sunshineSeconds !== null && sunshineSeconds < 0) ||
       (probability !== null && (probability < 0 || probability > 100))
     )
       return null;
+    // Without temperatures the day is useless; the stop becomes unavailable only if it needed that day.
+    if (highC === null || lowC === null) continue;
     records.push({
       date,
       highC,
       lowC,
       precipProbability: probability === null ? null : probability / 100,
       precipMm,
-      snowCm,
+      snowCm: snowCm ?? 0,
       uvIndexMax,
       sunshineHours: sunshineSeconds === null ? null : sunshineSeconds / 3600,
     });
@@ -139,14 +143,16 @@ function typicalDay(
   const sunshine = samples
     .map((row) => row.sunshineHours)
     .filter((value): value is number => value !== null);
+  const wet = samples.map((row) => row.precipMm).filter((mm): mm is number => mm !== null);
   return {
     date: target,
     stopIndex,
     source: "typical",
     highC: average(samples.map((row) => row.highC)),
     lowC: average(samples.map((row) => row.lowC)),
-    precipProbability: samples.filter((row) => row.precipMm >= 1).length / samples.length,
-    precipMm: average(samples.map((row) => row.precipMm)),
+    // Years with no precipitation value are left out of both numbers rather than counted as dry.
+    precipProbability: wet.length ? wet.filter((mm) => mm >= 1).length / wet.length : 0,
+    precipMm: wet.length ? average(wet) : 0,
     snowCm: average(samples.map((row) => row.snowCm)),
     uvIndexMax: null,
     sunshineHours: sunshine.length > 0 ? average(sunshine) : null,
@@ -251,11 +257,14 @@ export function createOpenMeteoWeatherProvider({
         for (const date of dates) {
           if (isForecastDay(date, today)) {
             const record = forecastByDate.get(date);
-            const precipProbability = record?.precipProbability;
-            if (!record || precipProbability === null || precipProbability === undefined)
-              throw new Error("missing weather");
+            if (!record) throw new Error("missing weather");
+            // No probability from the model: a wet day (>= 1 mm, the same bar as typical data) is certain
+            // enough to plan for; no precipitation value at all is no signal.
+            const precipProbability =
+              record.precipProbability ?? ((record.precipMm ?? 0) >= 1 ? 1 : 0);
             days.push({
               ...record,
+              precipMm: record.precipMm ?? 0,
               date,
               stopIndex: stop.stopIndex,
               source: "forecast",

@@ -262,6 +262,98 @@ describe("Open-Meteo privacy cache and failures", () => {
     });
   });
 
+  describe("a null metric on one day", () => {
+    const forecast = async (values: Parameters<typeof dailyBody>[1]) => {
+      const provider = createOpenMeteoWeatherProvider({
+        fetch: vi.fn<typeof fetch>(async () =>
+          json(dailyBody(["2026-06-02", "2026-06-03"], values)),
+        ),
+        now: () => TODAY,
+      });
+      return provider.getStopWeather(stop);
+    };
+
+    it("derives a missing probability from precipitation: 1 mm or more is wet, less is dry", async () => {
+      const result = await forecast((_date, i) => ({ probability: null, precip: [1, 0.9][i] }));
+      expect(result.status).toBe("ok");
+      expect(result.days.map((d) => d.precipProbability)).toEqual([1, 0]);
+    });
+
+    it("treats a missing probability and a missing precipitation sum as no rain signal", async () => {
+      const result = await forecast(() => ({ probability: null, precip: null }));
+      expect(result.status).toBe("ok");
+      expect(result.days.map((d) => [d.precipProbability, d.precipMm])).toEqual([
+        [0, 0],
+        [0, 0],
+      ]);
+    });
+
+    it("keeps the other days and metrics when one precipitation sum or snowfall is null", async () => {
+      const result = await forecast((_date, i) => ({
+        precip: i === 0 ? null : 5,
+        snow: i === 0 ? null : 2,
+      }));
+      expect(result.status).toBe("ok");
+      expect(result.days.map((d) => [d.precipMm, d.snowCm, d.precipProbability])).toEqual([
+        [0, 0, 0.4],
+        [5, 2, 0.4],
+      ]);
+    });
+
+    it("keeps null UV and sunshine as unknown", async () => {
+      const result = await forecast(() => ({ uv: null, sunshine: null }));
+      expect(result.days.map((d) => [d.uvIndexMax, d.sunshineHours])).toEqual([
+        [null, null],
+        [null, null],
+      ]);
+    });
+
+    it("is unavailable only when the temperatures of a needed day are missing", async () => {
+      expect((await forecast((_d, i) => ({ high: i === 0 ? null : 20 }))).status).toBe(
+        "unavailable",
+      );
+      expect((await forecast((_d, i) => ({ low: i === 1 ? null : 10 }))).status).toBe(
+        "unavailable",
+      );
+    });
+
+    it("still rejects a wrong type, a negative amount and an out-of-range probability", async () => {
+      expect((await forecast(() => ({ precip: -1 }))).status).toBe("unavailable");
+      expect((await forecast(() => ({ snow: -1 }))).status).toBe("unavailable");
+      expect((await forecast(() => ({ probability: 101 }))).status).toBe("unavailable");
+      expect((await forecast(() => ({ probability: "40" as unknown as number }))).status).toBe(
+        "unavailable",
+      );
+    });
+
+    it("typical data skips a null year instead of dropping the stop", async () => {
+      const sampleDates = Array.from({ length: 5 }, (_, offset) => `${2021 + offset}-07-01`);
+      const run = async (precip: (number | null)[], high: (number | null)[]) => {
+        const provider = createOpenMeteoWeatherProvider({
+          fetch: vi.fn<typeof fetch>(async () =>
+            json(dailyBody(sampleDates, (_d, i) => ({ precip: precip[i], high: high[i] }))),
+          ),
+          now: () => TODAY,
+        });
+        return provider.getStopWeather({
+          ...stop,
+          arrive: "2027-07-01",
+          leave: "2027-07-01",
+          includeLeave: true,
+        });
+      };
+      const dry = await run([null, 2, 0, 3, null], [20, 20, 20, 20, 20]);
+      expect(dry.days[0]).toMatchObject({ precipProbability: 2 / 3, precipMm: 5 / 3 });
+      const unknown = await run([null, null, null, null, null], [20, 20, 20, 20, 20]);
+      expect(unknown.days[0]).toMatchObject({ precipProbability: 0, precipMm: 0 });
+      const missingYears = await run([0, 0, 0, 0, 0], [null, null, null, 18, 22]);
+      expect(missingYears.days[0]).toMatchObject({ highC: 20 });
+      expect((await run([0, 0, 0, 0, 0], [null, null, null, null, null])).status).toBe(
+        "unavailable",
+      );
+    });
+  });
+
   it.each([
     ["an HTTP error", vi.fn<typeof fetch>(async () => json({}, { status: 503 }))],
     ["malformed JSON", vi.fn<typeof fetch>(async () => new Response("not json"))],
