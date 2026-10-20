@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FinishSetupView } from "./FinishSetupView";
@@ -55,6 +55,9 @@ describe("SignUpForm", () => {
     await user.type(screen.getByLabelText("Email"), "typed@example.test");
     await user.type(screen.getByLabelText("Password"), "x");
     await user.click(screen.getByRole("button", { name: "Create account" }));
+    // The action's result and the focus move land in a later render; wait for them instead of reading straight after the click
+    // (read too early on a busy machine, this test flaked with focus still on the button).
+    await screen.findByText("Enter a valid email address.");
     const sent = action.mock.calls[0] as unknown as [FormState, FormData];
     expect(sent[1].get("email")).toBe("typed@example.test");
     expect(sent[1].get("password")).toBe("x");
@@ -69,7 +72,7 @@ describe("SignUpForm", () => {
     const password = screen.getByLabelText("Password");
     expect(password.getAttribute("aria-describedby")).toContain("password-error");
     // Focus goes to the first invalid field, and no form-level alert is added for a field problem.
-    expect(document.activeElement).toBe(email);
+    await waitFor(() => expect(document.activeElement).toBe(email));
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
@@ -192,12 +195,16 @@ describe("VerifyForm", () => {
     fireEvent.change(code, { target: { value: "111111" } });
     const select = vi.spyOn(code, "select");
     await userEvent.setup().click(screen.getByRole("button", { name: "Verify" }));
-    expect(code.getAttribute("aria-invalid")).toBe("true");
-    expect(document.getElementById("code-error")?.textContent).toContain(
-      "isn't right or has expired",
-    );
-    expect(document.activeElement).toBe(code);
-    expect(select).toHaveBeenCalled();
+    // The result, the focus move and the selection are applied after the action settles, so wait for each rather than reading
+    // them straight after the click (this raced under a busy machine).
+    await waitFor(() => {
+      expect(code.getAttribute("aria-invalid")).toBe("true");
+      expect(document.getElementById("code-error")?.textContent).toContain(
+        "isn't right or has expired",
+      );
+      expect(document.activeElement).toBe(code);
+      expect(select).toHaveBeenCalled();
+    });
     // The refused code is still there (React clears an uncontrolled form after an action).
     expect(code.value).toBe("111111");
   });
@@ -251,7 +258,7 @@ describe("ForgotForm", () => {
       ),
     ).toBeTruthy();
     expect(screen.queryByLabelText("Email")).toBeNull();
-    expect(document.activeElement).toBe(heading);
+    await waitFor(() => expect(document.activeElement).toBe(heading));
     expect(screen.getByText("You can send it again in 30s")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Back to sign in" })).toBeTruthy();
   });

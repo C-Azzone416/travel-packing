@@ -53,7 +53,13 @@ async function setup(
   return { user, source: base, view };
 }
 
-const title = () => screen.findByRole("heading", { name: "Review your bag", level: 1 });
+// The heading is also shown while the review loads, so wait for the loaded screen (its Ready button) before anything else;
+// resolving on the heading alone raced the load and failed under a busy machine.
+const title = async () => {
+  const heading = await screen.findByRole("heading", { name: "Review your bag", level: 1 });
+  await waitFor(() => expect(screen.queryByLabelText("Loading review")).toBeNull());
+  return heading;
+};
 const rowOf = (id: string) => document.querySelector(`[data-item-id="${id}"]`) as HTMLElement;
 const readyButton = () => screen.getByRole("button", { name: "I’m ready to go" });
 const live = () => screen.getByRole("status", { name: "Review updates" });
