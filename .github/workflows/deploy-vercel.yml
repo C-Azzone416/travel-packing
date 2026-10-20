@@ -31,6 +31,7 @@ permissions:
 
 env:
   VERCEL_CLI_VERSION: 64.5.0 # pinned (never a moving tag)
+  PREVIEW_ALIAS: travel-packing-preview.vercel.app # the one stable Preview address (also PREVIEW_ORIGIN in request-origin.ts)
   VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
   VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
 
@@ -189,3 +190,32 @@ jobs:
           DEPLOY_URL: ${{ steps.deploy.outputs.url }}
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: npx tsx scripts/smoke-test.ts "$DEPLOY_URL"
+
+      # ---- the stable Preview alias (#96) -------------------------------------------------------------------------------
+      # Reached only after a successful deploy AND smoke test: an earlier failing step ends the job, and none of these steps
+      # uses always() or failure(), so a failed build, deploy or smoke test never touches the alias. Production never gets one.
+      # Deploys are serialized by this workflow's concurrency group and never cancelled; an older run can still finish after a
+      # newer push, so the alias moves only if this run's commit is STILL the develop head.
+      - name: Is this run still the develop head? (preview only)
+        id: alias_head
+        if: env.TARGET == 'preview'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          head=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/develop" --jq .object.sha)
+          npx tsx scripts/check-alias-head.ts "$GITHUB_SHA" "$head"
+
+      - name: Assign the stable Preview alias
+        if: env.TARGET == 'preview' && steps.alias_head.outputs.assign == 'true'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          DEPLOY_URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          vercel alias set "$DEPLOY_URL" "$PREVIEW_ALIAS" --token="$VERCEL_TOKEN"
+          echo "Preview alias: https://$PREVIEW_ALIAS -> $DEPLOY_URL" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Smoke test the alias
+        if: env.TARGET == 'preview' && steps.alias_head.outputs.assign == 'true'
+        env:
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: npx tsx scripts/smoke-test.ts "https://${PREVIEW_ALIAS}"

@@ -2,9 +2,11 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  ALIAS_HEAD_STEP,
   checkCiWorkflow,
   checkDeployWorkflow,
   MIN_CI_TIMEOUT_MINUTES,
+  stepLines,
   unpinnedActions,
 } from "./workflow-check";
 
@@ -62,6 +64,17 @@ function movedInjection(): string {
   const anchor = "      # `vercel build` works";
   expect(deploy).toContain(anchor);
   return deploy.replace(block as string, "").replace(anchor, `${block}${anchor}`);
+}
+
+/** The real workflow with the whole alias section moved in front of the first smoke test (wrong order). */
+function aliasBeforeSmoke(): string {
+  const start = deploy.indexOf("      # ---- the stable Preview alias");
+  expect(start).toBeGreaterThan(0);
+  const block = deploy.slice(start);
+  const withoutBlock = deploy.slice(0, start).trimEnd() + "\n";
+  const smoke = "      - name: Smoke test\n";
+  expect(withoutBlock).toContain(smoke);
+  return withoutBlock.replace(smoke, `${block}\n${smoke}`);
 }
 
 describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
@@ -188,6 +201,166 @@ describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
       /build output check must run after the build and before the deploy/,
     ],
     [
+      "a head check that compares the run with itself (the judge's mutant 1)",
+      mutate(/head=\$\(gh api [^\n]*\)\n/, "head=$GITHUB_SHA\n"),
+      /develop head check step must be exactly as reviewed/,
+    ],
+    [
+      "a head read from main (the judge's mutant 2)",
+      mutate("git/ref/heads/develop", "git/ref/heads/main"),
+      /develop head check step must be exactly as reviewed/,
+    ],
+    [
+      "a head read with the wrong jq field",
+      mutate("--jq .object.sha", "--jq .object.type"),
+      /develop head check step must be exactly as reviewed/,
+    ],
+    [
+      "a head check that compares another variable",
+      mutate('check-alias-head.ts "$GITHUB_SHA" "$head"', 'check-alias-head.ts "$head" "$head"'),
+      /develop head check step must be exactly as reviewed/,
+    ],
+    [
+      "a head check with an extra environment variable",
+      mutate(
+        "GH_TOKEN: ${{ github.token }}\n        run: |\n          head=",
+        "GH_TOKEN: ${{ github.token }}\n          EXTRA: 1\n        run: |\n          head=",
+      ),
+      /develop head check step must be exactly as reviewed/,
+    ],
+    [
+      "a head check using a secret token",
+      mutate(
+        "GH_TOKEN: ${{ github.token }}\n        run: |\n          head=",
+        "GH_TOKEN: ${{ secrets.VERCEL_TOKEN }}\n        run: |\n          head=",
+      ),
+      /develop head check step must be exactly as reviewed|exactly three steps/,
+    ],
+    [
+      "a head check that does something else afterwards",
+      mutate(
+        'npx tsx scripts/check-alias-head.ts "$GITHUB_SHA" "$head"',
+        'npx tsx scripts/check-alias-head.ts "$GITHUB_SHA" "$head" || true',
+      ),
+      /develop head check step must be exactly as reviewed/,
+    ],
+    [
+      "an alias pointed at a fixed URL (the judge's mutant 3)",
+      mutate(
+        "DEPLOY_URL: ${{ steps.deploy.outputs.url }}\n        run: |\n          vercel alias set",
+        "DEPLOY_URL: https://old-build.vercel.app\n        run: |\n          vercel alias set",
+      ),
+      /alias assignment step must be exactly as reviewed/,
+    ],
+    [
+      "an extra flag on vercel alias set",
+      mutate(
+        '"$PREVIEW_ALIAS" --token="$VERCEL_TOKEN"',
+        '"$PREVIEW_ALIAS" --scope other-team --token="$VERCEL_TOKEN"',
+      ),
+      /alias assignment step must be exactly as reviewed/,
+    ],
+    [
+      "an alias step with an extra command",
+      mutate(
+        '>> "$GITHUB_STEP_SUMMARY"\n\n      - name: Smoke test the alias',
+        '>> "$GITHUB_STEP_SUMMARY"\n          curl -s https://example.test\n\n      - name: Smoke test the alias',
+      ),
+      /alias assignment step must be exactly as reviewed/,
+    ],
+    [
+      "an alias smoke test that is allowed to fail",
+      mutate(
+        'smoke-test.ts "https://${PREVIEW_ALIAS}"',
+        'smoke-test.ts "https://${PREVIEW_ALIAS}" || true',
+      ),
+      /alias smoke test step must be exactly as reviewed/,
+    ],
+    [
+      "an alias smoke test with a different condition",
+      mutate(
+        "- name: Smoke test the alias\n        if: env.TARGET == 'preview' && steps.alias_head.outputs.assign == 'true'",
+        "- name: Smoke test the alias\n        if: env.TARGET == 'preview'",
+      ),
+      /alias smoke test step must be exactly as reviewed/,
+    ],
+    [
+      "a second step that moves the alias",
+      `${deploy.trimEnd()}\n      - name: Move it again\n        run: vercel alias set "$DEPLOY_URL" "$PREVIEW_ALIAS"\n`,
+      /alias must be set by exactly one step/,
+    ],
+    [
+      "the alias set for something other than the deployed URL",
+      mutate(
+        'vercel alias set "$DEPLOY_URL" "$PREVIEW_ALIAS"',
+        'vercel alias set "$OLD_URL" "$PREVIEW_ALIAS"',
+      ),
+      /assign the deployed URL to PREVIEW_ALIAS/,
+    ],
+    [
+      "the alias set without checking the develop head",
+      mutate(
+        " && steps.alias_head.outputs.assign == 'true'\n        env:\n          VERCEL_TOKEN",
+        "\n        env:\n          VERCEL_TOKEN",
+      ),
+      /still the develop head/,
+    ],
+    [
+      "the alias set for a production run too",
+      mutate(
+        "if: env.TARGET == 'preview' && steps.alias_head.outputs.assign == 'true'\n        env:\n          VERCEL_TOKEN",
+        "if: steps.alias_head.outputs.assign == 'true'\n        env:\n          VERCEL_TOKEN",
+      ),
+      /still the develop head/,
+    ],
+    [
+      "a step that runs after a failure",
+      mutate(
+        "- name: Smoke test the alias\n        if:",
+        "- name: Smoke test the alias\n        if: always() &&",
+      ),
+      /must not move then/,
+    ],
+    [
+      "a step that continues past a failure",
+      mutate(
+        "- name: Assign the stable Preview alias\n",
+        "- name: Assign the stable Preview alias\n        continue-on-error: true\n",
+      ),
+      /must not move then/,
+    ],
+    [
+      "the develop head check dropped",
+      mutate("scripts/check-alias-head.ts", "scripts/other.ts"),
+      /order must be: smoke test, develop head check, alias set/,
+    ],
+    [
+      "the alias block moved ahead of the first smoke test",
+      aliasBeforeSmoke(),
+      /order must be: smoke test, develop head check, alias set/,
+    ],
+    [
+      "no smoke test of the alias itself",
+      mutate(
+        'scripts/smoke-test.ts "https://${PREVIEW_ALIAS}"',
+        'scripts/smoke-test.ts "$DEPLOY_URL"',
+      ),
+      /alias itself must be smoke-tested/,
+    ],
+    [
+      "a different alias name",
+      mutate(
+        "PREVIEW_ALIAS: travel-packing-preview.vercel.app",
+        "PREVIEW_ALIAS: other-name.vercel.app",
+      ),
+      /PREVIEW_ALIAS must be travel-packing-preview.vercel.app/,
+    ],
+    [
+      "a fourth Vercel token use",
+      `${deploy.trimEnd()}\n        X: \${{ secrets.VERCEL_TOKEN }}\n`,
+      /exactly three steps/,
+    ],
+    [
       "a preview deploy that leaves its target to Vercel",
       mutate("vercel deploy --prebuilt --target=preview", "vercel deploy --prebuilt"),
       /preview deploy must pass --target=preview/,
@@ -236,7 +409,7 @@ describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
       `${deploy.trimEnd()}\n        X: \${{ secrets.DATABASE_URL }}\n`,
       /secrets\.DATABASE_URL must be read only by the secret injection step/,
     ],
-    ["a third Vercel token use", `${deploy}\n# ${"secrets"}.VERCEL_TOKEN\n`, /exactly two steps/],
+    ["a third Vercel token use", `${deploy}\n# ${"secrets"}.VERCEL_TOKEN\n`, /exactly three steps/],
     ["the pooled URL", `${deploy}\n          DATABASE_URL: x\n`, /never the pooled/],
     [
       "no direct URL secret",
@@ -422,5 +595,35 @@ describe("checkCiWorkflow", () => {
     expect(checkCiWorkflow(ci.slice(0, ci.indexOf("  deploy:"))).join("\n")).toMatch(
       /deploy job is missing/,
     );
+  });
+});
+
+describe("stepLines", () => {
+  const sample = [
+    "jobs:",
+    "  a:",
+    "    steps:",
+    "      # a comment",
+    "      - name: One",
+    "        id: first",
+    "",
+    "        # inner comment",
+    "        run: |",
+    "          echo   hi  ",
+    "      - name: Two",
+    "        run: echo two",
+  ].join("\n");
+
+  it("returns a step's meaningful lines, trimmed, without comments or blank lines", () => {
+    expect(stepLines(sample, "One")).toEqual(["- name: One", "id: first", "run: |", "echo   hi"]);
+    expect(stepLines(sample, "Two")).toEqual(["- name: Two", "run: echo two"]);
+  });
+
+  it("returns null when there is no such step", () => {
+    expect(stepLines(sample, "Three")).toBeNull();
+  });
+
+  it("pins the real workflow's three alias steps to the reviewed lines", () => {
+    expect(stepLines(deploy, "Is this run still the develop head?")).toEqual(ALIAS_HEAD_STEP);
   });
 });
