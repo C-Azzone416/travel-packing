@@ -244,7 +244,10 @@ test(
     const sheet = page.getByRole("dialog", { name: "Edit route" });
     await sheet.getByLabel("Arrive", { exact: true }).fill(inDays(4));
     await sheet.getByRole("button", { name: "Save route" }).click();
-    await page.locator(".weather-review-banner").getByRole("button", { name: "Review" }).click();
+    // Wait for the banner itself (the weather is fetched again after the route edit), so a failure says what was missing.
+    const banner = page.locator(".weather-review-banner");
+    await expect(banner).toBeVisible();
+    await banner.getByRole("button", { name: "Review" }).click();
     await expect(page.getByRole("dialog", { name: "Weather changes" })).toBeVisible();
     await expectAccessible(page, "weather review sheet");
   },
