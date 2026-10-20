@@ -19,6 +19,9 @@ export const SECRET_ENV_NAMES = [
   "E2E_DATABASE_URL",
   "OPEN_METEO_GEOCODING_URL",
   "LOCATION_PROVIDER",
+  "WEATHER_PROVIDER",
+  "OPEN_METEO_FORECAST_URL",
+  "OPEN_METEO_ARCHIVE_URL",
 ] as const;
 
 /** Shapes of secret VALUES (a connection string with a password, a private key, common token prefixes). */
@@ -42,6 +45,11 @@ export const SERVER_ONLY_MARKERS: readonly { name: string; text: string; source:
   },
   { name: "the data-layer runtime", text: "getDataContext", source: "src/server/data/runtime.ts" },
   { name: "the owner gate", text: "authorizeOwner", source: "src/server/auth/guard.ts" },
+  {
+    name: "the weather provider",
+    text: "createOpenMeteoWeatherProvider",
+    source: "src/server/weather/open-meteo.ts",
+  },
   { name: "the seed guard", text: "assertSeedAllowed", source: "src/server/seed/guard.ts" },
 ];
 
