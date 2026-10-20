@@ -1,5 +1,8 @@
+import type { ThemeId } from "../themes";
+import { hasUsableWeather, recommendPacking } from "../weather/recommend";
+import type { DayWeather } from "../weather/types";
 import { tripDays } from "./dates";
-import { RETURN_OFF_POLICY, type ReturnOffPolicy } from "./return-policy";
+import { dailyDaysFor } from "./daily-days";
 
 export interface CalcConfig {
   start: string;
@@ -12,12 +15,25 @@ export interface CalcConfig {
   returnOutfit?: boolean;
 }
 
+/** Weather for the trip (#110). Absent or empty: the calculator behaves exactly as before. */
+export interface WeatherInput {
+  days: readonly DayWeather[];
+  /** Place names by stop index, used only to word the reasons. */
+  stopNames?: readonly string[];
+  theme?: ThemeId;
+}
+
 export interface Suggestion {
   id: string;
   name: string;
   category: string;
   qty: number;
   optional?: boolean;
+  /** Set on weather-driven lines: the stable id, why it is suggested, and where it is filed. */
+  semanticId?: string;
+  reason?: string;
+  groupId?: string;
+  fromWeather?: boolean;
 }
 
 export interface Suggestions {
@@ -28,16 +44,9 @@ export interface Suggestions {
 
 export { RETURN_OFF_POLICY, type ReturnOffPolicy } from "./return-policy";
 
-export function dailyDaysFor(
-  days: number,
-  returnOutfit: boolean,
-  policy: ReturnOffPolicy = RETURN_OFF_POLICY,
-): number {
-  const returnDayExcluded = returnOutfit || policy === "exclude-return-day";
-  return Math.max(0, days - (returnDayExcluded ? 2 : 1));
-}
+export { dailyDaysFor };
 
-export function calculateSuggestions(config: CalcConfig): Suggestions {
+export function calculateSuggestions(config: CalcConfig, weather?: WeatherInput): Suggestions {
   const days = tripDays(config.start, config.end);
   const dailyDays = dailyDaysFor(days, config.returnOutfit !== false);
   const laundry = Boolean(config.laundry);
@@ -86,6 +95,30 @@ export function calculateSuggestions(config: CalcConfig): Suggestions {
       optional: true,
     },
   ];
+
+  if (weather && hasUsableWeather(weather.days, config)) {
+    const { clothing, extras } = recommendPacking({
+      days: weather.days,
+      dayStopNames: weather.stopNames ?? [],
+      config,
+      theme: weather.theme,
+    });
+    const at = items.findIndex((item) => item.id === "tops");
+    items.splice(at, 2, ...clothing.map((line) => ({ ...line, fromWeather: true })));
+    for (const extra of extras) {
+      items.push({
+        id: extra.semanticId,
+        semanticId: extra.semanticId,
+        name: extra.name,
+        category: extra.category,
+        qty: extra.qty,
+        optional: extra.optional,
+        reason: extra.reason,
+        fromWeather: true,
+        ...(extra.groupId ? { groupId: extra.groupId } : {}),
+      });
+    }
+  }
 
   return { days, dailyDays, items: items.filter((item) => item.qty > 0) };
 }
