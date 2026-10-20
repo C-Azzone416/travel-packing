@@ -66,6 +66,16 @@ describe("the stop cards", () => {
     expect(second.getAttribute("aria-describedby")).toBeTruthy();
   });
 
+  it("ignores an edit to Arrive on stops 2+ (iOS opens a picker on read-only date inputs) and marks it read-only", () => {
+    render(<Harness initial={THREE} />);
+    const second = screen.getByLabelText("Arrive, Stop 2") as HTMLInputElement;
+    expect(second.getAttribute("aria-readonly")).toBe("true");
+    fireEvent.change(second, { target: { value: "2030-06-20" } });
+    expect((screen.getByLabelText("Arrive") as HTMLInputElement).value).toBe("2030-05-01");
+    expect((screen.getByLabelText("Leave, Stop 3") as HTMLInputElement).value).toBe("2030-05-09");
+    expect(summary()).toContain("8 nights");
+  });
+
   it("changing a Leave date shifts every later stop", () => {
     render(<Harness initial={THREE} />);
     fireEvent.change(screen.getByLabelText("Leave"), { target: { value: "2030-05-06" } });
@@ -239,6 +249,40 @@ describe("validation messages", () => {
         onChange={() => undefined}
       />,
     );
+    expect(screen.getAllByText("Choose a date.").length).toBeGreaterThan(0);
+  });
+});
+
+describe("a notice under the first Arrive", () => {
+  it("shows at once, as an error tied to the field", () => {
+    render(
+      <StopList
+        stops={THREE}
+        attempted={false}
+        arriveNotice="Choose a new start date for the copy."
+        provider={curatedLocationProvider}
+        onChange={() => undefined}
+      />,
+    );
+    const arrive = screen.getByLabelText("Arrive");
+    const notice = screen.getByText("Choose a new start date for the copy.");
+    expect(notice.className).toContain("field-error");
+    expect(arrive.getAttribute("aria-invalid")).toBe("true");
+    expect(arrive.getAttribute("aria-describedby")).toBe(notice.id);
+  });
+
+  it("gives way to a real problem with the same field", () => {
+    const broken = [{ ...THREE[0], arrive: "" }, THREE[1]];
+    render(
+      <StopList
+        stops={broken}
+        attempted
+        arriveNotice="Choose a new start date for the copy."
+        provider={curatedLocationProvider}
+        onChange={() => undefined}
+      />,
+    );
+    expect(screen.queryByText("Choose a new start date for the copy.")).toBeNull();
     expect(screen.getAllByText("Choose a date.").length).toBeGreaterThan(0);
   });
 });

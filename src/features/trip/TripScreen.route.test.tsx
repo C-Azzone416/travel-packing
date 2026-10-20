@@ -11,13 +11,13 @@ import { TripScreen } from "./TripScreen";
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/trips/san-diego" }));
 
-function stateWithRoute(): LifecycleState {
+function stateWithRoute(title = "San Diego → Lisbon"): LifecycleState {
   const state = sampleLifecycleState();
   const [sanDiego, lisbon] = state.trips;
   const tour = {
     ...sanDiego,
     id: "tour",
-    destination: "San Diego → Lisbon",
+    destination: title,
     end: "2026-10-29",
     stops: [
       { location: sanDiego.location!, arrive: "2026-10-23", leave: "2026-10-26" },
@@ -27,8 +27,8 @@ function stateWithRoute(): LifecycleState {
   return { ...state, trips: [tour, ...state.trips] };
 }
 
-function setup(id: string, fail = false) {
-  const base = createMemoryTripsSource(stateWithRoute(), {
+function setup(id: string, fail = false, title?: string) {
+  const base = createMemoryTripsSource(stateWithRoute(title), {
     now: () => 1,
     newId: () => "new",
     today: () => "2026-10-16",
@@ -46,9 +46,15 @@ function setup(id: string, fail = false) {
 }
 
 describe("the route on the trip header", () => {
-  it("shows a route chip with the full route for a multi-stop trip", async () => {
+  it("does not repeat the route as a chip when the title is the route", async () => {
     setup("tour");
     await screen.findByRole("heading", { name: "San Diego → Lisbon", level: 1 });
+    expect(document.querySelector(".route-chip")).toBeNull();
+  });
+
+  it("shows a route chip with the full route when the title is something else", async () => {
+    setup("tour", false, "Autumn tour");
+    await screen.findByRole("heading", { name: "Autumn tour", level: 1 });
     const chip = document.querySelector(".route-chip") as HTMLElement;
     expect(chip.textContent).toContain("Route: San Diego, then Lisbon.");
     expect(chip.querySelector(".route-text")?.getAttribute("title")).toBe("San Diego → Lisbon");

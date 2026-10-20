@@ -62,7 +62,8 @@ test(
     await expect(
       page.getByRole("heading", { name: "Lisbon → Paris → Rome", level: 1 }),
     ).toBeVisible();
-    await expect(page.locator(".route-chip")).toContainText("Lisbon → Paris → Rome");
+    // The title is the route, so the header does not repeat it as a chip.
+    await expect(page.locator(".route-chip")).toHaveCount(0);
   },
 );
 
@@ -88,7 +89,7 @@ test("edit the route down to 2 stops, then copy the trip to new dates", async ({
 
   await page.reload();
   await expect(page.getByRole("heading", { name: "Lisbon → Rome", level: 1 })).toBeVisible();
-  await expect(page.locator(".route-chip")).toContainText("Lisbon → Rome");
+  await expect(page.locator(".route-chip")).toHaveCount(0);
 
   await page.goto("/");
   await trip(page, "Lisbon → Rome")

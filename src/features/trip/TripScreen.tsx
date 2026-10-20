@@ -14,7 +14,7 @@ import type { LifecycleTrip } from "@/domain/trip-lifecycle";
 import { TripsSourceError, type TripChange } from "@/features/trips/trips-source";
 import { useTripsSource } from "@/features/trips/TripsSourceProvider";
 import { RouteText } from "@/features/trips/RouteText";
-import { formatDays, formatRange, routeCities } from "@/features/trips/view";
+import { formatDays, formatRange, routeCities, routeIsTitle } from "@/features/trips/view";
 import { AddToiletryForm } from "./AddToiletryForm";
 import { themeFor } from "@/domain/themes";
 import { EditRouteSheet } from "./EditRouteSheet";
@@ -331,7 +331,7 @@ export function TripScreen({ tripId }: { tripId: string }) {
           </Link>
           <div className="head-copy destination-head-copy">
             <h1>{trip.destination}</h1>
-            {routeCities(trip).length ? (
+            {routeCities(trip).length && !routeIsTitle(trip) ? (
               <p className="route-chip">
                 <RouteText cities={routeCities(trip)} budget={64} />
               </p>

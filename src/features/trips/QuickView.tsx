@@ -4,7 +4,7 @@ import { useState } from "react";
 import { buttonClassName } from "@/components/ui/Button";
 import Link from "next/link";
 import { RouteText } from "./RouteText";
-import { quickViewModel, routeCities, type QuickFilter } from "./view";
+import { quickViewModel, routeCities, routeIsTitle, type QuickFilter } from "./view";
 import type { LifecycleTrip } from "@/domain/trip-lifecycle";
 
 // Read-only preview of a trip's list. The filter is local view state only: nothing
@@ -12,7 +12,7 @@ import type { LifecycleTrip } from "@/domain/trip-lifecycle";
 export function QuickView({ trip, id }: { trip: LifecycleTrip; id: string }) {
   const [filter, setFilter] = useState<QuickFilter>("still");
   const model = quickViewModel(trip, filter);
-  const route = routeCities(trip);
+  const route = routeIsTitle(trip) ? [] : routeCities(trip);
   const count = model.categories.reduce((sum, entry) => sum + entry.rows.length, 0);
 
   return (

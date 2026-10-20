@@ -68,6 +68,13 @@ describe("the dashboard card and Quick view", () => {
     expect(container.textContent).not.toContain("California, United States");
   });
 
+  it("prints the stop count instead when the title is already the route", () => {
+    const trip = { ...multi(), destination: "San Diego → Lisbon" };
+    const { container } = render(card(trip));
+    expect(container.querySelector(".item-meta")?.textContent).toBe("2 stops");
+    expect(container.querySelectorAll(".route-text")).toHaveLength(0);
+  });
+
   it("keeps the place line for a single destination", () => {
     const [single] = sampleLifecycleState().trips;
     const { container } = render(card(single as ReturnType<typeof multi>));
@@ -80,6 +87,8 @@ describe("the dashboard card and Quick view", () => {
       "San Diego → Lisbon",
     );
     rerender(<QuickView trip={sampleLifecycleState().trips[0]} id="q" />);
+    expect(container.querySelector(".quick-view-route")).toBeNull();
+    rerender(<QuickView trip={{ ...multi(), destination: "San Diego → Lisbon" }} id="q" />);
     expect(container.querySelector(".quick-view-route")).toBeNull();
   });
 });

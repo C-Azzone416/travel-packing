@@ -55,7 +55,11 @@ export function TripCard({
             <h2 id={`trip-title-${trip.id}`}>{view.destination}</h2>
             {view.route.length ? (
               <div className="item-meta">
-                <RouteText cities={view.route} />
+                {view.routeIsTitle ? (
+                  `${view.route.length} stops`
+                ) : (
+                  <RouteText cities={view.route} />
+                )}
               </div>
             ) : view.place ? (
               <div className="item-meta">{view.place}</div>

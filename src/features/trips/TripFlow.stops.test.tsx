@@ -161,7 +161,13 @@ describe("copying a multi-stop trip", () => {
     expect(screen.getByText("Copy of San Diego → Lisbon")).toBeTruthy();
     // The source's own dates cannot be saved as the copy's.
     expect(cont().getAttribute("aria-disabled")).toBe("true");
-    expect(screen.getAllByText("Choose a new start date for the copy.").length).toBeGreaterThan(0);
+    // The explanation sits under Stop 1's Arrive, where the person has to act, as well as under Continue.
+    const arrive = screen.getByLabelText("Arrive");
+    expect(arrive.getAttribute("aria-invalid")).toBe("true");
+    expect(
+      document.getElementById(arrive.getAttribute("aria-describedby") ?? "")?.textContent,
+    ).toBe("Choose a new start date for the copy.");
+    expect(screen.getAllByText("Choose a new start date for the copy.")).toHaveLength(2);
 
     fireEvent.change(screen.getByLabelText("Arrive"), { target: { value: "2027-01-10" } });
     expect((screen.getByLabelText("Arrive, Stop 2") as HTMLInputElement).value).toBe("2027-01-13");

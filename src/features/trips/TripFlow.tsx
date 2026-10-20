@@ -46,6 +46,8 @@ import { formatDays, formatRange } from "./view";
 
 type Step = "details" | "shape";
 
+const COPY_DATE_NOTICE = "Choose a new start date for the copy.";
+
 export interface TripFlowProps {
   copyId?: string;
   allowCustom?: boolean;
@@ -210,6 +212,7 @@ function FlowBody({
                 allowCustom={allowCustom}
                 attempted={attempted}
                 firstQuery={query}
+                arriveNotice={staleCopy ? COPY_DATE_NOTICE : undefined}
                 onChange={(stops) => {
                   const next = setDraftStops(draft, stops);
                   setDraft(next);

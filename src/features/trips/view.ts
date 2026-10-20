@@ -35,6 +35,8 @@ export interface TripCardView {
   place: string | null;
   /** City names of a multi-stop route, in order; empty for a single destination. */
   route: string[];
+  /** The trip's title is the route itself, so the card must not print it twice. */
+  routeIsTitle: boolean;
   /** "Past trip" / "Archived trip"; upcoming trips carry no eyebrow. */
   eyebrow: string | null;
   ready: boolean;
@@ -61,6 +63,7 @@ export function tripCardView(trip: LifecycleTrip, today: string, view: TripListV
       ? [trip.location.region, trip.location.country].filter(Boolean).join(", ") || null
       : null,
     route: routeCities(trip),
+    routeIsTitle: routeIsTitle(trip),
     eyebrow: trip.archived ? "Archived trip" : past ? "Past trip" : null,
     ready: trip.ready,
     packed: totals.packed,
@@ -153,6 +156,12 @@ export function quickViewModel(trip: LifecycleTrip, filter: QuickFilter): QuickV
 /** City names of a multi-stop trip, in order; empty for a single-destination trip (it shows its city as today). */
 export function routeCities(trip: Pick<LifecycleTrip, "stops">): string[] {
   return trip.stops.length > 1 ? trip.stops.map((stop) => stop.location.city) : [];
+}
+
+/** True when a multi-stop trip's title is just its route (the default), so showing the route as well would repeat it. */
+export function routeIsTitle(trip: Pick<LifecycleTrip, "stops" | "destination">): boolean {
+  const cities = routeCities(trip);
+  return cities.length > 0 && cities.join(" → ") === trip.destination;
 }
 
 export interface RouteDisplay {
