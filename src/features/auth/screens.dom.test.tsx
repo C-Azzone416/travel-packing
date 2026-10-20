@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FinishSetupView } from "./FinishSetupView";
@@ -68,8 +68,9 @@ describe("SignUpForm", () => {
     expect(email.value).toBe("typed@example.test");
     const password = screen.getByLabelText("Password");
     expect(password.getAttribute("aria-describedby")).toContain("password-error");
-    // Focus goes to the first invalid field, and no form-level alert is added for a field problem.
-    expect(document.activeElement).toBe(email);
+    // Focus goes to the first invalid field (moved by an effect after the state settles, so wait for it rather than racing it
+    // under a busy machine), and no form-level alert is added for a field problem.
+    await waitFor(() => expect(document.activeElement).toBe(email));
     expect(screen.queryByRole("alert")).toBeNull();
   });
 

@@ -89,9 +89,67 @@ export function checkDeployWorkflow(workflow: string): string[] {
     }
   }
 
-  // Secrets: the Vercel token only in the two steps that talk to Vercel; the database secret only in the deploy job.
-  if (count(/secrets\.VERCEL_TOKEN/g) !== 2)
-    problems.push("VERCEL_TOKEN must be read by exactly two steps (pull and deploy)");
+  // Secrets: the Vercel token only in the three steps that talk to Vercel (pull, deploy, and assigning the Preview alias);
+  // the database secret only in the deploy job.
+  if (count(/secrets\.VERCEL_TOKEN/g) !== 3)
+    problems.push(
+      "VERCEL_TOKEN must be read by exactly three steps (pull, deploy and the Preview alias)",
+    );
+
+  // The stable Preview alias (#96): assigned only after a green deploy and smoke test, only for the develop head, only for a
+  // preview, and never by a step that runs after a failure.
+  const aliasStep =
+    /^( *)- name: Assign the stable Preview alias[^\n]*\n((?:\1 {2}.*\n|\n)*)/m.exec(
+      workflow,
+    )?.[0] ?? "";
+  const headStep =
+    /^( *)- name: Is this run still the develop head\?[^\n]*\n((?:\1 {2}.*\n|\n)*)/m.exec(
+      workflow,
+    )?.[0] ?? "";
+  if (count(/vercel alias set/g) !== 1)
+    problems.push("the Preview alias must be set by exactly one step");
+  if (!/vercel alias set "\$DEPLOY_URL" "\$PREVIEW_ALIAS"/.test(aliasStep)) {
+    problems.push("the alias step must assign the deployed URL to PREVIEW_ALIAS");
+  }
+  if (
+    !/^\s+if:\s*env\.TARGET == 'preview' && steps\.alias_head\.outputs\.assign == 'true'\s*$/m.test(
+      aliasStep,
+    )
+  ) {
+    problems.push(
+      "the alias may be set only for a preview run whose commit is still the develop head",
+    );
+  }
+  if (
+    !/^\s+if:\s*env\.TARGET == 'preview'\s*$/m.test(headStep) ||
+    !/id:\s*alias_head/.test(headStep)
+  ) {
+    problems.push("the develop head check must run for previews only and be the step alias_head");
+  }
+  const code = workflow
+    .split("\n")
+    .filter((line) => !/^\s*#/.test(line))
+    .join("\n");
+  if (/\b(always|failure|cancelled)\(\)|continue-on-error/.test(code)) {
+    problems.push(
+      "no step may run after a failure or continue past one (the alias must not move then)",
+    );
+  }
+  const headAt = workflow.indexOf("scripts/check-alias-head.ts");
+  const aliasAt = workflow.indexOf("vercel alias set");
+  const firstSmokeAt = workflow.indexOf("scripts/smoke-test.ts");
+  const lastSmokeAt = workflow.lastIndexOf("scripts/smoke-test.ts");
+  if (!(firstSmokeAt >= 0 && firstSmokeAt < headAt && headAt < aliasAt && aliasAt < lastSmokeAt)) {
+    problems.push(
+      "the order must be: smoke test, develop head check, alias set, smoke test of the alias",
+    );
+  }
+  if (!/smoke-test\.ts "https:\/\/\$\{PREVIEW_ALIAS\}"/.test(workflow)) {
+    problems.push("the alias itself must be smoke-tested");
+  }
+  if (!/^ {2}PREVIEW_ALIAS: travel-packing-preview\.vercel\.app\b/m.test(workflow)) {
+    problems.push("PREVIEW_ALIAS must be travel-packing-preview.vercel.app");
+  }
   const firstSecretLine = workflow.split("\n").findIndex((line) => /secrets\./.test(line));
   const deployLine = workflow.split("\n").findIndex((line) => /^ {2}deploy:\s*$/.test(line));
   if (firstSecretLine >= 0 && deployLine >= 0 && firstSecretLine < deployLine) {
