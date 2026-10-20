@@ -17,7 +17,7 @@ describe("weather provider config", () => {
     expect(openMeteoWeatherEnabled({ WEATHER_PROVIDER: "OPEN-METEO" })).toBe(false);
     const fetcher = vi.fn<typeof fetch>();
     const provider = selectWeatherProvider(
-      { WEATHER_PROVIDER: "fake" },
+      { WEATHER_PROVIDER: "fake", NEXT_PUBLIC_E2E_BUILD: "1" },
       fetcher,
       () => new Date("2026-06-01T12:00:00Z"),
     );
@@ -65,8 +65,30 @@ describe("weather provider config", () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
-  it("returns unavailable fake weather for a custom stop", async () => {
-    const provider = selectWeatherProvider({}, vi.fn(), () => new Date("2026-06-01T00:00:00Z"));
+  it.each([
+    ["unset", {}],
+    ["empty", { WEATHER_PROVIDER: "" }],
+    ["a typo", { WEATHER_PROVIDER: "openmeteo" }],
+    ["fake on a non-e2e build", { WEATHER_PROVIDER: "fake" }],
+    ["fake with the e2e flag off", { WEATHER_PROVIDER: "fake", NEXT_PUBLIC_E2E_BUILD: "0" }],
+    ["fake on Vercel", { WEATHER_PROVIDER: "fake", NEXT_PUBLIC_E2E_BUILD: "1", VERCEL: "1" }],
+  ])("serves no weather and makes no request when the provider is %s", async (_name, env) => {
+    const fetcher = vi.fn<typeof fetch>();
+    const provider = selectWeatherProvider(env, fetcher, () => new Date("2026-06-01T12:00:00Z"));
+    expect(await provider.getStopWeather({ ...stop, stopIndex: 3 })).toEqual({
+      stopIndex: 3,
+      status: "unavailable",
+      days: [],
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("the e2e fake is unavailable for a custom stop", async () => {
+    const provider = selectWeatherProvider(
+      { WEATHER_PROVIDER: "fake", NEXT_PUBLIC_E2E_BUILD: "1" },
+      vi.fn(),
+      () => new Date("2026-06-01T00:00:00Z"),
+    );
     expect(await provider.getStopWeather({ ...stop, latitude: undefined })).toEqual({
       stopIndex: 0,
       status: "unavailable",

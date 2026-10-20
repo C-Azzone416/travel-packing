@@ -1,6 +1,6 @@
 import { createFakeWeatherProvider } from "./fake";
 import { createOpenMeteoWeatherProvider } from "./open-meteo";
-import type { WeatherProvider } from "./provider";
+import { unavailableStop, type WeatherProvider } from "./provider";
 
 type Env = Record<string, string | undefined>;
 
@@ -16,12 +16,23 @@ export function weatherBaseUrls(env: Env): { forecastUrl?: string; archiveUrl?: 
 export const openMeteoWeatherEnabled = (env: Env = process.env): boolean =>
   env.WEATHER_PROVIDER === "open-meteo";
 
-/** Fails private and deterministic: only an explicit value enables external weather requests. */
+/** The deterministic fake exists for e2e builds only; a deployed build can never serve made-up weather. */
+export const fakeWeatherEnabled = (env: Env = process.env): boolean =>
+  env.WEATHER_PROVIDER === "fake" && env.NEXT_PUBLIC_E2E_BUILD === "1" && !env.VERCEL;
+
+/** Every stop is unavailable and nothing leaves the server. */
+const unavailableProvider: WeatherProvider = {
+  getStopWeather: async (stop) => unavailableStop(stop.stopIndex),
+};
+
+/** Fails private and honest: only an explicit value enables external requests, and anything else shows no weather. */
 export function selectWeatherProvider(
   env: Env = process.env,
   doFetch: typeof fetch = (...args) => fetch(...args),
   now: () => Date = () => new Date(),
 ): WeatherProvider {
-  if (!openMeteoWeatherEnabled(env)) return createFakeWeatherProvider(now);
-  return createOpenMeteoWeatherProvider({ fetch: doFetch, now, ...weatherBaseUrls(env) });
+  if (openMeteoWeatherEnabled(env))
+    return createOpenMeteoWeatherProvider({ fetch: doFetch, now, ...weatherBaseUrls(env) });
+  if (fakeWeatherEnabled(env)) return createFakeWeatherProvider(now);
+  return unavailableProvider;
 }
