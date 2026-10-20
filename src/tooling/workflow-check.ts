@@ -63,9 +63,7 @@ export const ALIAS_SET_STEP = [
   "env:",
   "VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}",
   "DEPLOY_URL: ${{ steps.deploy.outputs.url }}",
-  "run: |",
-  'vercel alias set "$DEPLOY_URL" "$PREVIEW_ALIAS" --scope="$VERCEL_ORG_ID" --token="$VERCEL_TOKEN"',
-  'echo "Preview alias: https://$PREVIEW_ALIAS -> $DEPLOY_URL" >> "$GITHUB_STEP_SUMMARY"',
+  'run: npx tsx scripts/assign-alias.ts "$DEPLOY_URL" "$PREVIEW_ALIAS"',
 ];
 export const ALIAS_SMOKE_STEP = [
   "- name: Smoke test the alias",
@@ -156,9 +154,12 @@ export function checkDeployWorkflow(workflow: string): string[] {
     /^( *)- name: Is this run still the develop head\?[^\n]*\n((?:\1 {2}.*\n|\n)*)/m.exec(
       workflow,
     )?.[0] ?? "";
-  if (count(/vercel alias set/g) !== 1)
+  if (count(/scripts\/assign-alias\.ts/g) !== 1)
     problems.push("the Preview alias must be set by exactly one step");
-  if (!/vercel alias set "\$DEPLOY_URL" "\$PREVIEW_ALIAS"/.test(aliasStep)) {
+  // Not the CLI: `vercel alias` loads the token's user first, which answers 404 for this token (see src/tooling/alias-api.ts).
+  if (/\bvercel alias\b/.test(workflow.replace(/^\s*#.*$/gm, "")))
+    problems.push("the alias must be assigned by scripts/assign-alias.ts, never the vercel CLI");
+  if (!/assign-alias\.ts "\$DEPLOY_URL" "\$PREVIEW_ALIAS"/.test(aliasStep)) {
     problems.push("the alias step must assign the deployed URL to PREVIEW_ALIAS");
   }
   if (
@@ -204,7 +205,7 @@ export function checkDeployWorkflow(workflow: string): string[] {
     );
   }
   const headAt = workflow.indexOf("scripts/check-alias-head.ts");
-  const aliasAt = workflow.indexOf("vercel alias set");
+  const aliasAt = workflow.indexOf("scripts/assign-alias.ts");
   const firstSmokeAt = workflow.indexOf("scripts/smoke-test.ts");
   const lastSmokeAt = workflow.lastIndexOf("scripts/smoke-test.ts");
   if (!(firstSmokeAt >= 0 && firstSmokeAt < headAt && headAt < aliasAt && aliasAt < lastSmokeAt)) {

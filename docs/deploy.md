@@ -129,9 +129,14 @@ production `DATABASE_URL` to the Preview environment.
 
 Every deploy gets its own `travel-packing-<hash>-….vercel.app` URL, which is no use as a sign-in or reset-link address (the auth
 project has to trust each origin it serves). So after a good preview deploy the workflow points ONE stable name,
-`https://travel-packing-preview.vercel.app`, at it (`vercel alias set`, with the existing `VERCEL_TOKEN` and `--scope` set to `VERCEL_ORG_ID`: the command is not linked to the project, so
-without the scope it fails with "User not found."; the first run creates the name,
-and if Vercel refuses it the step fails loudly and nothing else changes).
+`https://travel-packing-preview.vercel.app`, at it, with the existing `VERCEL_TOKEN` and `VERCEL_ORG_ID` (`scripts/assign-alias.ts`; the
+first run creates the name, and if Vercel refuses it the step fails loudly and nothing else changes).
+
+It uses Vercel's REST API (look up the deployment, then `POST /v2/deployments/{id}/aliases` for the team) and not `vercel alias set`:
+the CLI loads the token's user first (`GET /v2/user`), which answers 404 "User not found" for this token however `--scope` is given
+(develop runs after #99 and #100), while pull and deploy never make that call. If the REST call is refused with 401/403/404 the token
+itself lacks access to the team; that is a credential matter for the repository owner (a token created under an account that is a member
+of the team), not something the workflow can fix.
 
 The alias moves only when all of this holds, in this order, in the same job:
 
@@ -153,7 +158,7 @@ trusted domains); that is a Neon setting, not part of the workflow.
 name that nobody holds until the first successful run assigns it to this project; until then anyone with a Vercel account could claim it, and
 every reset and finish-setup link on Preview is built on exactly that origin. So:
 
-1. Let the first preview run assign the alias, and confirm it is this project's (the run summary line `Preview alias: https://travel-packing-preview.vercel.app -> <deployment url>`, or `vercel alias ls`).
+1. Let the first preview run assign the alias, and confirm it is this project's (the run summary line `Preview alias: https://travel-packing-preview.vercel.app -> https://<deployment host> (dpl_…, replacing … / first assignment)`).
 2. Only then add `https://travel-packing-preview.vercel.app` to the Neon Auth Preview trusted domains.
 3. If the alias step ever fails with "in use" or a refusal, **do not** trust that origin in Neon; tell the PM (someone else may hold the name, and reset links on Preview would point at their site).
 4. Until the alias is ours, reset and finish-setup links on Preview point at an unassigned name and will not work.
