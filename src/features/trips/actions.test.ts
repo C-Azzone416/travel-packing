@@ -24,6 +24,7 @@ import type { TripDraft } from "@/domain/trip-lifecycle";
 import {
   archiveTripAction,
   createTripAction,
+  createTripWithWeatherAction,
   loadTripsAction,
   removeTripAction,
   restoreTripAction,
@@ -158,6 +159,47 @@ describe("trips server actions", () => {
       if (!result.ok) throw new Error(`expected ok, got ${result.code}`);
       expect(result.trip.copiedFrom).toBe(source.id);
       expect(result.trip.id).not.toBe(source.id);
+    });
+
+    it("atomically saves the draft with its Shape-the-list weather rows", async () => {
+      const result = await createTripWithWeatherAction(draft(), [
+        {
+          kind: "add",
+          semanticId: "weather-umbrella",
+          ruleSignature: "rain",
+          item: {
+            semanticId: "weather-umbrella",
+            name: "Compact umbrella",
+            category: "Accessories",
+            qty: 1,
+            optional: false,
+          },
+        },
+      ]);
+      if (!result.ok) throw new Error(`expected ok, got ${result.code}`);
+      expect(result.trip.items.find((item) => item.id === "weather-umbrella")).toMatchObject({
+        name: "Compact umbrella",
+        packed: 0,
+      });
+      expect(result.trip.weather.status).toBe("accepted");
+
+      await resetData(ctx.client);
+      const invalid = await createTripWithWeatherAction(draft(), [
+        {
+          kind: "add",
+          semanticId: "bad",
+          ruleSignature: "bad",
+          item: {
+            semanticId: "bad",
+            name: "Bad",
+            category: "Accessories",
+            qty: 0,
+            optional: false,
+          },
+        },
+      ]);
+      expect(invalid).toEqual({ ok: false, code: "INVALID_INPUT" });
+      expect(stateOf(await loadTripsAction()).trips).toEqual([]);
     });
 
     it("cannot copy another owner's trip (NOT_FOUND)", async () => {

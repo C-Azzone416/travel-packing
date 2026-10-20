@@ -188,7 +188,7 @@ describe("clothing breakdown", () => {
       name: "Short-sleeve tops",
       category: "Clothing",
     });
-    expect(r.clothing[0].reason).toBe("Mostly hot days; 6 hot days in Lisbon");
+    expect(r.clothing[0].reason).toBe("Mostly hot days");
   });
 });
 
@@ -545,12 +545,22 @@ describe("reason copy (#108 §7.4)", () => {
   it("clothing: mostly band, with the city that has most of them", () => {
     const r = recommend(trip((i) => ({ stopIndex: i < 4 ? 0 : 1, highC: i < 4 ? 30 : 22 })));
     const reason = (id: string) => r.clothing.find((l) => l.id === id)?.reason;
-    expect(reason("tops-short")).toBe("Mostly hot days; 3 hot days in Lisbon");
-    expect(reason("bottoms-shorts")).toBe("Mostly hot days; 3 hot days in Lisbon");
-    expect(reason("bottoms-pants")).toBe("Mostly warm days; 3 warm days in Edinburgh");
+    // Tops cover both bands, so the other band is named with its city; a single band is said once.
+    expect(reason("tops-short")).toBe("Mostly hot days; 3 warm days in Edinburgh");
+    expect(reason("bottoms-shorts")).toBe("Mostly hot days");
+    expect(reason("bottoms-pants")).toBe("Mostly warm days");
     const cold = recommend(trip(() => ({ highC: 5 })));
-    expect(cold.clothing.find((l) => l.id === "tops-long")?.reason).toBe(
-      "Mostly cold days; 6 cold days in Lisbon",
+    expect(cold.clothing.find((l) => l.id === "tops-long")?.reason).toBe("Mostly cold days");
+  });
+  it("clothing: the second band is named with the city that has most of it; with no city names the place is dropped", () => {
+    // Hot days are in stop 1 (Edinburgh), warm days in stop 0 (Lisbon).
+    const days = trip((i) => ({ stopIndex: i < 4 ? 1 : 0, highC: i < 4 ? 30 : 22 }));
+    expect(recommend(days).clothing.find((l) => l.id === "tops-short")?.reason).toBe(
+      "Mostly hot days; 3 warm days in Lisbon",
+    );
+    const unnamed = recommendPacking({ days, dayStopNames: [], config: base });
+    expect(unnamed.clothing.find((l) => l.id === "tops-short")?.reason).toBe(
+      "Mostly hot days; 3 warm days",
     );
   });
   it("clothing: days with no weather are described as cool", () => {

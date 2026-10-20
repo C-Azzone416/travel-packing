@@ -15,6 +15,14 @@ import { niceAccessoryKey } from "./calc";
 import type { ItemSection, Scope, Staple, SuggestFn, Trip, TripConfig, TripItem } from "./trip";
 
 /** Ids the calculator owns; everything else on a trip is user-added or canonical (Pack last, return, ...). */
+/** The clothing lines a weather-aware list uses instead of "Everyday tops" / "Everyday bottoms" (epic #107 §3). */
+const WEATHER_CLOTHING_IDS: ReadonlySet<string> = new Set([
+  "tops-short",
+  "tops-long",
+  "bottoms-shorts",
+  "bottoms-pants",
+]);
+
 export const CALCULATED_ITEM_IDS: ReadonlySet<string> = new Set([
   "tops",
   "bottoms",
@@ -212,8 +220,12 @@ export function recalculateSuggestions<T extends Trip>(
 
   const calculated = suggest({ ...nextConfig, start: trip.start, end: trip.end });
   const nonCalculated = oldItems.filter((entry) => !CALCULATED_ITEM_IDS.has(entry.id));
+  // A list already split by weather keeps its split clothing: recalculating must not add Everyday tops and
+  // bottoms beside it. The weather review offers new counts for the split lines instead (epic #107 §4).
+  const weatherClothing = oldItems.some((entry) => WEATHER_CLOTHING_IDS.has(entry.id));
 
   const nextSuggested = calculated.items
+    .filter((suggestion) => !(weatherClothing && ["tops", "bottoms"].includes(suggestion.id)))
     .map((suggestion): TripItem => {
       const template: TripItem = {
         id: suggestion.id,

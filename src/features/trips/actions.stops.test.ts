@@ -23,7 +23,7 @@ vi.mock("next/navigation", () => ({
 
 import { locationById } from "@/domain/locations";
 import { startDraft, setDraftStops, type DraftStop, type TripDraft } from "@/domain/trip-lifecycle";
-import { createTripAction } from "./actions";
+import { createTripAction, createTripWithWeatherAction } from "./actions";
 import { setStopsAction } from "./trip-actions";
 
 let ctx: Awaited<ReturnType<typeof createMigratedDb>>;
@@ -156,5 +156,52 @@ describe("setStopsAction", () => {
       ok: false,
       code: "INTERNAL",
     });
+  });
+});
+
+describe("createTripWithWeatherAction", () => {
+  const umbrella = {
+    kind: "add" as const,
+    semanticId: "weather-umbrella",
+    ruleSignature: "rain",
+    item: {
+      semanticId: "weather-umbrella",
+      name: "Compact umbrella",
+      category: "Accessories" as const,
+      qty: 1,
+      optional: false,
+    },
+  };
+
+  it("saves a route of several stops together with the weather rows", async () => {
+    const result = await createTripWithWeatherAction(route(ROUTE), [umbrella]);
+    if (!result.ok) throw new Error(result.code);
+    expect(result.trip.stops.map((entry) => entry.location.city)).toEqual(["Lisbon", "Paris"]);
+    expect(result.trip.items.some((item) => item.id === "weather-umbrella")).toBe(true);
+  });
+
+  it("refuses a draft with no confirmed place, and is INTERNAL without a database", async () => {
+    expect(
+      await createTripWithWeatherAction(startDraft(CONFIG, "2030-05-01", "2030-05-03"), []),
+    ).toEqual({
+      ok: false,
+      code: "INVALID_INPUT",
+    });
+    current = null;
+    expect(await createTripWithWeatherAction(route(ROUTE), [])).toEqual({
+      ok: false,
+      code: "INTERNAL",
+    });
+  });
+
+  it("sends a signed-out person to sign in and an unlisted one to access denied", async () => {
+    as(null);
+    await expect(createTripWithWeatherAction(route(ROUTE), [])).rejects.toThrow(
+      /NEXT_REDIRECT.*sign-in/,
+    );
+    as({ userId: "intruder", email: "intruder@example.test" });
+    await expect(createTripWithWeatherAction(route(ROUTE), [])).rejects.toThrow(
+      /NEXT_REDIRECT.*access-denied/,
+    );
   });
 });

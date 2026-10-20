@@ -7,6 +7,7 @@ import {
   type LifecycleTrip,
   type TripDraft,
 } from "@/domain/trip-lifecycle";
+import type { AcceptedWeatherDecision } from "./trip-actions";
 import * as service from "@/server/data/service";
 import type { DataContext } from "@/server/data/context";
 import type { ErrorCode, Result } from "@/server/data/result";
@@ -96,6 +97,42 @@ export async function createTripAction(draft: TripDraft): Promise<CreateTripActi
             theme: draft.theme,
           })
         : await service.createTrip(context, { ...where, config: draft.config, theme: draft.theme });
+  if (saved.ok) return { ok: true, trip: toLifecycleTrip(saved.data) };
+  if (saved.error.code === "UNAUTHENTICATED") redirect(SIGN_IN_PATH);
+  if (saved.error.code === "FORBIDDEN") redirect(ACCESS_DENIED_PATH);
+  return { ok: false, code: saved.error.code };
+}
+
+/** Atomically save a draft and the weather rows already shown on Shape the list. */
+export async function createTripWithWeatherAction(
+  draft: TripDraft,
+  accepted: AcceptedWeatherDecision[],
+): Promise<CreateTripActionResult> {
+  const context = await getDataContext();
+  if (!context) return { ok: false, code: "INTERNAL" };
+  if (!draft?.location) return { ok: false, code: "INVALID_INPUT" };
+  const route =
+    draft.stops && draft.stops.length > 1
+      ? {
+          stops: draftStops(draft).map((stop) => ({
+            location: { id: stop.location?.id ?? "" },
+            arrive: stop.arrive,
+            leave: stop.leave,
+          })),
+        }
+      : {
+          location: { id: draft.location.id },
+          start: draft.start,
+          end: draft.end,
+        };
+  const saved = await service.createTripWithWeatherReview(context, {
+    mode: draft.mode,
+    sourceId: draft.sourceId,
+    ...route,
+    config: draft.config,
+    theme: draft.theme,
+    accepted,
+  });
   if (saved.ok) return { ok: true, trip: toLifecycleTrip(saved.data) };
   if (saved.error.code === "UNAUTHENTICATED") redirect(SIGN_IN_PATH);
   if (saved.error.code === "FORBIDDEN") redirect(ACCESS_DENIED_PATH);

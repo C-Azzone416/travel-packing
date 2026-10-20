@@ -9,6 +9,7 @@ import { LocationProviderProvider } from "./LocationProviderContext";
 import { TripFlow } from "./TripFlow";
 import { TripsSourceProvider } from "./TripsSourceProvider";
 import { createMemoryTripsSource, type TripsSource } from "./trips-source";
+import type { StopWeather } from "@/domain/weather/types";
 
 const { push } = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock("next/navigation", () => ({
@@ -39,6 +40,59 @@ function memory() {
     newId: () => `new-${++counter}`,
     today: () => "2026-10-16",
   });
+}
+
+function withWeather(base: ReturnType<typeof memory>, optedIn = false) {
+  let weatherOptIn = optedIn;
+  const stops: StopWeather[] = [
+    {
+      stopIndex: 0,
+      status: "ok",
+      days: [
+        {
+          date: "2026-11-13",
+          stopIndex: 0,
+          source: "forecast",
+          highC: 20,
+          lowC: 14,
+          precipProbability: 0.8,
+          precipMm: 4,
+          snowCm: 0,
+          uvIndexMax: 1,
+          sunshineHours: 1,
+        },
+      ],
+    },
+  ];
+  const previewDraft = vi.fn().mockResolvedValue({ kind: "ready", stops });
+  const updateSettings = vi.fn(async (change: { weatherOptIn?: boolean }) => {
+    weatherOptIn = change.weatherOptIn ?? weatherOptIn;
+    return { weatherOptIn, temperatureUnit: "F" as const };
+  });
+  const applyReview = vi.fn(async (tripId: string, _accepted: unknown[], _skipped: unknown[]) => {
+    void [_accepted, _skipped];
+    return base.acceptWeather(tripId);
+  });
+  const createTripWithReview = vi.fn(
+    async (draft: Parameters<typeof base.createTrip>[0], _accepted: unknown[]) => {
+      void _accepted;
+      const trip = await base.createTrip(draft);
+      return (await base.acceptWeather(trip.id)).trip;
+    },
+  );
+  const source: TripsSource = {
+    ...base,
+    weather: {
+      getSettings: async () => ({ weatherOptIn, temperatureUnit: "F" }),
+      updateSettings,
+      getTripWeather: vi.fn().mockResolvedValue({ kind: "ready", stops }),
+      previewDraft,
+      createTripWithReview,
+      listSuggestions: vi.fn().mockResolvedValue([]),
+      applyReview,
+    },
+  };
+  return { source, previewDraft, updateSettings, applyReview, createTripWithReview };
 }
 
 const search = () => screen.getByRole("combobox", { name: "Destination search" });
@@ -242,7 +296,7 @@ describe("step 2: shape the list", () => {
       screen.getByText("Lisbon, Lisbon District, Portugal · Nov 12 – Nov 16 · 5 days"),
     ).toBeTruthy();
     expect(screen.getByRole("heading", { name: "3 everyday days" })).toBeTruthy();
-    expect(screen.getByText("Simulated · Seasonal outlook")).toBeTruthy();
+    expect(screen.queryByText(/Simulated/)).toBeNull();
     const row = (name: string) =>
       screen.getByText(name, { selector: "strong" }).closest(".review-row") as HTMLElement;
     expect(row("Everyday tops").textContent).toContain("2");
@@ -310,16 +364,60 @@ describe("step 2: shape the list", () => {
     expect(ret().value).toBe("2026-11-16");
   });
 
-  it("labels the forecast from the injected today, not the system clock", async () => {
-    const near = setup({ getToday: () => "2026-11-10" });
-    await toShapeStep(near.user);
-    expect(screen.getByText("Simulated · Close forecast")).toBeTruthy();
+  it("asks before previewing and shapes the list with weather reasons after opt-in", async () => {
+    let wired!: ReturnType<typeof withWeather>;
+    const flow = setup({}, (base) => {
+      wired = withWeather(base);
+      return wired.source;
+    });
+    await toShapeStep(flow.user);
+    expect(await screen.findByText("Get weather for your stops?")).toBeTruthy();
+    expect(screen.getByText(/Only map coordinates and dates are sent to Open-Meteo/)).toBeTruthy();
+    expect(wired.previewDraft).not.toHaveBeenCalled();
+    await flow.user.click(screen.getByRole("button", { name: "Get weather" }));
+    await waitFor(() => expect(wired.previewDraft).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText("Your list uses the weather for Lisbon.")).toBeTruthy();
+    const umbrella = screen
+      .getByText("Compact umbrella", { selector: "strong" })
+      .closest(".review-row") as HTMLElement;
+    expect(umbrella.textContent).toContain("Weather");
+    expect(umbrella.textContent).toContain("Rain likely in Lisbon, Nov 13");
+    expect(screen.queryByText("Everyday tops", { selector: "strong" })).toBeNull();
+    expect(screen.getByText("Long-sleeve tops", { selector: "strong" })).toBeTruthy();
   });
 
-  it("uses a seasonal outlook when the trip is far off", async () => {
-    const far = setup({ getToday: () => "2026-01-01" });
-    await toShapeStep(far.user);
-    expect(screen.getByText("Simulated · Seasonal outlook")).toBeTruthy();
+  it("Not now answers the new trip's weather prompt, so the trip screen does not ask again", async () => {
+    const skipped: string[] = [];
+    const { user, source } = setup({}, (base) => {
+      const wired = withWeather(base);
+      return {
+        ...wired.source,
+        skipWeather: async (id) => (skipped.push(id), base.skipWeather(id)),
+      };
+    });
+    await toShapeStep(user);
+    await user.click(await screen.findByRole("button", { name: "Not now" }));
+    expect(await screen.findByText("Weather is off")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Save trip" }));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/"));
+    expect(skipped).toEqual([source.snapshot().trips[0].id]);
+    expect(source.snapshot().trips[0].weather.status).toBe("skipped");
+  });
+
+  it("does not touch the weather status of a trip saved before the question was answered", async () => {
+    const skipped: string[] = [];
+    const { user, source } = setup({}, (base) => {
+      const wired = withWeather(base);
+      return {
+        ...wired.source,
+        skipWeather: async (id) => (skipped.push(id), base.skipWeather(id)),
+      };
+    });
+    await toShapeStep(user);
+    await user.click(await screen.findByRole("button", { name: "Save trip" }));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/"));
+    expect(skipped).toEqual([]);
+    expect(source.snapshot().trips[0].weather.status).toBe("pending");
   });
 
   it("omits the forecast card for a custom destination", async () => {
@@ -355,6 +453,25 @@ describe("saving", () => {
     expect(
       within(document.querySelector(".toast-region") as HTMLElement).getByText("Trip saved"),
     ).toBeTruthy();
+  });
+
+  it("persists the weather recommendations shown in Shape the list", async () => {
+    let wired!: ReturnType<typeof withWeather>;
+    const { user, source } = setup({}, (base) => {
+      wired = withWeather(base, true);
+      return wired.source;
+    });
+    await toShapeStep(user);
+    expect(await screen.findByText("Compact umbrella", { selector: "strong" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Save trip" }));
+    await waitFor(() => expect(wired.createTripWithReview).toHaveBeenCalledTimes(1));
+    expect(wired.createTripWithReview.mock.calls[0][1]).toEqual(
+      expect.arrayContaining([expect.objectContaining({ semanticId: "weather-umbrella" })]),
+    );
+    expect(source.snapshot().trips[0].items.some((item) => item.id === "weather-umbrella")).toBe(
+      true,
+    );
+    expect(push).toHaveBeenCalledWith("/");
   });
 
   it("shows Saving…, disables the buttons while pending, and does not navigate before the source confirms", async () => {

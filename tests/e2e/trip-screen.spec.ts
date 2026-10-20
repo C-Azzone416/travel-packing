@@ -232,34 +232,14 @@ test("a remembered edit changes future trips, but neither this trip's history no
   await expect(row(page, "sunglasses")).toContainText("Polarized sunglasses");
 });
 
-test("weather: nothing changes until accepted; accepting adds exactly one umbrella", async ({
+test("weather: a trip with only curated places says it needs a map place, and adds nothing to the list", async ({
   page,
 }) => {
   await openSanDiego(page);
-  await expect(page.getByText("Simulated · Close forecast")).toBeVisible();
-  await expect(
-    page.getByText("This is a simulated suggestion, not a real forecast.").first(),
-  ).toBeVisible();
-  await expect(row(page, "weather-umbrella")).toHaveCount(0);
-
-  await page.getByRole("button", { name: "Review suggestion" }).click();
-  const dialog = page.getByRole("dialog", { name: "Add a compact umbrella?" });
-  // The trip is not Ready, so the dialog does not warn that Ready will turn off.
-  await expect(
-    dialog.getByText("Accepting changes your list, so Ready will turn off."),
-  ).toHaveCount(0);
-  await dialog.getByRole("button", { name: "Skip" }).click();
-  await expect(page.getByText("Simulated · skipped")).toBeVisible();
-  await expect(row(page, "weather-umbrella")).toHaveCount(0);
-
-  await page.getByRole("button", { name: "Review again" }).click();
-  await page
-    .getByRole("dialog", { name: "Add a compact umbrella?" })
-    .getByRole("button", { name: "Accept umbrella" })
-    .click();
-  await expect(row(page, "weather-umbrella")).toHaveCount(1);
-  await expect(page.getByText("Simulated · accepted")).toBeVisible();
+  await expect(page.getByText("Weather needs a place from the map.")).toBeVisible();
+  await expect(page.getByText(/Simulated/)).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Review suggestion" })).toHaveCount(0);
+  await expect(row(page, "weather-umbrella")).toHaveCount(0);
 });
 
 test("a trip whose umbrella was already accepted shows it once, with no suggestion to review", async ({
@@ -267,9 +247,8 @@ test("a trip whose umbrella was already accepted shows it once, with no suggesti
 }) => {
   await openLisbon(page);
   await expect(page.getByText("You’re ready to go.")).toBeVisible();
-  await expect(page.getByText("Simulated · accepted")).toBeVisible();
+  await expect(page.getByText(/Simulated/)).toHaveCount(0);
   await expect(row(page, "weather-umbrella")).toHaveCount(1);
-  await expect(page.getByRole("button", { name: "Review suggestion" })).toHaveCount(0);
 });
 
 test("an optional item can be removed, after a confirmation that focuses the safe button", async ({
@@ -467,26 +446,13 @@ test("screenshots of the trip screen", DEVICE, async ({ page }, testInfo) => {
   await shot("preferences");
 });
 
-test(
-  "screenshots of the Ready trip, the weather card and its dialog",
-  DEVICE,
-  async ({ page }, testInfo) => {
-    await page.emulateMedia({ reducedMotion: "reduce" });
-    const shot = (name: string) =>
-      page.screenshot({
-        path: `test-results/screenshots/${testInfo.project.name}-trip-${name}.png`,
-      });
-    await openLisbon(page);
-    await expect(page.getByText("You’re ready to go.")).toBeVisible();
-    await shot("ready");
-
-    await page.getByRole("link", { name: "Back to trips" }).click();
-    await page.getByRole("link", { name: "Keep packing: San Diego" }).click();
-    await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
-    await page.getByRole("button", { name: "Review suggestion" }).scrollIntoViewIfNeeded();
-    await shot("weather-card");
-    await page.getByRole("button", { name: "Review suggestion" }).click();
-    await expect(page.getByRole("dialog", { name: "Add a compact umbrella?" })).toBeVisible();
-    await shot("weather-dialog");
-  },
-);
+test("screenshot of the Ready trip", DEVICE, async ({ page }, testInfo) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const shot = (name: string) =>
+    page.screenshot({
+      path: `test-results/screenshots/${testInfo.project.name}-trip-${name}.png`,
+    });
+  await openLisbon(page);
+  await expect(page.getByText("You’re ready to go.")).toBeVisible();
+  await shot("ready");
+});

@@ -443,6 +443,25 @@ describe("removeTripItem", () => {
 });
 
 describe("recalculateSuggestions", () => {
+  it("keeps a weather-split list split: no Everyday tops or bottoms are added beside it (epic #107)", () => {
+    const base = makeTrip();
+    const split = {
+      ...base,
+      items: [
+        ...base.items.filter((entry) => entry.id !== "tops" && entry.id !== "bottoms"),
+        item("tops-short", "Short-sleeve tops", "Clothing", 3),
+        item("bottoms-pants", "Pants", "Clothing", 2),
+      ],
+    };
+    const next = checked(recalculateSuggestions(split, { ...CONFIG, laundry: true }, suggest));
+    expect(next.items.some((entry) => entry.id === "tops" || entry.id === "bottoms")).toBe(false);
+    expect(byId(next, "tops-short")).toMatchObject({ qty: 3 });
+    expect(byId(next, "bottoms-pants")).toMatchObject({ qty: 2 });
+    // Without a split the legacy lines come back as before.
+    const plain = checked(recalculateSuggestions(base, { ...CONFIG, laundry: true }, suggest));
+    expect(plain.items.some((entry) => entry.id === "tops")).toBe(true);
+  });
+
   const nicePicks = (trip: Trip) =>
     trip.items
       .filter((entry) => entry.id.startsWith("nice-"))

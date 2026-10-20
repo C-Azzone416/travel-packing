@@ -27,11 +27,13 @@ import {
   type Signals,
 } from "../../domain/readiness";
 import type { Staple } from "../../domain/trip";
+import { applyWeatherChanges } from "../../domain/weather/apply";
 import {
   beginDraft,
   emptyLifecycleState,
   saveDraft,
   selectDraftLocation,
+  setDraftConfig,
   setDraftStops,
   setDraftTheme,
   startCopyDraft,
@@ -340,6 +342,17 @@ async function saveNewTrip(
   context: DataContext,
   draft: TripDraft,
 ): Promise<StoredTrip> {
+  const trip = await buildNewTrip(scope, context, draft);
+  await insertTrip(scope.db, scope.ownerId, trip);
+  return (await loadTrip(scope.db, scope.ownerId, trip.id)) ?? refuse(fail("INTERNAL"));
+}
+
+/** Build a fresh stored snapshot without inserting it, for atomic compound creates. */
+async function buildNewTrip(
+  scope: OwnerScope,
+  context: DataContext,
+  draft: TripDraft,
+): Promise<StoredTrip> {
   await ensureDefaultStaples(scope.db, scope.ownerId);
   const staples = await listStaples(scope.db, scope.ownerId);
   const saved = saveDraft(beginDraft(emptyLifecycleState(), draft), staples, {
@@ -347,9 +360,7 @@ async function saveNewTrip(
     today: todayOf(context),
   });
   if (!saved.ok) refuse(fail("INVALID_INPUT", { fields: ["location", "start", "end"] }));
-  const trip = toStoredTrip(saved.trip);
-  await insertTrip(scope.db, scope.ownerId, trip);
-  return (await loadTrip(scope.db, scope.ownerId, trip.id)) ?? refuse(fail("INTERNAL"));
+  return toStoredTrip(saved.trip);
 }
 
 /**
@@ -418,6 +429,43 @@ export function copyTrip(context: DataContext, input: unknown): Promise<Result<S
         )
       : await singleStopDraft(context, request, begin);
     return saveNewTrip(scope, context, request.theme ? setDraftTheme(draft, request.theme) : draft);
+  });
+}
+
+/** Create/copy the trip and apply the Shape-the-list weather rows in one transaction. */
+export function createTripWithWeatherReview(
+  context: DataContext,
+  input: unknown,
+): Promise<Result<StoredTrip>> {
+  return run(context, inputs.createTripWithWeatherInput, input, async (scope, request) => {
+    const copied =
+      request.mode === "copy" ? await mustLoad(scope, request.sourceId as string) : null;
+    const begin = (start: string, end: string) =>
+      copied
+        ? startCopyDraft({ ...copied, location: null, stops: [] }, start, end)
+        : startDraft(request.config, start, end, request.theme);
+    let draft = request.stops
+      ? setDraftStops(
+          begin(request.stops[0].arrive, request.stops.at(-1)?.leave ?? request.stops[0].leave),
+          await resolveStops(context, request.stops),
+        )
+      : await singleStopDraft(context, request, begin);
+    draft = setDraftTheme(setDraftConfig(draft, request.config), request.theme);
+
+    return scope.db.transaction(async (tx) => {
+      const txScope: OwnerScope = { db: tx as OwnerScope["db"], ownerId: scope.ownerId };
+      const base = await buildNewTrip(txScope, context, draft);
+      const trip = applyWeatherChanges(base, request.accepted);
+      await insertTrip(txScope.db, txScope.ownerId, trip);
+      for (const decision of request.accepted) {
+        await writeWeatherSuggestion(txScope.db, txScope.ownerId, trip.id, {
+          semanticId: decision.semanticId,
+          status: "accepted",
+          ruleSignature: decision.ruleSignature,
+        });
+      }
+      return (await loadTrip(txScope.db, txScope.ownerId, trip.id)) ?? refuse(fail("INTERNAL"));
+    });
   });
 }
 
@@ -559,4 +607,40 @@ export function setTripWeatherSuggestion(
     }
     return listWeatherSuggestions(scope.db, scope.ownerId, tripId);
   });
+}
+
+/**
+ * Apply the checked review rows and persist checked/skipped rule signatures in one owner-scoped transaction.
+ * The request contains recommendation decisions, never raw weather observations.
+ */
+export function applyTripWeatherReview(
+  context: DataContext,
+  input: unknown,
+): Promise<Result<TripResult>> {
+  return run(context, inputs.weatherReviewInput, input, async (scope, request) =>
+    scope.db.transaction(async (tx) => {
+      const txScope: OwnerScope = { db: tx as OwnerScope["db"], ownerId: scope.ownerId };
+      if (!(await lockTrip(txScope.db, txScope.ownerId, request.tripId))) refuse(fail("NOT_FOUND"));
+      const current = await mustLoad(txScope, request.tripId);
+      const trip = applyWeatherChanges(current, request.accepted);
+      if (trip !== current && !(await saveTrip(txScope.db, txScope.ownerId, trip))) {
+        refuse(fail("NOT_FOUND"));
+      }
+      for (const decision of request.accepted) {
+        await writeWeatherSuggestion(txScope.db, txScope.ownerId, request.tripId, {
+          semanticId: decision.semanticId,
+          status: "accepted",
+          ruleSignature: decision.ruleSignature,
+        });
+      }
+      for (const decision of request.skipped) {
+        await writeWeatherSuggestion(txScope.db, txScope.ownerId, request.tripId, {
+          semanticId: decision.semanticId,
+          status: "skipped",
+          ruleSignature: decision.ruleSignature,
+        });
+      }
+      return { trip };
+    }),
+  );
 }

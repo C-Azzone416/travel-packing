@@ -601,3 +601,133 @@ describe("the trip store", () => {
     expect((await loadTrip(db(), OWNER.userId, trip.id))?.stops).toHaveLength(1);
   });
 });
+
+describe("createTripWithWeatherReview", () => {
+  const umbrella = {
+    kind: "add" as const,
+    semanticId: "weather-umbrella",
+    ruleSignature: "rain",
+    item: {
+      semanticId: "weather-umbrella",
+      name: "Compact umbrella",
+      category: "Accessories" as const,
+      qty: 1,
+      optional: false,
+    },
+  };
+  const base = { config: CONFIG, theme: "travel", accepted: [umbrella] };
+  const review = (input: Record<string, unknown>) =>
+    service.createTripWithWeatherReview(context(), {
+      mode: "create",
+      sourceId: null,
+      ...base,
+      ...input,
+    });
+
+  it("creates a route of several stops with the accepted weather rows, atomically", async () => {
+    const trip = data(await review({ stops: ROUTE }));
+    expect(trip.stops).toHaveLength(3);
+    expect(trip.items.some((item) => item.id === "weather-umbrella")).toBe(true);
+    const rows = data(await service.listTripWeatherSuggestions(context(), { tripId: trip.id }));
+    expect(rows.find((row) => row.semanticId === "weather-umbrella")).toMatchObject({
+      status: "accepted",
+      ruleSignature: "rain",
+    });
+  });
+
+  it("copies one of the owner's trips with its preferences and the accepted rows", async () => {
+    const source = data(await create());
+    const copy = data(
+      await review({
+        mode: "copy",
+        sourceId: source.id,
+        location: { id: "beta" },
+        start: "2030-07-01",
+        end: "2030-07-03",
+      }),
+    );
+    expect(copy).toMatchObject({ copiedFrom: source.id, destination: "Beta" });
+    expect(copy.items.some((item) => item.id === "weather-umbrella")).toBe(true);
+  });
+
+  it("refuses a copy with no source, a create with a source, and another owner's source", async () => {
+    const source = data(await create());
+    const one = { location: { id: "beta" }, start: "2030-07-01", end: "2030-07-03" };
+    expect(errorOf(await review({ ...one, mode: "copy", sourceId: null }))?.fields).toContain(
+      "sourceId",
+    );
+    expect(errorOf(await review({ ...one, sourceId: source.id }))?.fields).toContain("sourceId");
+    as(OTHER_OWNER);
+    expect(errorOf(await review({ ...one, mode: "copy", sourceId: source.id }))?.code).toBe(
+      "NOT_FOUND",
+    );
+  });
+
+  it("saves nothing when a weather row is refused", async () => {
+    const bad = { ...umbrella, item: { ...umbrella.item, qty: 0 } };
+    expect(errorOf(await review({ stops: ROUTE, accepted: [bad] }))?.code).toBe("INVALID_INPUT");
+    expect(await ctx.client.query(`SELECT 1 FROM trips`)).toMatchObject({ rows: [] });
+  });
+});
+
+describe("applyTripWeatherReview", () => {
+  const decision = (semanticId: string) => ({ semanticId, ruleSignature: "sig" });
+
+  it("applies the accepted rows and records accepted and skipped signatures together", async () => {
+    const trip = data(await create());
+    const result = data(
+      await service.applyTripWeatherReview(context(), {
+        tripId: trip.id,
+        accepted: [
+          {
+            ...decision("weather-rain-jacket"),
+            kind: "add",
+            item: {
+              semanticId: "weather-rain-jacket",
+              name: "Rain jacket",
+              category: "Clothing",
+              qty: 1,
+              optional: false,
+            },
+          },
+        ],
+        skipped: [decision("weather-sunscreen")],
+      }),
+    );
+    expect(result.trip.items.some((item) => item.id === "weather-rain-jacket")).toBe(true);
+    expect(result.trip.ready).toBe(false);
+    const rows = data(await service.listTripWeatherSuggestions(context(), { tripId: trip.id }));
+    expect(rows.map((row) => [row.semanticId, row.status])).toEqual(
+      expect.arrayContaining([
+        ["weather-rain-jacket", "accepted"],
+        ["weather-sunscreen", "skipped"],
+      ]),
+    );
+  });
+
+  it("a review that only skips leaves the list alone", async () => {
+    const trip = data(await create());
+    const result = data(
+      await service.applyTripWeatherReview(context(), {
+        tripId: trip.id,
+        accepted: [],
+        skipped: [decision("weather-umbrella")],
+      }),
+    );
+    expect(result.trip.items).toEqual(trip.items);
+  });
+
+  it("is NOT_FOUND for another owner's trip", async () => {
+    const trip = data(await create());
+    as(OTHER_OWNER);
+    expect(
+      errorOf(
+        await service.applyTripWeatherReview(context(), {
+          tripId: trip.id,
+          accepted: [],
+          skipped: [decision("weather-umbrella")],
+        }),
+      )?.code,
+    ).toBe("NOT_FOUND");
+  });
+});
