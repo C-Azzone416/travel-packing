@@ -258,7 +258,9 @@ main {
   width: calc(100% - 24px);
   max-width: 520px;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  /* Three links, or four with Sign out: equal columns either way. */
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
   padding: 6px;
   border: 1px solid rgba(24, 61, 69, 0.12);
   border-radius: 21px;
@@ -279,8 +281,29 @@ main {
   font-weight: 800;
   text-decoration: none;
 }
-.bottom-nav a span {
+.bottom-nav a span,
+.bottom-nav button span {
   font-size: 18px;
+  line-height: 1;
+}
+.nav-signout {
+  display: grid;
+}
+.bottom-nav button {
+  min-height: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border: 0;
+  border-radius: 15px;
+  background: none;
+  color: var(--muted-text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
 }
 .bottom-nav a[aria-current="page"] {
   background: var(--seafoam-soft);
@@ -539,10 +562,18 @@ main {
     left: 24px;
     transform: none;
     width: var(--nav-rail-width);
+    grid-auto-flow: row;
     grid-template-columns: 1fr;
   }
-  .bottom-nav a {
+  .bottom-nav a,
+  .bottom-nav button {
     min-height: 66px;
+  }
+  /* Sign out sits at the end of the rail, under a divider, and looks like the other items. */
+  .nav-signout {
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid var(--line);
   }
   .toast-region {
     bottom: 24px;
