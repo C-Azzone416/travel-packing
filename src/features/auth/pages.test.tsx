@@ -143,6 +143,14 @@ describe("the Didn't get it? note on the pages", () => {
     expect(await html(ForgotPasswordPage())).not.toContain("Didn’t get it?");
   });
 
+  it("the forgot-password page hands the form the Preview address on the Preview, and null elsewhere", async () => {
+    const appHost = async () =>
+      ((await ForgotPasswordPage()) as { props: { appHost: string | null } }).props.appHost;
+    expect(await withEnv("preview", appHost)).toBe("travel-packing-preview.vercel.app");
+    expect(await withEnv("production", appHost)).toBeNull();
+    expect(await withEnv(undefined, appHost)).toBeNull();
+  });
+
   it("is identical for every remembered address (it says nothing about any account)", async () => {
     const note = (markup: string) => markup.slice(markup.indexOf('<details class="didnt-get-it"'));
     jar.set("cw-pending-email", "owner@example.test");
