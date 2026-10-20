@@ -76,27 +76,32 @@ export type RateLimited = { status: "rate-limited" };
 
 /**
  * - ok: the verification step comes next, whether or not the address was already registered or allowed
- * - invalid-email / weak-password: fix the form
+ * - invalid-email: fix the form
  * - rate-limited / unavailable: try again later
  */
 export type SignUpOutcome =
   | { status: "ok"; email: string; cooldownSeconds: number }
   | { status: "invalid-email" }
-  | { status: "weak-password"; problem: PasswordProblem | "provider" }
   | RateLimited
   | { status: "unavailable" };
+
+/**
+ * The password the provider's sign-up call insists on (#102). Sign-up asks for an email only, so this is made here, from
+ * 32 random bytes (43 characters, inside any password policy), handed to the provider and dropped. Nobody sees or uses
+ * it: the person chooses the real password through the emailed link, which replaces this one.
+ */
+function throwawayPassword(): string {
+  return Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(32))).toString("base64url");
+}
 
 export async function signUpOwner(
   auth: Auth,
   limits: FlowLimits,
   address: string,
   emailInput: unknown,
-  password: unknown,
 ): Promise<SignUpOutcome> {
   const email = cleanEmail(emailInput);
   if (!email) return { status: "invalid-email" };
-  const problem = passwordProblem(password);
-  if (problem) return { status: "weak-password", problem };
   if (!limits.signUp(address).ok) {
     logAuthEvent("flow-rate-limited");
     return { status: "rate-limited" };
@@ -112,12 +117,11 @@ export async function signUpOwner(
   } else if (!isAllowed(auth.allowlist, email)) {
     logAuthEvent("sign-up-skipped-allowlist");
   } else {
-    const result = await auth.provider.signUp(email, password as string);
+    const result = await auth.provider.signUp(email, throwawayPassword());
     if (!result.ok) {
+      // Even "weak-password" is a server problem now: the person typed no password, so there is nothing for them to fix.
       logAuthEvent("sign-up-failed");
-      return result.reason === "weak-password"
-        ? { status: "weak-password", problem: "provider" }
-        : { status: "unavailable" };
+      return { status: "unavailable" };
     }
     // The provider answered. A client error (a 4xx, e.g. an untrusted origin or a taken address) looks like success to the
     // person, but it did not send a code, so it is logged apart from a real success.

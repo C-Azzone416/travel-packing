@@ -74,65 +74,58 @@ describe("signUpAction", () => {
   const submit = (fields: Record<string, string>) => signUpAction(INITIAL_FORM, data(fields));
 
   it("creates the account, remembers the address, and goes to the code screen", async () => {
-    await expect(
-      submit({ email: " Owner@Example.test ", password: "a-long-password" }),
-    ).rejects.toThrow("NEXT_REDIRECT:/verify");
+    await expect(submit({ email: " Owner@Example.test " })).rejects.toThrow(
+      "NEXT_REDIRECT:/verify",
+    );
     expect(calls()).toEqual(["signUp"]);
     expect(jar.get("cw-pending-email")).toBe(OWNER);
   });
 
   it("does the same, visibly, for an address that is not allowed (and creates nothing)", async () => {
-    await expect(submit({ email: STRANGER, password: "a-long-password" })).rejects.toThrow(
-      "NEXT_REDIRECT:/verify",
-    );
+    await expect(submit({ email: STRANGER })).rejects.toThrow("NEXT_REDIRECT:/verify");
     expect(calls()).toEqual([]);
     expect(jar.get("cw-pending-email")).toBe(STRANGER);
   });
 
   it("keeps what was typed and names the field to fix", async () => {
-    expect(await submit({ email: "nope", password: "a-long-password" })).toEqual({
+    expect(await submit({ email: "nope" })).toEqual({
       error: null,
       email: "nope",
       fieldErrors: { email: "Enter a valid email address." },
     });
-    expect(await submit({ email: OWNER, password: "short" })).toMatchObject({
-      email: OWNER,
-      fieldErrors: { password: "Password must be at least 8 characters." },
-    });
     expect(jar.size).toBe(0);
-  });
-
-  it("names every problem at once", async () => {
-    expect(await submit({ email: "nope", password: "short" })).toMatchObject({
-      fieldErrors: {
-        email: "Enter a valid email address.",
-        password: "Password must be at least 8 characters.",
-      },
-    });
     expect(calls()).toEqual([]);
   });
 
-  it("shows the provider's refused password under the password field", async () => {
+  it("ignores a password field posted anyway: the provider gets the server's own random one", async () => {
+    await expect(submit({ email: OWNER, password: "typed-by-someone" })).rejects.toThrow(
+      "NEXT_REDIRECT:/verify",
+    );
+    expect(fake.flows.calls[0].args[1]).not.toBe("typed-by-someone");
+  });
+
+  it("shows a refused password as a server problem, not a password message", async () => {
     fake.flows.answers.signUp = { ok: false, reason: "weak-password" };
-    expect(await submit({ email: OWNER, password: "a-long-password" })).toMatchObject({
-      fieldErrors: { password: expect.stringContaining("at least 8") },
+    expect(await submit({ email: OWNER })).toMatchObject({
+      error: "Something went wrong on our side. Try again in a moment.",
+      fieldErrors: {},
     });
   });
 
   it("says what went wrong when sign-up is limited, down, or switched off", async () => {
     fake.flows.answers.signUp = { ok: false, reason: "unavailable" };
-    expect(await submit({ email: OWNER, password: "a-long-password" })).toMatchObject({
+    expect(await submit({ email: OWNER })).toMatchObject({
       error: "Something went wrong on our side. Try again in a moment.",
     });
     available = false;
-    expect(await submit({ email: OWNER, password: "a-long-password" })).toMatchObject({
+    expect(await submit({ email: OWNER })).toMatchObject({
       error: "Sign-up isn't available right now.",
     });
     available = true;
     for (let i = 0; i < 10; i += 1) {
-      await submit({ email: `u${i}@example.test`, password: "a-long-password" }).catch(() => {});
+      await submit({ email: `u${i}@example.test` }).catch(() => {});
     }
-    expect(await submit({ email: OWNER, password: "a-long-password" })).toMatchObject({
+    expect(await submit({ email: OWNER })).toMatchObject({
       error: "Too many requests. Try again in a few minutes.",
     });
   });
@@ -140,7 +133,7 @@ describe("signUpAction", () => {
   it("waits out the minimum so allowed and unlisted addresses take the same time", async () => {
     vi.stubEnv("AUTH_FLOW_MIN_MS", "60");
     const started = Date.now();
-    await submit({ email: STRANGER, password: "a-long-password" }).catch(() => {});
+    await submit({ email: STRANGER }).catch(() => {});
     expect(Date.now() - started).toBeGreaterThanOrEqual(55);
   });
 });

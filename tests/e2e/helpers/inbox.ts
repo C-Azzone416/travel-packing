@@ -71,3 +71,16 @@ export function createVerifiedAccount(email: string, password: string): void {
     JSON.stringify({ password, verified: true }),
   );
 }
+
+/**
+ * Someone who knows the address calls the auth service's public sign-up endpoint directly with a password of their own (the
+ * app's sign-up no longer takes one, #102): an unverified account with that password, and the code mailed to the owner's inbox.
+ */
+export function preRegisterAccount(email: string, password: string): void {
+  mkdirSync(STATE_DIR, { recursive: true });
+  writeFileSync(
+    join(STATE_DIR, `acct-${hex(email)}`),
+    JSON.stringify({ password, verified: false }),
+  );
+  writeFileSync(join(STATE_DIR, `inbox-verify-${hex(email)}`), "424242:0");
+}

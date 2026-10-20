@@ -30,10 +30,9 @@ describe("SignUpForm", () => {
     expect(email.autocomplete).toBe("email");
     expect(email.getAttribute("autocapitalize")).toBe("none");
     expect(email.getAttribute("spellcheck")).toBe("false");
-    const password = screen.getByLabelText("Password") as HTMLInputElement;
-    expect(password.autocomplete).toBe("new-password");
-    expect(password.getAttribute("aria-describedby")).toBe("password-hint");
-    expect(document.getElementById("password-hint")?.textContent).toBe("At least 8 characters.");
+    // Email only (#102): no password field, hint or mention of a password rule at this step.
+    expect(screen.queryByLabelText(/password/i)).toBeNull();
+    expect(document.querySelector("input[type='password']")).toBeNull();
     expect(screen.getByRole("button", { name: "Create account" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe("/sign-in");
     expect(document.activeElement).toBe(screen.getByRole("heading", { level: 1 }));
@@ -44,23 +43,19 @@ describe("SignUpForm", () => {
       vi.fn(async () =>
         form({
           email: "typed@example.test",
-          fieldErrors: {
-            email: "Enter a valid email address.",
-            password: "Password must be at least 8 characters.",
-          },
+          fieldErrors: { email: "Enter a valid email address." },
         }),
       ),
     );
     const user = userEvent.setup();
     await user.type(screen.getByLabelText("Email"), "typed@example.test");
-    await user.type(screen.getByLabelText("Password"), "x");
     await user.click(screen.getByRole("button", { name: "Create account" }));
     // The action's result and the focus move land in a later render; wait for them instead of reading straight after the click
     // (read too early on a busy machine, this test flaked with focus still on the button).
     await screen.findByText("Enter a valid email address.");
     const sent = action.mock.calls[0] as unknown as [FormState, FormData];
     expect(sent[1].get("email")).toBe("typed@example.test");
-    expect(sent[1].get("password")).toBe("x");
+    expect(sent[1].has("password")).toBe(false);
 
     const email = screen.getByLabelText("Email") as HTMLInputElement;
     expect(email.getAttribute("aria-invalid")).toBe("true");
@@ -69,8 +64,6 @@ describe("SignUpForm", () => {
       "Enter a valid email address.",
     );
     expect(email.value).toBe("typed@example.test");
-    const password = screen.getByLabelText("Password");
-    expect(password.getAttribute("aria-describedby")).toContain("password-error");
     // Focus goes to the first invalid field, and no form-level alert is added for a field problem.
     await waitFor(() => expect(document.activeElement).toBe(email));
     expect(screen.queryByRole("alert")).toBeNull();

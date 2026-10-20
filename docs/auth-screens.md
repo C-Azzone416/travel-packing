@@ -23,7 +23,7 @@ never create a session on their own, and a verified address that is not allowlis
 
 | Route                           | What it does                                                                                                                                                                                             |
 | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/sign-up`                      | Email + password. Always continues to `/verify`.                                                                                                                                                         |
+| `/sign-up`                      | Email only (#102). Always continues to `/verify`.                                                                                                                                                        |
 | `/verify`                       | Enter the 6-digit code. "Send a new code" with a 30-second gap. "Use a different email" goes back to sign-up. A right code goes to `/finish-setup`.                                                      |
 | `/finish-setup`                 | "Check your email to finish setting up" (#83): the link that chooses the password was emailed. "Send the link again" with the 30-second gap.                                                             |
 | `/forgot-password`              | Email, then always "Check your email". "Send it again" with the same 30-second gap.                                                                                                                      |
@@ -36,7 +36,7 @@ in history, a shared link or an access log. It grants nothing. With no cookie, `
 ## Enumeration safety
 
 - **Sign-up** for an address that already has an account looks like any other sign-up (the provider reports success without sending a
-  code, and the adapter treats every client error except "password refused" as success).
+  code, and the adapter treats every client error as success).
 - **Addresses not on the allowlist** get the identical screens, copy and (with the timing floor) timing, but **nothing is created,
   mailed or verified**: only allowlisted addresses ever reach the provider. Their code step simply never succeeds ("That code isn't
   right or has expired…"), and they hit the same five-attempt lock. No screen says "not invited" or "not allowed". Pinned by
@@ -52,6 +52,28 @@ in history, a shared link or an access log. It grants nothing. With no cookie, `
 - The timing floor (`AUTH_FLOW_MIN_MS`, default 800 ms, `min-duration.ts`) makes a request that reached the provider and one that did not
   take the same time.
 - Logs are a closed set of event codes (`safe-log.ts`); no address, code, token or password is ever logged. Tests assert it.
+
+## Sign-up asks for an email only (#102)
+
+The provider's sign-up call needs a password, but since #83 that password can never sign anyone in: the person chooses the real one
+through the emailed "finish setting up" link. So the form asks for the email alone (a password box there only confused people), and
+the server action makes the password itself: 32 random bytes from the CSPRNG (`crypto.getRandomValues`), base64url (43 characters, inside
+any password policy), different on every call. It goes to `provider.signUp` and is dropped: never returned to the browser, logged,
+stored or part of the client bundle. The link replaces it. A password refused by the provider is now only a server error ("Something
+went wrong on our side"); there is no password-policy message on the sign-up form.
+
+**Retrying an abandoned sign-up.** Someone who started but never entered the code used to be able to sign in with the password they typed
+and be sent back to `/verify` for a fresh code. They no longer know a password, so sign-in cannot do that. What works, with no password:
+
+1. **Sign up again** with the same address. It always lands on `/verify` (the same screen as any sign-up). With the real provider a
+   taken address is a client error that sends nothing, which the app treats as success and logs as `sign-up-provider-rejected`; so
+   the code from the first attempt still works if it has not expired.
+2. **"Send a new code"** on `/verify` (the provider's `sendVerificationOtp`) mails a new code that replaces the old one. It needs no password and
+   is the way back once a code has expired. Note that a repeat sign-up starts the 30-second gap again, so this button reappears 30
+   seconds after it.
+
+Pinned by `pre-registration.test.ts` ("retrying an abandoned sign-up") and `auth-screens.spec.ts`. The real provider's behaviour for a
+taken address is not testable in CI; confirm it on the preview.
 
 ## Why did no code arrive? (server-side events, #93)
 
@@ -107,7 +129,8 @@ A successful reset signs out _this browser_ and does not sign anyone in. Ending 
 ## Pre-registration: closed by setting the password through the emailed link
 
 The gap (found reviewing #81): sign-up is open for any address on `OWNER_EMAIL_ALLOWLIST`, so **anyone who knows the owner's email
-could sign up with it first, with their own password.** The code goes to the owner's inbox, so they cannot verify it, but when the
+could sign up with it first, with their own password.** (Since #102 the app's own form takes no password, so the attacker calls the
+auth service's public sign-up endpoint directly; the gap and its closure are unchanged, and the tests do exactly that.) The code goes to the owner's inbox, so they cannot verify it, but when the
 owner later enters that code the account becomes verified **with the other person's password**. The Neon Auth sign-up endpoint is
 public per project, so this exists with or without the app's screens.
 
