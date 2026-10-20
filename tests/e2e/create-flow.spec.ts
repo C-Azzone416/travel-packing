@@ -224,6 +224,9 @@ test("screenshots of the create flow", DEVICE, async ({ page }, testInfo) => {
   await openDashboard(page);
   await page.getByRole("link", { name: /New trip/ }).click();
   await page.getByRole("combobox", { name: "Destination search" }).fill("lon");
+  // Take the picture only once the results are on screen: a full-page WebKit screenshot taken mid-search was the
+  // likely cause of the option never appearing (#120).
+  await expect(page.getByRole("option", { name: /Ontario/ })).toBeVisible();
   await page.screenshot({
     path: `test-results/screenshots/${testInfo.project.name}-create-step1.png`,
     fullPage: true,

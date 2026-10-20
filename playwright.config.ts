@@ -39,6 +39,9 @@ export default defineConfig({
   // One worker: the e2e database is a single PGlite instance, which serializes every connection, so parallel tests
   // queue behind each other and time out waiting for the dashboard. (CI already runs one worker.)
   workers: 1,
+  // CI prints every test with its duration (`list`) and annotates failures on the PR (`github`); the default `dot` hid
+  // both. A failed attempt keeps its trace (uploaded with the report) so a flaky test can be diagnosed, not guessed at.
+  reporter: process.env.CI ? [["list"], ["github"]] : "list",
   webServer: [
     {
       // A real Postgres (PGlite behind the wire protocol), migrated and seeded with the synthetic sample set, in
@@ -86,13 +89,21 @@ export default defineConfig({
       },
     },
   ],
-  use: { baseURL: `http://localhost:${PORT}` },
+  use: { baseURL: `http://localhost:${PORT}`, trace: process.env.CI ? "retain-on-failure" : "off" },
   projects: [
     // A real phone: Playwright's iPhone 15 profile (WebKit, mobile user agent, touch, 3x pixel ratio, the Safari viewport).
     // It runs ONLY the specs tagged @device (tests/e2e/helpers/device.ts): the ones whose outcome depends on the device
     // (layout, tap targets, overflow, navigation, sheets, accessibility at phone size, the golden path). The app's logic
     // and data flows are the same on every device, so they run once, on desktop.
-    { name: "phone", grep: /@device/, use: { ...devices["iPhone 15"] } },
+    // WebKit on a shared CI runner is slower than Chromium, so a phone test gets 60 s instead of 30 s (assertion timeouts
+    // are unchanged) and one retry in CI. A test that passes only on retry is reported as "flaky": file or fix it (docs/e2e.md).
+    {
+      name: "phone",
+      grep: /@device/,
+      timeout: 60_000,
+      retries: process.env.CI ? 1 : 0,
+      use: { ...devices["iPhone 15"] },
+    },
     // Every test, in Chromium at a desktop size.
     { name: "desktop", use: { browserName: "chromium", viewport: { width: 1440, height: 1000 } } },
   ],

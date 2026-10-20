@@ -15,6 +15,14 @@ overflow, the bottom navigation and sheets, accessibility at phone size, the num
 Tag a spec with `test("...", DEVICE, async ...)` or `test.describe("...", DEVICE, () => ...)`. CI fails if the projects in
 `playwright.config.ts` and the CI matrix ever differ.
 
+## Timeouts, retries and "flaky" (#120)
+
+CI prints every test with its duration (the `list` reporter) and keeps a trace for each failed attempt in the uploaded
+`playwright-report-*` artifact. The `phone` project allows 60 s per test (WebKit on a shared runner is slower than Chromium; `expect`
+timeouts are unchanged) and retries a failed test once in CI. A test that fails and then passes is reported as **flaky** in the run's
+summary. A "flaky" result means **file an issue or fix the test, not ignore it**: the retry only keeps one slow runner from blocking a
+merge, it does not make the test sound.
+
 ## Run it locally
 
 ```
