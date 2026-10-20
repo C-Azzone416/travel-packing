@@ -42,11 +42,20 @@ async function signUp(page: Page, address = email) {
   await expect(page).toHaveURL(/\/verify$/);
 }
 
-/** Types the code and presses Verify, and waits for the server's answer so the next try never races the form reset. */
+/**
+ * Types the code and presses Verify, and waits for the server's answer so the next try never races the form reset.
+ * The form ignores a submit while the previous answer is still being applied (a deliberate double-submit guard), and on a slow
+ * runner a click can land in that window and do nothing. CI showed it: one of five wrong tries was swallowed, so the lock never came
+ * and the right code was accepted. So the code is typed and Verify pressed again until a request really goes out.
+ */
 async function enterCode(page: Page, code: string) {
-  await page.getByLabel("6-digit code").fill(code);
   const answered = page.waitForResponse((response) => response.request().method() === "POST");
-  await page.getByRole("button", { name: "Verify" }).click();
+  await expect(async () => {
+    await page.getByLabel("6-digit code").fill(code);
+    const sent = page.waitForRequest((request) => request.method() === "POST", { timeout: 1500 });
+    await page.getByRole("button", { name: "Verify" }).click();
+    await sent;
+  }).toPass({ timeout: 15_000 });
   await answered;
 }
 
