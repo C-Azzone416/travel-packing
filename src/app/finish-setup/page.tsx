@@ -4,6 +4,7 @@ import { getAuth } from "@/server/auth/auth-runtime";
 import { flowLimits } from "@/server/auth/flow-limits";
 import { authorizeOwner } from "@/server/auth/guard";
 import { pendingEmail } from "@/server/auth/pending-email";
+import { previewHost } from "@/server/auth/request-origin";
 import { resendSetupAction } from "./actions";
 
 export const metadata = { title: "Finish setting up" };
@@ -19,6 +20,7 @@ export default async function FinishSetupPage() {
       email={email}
       initialCooldown={email ? flowLimits().cooldownRemaining("reset", email) : 0}
       resendAction={resendSetupAction}
+      appHost={previewHost()}
     />
   );
 }

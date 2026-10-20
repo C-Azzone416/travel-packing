@@ -2606,3 +2606,38 @@ a.back {
     width: 100%;
   }
 }
+
+/* "Didn't get it?" under the resend control (#119): a link-style summary, 44px, in the same place on all three screens. */
+.didnt-get-it {
+  margin-top: 4px;
+}
+.didnt-get-it summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  color: var(--teal-dark, var(--teal));
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.didnt-get-it summary::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+}
+.didnt-get-it[open] summary::after {
+  transform: translateY(2px) rotate(-135deg);
+}
+.didnt-get-it ul {
+  margin: 0 0 8px;
+  padding-left: 20px;
+  color: var(--ink);
+  font-size: 14px;
+}
+.didnt-get-it li + li {
+  margin-top: 4px;
+}

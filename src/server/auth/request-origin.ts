@@ -11,6 +11,14 @@ import { RESET_PASSWORD_PATH } from "./public-paths";
  */
 export const PREVIEW_ORIGIN = "https://travel-packing-preview.vercel.app";
 
+/**
+ * The stable address to name in the "Didn't get it?" hint: the Preview's, only on the Preview (VERCEL_ENV), else null. It is the
+ * same for every visitor, so it says nothing about any address.
+ */
+export function previewHost(env: Record<string, string | undefined> = process.env): string | null {
+  return env.VERCEL_ENV === "preview" ? new URL(PREVIEW_ORIGIN).host : null;
+}
+
 const HOST_SHAPE = /^[a-z0-9]([a-z0-9.-]*[a-z0-9])?(:\d{1,5})?$/i;
 
 export function resetPasswordUrl(

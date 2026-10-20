@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { PREVIEW_ORIGIN, resetPasswordUrl } from "./request-origin";
+import { PREVIEW_ORIGIN, previewHost, resetPasswordUrl } from "./request-origin";
 
 const headers = (entries: Record<string, string>) => ({
   get: (name: string) => entries[name.toLowerCase()] ?? null,
@@ -89,5 +89,13 @@ describe("the stable Preview origin (#96)", () => {
     );
     const alias = /^ {2}PREVIEW_ALIAS: (\S+)/m.exec(workflow)?.[1];
     expect(`https://${alias}`).toBe(PREVIEW_ORIGIN);
+  });
+});
+
+describe("previewHost", () => {
+  it("is the stable Preview host on the Preview and null everywhere else", () => {
+    expect(previewHost({ VERCEL_ENV: "preview" })).toBe("travel-packing-preview.vercel.app");
+    expect(previewHost({ VERCEL_ENV: "production" })).toBeNull();
+    expect(previewHost({})).toBeNull();
   });
 });

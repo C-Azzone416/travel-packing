@@ -2,6 +2,7 @@
 
 import { AuthCard, AuthLink } from "./AuthParts";
 import { FINISH_SETUP_TITLE, finishSetupHelper } from "./copy";
+import { DidntGetIt } from "./DidntGetIt";
 import { ResendControl } from "./ResendControl";
 import type { ResendState } from "./state";
 
@@ -13,7 +14,10 @@ export function FinishSetupView({
   email,
   initialCooldown,
   resendAction,
+  appHost = null,
 }: {
+  /** The Preview's web address for the "Didn't get it?" note; null elsewhere. */
+  appHost?: string | null;
   /** The address the link went to, or null when the page does not know it. */
   email: string | null;
   initialCooldown: number;
@@ -23,7 +27,10 @@ export function FinishSetupView({
     <AuthCard titleId="finish-setup-title" title={FINISH_SETUP_TITLE}>
       <p className="auth-helper">{finishSetupHelper(email)}</p>
       {email ? (
-        <ResendControl kind="setup" action={resendAction} initialCooldown={initialCooldown} />
+        <>
+          <ResendControl kind="setup" action={resendAction} initialCooldown={initialCooldown} />
+          <DidntGetIt host={appHost} />
+        </>
       ) : (
         <p className="auth-links">
           <AuthLink href="/forgot-password">Send me a link</AuthLink>

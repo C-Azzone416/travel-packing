@@ -116,6 +116,52 @@ describe("the finish-setup page", () => {
   });
 });
 
+describe("the Didn't get it? note on the pages", () => {
+  const withEnv = async <T,>(value: string | undefined, run: () => Promise<T>) => {
+    const before = process.env.VERCEL_ENV;
+    if (value === undefined) delete process.env.VERCEL_ENV;
+    else process.env.VERCEL_ENV = value;
+    try {
+      return await run();
+    } finally {
+      if (before === undefined) delete process.env.VERCEL_ENV;
+      else process.env.VERCEL_ENV = before;
+    }
+  };
+
+  it("is on the verify, finish-setup and forgot-password pages, and names the Preview address only on the Preview", async () => {
+    jar.set("cw-pending-email", "owner@example.test");
+    for (const make of [() => VerifyPage(), () => FinishSetupPage()]) {
+      const preview = await withEnv("preview", async () => html(make()));
+      expect(preview).toContain("Didn’t get it?");
+      expect(preview).toContain("(travel-packing-preview.vercel.app)");
+      const elsewhere = await withEnv(undefined, async () => html(make()));
+      expect(elsewhere).toContain("Didn’t get it?");
+      expect(elsewhere).not.toContain("vercel.app");
+    }
+    // The forgot-password page shows the note only on its confirmation, which is client state (see the screens tests).
+    expect(await html(ForgotPasswordPage())).not.toContain("Didn’t get it?");
+  });
+
+  it("the forgot-password page hands the form the Preview address on the Preview, and null elsewhere", async () => {
+    const appHost = async () =>
+      ((await ForgotPasswordPage()) as { props: { appHost: string | null } }).props.appHost;
+    expect(await withEnv("preview", appHost)).toBe("travel-packing-preview.vercel.app");
+    expect(await withEnv("production", appHost)).toBeNull();
+    expect(await withEnv(undefined, appHost)).toBeNull();
+  });
+
+  it("is identical for every remembered address (it says nothing about any account)", async () => {
+    const note = (markup: string) => markup.slice(markup.indexOf('<details class="didnt-get-it"'));
+    jar.set("cw-pending-email", "owner@example.test");
+    const one = note(await html(VerifyPage()));
+    jar.set("cw-pending-email", "stranger@example.test");
+    const two = note(await html(VerifyPage()));
+    expect(one).toBe(two);
+    expect(one.length).toBeGreaterThan(20);
+  });
+});
+
 describe("the reset-password page", () => {
   const page = (params: Record<string, string | string[]>) =>
     html(ResetPasswordPage({ searchParams: Promise.resolve(params) }));
