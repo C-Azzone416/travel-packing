@@ -247,21 +247,24 @@ describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
     [
       "an alias pointed at a fixed URL (the judge's mutant 3)",
       mutate(
-        "DEPLOY_URL: ${{ steps.deploy.outputs.url }}\n        run: |\n          vercel alias set",
-        "DEPLOY_URL: https://old-build.vercel.app\n        run: |\n          vercel alias set",
+        "DEPLOY_URL: ${{ steps.deploy.outputs.url }}\n        run: npx tsx scripts/assign-alias.ts",
+        "DEPLOY_URL: https://old-build.vercel.app\n        run: npx tsx scripts/assign-alias.ts",
       ),
       /alias assignment step must be exactly as reviewed/,
     ],
     [
-      "an extra flag on vercel alias set",
-      mutate('--scope="$VERCEL_ORG_ID"', "--scope other-team"),
+      "an extra argument to the alias script",
+      mutate(
+        'scripts/assign-alias.ts "$DEPLOY_URL" "$PREVIEW_ALIAS"',
+        'scripts/assign-alias.ts "$DEPLOY_URL" "$PREVIEW_ALIAS" other.vercel.app',
+      ),
       /alias assignment step must be exactly as reviewed/,
     ],
     [
       "an alias step with an extra command",
       mutate(
-        '>> "$GITHUB_STEP_SUMMARY"\n\n      - name: Smoke test the alias',
-        '>> "$GITHUB_STEP_SUMMARY"\n          curl -s https://example.test\n\n      - name: Smoke test the alias',
+        'assign-alias.ts "$DEPLOY_URL" "$PREVIEW_ALIAS"\n\n      - name: Smoke test the alias',
+        'assign-alias.ts "$DEPLOY_URL" "$PREVIEW_ALIAS"\n          curl -s https://example.test\n\n      - name: Smoke test the alias',
       ),
       /alias assignment step must be exactly as reviewed/,
     ],
@@ -283,14 +286,22 @@ describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
     ],
     [
       "a second step that moves the alias",
-      `${deploy.trimEnd()}\n      - name: Move it again\n        run: vercel alias set "$DEPLOY_URL" "$PREVIEW_ALIAS"\n`,
+      `${deploy.trimEnd()}\n      - name: Move it again\n        run: npx tsx scripts/assign-alias.ts "$DEPLOY_URL" "$PREVIEW_ALIAS"\n`,
       /alias must be set by exactly one step/,
+    ],
+    [
+      "the alias moved with the vercel CLI again",
+      mutate(
+        'run: npx tsx scripts/assign-alias.ts "$DEPLOY_URL" "$PREVIEW_ALIAS"',
+        'run: vercel alias set "$DEPLOY_URL" "$PREVIEW_ALIAS" --token="$VERCEL_TOKEN"',
+      ),
+      /never the vercel CLI/,
     ],
     [
       "the alias set for something other than the deployed URL",
       mutate(
-        'vercel alias set "$DEPLOY_URL" "$PREVIEW_ALIAS"',
-        'vercel alias set "$OLD_URL" "$PREVIEW_ALIAS"',
+        'assign-alias.ts "$DEPLOY_URL" "$PREVIEW_ALIAS"',
+        'assign-alias.ts "$OLD_URL" "$PREVIEW_ALIAS"',
       ),
       /assign the deployed URL to PREVIEW_ALIAS/,
     ],
