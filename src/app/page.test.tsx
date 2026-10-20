@@ -15,6 +15,16 @@ vi.mock("@/server/auth/auth-runtime", () => ({
   }),
 }));
 vi.mock("@/app/sign-in/actions", () => ({ signOutAction: async () => {} }));
+vi.mock("@/features/settings/weather-actions", () => ({
+  getWeatherSettingsAction: async () => ({
+    ok: true,
+    settings: { weatherOptIn: false, temperatureUnit: "F" },
+  }),
+  updateWeatherSettingsAction: async () => ({
+    ok: true,
+    settings: { weatherOptIn: false, temperatureUnit: "F" },
+  }),
+}));
 
 describe("screens", () => {
   it("Staples renders its screen, starting in its loading state", () => {
@@ -33,7 +43,9 @@ describe("screens", () => {
 
   it("Settings renders the signed-in account and a Sign out button", async () => {
     const html = renderToStaticMarkup(
-      <SaveStatusProvider>{await SettingsPage()}</SaveStatusProvider>,
+      <ToastProvider>
+        <SaveStatusProvider>{await SettingsPage()}</SaveStatusProvider>
+      </ToastProvider>,
     );
     expect(html).toContain("<h1>Settings</h1>");
     expect(html).toContain("owner@example.test");

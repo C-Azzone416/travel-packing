@@ -141,3 +141,40 @@ export const weatherSuggestionInput = z.object({
   ruleSignature: z.string().max(200),
 });
 export const tripWeatherSuggestions = z.object({ tripId });
+
+const weatherDecisionState = z.object({
+  semanticId,
+  ruleSignature: z.string().max(200),
+});
+const weatherApplyItem = z.object({
+  semanticId,
+  name,
+  category: z.enum(ITEM_CATEGORIES),
+  qty,
+  optional: z.boolean(),
+  groupId: z.literal(TOILETRY_GROUP).optional(),
+});
+const weatherClothingLine = z.object({
+  id: semanticId,
+  semanticId: semanticId.optional(),
+  name,
+  category: z.enum(ITEM_CATEGORIES),
+  qty,
+  optional: z.boolean().optional(),
+  groupId: z.literal(TOILETRY_GROUP).optional(),
+});
+const weatherAcceptedChange = z.discriminatedUnion("kind", [
+  weatherDecisionState.extend({ kind: z.literal("add"), item: weatherApplyItem }),
+  weatherDecisionState.extend({ kind: z.literal("remove") }),
+  weatherDecisionState.extend({
+    kind: z.literal("split"),
+    clothing: z.array(weatherClothingLine).min(1).max(4),
+  }),
+]);
+
+/** Review decisions contain rule signatures and item definitions, never raw weather. */
+export const weatherReviewInput = z.object({
+  tripId,
+  accepted: z.array(weatherAcceptedChange).max(20),
+  skipped: z.array(weatherDecisionState).max(20),
+});
