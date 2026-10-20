@@ -49,7 +49,7 @@ async function createWeatherTrip(page: Page) {
   await newTrip(page);
   await fillTwoStops(page);
   await page.getByRole("button", { name: "Get weather" }).click();
-  await expect(page.getByText("Weather is shaping this list")).toBeVisible();
+  await expect(page.getByText("Your list uses the weather for London and London.")).toBeVisible();
   await page.getByRole("button", { name: "Save trip" }).click();
   await page
     .getByRole("link", { name: /^Keep packing/ })
@@ -69,7 +69,7 @@ test("opt in while shaping a 2-stop trip: weather-based lines with reasons, save
   await expect(page.getByText("Everyday tops")).toBeVisible();
 
   await page.getByRole("button", { name: "Get weather" }).click();
-  await expect(page.getByText("Weather is shaping this list")).toBeVisible();
+  await expect(page.getByText("Your list uses the weather for London and London.")).toBeVisible();
   for (const name of [
     "Short-sleeve tops",
     "Long-sleeve tops",
@@ -230,7 +230,7 @@ test(
     await fillTwoStops(page);
     await expectAccessible(page, "shape step with the weather prompt");
     await page.getByRole("button", { name: "Get weather" }).click();
-    await expect(page.getByText("Weather is shaping this list")).toBeVisible();
+    await expect(page.getByText("Your list uses the weather for London and London.")).toBeVisible();
     await expectAccessible(page, "shape step with weather");
     await page.getByRole("button", { name: "Save trip" }).click();
     await page

@@ -376,7 +376,7 @@ describe("step 2: shape the list", () => {
     expect(wired.previewDraft).not.toHaveBeenCalled();
     await flow.user.click(screen.getByRole("button", { name: "Get weather" }));
     await waitFor(() => expect(wired.previewDraft).toHaveBeenCalledTimes(1));
-    expect(await screen.findByText("Weather is shaping this list")).toBeTruthy();
+    expect(await screen.findByText("Your list uses the weather for Lisbon.")).toBeTruthy();
     const umbrella = screen
       .getByText("Compact umbrella", { selector: "strong" })
       .closest(".review-row") as HTMLElement;

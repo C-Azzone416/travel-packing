@@ -129,6 +129,29 @@ describe("ReviewSheet", () => {
     expect(screen.getByText(/already packed/)).toBeTruthy();
   });
 
+  it("an update to a trip that is already split says what changes, not that Everyday rows are replaced", () => {
+    const update: WeatherChange = {
+      kind: "split",
+      semanticId: "clothing-split",
+      title: "Update clothing split",
+      reason: "Short-sleeve tops: 3 → 5",
+      ruleSignature: "newer",
+      userEdited: false,
+      clothing: [
+        {
+          id: "tops-short",
+          semanticId: "tops-short",
+          name: "Short-sleeve tops",
+          category: "Clothing",
+          qty: 5,
+        },
+      ],
+    };
+    setup({ changes: [update] });
+    expect(screen.getByText("Short-sleeve tops: 3 → 5")).toBeTruthy();
+    expect(screen.queryByText(/Replaces Everyday/)).toBeNull();
+  });
+
   it("disables apply when nothing is selected", async () => {
     setup({ changes: [changes[1]] });
     const apply = screen.getByRole("button", { name: "Add selected" }) as HTMLButtonElement;

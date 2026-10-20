@@ -74,6 +74,24 @@ function recommendationForDraft(
   });
 }
 
+/** "Lisbon", "Lisbon and Porto", "Lisbon, Porto and Madrid". */
+function joinPlaces(names: readonly string[]): string {
+  return names.length > 1
+    ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`
+    : (names[0] ?? "");
+}
+
+/** Design #108 §6: names the stops the weather really covers (a stop without weather is left out). */
+function weatherBanner(route: readonly TripStop[], stops: readonly StopWeather[]): string {
+  const covered = stops
+    .filter((stop) => stop.status === "ok" && stop.days.length > 0)
+    .map((stop) => route[stop.stopIndex]?.location.city)
+    .filter((city): city is string => Boolean(city));
+  return covered.length > 0
+    ? `Your list uses the weather for ${joinPlaces(covered)}.`
+    : "No weather is available for your stops. Your list uses the standard calculation.";
+}
+
 /** A draft has no saved weather lines yet, so a review of it never proposes a removal. */
 function acceptedDecision(change: Exclude<WeatherChange, { kind: "remove" }>) {
   if (change.kind === "add") {
@@ -698,12 +716,10 @@ function ShapeStep({
           {weather.kind === "ready" ? (
             <div className="weather-card">
               <span className="tag">Weather</span>
-              <h3>Weather is shaping this list</h3>
-              <p className="tiny muted">
-                {weather.stops.some((stop) => stop.days.some((day) => day.source === "typical"))
-                  ? "Forecast and typical conditions are reflected below."
-                  : "The forecast for your stops is reflected below."}
-              </p>
+              <h3>{weatherBanner(weatherRoute, weather.stops)}</h3>
+              {weather.stops.some((stop) => stop.days.some((day) => day.source === "typical")) ? (
+                <p className="tiny muted">Dates past 16 days use typical weather.</p>
+              ) : null}
               <a
                 className="tiny muted"
                 href="https://open-meteo.com/"

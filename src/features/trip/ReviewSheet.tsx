@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { ModalSheet } from "@/components/ui/ModalSheet";
-import type { WeatherChange } from "@/domain/weather/diff";
+import { UPDATE_SPLIT_TITLE, type WeatherChange } from "@/domain/weather/diff";
 
 export interface ReviewSheetProps {
   open: boolean;
@@ -25,7 +25,10 @@ function changeTitle(change: WeatherChange): string {
 
 function changeReason(change: WeatherChange): string {
   if (change.kind === "split") {
-    return "Replaces Everyday tops and Everyday bottoms with short-sleeve, long-sleeve, shorts and pants.";
+    // A trip already split by weather has no Everyday rows to replace: say what changes instead.
+    return change.title === UPDATE_SPLIT_TITLE
+      ? change.reason
+      : "Replaces Everyday tops and Everyday bottoms with short-sleeve, long-sleeve, shorts and pants.";
   }
   return change.userEdited ? `Offered only: ${change.reason}` : change.reason;
 }

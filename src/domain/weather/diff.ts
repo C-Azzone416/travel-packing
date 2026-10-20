@@ -15,6 +15,15 @@ export const WEATHER_EXTRA_IDS = [
 ] as const;
 
 export const CLOTHING_SPLIT_ID = "clothing-split";
+/** The title for a trip still on Everyday tops/bottoms, and for one already split by weather. */
+export const SPLIT_TITLE = "Split clothing by weather";
+export const UPDATE_SPLIT_TITLE = "Update clothing split";
+const SPLIT_NAMES: Record<string, string> = {
+  "tops-short": "Short-sleeve tops",
+  "tops-long": "Long-sleeve tops",
+  "bottoms-shorts": "Shorts",
+  "bottoms-pants": "Pants",
+};
 const SPLIT_IDS = ["tops-short", "tops-long", "bottoms-shorts", "bottoms-pants"];
 const CLOTHING_IDS = ["tops", "bottoms", ...SPLIT_IDS];
 
@@ -69,6 +78,22 @@ const WEATHER_EXTRA_NAMES: Record<string, string> = {
   "weather-snow-boots": "Waterproof boots",
 };
 
+/** "Short-sleeve tops: 3 → 5, Pants: 2 → 0": only the lines whose count changes, for a trip already split by weather. */
+function splitDifferences(
+  have: readonly { id: string; qty: number }[],
+  wanted: readonly { id: string; name: string; qty: number }[],
+): string {
+  const was = new Map(have.map((line) => [line.id, line.qty]));
+  const now = new Map(wanted.map((line) => [line.id, line.qty]));
+  const lines = wanted
+    .filter((line) => (was.get(line.id) ?? 0) !== line.qty)
+    .map((line) => `${line.name}: ${was.get(line.id) ?? 0} → ${line.qty}`);
+  const dropped = have
+    .filter((line) => SPLIT_IDS.includes(line.id) && !now.has(line.id) && line.qty > 0)
+    .map((line) => `${SPLIT_NAMES[line.id]}: ${line.qty} → 0`);
+  return [...lines, ...dropped].join(", ");
+}
+
 function splitSignature(lines: readonly { id: string; qty: number }[]): string {
   return lines
     .map((line) => `${line.id}:${line.qty}`)
@@ -121,13 +146,14 @@ export function diffRecommendations(
     const have = saved.filter((item) => CLOTHING_IDS.includes(item.id));
     const wantedSignature = splitSignature(wanted);
     if (splitSignature(have) !== wantedSignature) {
+      const alreadySplit = have.some((item) => SPLIT_IDS.includes(item.id));
       changes.push({
         kind: "split",
         semanticId: CLOTHING_SPLIT_ID,
-        title: have.some((item) => SPLIT_IDS.includes(item.id))
-          ? "Update clothing split"
-          : "Split clothing by weather",
-        reason: wanted.map((line) => `${line.qty} × ${line.name}`).join(", "),
+        title: alreadySplit ? UPDATE_SPLIT_TITLE : SPLIT_TITLE,
+        reason: alreadySplit
+          ? splitDifferences(have, wanted)
+          : wanted.map((line) => `${line.qty} × ${line.name}`).join(", "),
         ruleSignature: wantedSignature,
         userEdited: have.some((item) => item.userEdited),
         clothing: wanted,
