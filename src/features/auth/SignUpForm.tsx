@@ -1,8 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { AuthCard, AuthLink, FormAlert, PasswordField, SubmitButton, TextField } from "./AuthParts";
-import { PASSWORD_RULE } from "./copy";
+import { AuthCard, AuthLink, FormAlert, SubmitButton, TextField } from "./AuthParts";
 import { useDelayed, useFocusInvalid, useHeadingFocus } from "./hooks";
 import { INITIAL_FORM, type FormState } from "./state";
 import { CODE_LENGTH } from "@/server/auth/account-flows";
@@ -19,7 +18,8 @@ export function SignUpForm({
   return (
     <AuthCard titleId="sign-up-title" title="Create your account" headingRef={heading}>
       <p className="auth-helper">
-        We&rsquo;ll email you a {CODE_LENGTH}-digit code to confirm your address.
+        We&rsquo;ll email you a {CODE_LENGTH}-digit code to confirm your address, then a link to
+        choose your password.
       </p>
       <form
         ref={form}
@@ -42,13 +42,6 @@ export function SignUpForm({
           required
           defaultValue={state.email}
           error={state.fieldErrors.email}
-        />
-        <PasswordField
-          id="password"
-          label="Password"
-          autoComplete="new-password"
-          hint={PASSWORD_RULE}
-          error={state.fieldErrors.password}
         />
         <FormAlert message={state.error} />
         <SubmitButton label="Create account" busy={busy} />

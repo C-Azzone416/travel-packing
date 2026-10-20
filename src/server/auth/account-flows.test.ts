@@ -86,19 +86,21 @@ describe("input cleaning", () => {
 
 describe("signUpOwner", () => {
   it("creates the account for an allowlisted address and moves on to verification with the gap running", async () => {
-    expect(await signUpOwner(auth, limits, "1.1.1.1", " Owner@Example.test", PASSWORD)).toEqual({
+    expect(await signUpOwner(auth, limits, "1.1.1.1", " Owner@Example.test")).toEqual({
       status: "ok",
       email: OWNER_EMAIL,
       cooldownSeconds: 30,
     });
-    expect(fake.flows.calls).toEqual([{ method: "signUp", args: [OWNER_EMAIL, PASSWORD] }]);
+    expect(fake.flows.calls).toEqual([
+      { method: "signUp", args: [OWNER_EMAIL, expect.any(String)] },
+    ]);
     expect(fake.current).toBeNull();
     expect(events()).toEqual(["sign-up-provider-ok", "sign-up-requested"]);
   });
 
   it("answers an address that is not on the allowlist the same way, and creates and sends nothing", async () => {
-    const allowed = await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL, PASSWORD);
-    const other = await signUpOwner(auth, limits, "2.2.2.2", STRANGER, PASSWORD);
+    const allowed = await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL);
+    const other = await signUpOwner(auth, limits, "2.2.2.2", STRANGER);
     expect(other).toEqual({ ...allowed, email: STRANGER });
     expect(methods()).toEqual(["signUp"]);
     expect(events()).toEqual([
@@ -110,15 +112,15 @@ describe("signUpOwner", () => {
   });
 
   it("never grants a session, whoever signs up", async () => {
-    await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL, PASSWORD);
-    await signUpOwner(auth, limits, "1.1.1.1", STRANGER, PASSWORD);
+    await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL);
+    await signUpOwner(auth, limits, "1.1.1.1", STRANGER);
     expect(await fake.getSession()).toBeNull();
   });
 
   it("moves on without sending again when a code just went out", async () => {
-    await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL, PASSWORD);
+    await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL);
     wait(10_000);
-    expect(await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL, PASSWORD)).toEqual({
+    expect(await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL)).toEqual({
       status: "ok",
       email: OWNER_EMAIL,
       cooldownSeconds: 20,
@@ -127,25 +129,40 @@ describe("signUpOwner", () => {
   });
 
   it("asks the form to be fixed without calling the provider", async () => {
-    expect(await signUpOwner(auth, limits, "1.1.1.1", "nope", PASSWORD)).toEqual({
+    expect(await signUpOwner(auth, limits, "1.1.1.1", "nope")).toEqual({
       status: "invalid-email",
-    });
-    expect(await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL, "short")).toEqual({
-      status: "weak-password",
-      problem: "too-short",
     });
     expect(methods()).toEqual([]);
   });
 
-  it("reports the provider's refused password and its outage", async () => {
+  it("sends the provider a different random password every time, long enough for any policy (#102)", async () => {
+    for (let i = 0; i < 4; i += 1) {
+      await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL);
+      wait(31_000);
+    }
+    const sent = fake.flows.calls.map((call) => call.args[1] as string);
+    expect(sent).toHaveLength(4);
+    expect(new Set(sent).size).toBe(sent.length);
+    for (const password of sent) {
+      expect(password).toMatch(/^[A-Za-z0-9_-]{43}$/); // 32 random bytes, base64url
+    }
+  });
+
+  it("never lets the throwaway password into a log line or the answer", async () => {
+    const answer = await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL);
+    const password = fake.flows.calls[0].args[1] as string;
+    expect(logged.join("\n")).not.toContain(password);
+    expect(JSON.stringify(answer)).not.toContain(password);
+  });
+
+  it("reports a provider outage, and a refused password is also only a server problem (nobody typed one)", async () => {
     fake.flows.answers.signUp = { ok: false, reason: "weak-password" };
-    expect(await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL, PASSWORD)).toEqual({
-      status: "weak-password",
-      problem: "provider",
+    expect(await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL)).toEqual({
+      status: "unavailable",
     });
     wait(31_000);
     fake.flows.answers.signUp = { ok: false, reason: "unavailable" };
-    expect(await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL, PASSWORD)).toEqual({
+    expect(await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL)).toEqual({
       status: "unavailable",
     });
     expect(events()).toEqual(["sign-up-failed", "sign-up-failed"]);
@@ -153,9 +170,9 @@ describe("signUpOwner", () => {
 
   it("is rate limited per caller", async () => {
     for (let i = 0; i < 10; i += 1) {
-      await signUpOwner(auth, limits, "1.1.1.1", `user${i}@example.test`, PASSWORD);
+      await signUpOwner(auth, limits, "1.1.1.1", `user${i}@example.test`);
     }
-    expect(await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL, PASSWORD)).toEqual({
+    expect(await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL)).toEqual({
       status: "rate-limited",
     });
     expect(events().at(-1)).toBe("flow-rate-limited");
@@ -164,12 +181,12 @@ describe("signUpOwner", () => {
   it("a new code clears an earlier lock on guessing", async () => {
     for (let i = 0; i < CODE_GUESSES; i += 1) limits.recordWrongGuess(OWNER_EMAIL);
     expect(limits.guessBlocked(OWNER_EMAIL).ok).toBe(false);
-    await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL, PASSWORD);
+    await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL);
     expect(limits.guessBlocked(OWNER_EMAIL).ok).toBe(true);
   });
 
   it("logs codes only: no address, password, code or token ever appears in a log line", async () => {
-    await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL, PASSWORD);
+    await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL);
     await verifyOwnerEmail(auth, limits, "1.1.1.1", OWNER_EMAIL, "123456", REDIRECT);
     await requestPasswordReset(auth, limits, "1.1.1.1", OWNER_EMAIL, REDIRECT);
     await resetOwnerPassword(auth, "fake-token-one", "new-password-1");
@@ -483,22 +500,22 @@ describe("why a sign-up, code or link did or did not reach the provider (server-
   it("tells a provider success from an allowlist skip, a cooldown skip and an hourly-limit skip, with one answer for the browser", async () => {
     const answers: unknown[] = [];
     // 1. allowlisted, first request: the provider is called
-    answers.push(await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL, PASSWORD));
+    answers.push(await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL));
     // 2. the same address again inside the 30-second gap: skipped for the cooldown
-    answers.push(await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL, PASSWORD));
+    answers.push(await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL));
     // 3. a stranger: skipped for the allowlist
-    answers.push(await signUpOwner(auth, limits, "1.1.1.1", STRANGER, PASSWORD));
+    answers.push(await signUpOwner(auth, limits, "1.1.1.1", STRANGER));
     expect(
       events().filter((event) => event.startsWith("sign-up-") && event !== "sign-up-requested"),
     ).toEqual(["sign-up-provider-ok", "sign-up-skipped-cooldown", "sign-up-skipped-allowlist"]);
     // 4. five more spaced-out sends exhaust the hourly cap for that address; the next is skipped for the limit
     for (let i = 0; i < 4; i += 1) {
       wait(31_000);
-      await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL, PASSWORD);
+      await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL);
     }
     wait(31_000);
     logged = [];
-    answers.push(await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL, PASSWORD));
+    answers.push(await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL));
     expect(events()).toEqual(["sign-up-skipped-limit", "sign-up-requested"]);
     // In every case the person is sent on to the code screen with the same shape of answer.
     for (const answer of answers)
@@ -507,7 +524,7 @@ describe("why a sign-up, code or link did or did not reach the provider (server-
 
   it("logs a provider that refused the call (a 4xx the screen treats as success) apart from a real success, with status and code only", async () => {
     fake.flows.answers.signUp = { ok: true, rejected: { status: 403, code: "invalid_origin" } };
-    const answer = await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL, PASSWORD);
+    const answer = await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL);
     expect(answer).toEqual({ status: "ok", email: OWNER_EMAIL, cooldownSeconds: 30 });
     expect(eventsWithDetail()).toEqual([
       { scope: "auth", event: "sign-up-provider-rejected", status: 403, code: "INVALID_ORIGIN" },
@@ -520,7 +537,7 @@ describe("why a sign-up, code or link did or did not reach the provider (server-
       ok: true,
       rejected: { status: 7, code: "Email owner@example.test taken!" },
     };
-    await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL, PASSWORD);
+    await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL);
     expect(eventsWithDetail()[0]).toEqual({
       scope: "auth",
       event: "sign-up-provider-rejected",
@@ -530,7 +547,7 @@ describe("why a sign-up, code or link did or did not reach the provider (server-
 
   it("logs a failed provider call as before", async () => {
     fake.flows.answers.signUp = { ok: false, reason: "unavailable" };
-    await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL, PASSWORD);
+    await signUpOwner(auth, limits, "1.1.1.1", OWNER_EMAIL);
     expect(events()).toEqual(["sign-up-failed"]);
   });
 
@@ -557,8 +574,8 @@ describe("why a sign-up, code or link did or did not reach the provider (server-
 
   it("never writes an address, a password, a code or the allowlist into any of these lines", async () => {
     fake.flows.answers.signUp = { ok: true, rejected: { status: 403, code: "INVALID_ORIGIN" } };
-    await signUpOwner(auth, limits, "9.9.9.9", OWNER_EMAIL, PASSWORD);
-    await signUpOwner(auth, limits, "9.9.9.9", STRANGER, PASSWORD);
+    await signUpOwner(auth, limits, "9.9.9.9", OWNER_EMAIL);
+    await signUpOwner(auth, limits, "9.9.9.9", STRANGER);
     await resendVerificationCode(auth, limits, "9.9.9.9", OWNER_EMAIL);
     await requestPasswordReset(auth, limits, "9.9.9.9", STRANGER, REDIRECT);
     const text = logged.join("\n");

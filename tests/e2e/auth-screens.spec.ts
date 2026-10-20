@@ -10,6 +10,7 @@ import {
 import {
   createVerifiedAccount,
   nextNewcomerSlot,
+  preRegisterAccount,
   resetAccount,
   resetLinkPath,
   resetToken,
@@ -20,8 +21,6 @@ import {
 // Sign-up, verification code, resend, forgot and reset password (#27) against the real server with the e2e-only fake
 // provider. Codes and links come from the fake "inbox" (tests/e2e/helpers/inbox.ts); none is in source or a log.
 const NEW_PASSWORD = "a-new-password-1";
-/** Typed at sign-up. It is never usable: the password that counts is the one chosen through the emailed link. */
-const FIRST_PASSWORD = "my-first-password";
 /** Chosen through the "finish setting up" link. */
 const SET_PASSWORD = "my-chosen-password";
 
@@ -35,10 +34,9 @@ test.beforeEach(({}, testInfo) => {
 const heading = (page: Page, name: string | RegExp) =>
   page.getByRole("heading", { level: 1, name });
 
-async function signUp(page: Page, address = email, password = FIRST_PASSWORD) {
+async function signUp(page: Page, address = email) {
   await page.goto("/sign-up");
   await page.getByLabel("Email").fill(address);
-  await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page).toHaveURL(/\/verify$/);
 }
@@ -105,10 +103,11 @@ test.describe("sign-up and verification", () => {
     page,
   }) => {
     const ATTACKER_PASSWORD = "the-attackers-password";
-    // 1. Someone who knows the address signs up first, with their own password.
-    await signUp(page, email, ATTACKER_PASSWORD);
-    // 2. The real owner signs up with the same address and their own password: the screen looks the same, nothing is applied.
-    await signUp(page, email, SET_PASSWORD);
+    // 1. Someone who knows the address calls the auth service's public sign-up directly, with their own password (the app's
+    //    own form takes no password since #102, so this is the only way to choose one).
+    preRegisterAccount(email, ATTACKER_PASSWORD);
+    // 2. The real owner signs up with the same address: the screen looks the same, nothing is applied.
+    await signUp(page, email);
     // 3. The owner enters the mailed code, so the address is now verified, with the attacker's password on the account.
     await enterCode(page, verificationCode(email) ?? "");
     await expect(page).toHaveURL(/\/finish-setup$/);
@@ -122,7 +121,7 @@ test.describe("sign-up and verification", () => {
     );
     await page.goto("/");
     await expect(page).toHaveURL(/\/sign-in$/);
-    // ...and the owner's own typed password was never applied, so it does not work either.
+    // ...and the password the owner chooses later is not on the account yet, so it does not work either.
     await signIn(page, email, SET_PASSWORD);
     await expect(page.locator("form p[role='alert']")).toContainText(
       "Email or password is incorrect.",
@@ -199,19 +198,19 @@ test.describe("sign-up and verification", () => {
     expect(verificationCode(email)).toMatch(/^\d{6}$/);
   });
 
-  test("signing in with a right password before confirming the address leads back to the code screen", async ({
+  test("an abandoned sign-up is retried by signing up again, which shows the code screen and the code that was already sent", async ({
     page,
   }) => {
     await signUp(page);
-    await signIn(page, email, FIRST_PASSWORD);
-    await expect(page).toHaveURL(/\/verify$/);
-    await expect(page.getByText(`If ${email} can be used to sign up`)).toBeVisible();
-    // A wrong password stays the one generic error.
-    await signIn(page, email, "not-the-password");
-    await expect(page.locator("form p[role='alert']")).toContainText(
-      "Email or password is incorrect.",
-    );
-    await expect(page).toHaveURL(/\/sign-in$/);
+    const first = verificationCode(email);
+    // The person closes the tab and comes back later: no cookie, no password to sign in with.
+    await page.context().clearCookies();
+    await signUp(page);
+    await expect(heading(page, "Check your email")).toBeVisible();
+    // Nothing new was mailed for the taken address (as with the real provider); the code from before still works.
+    expect(verificationCode(email)).toBe(first);
+    await enterCode(page, first ?? "");
+    await expect(page).toHaveURL(/\/finish-setup$/);
   });
 
   test("an address that is not allowed gets the same screens and its code never works", async ({
@@ -226,24 +225,16 @@ test.describe("sign-up and verification", () => {
     await enterCode(page, "123456");
     await expect(page.locator("#code-error")).toContainText("That code isn't right or has expired");
     await expect(page).toHaveURL(/\/verify$/);
-    // And it cannot sign in with the password it chose.
-    await signIn(page, STRANGER_EMAIL, FIRST_PASSWORD);
-    await expect(page.locator("form p[role='alert']")).toContainText(
-      "Email or password is incorrect.",
-    );
   });
 
-  test("form problems are named under their fields, and a short password is not sent anywhere", async ({
+  test("a bad address is named under the field and nothing is sent; the form has no password field", async ({
     page,
   }) => {
     await page.goto("/sign-up");
+    await expect(page.getByLabel(/password/i)).toHaveCount(0);
     await page.getByLabel("Email").fill("not-an-email");
-    await page.getByLabel("Password", { exact: true }).fill("short");
     await page.getByRole("button", { name: "Create account" }).click();
     await expect(page.locator("#email-error")).toContainText("Enter a valid email address.");
-    await expect(page.locator("#password-error")).toContainText(
-      "Password must be at least 8 characters.",
-    );
     await expect(page.getByLabel("Email")).toBeFocused();
     await expect(page.getByLabel("Email")).toHaveValue("not-an-email");
     await expect(page).toHaveURL(/\/sign-up$/);
@@ -407,7 +398,6 @@ test.describe("the account screens", () => {
     ]);
     await visit("/sign-up", [
       () => page.getByRole("button", { name: "Create account" }),
-      () => page.getByRole("button", { name: "Show password" }),
       () => page.getByRole("link", { name: "Sign in" }),
     ]);
     await visit("/verify", [
@@ -449,7 +439,6 @@ test.describe("accessibility and screenshots", () => {
     await page.goto("/sign-up");
     await check("sign-up");
     await page.getByLabel("Email").fill("not-an-email");
-    await page.getByLabel("Password", { exact: true }).fill("short");
     await page.getByRole("button", { name: "Create account" }).click();
     await expect(page.locator("#email-error")).toBeVisible();
     await check("sign-up-errors");
