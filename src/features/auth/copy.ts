@@ -64,3 +64,18 @@ export const RESEND_COPY = {
     ready: "You can send it again now.",
   },
 } as const;
+
+/**
+ * The "Didn't get it?" note under the resend control (#119, design on the issue). One wording on all three screens and for
+ * every address; it never says whether a mail was sent. {host} is only given on the Preview.
+ */
+export const DIDNT_GET_IT = {
+  summary: "Didn’t get it?",
+  lines: (host: string | null): string[] => [
+    "It can take a couple of minutes. You can ask for another in a moment.",
+    "Check your spam or junk folder.",
+    host
+      ? `Open the link from the same web address you started on (${host}). A link opened from a different web address won’t work.`
+      : "Open the link from the same web address you normally use for this app. A link opened from a different web address won’t work.",
+  ],
+} as const;

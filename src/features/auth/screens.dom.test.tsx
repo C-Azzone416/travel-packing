@@ -130,6 +130,20 @@ describe("VerifyForm", () => {
     );
   });
 
+  it("has the Didn't get it? note under the resend control, closed, with the Preview address when given", () => {
+    const { rerender } = render(<VerifyForm {...props()} />);
+    const note = document.querySelector("details.didnt-get-it") as HTMLDetailsElement;
+    expect(note.open).toBe(false);
+    expect(screen.getByText("Didn’t get it?")).toBeTruthy();
+    const resendRow = document.querySelector(".resend-row") as HTMLElement;
+    expect(resendRow.nextElementSibling).toBe(note);
+    expect(note.textContent).not.toContain("vercel.app");
+    rerender(<VerifyForm {...props()} appHost="travel-packing-preview.vercel.app" />);
+    expect(document.querySelector("details.didnt-get-it")?.textContent).toContain(
+      "(travel-packing-preview.vercel.app)",
+    );
+  });
+
   it("has ONE code input that suits autofill, paste and a phone keypad", () => {
     render(<VerifyForm {...props()} />);
     const code = screen.getByLabelText("6-digit code") as HTMLInputElement;
@@ -237,6 +251,21 @@ describe("ForgotForm", () => {
     );
   });
 
+  it("shows the Didn't get it? note only after the confirmation, not on the form", async () => {
+    const action = vi.fn(async () =>
+      forgot({ sent: { email: "any@example.test", cooldownSeconds: 30 } }),
+    );
+    render(<ForgotForm action={action} resendAction={resend} appHost="x.vercel.app" />);
+    expect(document.querySelector("details.didnt-get-it")).toBeNull();
+    await userEvent.setup().type(screen.getByLabelText("Email"), "any@example.test");
+    await userEvent.setup().click(screen.getByRole("button", { name: "Send reset link" }));
+    await screen.findByRole("heading", { level: 1, name: "Check your email" });
+    const note = document.querySelector("details.didnt-get-it") as HTMLDetailsElement;
+    expect(note.open).toBe(false);
+    expect((document.querySelector(".resend-row") as HTMLElement).nextElementSibling).toBe(note);
+    expect(note.textContent).toContain("(x.vercel.app)");
+  });
+
   it("replaces the form with 'Check your email' and moves focus to the new heading", async () => {
     const action = vi.fn(async () =>
       forgot({ sent: { email: "any@example.test", cooldownSeconds: 30 } }),
@@ -323,6 +352,17 @@ describe("ResetForm, setup variant", () => {
     const sent = action.mock.calls[0] as unknown as [FormState, FormData];
     expect(sent[1].get("variant")).toBe("setup");
     expect(sent[1].get("for")).toBe("seal.value.mac");
+  });
+});
+
+describe("FinishSetupView hint", () => {
+  it("has the note under the resend control when the address is known, and not when it is not", () => {
+    const { rerender } = render(
+      <FinishSetupView email="owner@example.test" initialCooldown={0} resendAction={resend} />,
+    );
+    expect(document.querySelectorAll("details.didnt-get-it")).toHaveLength(1);
+    rerender(<FinishSetupView email={null} initialCooldown={0} resendAction={resend} />);
+    expect(document.querySelector("details.didnt-get-it")).toBeNull();
   });
 });
 
