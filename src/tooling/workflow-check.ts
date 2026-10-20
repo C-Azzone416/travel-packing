@@ -537,6 +537,28 @@ export function checkCiWorkflow(workflow: string): string[] {
   if (/--shard|workers/.test(e2e))
     problems.push("the e2e job runs its project whole, on one worker");
 
+  // A job that runs AFTER a job which can be skipped (a heavy job, in quick or reused mode) gets an implicit success() unless its
+  // if names a status function, and that is false when any ancestor was skipped. Only `ci` and `deploy` do that on purpose.
+  const needsOf = new Map(jobs.map((name) => [name, jobNeeds(body(name) ?? "")]));
+  const ancestors = (name: string, seen = new Set<string>()): Set<string> => {
+    for (const parent of needsOf.get(name) ?? [])
+      if (!seen.has(parent)) {
+        seen.add(parent);
+        ancestors(parent, seen);
+      }
+    return seen;
+  };
+  for (const name of jobs) {
+    if ((HEAVY_JOBS as readonly string[]).includes(name)) continue;
+    if (![...ancestors(name)].some((parent) => (HEAVY_JOBS as readonly string[]).includes(parent)))
+      continue;
+    const condition = /^ {4}if:\s*(.*)$/m.exec(body(name) ?? "")?.[1] ?? "";
+    if (!/(?:^|[\s{(&|])(?:always\(\)|!cancelled\(\))/.test(condition))
+      problems.push(
+        `the ${name} job runs after a job that can be skipped, so its if needs a status function (always() or !cancelled())`,
+      );
+  }
+
   // The summary: the one required check.
   const ci = body("ci") ?? "";
   const needs = jobNeeds(ci);
@@ -557,12 +579,38 @@ export function checkCiWorkflow(workflow: string): string[] {
   if (deploy) {
     if (!jobNeeds(deploy).includes("ci") || jobNeeds(deploy).length !== 1)
       problems.push("the deploy job must need ci, and only ci");
+    // The condition is exactly these terms, joined by &&. A status function is required: without one the job gets an implicit
+    // success() that fails when any ancestor was skipped, and a reused push skips the heavy jobs behind `ci` (#105).
+    const condition = (/^ {4}if:\s*(.*)$/m.exec(deploy)?.[1] ?? "")
+      .replace(/^\$\{\{\s*/, "")
+      .replace(/\s*\}\}$/, "")
+      .trim();
+    const terms = condition.split("&&").map((term) => term.trim());
+    if (condition.includes("||")) problems.push("the deploy job's condition must not use ||");
+    if (!terms.includes("!cancelled()") && !terms.includes("always()"))
+      problems.push(
+        "the deploy job needs a status function (!cancelled()) in its if, or a reused push (heavy jobs skipped) never deploys",
+      );
+    if (!terms.includes("needs.ci.result == 'success'"))
+      problems.push(
+        "the deploy job must be gated on ci's own result (needs.ci.result == 'success')",
+      );
     if (
-      !/if:\s*github\.event_name == 'push' && github\.ref == 'refs\/heads\/develop'\s*$/m.test(
-        deploy,
-      )
+      !terms.includes("github.event_name == 'push'") ||
+      !terms.includes("github.ref == 'refs/heads/develop'")
     )
       problems.push("the deploy job must run only for a push to develop");
+    const allowed = new Set([
+      "!cancelled()",
+      "always()",
+      "needs.ci.result == 'success'",
+      "github.event_name == 'push'",
+      "github.ref == 'refs/heads/develop'",
+    ]);
+    if (terms.some((term) => !allowed.has(term)))
+      problems.push(
+        "the deploy job's condition may hold only the status function, ci's result and the push/develop guard",
+      );
     if (!/uses:\s*\.\/\.github\/workflows\/deploy-vercel\.yml\s*$/m.test(deploy))
       problems.push("the deploy job must call the deploy workflow in this repository");
     if (!/secrets:\s*inherit/.test(deploy))
