@@ -77,6 +77,65 @@ describe("previewWeatherAction", () => {
     expect(fakes.getDataContext).not.toHaveBeenCalled();
   });
 
+  describe("input bounds", () => {
+    const rejected = async (stops: unknown[]) => {
+      vi.clearAllMocks();
+      await expect(previewWeatherAction(stops as never)).resolves.toEqual({ kind: "unavailable" });
+      // Nothing past the schema ran: no context, no auth, no settings read, no rate-limit use, no provider call.
+      expect(fakes.getDataContext).not.toHaveBeenCalled();
+      expect(fakes.requireOwner).not.toHaveBeenCalled();
+      expect(fakes.readWeatherSettings).not.toHaveBeenCalled();
+      expect(fakes.consume).not.toHaveBeenCalled();
+      expect(fakes.getStopWeather).not.toHaveBeenCalled();
+    };
+    const accepted = async (stops: unknown[]) => {
+      vi.clearAllMocks();
+      fakes.getDataContext.mockResolvedValue({ db: {}, auth: { provider: {}, allowlist: {} } });
+      fakes.requireOwner.mockResolvedValue({ userId: "owner" });
+      fakes.readWeatherSettings.mockResolvedValue({ weatherOptIn: true, temperatureUnit: "F" });
+      fakes.consume.mockReturnValue({ ok: true });
+      fakes.getStopWeather.mockResolvedValue({ stopIndex: 0, status: "ok", days: [] });
+      await expect(previewWeatherAction(stops as never)).resolves.toMatchObject({ kind: "ready" });
+      expect(fakes.getStopWeather).toHaveBeenCalledTimes(stops.length);
+    };
+    const withIndex = (stopIndex: number) => ({ ...stop, stopIndex });
+
+    it("takes 1 to 6 stops and refuses none and seven", async () => {
+      await accepted([stop]);
+      await accepted([0, 1, 2, 3, 4, 5].map(withIndex));
+      await rejected([]);
+      await rejected([0, 1, 2, 3, 4, 5, 5].map(withIndex));
+    });
+
+    it("takes a latitude of exactly ±90 and refuses anything past it", async () => {
+      await accepted([{ ...stop, latitude: 90 }]);
+      await accepted([{ ...stop, latitude: -90 }]);
+      await rejected([{ ...stop, latitude: 90.01 }]);
+      await rejected([{ ...stop, latitude: -90.01 }]);
+    });
+
+    it("takes a longitude of exactly ±180 and refuses anything past it", async () => {
+      await accepted([{ ...stop, longitude: 180 }]);
+      await accepted([{ ...stop, longitude: -180 }]);
+      await rejected([{ ...stop, longitude: 180.01 }]);
+      await rejected([{ ...stop, longitude: -180.01 }]);
+    });
+
+    it("refuses a stop index below 0 or above 5, and a fractional one, and takes 0 and 5", async () => {
+      await accepted([withIndex(0)]);
+      await accepted([withIndex(5)]);
+      await rejected([withIndex(-1)]);
+      await rejected([withIndex(6)]);
+      await rejected([withIndex(1.5)]);
+    });
+
+    it("refuses a non-finite coordinate and a malformed date", async () => {
+      await rejected([{ ...stop, latitude: Number.NaN }]);
+      await rejected([{ ...stop, longitude: Number.POSITIVE_INFINITY }]);
+      await rejected([{ ...stop, arrive: "2026-1-2" }]);
+    });
+  });
+
   it("makes no provider call while the owner is opted out", async () => {
     fakes.readWeatherSettings.mockResolvedValue({ weatherOptIn: false, temperatureUnit: "F" });
     await expect(previewWeatherAction([stop])).resolves.toEqual({ kind: "ready", stops: [] });
