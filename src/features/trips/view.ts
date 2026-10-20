@@ -16,6 +16,9 @@ function formatDate(value: string): string {
   return date ? RANGE.format(date) : "Choose dates";
 }
 
+/** "Oct 5", or the "Choose dates" prompt for a blank or malformed date. */
+export const formatShortDate = formatDate;
+
 export function formatRange(trip: Pick<LifecycleTrip, "start" | "end">): string {
   return `${formatDate(trip.start)} – ${formatDate(trip.end)}`;
 }
@@ -30,6 +33,10 @@ export interface TripCardView {
   destination: string;
   /** "Region, Country", or null for a destination with no confirmed location. */
   place: string | null;
+  /** City names of a multi-stop route, in order; empty for a single destination. */
+  route: string[];
+  /** The trip's title is the route itself, so the card must not print it twice. */
+  routeIsTitle: boolean;
   /** "Past trip" / "Archived trip"; upcoming trips carry no eyebrow. */
   eyebrow: string | null;
   ready: boolean;
@@ -55,6 +62,8 @@ export function tripCardView(trip: LifecycleTrip, today: string, view: TripListV
     place: trip.location
       ? [trip.location.region, trip.location.country].filter(Boolean).join(", ") || null
       : null,
+    route: routeCities(trip),
+    routeIsTitle: routeIsTitle(trip),
     eyebrow: trip.archived ? "Archived trip" : past ? "Past trip" : null,
     ready: trip.ready,
     packed: totals.packed,
@@ -140,4 +149,44 @@ export function quickViewModel(trip: LifecycleTrip, filter: QuickFilter): QuickV
     ),
   ].filter((entry): entry is QuickCategory => entry !== null);
   return { categories, bag: BAG_LABELS[toiletryBagState(trip)] };
+}
+
+// ---------------------------------------------------------------- route (epic #107, design #108 §2)
+
+/** City names of a multi-stop trip, in order; empty for a single-destination trip (it shows its city as today). */
+export function routeCities(trip: Pick<LifecycleTrip, "stops">): string[] {
+  return trip.stops.length > 1 ? trip.stops.map((stop) => stop.location.city) : [];
+}
+
+/** True when a multi-stop trip's title is just its route (the default), so showing the route as well would repeat it. */
+export function routeIsTitle(trip: Pick<LifecycleTrip, "stops" | "destination">): boolean {
+  const cities = routeCities(trip);
+  return cities.length > 0 && cities.join(" → ") === trip.destination;
+}
+
+export interface RouteDisplay {
+  /** What shows: the whole route, or "First → … → Last" when it would not fit. */
+  cities: string[];
+  /** True when the middle was dropped (the "· N stops" badge shows). */
+  shortened: boolean;
+  count: number;
+  /** "Route: Lisbon, then Porto, then Madrid." */
+  spoken: string;
+}
+
+/** Characters before a route is shortened: about what a phone card line holds. Whole city names only. */
+export const ROUTE_BUDGET = 28;
+
+export function routeDisplay(
+  cities: readonly string[],
+  budget: number = ROUTE_BUDGET,
+): RouteDisplay {
+  const whole = cities.join(" → ");
+  const shortened = cities.length > 2 && whole.length > budget;
+  return {
+    cities: shortened ? [cities[0], "…", cities[cities.length - 1]] : [...cities],
+    shortened,
+    count: cities.length,
+    spoken: `Route: ${cities.join(", then ")}.`,
+  };
 }

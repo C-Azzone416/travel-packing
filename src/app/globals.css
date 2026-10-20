@@ -2155,3 +2155,129 @@ a.back {
     padding-bottom: 67px;
   }
 }
+
+/* Multi-destination trips (epic #107, design #108): route text, stop cards, the summary strip. */
+.route-text {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+.route-count {
+  color: var(--muted-text);
+  font-weight: 400;
+}
+.destination-head-copy p.route-chip {
+  display: inline-block;
+  margin: 0 0 6px;
+  padding: 3px 11px;
+  border-radius: 14px;
+  background: var(--seafoam-soft);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+}
+.quick-view-route {
+  margin: 0 0 8px;
+  color: var(--ink);
+  font-weight: 700;
+}
+.quick-view-route .route-text {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.edit-route {
+  margin-top: 8px;
+}
+.add-stop-row {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+}
+.stop-list {
+  display: grid;
+  gap: 12px;
+}
+.stop-card {
+  display: grid;
+  gap: 12px;
+}
+.stop-card [role="group"] {
+  display: grid;
+  gap: 12px;
+}
+.stop-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.stop-head h2,
+.stop-head h3 {
+  margin: 0;
+  flex: 1;
+  font-size: 16px;
+}
+.stop-number {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--seafoam-soft);
+  color: var(--ink);
+  font-weight: 800;
+}
+.stop-actions {
+  display: flex;
+  gap: 4px;
+}
+.stop-actions .icon-button {
+  min-width: 44px;
+  min-height: 44px;
+}
+.stop-actions .icon-button[aria-disabled="true"] {
+  opacity: 0.4;
+}
+.stop-actions .icon-button.danger:hover {
+  color: var(--danger, #9b3d46);
+}
+.stop-connector {
+  height: 20px;
+  margin-left: 30px;
+  border-left: 2px dashed var(--line, #c9d6d1);
+  font-size: 12px;
+  color: var(--muted-text);
+}
+.stop-connector span {
+  display: none;
+  padding-left: 10px;
+}
+@media (min-width: 900px) {
+  .stop-connector span {
+    display: inline;
+  }
+}
+.stop-dates input[readonly] {
+  background: var(--linen, #f5f7f2);
+}
+.nights-chip {
+  justify-self: end;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--seafoam-soft);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+.route-summary {
+  margin: 0;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--seafoam-soft);
+  color: var(--ink);
+  font-weight: 700;
+}

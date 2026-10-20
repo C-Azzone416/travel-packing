@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { buttonClassName } from "@/components/ui/Button";
 import Link from "next/link";
-import { quickViewModel, type QuickFilter } from "./view";
+import { RouteText } from "./RouteText";
+import { quickViewModel, routeCities, routeIsTitle, type QuickFilter } from "./view";
 import type { LifecycleTrip } from "@/domain/trip-lifecycle";
 
 // Read-only preview of a trip's list. The filter is local view state only: nothing
@@ -11,6 +12,7 @@ import type { LifecycleTrip } from "@/domain/trip-lifecycle";
 export function QuickView({ trip, id }: { trip: LifecycleTrip; id: string }) {
   const [filter, setFilter] = useState<QuickFilter>("still");
   const model = quickViewModel(trip, filter);
+  const route = routeIsTitle(trip) ? [] : routeCities(trip);
   const count = model.categories.reduce((sum, entry) => sum + entry.rows.length, 0);
 
   return (
@@ -37,6 +39,11 @@ export function QuickView({ trip, id }: { trip: LifecycleTrip; id: string }) {
           </button>
         </div>
       </div>
+      {route.length ? (
+        <p className="quick-view-route">
+          <RouteText cities={route} budget={64} />
+        </p>
+      ) : null}
       <p className="sr-only" role="status" aria-label="Quick view result count">
         {count === 1 ? "1 item shown" : `${count} items shown`}
       </p>
