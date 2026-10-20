@@ -122,3 +122,17 @@ export async function decideMode(
 export function resolveDraft(live: string | null): boolean {
   return live?.trim() === "true";
 }
+
+/**
+ * The tree of a commit, fetching the commit first when this clone does not have it. A pull request's head is not in a
+ * develop clone after a squash merge (only the squash commit is), but GitHub keeps it reachable from refs/pull/N/head, so
+ * fetching it by id works. `run` is the command runner (`git` with these arguments, output trimmed).
+ */
+export function treeWithFetch(run: (args: string[]) => string, sha: string): string {
+  try {
+    return run(["rev-parse", `${sha}^{tree}`]);
+  } catch {
+    run(["fetch", "--no-tags", "--depth=1", "origin", sha]);
+    return run(["rev-parse", `${sha}^{tree}`]);
+  }
+}

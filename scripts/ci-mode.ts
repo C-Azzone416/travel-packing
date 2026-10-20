@@ -2,7 +2,7 @@
 // GITHUB_OUTPUT. Reads EVENT_NAME, REF, PR_NUMBER, SHA, GITHUB_REPOSITORY and GH_TOKEN from the environment.
 import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
-import { decideMode, resolveDraft, type Lookups } from "../src/tooling/ci-mode";
+import { decideMode, resolveDraft, treeWithFetch, type Lookups } from "../src/tooling/ci-mode";
 import type { CiRun } from "../src/tooling/ci-gate";
 
 const repo = process.env.GITHUB_REPOSITORY ?? "";
@@ -19,13 +19,7 @@ const lookups: Lookups = {
     return JSON.parse(out) as { number: number; headSha: string }[];
   },
   async treeOf(sha) {
-    // The pull request's head may not be in a shallow clone; fetch just that commit when it is missing.
-    try {
-      return run("git", ["rev-parse", `${sha}^{tree}`]);
-    } catch {
-      run("git", ["fetch", "--no-tags", "--depth=1", "origin", sha]);
-      return run("git", ["rev-parse", `${sha}^{tree}`]);
-    }
+    return treeWithFetch((args) => run("git", args), sha);
   },
   async runsFor(sha) {
     const out = run("gh", [

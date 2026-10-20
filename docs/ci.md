@@ -28,6 +28,12 @@ The first step after install decides what this run does (`scripts/ci-mode.ts`, l
 | Push to `develop` or `main` | `full`, or `reused` | `reused` only when the pushed files are byte-identical (same git tree) to the head of a pull request whose latest `ci` run on that exact head is a completed success. Anything uncertain (no pull request, different files, lookup error) is `full`. |
 | Anything else               | `full`              | everything                                                                                                                                                                                                                                           |
 
+**The reuse rule needs the pull request to be up to date with develop when it is merged.** A pull request's `ci` run
+validates the merge of its head with develop as it was at that moment, and a squash merge produces the same files as the
+head only when develop has not moved since the head last contained it. If develop moved, the trees differ, the mode is
+`full`, and nothing is reused (that is what happened on `6125273`). `src/tooling/ci-mode-squash.test.ts` proves both cases with
+real git, including that the pull request's head is fetched by id into a clone that never had it.
+
 Full = the quick checks plus unit tests with the 90% coverage gate, both production builds (Turbopack and webpack) each with
 the e2e-code and client-bundle secret scans, and phone + desktop e2e (with the a11y checks).
 
