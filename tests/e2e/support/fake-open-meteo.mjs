@@ -70,6 +70,46 @@ PLACES.countryless = [
 
 const queries = [];
 
+// ---- Weather (forecast + archive), for the weather e2e. Synthetic: no real place or date is represented.
+// A place's weather is chosen by its rounded latitude. "base" gives the first London (51.51) hot and dry
+// and the second (42.98) cool and rainy; "swapped" reverses them, which is the "changed forecast" of the
+// review-sheet scenario. Every request is recorded so a test can prove what was (not) sent.
+const HOT_DRY = { high: 30, low: 20, prob: 0, mm: 0, uv: 9, sun: 11 * 3600 };
+const COOL_WET = { high: 15, low: 8, prob: 80, mm: 6, uv: 2, sun: 3 * 3600 };
+const weatherCalls = [];
+const weatherState = { variant: "base", fail: false };
+
+function profileFor(latitude) {
+  const first = Math.abs(Number(latitude) - 51.51) < 0.5;
+  const hot = weatherState.variant === "base" ? first : !first;
+  return hot ? HOT_DRY : COOL_WET;
+}
+
+function* days(start, end) {
+  const last = Date.parse(`${end}T00:00:00Z`);
+  for (let at = Date.parse(`${start}T00:00:00Z`); at <= last; at += 86_400_000) {
+    yield new Date(at).toISOString().slice(0, 10);
+  }
+}
+
+function weatherBody(url, forecast) {
+  const profile = profileFor(url.searchParams.get("latitude"));
+  const dates = [...days(url.searchParams.get("start_date"), url.searchParams.get("end_date"))];
+  const daily = {
+    time: dates,
+    temperature_2m_max: dates.map(() => profile.high),
+    temperature_2m_min: dates.map(() => profile.low),
+    precipitation_sum: dates.map(() => profile.mm),
+    snowfall_sum: dates.map(() => 0),
+    sunshine_duration: dates.map(() => profile.sun),
+  };
+  if (forecast) {
+    daily.precipitation_probability_max = dates.map(() => profile.prob);
+    daily.uv_index_max = dates.map(() => profile.uv);
+  }
+  return { daily };
+}
+
 createServer((request, response) => {
   const url = new URL(request.url ?? "/", `http://127.0.0.1:${PORT}`);
   const send = (status, body) => {
@@ -78,6 +118,27 @@ createServer((request, response) => {
   };
   if (url.pathname === "/health") return send(200, { ok: true });
   if (url.pathname === "/__queries") return send(200, queries);
+  if (url.pathname === "/__weather-calls") return send(200, weatherCalls);
+  if (url.pathname === "/__weather-reset") {
+    weatherCalls.length = 0;
+    weatherState.variant = "base";
+    weatherState.fail = false;
+    return send(200, { ok: true });
+  }
+  if (url.pathname === "/__weather-set") {
+    if (url.searchParams.has("variant")) weatherState.variant = url.searchParams.get("variant");
+    if (url.searchParams.has("fail")) weatherState.fail = url.searchParams.get("fail") === "1";
+    return send(200, weatherState);
+  }
+  if (url.pathname === "/v1/forecast" || url.pathname === "/v1/archive") {
+    weatherCalls.push({
+      path: url.pathname,
+      params: Object.fromEntries(url.searchParams),
+      headers: Object.keys(request.headers).sort(),
+    });
+    if (weatherState.fail) return send(500, { error: true });
+    return send(200, weatherBody(url, url.pathname === "/v1/forecast"));
+  }
   if (url.pathname === "/__reset") {
     queries.length = 0;
     return send(200, { ok: true });
