@@ -254,10 +254,7 @@ describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
     ],
     [
       "an extra flag on vercel alias set",
-      mutate(
-        '"$PREVIEW_ALIAS" --token="$VERCEL_TOKEN"',
-        '"$PREVIEW_ALIAS" --scope other-team --token="$VERCEL_TOKEN"',
-      ),
+      mutate('--scope="$VERCEL_ORG_ID"', "--scope other-team"),
       /alias assignment step must be exactly as reviewed/,
     ],
     [
