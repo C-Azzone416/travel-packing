@@ -3,7 +3,7 @@
 // The owner id never comes from the caller.
 
 import type { ZodType } from "zod";
-import { calculateSuggestions, normalizeTripDates } from "../../domain/calc";
+import { calculateSuggestions, normalizeTripDates, packingDays, tripDays } from "../../domain/calc";
 import {
   acceptWeather,
   addToiletryItem,
@@ -32,12 +32,20 @@ import {
   emptyLifecycleState,
   saveDraft,
   selectDraftLocation,
+  setDraftStops,
   setDraftTheme,
   startCopyDraft,
   startDraft,
   type LifecycleTrip,
   type SampleLocation,
+  type TripDraft,
 } from "../../domain/trip-lifecycle";
+import {
+  routeLabel,
+  tripDatesFromStops,
+  validateStops,
+  type TripStop,
+} from "../../domain/trip-stops";
 import { and, eq, isNull } from "drizzle-orm";
 import { restoreDeletedTrip, softDeleteTrip } from "../db/retention";
 import * as schema from "../db/schema";
@@ -57,6 +65,14 @@ import {
   type StoredPlace,
   type StoredTrip,
 } from "./trip-store";
+import {
+  listWeatherSuggestions,
+  readWeatherSettings,
+  writeWeatherSettings,
+  writeWeatherSuggestion,
+  type WeatherSettings,
+  type WeatherSuggestionState,
+} from "./weather-store";
 
 export interface TripResult {
   trip: StoredTrip;
@@ -272,6 +288,10 @@ const orNull = (value: string): string | null => (value === "" ? null : value);
  * The structured place stored next to a trip's destination (#47). Coordinates exist only for a provider place
  * and are rounded here again, so even a resolver that returned more precision could never store it.
  */
+function stopPlace(location: SampleLocation): StoredPlace {
+  return toStoredPlace(location);
+}
+
 function toStoredPlace(location: SampleLocation): StoredPlace {
   const fromProvider = location.provider !== undefined && location.providerPlaceId !== undefined;
   const hasCoordinates =
@@ -314,59 +334,126 @@ function validDates(start: string, end: string): { start: string; end: string } 
   return { start: dates.start, end: dates.end };
 }
 
-/** Save a draft through the domain (location confirmed, dates valid, fresh snapshot) and persist it. */
+/** Save a draft through the domain (every place confirmed, dates valid, fresh snapshot) and persist it. */
 async function saveNewTrip(
   scope: OwnerScope,
   context: DataContext,
-  draft: ReturnType<typeof startDraft>,
-  location: SampleLocation,
+  draft: TripDraft,
 ): Promise<StoredTrip> {
   await ensureDefaultStaples(scope.db, scope.ownerId);
   const staples = await listStaples(scope.db, scope.ownerId);
-  const saved = saveDraft(
-    beginDraft(emptyLifecycleState(), selectDraftLocation(draft, location)),
-    staples,
-    { newId: () => crypto.randomUUID(), today: todayOf(context) },
-  );
+  const saved = saveDraft(beginDraft(emptyLifecycleState(), draft), staples, {
+    newId: () => crypto.randomUUID(),
+    today: todayOf(context),
+  });
   if (!saved.ok) refuse(fail("INVALID_INPUT", { fields: ["location", "start", "end"] }));
   const trip = toStoredTrip(saved.trip);
   await insertTrip(scope.db, scope.ownerId, trip);
   return (await loadTrip(scope.db, scope.ownerId, trip.id)) ?? refuse(fail("INTERNAL"));
 }
 
-/** Create a trip from a confirmed sample location, dates, and preferences. */
+/**
+ * The stops the browser named, with each place resolved server-side (the same place id is looked up once) and the
+ * route checked. Resolved before any database write, so a slow lookup never holds a transaction open.
+ */
+async function resolveStops(
+  context: DataContext,
+  named: readonly { location: { id: string }; arrive: string; leave: string }[],
+): Promise<TripStop[]> {
+  const places = new Map<string, SampleLocation>();
+  for (const { location } of named) {
+    if (!places.has(location.id))
+      places.set(location.id, await resolveLocation(context, location.id));
+  }
+  const stops = named.map((stop): TripStop => ({
+    location: { ...(places.get(stop.location.id) as SampleLocation) },
+    arrive: stop.arrive,
+    leave: stop.leave,
+  }));
+  if (!validateStops(stops).ok) refuse(fail("INVALID_INPUT", { fields: ["stops"] }));
+  return stops;
+}
+
+/** The single-destination form as a draft: one place, dates normalized as before. */
+async function singleStopDraft(
+  context: DataContext,
+  request: { location?: { id: string }; start?: string; end?: string },
+  begin: (start: string, end: string) => TripDraft,
+): Promise<TripDraft> {
+  const dates = validDates(request.start as string, request.end as string);
+  const location = await resolveLocation(context, (request.location as { id: string }).id);
+  return selectDraftLocation(begin(dates.start, dates.end), location);
+}
+
+/** Create a trip from a confirmed location (or an ordered list of stops), dates, and preferences. */
 export function createTrip(context: DataContext, input: unknown): Promise<Result<StoredTrip>> {
   return run(context, inputs.createTripInput, input, async (scope, request) => {
-    const dates = validDates(request.start, request.end);
-    // Resolved before any database write, so a slow lookup never holds a transaction open.
-    const location = await resolveLocation(context, request.location.id);
-    return saveNewTrip(
-      scope,
-      context,
-      startDraft(request.config, dates.start, dates.end, request.theme),
-      location,
-    );
+    const begin = (start: string, end: string) =>
+      startDraft(request.config, start, end, request.theme);
+    const draft = request.stops
+      ? setDraftStops(
+          begin(request.stops[0].arrive, request.stops[0].leave),
+          await resolveStops(context, request.stops),
+        )
+      : await singleStopDraft(context, request, begin);
+    return saveNewTrip(scope, context, draft);
   });
 }
 
 /**
- * Copy one of the owner's live trips: preferences only; a new location and dates; every check, bag placement,
- * and Ready state starts clear; `copied_from` records the source. The source is looked up by owner, so another
- * owner's trip is NOT_FOUND and can never be referenced.
+ * Copy one of the owner's live trips: preferences only; a new location (or stops) and dates; every check, bag
+ * placement, and Ready state starts clear; `copied_from` records the source. The source is looked up by owner, so
+ * another owner's trip is NOT_FOUND and can never be referenced.
  */
 export function copyTrip(context: DataContext, input: unknown): Promise<Result<StoredTrip>> {
   return run(context, inputs.copyTripInput, input, async (scope, request) => {
     const source = await mustLoad(scope, request.sourceId);
-    const dates = validDates(request.start, request.end);
-    const location = await resolveLocation(context, request.location.id);
-    const lifecycleSource: LifecycleTrip = { ...source, location: null };
-    const draft = startCopyDraft(lifecycleSource, dates.start, dates.end);
-    return saveNewTrip(
-      scope,
-      context,
-      request.theme ? setDraftTheme(draft, request.theme) : draft,
-      location,
-    );
+    // The single-destination form chooses its place and dates anew, whatever route the source had.
+    const lifecycleSource: LifecycleTrip = { ...source, location: null, stops: [] };
+    const begin = (start: string, end: string) => startCopyDraft(lifecycleSource, start, end);
+    const draft = request.stops
+      ? setDraftStops(
+          begin(request.stops[0].arrive, request.stops[0].leave),
+          await resolveStops(context, request.stops),
+        )
+      : await singleStopDraft(context, request, begin);
+    return saveNewTrip(scope, context, request.theme ? setDraftTheme(draft, request.theme) : draft);
+  });
+}
+
+/**
+ * Replace a saved trip's stops. Trip start and end follow the stops, the day counts are recomputed, and the
+ * calculated items are recalculated from the trip's own preferences (as a preference change does). The title
+ * (`destination`) is left alone unless it still equals the old route, in which case it follows the new route.
+ */
+export function setTripStops(context: DataContext, input: unknown) {
+  return run(context, inputs.setStopsInput, input, async (scope, request) => {
+    const stops = await resolveStops(context, request.stops);
+    return scope.db.transaction(async (tx) => {
+      const txScope: OwnerScope = { db: tx as OwnerScope["db"], ownerId: scope.ownerId };
+      if (!(await lockTrip(txScope.db, txScope.ownerId, request.tripId))) refuse(fail("NOT_FOUND"));
+      const current = await mustLoad(txScope, request.tripId);
+      const { start, end } = tripDatesFromStops(stops);
+      const moved = recalculateSuggestions(
+        { ...current, stops, start, end },
+        current.config,
+        calculateSuggestions,
+      );
+      const next: StoredTrip = {
+        ...moved,
+        days: tripDays(start, end),
+        dailyDays: packingDays(start, end),
+        destination:
+          current.destination === routeLabel(current.stops)
+            ? routeLabel(stops)
+            : current.destination,
+        place: stopPlace(stops[0].location),
+        locationId: stops[0].location.id,
+        locationLabel: stops[0].location.label,
+      };
+      if (!(await saveTrip(txScope.db, txScope.ownerId, next))) refuse(fail("NOT_FOUND"));
+      return mustLoad(txScope, request.tripId);
+    });
   });
 }
 
@@ -431,4 +518,45 @@ export function listRecentlyDeletedTrips(context: DataContext): Promise<Result<S
   return run(context, inputs.none, {}, (scope) =>
     loadTrips(scope.db, scope.ownerId, { filter: "deleted" }),
   );
+}
+
+// ---------------------------------------------------------------- weather settings and suggestion status
+
+export function getWeatherSettings(context: DataContext): Promise<Result<WeatherSettings>> {
+  return run(context, inputs.none, {}, (scope) => readWeatherSettings(scope.db, scope.ownerId));
+}
+
+/** Change the weather opt-in and/or the temperature unit. Fields left out keep their value. */
+export function updateWeatherSettings(
+  context: DataContext,
+  input: unknown,
+): Promise<Result<WeatherSettings>> {
+  return run(context, inputs.weatherSettingsInput, input, (scope, change) =>
+    writeWeatherSettings(scope.db, scope.ownerId, change),
+  );
+}
+
+/** The status of each weather suggestion on one of the owner's trips. */
+export function listTripWeatherSuggestions(
+  context: DataContext,
+  input: unknown,
+): Promise<Result<WeatherSuggestionState[]>> {
+  return run(context, inputs.tripWeatherSuggestions, input, async (scope, { tripId }) => {
+    await mustLoad(scope, tripId);
+    return listWeatherSuggestions(scope.db, scope.ownerId, tripId);
+  });
+}
+
+/** Record one suggestion's status and rule signature on one of the owner's trips (NOT_FOUND for anyone else's). */
+export function setTripWeatherSuggestion(
+  context: DataContext,
+  input: unknown,
+): Promise<Result<WeatherSuggestionState[]>> {
+  return run(context, inputs.weatherSuggestionInput, input, async (scope, request) => {
+    const { tripId, ...state } = request;
+    if (!(await writeWeatherSuggestion(scope.db, scope.ownerId, tripId, state))) {
+      refuse(fail("NOT_FOUND"));
+    }
+    return listWeatherSuggestions(scope.db, scope.ownerId, tripId);
+  });
 }

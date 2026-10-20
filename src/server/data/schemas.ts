@@ -3,7 +3,8 @@
 
 import { z } from "zod";
 import { THEME_IDS } from "../../domain/themes";
-import { ITEM_CATEGORIES, TOILETRY_GROUP } from "../db/schema";
+import { MAX_STOPS } from "../../domain/trip-stops";
+import { ITEM_CATEGORIES, TEMPERATURE_UNITS, TOILETRY_GROUP, WEATHER_STATUSES } from "../db/schema";
 
 export const tripId = z.uuid();
 /** The six built-in themes, and nothing else: an unknown value is INVALID_INPUT (#48). */
@@ -59,20 +60,61 @@ export const updatePreferencesInput = z.object({ tripId, config: tripConfig });
  */
 export const locationSelection = z.object({ id: z.string().min(1).max(60) });
 
-export const createTripInput = z.object({
+/** One stop as the browser names it: a place id plus the arrive and leave dates. At most six per trip. */
+export const stopSelection = z.object({
   location: locationSelection,
-  ...dates.shape,
-  config: tripConfig,
-  /** Travel when left out. */
-  theme: theme.optional(),
+  arrive: isoDate,
+  leave: isoDate,
 });
-export const copyTripInput = z.object({
-  sourceId: tripId,
-  location: locationSelection,
-  ...dates.shape,
-  /** The source trip's theme when left out. */
-  theme: theme.optional(),
-});
+export const stopsSelection = z.array(stopSelection).min(1).max(MAX_STOPS);
+
+/**
+ * A trip's route is either the single-destination form (`location` + `start` + `end`, as before) or `stops`.
+ * Exactly one form is accepted; a missing field of the chosen form is reported at its own path.
+ */
+function oneRouteForm(
+  value: { location?: unknown; start?: unknown; end?: unknown; stops?: unknown },
+  ctx: z.RefinementCtx,
+): void {
+  if (value.stops !== undefined) {
+    for (const key of ["location", "start", "end"] as const) {
+      if (value[key] !== undefined) {
+        ctx.addIssue({ code: "custom", path: [key], message: "Use stops or location and dates" });
+      }
+    }
+    return;
+  }
+  for (const key of ["location", "start", "end"] as const) {
+    if (value[key] === undefined)
+      ctx.addIssue({ code: "custom", path: [key], message: "Required" });
+  }
+}
+
+const routeFields = {
+  location: locationSelection.optional(),
+  start: isoDate.optional(),
+  end: isoDate.optional(),
+  stops: stopsSelection.optional(),
+};
+
+export const createTripInput = z
+  .object({
+    ...routeFields,
+    config: tripConfig,
+    /** Travel when left out. */
+    theme: theme.optional(),
+  })
+  .superRefine(oneRouteForm);
+export const copyTripInput = z
+  .object({
+    sourceId: tripId,
+    ...routeFields,
+    /** The source trip's theme when left out. */
+    theme: theme.optional(),
+  })
+  .superRefine(oneRouteForm);
+/** Replace the stops of a saved trip. */
+export const setStopsInput = z.object({ tripId, stops: stopsSelection });
 export const setThemeInput = z.object({ tripId, theme });
 
 export const stapleInput = z.object({
@@ -86,3 +128,16 @@ export const stapleInput = z.object({
 });
 
 export const none = z.object({}).strict();
+
+export const weatherSettingsInput = z
+  .object({ weatherOptIn: z.boolean(), temperatureUnit: z.enum(TEMPERATURE_UNITS) })
+  .partial();
+const semanticId = z.string().min(1).max(100);
+export const weatherSuggestionInput = z.object({
+  tripId,
+  semanticId,
+  status: z.enum(WEATHER_STATUSES),
+  /** A short rule signature, never raw weather. */
+  ruleSignature: z.string().max(200),
+});
+export const tripWeatherSuggestions = z.object({ tripId });

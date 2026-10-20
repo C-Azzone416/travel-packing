@@ -8,24 +8,17 @@ import { buildTripItems, forecastLabel, normalizeTripDates, parseDate } from "./
 import { DEFAULT_THEME, type ThemeId } from "./themes";
 import { TOILETRY_GROUP_ID } from "./toiletry-bag";
 import type { Staple, Trip, TripConfig, TripItem } from "./trip";
+import {
+  daysBetween,
+  routeLabel,
+  shiftStops,
+  tripDatesFromStops,
+  validateStops,
+  type SampleLocation,
+  type TripStop,
+} from "./trip-stops";
 
-export interface SampleLocation {
-  id: string;
-  city: string;
-  region: string;
-  country: string;
-  countryCode: string;
-  label: string;
-  /** Extra place detail (e.g. a county), set only to tell apart results that share city, region and country. */
-  detail?: string;
-  /** Present only for a place that came from a geocoding provider (#47); curated entries have none of these. */
-  provider?: string;
-  providerPlaceId?: string;
-  /** Rounded to 2 decimals (about 1 km) before they are ever stored. */
-  latitude?: number;
-  longitude?: number;
-  timezone?: string;
-}
+export type { SampleLocation };
 
 export interface LifecycleTrip extends Trip {
   destination: string;
@@ -36,9 +29,22 @@ export interface LifecycleTrip extends Trip {
   theme: ThemeId;
 }
 
+/** A stop being drafted: its place is unconfirmed until the person picks one. */
+export interface DraftStop {
+  location: SampleLocation | null;
+  arrive: string;
+  leave: string;
+}
+
 export interface TripDraft {
   mode: "create" | "copy";
   sourceId: string | null;
+  /**
+   * The ordered stops of a multi-stop draft (2 or more). Absent for a single-destination draft, whose one stop is
+   * `location` + `start` + `end` below. These three always mirror the route (first stop's place, first arrive, last
+   * leave), so single-stop callers keep working; read the route with `draftStops`.
+   */
+  stops?: DraftStop[];
   /** Only a confirmed location object counts; free text never confirms a destination. */
   location: SampleLocation | null;
   start: string;
@@ -88,6 +94,26 @@ export function emptyLifecycleState(): LifecycleState {
 
 // ---------------------------------------------------------------- drafts
 
+/** The draft's route: its stops when it has several, otherwise the one stop named by location, start and end. */
+export function draftStops(draft: TripDraft): DraftStop[] {
+  return draft.stops && draft.stops.length > 1
+    ? draft.stops
+    : [{ location: draft.location, arrive: draft.start, leave: draft.end }];
+}
+
+/** The draft with this route; a single stop is stored in the single-destination fields only. */
+function withStops(draft: TripDraft, stops: DraftStop[]): TripDraft {
+  const { stops: _previous, ...rest } = draft;
+  void _previous;
+  return {
+    ...rest,
+    ...(stops.length > 1 ? { stops } : {}),
+    location: stops[0].location,
+    start: stops[0].arrive,
+    end: stops[stops.length - 1].leave,
+  };
+}
+
 /** Start a new draft. Dates are normalized (a return before departure becomes departure). */
 export function startDraft(
   config: TripConfig,
@@ -108,27 +134,69 @@ export function startDraft(
 }
 
 /**
- * Start a copy draft: the source's preference config and theme are carried over; location and dates are chosen anew.
+ * Start a copy draft: the source's preference config and theme are carried over. A single-stop source asks for a
+ * location and dates anew; a multi-stop source keeps its route, every stop shifted by the same offset so the first
+ * arrival lands on `start` (`end` then follows from the stops).
  */
 export function startCopyDraft(source: LifecycleTrip, start: string, end: string): TripDraft {
-  return {
+  const draft: TripDraft = {
     ...startDraft(source.config, start, end, source.theme),
     mode: "copy",
     sourceId: source.id,
   };
+  const stops = source.stops ?? [];
+  if (stops.length < 2 || !parseDate(start)) return draft;
+  return withStops(draft, shiftStops(stops, daysBetween(stops[0].arrive, start)));
 }
 
 export function setDraftTheme(draft: TripDraft, theme: ThemeId): TripDraft {
   return { ...draft, theme };
 }
 
+/** Confirm the first stop's place (the only stop of a single-destination trip). */
 export function selectDraftLocation(draft: TripDraft, location: SampleLocation): TripDraft {
-  return { ...draft, location: { ...location } };
+  return setDraftStopLocation(draft, 0, location);
 }
 
+export function setDraftStopLocation(
+  draft: TripDraft,
+  index: number,
+  location: SampleLocation,
+): TripDraft {
+  const current = draftStops(draft);
+  if (index < 0 || index >= current.length) return draft;
+  return withStops(
+    draft,
+    current.map((stop, at) => (at === index ? { ...stop, location: { ...location } } : stop)),
+  );
+}
+
+/** Replace the whole route (add, remove or reorder stops). Needs at least one stop; the UI validates the rest. */
+export function setDraftStops(draft: TripDraft, stops: readonly DraftStop[]): TripDraft {
+  if (stops.length === 0) return draft;
+  return withStops(
+    draft,
+    stops.map((stop) => ({ ...stop, location: stop.location ? { ...stop.location } : null })),
+  );
+}
+
+/**
+ * Set the trip's first arrival and last departure. With one stop this is exactly the old behaviour (a return before
+ * departure becomes departure). With several, only the two outer dates move; the stops in between keep their dates
+ * and `validateStops` reports any gap or overlap this creates.
+ */
 export function setDraftDates(draft: TripDraft, start: string, end: string): TripDraft {
   const dates = normalizeTripDates(start, end);
-  return { ...draft, start: dates.start, end: dates.end };
+  const current = draftStops(draft);
+  const last = current.length - 1;
+  return withStops(
+    draft,
+    current.map((stop, at) => ({
+      ...stop,
+      ...(at === 0 ? { arrive: dates.start } : {}),
+      ...(at === last ? { leave: dates.end } : {}),
+    })),
+  );
 }
 
 export function setDraftConfig(draft: TripDraft, config: TripConfig): TripDraft {
@@ -164,6 +232,7 @@ export function buildTrip(
   deps: TripBuilderDeps,
   copiedFrom: string | null = null,
   theme: ThemeId = DEFAULT_THEME,
+  stops?: readonly TripStop[],
 ): LifecycleTrip {
   const built = buildTripItems({ ...config, start, end }, staples);
   const items: TripItem[] = built.items
@@ -178,6 +247,11 @@ export function buildTrip(
     id: deps.newId(),
     destination,
     location: location ? { ...location } : null,
+    stops: stops
+      ? stops.map((stop) => ({ ...stop, location: { ...stop.location } }))
+      : location
+        ? [{ location: { ...location }, arrive: start, leave: end }]
+        : [],
     start,
     end,
     config: { ...config },
@@ -210,13 +284,24 @@ export function saveDraft(
 ): LifecycleResult {
   const draft = state.draft;
   if (!draft) return { ok: false, reason: "NO_DRAFT", state };
-  if (!draft.location) return { ok: false, reason: "LOCATION_NOT_CONFIRMED", state };
-  const dates = normalizeTripDates(draft.start, draft.end);
-  if (!dates.valid) return { ok: false, reason: "INVALID_DATES", state };
+  const confirmed: TripStop[] = [];
+  for (const stop of draftStops(draft)) {
+    if (!stop.location) return { ok: false, reason: "LOCATION_NOT_CONFIRMED", state };
+    confirmed.push({ location: stop.location, arrive: stop.arrive, leave: stop.leave });
+  }
+  // One stop keeps today's date rule (a return before departure becomes departure, a day trip is fine).
+  if (confirmed.length === 1) {
+    const dates = normalizeTripDates(confirmed[0].arrive, confirmed[0].leave);
+    if (!dates.valid) return { ok: false, reason: "INVALID_DATES", state };
+    confirmed[0] = { ...confirmed[0], arrive: dates.start, leave: dates.end };
+  } else if (!validateStops(confirmed).ok) {
+    return { ok: false, reason: "INVALID_DATES", state };
+  }
+  const dates = tripDatesFromStops(confirmed);
 
   const trip = buildTrip(
-    draft.location.city,
-    draft.location,
+    routeLabel(confirmed),
+    confirmed[0].location,
     dates.start,
     dates.end,
     draft.config,
@@ -224,6 +309,7 @@ export function saveDraft(
     deps,
     draft.sourceId,
     draft.theme,
+    confirmed,
   );
   return { ok: true, state: { ...state, trips: [trip, ...state.trips], draft: null }, trip };
 }

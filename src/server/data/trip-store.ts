@@ -6,6 +6,12 @@ import { and, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import type { ThemeId } from "../../domain/themes";
 import type { Trip, TripConfig, TripItem } from "../../domain/trip";
+import {
+  tripDatesFromStops,
+  validateStops,
+  type SampleLocation,
+  type TripStop,
+} from "../../domain/trip-stops";
 import type { Db } from "../db/retention";
 import * as schema from "../db/schema";
 import { ITEM_CATEGORIES } from "../db/schema";
@@ -42,9 +48,13 @@ export interface StoredTrip extends Trip {
 }
 
 const WEATHER_SUGGESTION_TEXT = "Compact umbrella";
+/** The simulated umbrella that existed before per-stop weather; its row also carries the legacy label. */
+const LEGACY_UMBRELLA_ID = "weather-umbrella";
 const CATEGORIES: ReadonlySet<string> = new Set(ITEM_CATEGORIES);
 
 type TripRow = typeof schema.trips.$inferSelect;
+type StopRow = typeof schema.tripStops.$inferSelect;
+type WeatherRow = typeof schema.weatherSuggestions.$inferSelect;
 
 export type TripFilter = "live" | "deleted";
 
@@ -79,8 +89,17 @@ export async function loadTrips(
     .select()
     .from(schema.weatherSuggestions)
     .where(
-      and(inArray(schema.weatherSuggestions.tripId, ids), owned(schema.weatherSuggestions.ownerId)),
+      and(
+        inArray(schema.weatherSuggestions.tripId, ids),
+        owned(schema.weatherSuggestions.ownerId),
+        eq(schema.weatherSuggestions.semanticId, LEGACY_UMBRELLA_ID),
+      ),
     );
+  const stopRows = await db
+    .select()
+    .from(schema.tripStops)
+    .where(and(inArray(schema.tripStops.tripId, ids), owned(schema.tripStops.ownerId)))
+    .orderBy(schema.tripStops.tripId, schema.tripStops.position);
   const items = await db
     .select({ item: schema.tripItems, packed: schema.tripItemProgress.packed })
     .from(schema.tripItems)
@@ -96,6 +115,7 @@ export async function loadTrips(
       prefs,
       weatherRow,
       items.filter((entry) => entry.item.tripId === row.id),
+      stopRows.filter((entry) => entry.tripId === row.id),
     );
   });
 }
@@ -160,11 +180,87 @@ function placeColumns(place: StoredPlace | null) {
   };
 }
 
+/** One stop row as the domain's stop. Provider fields come back only when the stop has them. */
+function toStop(row: StopRow): TripStop {
+  const location: SampleLocation = {
+    id: row.locationId ?? "",
+    city: row.city,
+    region: row.locationRegion ?? "",
+    country: row.locationCountry ?? "",
+    countryCode: row.locationCountryCode ?? "",
+    label: row.locationLabel ?? row.city,
+  };
+  if (row.locationProvider !== null && row.locationPlaceId !== null) {
+    location.provider = row.locationProvider;
+    location.providerPlaceId = row.locationPlaceId;
+    if (row.latitude !== null && row.longitude !== null) {
+      location.latitude = Number(row.latitude);
+      location.longitude = Number(row.longitude);
+    }
+    if (row.timezone !== null) location.timezone = row.timezone;
+  }
+  return { location, arrive: row.arriveDate, leave: row.leaveDate };
+}
+
+function stopValues(ownerId: string, tripId: string, stop: TripStop, position: number) {
+  const { location } = stop;
+  const fromProvider = location.provider !== undefined && location.providerPlaceId !== undefined;
+  const hasCoordinates =
+    fromProvider && location.latitude !== undefined && location.longitude !== undefined;
+  const orNull = (value: string): string | null => (value === "" ? null : value);
+  return {
+    tripId,
+    ownerId,
+    position,
+    city: location.city,
+    locationId: orNull(location.id),
+    locationLabel: orNull(location.label),
+    locationProvider: fromProvider ? (location.provider ?? null) : null,
+    locationPlaceId: fromProvider ? (location.providerPlaceId ?? null) : null,
+    locationRegion: orNull(location.region),
+    locationCountry: orNull(location.country),
+    locationCountryCode: orNull(location.countryCode),
+    // Re-rounded here, so a caller that held more precision can never store it.
+    latitude: hasCoordinates ? String(Math.round((location.latitude as number) * 100) / 100) : null,
+    longitude: hasCoordinates
+      ? String(Math.round((location.longitude as number) * 100) / 100)
+      : null,
+    timezone: fromProvider ? (location.timezone ?? null) : null,
+    arriveDate: stop.arrive,
+    leaveDate: stop.leave,
+  };
+}
+
+/** A trip written without stops (a single place on the trip row) gets its one stop from the trip's own columns. */
+function stopsToWrite(trip: StoredTrip): TripStop[] {
+  if (trip.stops.length > 0) return trip.stops;
+  const place = trip.place;
+  const location: SampleLocation = {
+    id: trip.locationId ?? "",
+    city: trip.destination,
+    region: place?.region ?? "",
+    country: place?.country ?? "",
+    countryCode: place?.countryCode ?? "",
+    label: trip.locationLabel ?? trip.destination,
+  };
+  if (place?.provider && place.placeId) {
+    location.provider = place.provider;
+    location.providerPlaceId = place.placeId;
+    if (place.latitude !== null && place.longitude !== null) {
+      location.latitude = place.latitude;
+      location.longitude = place.longitude;
+    }
+    if (place.timezone) location.timezone = place.timezone;
+  }
+  return [{ location, arrive: trip.start, leave: trip.end }];
+}
+
 function toStoredTrip(
   row: TripRow,
   prefs: typeof schema.tripPreferences.$inferSelect | undefined,
-  weather: typeof schema.weatherSuggestions.$inferSelect | undefined,
+  weather: WeatherRow | undefined,
   itemRows: { item: typeof schema.tripItems.$inferSelect; packed: number | null }[],
+  stopRows: StopRow[],
 ): StoredTrip {
   const config: TripConfig = {
     laundry: prefs?.laundry ?? false,
@@ -182,6 +278,7 @@ function toStoredTrip(
     place: toStoredPlace(row),
     start: row.startDate,
     end: row.endDate,
+    stops: stopRows.map(toStop),
     config,
     days: row.days,
     dailyDays: row.dailyDays,
@@ -222,7 +319,8 @@ function toDomainItem(row: typeof schema.tripItems.$inferSelect, packed: number)
 // ---------------------------------------------------------------- writing
 
 /** Insert a new trip aggregate. `trip.id` must be a uuid chosen by the caller. */
-export async function insertTrip(db: Db, ownerId: string, trip: StoredTrip): Promise<void> {
+export async function insertTrip(db: Db, ownerId: string, given: StoredTrip): Promise<void> {
+  const trip = withStopDates(given);
   assertWritable(trip);
   await db.transaction(async (tx) => {
     await tx.insert(schema.trips).values({
@@ -247,7 +345,8 @@ export async function insertTrip(db: Db, ownerId: string, trip: StoredTrip): Pro
 }
 
 /** Replace a trip aggregate's mutable state. Returns false if the trip is not this owner's live trip. */
-export async function saveTrip(db: Db, ownerId: string, trip: StoredTrip): Promise<boolean> {
+export async function saveTrip(db: Db, ownerId: string, given: StoredTrip): Promise<boolean> {
+  const trip = withStopDates(given);
   assertWritable(trip);
   return db.transaction(async (tx) => {
     const updated = await tx
@@ -281,7 +380,18 @@ export async function saveTrip(db: Db, ownerId: string, trip: StoredTrip): Promi
   });
 }
 
+/** trips.start_date / end_date are stored and derived: when the trip has stops they are the first arrive and last leave. */
+function withStopDates(trip: StoredTrip): StoredTrip {
+  if (trip.stops.length === 0) return trip;
+  const { start, end } = tripDatesFromStops(trip.stops);
+  return { ...trip, start, end };
+}
+
 function assertWritable(trip: StoredTrip): void {
+  if (trip.stops.length > 0) {
+    const stops = validateStops(trip.stops);
+    if (!stops.ok) refuse(fail("INVALID_INPUT", { fields: ["stops"] }));
+  }
   const badCategory = trip.items.find((item) => !CATEGORIES.has(item.category));
   if (badCategory) refuse(fail("INVALID_INPUT", { fields: ["items.category"] }));
 }
@@ -314,11 +424,27 @@ async function writeChildren(tx: Db, ownerId: string, trip: StoredTrip): Promise
 
   await tx
     .insert(schema.weatherSuggestions)
-    .values({ tripId, ownerId, status: trip.weather.status, label: trip.weather.label })
+    .values({
+      tripId,
+      ownerId,
+      semanticId: LEGACY_UMBRELLA_ID,
+      status: trip.weather.status,
+      label: trip.weather.label,
+    })
     .onConflictDoUpdate({
-      target: schema.weatherSuggestions.tripId,
+      target: [schema.weatherSuggestions.tripId, schema.weatherSuggestions.semanticId],
       set: { status: trip.weather.status, label: trip.weather.label, updatedAt: new Date() },
     });
+
+  // Stops are replaced as a set, in the same transaction as the trip row.
+  await tx
+    .delete(schema.tripStops)
+    .where(and(eq(schema.tripStops.tripId, tripId), eq(schema.tripStops.ownerId, ownerId)));
+  await tx
+    .insert(schema.tripStops)
+    .values(
+      stopsToWrite(trip).map((stop, position) => stopValues(ownerId, tripId, stop, position)),
+    );
 
   const existing = await tx
     .select({ id: schema.tripItems.id, semanticId: schema.tripItems.semanticId })
