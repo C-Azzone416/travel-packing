@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import { AuthCard, AuthLink, FormAlert, SubmitButton, TextField } from "./AuthParts";
 import { verifyHelper } from "./copy";
 import { useDelayed, useFocusInvalid, useHeadingFocus } from "./hooks";
+import { DidntGetIt } from "./DidntGetIt";
 import { ResendControl } from "./ResendControl";
 import { INITIAL_FORM, type FormState, type ResendState } from "./state";
 import { CODE_LENGTH } from "@/server/auth/account-flows";
@@ -18,7 +19,10 @@ export function VerifyForm({
   initialCooldown,
   verifyAction,
   resendAction,
+  appHost = null,
 }: {
+  /** The Preview's web address for the "Didn't get it?" note; null elsewhere. */
+  appHost?: string | null;
   /** The address being verified, or null when the page does not know it (the person types it). */
   email: string | null;
   initialCooldown: number;
@@ -97,6 +101,7 @@ export function VerifyForm({
         email={email ? undefined : (known ?? undefined)}
         initialCooldown={initialCooldown}
       />
+      <DidntGetIt host={appHost} />
       <p className="auth-links">
         <AuthLink href="/sign-up">Use a different email</AuthLink>
       </p>

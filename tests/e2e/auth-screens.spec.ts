@@ -266,6 +266,27 @@ test.describe("forgot and reset password", () => {
     await expect(heading(page, "Check your email")).toBeFocused();
   }
 
+  test(
+    "Didn't get it? sits under the resend control, closed, and reads the same for an address with an account and one without",
+    DEVICE,
+    async ({ page }) => {
+      await ownAccount();
+      await forgot(page, email);
+      const note = page.locator("details.didnt-get-it");
+      await expect(note).toBeVisible();
+      await expect(note).not.toHaveAttribute("open", "");
+      const summary = note.getByText("Didn’t get it?");
+      expect(Math.round((await summary.boundingBox())!.height)).toBeGreaterThanOrEqual(44);
+      await summary.click();
+      await expect(note.getByText("Check your spam or junk folder.")).toBeVisible();
+      const own = await note.innerText();
+      await expectAccessible(page, "forgot-password confirmation with the note open");
+      await forgot(page, STRANGER_EMAIL);
+      await page.locator("details.didnt-get-it summary").click();
+      expect(await page.locator("details.didnt-get-it").innerText()).toBe(own);
+    },
+  );
+
   test("the same answer for an address with an account and one without", async ({ page }) => {
     await ownAccount();
     await forgot(page, email);

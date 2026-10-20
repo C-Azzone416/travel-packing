@@ -4,6 +4,7 @@ import { getAuth } from "@/server/auth/auth-runtime";
 import { flowLimits } from "@/server/auth/flow-limits";
 import { authorizeOwner } from "@/server/auth/guard";
 import { pendingEmail } from "@/server/auth/pending-email";
+import { previewHost } from "@/server/auth/request-origin";
 import { resendVerifyAction, verifyAction } from "./actions";
 
 export const metadata = { title: "Check your email" };
@@ -20,6 +21,7 @@ export default async function VerifyPage() {
       initialCooldown={email ? flowLimits().cooldownRemaining("verify", email) : 0}
       verifyAction={verifyAction}
       resendAction={resendVerifyAction}
+      appHost={previewHost()}
     />
   );
 }

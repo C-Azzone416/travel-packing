@@ -4,13 +4,17 @@ import { useActionState } from "react";
 import { AuthCard, AuthLink, FormAlert, SubmitButton, TextField } from "./AuthParts";
 import { forgotSentHelper } from "./copy";
 import { useDelayed, useFocusInvalid, useHeadingFocus } from "./hooks";
+import { DidntGetIt } from "./DidntGetIt";
 import { ResendControl } from "./ResendControl";
 import { INITIAL_FORGOT, type ForgotState, type ResendState } from "./state";
 
 export function ForgotForm({
   action,
   resendAction,
+  appHost = null,
 }: {
+  /** The Preview's web address for the "Didn't get it?" note; null elsewhere. */
+  appHost?: string | null;
   action: (previous: ForgotState, formData: FormData) => Promise<ForgotState>;
   resendAction: (previous: ResendState, formData: FormData) => Promise<ResendState>;
 }) {
@@ -29,6 +33,7 @@ export function ForgotForm({
           email={state.sent.email}
           initialCooldown={state.sent.cooldownSeconds}
         />
+        <DidntGetIt host={appHost} />
         <p className="auth-links">
           <AuthLink href="/sign-in">Back to sign in</AuthLink>
         </p>
