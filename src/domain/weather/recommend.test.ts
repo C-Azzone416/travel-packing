@@ -187,7 +187,7 @@ describe("clothing breakdown", () => {
       name: "Short-sleeve tops",
       category: "Clothing",
     });
-    expect(r.clothing[0].reason).toBe("Warm days in Lisbon, Oct 2–7");
+    expect(r.clothing[0].reason).toBe("Mostly hot days; 6 hot days in Lisbon");
   });
 });
 
@@ -236,7 +236,7 @@ describe("conditional items", () => {
     const heavy = recommend(one(10));
     expect(extraIds(heavy)).toContain("weather-rain-jacket");
     expect(heavy.extras.find((e) => e.semanticId === "weather-rain-jacket")?.reason).toBe(
-      "Heavy rain in Lisbon, Oct 3",
+      "Rain on 1 day in Lisbon, Oct 3",
     );
     expect(extraIds(recommend(rainy(2, { precipMm: 12 })))).toContain("weather-rain-jacket");
   });
@@ -300,9 +300,11 @@ describe("conditional items", () => {
     ).toBe("beach");
   });
   it("snow boots when any snow", () => {
-    expect(extraIds(recommend(dates(8).map((d) => day(d, { snowCm: 0.1 }))))).toContain(
-      "weather-snow-boots",
-    );
+    const snow = (cm: number) =>
+      extraIds(recommend(dates(8).map((d, i) => day(d, { snowCm: i === 3 ? cm : 0 }))));
+    expect(snow(0)).not.toContain("weather-snow-boots");
+    expect(snow(0.9)).not.toContain("weather-snow-boots");
+    expect(snow(1)).toContain("weather-snow-boots");
     expect(extraIds(recommend(withHigh(15)))).not.toContain("weather-snow-boots");
   });
   it("layers: light below 15 low (not 15), warm coat below 5 low or 10 high, accessories below 0", () => {
@@ -356,15 +358,15 @@ describe("mixed trip example", () => {
     ]);
     const reason = (id: string) => r.extras.find((e) => e.semanticId === id)?.reason;
     expect(reason("weather-umbrella")).toBe("Rain likely in Edinburgh, Oct 5–8");
-    expect(reason("layer-light")).toBe("Cool evenings in Edinburgh, Oct 5–8");
-    expect(reason("weather-sunscreen")).toBe("Strong sun in Lisbon, Oct 1–4");
+    expect(reason("layer-light")).toBe("Cold nights in Edinburgh");
+    expect(reason("weather-sunscreen")).toBe("Sunny days in Lisbon");
   });
   it("names several stops in one reason", () => {
     const wet = recommend(
       dates(8).map((d, i) => day(d, { stopIndex: i % 2, precipProbability: 1 })),
     );
     expect(wet.extras.find((e) => e.semanticId === "weather-umbrella")?.reason).toBe(
-      "Rain likely in Lisbon and Edinburgh, Oct 1–8",
+      "Rain likely in Lisbon, Oct 1–7 and Edinburgh, Oct 2–8",
     );
   });
   it("flows through calculateSuggestions and buildTripItems, sunscreen in the toiletry group", () => {
@@ -395,15 +397,115 @@ describe("defaultFormatRange and injection", () => {
   });
   it("uses an injected formatter", () => {
     const r = recommendPacking({
-      days: withHigh(30),
+      days: [day("2026-10-03", { precipProbability: 1 })],
       dayStopNames: ["Lisbon"],
       config: base,
       formatRange: (a, b) => `${a}..${b}`,
     });
-    expect(r.clothing[0].reason).toBe("Warm days in Lisbon, 2026-10-02..2026-10-07");
+    expect(r.extras.find((e) => e.semanticId === "weather-umbrella")?.reason).toBe(
+      "Rain likely in Lisbon, 2026-10-03..2026-10-03",
+    );
   });
-  it("omits the place when names are missing", () => {
-    const r = recommendPacking({ days: withHigh(30), dayStopNames: [], config: base });
-    expect(r.clothing[0].reason).toBe("Warm days, Oct 2–7");
+  it("shows only the dates when stops have no names", () => {
+    const r = recommendPacking({
+      days: [day("2026-10-03", { precipProbability: 1 })],
+      dayStopNames: [],
+      config: base,
+    });
+    expect(r.extras.find((e) => e.semanticId === "weather-umbrella")?.reason).toBe(
+      "Rain likely, Oct 3",
+    );
+    expect(r.extras.find((e) => e.semanticId === "weather-rain-jacket")).toBeUndefined();
+  });
+});
+
+describe("reason copy (#108 §7.4)", () => {
+  const reasonOf = (r: ReturnType<typeof recommend>, id: string) =>
+    r.extras.find((e) => e.semanticId === id)?.reason;
+  const trip = (over: (i: number) => Partial<DayWeather>) =>
+    dates(8).map((d, i) => day(d, over(i)));
+
+  it("rain: forecast, two places, and the cap", () => {
+    const two = recommend(
+      trip((i) => ({
+        stopIndex: i < 4 ? 0 : 1,
+        precipProbability: i === 0 || i === 1 || i === 6 ? 1 : 0,
+      })),
+    );
+    expect(reasonOf(two, "weather-umbrella")).toBe(
+      "Rain likely in Lisbon, Oct 1–2 and Edinburgh, Oct 7",
+    );
+    const three = recommendPacking({
+      days: trip((i) => ({ stopIndex: i % 3, precipProbability: 1 })),
+      dayStopNames: ["A", "B", "C"],
+      config: base,
+    });
+    expect(reasonOf(three, "weather-umbrella")).toBe(
+      "Rain likely in A, Oct 1–7 and B, Oct 2–8 and more",
+    );
+  });
+  it("rain jacket counts days, with two-place wording kept", () => {
+    const r = recommend(trip((i) => ({ precipProbability: i < 3 ? 0.5 : 0 })));
+    expect(reasonOf(r, "weather-rain-jacket")).toBe("Rain on 3 days in Lisbon, Oct 1–3");
+  });
+  it("typical data softens the verb and never says forecast", () => {
+    const typical = (extra: Partial<DayWeather>) => trip(() => ({ source: "typical", ...extra }));
+    const wet = recommend(typical({ precipProbability: 0.5 }));
+    expect(reasonOf(wet, "weather-umbrella")).toBe("Often rainy in Lisbon, Oct 1–8");
+    expect(reasonOf(wet, "weather-rain-jacket")).toBe("Rain on about 8 days in Lisbon, Oct 1–8");
+    expect(reasonOf(recommend(typical({ highC: 30 })), "weather-swimsuit")).toBe(
+      "Often hot in Lisbon, Oct 1–8",
+    );
+    expect(reasonOf(recommend(typical({ lowC: 2 })), "layer-light")).toBe(
+      "Often cold at night in Lisbon",
+    );
+    expect(reasonOf(recommend(typical({ snowCm: 2 })), "weather-snow-boots")).toBe(
+      "Snow is common in Lisbon at this time",
+    );
+    const text = JSON.stringify([wet, recommend(typical({ snowCm: 2, highC: 30, lowC: 2 }))]);
+    expect(text.toLowerCase()).not.toContain("forecast");
+  });
+  it("forecast wording for heat, cold, snow and sun", () => {
+    expect(reasonOf(recommend(trip(() => ({ highC: 30 }))), "weather-swimsuit")).toBe(
+      "Hot days in Lisbon, Oct 1–8",
+    );
+    expect(reasonOf(recommend(trip(() => ({ lowC: -2 }))), "cold-accessories")).toBe(
+      "Cold nights in Lisbon",
+    );
+    expect(reasonOf(recommend(trip(() => ({ snowCm: 3 }))), "weather-snow-boots")).toBe(
+      "Snow expected in Lisbon, Oct 1–8",
+    );
+    expect(reasonOf(recommend(trip(() => ({ uvIndexMax: 9 }))), "weather-sun-hat")).toBe(
+      "Strong sun in Lisbon, Oct 1–8",
+    );
+    expect(reasonOf(recommend(trip(() => ({ uvIndexMax: 9 }))), "weather-sunscreen")).toBe(
+      "Strong sun in Lisbon, Oct 1–8",
+    );
+    expect(reasonOf(recommend(trip(() => ({ uvIndexMax: 4 }))), "weather-sunscreen")).toBe(
+      "Sunny days in Lisbon",
+    );
+  });
+  it("sunny days without a city name", () => {
+    const r = recommendPacking({
+      days: trip(() => ({ uvIndexMax: 4 })),
+      dayStopNames: [],
+      config: base,
+    });
+    expect(reasonOf(r, "weather-sunscreen")).toBe("Sunny days");
+  });
+  it("clothing: mostly band, with the city that has most of them", () => {
+    const r = recommend(trip((i) => ({ stopIndex: i < 4 ? 0 : 1, highC: i < 4 ? 30 : 22 })));
+    const reason = (id: string) => r.clothing.find((l) => l.id === id)?.reason;
+    expect(reason("tops-short")).toBe("Mostly hot days; 3 hot days in Lisbon");
+    expect(reason("bottoms-shorts")).toBe("Mostly hot days; 3 hot days in Lisbon");
+    expect(reason("bottoms-pants")).toBe("Mostly warm days; 3 warm days in Edinburgh");
+    const cold = recommend(trip(() => ({ highC: 5 })));
+    expect(cold.clothing.find((l) => l.id === "tops-long")?.reason).toBe(
+      "Mostly cold days; 6 cold days in Lisbon",
+    );
+  });
+  it("clothing: days with no weather are described as cool", () => {
+    const r = recommend([day("2026-10-01", { highC: 30 })]);
+    expect(r.clothing.find((l) => l.id === "tops-long")?.reason).toBe("Mostly cool days");
   });
 });

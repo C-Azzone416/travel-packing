@@ -23,6 +23,8 @@ export const WEATHER_RULES = {
   rainProbability: 0.4,
   rainDaysForJacket: 2,
   heavyRainMm: 10,
+  /** Waterproof boots: a real snow day (a typical-data average turns one flake into a fraction). */
+  snowBootsCm: 1,
   /** Sun. */
   sunscreenUv: 3,
   sunscreenHighC: 21,
@@ -146,18 +148,61 @@ export function hasUsableWeather(days: readonly DayWeather[], config: CalcConfig
   return tripWeather(days, tripDates(config.start, config.end)).length > 0;
 }
 
-function describe(
+const MAX_PLACES = 2;
+
+function capped(entries: readonly string[]): string {
+  const shown = entries.slice(0, MAX_PLACES).join(" and ");
+  return entries.length > MAX_PLACES ? `${shown} and more` : shown;
+}
+
+function byStop(matching: readonly DayWeather[]): [number, DayWeather[]][] {
+  const groups = new Map<number, DayWeather[]>();
+  for (const day of matching)
+    groups.set(day.stopIndex, [...(groups.get(day.stopIndex) ?? []), day]);
+  return [...groups].sort(([a], [b]) => a - b);
+}
+
+/** True when every matching day is a multi-year average, so the wording must not promise a forecast. */
+function isTypical(matching: readonly DayWeather[]): boolean {
+  return matching.length > 0 && matching.every((day) => day.source === "typical");
+}
+
+/** " in Lisbon, Oct 3–5 and Porto, Oct 8" (two places at most, then "and more"). */
+function placesWithDates(
   matching: readonly DayWeather[],
   names: readonly string[],
   formatRange: RangeFormatter,
 ): string {
-  const dates = matching.map((day) => day.date).sort();
-  const places = [...new Set(matching.map((day) => day.stopIndex))]
-    .sort((a, b) => a - b)
-    .map((index) => names[index])
+  const entries = byStop(matching).map(([index, days]) => {
+    const dates = days.map((day) => day.date).sort();
+    const range = formatRange(dates[0], dates[dates.length - 1]);
+    return names[index] ? `${names[index]}, ${range}` : range;
+  });
+  const anyNamed = byStop(matching).some(([index]) => names[index]);
+  return `${anyNamed ? " in " : ", "}${capped(entries)}`;
+}
+
+/** " in Lisbon and Porto"; empty when no stop has a name. */
+function placeNames(matching: readonly DayWeather[], names: readonly string[]): string {
+  const named = byStop(matching)
+    .map(([index]) => names[index])
     .filter(Boolean);
-  const where = places.length ? ` in ${places.join(" and ")}` : "";
-  return `${where}, ${formatRange(dates[0], dates[dates.length - 1])}`;
+  return named.length ? ` in ${capped(named)}` : "";
+}
+
+const BAND_ORDER: readonly ClothingBand[] = ["hot", "warm", "cool", "cold"];
+
+/** "Mostly warm days; 3 warm days in Lisbon". */
+function clothingReason(matching: readonly DayWeather[], names: readonly string[]): string {
+  if (matching.length === 0) return "Mostly cool days";
+  const counts = BAND_ORDER.map(
+    (band) => matching.filter((day) => classifyDay(day.highC) === band).length,
+  );
+  const mostly = BAND_ORDER[counts.indexOf(Math.max(...counts))];
+  const inBand = matching.filter((day) => classifyDay(day.highC) === mostly);
+  const [index, days] = byStop(inBand).sort(([, a], [, b]) => b.length - a.length)[0];
+  const city = names[index] ? ` in ${names[index]}` : "";
+  return `Mostly ${mostly} days; ${days.length} ${mostly} days${city}`;
 }
 
 export function legacyClothing(everydayLooks: number, laundry: boolean): Suggestion[] {
@@ -211,13 +256,7 @@ export function recommendPacking(input: RecommendInput): WeatherRecommendation {
   const pants = shortPants + longPants;
 
   const clothing: Suggestion[] = [];
-  const addClothing = (
-    id: string,
-    name: string,
-    qty: number,
-    matching: DayWeather[],
-    why: string,
-  ) => {
+  const addClothing = (id: string, name: string, qty: number, matching: DayWeather[]) => {
     if (qty <= 0) return;
     clothing.push({
       id,
@@ -225,9 +264,7 @@ export function recommendPacking(input: RecommendInput): WeatherRecommendation {
       category: "Clothing",
       qty,
       semanticId: id,
-      reason: matching.length
-        ? `${why}${describe(matching, input.dayStopNames, formatRange)}`
-        : why,
+      reason: clothingReason(matching, input.dayStopNames),
     });
   };
   const hotDays = daysOf("short-shorts");
@@ -238,17 +275,15 @@ export function recommendPacking(input: RecommendInput): WeatherRecommendation {
     "Short-sleeve tops",
     laundry ? Math.ceil(shortTops / 2) : shortTops,
     shortSleeveDays,
-    "Warm days",
   );
   addClothing(
     "tops-long",
     "Long-sleeve tops",
     laundry ? Math.ceil(longPants / 2) : longPants,
     daysOf("long-pants"),
-    "Cool days",
   );
-  addClothing("bottoms-shorts", "Shorts", bottomsFor(shorts, laundry), hotDays, "Hot days");
-  addClothing("bottoms-pants", "Pants", bottomsFor(pants, laundry), pantsDays, "Cooler days");
+  addClothing("bottoms-shorts", "Shorts", bottomsFor(shorts, laundry), hotDays);
+  addClothing("bottoms-pants", "Pants", bottomsFor(pants, laundry), pantsDays);
 
   return { clothing, extras: conditionalExtras(weather, input, formatRange) };
 }
@@ -261,7 +296,8 @@ function conditionalExtras(
   const rules = WEATHER_RULES;
   const theme = input.theme;
   const names = input.dayStopNames;
-  const say = (matching: readonly DayWeather[]) => describe(matching, names, formatRange);
+  const dated = (matching: readonly DayWeather[]) => placesWithDates(matching, names, formatRange);
+  const where = (matching: readonly DayWeather[]) => placeNames(matching, names);
   const extras: WeatherSuggestion[] = [];
   const add = (
     semanticId: string,
@@ -291,7 +327,7 @@ function conditionalExtras(
       "Light jacket or sweater",
       "Clothing",
       false,
-      `Cool evenings${say(light)}`,
+      `${isTypical(light) ? "Often cold at night" : "Cold nights"}${where(light)}`,
       "low",
     );
   }
@@ -299,7 +335,14 @@ function conditionalExtras(
     (day) => day.lowC < rules.warmCoatBelowLowC || day.highC < rules.warmCoatBelowHighC,
   );
   if (cold.length) {
-    add("layer-warm", "Warm coat", "Clothing", false, `Cold weather${say(cold)}`, "cold");
+    add(
+      "layer-warm",
+      "Warm coat",
+      "Clothing",
+      false,
+      `${isTypical(cold) ? "Often cold at night" : "Cold nights"}${where(cold)}`,
+      "cold",
+    );
   }
   const freezing = weather.filter((day) => day.lowC < rules.coldAccessoriesBelowLowC);
   if (freezing.length) {
@@ -308,7 +351,7 @@ function conditionalExtras(
       "Hat and gloves",
       "Clothing",
       true,
-      `Freezing nights${say(freezing)}`,
+      `${isTypical(freezing) ? "Often cold at night" : "Cold nights"}${where(freezing)}`,
       "freezing",
     );
   }
@@ -320,7 +363,7 @@ function conditionalExtras(
       "Compact umbrella",
       "Accessories",
       false,
-      `Rain likely${say(wet)}`,
+      `${isTypical(wet) ? "Often rainy" : "Rain likely"}${dated(wet)}`,
       "rain",
     );
   }
@@ -333,7 +376,7 @@ function conditionalExtras(
       "Rain jacket",
       "Clothing",
       false,
-      `${downpour.length ? "Heavy rain" : "Several rainy days"}${say(matching)}`,
+      `${isTypical(matching) ? "Rain on about" : "Rain on"} ${matching.length} ${matching.length === 1 ? "day" : "days"}${dated(matching)}`,
       [manyWet ? "days" : "", downpour.length ? "heavy" : ""].filter(Boolean).join("+"),
     );
   }
@@ -346,7 +389,7 @@ function conditionalExtras(
       "Swimsuit",
       "Clothing",
       !beach,
-      hot.length ? `Hot weather${say(hot)}` : "Beach trip",
+      hot.length ? `${isTypical(hot) ? "Often hot" : "Hot days"}${dated(hot)}` : "Beach trip",
       [beach ? "beach" : "", hot.length ? "hot" : ""].filter(Boolean).join("+"),
     );
   }
@@ -361,6 +404,9 @@ function conditionalExtras(
       (day.sunshineHours ?? 0) >= rules.sunscreenSunshineHours,
   );
   const sunny = [...uv, ...bright];
+  const strongSun = weather.filter(
+    (day) => day.uvIndexMax !== null && day.uvIndexMax >= rules.sunHatUv,
+  );
   const themed = theme !== undefined && rules.sunscreenThemes.includes(theme);
   if (sunny.length || themed) {
     add(
@@ -368,7 +414,11 @@ function conditionalExtras(
       "Sunscreen",
       "Bathroom",
       false,
-      sunny.length ? `Strong sun${say(sunny)}` : "Outdoor trip",
+      strongSun.length
+        ? `Strong sun${dated(strongSun)}`
+        : sunny.length
+          ? `Sunny days${where(sunny)}`
+          : "Outdoor trip",
       [uv.length ? "uv" : "", bright.length ? "sun" : "", themed ? "theme" : ""]
         .filter(Boolean)
         .join("+"),
@@ -376,28 +426,25 @@ function conditionalExtras(
     );
   }
 
-  const strongUv = weather.filter(
-    (day) => day.uvIndexMax !== null && day.uvIndexMax >= rules.sunHatUv,
-  );
-  if (strongUv.length || beach) {
+  if (strongSun.length || beach) {
     add(
       "weather-sun-hat",
       "Sun hat",
       "Accessories",
       true,
-      strongUv.length ? `Very high UV${say(strongUv)}` : "Beach trip",
-      [strongUv.length ? "uv" : "", beach ? "beach" : ""].filter(Boolean).join("+"),
+      strongSun.length ? `Strong sun${dated(strongSun)}` : "Beach trip",
+      [strongSun.length ? "uv" : "", beach ? "beach" : ""].filter(Boolean).join("+"),
     );
   }
 
-  const snow = weather.filter((day) => day.snowCm > 0);
+  const snow = weather.filter((day) => day.snowCm >= rules.snowBootsCm);
   if (snow.length) {
     add(
       "weather-snow-boots",
       "Waterproof boots",
       "Accessories",
       true,
-      `Snow expected${say(snow)}`,
+      isTypical(snow) ? `Snow is common${where(snow)} at this time` : `Snow expected${dated(snow)}`,
       "snow",
     );
   }
