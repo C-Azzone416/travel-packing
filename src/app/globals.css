@@ -2570,6 +2570,12 @@ a.back {
   text-decoration: underline;
   cursor: pointer;
 }
+.whats-this summary,
+.weather-card a[href$="open-meteo.com/"] {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
 .whats-this summary {
   cursor: pointer;
   color: var(--teal-dark, var(--teal));
