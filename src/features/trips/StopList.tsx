@@ -68,16 +68,19 @@ export function StopList({
   );
   const [confirming, setConfirming] = useState<number | null>(null);
   const [announcement, setAnnouncement] = useState("");
-  const [focusKey, setFocusKey] = useState<number | null>(null);
+  // The key of a stop whose search box should take focus once it has rendered (a stop was just added).
+  const focusKey = useRef<number | null>(null);
   const root = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (focusKey === null) return;
+    if (focusKey.current === null) return;
     root.current
-      ?.querySelector<HTMLInputElement>(`[data-stop-key="${focusKey}"] input[role="combobox"]`)
+      ?.querySelector<HTMLInputElement>(
+        `[data-stop-key="${focusKey.current}"] input[role="combobox"]`,
+      )
       ?.focus();
-    setFocusKey(null);
-  }, [focusKey]);
+    focusKey.current = null;
+  });
 
   const single = stops.length === 1;
   const problems = stopProblems(stops);
@@ -103,7 +106,7 @@ export function StopList({
     setKeys([...keys, key]);
     setQueries({ ...queries, [key]: "" });
     onChange(addStop(stops));
-    setFocusKey(key);
+    focusKey.current = key;
     setAnnouncement(`Stop ${stops.length + 1} added`);
   }
 
