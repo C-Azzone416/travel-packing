@@ -224,6 +224,8 @@ test(
   "a11y: the opt-in prompt, the weather panel and the review sheet",
   DEVICE,
   async ({ page }) => {
+    // Creates a trip, saves it, edits its route and runs axe on four screens: more than 30 s on a slow phone runner.
+    test.slow();
     await newTrip(page);
     await fillTwoStops(page);
     await expectAccessible(page, "shape step with the weather prompt");
