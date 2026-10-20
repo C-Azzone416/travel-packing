@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -5,7 +6,9 @@ import {
   ALIAS_HEAD_STEP,
   checkCiWorkflow,
   checkDeployWorkflow,
+  ciJob,
   MIN_CI_TIMEOUT_MINUTES,
+  stepScript,
   stepLines,
   unpinnedActions,
 } from "./workflow-check";
@@ -436,6 +439,16 @@ describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
     ],
     ["a moving tag install", `${deploy}\nrun: npm i vercel@latest\n`, /@latest/],
     [
+      "the deploy downloading the e2e build",
+      `${deploy}\n      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333\n        with:\n          name: e2e-build\n`,
+      /never use an artifact or an e2e build/,
+    ],
+    [
+      "the deploy building with the e2e flag",
+      `${deploy}\n          NEXT_PUBLIC_E2E_BUILD: "1"\n`,
+      /never use an artifact or an e2e build/,
+    ],
+    [
       "no production host passed",
       mutate(/vars\.PRODUCTION_DB_HOST/g, "vars.OTHER"),
       /PRODUCTION_DB_HOST must be passed/,
@@ -473,20 +486,32 @@ describe("checkCiWorkflow", () => {
     expect(mutated).not.toBe(ci);
     return mutated;
   };
+  /** Replace text inside one job only. */
+  const inJob = (job: string, from: string | RegExp, to: string) => {
+    const body = jobText(job);
+    const changed = body.replace(from, to);
+    expect(changed).not.toBe(body);
+    return ci.replace(body, changed);
+  };
+  const jobText = (name: string) => {
+    const start = ci.search(new RegExp(`^  ${name}:\\s*$`, "m"));
+    expect(start).toBeGreaterThan(0);
+    const rest = ci.slice(start + 1);
+    const next = rest.search(/^ {2}[A-Za-z0-9_-]+:\s*$/m);
+    return next < 0 ? ci.slice(start) : ci.slice(start, start + 1 + next);
+  };
 
-  it("holds for the real workflow, with a timeout of at least the minimum", () => {
+  it("holds for the real workflow", () => {
     expect(checkCiWorkflow(ci)).toEqual([]);
-    expect(Number(/^ {4}timeout-minutes:\s*(\d+)/m.exec(ci)?.[1])).toBeGreaterThanOrEqual(
-      MIN_CI_TIMEOUT_MINUTES,
-    );
+    expect(MIN_CI_TIMEOUT_MINUTES).toBeGreaterThan(0);
   });
 
   it.each([
-    ["the job renamed", mutateCi(/^ {2}ci:/m, "  checks:"), /named `ci`/],
+    ["the summary job renamed", mutateCi(/^ {2}ci:/m, "  summary:"), /ci job is missing/],
     [
-      "an extra job",
-      `${ci}\n  lint:\n    runs-on: ubuntu-latest\n    steps: []\n`,
-      /only the `ci` and `deploy` jobs/,
+      "an extra job nobody summarises",
+      `${ci.replace(/\n {2}deploy:[\s\S]*$/, "")}\n  lint:\n    runs-on: ubuntu-latest\n    timeout-minutes: 5\n    steps: []\n\n${ci.slice(ci.indexOf("  deploy:"))}`,
+      /unknown job lint/,
     ],
     ["no ready_for_review", mutateCi(", ready_for_review", ""), /ready_for_review/],
     [
@@ -497,106 +522,254 @@ describe("checkCiWorkflow", () => {
       ),
       /may be cancelled/,
     ],
-    ["a short timeout", mutateCi(/^( {4}timeout-minutes:\s*)\d+/m, "$120"), /timeout-minutes/],
-    ["no timeout", mutateCi(/^ {4}timeout-minutes:.*\n/m, ""), /timeout-minutes/],
     [
-      "the ci job reads a secret",
-      mutateCi(
-        "          GH_TOKEN: ${{ github.token }}",
-        "          GH_TOKEN: ${{ secrets.VERCEL_TOKEN }}",
+      "a job without a timeout",
+      inJob("unit", /^ {4}timeout-minutes:.*\n/m, ""),
+      /unit job needs a timeout/,
+    ],
+    [
+      "a tiny e2e timeout",
+      inJob("e2e", /timeout-minutes: \d+/, "timeout-minutes: 3"),
+      /e2e job's timeout-minutes must leave room/,
+    ],
+    [
+      "a job reading a secret",
+      inJob(
+        "unit",
+        "      - name: Test with coverage\n",
+        "      - name: Test with coverage\n        env:\n          X: ${{ secrets.VERCEL_TOKEN }}\n",
       ),
-      /no secret but GITHUB_TOKEN/,
+      /unit job must read no secret/,
+    ],
+    [
+      "continue-on-error on a gate",
+      inJob(
+        "checks",
+        "      - name: Lint\n",
+        "      - name: Lint\n        continue-on-error: true\n",
+      ),
+      /checks job must not use continue-on-error/,
+    ],
+    [
+      "no mode step",
+      inJob("mode", "scripts/ci-mode.ts", "scripts/other.ts"),
+      /mode step is missing/,
+    ],
+    [
+      "the mode not published",
+      inJob("mode", /\s+mode: \$\{\{ steps\.mode\.outputs\.mode \}\}/, ""),
+      /must output the mode/,
+    ],
+    [
+      "checks waiting for the mode",
+      inJob("checks", "  checks:\n", "  checks:\n    needs: mode\n"),
+      /checks job must run in every mode/,
+    ],
+    [
+      "checks skipped outside full mode",
+      inJob("checks", "  checks:\n", "  checks:\n    if: needs.mode.outputs.mode == 'full'\n"),
+      /checks job must run in every mode/,
     ],
     [
       "gitleaks removed",
-      mutateCi(/ {6}- uses: gitleaks[^\n]*\n {8}env:\n {10}GITHUB_TOKEN[^\n]*\n\n/, ""),
-      /gitleaks\) must run inside/,
-    ],
-    ["a shallow checkout", mutateCi(/ {8}with:\n {10}fetch-depth: 0[^\n]*\n/, ""), /full history/],
-    [
-      "gitleaks after the install",
-      mutateCi(
-        "      - name: Install\n        run: npm ci\n",
-        "      - name: Install\n        run: npm ci\n      - run: true # gitleaks/gitleaks-action\n",
-      ).replace(/(gitleaks\/gitleaks-action@[0-9a-f]{40})/, "other/action@" + "0".repeat(40)),
-      /gitleaks/,
-    ],
-    ["no mode step", mutateCi("scripts/ci-mode.ts", "scripts/other.ts"), /mode step is missing/],
-    [
-      "coverage runs in every mode",
-      mutateCi(/(- name: Test with coverage\n) {8}if:[^\n]*\n/, "$1"),
-      /test:coverage step must run only in full mode/,
+      inJob("checks", /      - uses: gitleaks[^\n]*\n {8}env:\n {10}GITHUB_TOKEN[^\n]*\n\n/, ""),
+      /gitleaks\) must run inside the checks job/,
     ],
     [
-      "e2e runs in every mode",
-      mutateCi(/(- name: E2E \(phone \+ desktop\)\n) {8}if:[^\n]*\n/, "$1"),
-      /test:e2e step must run only in full mode/,
+      "a shallow checkout for gitleaks",
+      inJob("checks", /\n {8}with:\n {10}fetch-depth: 0[^\n]*/, ""),
+      /full history/,
     ],
     [
-      "the webpack bundle scan runs in every mode",
-      mutateCi(/(- name: Scan the webpack client bundle\n) {8}if:[^\n]*\n/, "$1"),
-      /check:client-bundle step must run only in full mode/,
+      "the audit weakened",
+      inJob("checks", "--audit-level=high", "--audit-level=critical"),
+      /dependency audit/,
     ],
-    ["the audit is gone", mutateCi("npm audit --omit=dev --audit-level=high", "true"), /audit/],
     [
-      "lint only in full mode",
-      mutateCi(
-        "      - name: Lint\n",
-        "      - name: Lint\n        if: steps.mode.outputs.mode == 'full'\n",
+      "lint dropped",
+      inJob("checks", "        run: npm run lint\n", "        run: true\n"),
+      /lint check is missing/,
+    ],
+    [
+      "actionlint dropped",
+      inJob("checks", '"$RUNNER_TEMP/actionlint" -color', "true"),
+      /actionlint check is missing/,
+    ],
+    [
+      "unit not waiting for the mode",
+      inJob("unit", "    needs: mode\n", ""),
+      /unit job must need the mode/,
+    ],
+    [
+      "unit running in every mode",
+      inJob("unit", "    if: needs.mode.outputs.mode == 'full'\n", ""),
+      /unit job must run only in full mode/,
+    ],
+    [
+      "e2e running in every mode",
+      inJob("e2e", "    if: needs.mode.outputs.mode == 'full'\n", ""),
+      /e2e job must run only in full mode/,
+    ],
+    [
+      "e2e-build running in every mode",
+      inJob("e2e-build", "    if: needs.mode.outputs.mode == 'full'\n", ""),
+      /e2e-build job must run only in full mode/,
+    ],
+    [
+      "coverage dropped",
+      inJob("unit", "npm run test:coverage", "true"),
+      /unit job must run the coverage tests/,
+    ],
+    [
+      "the webpack build dropped",
+      inJob("build", "npm run build:webpack", "true"),
+      /build job must run the webpack build/,
+    ],
+    [
+      "the production build made with the e2e flag",
+      inJob(
+        "build",
+        "      - name: Build\n        run: npm run build\n",
+        "      - name: Build\n        env:\n          NEXT_PUBLIC_E2E_BUILD: '1'\n        run: npm run build\n",
       ),
-      /lint check must run in every mode/,
+      /build job must build exactly like production/,
     ],
     [
-      "a draft that passes",
-      mutateCi("          exit 1", "          exit 0"),
-      /quick \(draft\) run must end red/,
+      "the production build uploading an artifact",
+      inJob(
+        "build",
+        "      - name: Build with webpack\n",
+        "      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9\n        with:\n          name: x\n          path: .next\n      - name: Build with webpack\n",
+      ),
+      /build job must build exactly like production/,
     ],
     [
-      "a draft check that is not last",
-      `${ci.replace(/\n {2}deploy:[\s\S]*$/, "")}      - name: After\n        run: true\n\n${ci.slice(ci.indexOf("  deploy:"))}`,
-      /must be the last step/,
+      "the e2e build not made with the flag",
+      inJob("e2e-build", "npm run build:e2e", "npm run build"),
+      /must run npm run build:e2e/,
     ],
-    ["the deploy does not need ci", mutateCi("    needs: ci\n", ""), /deploy job must need ci/],
     [
-      "the deploy runs on pull requests",
+      "a long-lived e2e artifact",
+      inJob("e2e-build", "retention-days: 1", "retention-days: 30"),
+      /live one day/,
+    ],
+    [
+      "an artifact with the build cache",
+      inJob("e2e-build", "            !.next/cache\n", ""),
+      /without its cache/,
+    ],
+    [
+      "e2e not waiting for the e2e build",
+      inJob("e2e", "    needs: [mode, e2e-build]", "    needs: [mode]"),
+      /e2e job must need the e2e-build/,
+    ],
+    [
+      "a third e2e project",
+      inJob("e2e", "[phone, desktop]", "[phone, desktop, tablet]"),
+      /exactly the phone and desktop/,
+    ],
+    ["only phone", inJob("e2e", "[phone, desktop]", "[phone]"), /exactly the phone and desktop/],
+    [
+      "fail-fast",
+      inJob("e2e", "fail-fast: false", "fail-fast: true"),
+      /must not cancel one project/,
+    ],
+    [
+      "serialised projects",
+      inJob("e2e", "      fail-fast: false\n", "      fail-fast: false\n      max-parallel: 1\n"),
+      /at the same time/,
+    ],
+    ["e2e rebuilding", inJob("e2e", 'E2E_PREBUILT: "1"', 'E2E_PREBUILT: "0"'), /E2E_PREBUILT/],
+    [
+      "e2e without the download",
+      inJob("e2e", "name: e2e-build\n          path: .next", "name: other\n          path: .next"),
+      /download the e2e build/,
+    ],
+    [
+      "both projects in one command",
+      inJob("e2e", '--project="$E2E_PROJECT"', "--project=phone"),
+      /for its own project/,
+    ],
+    [
+      "sharded e2e",
+      inJob("e2e", '--project="$E2E_PROJECT"', '--project="$E2E_PROJECT" --shard=1/2'),
+      /whole, on one worker/,
+    ],
+    [
+      "the summary missing a job",
       mutateCi(
+        "needs: [mode, checks, unit, build, e2e-build, e2e]",
+        "needs: [mode, checks, unit, build, e2e-build]",
+      ),
+      /ci job must need e2e$/m,
+    ],
+    ["the summary skippable", inJob("ci", "    if: always()\n", ""), /must always run/],
+    [
+      "the summary missing the quick branch",
+      inJob("ci", "quick) fail", "quik) fail"),
+      /must handle quick/,
+    ],
+    [
+      "the summary needing the deploy",
+      mutateCi(
+        "needs: [mode, checks, unit, build, e2e-build, e2e]",
+        "needs: [mode, checks, unit, build, e2e-build, e2e, deploy]",
+      ),
+      /only the jobs it summarises/,
+    ],
+    [
+      "the deploy not needing ci",
+      inJob("deploy", "    needs: ci\n", ""),
+      /deploy job must need ci/,
+    ],
+    [
+      "the deploy also needing a heavy job",
+      inJob("deploy", "    needs: ci\n", "    needs: [ci, e2e]\n"),
+      /need ci, and only ci/,
+    ],
+    [
+      "the deploy running on pull requests",
+      inJob(
+        "deploy",
         "    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'",
         "    if: github.event_name == 'push'",
       ),
       /only for a push to develop/,
     ],
     [
-      "the deploy calls something else",
-      mutateCi("./.github/workflows/deploy-vercel.yml", "./.github/workflows/other.yml"),
+      "the deploy calling something else",
+      inJob("deploy", "./.github/workflows/deploy-vercel.yml", "./.github/workflows/other.yml"),
       /call the deploy workflow/,
     ],
-    ["the deploy gets no secrets", mutateCi("    secrets: inherit\n", ""), /pass its secrets/],
     [
-      "the deploy passes a release sha",
-      mutateCi(
-        "    secrets: inherit\n",
-        "    secrets: inherit\n    with:\n      release_sha: abc\n",
-      ),
-      /no inputs/,
+      "the deploy getting no secrets",
+      inJob("deploy", "    secrets: inherit\n", ""),
+      /pass its secrets/,
     ],
     [
-      "secrets inherited by the ci job too",
-      mutateCi(
-        "    permissions:\n      contents: read\n      pull-requests",
-        "    secrets: inherit\n    permissions:\n      contents: read\n      pull-requests",
-      ),
-      /ci job must not inherit/,
+      "secrets inherited elsewhere",
+      inJob("unit", "    timeout-minutes", "    secrets: inherit\n    timeout-minutes"),
+      /unit job must not inherit/,
     ],
     [
-      "the deploy polls",
-      mutateCi(
-        "    uses: ./.github/workflows/deploy-vercel.yml",
-        "    uses: ./.github/workflows/deploy-vercel.yml\n    # gh run list",
-      ),
-      /poll/,
+      "manual dispatch of ci.yml",
+      mutateCi("on:\n", "on:\n  workflow_dispatch:\n"),
+      /must not be dispatchable/,
     ],
   ])("fails with %s", (_name, workflow, message) => {
     expect(checkCiWorkflow(workflow).join("\n")).toMatch(message);
+  });
+
+  it("is not fooled by comments that mention what a rule bans", () => {
+    expect(
+      checkCiWorkflow(
+        inJob(
+          "build",
+          "      - name: Build\n",
+          "      # NEXT_PUBLIC_E2E_BUILD and secrets.VERCEL_TOKEN are not used here\n      - name: Build\n",
+        ),
+      ),
+    ).toEqual([]);
   });
 
   it("flags a missing deploy job", () => {
@@ -606,32 +779,94 @@ describe("checkCiWorkflow", () => {
   });
 });
 
-describe("stepLines", () => {
-  const sample = [
-    "jobs:",
-    "  a:",
-    "    steps:",
-    "      # a comment",
-    "      - name: One",
-    "        id: first",
-    "",
-    "        # inner comment",
-    "        run: |",
-    "          echo   hi  ",
-    "      - name: Two",
-    "        run: echo two",
-  ].join("\n");
+describe("the ci summary script, run for real", () => {
+  const script = stepScript(ciJob(ci, "ci") ?? "", "Every job must have succeeded");
+  type Result = "success" | "failure" | "cancelled" | "skipped";
+  const jobs = ["mode", "checks", "unit", "build", "e2e-build", "e2e"] as const;
+  const needs = (results: Partial<Record<(typeof jobs)[number], Result>>) =>
+    Object.fromEntries(jobs.map((job) => [job, { result: results[job] ?? "success" }]));
+  /** Runs the real step in bash with the same env GitHub gives it; returns the exit code. */
+  function run(mode: string, results: Partial<Record<(typeof jobs)[number], Result>>): number {
+    try {
+      execFileSync("bash", ["-e", "-c", script], {
+        env: {
+          ...process.env,
+          NEEDS: JSON.stringify(needs(results)),
+          MODE: mode,
+        } as NodeJS.ProcessEnv,
+        stdio: "pipe",
+      });
+      return 0;
+    } catch (error) {
+      return (error as { status?: number }).status ?? 99;
+    }
+  }
+  const skippedHeavy = {
+    unit: "skipped",
+    build: "skipped",
+    "e2e-build": "skipped",
+    e2e: "skipped",
+  } as const;
 
-  it("returns a step's meaningful lines, trimmed, without comments or blank lines", () => {
-    expect(stepLines(sample, "One")).toEqual(["- name: One", "id: first", "run: |", "echo   hi"]);
-    expect(stepLines(sample, "Two")).toEqual(["- name: Two", "run: echo two"]);
+  it("extracts a real script", () => {
+    expect(script).toContain("jq");
+    expect(script.split("\n").length).toBeGreaterThan(8);
   });
 
-  it("returns null when there is no such step", () => {
-    expect(stepLines(sample, "Three")).toBeNull();
+  it("full: passes only when every job succeeded", () => {
+    expect(run("full", {})).toBe(0);
+    for (const job of jobs) {
+      for (const bad of ["failure", "cancelled", "skipped"] as const) {
+        expect(run("full", { [job]: bad }), `${job} ${bad}`).not.toBe(0);
+      }
+    }
   });
 
-  it("pins the real workflow's three alias steps to the reviewed lines", () => {
-    expect(stepLines(deploy, "Is this run still the develop head?")).toEqual(ALIAS_HEAD_STEP);
+  it("full: a missing job result is a failure", () => {
+    const partial = { ...needs({}), e2e: undefined };
+    const status = (() => {
+      try {
+        execFileSync("bash", ["-e", "-c", script], {
+          env: {
+            ...process.env,
+            NEEDS: JSON.stringify(partial),
+            MODE: "full",
+          } as NodeJS.ProcessEnv,
+          stdio: "pipe",
+        });
+        return 0;
+      } catch (error) {
+        return (error as { status?: number }).status ?? 99;
+      }
+    })();
+    expect(status).not.toBe(0);
+  });
+
+  it("reused: passes with the heavy jobs skipped on purpose, fails if checks or a heavy job failed", () => {
+    expect(run("reused", skippedHeavy)).toBe(0);
+    expect(run("reused", {})).toBe(0);
+    expect(run("reused", { ...skippedHeavy, checks: "failure" })).not.toBe(0);
+    expect(run("reused", { ...skippedHeavy, checks: "skipped" })).not.toBe(0);
+    expect(run("reused", { ...skippedHeavy, mode: "failure" })).not.toBe(0);
+    for (const job of ["unit", "build", "e2e-build", "e2e"] as const) {
+      for (const bad of ["failure", "cancelled"] as const) {
+        expect(run("reused", { ...skippedHeavy, [job]: bad }), `${job} ${bad}`).not.toBe(0);
+      }
+    }
+  });
+
+  it("quick (a draft): always red, even when every job that ran succeeded", () => {
+    expect(run("quick", skippedHeavy)).not.toBe(0);
+    expect(run("quick", {})).not.toBe(0);
+  });
+
+  it("an unknown or empty mode is red", () => {
+    expect(run("", {})).not.toBe(0);
+    expect(run("everything", {})).not.toBe(0);
+  });
+
+  it("a failed mode job is red whatever the mode output says", () => {
+    expect(run("full", { mode: "failure" })).not.toBe(0);
+    expect(run("full", { mode: "cancelled" })).not.toBe(0);
   });
 });

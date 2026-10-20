@@ -29,6 +29,10 @@ const e2eEnv = {
   AUTH_FLOW_CALLERS_PER_HOUR: "10000",
 };
 
+// CI builds the e2e variant once (the `e2e-build` job) and hands it to each browser job, which sets E2E_PREBUILT=1 to start
+// that build instead of making another. Locally nothing sets it, so the app is built from your checkout as before.
+const prebuilt = process.env.E2E_PREBUILT === "1";
+
 // Servers are never reused: reusing whatever happens to be listening could silently test another checkout's code.
 export default defineConfig({
   testDir: "tests/e2e",
@@ -52,7 +56,9 @@ export default defineConfig({
       },
     },
     {
-      command: `npm run build && npm run start -- --port ${PORT}`,
+      command: prebuilt
+        ? `npm run start -- --port ${PORT}`
+        : `npm run build && npm run start -- --port ${PORT}`,
       url: `http://localhost:${PORT}`,
       reuseExistingServer: false,
       timeout: 180_000,

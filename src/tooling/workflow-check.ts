@@ -335,6 +335,9 @@ export function checkDeployWorkflow(workflow: string): string[] {
   if (!/VERCEL_CLI_VERSION:\s*\d+\.\d+\.\d+\b/.test(workflow))
     problems.push("the Vercel CLI version must be pinned");
   if (/@latest\b/.test(workflow)) problems.push("nothing may be installed at @latest");
+  // The e2e build exists only inside a CI run; a deploy builds its own, exactly as production does.
+  if (/download-artifact|upload-artifact|e2e-build|NEXT_PUBLIC_E2E_BUILD\s*[:=]/.test(workflow))
+    problems.push("the deploy must never use an artifact or an e2e build");
   if (!/vars\.PRODUCTION_DB_HOST/.test(workflow))
     problems.push("PRODUCTION_DB_HOST must be passed to the host checks");
   return problems;
@@ -343,31 +346,78 @@ export function checkDeployWorkflow(workflow: string): string[] {
 /** The ci job needs room for a slow runner: a healthy full run is ~19 minutes, and a cancelled run stops the deploy that follows it. */
 export const MIN_CI_TIMEOUT_MINUTES = 35;
 
+/** The jobs `ci.yml` may have. A new job must be added here, to the `ci` job's needs and to its summary script together. */
+export const CI_JOBS = [
+  "mode",
+  "checks",
+  "unit",
+  "build",
+  "e2e-build",
+  "e2e",
+  "ci",
+  "deploy",
+] as const;
+/** The jobs that wait for the mode and run only in full mode. */
+const HEAVY_JOBS = ["unit", "build", "e2e-build", "e2e"] as const;
+/** The jobs the `ci` summary waits for (everything but itself and the deploy). */
+const SUMMARY_NEEDS = ["mode", "checks", ...HEAVY_JOBS] as const;
+
+/** The job names a `needs:` line or list names, from the job's own text. */
+function jobNeeds(job: string): string[] {
+  const inline = /^ {4}needs:\s*\[([^\]]*)\]\s*$/m.exec(job)?.[1];
+  if (inline !== undefined)
+    return inline
+      .split(",")
+      .map((name) => name.trim())
+      .filter(Boolean);
+  const single = /^ {4}needs:\s*([A-Za-z0-9_-]+)\s*$/m.exec(job)?.[1];
+  if (single) return [single];
+  const block = /^ {4}needs:\s*\n((?: {6}- .*\n)+)/m.exec(job)?.[1];
+  return block ? [...block.matchAll(/- ([A-Za-z0-9_-]+)/g)].map((m) => m[1]) : [];
+}
+
+/** The `run:` script of the step whose name contains `needle`, as the shell would read it (used by tests to run it). */
+export function stepScript(job: string, needle: string): string {
+  const step = stepsOf(job, needle)[0] ?? "";
+  const block = /^ {8}run:\s*\|\n((?: {10}.*\n?|\n)*)/m.exec(step)?.[1] ?? "";
+  return block
+    .split("\n")
+    .map((line) => line.slice(10))
+    .join("\n");
+}
+
+/** A job's text without its YAML comment lines, so a rule never fires on what a comment says. Null when there is no such job. */
+export function ciJob(workflow: string, name: string): string | null {
+  const job = jobBody(workflow, name);
+  return job === null ? null : job.replace(/^\s*#.*\n?/gm, "");
+}
+
 /**
- * What must be true of `.github/workflows/ci.yml` (#91). Returns the broken rules (empty when fine).
- * The shape is deliberate: one job named `ci` (extra jobs cost whole billed minutes and the review gate reads this name),
- * gitleaks inside it, the heavy steps gated on the mode, a draft ending red, and a native-`needs` deploy on develop pushes only.
+ * What must be true of `.github/workflows/ci.yml` (#91, #98). Returns the broken rules (empty when fine).
+ * The shape: parallel jobs (checks, unit, the production builds, one e2e build shared by phone and desktop e2e on separate
+ * runners), one required summary job named `ci` that needs them all, a mode job every heavy job waits for, gitleaks in the
+ * checks, and a native-`needs` deploy on develop pushes only.
  */
 export function checkCiWorkflow(workflow: string): string[] {
   const problems: string[] = [];
-  const ci = jobBody(workflow, "ci");
-  const deploy = jobBody(workflow, "deploy");
-  const jobNames = [...workflow.matchAll(/^ {2}([A-Za-z0-9_-]+):\s*$/gm)].map((m) => m[1]);
   const jobsStart = workflow.search(/^jobs:/m);
-  const jobs = jobNames.filter((_, i) => {
-    const at = [...workflow.matchAll(/^ {2}([A-Za-z0-9_-]+):\s*$/gm)][i].index ?? 0;
-    return at > jobsStart;
-  });
+  const jobs = [...workflow.matchAll(/^ {2}([A-Za-z0-9_-]+):\s*$/gm)]
+    .filter((match) => (match.index ?? 0) > jobsStart)
+    .map((match) => match[1]);
+  const body = (name: string) => ciJob(workflow, name);
 
-  if (!ci) problems.push("the job must be named `ci`");
-  if (jobs.some((name) => name !== "ci" && name !== "deploy"))
-    problems.push(
-      "the workflow may have only the `ci` and `deploy` jobs (every extra job bills a minute)",
-    );
+  for (const name of CI_JOBS) if (!body(name)) problems.push(`the ${name} job is missing`);
+  for (const name of jobs)
+    if (!(CI_JOBS as readonly string[]).includes(name))
+      problems.push(
+        `unknown job ${name}: add it to CI_JOBS, the ci job's needs and its summary script together`,
+      );
   if (!/^\s*pull_request:/m.test(workflow) || !/^\s*push:/m.test(workflow))
     problems.push("ci must run on pull requests and on pushes");
   if (!/ready_for_review/.test(workflow))
     problems.push("marking a draft ready must run the full validation (ready_for_review)");
+  if (/^\s*workflow_dispatch:/m.test(workflow.slice(0, jobsStart)))
+    problems.push("ci.yml must not be dispatchable by hand");
 
   const concurrency = /^concurrency:\n((?: {2}.*\n)*)/m.exec(workflow)?.[1] ?? "";
   if (
@@ -377,67 +427,121 @@ export function checkCiWorkflow(workflow: string): string[] {
       "only pull request runs may be cancelled by a newer push (a develop push may be deploying)",
     );
 
-  if (ci) {
-    const timeout = Number(/^ {4}timeout-minutes:\s*(\d+)/m.exec(ci)?.[1] ?? NaN);
-    if (!(timeout >= MIN_CI_TIMEOUT_MINUTES))
-      problems.push(`the ci job's timeout-minutes must be at least ${MIN_CI_TIMEOUT_MINUTES}`);
-    if (/secrets\.(?!GITHUB_TOKEN\b)/.test(ci))
-      problems.push("the ci job must read no secret but GITHUB_TOKEN");
-    if (/secrets:\s*inherit/.test(ci)) problems.push("the ci job must not inherit secrets");
-    if (!/gitleaks\/gitleaks-action@[0-9a-f]{40}/.test(ci))
-      problems.push("secret scanning (gitleaks) must run inside the ci job");
-    if (!/fetch-depth:\s*0/.test(ci))
-      problems.push("gitleaks needs the full history (fetch-depth: 0)");
-    const gitleaks = ci.indexOf("gitleaks/gitleaks-action");
-    const install = ci.indexOf("npm ci");
-    if (gitleaks >= 0 && install >= 0 && gitleaks > install)
-      problems.push("gitleaks must run before the install, so a leak fails the run first");
-    if (!/scripts\/ci-mode\.ts/.test(ci)) problems.push("the mode step is missing");
-    // Every step that costs real time must be skipped outside full mode; the cheap checks must not be.
-    for (const heavy of [
-      "npm run test:coverage",
-      "npm run build",
-      "npm run build:webpack",
-      "check:no-e2e-in-build",
-      "check:client-bundle",
-      "playwright install",
-      "npm run test:e2e",
-    ]) {
-      if (!ci.includes(heavy)) {
-        problems.push(`the ${heavy} step is missing`);
-        continue;
-      }
-      // Every step that runs it (the bundle checks run twice, once per bundler).
-      const ungated = stepsOf(ci, heavy).some(
-        (step) => !/if:[^\n]*steps\.mode\.outputs\.mode == 'full'/.test(step),
-      );
-      if (ungated) problems.push(`the ${heavy} step must run only in full mode`);
-    }
-    for (const cheap of [
-      "check:repo-hygiene",
-      "actionlint",
-      "check:workflows",
-      "npm audit",
-      "npm run lint",
-      "npm run typecheck",
-    ]) {
-      if (!ci.includes(cheap)) problems.push(`the ${cheap} check is missing`);
-      else if (stepsOf(ci, cheap).some((step) => /steps\.mode/.test(step)))
-        problems.push(`the ${cheap} check must run in every mode`);
-    }
-    if (!/npm audit --omit=dev --audit-level=high/.test(ci))
-      problems.push("the dependency audit must fail on high severity");
-    const finish = stepsOf(ci, "full validation not run")[0] ?? "";
-    if (!/if:\s*steps\.mode\.outputs\.mode == 'quick'/.test(finish) || !/exit 1/.test(finish))
-      problems.push("a quick (draft) run must end red");
-    if (ci.lastIndexOf("- name:") !== ci.indexOf("- name: Draft pull request")) {
-      problems.push("the red finish for a quick run must be the last step of the job");
-    }
+  for (const name of jobs.filter((job) => job !== "deploy")) {
+    const job = body(name) ?? "";
+    if (!/^ {4}timeout-minutes:\s*\d+/m.test(job))
+      problems.push(`the ${name} job needs a timeout-minutes`);
+    if (/secrets\.(?!GITHUB_TOKEN\b)/.test(job))
+      problems.push(`the ${name} job must read no secret but GITHUB_TOKEN`);
+    if (/secrets:\s*inherit/.test(job)) problems.push(`the ${name} job must not inherit secrets`);
+    if (/continue-on-error/.test(job))
+      problems.push(`the ${name} job must not use continue-on-error`);
+  }
+  for (const name of ["unit", "build", "e2e-build", "e2e"] as const) {
+    const timeout = Number(/^ {4}timeout-minutes:\s*(\d+)/m.exec(body(name) ?? "")?.[1] ?? NaN);
+    if (!(timeout >= MIN_CI_TIMEOUT_MINUTES / 2))
+      problems.push(`the ${name} job's timeout-minutes must leave room for a slow runner`);
   }
 
-  if (!deploy) problems.push("the deploy job is missing");
-  else {
-    if (!/^\s+needs:\s*ci\s*$/m.test(deploy)) problems.push("the deploy job must need ci");
+  // The mode job decides once for everyone.
+  const mode = body("mode") ?? "";
+  if (!/scripts\/ci-mode\.ts/.test(mode)) problems.push("the mode step is missing");
+  if (!/^\s+mode:\s*\$\{\{\s*steps\.mode\.outputs\.mode\s*\}\}\s*$/m.test(mode))
+    problems.push("the mode job must output the mode");
+
+  // The static checks start at once and run in every mode; gitleaks is first, with the full history.
+  const checks = body("checks") ?? "";
+  if (jobNeeds(checks).length > 0 || /^ {4}if:/m.test(checks))
+    problems.push("the checks job must run in every mode and need nothing");
+  if (!/gitleaks\/gitleaks-action@[0-9a-f]{40}/.test(checks))
+    problems.push("secret scanning (gitleaks) must run inside the checks job");
+  if (!/fetch-depth:\s*0/.test(checks))
+    problems.push("gitleaks needs the full history (fetch-depth: 0)");
+  if (checks.indexOf("gitleaks/gitleaks-action") > checks.indexOf("npm ci"))
+    problems.push("gitleaks must run before the install, so a leak fails the run first");
+  for (const [needle, label] of [
+    ["npm run check:repo-hygiene", "repository hygiene"],
+    ['"$RUNNER_TEMP/actionlint"', "actionlint"],
+    ["npm run check:workflows", "workflow contract"],
+    ["npm audit --omit=dev --audit-level=high", "dependency audit (high severity)"],
+    ["npm run lint", "lint"],
+    ["npm run typecheck", "typecheck"],
+  ] as const) {
+    if (!checks.includes(needle))
+      problems.push(`the ${label} check is missing from the checks job`);
+  }
+
+  // Every heavy job waits for the mode and runs only in full mode.
+  for (const name of HEAVY_JOBS) {
+    const job = body(name) ?? "";
+    if (!jobNeeds(job).includes("mode")) problems.push(`the ${name} job must need the mode job`);
+    if (!/^ {4}if:\s*needs\.mode\.outputs\.mode == 'full'\s*$/m.test(job))
+      problems.push(`the ${name} job must run only in full mode`);
+  }
+  const requireStep = (name: string, needle: string, message: string) => {
+    if (!(body(name) ?? "").includes(needle)) problems.push(message);
+  };
+  requireStep("unit", "npm run test:coverage", "the unit job must run the coverage tests");
+  requireStep("build", "npm run build:webpack", "the build job must run the webpack build");
+  for (const needle of ["npm run build\n", "check:no-e2e-in-build", "check:client-bundle"]) {
+    requireStep("build", needle, `the build job is missing ${needle.trim()}`);
+  }
+
+  // The production builds never carry the e2e flag or hand anything on; the one e2e build does, to both e2e jobs.
+  const build = body("build") ?? "";
+  if (/NEXT_PUBLIC_E2E_BUILD|build:e2e|upload-artifact/.test(build))
+    problems.push("the build job must build exactly like production (no e2e flag, no artifact)");
+  const e2eBuild = body("e2e-build") ?? "";
+  if (!/npm run build:e2e/.test(e2eBuild))
+    problems.push("the e2e-build job must run npm run build:e2e");
+  if (!/name:\s*e2e-build\b/.test(e2eBuild) || !/retention-days:\s*1\s*$/m.test(e2eBuild))
+    problems.push("the e2e build artifact must be named e2e-build and live one day");
+  if (!/include-hidden-files:\s*true/.test(e2eBuild) || !/!\.next\/cache/.test(e2eBuild))
+    problems.push("the e2e build artifact must include .next without its cache");
+  for (const name of jobs.filter((job) => !["e2e-build", "deploy", "ci"].includes(job)))
+    if (
+      /actions\/upload-artifact[^\n]*\n(?:[^\n]*\n){0,3}\s+name:\s*e2e-build/.test(body(name) ?? "")
+    )
+      problems.push(`only the e2e-build job may upload the e2e build (found in ${name})`);
+
+  const e2e = body("e2e") ?? "";
+  if (!jobNeeds(e2e).includes("e2e-build"))
+    problems.push("the e2e job must need the e2e-build job");
+  if (!/^ {8}project:\s*\[\s*phone\s*,\s*desktop\s*\]\s*$/m.test(e2e))
+    problems.push("the e2e matrix must be exactly the phone and desktop projects");
+  if (!/fail-fast:\s*false/.test(e2e))
+    problems.push("the e2e matrix must not cancel one project when the other fails");
+  if (/^ {6}max-parallel:/m.test(e2e))
+    problems.push("the e2e projects must run at the same time (no max-parallel)");
+  if (!/actions\/download-artifact@[0-9a-f]{40}[\s\S]*name:\s*e2e-build/.test(e2e))
+    problems.push("the e2e job must download the e2e build");
+  if (!/E2E_PREBUILT:\s*"1"/.test(e2e))
+    problems.push("the e2e job must start the downloaded build (E2E_PREBUILT)");
+  if (!/npm run test:e2e -- --project="\$E2E_PROJECT"/.test(e2e))
+    problems.push("the e2e job must run npm run test:e2e for its own project");
+  if (/--shard|workers/.test(e2e))
+    problems.push("the e2e job runs its project whole, on one worker");
+
+  // The summary: the one required check.
+  const ci = body("ci") ?? "";
+  const needs = jobNeeds(ci);
+  for (const name of SUMMARY_NEEDS)
+    if (!needs.includes(name)) problems.push(`the ci job must need ${name}`);
+  if (needs.some((name) => !(SUMMARY_NEEDS as readonly string[]).includes(name)))
+    problems.push("the ci job may need only the jobs it summarises");
+  if (!/^ {4}if:\s*always\(\)\s*$/m.test(ci))
+    problems.push("the ci job must always run (if: always())");
+  if (/^ {4}if:/m.test(ci) && !/^ {4}if:\s*always\(\)\s*$/m.test(ci))
+    problems.push("the ci job must not be skippable");
+  const script = stepScript(ci, "Every job must have succeeded");
+  for (const piece of ["quick)", "full)", "reused)", "fail"])
+    if (!script.includes(piece))
+      problems.push(`the ci summary must handle ${piece.replace(")", "")}`);
+
+  const deploy = body("deploy");
+  if (deploy) {
+    if (!jobNeeds(deploy).includes("ci") || jobNeeds(deploy).length !== 1)
+      problems.push("the deploy job must need ci, and only ci");
     if (
       !/if:\s*github\.event_name == 'push' && github\.ref == 'refs\/heads\/develop'\s*$/m.test(
         deploy,

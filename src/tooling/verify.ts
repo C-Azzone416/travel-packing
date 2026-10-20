@@ -83,12 +83,19 @@ export const VERIFY_STEPS: readonly VerifyStep[] = [
     command: npm("check:client-bundle"),
     quick: false,
   },
+  // CI builds the e2e variant once and hands it to the phone and desktop jobs; locally the same two steps run in order.
+  {
+    id: "build:e2e",
+    label: "Build for e2e",
+    command: npm("build:e2e"),
+    quick: false,
+  },
   {
     id: "test:e2e",
     label: "E2E (phone + desktop)",
     command: npm("test:e2e"),
     quick: false,
-    env: { CI: "1", E2E_PORT: "3102" },
+    env: { CI: "1", E2E_PORT: "3102", E2E_PREBUILT: "1" },
   },
 ];
 

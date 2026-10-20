@@ -46,7 +46,7 @@ describe("the real step list and the real ci.yml", () => {
 
   it("e2e uses CI=1 and the shared port", () => {
     const e2e = VERIFY_STEPS.find((step) => step.id === "test:e2e");
-    expect(e2e?.env).toEqual({ CI: "1", E2E_PORT: "3102" });
+    expect(e2e?.env).toEqual({ CI: "1", E2E_PORT: "3102", E2E_PREBUILT: "1" });
   });
 });
 
@@ -97,10 +97,15 @@ describe("verifyParityProblems: each drift is caught", () => {
     [
       "the e2e step run twice",
       mutate(
-        "        run: npm run test:e2e\n",
-        "        run: npm run test:e2e && npm run test:e2e\n",
+        '        run: npm run test:e2e -- --project="$E2E_PROJECT"\n',
+        '        run: npm run test:e2e -- --project="$E2E_PROJECT" && npm run test:e2e\n',
       ),
       /"test:e2e" 2x/,
+    ],
+    [
+      "the e2e build dropped from ci.yml",
+      mutate("        run: npm run build:e2e\n", "        run: true\n"),
+      /"build:e2e" 1x but ci.yml runs it 0x/,
     ],
   ])("%s", (_name, workflow, message) => {
     expect(verifyParityProblems(workflow).join("\n")).toMatch(message);
@@ -258,6 +263,6 @@ describe("stepEnvironment", () => {
 
   it("is what the e2e step relies on: its default port is the CI one", () => {
     const e2e = stepsFor("full").find((step) => step.label.startsWith("E2E"));
-    expect(e2e?.env).toEqual({ CI: "1", E2E_PORT: "3102" });
+    expect(e2e?.env).toEqual({ CI: "1", E2E_PORT: "3102", E2E_PREBUILT: "1" });
   });
 });
