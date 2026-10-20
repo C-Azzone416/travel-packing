@@ -2215,6 +2215,7 @@ a.back {
   align-items: center;
   gap: 10px;
 }
+.stop-head h2,
 .stop-head h3 {
   margin: 0;
   flex: 1;

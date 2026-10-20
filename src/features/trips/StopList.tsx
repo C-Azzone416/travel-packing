@@ -36,6 +36,8 @@ export interface StopListProps {
   allowCustom?: boolean;
   /** Text already typed in the first stop's search box (kept when a single destination grows into a route). */
   firstQuery?: string;
+  /** Level of each stop's title: 2 under the page title, 3 inside a sheet that has its own h2. */
+  headingLevel?: 2 | 3;
   /** The person pressed Continue/Save with problems: show every message, including missing places. */
   attempted: boolean;
 }
@@ -53,7 +55,9 @@ export function StopList({
   allowCustom,
   attempted,
   firstQuery = "",
+  headingLevel = 2,
 }: StopListProps) {
+  const Heading = headingLevel === 2 ? "h2" : "h3";
   const base = useId();
   const nextKey = useRef(stops.length);
   // A stable key per stop, so a search box keeps its text when stops are reordered or one above it is removed.
@@ -152,7 +156,7 @@ export function StopList({
                   <span className="stop-number" aria-hidden="true">
                     {index + 1}
                   </span>
-                  <h3 id={`${id}-title`}>Stop {index + 1}</h3>
+                  <Heading id={`${id}-title`}>Stop {index + 1}</Heading>
                   {single ? null : (
                     <div className="stop-actions">
                       <button

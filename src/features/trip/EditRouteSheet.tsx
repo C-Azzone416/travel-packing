@@ -69,6 +69,7 @@ export function EditRouteSheet({
         }
         allowCustom={allowCustom}
         attempted={attempted}
+        headingLevel={3}
       />
       {attempted && problems.length ? (
         <p className="tiny field-error">{fixSummary(problems.length)}</p>
