@@ -761,12 +761,48 @@ describe("checkCiWorkflow", () => {
     ],
     [
       "the deploy running on pull requests",
+      inJob("deploy", /&& github\.event_name == 'push' /, ""),
+      /only for a push to develop/,
+    ],
+    [
+      "the deploy running on any branch",
+      inJob("deploy", / && github\.ref == 'refs\/heads\/develop'/, ""),
+      /only for a push to develop/,
+    ],
+    [
+      "the OLD condition (no status function: skipped after a reused push)",
       inJob(
         "deploy",
-        "    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'",
-        "    if: github.event_name == 'push'",
+        /if: \$\{\{.*\}\}/,
+        "if: github.event_name == 'push' && github.ref == 'refs/heads/develop'",
       ),
-      /only for a push to develop/,
+      /needs a status function/,
+    ],
+    [
+      "no status function but ci's result",
+      inJob("deploy", /!cancelled\(\) && /, ""),
+      /needs a status function/,
+    ],
+    [
+      "a status function but not ci's result (would deploy a red ci)",
+      inJob("deploy", /needs\.ci\.result == 'success' && /, ""),
+      /gated on ci's own result/,
+    ],
+    [
+      "deploying when ci FAILED",
+      inJob("deploy", /needs\.ci\.result == 'success'/, "needs.ci.result == 'failure'"),
+      /gated on ci's own result/,
+    ],
+    [
+      "failure() instead of the guard",
+      inJob("deploy", /!cancelled\(\)/, "failure()"),
+      /needs a status function|may hold only/,
+    ],
+    ["an || that lets anything deploy", inJob("deploy", /\}\}/, "|| true }}"), /must not use \|\|/],
+    [
+      "an extra term",
+      inJob("deploy", /!cancelled\(\) && /, "!cancelled() && github.actor != 'x' && "),
+      /may hold only/,
     ],
     [
       "the deploy calling something else",
@@ -802,6 +838,23 @@ describe("checkCiWorkflow", () => {
         ),
       ),
     ).toEqual([]);
+  });
+
+  it("accepts always() in place of !cancelled(), as long as ci's own result is checked", () => {
+    expect(checkCiWorkflow(inJob("deploy", /!cancelled\(\)/, "always()"))).toEqual([]);
+  });
+
+  it("a job downstream of a skippable job needs a status function: ci has one, a plain downstream job does not", () => {
+    const extra = ci.replace(
+      "  deploy:",
+      "  notify:\n    needs: ci\n    runs-on: ubuntu-latest\n    timeout-minutes: 5\n    steps: []\n\n  deploy:",
+    );
+    const problems = checkCiWorkflow(extra).join("\n");
+    expect(problems).toMatch(/unknown job notify/);
+    // the summary job itself must keep its always()
+    expect(checkCiWorkflow(inJob("ci", "    if: always()\n", "")).join("\n")).toMatch(
+      /ci job runs after a job that can be skipped, so its if needs a status function/,
+    );
   });
 
   it("flags a missing deploy job", () => {

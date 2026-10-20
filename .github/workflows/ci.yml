@@ -349,7 +349,10 @@ jobs:
   # target from this event (a push to develop can only mean preview) and never deploys production here.
   deploy:
     needs: ci
-    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    # Not just `needs: ci`: a job with no status function in its `if` gets an implicit success() that is false when ANY ancestor was
+    # skipped, and a reused push skips the heavy jobs behind `ci`. So gate on ci's own result (it already means "everything passed, or
+    # the identical files already did") and name the status function explicitly. Without it no reused push would ever deploy (#105).
+    if: ${{ !cancelled() && needs.ci.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/develop' }}
     permissions:
       contents: read
       actions: read
