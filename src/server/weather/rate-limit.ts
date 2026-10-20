@@ -1,6 +1,6 @@
 import { createRateLimiter, type RateLimiter } from "@/server/locations/rate-limit";
 
-export const DEFAULT_WEATHER_REQUESTS_PER_MINUTE = 12;
+export const DEFAULT_WEATHER_REQUESTS_PER_MINUTE = 30;
 
 export function weatherRequestsPerMinute(
   env: Record<string, string | undefined> = process.env,
