@@ -20,12 +20,17 @@ export async function expectAccessible(page: Page, label: string, options: A11yO
   // Animations would make contrast depend on the instant of the check.
   await page.emulateMedia({ reducedMotion: "reduce" });
   // WebKit keeps a dialog's fade-in running after the media change (Chromium has finished it by now), and axe then reads
-  // blended text over the backdrop (contrast 1.5-1.9). Wait for every finite animation to end before measuring.
-  await page.evaluate(async () => {
-    const finite = document
-      .getAnimations()
-      .filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity);
-    await Promise.allSettled(finite.map((animation) => animation.finished));
+  // blended text over the backdrop (contrast 1.5-1.9). Jump every finite animation to its end instead of waiting for real time:
+  // that is deterministic, and it cannot hang on an animation that is paused or very long (one did, on the Ready review).
+  await page.evaluate(() => {
+    for (const animation of document.getAnimations()) {
+      if (animation.effect?.getComputedTiming().iterations === Infinity) continue;
+      try {
+        animation.finish();
+      } catch {
+        // not finishable (for example an infinite duration): leave it, axe measures it as it is
+      }
+    }
   });
   const analyze = async (include?: string) => {
     let builder = new AxeBuilder({ page }).withTags(TAGS);
