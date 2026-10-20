@@ -11,11 +11,16 @@ import type { CiRun } from "./ci-gate";
 import { decideMode, treeWithFetch, type Lookups } from "./ci-mode";
 
 let root: string;
+// Inside a git hook (the pre-push hook runs the unit tests), git exports GIT_DIR, GIT_INDEX_FILE and friends. They would
+// point these scratch repositories at the real one, so every git call here runs without any GIT_* variable.
+const cleanEnv = Object.fromEntries(
+  Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")),
+);
 const git = (cwd: string, ...args: string[]) =>
   execFileSync(
     "git",
     ["-c", "user.name=t", "-c", "user.email=t@example.test", "-c", "commit.gpgsign=false", ...args],
-    { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+    { cwd, env: cleanEnv, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
   ).trim();
 
 function commitFile(cwd: string, name: string, text: string, message: string): string {
