@@ -21,7 +21,8 @@ test("Account shows who is signed in, and Sign out goes straight through to sign
 }, testInfo) => {
   await openSettings(page);
   await expect(page.getByText(ownerEmailFor(testInfo.project.name))).toBeVisible();
-  await page.getByRole("button", { name: "Sign out" }).click();
+  // The Account card's button (the nav has one too, #117).
+  await page.getByRole("main").getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/sign-in/);
   // Signed out for real: the app routes send the visitor back to sign-in.
   await page.goto("/settings");
@@ -112,7 +113,7 @@ test(
     expect(text).not.toMatch(/offline|waiting|simulat|prototype|sample|reset/i);
     if (testInfo.project.name === "phone") {
       for (const control of [
-        page.getByRole("button", { name: "Sign out" }),
+        page.getByRole("main").getByRole("button", { name: "Sign out" }),
         page.getByRole("link", { name: /Saved|Saving/ }),
       ]) {
         expect(Math.round((await control.boundingBox())!.height)).toBeGreaterThanOrEqual(44);

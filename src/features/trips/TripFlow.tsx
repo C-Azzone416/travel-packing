@@ -43,6 +43,7 @@ import {
 } from "./draft";
 import { LocationPicker } from "./LocationPicker";
 import { useLocationProvider } from "./LocationProviderContext";
+import { ClampedText } from "@/features/trip/ClampedText";
 import { StopList } from "./StopList";
 import { addStop } from "./stops-draft";
 import { ThemePicker } from "./ThemePicker";
@@ -717,6 +718,13 @@ function ShapeStep({
             <div className="weather-card">
               <span className="tag">Weather</span>
               <h3>{weatherBanner(weatherRoute, weather.stops)}</h3>
+              <details className="whats-this">
+                <summary>What’s this?</summary>
+                <p className="tiny muted">
+                  Clothing is split by temperature, and rain, sun and swim items are added when the
+                  weather calls for them. Change anything you like.
+                </p>
+              </details>
               {weather.stops.some((stop) => stop.days.some((day) => day.source === "typical")) ? (
                 <p className="tiny muted">Dates past 16 days use typical weather.</p>
               ) : null}
@@ -741,7 +749,8 @@ function ShapeStep({
                   </div>
                   {weatherReasons.has(item.id) ? (
                     <div className="item-meta">
-                      <span className="tag">Weather</span> {weatherReasons.get(item.id)}
+                      <span className="tag">Weather</span>{" "}
+                      <ClampedText text={weatherReasons.get(item.id) as string} />
                     </div>
                   ) : null}
                 </div>

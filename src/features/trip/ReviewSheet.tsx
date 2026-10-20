@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { ModalSheet } from "@/components/ui/ModalSheet";
+import { ClampedText } from "./ClampedText";
 import { UPDATE_SPLIT_TITLE, type WeatherChange } from "@/domain/weather/diff";
 
 export interface ReviewSheetProps {
@@ -76,10 +77,16 @@ function ReviewSheetState({
       showClose
       actions={
         <>
-          <Button variant="secondary" disabled={saving} onClick={() => onSkip(changes)}>
+          <Button
+            variant="secondary"
+            className="review-skip"
+            disabled={saving}
+            onClick={() => onSkip(changes)}
+          >
             Skip
           </Button>
           <Button
+            className="review-add"
             disabled={saving || chosen.length === 0}
             aria-live="polite"
             onClick={() => onApply(chosen, skipped)}
@@ -93,9 +100,17 @@ function ReviewSheetState({
       }
     >
       {error ? (
-        <p className="field-error" role="alert">
-          Couldn’t add those. Nothing was changed. <strong>Try again</strong>
-        </p>
+        <div className="field-error" role="alert">
+          <p>Couldn’t add those. Nothing was changed.</p>
+          <Button
+            variant="secondary"
+            small
+            disabled={saving}
+            onClick={() => onApply(chosen, skipped)}
+          >
+            Try again
+          </Button>
+        </div>
       ) : null}
       <label className="weather-select-all">
         <input
@@ -130,7 +145,9 @@ function ReviewSheetState({
               />
               <span className="weather-change-copy">
                 <strong>{changeTitle(change)}</strong>
-                <span className="weather-change-reason">{changeReason(change)}</span>
+                <span className="weather-change-reason">
+                  <ClampedText text={changeReason(change)} />
+                </span>
                 {change.kind === "split" ? (
                   <details>
                     <summary>See the new counts</summary>

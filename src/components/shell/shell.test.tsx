@@ -57,6 +57,45 @@ describe("Nav", () => {
   });
 });
 
+describe("Nav Sign out (#117)", () => {
+  it("adds a fourth item after the links: a button named Sign out, with the address only as its tooltip", async () => {
+    const signOut = vi.fn(async () => undefined);
+    render(<Nav signOut={signOut} email="owner@example.test" />);
+    const nav = screen.getByRole("navigation", { name: "Primary navigation" });
+    expect(nav.querySelectorAll("a")).toHaveLength(3);
+    const button = screen.getByRole("button", { name: "Sign out" });
+    // Last in the nav, so the links come first in the tab order.
+    expect(nav.lastElementChild?.contains(button)).toBe(true);
+    expect(button.getAttribute("title")).toBe("Signed in as owner@example.test");
+    expect(button.getAttribute("aria-current")).toBeNull();
+    expect(button.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
+    // No visible address: the rail is too narrow for one.
+    expect(nav.textContent).not.toContain("owner@example.test");
+    // One tap, no confirm.
+    await userEvent.click(button);
+    expect(signOut).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("is absent without the action or without a signed-in address", () => {
+    const { rerender } = render(<Nav />);
+    expect(screen.queryByRole("button", { name: "Sign out" })).toBeNull();
+    rerender(<Nav signOut={async () => undefined} email={null} />);
+    expect(screen.queryByRole("button", { name: "Sign out" })).toBeNull();
+    rerender(<Nav email="owner@example.test" />);
+    expect(screen.queryByRole("button", { name: "Sign out" })).toBeNull();
+  });
+
+  it("the shell passes it through to the nav", () => {
+    render(
+      <AppShell signOut={async () => undefined} email="owner@example.test">
+        x
+      </AppShell>,
+    );
+    expect(screen.getByRole("button", { name: "Sign out" })).toBeTruthy();
+  });
+});
+
 describe("RouteFocus", () => {
   it("does not steal focus on the first render", () => {
     render(

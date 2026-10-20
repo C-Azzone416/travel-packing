@@ -9,7 +9,14 @@ import { PreviewBanner } from "./PreviewBanner";
 import { RouteFocus } from "./RouteFocus";
 import { ConnectedSaveChip, SaveStatusProvider } from "./SaveStatus";
 
-export function AppShell({ children }: { children: ReactNode }) {
+export interface AppShellProps {
+  children: ReactNode;
+  /** Both given: the nav gets a Sign out item (#117). */
+  signOut?: () => Promise<void>;
+  email?: string | null;
+}
+
+export function AppShell({ children, signOut, email }: AppShellProps) {
   return (
     <ToastProvider>
       <SaveStatusProvider>
@@ -38,7 +45,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <main id="main" tabIndex={-1}>
                 {children}
               </main>
-              <Nav />
+              <Nav signOut={signOut} email={email} />
             </div>
             <RouteFocus />
           </AppLocationProvider>
