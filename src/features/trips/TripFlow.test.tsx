@@ -386,6 +386,40 @@ describe("step 2: shape the list", () => {
     expect(screen.getByText("Long-sleeve tops", { selector: "strong" })).toBeTruthy();
   });
 
+  it("Not now answers the new trip's weather prompt, so the trip screen does not ask again", async () => {
+    const skipped: string[] = [];
+    const { user, source } = setup({}, (base) => {
+      const wired = withWeather(base);
+      return {
+        ...wired.source,
+        skipWeather: async (id) => (skipped.push(id), base.skipWeather(id)),
+      };
+    });
+    await toShapeStep(user);
+    await user.click(await screen.findByRole("button", { name: "Not now" }));
+    expect(await screen.findByText("Weather is off")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Save trip" }));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/"));
+    expect(skipped).toEqual([source.snapshot().trips[0].id]);
+    expect(source.snapshot().trips[0].weather.status).toBe("skipped");
+  });
+
+  it("does not touch the weather status of a trip saved before the question was answered", async () => {
+    const skipped: string[] = [];
+    const { user, source } = setup({}, (base) => {
+      const wired = withWeather(base);
+      return {
+        ...wired.source,
+        skipWeather: async (id) => (skipped.push(id), base.skipWeather(id)),
+      };
+    });
+    await toShapeStep(user);
+    await user.click(await screen.findByRole("button", { name: "Save trip" }));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/"));
+    expect(skipped).toEqual([]);
+    expect(source.snapshot().trips[0].weather.status).toBe("pending");
+  });
+
   it("omits the forecast card for a custom destination", async () => {
     const { user } = setup({ allowCustom: true });
     await user.type(search(), "Grandma's cabin");

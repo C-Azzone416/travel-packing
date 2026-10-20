@@ -277,7 +277,13 @@ function FlowBody({
           const changes = diffRecommendations(baseline, recommendation);
           return source.weather.createTripWithReview(draft, changes.map(acceptedDecision));
         }
-        return source.createTrip(draft);
+        const created = await source.createTrip(draft);
+        // "Not now" / weather off: the new trip starts with its weather prompt already answered, so the trip screen
+        // shows "Weather is off" instead of asking again.
+        if (source.weather && weather.kind === "off") {
+          await source.skipWeather(created.id).catch(() => undefined);
+        }
+        return created;
       },
       () => {
         toast.show("Trip saved");

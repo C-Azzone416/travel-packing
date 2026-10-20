@@ -782,6 +782,21 @@ describe("weather", () => {
     expect(screen.queryByText("You’re ready to go.")).toBeNull();
   });
 
+  it("asks the weather service again when the route is edited", async () => {
+    let wired!: ReturnType<typeof withWeather>;
+    const { user } = setup("lisbon", (base) => {
+      wired = withWeather(base, true);
+      return wired.source;
+    });
+    await ready("Lisbon");
+    await waitFor(() => expect(wired.getTripWeather).toHaveBeenCalledTimes(1));
+    await user.click(screen.getByRole("button", { name: "Edit route" }));
+    const sheet = screen.getByRole("dialog", { name: "Edit route" });
+    fireEvent.change(within(sheet).getByLabelText("Leave"), { target: { value: "2026-09-09" } });
+    await user.click(within(sheet).getByRole("button", { name: "Save route" }));
+    await waitFor(() => expect(wired.getTripWeather).toHaveBeenCalledTimes(2));
+  });
+
   it("persists skipped signatures and can turn weather off without a provider call", async () => {
     let wired!: ReturnType<typeof withWeather>;
     const { user, view } = setup("lisbon", (base) => {

@@ -766,7 +766,11 @@ export function TripScreen({ tripId }: { tripId: string }) {
               modal: true,
               onFail: () => setRouteFailed(true),
               announce: () => "Route updated.",
-              after: close,
+              after: (change) => {
+                close();
+                // New stops and dates are a new question for the weather service.
+                void loadWeather(change.trip, weather?.settings);
+              },
             });
           }}
         />
