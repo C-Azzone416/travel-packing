@@ -10,6 +10,12 @@ Closes #
 
 <!-- Commands run and results. -->
 
+- [ ] `npm run verify` passed on this head (paste its summary line, e.g. `verify full: OK on 1a2b3c4d`), required before marking ready:
+
+```
+
+```
+
 ## Coverage
 
 | Lines | Branches | Functions | Statements |

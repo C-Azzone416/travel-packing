@@ -34,15 +34,33 @@ the e2e-code and client-bundle secret scans, and phone + desktop e2e (with the a
 A green `ci` therefore always means the full validation passed for that exact commit, or identical files did.
 Marking a draft ready (`ready_for_review`) starts the full run.
 
+## Verify locally first (#95)
+
+CI confirms; it is not where bugs are found.
+
+- `npm run verify` runs what full-mode `ci` runs, cheapest first, stopping at the first failure: gitleaks (only if installed
+  here; otherwise it says plainly that it was skipped), repo hygiene, actionlint (same rule), workflow contract, audit, lint,
+  typecheck, unit tests with the 90% coverage gate, both production builds with their bundle scans, and phone + desktop e2e
+  (`CI=1`, port 3102). It ends with a short summary naming the head commit; paste it into the pull request.
+- `npm run verify:quick` is everything before the builds (it still includes the unit tests and coverage gate).
+- A **pre-push hook** runs `verify:quick`. `npm install` turns it on (`prepare` points git at `.githooks`); nothing to
+  install by hand and no dependency. Emergency bypass: `git push --no-verify`, then run `npm run verify` yourself before
+  marking the PR ready.
+- `check:workflows` (so CI too) fails when `ci.yml` and `verify` run different checks or in a different order, so they cannot
+  drift. Adding a check means adding it to both (`src/tooling/verify.ts`).
+- The local run is in addition to CI, never instead of it.
+
 ## Working with it (this is how to stay cheap)
 
-1. **Open pull requests as drafts.** Push as often as you like; each push costs the quick run (a few minutes), not the full one.
-2. **Batch pushes.** Commit locally, run `npm run lint`, `npm run typecheck`, `npm test` and `npm run test:e2e`
-   yourself, and push once when it is coherent. Do not push to see whether CI passes.
-3. **Mark ready once, and not in the same minute as a push.** That run is the full validation. (Events can arrive out of order; the mode step reads the live draft flag, but a push and a ready click together still start two runs.) After review feedback, push the fix as one commit.
-4. **Rerun failed jobs only when the failure is not yours** (an infrastructure error). A rerun repeats the whole job and bills it
-   again. Never rerun to "see if it is flaky": fix or quarantine the flake.
-5. Before merging, `npm run ci:gate -- <pr number>` confirms the latest `ci` run on the pull request's head is green.
+1. **Run `npm run verify` before you mark a PR ready**, and paste its summary in the pull request template's line.
+2. **Open pull requests as drafts.** Each push costs the quick run (a few minutes), not the full one.
+3. **Batch pushes.** Commit locally, let the pre-push hook run, and push once when it is coherent. Do not push to see
+   whether CI passes.
+4. **Mark ready once, and not in the same minute as a push.** That run is the full validation. (Events can arrive out of
+   order; the mode step reads the live draft flag, but a push and a ready click together still start two runs.)
+5. **Rerun failed jobs only when the failure is not yours** (an infrastructure error). A rerun repeats the whole job and bills
+   it again. Never rerun to "see if it is flaky": fix or quarantine the flake.
+6. Before merging, `npm run ci:gate -- <pr number>` confirms the latest `ci` run on the pull request's head is green.
    Branch protection is not available on this plan, so that, plus review, is the gate.
 
 ## Measured minutes

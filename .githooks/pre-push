@@ -1,0 +1,5 @@
+#!/bin/sh
+# Installed by `npm install` (scripts/install-hooks.mjs). Runs the cheap local checks before a push.
+# Emergency bypass: git push --no-verify   (then run `npm run verify` yourself before marking the PR ready).
+echo "pre-push: npm run verify:quick (bypass with --no-verify)"
+exec npm run verify:quick
