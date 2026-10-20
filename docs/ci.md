@@ -87,8 +87,22 @@ CI confirms; it is not where bugs are found.
 
 ## Wall time
 
-A full `ci` run on `6125273` (one serial job) took about 19 minutes. The pull request that introduced the parallel jobs reports
-the new wall time from its own runs.
+Before: a full `ci` run took about 19 minutes (one serial job, develop `6125273`).
+
+After (first green run on the parallel jobs, PR #104): **8 min 21 s** end to end. Per job (start offset, duration):
+
+| Job             | Starts at | Takes |
+| --------------- | --------: | ----: |
+| `mode`          |      +3 s |  46 s |
+| `checks`        |      +3 s |  71 s |
+| `build`         |     +52 s |  77 s |
+| `unit`          |     +51 s | 152 s |
+| `e2e-build`     |     +52 s |  66 s |
+| `e2e (desktop)` |    +120 s | 325 s |
+| `e2e (phone)`   |    +120 s | 376 s |
+| `ci`            |    +498 s |   2 s |
+
+The critical path is `mode` (46 s) then `e2e-build` (66 s) then the slower e2e job. Everything else finishes inside it.
 
 ## Guardrails
 
