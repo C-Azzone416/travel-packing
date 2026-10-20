@@ -380,8 +380,9 @@ export function TripScreen({ tripId }: { tripId: string }) {
       .filter((suggestion) => suggestion.status === "skipped")
       .map((suggestion) => [suggestion.semanticId, suggestion.ruleSignature]),
   );
+  // Without a usable day (every stop unavailable) there is nothing to recommend: the list stays as it is.
   const weatherChanges =
-    weather?.panel.kind === "ready"
+    weather?.panel.kind === "ready" && weatherDays.length > 0
       ? diffRecommendations(trip.items, weatherRecommendation, suppressedWeather)
       : [];
 

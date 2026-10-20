@@ -72,8 +72,8 @@ const queries = [];
 
 // ---- Weather (forecast + archive), for the weather e2e. Synthetic: no real place or date is represented.
 // A place's weather is chosen by its rounded latitude. "base" gives the first London (51.51) hot and dry
-// and the second (42.98) cool and rainy; "swapped" reverses them, which is the "changed forecast" of the
-// review-sheet scenario. Every request is recorded so a test can prove what was (not) sent.
+// and the second (42.98) cool and rainy; "dry" makes both hot and dry, which is the "changed forecast" of the
+// review-sheet scenario (the rain gear is no longer called for). Every request is recorded so a test can prove what was (not) sent.
 const HOT_DRY = { high: 30, low: 20, prob: 0, mm: 0, uv: 9, sun: 11 * 3600 };
 const COOL_WET = { high: 15, low: 8, prob: 80, mm: 6, uv: 2, sun: 3 * 3600 };
 const weatherCalls = [];
@@ -81,7 +81,7 @@ const weatherState = { variant: "base", fail: false };
 
 function profileFor(latitude) {
   const first = Math.abs(Number(latitude) - 51.51) < 0.5;
-  const hot = weatherState.variant === "base" ? first : !first;
+  const hot = weatherState.variant === "dry" || first;
   return hot ? HOT_DRY : COOL_WET;
 }
 

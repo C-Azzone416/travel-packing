@@ -782,6 +782,24 @@ describe("weather", () => {
     expect(screen.queryByText("You’re ready to go.")).toBeNull();
   });
 
+  it("offers no changes when no stop has usable weather: the list stays as it is", async () => {
+    let wired!: ReturnType<typeof withWeather>;
+    setup("lisbon", (base) => {
+      wired = withWeather(base, true);
+      wired.getTripWeather.mockResolvedValue({
+        kind: "ready",
+        stops: [{ stopIndex: 0, status: "unavailable", days: [] }],
+      });
+      return wired.source;
+    });
+    await ready("Lisbon");
+    expect(
+      await screen.findByText("We couldn’t reach the weather service. Your list is unchanged."),
+    ).toBeTruthy();
+    expect(screen.queryByText(/weather changes? to review/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Review" })).toBeNull();
+  });
+
   it("asks the weather service again when the route is edited", async () => {
     let wired!: ReturnType<typeof withWeather>;
     const { user } = setup("lisbon", (base) => {

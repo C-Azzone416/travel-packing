@@ -8,7 +8,7 @@ import { FAKE_GEOCODER_PORT, OPEN_METEO_PORT } from "./support/ports";
 // Weather for every stop (epic #107, #113). The app runs a second time with LOCATION_PROVIDER=open-meteo and
 // WEATHER_PROVIDER=open-meteo, both pointed at one local fake (support/fake-open-meteo.mjs): it serves places with
 // coordinates, serves weather, counts every weather request and can change what it answers. No real network is used.
-// The fake's first London (England) is hot and dry, its second (Ontario) cool and rainy; "swapped" reverses them.
+// The fake's first London (England) is hot and dry, its second (Ontario) cool and rainy; "dry" makes both hot and dry.
 test.use({ baseURL: `http://localhost:${OPEN_METEO_PORT}` });
 
 const FAKE = `http://127.0.0.1:${FAKE_GEOCODER_PORT}`;
@@ -133,18 +133,17 @@ test("a changed forecast offers itemized changes; accepting some revokes Ready, 
   page,
 }) => {
   await createWeatherTrip(page);
-  const owner = `e2e-${ownerEmailFor(test.info().project.name)}`;
-  await markTripReady(owner, "London → London");
-  await page.reload();
-  await expect(page.getByText("You’re ready to go.")).toBeVisible();
-
-  // The same trip, a day later, with the forecast the other way round: a new request and a different answer.
-  await fake("/__weather-set?variant=swapped");
+  // The same trip, a day later, with a dry forecast: a new request and a different answer.
+  await fake("/__weather-set?variant=dry");
   await page.getByRole("button", { name: "Edit route" }).click();
   const sheet = page.getByRole("dialog", { name: "Edit route" });
   await sheet.getByLabel("Arrive", { exact: true }).fill(inDays(4));
   await sheet.getByRole("button", { name: "Save route" }).click();
   await expect(sheet).toHaveCount(0);
+  // Editing the route took the trip out of Ready; make it Ready again so the review has something to revoke.
+  await markTripReady(`e2e-${ownerEmailFor(test.info().project.name)}`, "London → London");
+  await page.reload();
+  await expect(page.getByText("You’re ready to go.")).toBeVisible();
 
   const banner = page.locator(".weather-review-banner");
   await expect(banner).toContainText(/\d+ weather changes? to review/);
@@ -218,7 +217,7 @@ test("a provider failure shows Unavailable and leaves the list as it was", async
     page.getByText("We couldn’t reach the weather service. Your list is unchanged."),
   ).toBeVisible();
   await expect(page.locator(".weather-review-banner")).toHaveCount(0);
-  expect(await page.locator("[data-item-id]").count()).toBeGreaterThan(before - 3);
+  expect(await page.locator("[data-item-id]").count()).toBe(before);
 });
 
 test(
@@ -238,7 +237,7 @@ test(
       .click();
     await expect(page.locator(".weather-row")).toHaveCount(2);
     await expectAccessible(page, "trip with the weather panel");
-    await fake("/__weather-set?variant=swapped");
+    await fake("/__weather-set?variant=dry");
     await page.getByRole("button", { name: "Edit route" }).click();
     const sheet = page.getByRole("dialog", { name: "Edit route" });
     await sheet.getByLabel("Arrive", { exact: true }).fill(inDays(4));
