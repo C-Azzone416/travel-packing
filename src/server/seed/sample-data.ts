@@ -73,6 +73,7 @@ function sampleTrip(
     locationLabel: place.label,
     start,
     end,
+    stops: [],
     config,
     days: built.days,
     dailyDays: built.dailyDays,

@@ -8,6 +8,7 @@ import type {
   TripItem as CalcTripItem,
 } from "./calc";
 import type { ReadinessTrip } from "./toiletry-bag";
+import type { TripStop } from "./trip-stops";
 
 // Item, staple, suggestion, and config shapes come from the calculator module (src/domain/calc);
 // this file only adds what trip state needs on top of them.
@@ -36,6 +37,8 @@ export interface Trip extends ReadinessTrip<TripItem> {
   id: string;
   start: string;
   end: string;
+  /** Ordered stops (epic #107); `start`/`end` are always the first arrive and last leave. */
+  stops: TripStop[];
   config: TripConfig;
   days: number;
   dailyDays: number;

@@ -44,6 +44,20 @@ export function makeStoredTrip(overrides: Partial<StoredTrip> = {}): StoredTrip 
     locationLabel: "Sampleton, Sample Region, Sampleland",
     start,
     end,
+    stops: [
+      {
+        location: {
+          id: "sample-a",
+          city: "Sampleton",
+          region: "",
+          country: "",
+          countryCode: "",
+          label: "Sampleton, Sample Region, Sampleland",
+        },
+        arrive: start,
+        leave: end,
+      },
+    ],
     config,
     days: built.days,
     dailyDays: built.dailyDays,
