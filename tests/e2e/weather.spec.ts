@@ -147,7 +147,7 @@ test("a changed forecast offers itemized changes; accepting some revokes Ready, 
 
   const banner = page.locator(".weather-review-banner");
   await expect(banner).toContainText(/\d+ weather changes? to review/);
-  await banner.getByRole("button", { name: "Review" }).click();
+  await banner.getByRole("button", { name: "Review changes" }).click();
   const review = page.getByRole("dialog", { name: "Weather changes" });
   await expect(
     review.getByText("Based on the weather for your stops. Choose what to add."),
@@ -166,6 +166,9 @@ test("a changed forecast offers itemized changes; accepting some revokes Ready, 
   // The unchecked changes are suppressed: they do not come back after a reload.
   await page.reload();
   await expect(row(page, "tops-short")).toHaveCount(1);
+  // The live forecast still calls for the added item, so its row carries the weather pill and reason.
+  await expect(row(page, "tops-short").locator(".weather-pill")).toBeVisible();
+  await expect(row(page, "tops-short").locator(".weather-note")).not.toBeEmpty();
   const remaining = await page.locator(".weather-review-banner").count();
   expect(remaining).toBe(0);
 });
@@ -247,7 +250,7 @@ test(
     // Wait for the banner itself (the weather is fetched again after the route edit), so a failure says what was missing.
     const banner = page.locator(".weather-review-banner");
     await expect(banner).toBeVisible();
-    await banner.getByRole("button", { name: "Review" }).click();
+    await banner.getByRole("button", { name: "Review changes" }).click();
     await expect(page.getByRole("dialog", { name: "Weather changes" })).toBeVisible();
     await expectAccessible(page, "weather review sheet");
   },

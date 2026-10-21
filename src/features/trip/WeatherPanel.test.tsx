@@ -137,7 +137,7 @@ describe("WeatherPanel", () => {
     expect(screen.getByText("Rain on 3 of 3 days")).toBeTruthy();
     expect(screen.getByText("Later days are typical for these dates.")).toBeTruthy();
     expect(screen.getByText("2 weather changes to review")).toBeTruthy();
-    await userEvent.click(screen.getByRole("button", { name: "Review" }));
+    await userEvent.click(screen.getByRole("button", { name: "Review changes" }));
     await userEvent.click(screen.getByRole("button", { name: "Refresh weather" }));
     expect(input.onReview).toHaveBeenCalledTimes(1);
     expect(input.onRefresh).toHaveBeenCalledTimes(1);

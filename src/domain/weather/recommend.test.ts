@@ -190,6 +190,14 @@ describe("clothing breakdown", () => {
     });
     expect(r.clothing[0].reason).toBe("Mostly hot days");
   });
+
+  it("every line carries a short pill tag", () => {
+    const hot = recommend(withHigh(30));
+    expect(hot.clothing.map((line) => line.tag)).toEqual(
+      hot.clothing.map((line) => (/short|shorts/i.test(line.name) ? "Warm" : "Cool")),
+    );
+    for (const extra of hot.extras) expect(extra.tag.length).toBeGreaterThan(0);
+  });
 });
 
 describe("laundry quantities per garment type", () => {

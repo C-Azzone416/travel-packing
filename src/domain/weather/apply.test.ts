@@ -64,6 +64,7 @@ const add = (id: string, groupId?: string): WeatherChange => ({
     qty: 1,
     optional: false,
     reason: "Weather reason",
+    tag: "Rain",
     ruleSignature: "rule",
     ...(groupId ? { groupId } : {}),
   },

@@ -31,7 +31,7 @@ export function ToiletrySection({
   const visible = filter === "still" ? items.filter((item) => item.packed < item.qty) : items;
   const titleId = `toiletry-title-${tripId}`;
   return (
-    <section className="toiletry-section" aria-labelledby={titleId}>
+    <section id="block-toiletries" className="toiletry-section" aria-labelledby={titleId}>
       <div className="list-section-head">
         <div>
           <h3 id={titleId}>Toiletries</h3>

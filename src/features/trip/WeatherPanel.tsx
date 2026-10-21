@@ -145,7 +145,7 @@ export function WeatherPanel({
             {changesCount} weather {changesCount === 1 ? "change" : "changes"} to review
           </strong>
           <Button small onClick={onReview}>
-            Review
+            Review changes
           </Button>
         </div>
       ) : null}

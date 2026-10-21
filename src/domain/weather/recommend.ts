@@ -45,6 +45,8 @@ export interface WeatherSuggestion {
   optional: boolean;
   /** "Rain likely in Lisbon, Oct 3–5". */
   reason: string;
+  /** One or two words for the item's weather pill: "Rain", "Cold". */
+  tag: string;
   /** Which branch of the rule fired; never raw weather. Changes when the recommendation changes. */
   ruleSignature: string;
   groupId?: string;
@@ -54,6 +56,18 @@ export interface WeatherRecommendation {
   clothing: Suggestion[];
   extras: WeatherSuggestion[];
 }
+
+const EXTRA_TAGS: Readonly<Record<string, string>> = {
+  "layer-light": "Cool nights",
+  "layer-warm": "Cold",
+  "cold-accessories": "Freezing",
+  "weather-umbrella": "Rain",
+  "weather-rain-jacket": "Rain",
+  "weather-swimsuit": "Hot",
+  "weather-sunscreen": "Sun",
+  "weather-sun-hat": "Sun",
+  "weather-snow-boots": "Snow",
+};
 
 export type RangeFormatter = (startDate: string, endDate: string) => string;
 
@@ -275,6 +289,7 @@ export function recommendPacking(input: RecommendInput): WeatherRecommendation {
       qty,
       semanticId: id,
       reason: clothingReason(matching, input.dayStopNames),
+      tag: id === "tops-short" || id === "bottoms-shorts" ? "Warm" : "Cool",
     });
   };
   const hotDays = daysOf("short-shorts");
@@ -325,6 +340,7 @@ function conditionalExtras(
       qty: 1,
       optional,
       reason,
+      tag: EXTRA_TAGS[semanticId] ?? "Weather",
       ruleSignature,
       ...(groupId ? { groupId } : {}),
     });

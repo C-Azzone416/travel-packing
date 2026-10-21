@@ -61,7 +61,7 @@ test("shows the trip with progress, and the All / Still to pack filter", async (
   );
   await expect(row(page, "sleepwear")).toHaveCount(0);
   await expect(row(page, "underwear")).toBeVisible();
-  await page.getByRole("button", { name: "All", exact: true }).click();
+  await page.getByRole("button", { name: "All items", exact: true }).click();
   await expect(row(page, "sleepwear")).toBeVisible();
 });
 
@@ -71,9 +71,11 @@ test("check and uncheck, and partial quantities with announcements and limits", 
   await openSanDiego(page);
   await row(page, "tops").getByRole("button", { name: "Pack all Everyday tops" }).click();
   await expect(
-    row(page, "tops").getByRole("button", { name: "Mark Everyday tops unpacked" }),
-  ).toHaveAttribute("aria-pressed", "true");
-  await row(page, "tops").getByRole("button", { name: "Mark Everyday tops unpacked" }).click();
+    row(page, "tops").getByRole("button", { name: "Packed, mark Everyday tops unpacked" }),
+  ).toHaveText("Packed");
+  await row(page, "tops")
+    .getByRole("button", { name: "Packed, mark Everyday tops unpacked" })
+    .click();
   await expect(
     row(page, "tops").getByRole("button", { name: "Pack all Everyday tops" }),
   ).toBeVisible();
@@ -129,14 +131,16 @@ test("the toiletry bag walks every state: waiting, ready to place, in the suitca
   await page.getByRole("button", { name: "Undo placement" }).click();
   await expect(page.getByText("Toiletry bag ready to place")).toBeVisible();
   await expect(
-    row(page, "last-toothbrush").getByRole("button", { name: "Mark Toothbrush unpacked" }),
+    row(page, "last-toothbrush").getByRole("button", { name: "Packed, mark Toothbrush unpacked" }),
   ).toBeVisible();
 
   await page.getByRole("button", { name: "Put bag in suitcase" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Confirm" }).click();
   await expect(page.getByText("Toiletry bag is in the suitcase")).toBeVisible();
   // Unchecking any content invalidates the placement.
-  await row(page, "last-contacts").getByRole("button", { name: "Mark Contacts unpacked" }).click();
+  await row(page, "last-contacts")
+    .getByRole("button", { name: "Packed, mark Contacts unpacked" })
+    .click();
   await expect(page.getByText("Toiletry bag not ready to place")).toBeVisible();
 });
 
@@ -455,4 +459,35 @@ test("screenshot of the Ready trip", DEVICE, async ({ page }, testInfo) => {
   await openLisbon(page);
   await expect(page.getByText("You’re ready to go.")).toBeVisible();
   await shot("ready");
+});
+
+test("ledger packing screen: stamp, sections panel, no overflow, and a completed row keeps its columns", async ({
+  page,
+}) => {
+  await openSanDiego(page);
+  await expect(page.getByRole("img", { name: /departure stamp$|route stamps$/ })).toBeVisible();
+  await expect(page.getByText(/^Leaves in \d+ days$/)).toBeVisible();
+  await expect(page.getByText(/^\d+ of \d+ packed/)).toBeVisible();
+
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+  );
+  expect(overflow).toBe(false);
+
+  const panel = page.getByRole("navigation", { name: "Packing sections" });
+  await expect(panel).toBeVisible();
+  await panel.getByRole("link", { name: /Everyday & occasion/ }).click();
+  await expect(page).toHaveURL(/#block-main$/);
+
+  const target = row(page, "underwear").getByRole("button", { name: /^Edit target for / });
+  const before = await target.boundingBox();
+  await row(page, "underwear")
+    .getByRole("button", { name: /^Pack all / })
+    .click();
+  await expect(row(page, "underwear").getByRole("button", { name: /unpacked$/ })).toHaveText(
+    "Packed",
+  );
+  const after = await target.boundingBox();
+  expect(after?.x).toBe(before?.x);
+  expect(after?.width).toBe(before?.width);
 });
