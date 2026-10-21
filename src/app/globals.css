@@ -3120,6 +3120,14 @@ a.back {
   .topbar-inner {
     height: 60px;
   }
+  /* The stamps sit under the title, as on the packing screen, so a two-stamp cluster never squeezes it. */
+  .ledger-hero-top {
+    flex-direction: column;
+    gap: 0;
+  }
+  .stamp-slot {
+    margin-top: 14px;
+  }
   .ledger-head {
     display: grid;
   }
