@@ -238,6 +238,13 @@ describe("signOutAction", () => {
     await expect(signOutAction()).rejects.toThrow("NEXT_REDIRECT:/sign-in");
     expect(fake.current).toBeNull();
   });
+
+  it("clears the theme cookie so it does not outlive the session", async () => {
+    jar.set("appearance", "ocean");
+    fake.current = { userId: "u1", email: "owner@example.test" };
+    await expect(signOutAction()).rejects.toThrow("NEXT_REDIRECT:/sign-in");
+    expect(jar.has("appearance")).toBe(false);
+  });
 });
 
 describe("signInAction rate limit", () => {

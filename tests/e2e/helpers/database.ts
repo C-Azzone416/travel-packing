@@ -19,10 +19,10 @@ export async function resetOwnerData(ownerId: string): Promise<void> {
   try {
     const db = drizzle(pool, { schema }) as unknown as Db;
     await db.delete(schema.trips).where(eq(schema.trips.ownerId, ownerId));
-    // Weather starts opted out, in Fahrenheit, for every test (the choice lives on the user, not on a trip).
+    // Weather starts opted out, in Fahrenheit, and the theme unchosen (Base), for every test (both live on the user).
     await db
       .update(schema.users)
-      .set({ weatherOptIn: false, temperatureUnit: "F" })
+      .set({ weatherOptIn: false, temperatureUnit: "F", appearance: null })
       .where(eq(schema.users.id, ownerId));
     await seedSyntheticData(db, ownerId, SAMPLE_TODAY);
   } finally {

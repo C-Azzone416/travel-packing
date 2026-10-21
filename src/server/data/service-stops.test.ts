@@ -731,3 +731,40 @@ describe("applyTripWeatherReview", () => {
     ).toBe("NOT_FOUND");
   });
 });
+
+describe("appearance (colour theme)", () => {
+  it("reads as Base until a theme is chosen, then returns the choice", async () => {
+    expect(data(await service.getAppearance(context()))).toBe("base");
+    expect(data(await service.updateAppearance(context(), { appearance: "ocean" }))).toBe("ocean");
+    expect(data(await service.getAppearance(context()))).toBe("ocean");
+    expect(data(await service.updateAppearance(context(), { appearance: "base" }))).toBe("base");
+  });
+
+  it("reads an unknown stored value as Base", async () => {
+    data(await service.getAppearance(context()));
+    await ctx.client.exec(`UPDATE "users" SET "appearance" = 'neon'`);
+    expect(data(await service.getAppearance(context()))).toBe("base");
+  });
+
+  it("refuses an unknown theme and leaves the saved one alone", async () => {
+    data(await service.updateAppearance(context(), { appearance: "violet" }));
+    for (const bad of [{ appearance: "neon" }, { appearance: "" }, {}, { appearance: 3 }]) {
+      expect(errorOf(await service.updateAppearance(context(), bad))?.code).toBe("INVALID_INPUT");
+    }
+    expect(data(await service.getAppearance(context()))).toBe("violet");
+  });
+
+  it("belongs to the signed-in owner only", async () => {
+    data(await service.updateAppearance(context(), { appearance: "terracotta" }));
+    as(OTHER_OWNER);
+    expect(data(await service.getAppearance(context()))).toBe("base");
+    data(await service.updateAppearance(context(), { appearance: "ocean" }));
+    as(OWNER);
+    expect(data(await service.getAppearance(context()))).toBe("terracotta");
+    as(null);
+    expect(errorOf(await service.getAppearance(context()))?.code).toBe("UNAUTHENTICATED");
+    expect(errorOf(await service.updateAppearance(context(), { appearance: "base" }))?.code).toBe(
+      "UNAUTHENTICATED",
+    );
+  });
+});

@@ -106,9 +106,17 @@ test("a failed theme image swaps to the neutral surface at the same size (deferr
   const actual = await failedArt.boundingBox();
   expect(actual!.height).toBeCloseTo(expected!.height, 0);
   expect(actual!.width).toBeCloseTo(expected!.width, 0);
-  expect(await failedArt.evaluate((node) => getComputedStyle(node).backgroundColor)).toBe(
-    "rgb(185, 221, 208)",
-  );
+  // The neutral surface is the theme's --seafoam tint; read it the same way the art does.
+  const background = (node: Element) => getComputedStyle(node).backgroundColor;
+  const neutral = await failedArt.evaluate((node) => {
+    const probe = document.createElement("div");
+    probe.style.background = "var(--seafoam)";
+    node.appendChild(probe);
+    const color = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    return color;
+  });
+  expect(await failedArt.evaluate(background)).toBe(neutral);
 });
 
 test("no horizontal scroll at 320px with a quick view open", DEVICE, async ({ page }) => {
