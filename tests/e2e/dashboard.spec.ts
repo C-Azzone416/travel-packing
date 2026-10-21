@@ -91,7 +91,8 @@ test("a failed theme image swaps to the neutral surface at the same size (deferr
   page,
 }) => {
   await openDashboard(page);
-  const art = card(page, "San Diego").locator("[data-art-key]");
+  await page.getByRole("button", { name: /Past & archive/ }).click();
+  const art = card(page, "Lisbon").locator("[data-art-key]");
   await expect(art.locator("img")).toBeVisible();
   const expected = await art.boundingBox();
 
@@ -99,7 +100,8 @@ test("a failed theme image swaps to the neutral surface at the same size (deferr
   await failing.route("**/themes/*.svg", (route) => route.abort());
   await failing.setViewportSize(page.viewportSize()!);
   await openDashboard(failing, { signedIn: true });
-  const failedArt = card(failing, "San Diego").locator("[data-art-key]");
+  await failing.getByRole("button", { name: /Past & archive/ }).click();
+  const failedArt = card(failing, "Lisbon").locator("[data-art-key]");
   await expect(failedArt).toHaveAttribute("data-art-failed", "true");
   await expect(failedArt.locator("img")).toHaveCount(0);
   await expect(failedArt).toHaveText("");
@@ -180,28 +182,11 @@ test("screenshots of the dashboard", DEVICE, async ({ page }, testInfo) => {
 });
 
 test(
-  "on phones the hero sun clears the hero text, and the end of the page is never hidden behind the nav",
+  "on phones the end of the page is never hidden behind the nav",
   DEVICE,
   async ({ page }, testInfo) => {
-    test.skip(
-      testInfo.project.name !== "phone",
-      "the bottom nav and the corner sun are phone layouts",
-    );
+    test.skip(testInfo.project.name !== "phone", "the bottom nav is a phone layout");
     await openDashboard(page);
-    const sun = (await page.locator(".sun").boundingBox())!;
-    for (const node of await page.locator(".hero-copy").locator("p, h1, .actions a").all()) {
-      const text = (await node.boundingBox())!;
-      const apart =
-        sun.x >= text.x + text.width ||
-        sun.x + sun.width <= text.x ||
-        sun.y >= text.y + text.height ||
-        sun.y + sun.height <= text.y;
-      expect(
-        apart,
-        `sun overlaps ${await node.evaluate((el) => el.tagName + "." + el.className)}`,
-      ).toBe(true);
-    }
-
     await tab(page, /Past & archive/).click();
     await expect(page.getByText("Nothing recently deleted.")).toBeVisible();
     await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
@@ -210,3 +195,55 @@ test(
     expect(last.y + last.height).toBeLessThanOrEqual(nav.y);
   },
 );
+
+// Field Ledger dashboard (#143): the hero, its actions and the dark header.
+test("the hero leads with the next departure; Add item opens the add form on the trip screen; Edit trip opens the route sheet", async ({
+  page,
+}) => {
+  await openDashboard(page);
+  await expect(page.getByRole("heading", { name: "Your travel ledger", level: 1 })).toBeVisible();
+  const hero = card(page, "San Diego");
+  await expect(hero.getByText("Next departure · Oct 23")).toBeVisible();
+  await expect(hero.getByText("days to go")).toBeVisible();
+  await expect(hero.getByRole("link", { name: "Continue packing: San Diego" })).toBeVisible();
+  // The header is the dark role token, not a hard-coded colour.
+  const headerBackground = await page
+    .locator("header.topbar")
+    .evaluate((node) => getComputedStyle(node).backgroundColor);
+  const headerToken = await page.evaluate(() => {
+    const probe = document.createElement("div");
+    probe.style.background = "var(--header)";
+    document.body.appendChild(probe);
+    const color = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    return color;
+  });
+  expect(headerBackground).toBe(headerToken);
+
+  await hero.getByRole("button", { name: "Edit trip: San Diego" }).click();
+  await expect(page.getByRole("dialog", { name: "Edit route" })).toBeVisible();
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByRole("dialog", { name: "Edit route" })).toHaveCount(0);
+
+  await hero.getByRole("link", { name: "Add item: San Diego" }).click();
+  await expect(page.getByRole("dialog", { name: "Add a Bathroom item" })).toBeVisible();
+});
+
+test("no horizontal scroll at 390 and 1280, and the sidebar sits beside the hero only on wide screens", async ({
+  page,
+}) => {
+  await openDashboard(page);
+  for (const [width, beside] of [
+    [390, false],
+    [1280, true],
+  ] as const) {
+    await page.setViewportSize({ width, height: 900 });
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+    const hero = await page.getByRole("article", { name: "San Diego" }).boundingBox();
+    const later = await page.getByRole("complementary", { name: "Later journeys" }).boundingBox();
+    expect(later!.x > hero!.x + hero!.width - 1).toBe(beside);
+  }
+});

@@ -113,7 +113,7 @@ function ListSection({
   );
 }
 
-export function TripScreen({ tripId }: { tripId: string }) {
+export function TripScreen({ tripId, openAdd = false }: { tripId: string; openAdd?: boolean }) {
   const source = useTripsSource();
   const { track } = useSaveStatus();
   const toast = useToast();
@@ -121,7 +121,7 @@ export function TripScreen({ tripId }: { tripId: string }) {
   const [staples, setStaples] = useState<Staple[]>([]);
   const [reloads, setReloads] = useState(0);
   const [filter, setFilter] = useState<PackFilter>("all");
-  const [dialog, setDialog] = useState<Dialog>(null);
+  const [dialog, setDialog] = useState<Dialog>(openAdd ? { kind: "add-toiletry" } : null);
   const [submitting, setSubmitting] = useState(false);
   const [failedRows, setFailedRows] = useState<ReadonlySet<string>>(new Set());
   const [announcement, setAnnouncement] = useState("");

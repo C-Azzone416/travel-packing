@@ -3,7 +3,15 @@ import { TripScreen } from "@/features/trip/TripScreen";
 
 export const metadata: Metadata = { title: "Packing list" };
 
-export default async function TripPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function TripPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ add?: string }>;
+}) {
   const { id } = await params;
-  return <TripScreen tripId={id} />;
+  // The dashboard's "+ Add item" lands here with the existing add form already open.
+  const { add } = await searchParams;
+  return <TripScreen tripId={id} openAdd={add === "item"} />;
 }

@@ -547,6 +547,15 @@ describe("toiletry bag gate", () => {
     expect(screen.queryByRole("heading", { name: "Toiletries" })).toBeNull();
   });
 
+  it("opens the Add a Bathroom item form on load when asked (the dashboard's + Add item)", async () => {
+    renderInApp(
+      <TripsSourceProvider source={memory()}>
+        <TripScreen tripId="san-diego" openAdd />
+      </TripsSourceProvider>,
+    );
+    expect(await screen.findByRole("dialog", { name: "Add a Bathroom item" })).toBeTruthy();
+  });
+
   it("adds a Bathroom item: validated, one normal checkbox, resetting an already placed bag", async () => {
     const { user, source } = setup("lisbon");
     await ready("Lisbon");

@@ -150,7 +150,12 @@ p {
   min-height: 100vh;
   padding-bottom: 86px;
 }
+/* The dark Field Ledger header (#143, spec §1/§3): full-bleed --header, 68px (60 on phones). */
 .topbar {
+  background: var(--header);
+  color: var(--header-ink);
+}
+.topbar-inner {
   height: 68px;
   display: flex;
   align-items: center;
@@ -159,6 +164,16 @@ p {
   padding: 0 18px;
   max-width: 1120px;
   margin: 0 auto;
+}
+.topbar :focus-visible {
+  outline-color: var(--focus-on-header);
+}
+.topbar .brand-button small {
+  color: var(--header-muted);
+}
+.topbar .sync-chip {
+  background: var(--surface);
+  border-color: var(--surface);
 }
 .brand-button {
   min-height: 44px;
@@ -540,7 +555,7 @@ main {
   .app-shell {
     padding-bottom: 30px;
   }
-  .topbar {
+  .topbar-inner {
     padding-inline: 28px;
   }
   main {
@@ -577,70 +592,7 @@ main {
   }
 }
 
-/* ---- Trips dashboard (#14). Ported from the prototype; sizes follow design #12 gap 3. */
-.hero {
-  position: relative;
-  overflow: hidden;
-  min-height: 265px;
-  display: grid;
-  align-items: center;
-  padding: 30px 26px;
-  border-radius: 30px;
-  background: linear-gradient(
-    130deg,
-    var(--surface) 0%,
-    color-mix(in srgb, var(--accent) 22%, var(--surface)) 60%,
-    color-mix(in srgb, var(--accent) 38%, var(--surface)) 100%
-  );
-  box-shadow: var(--shadow);
-}
-.hero-copy {
-  position: relative;
-  z-index: 2;
-  max-width: 540px;
-}
-.hero-copy p {
-  color: var(--ink);
-  max-width: 44ch;
-}
-.hero-art {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-.sun {
-  position: absolute;
-  width: 92px;
-  height: 92px;
-  border-radius: 50%;
-  right: 12%;
-  top: 22px;
-  background: color-mix(in srgb, var(--notice) 90%, transparent);
-}
-.hill {
-  position: absolute;
-  border-radius: 50% 50% 0 0;
-  bottom: -65px;
-  transform: rotate(-6deg);
-}
-.hill.one {
-  width: 380px;
-  height: 190px;
-  right: -70px;
-  background: color-mix(in srgb, var(--accent) 22%, transparent);
-}
-.hill.two {
-  width: 340px;
-  height: 145px;
-  right: 130px;
-  bottom: -80px;
-  background: color-mix(in srgb, var(--bg) 70%, transparent);
-}
-.hero .actions {
-  position: relative;
-  z-index: 3;
-}
-
+/* ---- Trips dashboard (#14; the Field Ledger layout is at the end of this file, #143). */
 .section-head {
   display: flex;
   align-items: end;
@@ -952,30 +904,9 @@ main {
   width: 55%;
 }
 
-/* On phones the sun sits in the bottom corner, clear of the hero text (design's #14 nit). */
-@media (max-width: 659px) {
-  .sun {
-    top: auto;
-    right: 22px;
-    bottom: 22px;
-    width: 64px;
-    height: 64px;
-  }
-}
-
 @media (min-width: 660px) {
   .card-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (min-width: 900px) {
-  .hero {
-    min-height: 310px;
-    padding: 44px;
-  }
-  .hero-copy {
-    padding-right: 120px;
   }
 }
 
@@ -2730,4 +2661,303 @@ a.back {
 }
 .appearance-status {
   margin-bottom: 0;
+}
+
+/* ---- Field Ledger dashboard (#143, spec §4). Roles only; the stamp slot belongs to FL-c (#144). */
+.ledger-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin: 12px 2px 16px;
+}
+.ledger-head h1 {
+  margin-bottom: 0;
+  font-size: clamp(38px, 5vw, 68px);
+}
+.ledger-head h1:focus {
+  outline: none;
+}
+.ledger-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 24px;
+  margin-top: 16px;
+}
+@media (min-width: 981px) {
+  .ledger-grid {
+    grid-template-columns: minmax(0, 1fr) 300px;
+  }
+}
+.ledger-hero {
+  position: relative;
+  min-width: 0;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-top: 4px solid var(--accent);
+  border-radius: var(--control-radius);
+  background: var(--surface);
+  box-shadow: 0 8px 24px var(--ledger-shadow);
+}
+.ledger-hero-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.ledger-hero-copy {
+  min-width: 0;
+}
+.ledger-hero .eyebrow,
+.later-journeys .eyebrow {
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.ledger-hero h2 {
+  margin-bottom: 4px;
+  font-size: clamp(44px, 3.7vw, 56px);
+  line-height: 0.98;
+  letter-spacing: -0.04em;
+  overflow-wrap: anywhere;
+}
+.ledger-dates {
+  margin: 8px 0 0;
+  color: var(--muted);
+}
+.stamp-slot:empty {
+  flex: none;
+}
+.weather-strip {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  margin: 20px 0 0;
+  padding: 0;
+  list-style: none;
+  border-block: 1px solid var(--line);
+  background: var(--weather-surface);
+}
+.weather-strip li {
+  display: grid;
+  gap: 2px;
+  padding: 12px 14px;
+  font-size: 13px;
+}
+.weather-strip li + li {
+  border-left: 1px solid var(--line);
+}
+.weather-city {
+  font-weight: 700;
+  font-size: 15px;
+}
+.weather-dates,
+.weather-note {
+  color: var(--muted);
+}
+.weather-range small {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.weather-glyph {
+  font-size: 18px;
+  line-height: 1;
+  color: var(--accent-2);
+}
+.weather-strip-note {
+  margin: 16px 0 0;
+}
+.ledger-hero-bottom {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 24px;
+  margin-top: 24px;
+}
+.days-to-go {
+  display: grid;
+  line-height: 1;
+}
+.days-to-go strong {
+  font-family: var(--font-display), var(--font-body), sans-serif;
+  font-size: 64px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  color: var(--accent);
+}
+.days-to-go span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.ledger-progress .progress-track span {
+  background: var(--progress);
+}
+.ledger-progress .progress-copy {
+  margin-bottom: 0;
+  font-size: 13px;
+}
+.ledger-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.add-item-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.add-item-form .field {
+  flex: 1 1 220px;
+}
+.ledger-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.ledger-hero .quick-view {
+  margin-top: 12px;
+}
+
+.later-journeys {
+  min-width: 0;
+}
+@media (min-width: 981px) {
+  .later-journeys {
+    padding-left: 24px;
+    border-left: 1px solid var(--line);
+  }
+}
+.later-journeys h2 {
+  font-size: 25px;
+}
+.later-journeys ul {
+  display: grid;
+  gap: 16px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+@media (min-width: 721px) and (max-width: 980px) {
+  .later-journeys ul {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.later-journey {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--control-radius);
+  background: var(--surface);
+}
+.later-days {
+  display: grid;
+  align-content: start;
+  line-height: 1;
+}
+.later-days strong {
+  font-family: var(--font-display), var(--font-body), sans-serif;
+  font-size: 34px;
+  font-weight: 800;
+  color: var(--accent);
+}
+.later-days span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.later-body h3 {
+  margin-bottom: 4px;
+  font-size: 24px;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+.later-dates {
+  margin: 4px 0 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.later-body .progress-copy {
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+.later-body .progress-track span {
+  background: var(--progress);
+}
+.later-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+.later-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding-inline: 4px;
+  color: var(--link);
+  font-weight: 700;
+}
+.later-link:hover {
+  background: var(--selection-surface);
+}
+
+@media (max-width: 980px) {
+  .ledger-hero-bottom {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .ledger-actions {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 720px) {
+  .topbar-inner {
+    height: 60px;
+  }
+  .ledger-head {
+    display: grid;
+  }
+  .ledger-head h1 {
+    font-size: 40px;
+  }
+  .ledger-head .button {
+    width: 100%;
+  }
+  .ledger-hero {
+    padding: 20px;
+  }
+  .ledger-hero h2 {
+    font-size: 40px;
+  }
+  .weather-strip {
+    grid-auto-flow: row;
+  }
+  .weather-strip li + li {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+  .ledger-hero-bottom {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+  .ledger-actions .button {
+    flex: 1 1 100%;
+  }
+  .later-journey {
+    border-top: 4px solid var(--line-strong);
+  }
 }
