@@ -38,7 +38,7 @@
     "smoke": "tsx scripts/smoke-test.ts"
   },
   "dependencies": {
-    "@masra91/framebriar": "0.4.1",
+    "@masra91/framebriar": "file:vendor/framebriar/framebriar-0.4.1.tgz",
     "@neondatabase/auth": "0.6.0-beta",
     "@neondatabase/serverless": "^1.2.0",
     "drizzle-orm": "^0.45.4",
