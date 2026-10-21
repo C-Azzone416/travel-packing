@@ -112,6 +112,11 @@ describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
     ["a pull request trigger", mutate("on:\n", "on:\n  pull_request:\n"), /pull request/],
     ["inherited secrets", `${deploy}\n    secrets: inherit\n`, /inherited/],
     [
+      "a production build that does not force screenshots off",
+      mutate("FEEDBACK_SCREENSHOTS=0 vercel build --prod", "vercel build --prod"),
+      /production build must set FEEDBACK_SCREENSHOTS=0/,
+    ],
+    [
       "the gate reads a secret",
       mutate(
         "        run: npm ci\n\n      - name: Release",
@@ -802,10 +807,20 @@ describe("checkCiWorkflow", () => {
       "the production build made with the e2e flag",
       inJob(
         "build",
-        "      - name: Build\n        run: npm run build\n",
-        "      - name: Build\n        env:\n          NEXT_PUBLIC_E2E_BUILD: '1'\n        run: npm run build\n",
+        "      - name: Build\n        run: npm run build:production\n",
+        "      - name: Build\n        env:\n          NEXT_PUBLIC_E2E_BUILD: '1'\n        run: npm run build:production\n",
       ),
       /build job must build exactly like production/,
+    ],
+    [
+      "the production-mode build replaced by a plain build",
+      inJob("build", "npm run build:production\n", "npm run build\n"),
+      /build job is missing npm run build:production/,
+    ],
+    [
+      "the screenshot capture check dropped",
+      inJob("build", /npm run check:no-capture-in-build\n/g, "true\n"),
+      /build job is missing check:no-capture-in-build/,
     ],
     [
       "the production build uploading an artifact",

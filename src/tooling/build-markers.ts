@@ -1,3 +1,6 @@
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
+
 // Strings that must never appear in a normal build, each unique to one module that must stay out of it. `source` is the
 // file that holds the string, and build-markers.test.ts checks that it still does, so renaming or editing the string
 // there cannot leave `check:no-e2e-in-build` looking for something that no longer exists.
@@ -26,3 +29,35 @@ export const BUILD_MARKERS: readonly BuildMarker[] = [
     source: "src/features/trips/fixtures.ts",
   },
 ];
+
+// Strings unique to the screenshot capture code, which must never be in a PRODUCTION build (#130). Unlike the markers above,
+// they legitimately appear in Preview, local and e2e builds, so `check:no-capture-in-build` is only run on a production-mode
+// build (VERCEL_ENV=production), where next.config.ts resolves the capture module to its stub.
+export const CAPTURE_MARKERS: readonly BuildMarker[] = [
+  {
+    name: "the screenshot capture module",
+    text: "feedback-screenshot-capture",
+    source: "src/features/feedback/screenshot-capture.ts",
+  },
+];
+
+/** Every build file that contains one of the markers' text: `{ marker name, file path }`. Reads text files under `dir`. */
+export function markerHits(
+  dir: string,
+  markers: readonly BuildMarker[],
+): { name: string; path: string }[] {
+  const hits: { name: string; path: string }[] = [];
+  const visit = (current: string) => {
+    for (const entry of readdirSync(current)) {
+      const path = join(current, entry);
+      if (statSync(path).isDirectory()) visit(path);
+      else {
+        const text = readFileSync(path, "utf8");
+        for (const marker of markers)
+          if (text.includes(marker.text)) hits.push({ name: marker.name, path });
+      }
+    }
+  };
+  visit(dir);
+  return hits;
+}

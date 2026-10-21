@@ -213,6 +213,10 @@ export function checkDeployWorkflow(workflow: string): string[] {
   if (!/scripts\/require-ci\.ts/.test(requireCi))
     problems.push("the CI check must run scripts/require-ci.ts");
 
+  // A production build never captures screenshots (#130): the switch is forced off on the build line itself.
+  if (!/FEEDBACK_SCREENSHOTS=0 vercel build --prod/.test(workflow))
+    problems.push("the production build must set FEEDBACK_SCREENSHOTS=0");
+
   // The gate decides the target and holds no secret and no environment.
   const gate = jobBody(workflow, "gate");
   if (!gate) problems.push("the gate job is missing");
@@ -676,7 +680,12 @@ export function checkCiWorkflow(workflow: string): string[] {
   };
   requireStep("unit", "npm run test:coverage", "the unit job must run the coverage tests");
   requireStep("build", "npm run build:webpack", "the build job must run the webpack build");
-  for (const needle of ["npm run build\n", "check:no-e2e-in-build", "check:client-bundle"]) {
+  for (const needle of [
+    "npm run build:production\n",
+    "check:no-e2e-in-build",
+    "check:no-capture-in-build",
+    "check:client-bundle",
+  ]) {
     requireStep("build", needle, `the build job is missing ${needle.trim()}`);
   }
 
