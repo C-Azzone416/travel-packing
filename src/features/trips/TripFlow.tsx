@@ -44,6 +44,7 @@ import {
 import { LocationPicker } from "./LocationPicker";
 import { useLocationProvider } from "./LocationProviderContext";
 import { ClampedText } from "@/features/trip/ClampedText";
+import { countCallout, countTiles, everydayHeading } from "./count-copy";
 import { StopList } from "./StopList";
 import { addStop } from "./stops-draft";
 import { ThemePicker } from "./ThemePicker";
@@ -654,25 +655,20 @@ function ShapeStep({
             onChange={(returnOutfit) => onChange({ returnOutfit })}
           />
           <div className="callout">
-            <strong>How counts work:</strong> the outbound outfit is worn, not packed.
+            <strong>How we count:</strong>{" "}
+            {countCallout(calculated.days, calculated.dailyDays, config.returnOutfit)}
           </div>
         </Card>
         <Card as="aside" padded>
           <p className="eyebrow">Live calculation</p>
-          <h2>{calculated.dailyDays} everyday days</h2>
+          <h2>{everydayHeading(calculated.dailyDays)}</h2>
           <div className="count-summary">
-            <div>
-              <strong>{calculated.days}</strong>
-              <span>TRIP DAYS</span>
-            </div>
-            <div>
-              <strong>1</strong>
-              <span>OUTBOUND WORN</span>
-            </div>
-            <div>
-              <strong>{config.returnOutfit ? 1 : 0}</strong>
-              <span>RETURN SET</span>
-            </div>
+            {countTiles(calculated.days, calculated.dailyDays, config.returnOutfit).map((tile) => (
+              <div key={tile.label}>
+                <strong>{tile.value}</strong>
+                <span>{tile.label}</span>
+              </div>
+            ))}
           </div>
           {weather.kind === "prompt" ? (
             <div className="weather-card">
