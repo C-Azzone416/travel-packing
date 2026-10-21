@@ -43,6 +43,13 @@
       "when": 1792516888289,
       "tag": "0005_trip_stops",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792611823729,
+      "tag": "0006_saved_lists",
+      "breakpoints": true
     }
   ]
 }

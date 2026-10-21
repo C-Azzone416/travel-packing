@@ -116,6 +116,54 @@ export const staples = pgTable(
   ],
 );
 
+/**
+ * A named, owner-scoped list of items to add to new trips (#140). Like staples it is a template: applying it copies
+ * items into the trip, and nothing here is referenced by trip rows, so editing or deleting a list never touches a trip.
+ * Carries no packed counts, Ready state or trip metadata.
+ */
+export const savedLists = pgTable(
+  "saved_lists",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ownerId: ownerId(),
+    name: text("name").notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    unique("saved_lists_id_owner_unique").on(table.id, table.ownerId),
+    check("saved_lists_name_not_blank", sql`btrim(${table.name}) <> ''`),
+    check("saved_lists_name_short", sql`char_length(${table.name}) <= 80`),
+    index("saved_lists_owner_idx").on(table.ownerId),
+  ],
+);
+
+/** One item of a saved list: identity (semantic_id), name, category and the needed quantity only. */
+export const savedListItems = pgTable(
+  "saved_list_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    listId: uuid("list_id").notNull(),
+    ownerId: ownerId(),
+    semanticId: text("semantic_id").notNull(),
+    name: text("name").notNull(),
+    category: itemCategory("category").notNull(),
+    qty: integer("qty").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (table) => [
+    foreignKey({
+      name: "saved_list_items_list_fk",
+      columns: [table.listId, table.ownerId],
+      foreignColumns: [savedLists.id, savedLists.ownerId],
+    }).onDelete("cascade"),
+    unique("saved_list_items_list_semantic_unique").on(table.listId, table.semanticId),
+    check("saved_list_items_qty_positive", sql`${table.qty} >= 1`),
+    check("saved_list_items_name_not_blank", sql`btrim(${table.name}) <> ''`),
+    index("saved_list_items_list_order_idx").on(table.listId, table.sortOrder),
+  ],
+);
+
 /** One saved trip. start_date, end_date, destination and location_* are privacy-sensitive (docs/schema.md). */
 export const trips = pgTable(
   "trips",
