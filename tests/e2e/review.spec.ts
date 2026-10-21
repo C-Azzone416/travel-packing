@@ -17,7 +17,7 @@ async function openReview(page: Page, trip: "San Diego" | "Lisbon", id: "san-die
   await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
   // The trip's id is stored by the data layer, so reach the review by the link the screens give.
   if (trip === "San Diego") {
-    await page.getByRole("link", { name: "Keep packing: San Diego" }).click();
+    await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
   } else {
     await page.getByRole("button", { name: /Past & archive/ }).click();
     await page.getByRole("link", { name: "Review bag: Lisbon" }).click();

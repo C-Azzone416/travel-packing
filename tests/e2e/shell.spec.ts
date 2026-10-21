@@ -27,7 +27,7 @@ test(
       // Trips and Staples lead with their prototype headlines; Settings leads with its name.
       const heading =
         screen.label === "Trips"
-          ? "Pack for the trip, not the anxiety."
+          ? "Your travel ledger"
           : screen.label === "Staples"
             ? "Every trip starts here"
             : screen.label;
@@ -57,8 +57,8 @@ test("keyboard focus is clearly visible", async ({ page }) => {
     const style = getComputedStyle(document.activeElement as Element);
     return { width: style.outlineWidth, style: style.outlineStyle, color: style.outlineColor };
   });
-  // Base theme: --accent-2 (#856421).
-  expect(outline).toEqual({ width: "3px", style: "solid", color: "rgb(133, 100, 33)" });
+  // The second Tab lands on the brand link in the dark header: --focus-on-header (Base #fff9eb).
+  expect(outline).toEqual({ width: "3px", style: "solid", color: "rgb(255, 249, 235)" });
 });
 
 test("touch targets are at least 44px", DEVICE, async ({ page }) => {

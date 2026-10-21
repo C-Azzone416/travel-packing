@@ -1,6 +1,14 @@
 // Pure view-models for the trips dashboard. No React, no clock: `today` is passed in.
 
 import { parseDate } from "@/domain/calc";
+import { daysBetween, type TripStop } from "@/domain/trip-stops";
+import type { StopWeather } from "@/domain/weather/types";
+import {
+  displayTemperature,
+  weatherRowView,
+  type WeatherRowView,
+} from "@/features/trip/weather-view";
+import type { TemperatureUnit } from "@/server/data/weather-store";
 import { packedTotals } from "@/domain/readiness";
 import { isPastTrip, classifyTrip, type LifecycleTrip } from "@/domain/trip-lifecycle";
 import { toiletryBagState, toiletryItems, TOILETRY_GROUP_ID } from "@/domain/toiletry-bag";
@@ -185,4 +193,88 @@ export function routeDisplay(
     count: cities.length,
     spoken: `Route: ${cities.join(", then ")}.`,
   };
+}
+
+// ---------------------------------------------------------------- Field Ledger dashboard (#143, spec §4)
+
+export interface DepartureView {
+  /** Whole days from today to the first day; 0 once the trip has started. */
+  daysToGo: number;
+  /** "days to go", "day to go", or "under way" once the trip has started. */
+  daysLabel: string;
+  /** "Oct 5" */
+  startShort: string;
+  /** "Oct 5 – Oct 9" */
+  range: string;
+  nights: number;
+  /** "4 nights" */
+  nightsLabel: string;
+}
+
+export function departureView(
+  trip: Pick<LifecycleTrip, "start" | "end">,
+  today: string,
+): DepartureView {
+  const ahead = daysBetween(today, trip.start);
+  const daysToGo = Math.max(0, ahead);
+  const nights = Math.max(0, daysBetween(trip.start, trip.end));
+  return {
+    daysToGo,
+    daysLabel: ahead < 0 ? "under way" : daysToGo === 1 ? "day to go" : "days to go",
+    startShort: formatDate(trip.start),
+    range: formatRange(trip),
+    nights,
+    nightsLabel: nights === 1 ? "1 night" : `${nights} nights`,
+  };
+}
+
+/** "N journeys ahead" for the page eyebrow; "No journeys ahead" when there are none. */
+export function journeysAheadLabel(count: number): string {
+  return count === 0
+    ? "No journeys ahead"
+    : count === 1
+      ? "1 journey ahead"
+      : `${count} journeys ahead`;
+}
+
+export interface WeatherCell {
+  stopIndex: number;
+  city: string;
+  dates: string;
+  glyph: WeatherRowView["glyph"];
+  /** "18° / 11°" in the person's unit. */
+  range: string;
+  /** One line: "Rain on 2 of 5 days", "Snow likely", "Mostly dry". */
+  note: string;
+  /** "Forecast" or "Typical" so a normal-for-the-season figure is never read as a forecast. */
+  source: string;
+}
+
+/** One compact cell per stay that has weather; a stay without it is simply left out (never a daily forecast). */
+export function weatherCells(
+  stops: readonly TripStop[],
+  weather: readonly StopWeather[],
+  unit: TemperatureUnit,
+): WeatherCell[] {
+  const cells: WeatherCell[] = [];
+  stops.forEach((stop, index) => {
+    const found = weather.find((entry) => entry.stopIndex === index);
+    const row = found ? weatherRowView(stop, found) : null;
+    if (!row) return;
+    cells.push({
+      stopIndex: index,
+      city: row.city,
+      dates: row.dates,
+      glyph: row.glyph,
+      range: `${displayTemperature(row.high, unit)}° / ${displayTemperature(row.low, unit)}°`,
+      note:
+        row.glyph === "snow"
+          ? "Snow likely"
+          : row.rainDays > 0
+            ? `Rain on ${row.rainDays} of ${row.totalDays} days`
+            : "Mostly dry",
+      source: row.source === "forecast" ? "Forecast" : "Typical",
+    });
+  });
+  return cells;
 }

@@ -21,7 +21,7 @@ const received = async (name: string): Promise<FakeQuery[]> => {
 
 async function openNewTrip(page: Page) {
   await signInAsOwner(page);
-  await page.getByRole("link", { name: /New trip/ }).click();
+  await page.getByRole("link", { name: /Plan a trip/ }).click();
   await expect(page.getByRole("heading", { name: "Confirm the trip" })).toBeVisible();
 }
 

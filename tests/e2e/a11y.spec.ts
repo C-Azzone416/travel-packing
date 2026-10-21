@@ -71,7 +71,7 @@ test.describe("dashboard", DEVICE, () => {
 test.describe("create and copy", DEVICE, () => {
   async function startTrip(page: Page) {
     await openDashboard(page);
-    await page.getByRole("link", { name: /New trip/ }).click();
+    await page.getByRole("link", { name: /Plan a trip/ }).click();
     await expect(page.getByRole("heading", { name: "Confirm the trip" })).toBeVisible();
   }
 
@@ -115,7 +115,7 @@ test.describe("create and copy", DEVICE, () => {
 test.describe("trip screen", DEVICE, () => {
   async function openSanDiego(page: Page) {
     await openDashboard(page);
-    await page.getByRole("link", { name: "Keep packing: San Diego" }).click();
+    await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
     await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
   }
 
@@ -196,7 +196,7 @@ test.describe("review, settings and staples", DEVICE, () => {
       await expect(page.getByRole("heading", { name: "Lisbon", level: 1 })).toBeVisible();
       await page.getByRole("link", { name: "Review bag again" }).click();
     } else {
-      await page.getByRole("link", { name: "Keep packing: San Diego" }).click();
+      await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
       await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
       const id = new URL(page.url()).pathname.split("/").pop();
       await page.goto(`/trips/${id}/review`);
@@ -253,7 +253,7 @@ test.describe("error states and toasts", DEVICE, () => {
 
   test("a trip row that did not save, and the toast after a removal", async ({ page }) => {
     await openDashboard(page);
-    await page.getByRole("link", { name: "Keep packing: San Diego" }).click();
+    await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
     await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
     await page.route("**/trips/**", (route) =>
       isAction(route.request()) ? route.abort("failed") : route.continue(),
@@ -293,7 +293,7 @@ test.describe("keyboard and focus", () => {
     page,
   }) => {
     await openDashboard(page);
-    await page.getByRole("link", { name: "Keep packing: San Diego" }).click();
+    await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
     await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
     const opener = page.getByRole("button", { name: "Edit preferences" });
     await opener.focus();
@@ -338,7 +338,7 @@ test.describe("narrow screens and large text", DEVICE, () => {
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
       );
     expect(await overflow(), "dashboard").toBeLessThanOrEqual(0);
-    await page.getByRole("link", { name: "Keep packing: San Diego" }).click();
+    await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
     await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
     expect(await overflow(), "trip screen").toBeLessThanOrEqual(0);
     await expectAccessible(page, "trip screen at 320px");
@@ -355,7 +355,7 @@ test.describe("narrow screens and large text", DEVICE, () => {
     await openDashboard(page);
     await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
     await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
-    await expect(page.getByRole("link", { name: /New trip/ })).toBeVisible();
+    await expect(page.getByRole("link", { name: /Plan a trip/ })).toBeVisible();
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -442,7 +442,7 @@ test.describe("design's known items", DEVICE, () => {
     // One line of 12px text plus padding: well under two lines.
     expect((await chip.boundingBox())!.height).toBeLessThan(60);
     await page.reload();
-    await page.getByRole("link", { name: "Keep packing: San Diego" }).click();
+    await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
     const row = page.locator('[data-item-id="last-toothbrush"]');
     await expect(row).toBeVisible();
     await expectBadgeClear(row);
@@ -453,7 +453,7 @@ test.describe("design's known items", DEVICE, () => {
   }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
     await openDashboard(page);
-    await page.getByRole("link", { name: "Keep packing: San Diego" }).click();
+    await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
     const row = page.locator('[data-item-id="last-toothbrush"]');
     await expect(row).toBeVisible();
     expect((await expectBadgeClear(row)).sameLine).toBe(true);
@@ -461,7 +461,7 @@ test.describe("design's known items", DEVICE, () => {
 
   test("group labels are the same size as field labels", async ({ page }) => {
     await openDashboard(page);
-    await page.getByRole("link", { name: "Keep packing: San Diego" }).click();
+    await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
     await page
       .locator('[data-item-id="sunglasses"]')
       .getByRole("button", { name: /^Sunglasses / })
@@ -490,7 +490,7 @@ test.describe("design's known items", DEVICE, () => {
 
   test("date inputs are tied to their hint and notice", async ({ page }) => {
     await openDashboard(page);
-    await page.getByRole("link", { name: /New trip/ }).click();
+    await page.getByRole("link", { name: /Plan a trip/ }).click();
     for (const label of ["Leave", "Return"]) {
       const input = page.getByLabel(label, { exact: true });
       await expect(input).toHaveAttribute("aria-describedby", "date-hint date-notice");
@@ -517,7 +517,7 @@ test("screenshots of the visual fixes (after)", DEVICE, async ({ page }, testInf
     });
   await page.emulateMedia({ reducedMotion: "reduce" });
   await openDashboard(page);
-  await page.getByRole("link", { name: "Keep packing: San Diego" }).click();
+  await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
   await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
   // Rows with the Pack last badge, and the packed count.
   await page.locator('[data-item-id="last-toothbrush"]').scrollIntoViewIfNeeded();
