@@ -46,6 +46,27 @@ module only by that exact specifier. Guards:
 - The production deploy builds with `FEEDBACK_SCREENSHOTS=0`, and `check-deploy-env` fails a production environment where the
   variable is set to anything but `0`. A preview may set it to `0` or `1`.
 
+## Sending a report (#132)
+
+The header's Feedback button opens the review sheet (design's #129 section 4). Nothing leaves the device until the person presses
+Send, and saving and delivering are different steps with different words:
+
+1. **Saved on this device.** Send prepares the report with the SDK (`prepareLocalFeedback`) and commits it to the durable outbox
+   (`createDurableFeedback`, IndexedDB, 10 reports / 32 MiB, kept until delivered or cleared). Only a committed save says "Saved".
+   Storage full, unavailable or unconfirmed say so and keep the notes; a retry after an unconfirmed save reuses the same report id,
+   so it cannot duplicate. Cancel while saving abandons an uncommitted save.
+2. **Received.** The outbox delivers later, with persisted backoff, resuming when the connection comes back (online event, connected
+   status, page shown). The service's confirmation turns the open sheet into "Received. Thank you." or raises a toast.
+
+What a report may contain (`capture-policy.ts`): the person's notes, an optional screenshot, and approved codes and numbers only: the
+screen code (`trips`, `new-trip`, `trip`, `review`, `staples`, `other`; never the path), a viewport class, the input kind, the app
+version, the capture time. No trip names, places, dates, emails or ids. The sheet lists what is sent. Capture is blocked on Settings
+and the sign-in and account screens, in the entry point, the sheet context and the capture code itself.
+
+Screenshots follow the build switch above: ticked by default where the build has them (the capture is taken before the sheet opens so
+the sheet is not in it), absent in Production. The capture uses `html-to-image` (MIT), imported only by the capture module, so it is
+absent from production bundles too.
+
 ## The fake Framebriar service (tests only)
 
 `src/test/fake-framebriar.ts` is an in-process stand-in for the service. It answers the SDK's wire contract: invitation

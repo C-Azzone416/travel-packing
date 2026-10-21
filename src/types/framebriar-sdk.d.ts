@@ -101,3 +101,61 @@ declare module "@masra91/framebriar/browser/submit-feedback" {
     signal?: AbortSignal;
   }): Promise<{ id: string; status: string; gameId: string }>;
 }
+
+declare module "@masra91/framebriar/browser/local-export" {
+  import type { NormalizedReport } from "@masra91/framebriar/protocol";
+  export interface PreparedFeedback {
+    report: NormalizedReport;
+    media: Blob | null;
+    metadata: Blob;
+    filenames: { media: string | null; metadata: string };
+  }
+  export function prepareLocalFeedback(options: {
+    blob: Blob | null;
+    captureContext: Record<string, unknown>;
+    notes?: string;
+  }): Promise<PreparedFeedback>;
+}
+
+declare module "@masra91/framebriar/browser/durable-feedback" {
+  import type { NormalizedReport } from "@masra91/framebriar/protocol";
+  export interface OutboxStatus {
+    state: string;
+    items: number;
+    bytes: number;
+    maxItems: number;
+    maxBytes: number;
+    blocked?: number;
+    retention: "until-delivered-or-cleared";
+    migration?: unknown;
+  }
+  export interface DurableFeedback {
+    status(): OutboxStatus;
+    subscribe(listener: (status: OutboxStatus) => void): () => void;
+    enqueue(options: {
+      report: NormalizedReport;
+      media: Blob | null;
+      signal?: AbortSignal;
+      includeDiagnostics?: boolean;
+    }): Promise<{ id: string; gameId: string; status: "saved-local"; sent: false }>;
+    start(): Promise<void>;
+    resume(): Promise<void>;
+    stop(): void;
+    clear(): Promise<OutboxStatus>;
+  }
+  export function createDurableFeedback(options: {
+    gameId: string;
+    buildSha?: string | null;
+    endpoint: string;
+    getToken: () => Promise<string | undefined>;
+    onReceipt?: (receipt: { id: string; gameId: string; status: string }) => void;
+    onChange?: (status: OutboxStatus) => void;
+  }): DurableFeedback;
+}
+
+declare module "html-to-image" {
+  export function toBlob(
+    node: HTMLElement,
+    options?: Record<string, unknown>,
+  ): Promise<Blob | null>;
+}
