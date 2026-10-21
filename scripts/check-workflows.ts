@@ -8,6 +8,7 @@ import {
   checkDeployWorkflow,
   dependabotProblems,
   checkVercelCliLock,
+  packageAccessProblems,
   unpinnedActions,
 } from "../src/tooling/workflow-check";
 import { e2eProjectParityProblems, verifyParityProblems } from "../src/tooling/verify";
@@ -18,6 +19,7 @@ for (const file of readdirSync(dir).filter((name) => /\.ya?ml$/.test(name))) {
   const text = readFileSync(join(dir, file), "utf8");
   const problems = [
     ...unpinnedActions(text),
+    ...packageAccessProblems(text),
     ...(file === "deploy-vercel.yml"
       ? [
           ...checkDeployWorkflow(text),

@@ -28,6 +28,7 @@ concurrency:
 permissions:
   contents: read
   actions: read # to read the `ci` result for this commit
+  packages: read # installs the private @masra91/framebriar package
 
 env:
   VERCEL_CLI_VERSION: 64.5.0 # pinned (never a moving tag)
@@ -54,6 +55,8 @@ jobs:
           cache: npm
 
       - name: Install
+        env:
+          GITHUB_PACKAGES_TOKEN: ${{ github.token }} # read access to the private @masra91/framebriar package (install steps only)
         run: npm ci
 
       - name: Release gate (which target may this run deploy?)
@@ -84,6 +87,8 @@ jobs:
           cache: npm
 
       - name: Install
+        env:
+          GITHUB_PACKAGES_TOKEN: ${{ github.token }} # read access to the private @masra91/framebriar package (install steps only)
         run: npm ci
 
       # A preview deploy only exists after `ci` passed (the caller's `needs: ci`). A manual production run has no such
