@@ -173,12 +173,12 @@ describe("0005_trip_stops", () => {
 
   it("rolls back to the single-key suggestion table and up again, keeping the umbrella", async () => {
     await seedBefore();
-    await migrateUp(client, migrations);
+    await migrateUp(client, migrations.slice(0, 6));
     await client.exec(
       `INSERT INTO weather_suggestions (trip_id, owner_id, suggestion_semantic_id, status, rule_signature)
        VALUES ('${TRIP}', 'owner-a', 'weather-rain-jacket', 'skipped', 'x')`,
     );
-    expect(await migrateDown(client, migrations, 1)).toEqual(["0005_trip_stops"]);
+    expect(await migrateDown(client, migrations.slice(0, 6), 1)).toEqual(["0005_trip_stops"]);
     expect(await rows(`SELECT status FROM weather_suggestions WHERE trip_id = '${TRIP}'`)).toEqual([
       { status: "accepted" },
     ]);
@@ -186,7 +186,7 @@ describe("0005_trip_stops", () => {
       `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`,
     );
     expect(tables.map((row) => row.table_name)).not.toContain("trip_stops");
-    await migrateUp(client, migrations);
+    await migrateUp(client, migrations.slice(0, 6));
     expect(await rows(`SELECT count(*)::int AS n FROM trip_stops`)).toEqual([{ n: 2 }]);
   });
 });
