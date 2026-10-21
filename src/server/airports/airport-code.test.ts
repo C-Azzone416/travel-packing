@@ -97,10 +97,25 @@ describe("airportCodeFor (the bundled dataset)", () => {
     expect(airportCodeFor({ latitude: 32.72, longitude: -117.16, countryCode: "US" })).toBe("SAN");
   });
 
-  it("keeps the city name for Lisbon today: Cascais (CAT, 19 km) is also in range, so LIS is not 'exactly one'", () => {
-    // Recorded on purpose: the rule is PM's (exactly one within 30 km). Paris (CDG, ORY) and Rome behave the same way.
-    expect(airportCodeFor({ latitude: 38.72, longitude: -9.14, countryCode: "PT" })).toBeNull();
+  it("keeps the city name for Lisbon: the medium airport at Cascais (CAT) counts toward ambiguity, so LIS is not 'exactly one'", () => {
+    // PM decision: the strict rule stands ("never assume a city maps uniquely to one airport"), so no large-wins tweak.
+    const lisbon = { latitude: 38.72, longitude: -9.14 };
+    const inRange = decodeAirports(AIRPORT_DATA)
+      .filter(
+        (entry) =>
+          entry.country === "PT" &&
+          distanceKm(lisbon.latitude, lisbon.longitude, entry.latitude, entry.longitude) <=
+            AIRPORT_RADIUS_KM,
+      )
+      .map((entry) => entry.iata)
+      .sort();
+    expect(inRange).toEqual(["CAT", "LIS"]);
+    expect(airportCodeFor({ ...lisbon, countryCode: "PT" })).toBeNull();
+  });
+
+  it("keeps the city name for Paris and London, which have several airports in range", () => {
     expect(airportCodeFor({ latitude: 48.86, longitude: 2.35, countryCode: "FR" })).toBeNull();
+    expect(airportCodeFor({ latitude: 51.51, longitude: -0.13, countryCode: "GB" })).toBeNull();
   });
 
   it("matches nothing for multi-airport cities: London and New York", () => {

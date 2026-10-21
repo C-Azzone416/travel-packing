@@ -4,20 +4,24 @@ import { alpha3For } from "./iso-alpha3";
 import type { TripStop } from "./trip-stops";
 
 export interface StampSpec {
-  kind: "country" | "city";
+  /** "airport" looks like a country code (FRA, AUS), so it is marked apart in the rendering and the accessible label. */
+  kind: "country" | "city" | "airport";
   /** Text on the stamp: an alpha-3 code, an airport code, or the uppercased city name cut to 9 characters and an ellipsis. */
   label: string;
   /** Untruncated name or code, for the accessible label. */
   fullName: string;
+  /** The city as the person entered it (airport stamps only), for "LIS airport, Lisbon, departure stamp". */
+  cityName?: string;
 }
 
 export const MAX_CITY_LABEL = 9;
 
 function cityStamp(stop: TripStop | undefined): StampSpec {
-  const full = (stop?.location.city ?? "").trim().toUpperCase();
+  const name = (stop?.location.city ?? "").trim();
+  const full = name.toUpperCase();
   // A reliably matched airport code (#152) replaces the city name on the stamp; the name stays in the accessible label.
   if (stop?.airportCode && /^[A-Z]{3}$/.test(stop.airportCode))
-    return { kind: "city", label: stop.airportCode, fullName: full };
+    return { kind: "airport", label: stop.airportCode, fullName: full, cityName: name };
   const label = full.length > MAX_CITY_LABEL ? `${full.slice(0, MAX_CITY_LABEL)}…` : full;
   return { kind: "city", label, fullName: full };
 }
@@ -48,9 +52,11 @@ export function selectStamps(stops: readonly TripStop[]): StampSpec[] {
   return codes.length === 1 || codes.length === 2 ? codes.map(countryStamp) : [cityStamp(first)];
 }
 
-/** "PRT, ESP route stamps" or "LISBON departure stamp". */
+/** "PRT, ESP route stamps", "LISBON departure stamp" or "LIS airport, Lisbon, departure stamp". */
 export function stampsAriaLabel(stamps: readonly StampSpec[]): string {
   if (stamps[0]?.kind === "country")
     return `${stamps.map((s) => s.fullName).join(", ")} route stamps`;
+  if (stamps[0]?.kind === "airport")
+    return `${stamps[0].label} airport, ${stamps[0].cityName ?? stamps[0].fullName}, departure stamp`;
   return `${stamps[0]?.fullName ?? ""} departure stamp`;
 }

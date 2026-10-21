@@ -80,8 +80,10 @@ describe("selectStamps", () => {
 describe("selectStamps with airport codes (#152)", () => {
   it("shows the airport code on a single-city stamp, keeping the city name for the accessible label", () => {
     const stamps = selectStamps([stop("Lisbon", "PT", "LIS")]);
-    expect(stamps).toEqual([{ kind: "city", label: "LIS", fullName: "LISBON" }]);
-    expect(stampsAriaLabel(stamps)).toBe("LISBON departure stamp");
+    expect(stamps).toEqual([
+      { kind: "airport", label: "LIS", fullName: "LISBON", cityName: "Lisbon" },
+    ]);
+    expect(stampsAriaLabel(stamps)).toBe("LIS airport, Lisbon, departure stamp");
   });
 
   it("uses the first stop's code in every city fallback", () => {
@@ -96,6 +98,15 @@ describe("selectStamps with airport codes (#152)", () => {
     expect(
       labels([stop("Lisbon", "PT"), stop("Madrid", "ES", "MAD"), stop("Paris", "FR")]),
     ).toEqual(["LISBON"]);
+  });
+
+  it("marks an airport code that collides with a country code (FRA, AUS) as an airport, not a country", () => {
+    const [frankfurt] = selectStamps([stop("Frankfurt", "DE", "FRA")]);
+    const [france] = selectStamps([stop("Paris", "FR"), stop("Nice", "FR")]);
+    expect(frankfurt).toMatchObject({ label: "FRA", kind: "airport" });
+    expect(france).toMatchObject({ label: "FRA", kind: "country" });
+    expect(stampsAriaLabel([frankfurt])).toBe("FRA airport, Frankfurt, departure stamp");
+    expect(stampsAriaLabel([france])).toBe("FRA route stamps");
   });
 
   it("never shows a code on country stamps", () => {
