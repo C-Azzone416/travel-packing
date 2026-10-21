@@ -19,7 +19,7 @@ import type { ErrorCode, Result } from "@/server/data/result";
 import { getDataContext } from "@/server/data/runtime";
 import * as service from "@/server/data/service";
 import { toLifecycleTrip } from "@/server/trips/to-lifecycle";
-import type { NewToiletryItem } from "./trips-source";
+import type { NewCustomItem, NewToiletryItem } from "./trips-source";
 import type { WeatherSuggestionState } from "@/server/data/weather-store";
 
 export type TripReadResult = { ok: true; trip: LifecycleTrip } | { ok: false; code: ErrorCode };
@@ -159,12 +159,6 @@ export async function addToiletryItemAction(
       scope: item.scope,
     }),
   );
-}
-
-export interface NewCustomItem {
-  name: string;
-  category: string;
-  neededQty: number;
 }
 
 /** A refusal that carries why: the field names for INVALID_INPUT, or EXISTS when the trip already has the item. */

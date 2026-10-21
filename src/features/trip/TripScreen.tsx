@@ -14,7 +14,11 @@ import type { LifecycleTrip } from "@/domain/trip-lifecycle";
 import { diffRecommendations, type WeatherChange } from "@/domain/weather/diff";
 import { weatherGuidance, type ItemGuidance } from "@/domain/weather/guidance";
 import { recommendPacking } from "@/domain/weather/recommend";
-import { TripsSourceError, type TripChange } from "@/features/trips/trips-source";
+import {
+  TripsSourceError,
+  type NewCustomItem,
+  type TripChange,
+} from "@/features/trips/trips-source";
 import { useTripsSource } from "@/features/trips/TripsSourceProvider";
 import { tripMathLine } from "@/features/trips/count-copy";
 import { RouteText } from "@/features/trips/RouteText";
@@ -25,6 +29,7 @@ import { themeFor } from "@/domain/themes";
 import { selectStamps } from "@/domain/stamps";
 import { daysBetween } from "@/domain/trip-stops";
 import { localToday } from "@/lib/today";
+import { AddItemInline } from "./AddItemInline";
 import { EditRouteSheet } from "./EditRouteSheet";
 import { ItemEditor } from "./ItemEditor";
 import { PackRow } from "./PackRow";
@@ -61,7 +66,7 @@ type Load =
 type Dialog =
   | null
   | { kind: "edit"; itemId: string }
-  | { kind: "add-toiletry" }
+  | { kind: "add-toiletry"; name?: string; qty?: number }
   | { kind: "bag" }
   | { kind: "preferences" }
   | { kind: "theme" }
@@ -319,6 +324,16 @@ export function TripScreen({ tripId, openAdd = false }: { tripId: string; openAd
       for (const id of [...waiting.keys()]) flush(id);
     };
   }, [flush]);
+
+  /** The inline "＋ Add item": resolves true when the source saved it, so the form can fold away. */
+  const addCustomItem = (item: NewCustomItem): Promise<boolean> =>
+    new Promise((resolve) => {
+      void act(() => source.addItem(tripId, item), {
+        announce: () => `${item.name.trim()} added to ${item.category}.`,
+        after: () => resolve(true),
+        onFail: () => resolve(false),
+      });
+    });
 
   const close = () => setDialog(null);
   // The dashboard's "+ Add item" arrives with ?add=item; once the form is closed the URL goes back to the plain trip.
@@ -648,6 +663,13 @@ export function TripScreen({ tripId, openAdd = false }: { tripId: string; openAd
       <div className="trip-layout">
         <div>
           <div className="packing-panel">
+            <AddItemInline
+              items={trip.items}
+              busy={submitting}
+              onAdd={addCustomItem}
+              onBathroom={(name, qty) => setDialog({ kind: "add-toiletry", name, qty })}
+              onEditExisting={(itemId) => setDialog({ kind: "edit", itemId })}
+            />
             <ListSection
               id="section-main"
               title="Everyday & occasion items"
@@ -788,6 +810,8 @@ export function TripScreen({ tripId, openAdd = false }: { tripId: string; openAd
       {dialog?.kind === "add-toiletry" ? (
         <AddToiletryForm
           destination={trip.destination}
+          initialName={dialog.name}
+          initialQty={dialog.qty}
           saving={submitting}
           onClose={closeAdd}
           onAdd={(item) =>

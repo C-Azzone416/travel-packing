@@ -14,6 +14,7 @@ import { createServerTripsSource } from "./server-source";
 import {
   applyWeatherReviewAction,
   acceptWeatherAction,
+  addItemAction,
   addToiletryItemAction,
   confirmBagPlacementAction,
   decrementPackedAction,
@@ -85,6 +86,7 @@ export function TripsSourceProvider({
           editItem: editItemAction,
           removeItem: removeItemAction,
           addToiletryItem: addToiletryItemAction,
+          addItem: addItemAction,
           confirmBagPlacement: confirmBagPlacementAction,
           undoBagPlacement: undoBagPlacementAction,
           markReady: markReadyAction,

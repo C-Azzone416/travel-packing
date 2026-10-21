@@ -9,6 +9,7 @@ import type { Scope, Staple, TripConfig } from "@/domain/trip";
 import type { TripStop } from "@/domain/trip-stops";
 import type {
   AcceptedWeatherDecision,
+  AddItemActionResult,
   SkippedWeatherDecision,
   StaplesReadResult,
   TripCommandResult,
@@ -20,6 +21,7 @@ import type { WeatherFetchResult } from "./weather-client";
 import type { WeatherSettings, WeatherSuggestionState } from "@/server/data/weather-store";
 import {
   TripsSourceError,
+  type NewCustomItem,
   type NewToiletryItem,
   type TripChange,
   type TripsSource,
@@ -46,6 +48,7 @@ export interface TripActions {
   editItem(tripId: string, itemId: string, edit: ItemEdit): Promise<TripCommandResult>;
   removeItem(tripId: string, itemId: string, scope: Scope): Promise<TripCommandResult>;
   addToiletryItem(tripId: string, item: NewToiletryItem): Promise<TripCommandResult>;
+  addItem(tripId: string, item: NewCustomItem): Promise<AddItemActionResult>;
   confirmBagPlacement(tripId: string): Promise<TripCommandResult>;
   undoBagPlacement(tripId: string): Promise<TripCommandResult>;
   markReady(tripId: string): Promise<TripCommandResult>;
@@ -145,6 +148,13 @@ export function createServerTripsSource(
     editItem: (id, itemId, edit) => unwrapChange(trip.editItem(id, itemId, edit)),
     removeItem: (id, itemId, scope) => unwrapChange(trip.removeItem(id, itemId, scope)),
     addToiletryItem: (id, item) => unwrapChange(trip.addToiletryItem(id, item)),
+    addItem: async (id, item) => {
+      const result = await trip.addItem(id, item);
+      if (!result.ok) {
+        throw new TripsSourceError(result.reason === "EXISTS" ? "EXISTS" : result.code);
+      }
+      return { trip: result.trip, signals: result.signals };
+    },
     confirmBagPlacement: (id) => unwrapChange(trip.confirmBagPlacement(id)),
     undoBagPlacement: (id) => unwrapChange(trip.undoBagPlacement(id)),
     markReady: (id) => unwrapChange(trip.markReady(id)),
