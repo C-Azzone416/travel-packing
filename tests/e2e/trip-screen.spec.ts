@@ -14,7 +14,7 @@ async function openDashboard(page: Page) {
 
 async function openSanDiego(page: Page) {
   await openDashboard(page);
-  await page.getByRole("link", { name: "Keep packing: San Diego" }).click();
+  await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
   await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
 }
 
@@ -191,14 +191,14 @@ test("a trip-only edit leaves the staples alone: a new trip still has the defaul
   await expect(row(page, "sunglasses")).toContainText("Beach sunglasses");
 
   await page.getByRole("link", { name: "Back to trips" }).click();
-  await page.getByRole("link", { name: /New trip/ }).click();
+  await page.getByRole("link", { name: /Plan a trip/ }).click();
   await page.getByRole("combobox", { name: "Destination search" }).fill("paris");
   await page.getByRole("option", { name: /Paris/ }).click();
   await page.getByLabel("Leave", { exact: true }).fill("2026-11-12");
   await page.getByLabel("Return", { exact: true }).fill("2026-11-16");
   await page.getByRole("button", { name: "Continue to packing preferences" }).click();
   await page.getByRole("button", { name: "Save trip" }).click();
-  await page.getByRole("link", { name: "Keep packing: Paris" }).click();
+  await page.getByRole("link", { name: /(Continue|Keep) packing: Paris/ }).click();
   await expect(row(page, "sunglasses")).toContainText("Sunglasses");
   await expect(row(page, "sunglasses")).not.toContainText("Beach");
 });
@@ -225,14 +225,14 @@ test("a remembered edit changes future trips, but neither this trip's history no
 
   // A trip made afterwards gets the remembered version.
   await page.getByRole("link", { name: "Back to trips" }).click();
-  await page.getByRole("link", { name: /New trip/ }).click();
+  await page.getByRole("link", { name: /Plan a trip/ }).click();
   await page.getByRole("combobox", { name: "Destination search" }).fill("paris");
   await page.getByRole("option", { name: /Paris/ }).click();
   await page.getByLabel("Leave", { exact: true }).fill("2026-11-12");
   await page.getByLabel("Return", { exact: true }).fill("2026-11-16");
   await page.getByRole("button", { name: "Continue to packing preferences" }).click();
   await page.getByRole("button", { name: "Save trip" }).click();
-  await page.getByRole("link", { name: "Keep packing: Paris" }).click();
+  await page.getByRole("link", { name: /(Continue|Keep) packing: Paris/ }).click();
   await expect(row(page, "sunglasses")).toContainText("Polarized sunglasses");
 });
 
@@ -328,7 +328,7 @@ test("Mark as not ready keeps every packed count", async ({ page }) => {
 
 test("an unknown trip says so, with a way back", async ({ page }) => {
   await openDashboard(page);
-  await page.getByRole("link", { name: "Keep packing: San Diego" }).click();
+  await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
   await page.evaluate(() => window.history.pushState({}, "", "/trips/nope"));
   await page.goto("/trips/nope");
   await expect(page.getByRole("heading", { name: "That trip isn’t available" })).toBeVisible();

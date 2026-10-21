@@ -5,7 +5,7 @@ import type { TripStop } from "./trip-stops";
 
 export interface StampSpec {
   kind: "country" | "city";
-  /** Text on the stamp: an alpha-3 code, or the uppercased city name cut to 10 characters. */
+  /** Text on the stamp: an alpha-3 code, or the uppercased city name cut to 9 characters and an ellipsis. */
   label: string;
   /** Untruncated name or code, for the accessible label. */
   fullName: string;

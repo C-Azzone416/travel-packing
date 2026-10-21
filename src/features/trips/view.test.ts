@@ -253,3 +253,93 @@ describe("route display (epic #107)", () => {
     ).toBe(false);
   });
 });
+
+describe("Field Ledger dashboard view models (#143)", () => {
+  it("counts days to go, nights and the range from today", async () => {
+    const { departureView } = await import("./view");
+    expect(departureView(sanDiego(), TODAY)).toMatchObject({
+      daysToGo: 7,
+      daysLabel: "days to go",
+      startShort: "Oct 23",
+      range: "Oct 23 – Oct 27",
+      nights: 4,
+      nightsLabel: "4 nights",
+    });
+    expect(departureView(sanDiego(), "2026-10-22")).toMatchObject({
+      daysToGo: 1,
+      daysLabel: "day to go",
+    });
+    expect(departureView(sanDiego(), "2026-10-25")).toMatchObject({
+      daysToGo: 0,
+      daysLabel: "under way",
+    });
+    expect(departureView({ start: "2026-10-23", end: "2026-10-24" }, TODAY).nightsLabel).toBe(
+      "1 night",
+    );
+  });
+
+  it("labels the journeys ahead", async () => {
+    const { journeysAheadLabel } = await import("./view");
+    expect([0, 1, 3].map(journeysAheadLabel)).toEqual([
+      "No journeys ahead",
+      "1 journey ahead",
+      "3 journeys ahead",
+    ]);
+  });
+
+  it("builds one compact weather cell per stay that has weather, in the person's unit", async () => {
+    const { weatherCells } = await import("./view");
+    const stop = (city: string, arrive: string, leave: string) => ({
+      location: { id: city, city, region: "", country: "", countryCode: "", label: city },
+      arrive,
+      leave,
+    });
+    const day = (stopIndex: number, over: Record<string, unknown> = {}) => ({
+      date: "2030-05-01",
+      stopIndex,
+      source: "forecast" as const,
+      highC: 20,
+      lowC: 10,
+      precipProbability: 0,
+      precipMm: 0,
+      snowCm: 0,
+      uvIndexMax: null,
+      sunshineHours: null,
+      ...over,
+    });
+    const stops = [
+      stop("A", "2030-05-01", "2030-05-03"),
+      stop("B", "2030-05-03", "2030-05-05"),
+      stop("C", "2030-05-05", "2030-05-06"),
+      stop("D", "2030-05-06", "2030-05-07"),
+    ];
+    const weather = [
+      { stopIndex: 0, status: "ok" as const, days: [day(0), day(0)] },
+      {
+        stopIndex: 1,
+        status: "ok" as const,
+        days: [
+          day(1, { precipProbability: 0.9, source: "typical" }),
+          day(1, { source: "typical" }),
+        ],
+      },
+      { stopIndex: 2, status: "unavailable" as const, days: [] },
+      { stopIndex: 3, status: "ok" as const, days: [day(3, { snowCm: 5 })] },
+    ];
+    const cells = weatherCells(stops, weather, "F");
+    expect(cells.map((cell) => cell.city)).toEqual(["A", "B", "D"]);
+    expect(cells[0]).toMatchObject({
+      range: "68° / 50°",
+      note: "Mostly dry",
+      source: "Forecast",
+      glyph: "sun",
+    });
+    expect(cells[1]).toMatchObject({
+      note: "Rain on 1 of 2 days",
+      source: "Typical",
+      glyph: "rain",
+    });
+    expect(cells[2]).toMatchObject({ note: "Snow likely", glyph: "snow" });
+    expect(weatherCells(stops, weather, "C")[0].range).toBe("20° / 10°");
+  });
+});

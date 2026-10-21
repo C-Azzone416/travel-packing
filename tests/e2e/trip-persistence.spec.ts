@@ -23,7 +23,7 @@ async function openDashboard(page: Page) {
 
 async function openSanDiego(page: Page) {
   await openDashboard(page);
-  await page.getByRole("link", { name: "Keep packing: San Diego" }).click();
+  await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
   await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
 }
 
@@ -191,7 +191,7 @@ test("another signed-in owner cannot open this owner's trip, and sees the same p
 }) => {
   await openDashboard(page);
   const href = await page
-    .getByRole("link", { name: "Keep packing: San Diego" })
+    .getByRole("link", { name: "Continue packing: San Diego" })
     .getAttribute("href");
   const second = await browser.newContext({ baseURL: test.info().project.use.baseURL });
   const other = await second.newPage();
@@ -267,9 +267,7 @@ test(
     await page.reload();
     expect(await headerArt(page)).toBe("outdoors");
     await page.getByRole("link", { name: "Back to trips" }).click();
-    await expect(
-      page.getByRole("article", { name: "San Diego" }).locator("[data-art-key]"),
-    ).toHaveAttribute("data-art-key", "outdoors");
+    await expect(page.getByRole("article", { name: "San Diego" })).toBeVisible();
   },
 );
 

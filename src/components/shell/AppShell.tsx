@@ -28,19 +28,21 @@ export function AppShell({ children, signOut, email }: AppShellProps) {
             <PreviewBanner />
             <div className="app-shell">
               <header className="topbar">
-                <Link
-                  className="brand-button"
-                  href="/"
-                  aria-label="Carrywell, Caroline’s packing companion: go to trips"
-                >
-                  <span className="brand-mark" aria-hidden="true">
-                    ✦
-                  </span>
-                  <span>
-                    <strong>Carrywell</strong> <small>Caroline’s packing companion</small>
-                  </span>
-                </Link>
-                <ConnectedSaveChip />
+                <div className="topbar-inner">
+                  <Link
+                    className="brand-button"
+                    href="/"
+                    aria-label="Carrywell, Caroline’s packing companion: go to trips"
+                  >
+                    <span className="brand-mark" aria-hidden="true">
+                      ✦
+                    </span>
+                    <span>
+                      <strong>Carrywell</strong> <small>Caroline’s packing companion</small>
+                    </span>
+                  </Link>
+                  <ConnectedSaveChip />
+                </div>
               </header>
               <main id="main" tabIndex={-1}>
                 {children}

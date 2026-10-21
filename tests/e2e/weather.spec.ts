@@ -25,7 +25,7 @@ test.beforeEach(async () => {
 
 async function newTrip(page: Page) {
   await signInAsOwner(page);
-  await page.getByRole("link", { name: /New trip/ }).click();
+  await page.getByRole("link", { name: /Plan a trip/ }).click();
   await expect(page.getByRole("heading", { name: "Confirm the trip" })).toBeVisible();
 }
 
@@ -52,7 +52,7 @@ async function createWeatherTrip(page: Page) {
   await expect(page.getByText("Your list uses the weather for London and London.")).toBeVisible();
   await page.getByRole("button", { name: "Save trip" }).click();
   await page
-    .getByRole("link", { name: /^Keep packing/ })
+    .getByRole("link", { name: /^(Continue|Keep) packing: London/ })
     .first()
     .click();
   await expect(page.locator(".weather-row")).toHaveCount(2);
@@ -99,7 +99,7 @@ test("opt in while shaping a 2-stop trip: weather-based lines with reasons, save
 
   await page.getByRole("button", { name: "Save trip" }).click();
   await page
-    .getByRole("link", { name: /^Keep packing/ })
+    .getByRole("link", { name: /^(Continue|Keep) packing: London/ })
     .first()
     .click();
   const rows = page.locator(".weather-row");
@@ -183,7 +183,7 @@ test("opting out sends no weather request and keeps the Everyday tops and bottom
   await expect(page.getByText("Everyday tops")).toBeVisible();
   await page.getByRole("button", { name: "Save trip" }).click();
   await page
-    .getByRole("link", { name: /^Keep packing/ })
+    .getByRole("link", { name: /^(Continue|Keep) packing: London/ })
     .first()
     .click();
   await expect(page.getByText("Weather is off.")).toBeVisible();
@@ -237,7 +237,7 @@ test(
     await expectAccessible(page, "shape step with weather");
     await page.getByRole("button", { name: "Save trip" }).click();
     await page
-      .getByRole("link", { name: /^Keep packing/ })
+      .getByRole("link", { name: /^(Continue|Keep) packing: London/ })
       .first()
       .click();
     await expect(page.locator(".weather-row")).toHaveCount(2);

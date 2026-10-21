@@ -28,18 +28,20 @@ async function newTrip(
   expectedCount: number,
 ) {
   await page.goto("/");
-  await page.getByRole("link", { name: /New trip/ }).click();
+  await page.getByRole("link", { name: /Plan a trip/ }).click();
   await page.getByRole("combobox", { name: "Destination search" }).fill("paris");
   await page.getByRole("option", { name: destination }).click();
   await page.getByLabel("Leave", { exact: true }).fill(start);
   await page.getByLabel("Return", { exact: true }).fill(end);
   await page.getByRole("button", { name: "Continue to packing preferences" }).click();
   await page.getByRole("button", { name: "Save trip" }).click();
-  await expect(page.getByRole("heading", { name: "Paris", level: 2 })).toHaveCount(expectedCount);
+  await expect(page.getByRole("heading", { name: "Paris" })).toHaveCount(expectedCount);
 }
 
 async function underwearQty(page: Page, tripName: string): Promise<number> {
-  await page.getByRole("link", { name: new RegExp(`Keep packing: ${tripName}`) }).click();
+  await page
+    .getByRole("link", { name: new RegExp(`(Continue|Keep) packing: ${tripName}`) })
+    .click();
   await expect(page.getByRole("heading", { name: tripName, level: 1 })).toBeVisible();
   const text = await page
     .locator('[data-item-id="underwear"] .qty-stepper span')
