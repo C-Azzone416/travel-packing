@@ -312,6 +312,11 @@ export function TripScreen({ tripId, openAdd = false }: { tripId: string; openAd
   }, [flush]);
 
   const close = () => setDialog(null);
+  // The dashboard's "+ Add item" arrives with ?add=item; once the form is closed the URL goes back to the plain trip.
+  const closeAdd = () => {
+    close();
+    if (openAdd) window.history.replaceState(null, "", `/trips/${tripId}`);
+  };
 
   if (load.phase === "loading") {
     return (
@@ -712,12 +717,12 @@ export function TripScreen({ tripId, openAdd = false }: { tripId: string; openAd
         <AddToiletryForm
           destination={trip.destination}
           saving={submitting}
-          onClose={close}
+          onClose={closeAdd}
           onAdd={(item) =>
             void act(() => source.addToiletryItem(tripId, item), {
               modal: true,
               staples: item.scope === "remember",
-              after: close,
+              after: closeAdd,
             })
           }
         />

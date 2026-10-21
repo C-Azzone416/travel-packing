@@ -2961,3 +2961,10 @@ a.back {
     border-top: 4px solid var(--line-strong);
   }
 }
+
+/* Quick view sits inline in the hero's and a journey's action rows, not on a row of its own (design on #148). */
+.ledger-tools .quick-view-toggle,
+.later-actions .quick-view-toggle {
+  width: auto;
+  margin: 0;
+}

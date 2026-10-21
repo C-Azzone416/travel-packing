@@ -127,6 +127,43 @@ describe("the hero and Later journeys", () => {
   });
 });
 
+describe("Remove on Later journeys and Past & archive cards", () => {
+  it("removes a Later journey after confirming, and offers Undo", async () => {
+    const { user, base } = setup(withLater());
+    const later = await screen.findByRole("complementary", { name: "Later journeys" });
+    await user.click(within(later).getByRole("button", { name: "Remove: Denver" }));
+    await user.click(
+      within(screen.getByRole("dialog", { name: "Remove Denver?" })).getByRole("button", {
+        name: "Remove trip",
+      }),
+    );
+    await waitFor(() => expect(within(later).getByText("Nothing else planned yet.")).toBeTruthy());
+    expect(base.snapshot().trips.map((trip) => trip.id)).toEqual(["san-diego"]);
+    expect(base.snapshot().deletedTrips.map(({ trip }) => trip.id)).toEqual(["later"]);
+  });
+
+  it("removes a trip from the Past & archive view after confirming", async () => {
+    const { user, base } = setup();
+    await screen.findByRole("article", { name: "San Diego" });
+    await user.click(screen.getByRole("button", { name: /Past & archive/ }));
+    await user.click(screen.getByRole("button", { name: "Remove: Lisbon" }));
+    await user.click(
+      within(screen.getByRole("dialog", { name: "Remove Lisbon?" })).getByRole("button", {
+        name: "Remove trip",
+      }),
+    );
+    await waitFor(() => expect(screen.queryByRole("article", { name: "Lisbon" })).toBeNull());
+    expect(base.snapshot().deletedTrips.map(({ trip }) => trip.id)).toEqual(["lisbon"]);
+  });
+
+  it("archives from the hero through the one shared handler", async () => {
+    const { user, base } = setup();
+    const hero = await screen.findByRole("article", { name: "San Diego" });
+    await user.click(within(hero).getByRole("button", { name: "Archive: San Diego" }));
+    await waitFor(() => expect(base.snapshot().trips[0].archived).toBe(true));
+  });
+});
+
 describe("the hero's weather strip", () => {
   it("shows one compact cell per stay in the person's unit, labelled Forecast or Typical", async () => {
     setup(undefined, (base) => weatherSource(base));

@@ -556,6 +556,33 @@ describe("toiletry bag gate", () => {
     expect(await screen.findByRole("dialog", { name: "Add a Bathroom item" })).toBeTruthy();
   });
 
+  it("takes ?add=item out of the URL once the add form is closed or used", async () => {
+    window.history.replaceState(null, "", "/trips/san-diego?add=item");
+    const user = userEvent.setup();
+    const { unmount } = renderInApp(
+      <TripsSourceProvider source={memory()}>
+        <TripScreen tripId="san-diego" openAdd />
+      </TripsSourceProvider>,
+    );
+    const dialog = await screen.findByRole("dialog", { name: "Add a Bathroom item" });
+    expect(window.location.search).toBe("?add=item");
+    expect(dialog).toBeTruthy();
+    await user.keyboard("{Escape}");
+    expect(window.location.pathname + window.location.search).toBe("/trips/san-diego");
+    unmount();
+
+    window.history.replaceState(null, "", "/trips/san-diego?add=item");
+    renderInApp(
+      <TripsSourceProvider source={memory()}>
+        <TripScreen tripId="san-diego" openAdd />
+      </TripsSourceProvider>,
+    );
+    const second = await screen.findByRole("dialog", { name: "Add a Bathroom item" });
+    await user.type(within(second).getByLabelText("Item name"), "Floss");
+    await user.click(within(second).getByRole("button", { name: "Add toiletry item" }));
+    await waitFor(() => expect(window.location.search).toBe(""));
+  });
+
   it("adds a Bathroom item: validated, one normal checkbox, resetting an already placed bag", async () => {
     const { user, source } = setup("lisbon");
     await ready("Lisbon");

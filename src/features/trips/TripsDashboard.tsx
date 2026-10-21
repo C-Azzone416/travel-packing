@@ -233,6 +233,8 @@ export function TripsDashboard({ source, getToday = localToday }: TripsDashboard
       .finally(() => setSaving(false));
   }
 
+  const archive = (id: string) => void run(id, () => source.archive(id));
+
   const tabs = (
     <div className="trip-tabs" role="group" aria-label="Trip views">
       <button
@@ -295,7 +297,7 @@ export function TripsDashboard({ source, getToday = localToday }: TripsDashboard
                   view={tripCardView(trip, today, view)}
                   first={index === 0}
                   busy={busy.has(trip.id)}
-                  onArchive={(id) => void run(id, () => source.archive(id))}
+                  onArchive={archive}
                   onRestore={(id) => void run(id, () => source.restore(id))}
                   onRemove={setRemoving}
                 />
@@ -329,7 +331,7 @@ export function TripsDashboard({ source, getToday = localToday }: TripsDashboard
                   setEditFailed(false);
                   setEditing(id);
                 }}
-                onArchive={(id) => void run(id, () => source.archive(id))}
+                onArchive={archive}
                 onRemove={setRemoving}
               />
               <LaterJourneys
@@ -339,7 +341,7 @@ export function TripsDashboard({ source, getToday = localToday }: TripsDashboard
                 }))}
                 today={today}
                 busy={busy}
-                onArchive={(id) => void run(id, () => source.archive(id))}
+                onArchive={archive}
                 onRemove={setRemoving}
               />
             </div>
