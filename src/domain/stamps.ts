@@ -5,7 +5,7 @@ import type { TripStop } from "./trip-stops";
 
 export interface StampSpec {
   kind: "country" | "city";
-  /** Text on the stamp: an alpha-3 code, or the uppercased city name cut to 9 characters and an ellipsis. */
+  /** Text on the stamp: an alpha-3 code, an airport code, or the uppercased city name cut to 9 characters and an ellipsis. */
   label: string;
   /** Untruncated name or code, for the accessible label. */
   fullName: string;
@@ -15,6 +15,9 @@ export const MAX_CITY_LABEL = 9;
 
 function cityStamp(stop: TripStop | undefined): StampSpec {
   const full = (stop?.location.city ?? "").trim().toUpperCase();
+  // A reliably matched airport code (#152) replaces the city name on the stamp; the name stays in the accessible label.
+  if (stop?.airportCode && /^[A-Z]{3}$/.test(stop.airportCode))
+    return { kind: "city", label: stop.airportCode, fullName: full };
   const label = full.length > MAX_CITY_LABEL ? `${full.slice(0, MAX_CITY_LABEL)}…` : full;
   return { kind: "city", label, fullName: full };
 }

@@ -50,6 +50,11 @@ export const SERVER_ONLY_MARKERS: readonly { name: string; text: string; source:
     text: "createOpenMeteoWeatherProvider",
     source: "src/server/weather/open-meteo.ts",
   },
+  {
+    name: "the airport dataset",
+    text: "ourairports-bundled-dataset",
+    source: "src/server/airports/airports-data.ts",
+  },
   { name: "the seed guard", text: "assertSeedAllowed", source: "src/server/seed/guard.ts" },
 ];
 
