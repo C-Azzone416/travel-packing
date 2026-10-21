@@ -5,18 +5,20 @@ Design basis: plan §18 "Suggested logical data sets" and §20 items 5–6 (item
 
 ## Tables
 
-| Table                 | Plan data set       | Purpose                                                                                                        |
-| --------------------- | ------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `users`               | users               | App-side mirror of the auth user (id supplied by the auth provider, #9). Owner of every row.                   |
-| `account_setups`      | (auth, #83)         | Addresses whose password was set through an emailed link (digest of the email). Not owner data: no `owner_id`. |
-| `staples`             | staples             | Future-trip defaults. Versioned on their own (`version`). Never referenced by trip rows.                       |
-| `trips`               | trips               | One saved trip; also carries Ready, toiletry-bag placement, archive flag, `deleted_at`.                        |
-| `trip_preferences`    | trip_preferences    | The preferences a trip was calculated from, plus suggestion memory / suppressed suggestions.                   |
-| `trip_items`          | trip_items          | Immutable snapshot of each item on a trip.                                                                     |
-| `trip_item_progress`  | trip_item_progress  | Mutable packed counts, kept apart from the item snapshot.                                                      |
-| `trip_stops`          | trips (stops)       | The ordered stops (1-6) of a trip: place, arrive and leave dates (epic #107).                                  |
-| `weather_suggestions` | weather_suggestions | The status of each weather suggestion on a trip: one row per (trip, semantic id), plus a short rule signature. |
-| _(recently deleted)_  | —                   | Not a table: `trips.deleted_at` (see Recoverable delete).                                                      |
+| Table                 | Plan data set       | Purpose                                                                                                         |
+| --------------------- | ------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `users`               | users               | App-side mirror of the auth user (id supplied by the auth provider, #9). Owner of every row.                    |
+| `account_setups`      | (auth, #83)         | Addresses whose password was set through an emailed link (digest of the email). Not owner data: no `owner_id`.  |
+| `staples`             | staples             | Future-trip defaults. Versioned on their own (`version`). Never referenced by trip rows.                        |
+| `saved_lists`         | (saved lists, #140) | A named list of items to add to new trips. Owner-scoped template; never referenced by trip rows.                |
+| `saved_list_items`    | (saved lists, #140) | The items of a saved list: identity (`semantic_id`), name, category, `qty` only. No packed counts or trip data. |
+| `trips`               | trips               | One saved trip; also carries Ready, toiletry-bag placement, archive flag, `deleted_at`.                         |
+| `trip_preferences`    | trip_preferences    | The preferences a trip was calculated from, plus suggestion memory / suppressed suggestions.                    |
+| `trip_items`          | trip_items          | Immutable snapshot of each item on a trip.                                                                      |
+| `trip_item_progress`  | trip_item_progress  | Mutable packed counts, kept apart from the item snapshot.                                                       |
+| `trip_stops`          | trips (stops)       | The ordered stops (1-6) of a trip: place, arrive and leave dates (epic #107).                                   |
+| `weather_suggestions` | weather_suggestions | The status of each weather suggestion on a trip: one row per (trip, semantic id), plus a short rule signature.  |
+| _(recently deleted)_  | —                   | Not a table: `trips.deleted_at` (see Recoverable delete).                                                       |
 
 Export/backup metadata (the last logical data set) is not modelled; it waits on the export decisions in plan §19.
 
@@ -24,6 +26,7 @@ Export/backup metadata (the last logical data set) is not modelled; it waits on 
 
 ```text
 users 1──* staples                         (no link to trip tables: snapshots)
+users 1──* saved_lists ──* saved_list_items (composite (list_id, owner_id) key; no link to trip tables)
 users 1──* trips ──* trip_items ──1 trip_item_progress
                ├──1 trip_preferences
                ├──* trip_stops            (unique (trip_id, position))
@@ -60,7 +63,7 @@ so quantity edits succeed instead of failing the cascade.
 
 | Rule                                   | Where                                                                              |
 | -------------------------------------- | ---------------------------------------------------------------------------------- |
-| `qty >= 1`                             | `staples_qty_positive`, `trip_items_qty_positive`                                  |
+| `qty >= 1`                             | `staples_qty_positive`, `saved_list_items_qty_positive`, `trip_items_qty_positive` |
 | `0 <= packed <= qty`                   | `trip_item_progress_packed_range`                                                  |
 | `occasion_count` 1..8                  | `trip_preferences_occasion_count_range`                                            |
 | `end_date >= start_date`               | `trips_dates_ordered`                                                              |

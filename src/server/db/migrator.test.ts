@@ -16,6 +16,7 @@ const EXPECTED_TAGS = [
   "0003_trip_theme",
   "0004_account_setups",
   "0005_trip_stops",
+  "0006_saved_lists",
 ];
 
 // One in-memory Postgres for the file; each test starts from an empty public schema.
@@ -75,6 +76,8 @@ describe("migrateUp", () => {
     expect(await appliedMigrations(client)).toEqual(EXPECTED_TAGS);
     expect(await userTables()).toEqual([
       "account_setups",
+      "saved_list_items",
+      "saved_lists",
       "staples",
       "trip_item_progress",
       "trip_items",
