@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { contentSecurityPolicy, securityHeaders } from "./headers";
+import { FEEDBACK_ENDPOINT } from "@masra91/framebriar/browser/feedback-runtime";
+import { contentSecurityPolicy, FEEDBACK_ORIGIN, securityHeaders } from "./headers";
 
 const value = (development: boolean, key: string) =>
   securityHeaders(development).find((rule) => rule.key === key)?.value;
@@ -17,11 +18,13 @@ describe("contentSecurityPolicy", () => {
 
   it("allows only this origin for everything it loads or connects to", () => {
     expect(production).toContain("default-src 'self'");
-    expect(production).toContain("connect-src 'self'");
+    expect(production).toContain(`connect-src 'self' ${FEEDBACK_ORIGIN}`);
+    expect(FEEDBACK_ORIGIN).toBe(new URL(FEEDBACK_ENDPOINT).origin);
     expect(production).toContain("font-src 'self'");
     expect(production).toContain("script-src 'self' 'unsafe-inline'");
-    // No wildcard and no foreign origin anywhere.
-    expect(production).not.toMatch(/\*|https?:\/\//);
+    // No wildcard, and the feedback service (connect-src only) is the one foreign origin.
+    expect(production.replaceAll(FEEDBACK_ORIGIN, "")).not.toMatch(/\*|https?:\/\//);
+    expect(production.split(FEEDBACK_ORIGIN)).toHaveLength(2);
   });
 
   it("never allows eval or websockets in production, only in development", () => {

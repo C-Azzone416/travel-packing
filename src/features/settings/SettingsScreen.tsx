@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/Card";
 import { useSaveStatus } from "@/components/shell/SaveStatus";
 import { Switch } from "@/components/ui/Switch";
 import { useToast } from "@/components/ui/Toast";
+import { FeedbackSettings } from "@/features/feedback/FeedbackSettings";
 import type { WeatherSettings } from "@/server/data/weather-store";
 import type { WeatherSettingsResult } from "./weather-actions";
 
@@ -138,6 +139,7 @@ export function SettingsScreen({
           ) : null}
           <p className="weather-credit tiny muted">Weather data by Open-Meteo.com</p>
         </Card>
+        <FeedbackSettings />
       </div>
     </section>
   );
