@@ -39,8 +39,11 @@ describe("0007_appearance", () => {
     expect(await columns()).toContain("appearance");
     const before = await client.query(`SELECT appearance FROM users WHERE id = 'owner-a'`);
     expect(before.rows).toEqual([{ appearance: null }]);
+    const saved = async () => (await client.query(`SELECT appearance FROM users`)).rows;
     await client.exec(`UPDATE users SET appearance = 'ocean' WHERE id = 'owner-a'`);
+    expect(await saved()).toEqual([{ appearance: "ocean" }]);
     await client.exec(`UPDATE users SET appearance = 'from-a-newer-build' WHERE id = 'owner-a'`);
+    expect(await saved()).toEqual([{ appearance: "from-a-newer-build" }]);
   });
 
   it("rolls back to the previous columns, keeping the owner, and up again", async () => {

@@ -1764,7 +1764,7 @@ input:disabled {
   color: var(--action-ink);
 }
 .ready-card .eyebrow {
-  color: var(--seafoam);
+  color: var(--action-ink);
 }
 .button.ready-secondary {
   border-color: color-mix(in srgb, var(--surface) 72%, transparent);

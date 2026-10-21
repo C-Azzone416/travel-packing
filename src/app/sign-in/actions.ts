@@ -1,7 +1,8 @@
 "use server";
 
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { APPEARANCE_COOKIE } from "@/domain/appearance";
 import { requestPasswordReset, resendVerificationCode } from "@/server/auth/account-flows";
 import { getAuth } from "@/server/auth/auth-runtime";
 import { flowLimits } from "@/server/auth/flow-limits";
@@ -69,5 +70,7 @@ export async function signInAction(
 /** Sign out goes straight through (no confirm), then back to sign-in. */
 export async function signOutAction(): Promise<void> {
   await signOutOwner((await getAuth()).provider);
+  // The theme cookie mirrors the account, so it must not outlive the session on a shared browser.
+  (await cookies()).delete(APPEARANCE_COOKIE);
   redirect(SIGN_IN_PATH);
 }
