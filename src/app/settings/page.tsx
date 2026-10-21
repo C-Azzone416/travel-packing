@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { SettingsScreen } from "@/features/settings/SettingsScreen";
 import { getAuth } from "@/server/auth/auth-runtime";
 import { signOutAction } from "@/app/sign-in/actions";
+import { readSavedAppearance } from "@/features/settings/saved-appearance";
+import { updateAppearanceAction } from "@/features/settings/appearance-actions";
 import {
   getWeatherSettingsAction,
   updateWeatherSettingsAction,
@@ -11,9 +13,10 @@ export const metadata: Metadata = { title: "Settings" };
 
 export default async function SettingsPage() {
   // The proxy already keeps signed-out visitors out; this only reads whose account to show.
-  const [session, weather] = await Promise.all([
+  const [session, weather, appearance] = await Promise.all([
     (await getAuth()).provider.getSession(),
     getWeatherSettingsAction(),
+    readSavedAppearance(),
   ]);
   return (
     <SettingsScreen
@@ -21,6 +24,8 @@ export default async function SettingsPage() {
       signOut={signOutAction}
       initialWeather={weather.settings}
       updateWeather={updateWeatherSettingsAction}
+      initialAppearance={appearance}
+      updateAppearance={updateAppearanceAction}
     />
   );
 }

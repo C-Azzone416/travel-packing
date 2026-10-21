@@ -9,6 +9,18 @@ import StaplesPage, { metadata as staplesMetadata } from "./staples/page";
 import { metadata as rootMetadata, viewport } from "./layout";
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
+vi.mock("next/headers", () => ({
+  headers: async () => new Headers(),
+  cookies: async () => ({ get: () => undefined }),
+}));
+vi.mock("./fonts", () => ({ fontClassNames: "" }));
+vi.mock("@/features/settings/saved-appearance", () => ({
+  readSavedAppearance: async () => "base",
+  appearanceForRequest: async () => "base",
+}));
+vi.mock("@/features/settings/appearance-actions", () => ({
+  updateAppearanceAction: async (appearance: string) => ({ ok: true, appearance }),
+}));
 vi.mock("@/server/auth/auth-runtime", () => ({
   getAuth: async () => ({
     provider: { getSession: async () => ({ userId: "u", email: "owner@example.test" }) },
@@ -79,6 +91,6 @@ describe("root layout metadata", () => {
   });
 
   it("sets the brand theme color", () => {
-    expect(viewport.themeColor).toBe("#166D7A");
+    expect(viewport.themeColor).toBe("#e9e3d6");
   });
 });

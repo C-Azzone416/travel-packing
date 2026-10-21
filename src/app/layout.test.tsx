@@ -2,8 +2,21 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 let authScreen: string | null = null;
+let appearanceCookie: string | undefined;
 vi.mock("next/headers", () => ({
   headers: async () => new Headers(authScreen ? { "x-auth-screen": authScreen } : {}),
+  cookies: async () => ({
+    get: (name: string) =>
+      name === "appearance" && appearanceCookie !== undefined
+        ? { name, value: appearanceCookie }
+        : undefined,
+  }),
+}));
+vi.mock("./fonts", () => ({ fontClassNames: "font-body font-display font-serif" }));
+let savedAppearance = "base";
+vi.mock("@/server/data/runtime", () => ({ getDataContext: async () => ({}) }));
+vi.mock("@/server/data/service", () => ({
+  getAppearance: async () => ({ ok: true, data: savedAppearance }),
 }));
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
@@ -23,6 +36,8 @@ import RootLayout from "./layout";
 
 beforeEach(() => {
   authScreen = null;
+  appearanceCookie = undefined;
+  savedAppearance = "base";
   session = null;
   getSession.mockClear();
 });
@@ -75,5 +90,28 @@ describe("RootLayout", () => {
     session = { email: "owner@example.test" };
     await render();
     expect(getSession).not.toHaveBeenCalled();
+  });
+
+  it("sets data-appearance from the cookie before first paint; an unknown cookie is Base", async () => {
+    appearanceCookie = "ocean";
+    expect(await render()).toContain('data-appearance="ocean"');
+    appearanceCookie = "neon";
+    expect(await render()).toContain('data-appearance="base"');
+  });
+
+  it("with no cookie, uses the account's saved theme for a signed-in person and Base for everyone else", async () => {
+    savedAppearance = "violet";
+    session = { email: "owner@example.test" };
+    expect(await render()).toContain('data-appearance="violet"');
+    session = null;
+    expect(await render()).toContain('data-appearance="base"');
+  });
+
+  it("themes the sign-in screens from the cookie too, and loads the three fonts", async () => {
+    authScreen = "1";
+    appearanceCookie = "terracotta";
+    const html = await render();
+    expect(html).toContain('data-appearance="terracotta"');
+    expect(html).toContain("font-body font-display font-serif");
   });
 });

@@ -57,7 +57,8 @@ test("keyboard focus is clearly visible", async ({ page }) => {
     const style = getComputedStyle(document.activeElement as Element);
     return { width: style.outlineWidth, style: style.outlineStyle, color: style.outlineColor };
   });
-  expect(outline).toEqual({ width: "3px", style: "solid", color: "rgb(22, 109, 122)" });
+  // Base theme: --accent-2 (#856421).
+  expect(outline).toEqual({ width: "3px", style: "solid", color: "rgb(133, 100, 33)" });
 });
 
 test("touch targets are at least 44px", DEVICE, async ({ page }) => {

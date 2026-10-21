@@ -44,6 +44,8 @@ function setup(
           signOut={signOut}
           initialWeather={{ weatherOptIn: false, temperatureUnit: "F" }}
           updateWeather={update}
+          initialAppearance="base"
+          updateAppearance={async (appearance) => ({ ok: true as const, appearance })}
         />
       </SaveStatusProvider>
     </ToastProvider>,

@@ -2,6 +2,7 @@
 // so nothing unexpected reaches the domain or the database.
 
 import { z } from "zod";
+import { APPEARANCES } from "../../domain/appearance";
 import { THEME_IDS } from "../../domain/themes";
 import { MAX_STOPS } from "../../domain/trip-stops";
 import { ITEM_CATEGORIES, TEMPERATURE_UNITS, TOILETRY_GROUP, WEATHER_STATUSES } from "../db/schema";
@@ -132,6 +133,7 @@ export const none = z.object({}).strict();
 export const weatherSettingsInput = z
   .object({ weatherOptIn: z.boolean(), temperatureUnit: z.enum(TEMPERATURE_UNITS) })
   .partial();
+export const appearanceInput = z.object({ appearance: z.enum(APPEARANCES) });
 const semanticId = z.string().min(1).max(100);
 export const weatherSuggestionInput = z.object({
   tripId,

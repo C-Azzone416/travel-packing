@@ -58,6 +58,8 @@ import * as inputs from "./schemas";
 import { ensureDefaultStaples, listStaples, saveStaples } from "./staple-store";
 import { curatedResolver } from "../locations/resolver";
 import { round2 } from "../locations/open-meteo";
+import type { Appearance } from "../../domain/appearance";
+import { readAppearance, writeAppearance } from "./appearance-store";
 import {
   insertTrip,
   loadTrip,
@@ -565,6 +567,22 @@ export function undoRemoveTrip(context: DataContext, input: unknown): Promise<Re
 export function listRecentlyDeletedTrips(context: DataContext): Promise<Result<StoredTrip[]>> {
   return run(context, inputs.none, {}, (scope) =>
     loadTrips(scope.db, scope.ownerId, { filter: "deleted" }),
+  );
+}
+
+// ---------------------------------------------------------------- appearance (colour theme)
+
+export function getAppearance(context: DataContext): Promise<Result<Appearance>> {
+  return run(context, inputs.none, {}, (scope) => readAppearance(scope.db, scope.ownerId));
+}
+
+/** Save the person's explicit theme choice. Only the four known ids are accepted. */
+export function updateAppearance(
+  context: DataContext,
+  input: unknown,
+): Promise<Result<Appearance>> {
+  return run(context, inputs.appearanceInput, input, (scope, { appearance }) =>
+    writeAppearance(scope.db, scope.ownerId, appearance),
   );
 }
 
