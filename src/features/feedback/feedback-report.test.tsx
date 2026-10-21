@@ -438,6 +438,20 @@ describe("when saving does not work", () => {
     expect(await within(dialog).findByRole("button", { name: "Copied" })).toBeTruthy();
   });
 
+  it("unavailable with a screenshot ticked: hints at unticking it, and the hint goes away without the screenshot", async () => {
+    const user = userEvent.setup();
+    mount({ outbox: failing(withCode("storage-unavailable")) });
+    const dialog = await openSheet(user);
+    await user.type(within(dialog).getByLabelText(COPY.notesLabel), "with picture");
+    await user.click(within(dialog).getByRole("button", { name: "Send" }));
+    await within(dialog).findByRole("alert");
+    expect(within(dialog).getByText(COPY.tryWithoutScreenshot)).toBeTruthy();
+    await user.click(within(dialog).getByRole("checkbox", { name: COPY.screenshotLabel }));
+    await user.click(within(dialog).getByRole("button", { name: "Send" }));
+    await within(dialog).findByRole("alert");
+    expect(within(dialog).queryByText(COPY.tryWithoutScreenshot)).toBeNull();
+  });
+
   it("Copy my notes that cannot copy stays quiet", async () => {
     const user = userEvent.setup();
     Object.defineProperty(navigator, "clipboard", {
@@ -610,6 +624,39 @@ describe("what goes into a report (privacy)", () => {
 });
 
 describe("the outbox inside the provider", () => {
+  it("fetches the code that prepares a report as soon as the app is up, so saving works with no connection", async () => {
+    const preload = vi.fn(async () => undefined);
+    const access = accessStub();
+    render(
+      <ToastProvider>
+        <FeedbackAccessProvider
+          create={async () => access.access}
+          createOutbox={outboxStub().create}
+          preload={preload}
+        >
+          <FeedbackButton />
+        </FeedbackAccessProvider>
+      </ToastProvider>,
+    );
+    await waitFor(() => expect(preload).toHaveBeenCalledTimes(1));
+  });
+
+  it("a failing preload changes nothing", async () => {
+    const access = accessStub();
+    render(
+      <ToastProvider>
+        <FeedbackAccessProvider
+          create={async () => access.access}
+          createOutbox={outboxStub().create}
+          preload={async () => Promise.reject(new Error("offline"))}
+        >
+          <FeedbackButton />
+        </FeedbackAccessProvider>
+      </ToastProvider>,
+    );
+    await waitFor(() => expect(feedbackButton().hasAttribute("disabled")).toBe(false));
+  });
+
   it("starts on its own, shows what is waiting and blocked, and resumes once connected", async () => {
     const outbox = outboxStub();
     const { access } = mount({ status: { connected: false }, outbox });

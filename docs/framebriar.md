@@ -6,7 +6,8 @@ As a temporary CI workaround, this public repository vendors only the exact `0.4
 credentials, invitations or backend configuration. We consume the SDK and never change the service here. The contract remains
 the private source repository's `docs/general-feedback-v2.md` and `docs/distribution.md`.
 
-Nothing in this repository holds a token, an invitation or an endpoint credential. Every value below is a placeholder.
+Nothing in this repository holds a token, an invitation or an endpoint credential. Every value below is a placeholder. What
+is captured, owner setup and the Preview delivery check are in [feedback.md](feedback.md).
 
 ## Installing the package
 

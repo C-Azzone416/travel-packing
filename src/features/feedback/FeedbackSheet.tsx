@@ -39,6 +39,9 @@ export const COPY = {
   unavailable:
     "We couldn’t save this on your device. Storage is full or unavailable, so nothing was saved. Free up space and press Send again.",
   uncertain: "We couldn’t confirm it was saved. Press Send again. It won’t be duplicated.",
+  // Some browsers (and private windows) cannot keep a picture on the device even when they can keep text.
+  tryWithoutScreenshot:
+    "If it keeps failing, untick the screenshot and press Send again. Your notes are kept.",
 } as const;
 
 const PROBLEM_TEXT: Record<Exclude<Problem, null>, string> = {
@@ -195,6 +198,9 @@ export function FeedbackSheet({
           {problem ? (
             <div className="feedback-problem" role="alert">
               <p className="field-error">{PROBLEM_TEXT[problem]}</p>
+              {problem === "unavailable" && include && blob ? (
+                <p className="tiny muted">{COPY.tryWithoutScreenshot}</p>
+              ) : null}
               {problem === "unavailable" ? (
                 <Button variant="ghost" small onClick={copyNotes}>
                   {copied ? "Copied" : "Copy my notes"}
