@@ -29,15 +29,9 @@ export function PackRow({
   const atMax = item.packed >= item.qty;
   return (
     <div className={complete ? "pack-row complete" : "pack-row"} data-item-id={item.id}>
-      <button
-        type="button"
-        className="check-button"
-        aria-label={checkLabel(item)}
-        aria-pressed={complete}
-        onClick={() => onToggle(item.id)}
-      >
-        <span aria-hidden="true">{complete ? "✓" : ""}</span>
-      </button>
+      <span className="check-state" aria-hidden="true">
+        {complete ? "✓" : ""}
+      </span>
       <button type="button" className="item-body" onClick={() => onEdit(item.id)}>
         <span className="item-name">{item.name}</span>{" "}
         <span className="item-meta">
@@ -66,6 +60,23 @@ export function PackRow({
           ＋
         </button>
       </div>
+      <button
+        type="button"
+        className="pack-all"
+        aria-label={checkLabel(item)}
+        aria-pressed={complete}
+        onClick={() => onToggle(item.id)}
+      >
+        {complete ? "Packed" : "Pack all"}
+      </button>
+      <button
+        type="button"
+        className="edit-target"
+        aria-label={`Edit target for ${item.name}`}
+        onClick={() => onEdit(item.id)}
+      >
+        Edit target
+      </button>
       {failed ? (
         <button type="button" className="row-error" onClick={() => onRetry(item.id)}>
           Not saved · Retry

@@ -170,7 +170,7 @@ describe("the review sheet", () => {
   it("sends each kind of change as the person chose it, and the unchecked ones as skipped", async () => {
     const { user, applyReview } = setup({ weather: { kind: "ready", stops: rainy } });
     await ready();
-    await user.click(await screen.findByRole("button", { name: "Review" }));
+    await user.click(await screen.findByRole("button", { name: "Review changes" }));
     const dialog = screen.getByRole("dialog", { name: "Weather changes" });
     const boxes = within(dialog).getAllByRole("checkbox");
     // "Select all" is first; uncheck the last change so it is skipped.
@@ -191,7 +191,7 @@ describe("the review sheet", () => {
       rainJacket: true,
     });
     await ready();
-    await user.click(await screen.findByRole("button", { name: "Review" }));
+    await user.click(await screen.findByRole("button", { name: "Review changes" }));
     const dialog = screen.getByRole("dialog", { name: "Weather changes" });
 
     await user.click(within(dialog).getByRole("button", { name: /^Add selected/ }));
@@ -203,7 +203,7 @@ describe("the review sheet", () => {
   it("keeps the sheet open with a message when applying fails", async () => {
     const { user } = setup({ applyFail: true });
     await ready();
-    await user.click(await screen.findByRole("button", { name: "Review" }));
+    await user.click(await screen.findByRole("button", { name: "Review changes" }));
     const dialog = screen.getByRole("dialog", { name: "Weather changes" });
     await user.click(within(dialog).getByRole("button", { name: /^Add selected/ }));
     expect(await within(dialog).findByText(/Couldn’t add those/)).toBeTruthy();

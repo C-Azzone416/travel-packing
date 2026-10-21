@@ -19,7 +19,11 @@ import { tripMathLine } from "@/features/trips/count-copy";
 import { RouteText } from "@/features/trips/RouteText";
 import { formatDays, formatRange, routeCities, routeIsTitle } from "@/features/trips/view";
 import { AddToiletryForm } from "./AddToiletryForm";
+import { Stamps } from "@/components/stamp/Stamp";
 import { themeFor } from "@/domain/themes";
+import { selectStamps } from "@/domain/stamps";
+import { daysBetween } from "@/domain/trip-stops";
+import { localToday } from "@/lib/today";
 import { EditRouteSheet } from "./EditRouteSheet";
 import { ItemEditor } from "./ItemEditor";
 import { PackRow } from "./PackRow";
@@ -28,8 +32,11 @@ import { ThemeSheet } from "./ThemeSheet";
 import { ToiletrySection } from "./ToiletrySection";
 import {
   bagGate,
+  completeCount,
+  leavesEyebrow,
   packedAnnouncement,
   progress,
+  sectionLinks,
   showReviewPrompt,
   showToiletries,
   tripSections,
@@ -94,11 +101,13 @@ function ListSection({
 }) {
   const visible = visibleItems(items, filter);
   return (
-    <section className="list-section" aria-labelledby={id}>
+    <section id={id.replace("section-", "block-")} className="list-section" aria-labelledby={id}>
       <div className="list-section-head">
         <div>
           <h3 id={id}>{title}</h3>
-          <div className="item-meta">{subtitle}</div>
+          <div className="item-meta">
+            {subtitle} · {completeCount(items)} of {items.length} complete
+          </div>
         </div>
         <span className="tag">{visible.length}</span>
       </div>
@@ -486,6 +495,9 @@ export function TripScreen({ tripId }: { tripId: string }) {
             ←
           </Link>
           <div className="head-copy destination-head-copy">
+            <p className="eyebrow hero-eyebrow">
+              {leavesEyebrow(daysBetween(localToday(), trip.start))}
+            </p>
             <h1>{trip.destination}</h1>
             {routeCities(trip).length && !routeIsTitle(trip) ? (
               <p className="route-chip">
@@ -504,6 +516,9 @@ export function TripScreen({ tripId }: { tripId: string }) {
             >
               Edit route
             </Button>
+          </div>
+          <div className="hero-stamps">
+            <Stamps stamps={selectStamps(trip.stops)} departure={trip.start} />
           </div>
           {trip.ready ? (
             <StatusBadge status="ready">Ready</StatusBadge>
@@ -552,6 +567,10 @@ export function TripScreen({ tripId }: { tripId: string }) {
               </div>
               <strong>{totals.percent}%</strong>
             </div>
+            <p className="progress-line">
+              {totals.packed} of {totals.total} packed
+              {totals.total - totals.packed > 0 ? ` / ${totals.total - totals.packed} left` : ""}
+            </p>
             <div
               className="progress-track"
               role="progressbar"
@@ -570,7 +589,7 @@ export function TripScreen({ tripId }: { tripId: string }) {
                 aria-pressed={filter === "all"}
                 onClick={() => setFilter("all")}
               >
-                All
+                All items
               </button>
               <button
                 type="button"
@@ -642,6 +661,19 @@ export function TripScreen({ tripId }: { tripId: string }) {
         </div>
 
         <aside className="side">
+          <nav className="sections-panel" aria-label="Packing sections">
+            <h3>Packing sections</h3>
+            <ul>
+              {sectionLinks(sections, showToiletries(trip, filter)).map((link) => (
+                <li key={link.target}>
+                  <a href={`#${link.target}`}>
+                    {link.label} <span className="muted">{link.count}</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+            <p className="tiny muted">Jump to a section of the list.</p>
+          </nav>
           {trip.ready ? (
             <Card padded className="ready-card">
               <p className="eyebrow">Confirmed after review</p>

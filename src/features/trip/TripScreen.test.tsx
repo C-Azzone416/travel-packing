@@ -146,6 +146,23 @@ describe("loading and states", () => {
     expect(screen.queryByText(/sample/i)).toBeNull();
   });
 
+  it("shows the ledger hero (departure eyebrow, route stamp), the packed line and the sections panel", async () => {
+    setup("san-diego");
+    await ready();
+    expect(
+      screen.getByText(/^(Leaves in \d+ days|Leaves tomorrow|Leaves today|Under way)$/),
+    ).toBeTruthy();
+    expect(screen.getByRole("img", { name: /departure stamp$|route stamps$/ })).toBeTruthy();
+    expect(screen.getByText(/^\d+ of \d+ packed( \/ \d+ left)?$/)).toBeTruthy();
+    const panel = screen.getByRole("navigation", { name: "Packing sections" });
+    const main = within(panel).getByRole("link", { name: /Everyday & occasion/ });
+    expect(main.getAttribute("href")).toBe("#block-main");
+    expect(document.getElementById("block-main")).toBeTruthy();
+    expect(
+      screen.getAllByText(/\d+ of \d+ complete/, { selector: ".item-meta" }).length,
+    ).toBeGreaterThan(0);
+  });
+
   it("shows Ready for a Ready trip, with the Ready card and review links", async () => {
     setup("lisbon");
     await ready("Lisbon");
@@ -268,7 +285,7 @@ describe("filters", () => {
     );
     expect(row("sleepwear")).toBeNull();
     expect(row("underwear")).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: "All" }));
+    await user.click(screen.getByRole("button", { name: "All items" }));
     expect(row("sleepwear")).toBeTruthy();
   });
 
@@ -289,12 +306,12 @@ describe("packing", () => {
     await waitFor(() => expect(itemOf(source, "tops").packed).toBe(itemOf(source, "tops").qty));
     expect(
       within(row("tops"))
-        .getByRole("button", { name: "Mark Everyday tops unpacked" })
+        .getByRole("button", { name: "Packed, mark Everyday tops unpacked" })
         .getAttribute("aria-pressed"),
     ).toBe("true");
     expect(live().textContent).toBe("Everyday tops 2 of 2 packed");
     await user.click(
-      within(row("tops")).getByRole("button", { name: "Mark Everyday tops unpacked" }),
+      within(row("tops")).getByRole("button", { name: "Packed, mark Everyday tops unpacked" }),
     );
     await waitFor(() => expect(itemOf(source, "tops").packed).toBe(0));
   });
@@ -373,7 +390,7 @@ describe("packing", () => {
     await user.click(within(row("tops")).getByRole("button", { name: "Pack all Everyday tops" }));
     await waitFor(() => expect(itemOf(source, "tops").packed).toBe(itemOf(source, "tops").qty));
     await user.click(
-      within(row("tops")).getByRole("button", { name: "Mark Everyday tops unpacked" }),
+      within(row("tops")).getByRole("button", { name: "Packed, mark Everyday tops unpacked" }),
     );
     await waitFor(() => expect(itemOf(source, "tops").packed).toBe(0));
   });
@@ -497,7 +514,7 @@ describe("toiletry bag gate", () => {
     expect(screen.getByText("Toiletry bag ready to place")).toBeTruthy();
     // Uncheck and recheck: the prompt stays dismissed, the persistent button remains.
     await user.click(
-      within(row("last-contacts")).getByRole("button", { name: "Mark Contacts unpacked" }),
+      within(row("last-contacts")).getByRole("button", { name: "Packed, mark Contacts unpacked" }),
     );
     await user.click(
       within(row("last-contacts")).getByRole("button", { name: "Pack all Contacts" }),
@@ -534,7 +551,7 @@ describe("toiletry bag gate", () => {
     await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Confirm" }));
     await screen.findByText("Toiletry bag is in the suitcase");
     await user.click(
-      within(row("last-contacts")).getByRole("button", { name: "Mark Contacts unpacked" }),
+      within(row("last-contacts")).getByRole("button", { name: "Packed, mark Contacts unpacked" }),
     );
     expect(await screen.findByText("Toiletry bag not ready to place")).toBeTruthy();
   });
@@ -768,7 +785,7 @@ describe("weather", () => {
       return wired.source;
     });
     await ready("Lisbon");
-    await user.click(await screen.findByRole("button", { name: "Review" }));
+    await user.click(await screen.findByRole("button", { name: "Review changes" }));
     const dialog = screen.getByRole("dialog", { name: "Weather changes" });
     expect(within(dialog).getByText(/takes this trip out of Ready/)).toBeTruthy();
     expect(within(dialog).getByText("Add Compact umbrella")).toBeTruthy();
@@ -797,7 +814,7 @@ describe("weather", () => {
       await screen.findByText("We couldn’t reach the weather service. Your list is unchanged."),
     ).toBeTruthy();
     expect(screen.queryByText(/weather changes? to review/)).toBeNull();
-    expect(screen.queryByRole("button", { name: "Review" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Review changes" })).toBeNull();
   });
 
   it("asks the weather service again when the route is edited", async () => {
@@ -822,7 +839,7 @@ describe("weather", () => {
       return wired.source;
     });
     await ready("Lisbon");
-    await user.click(await screen.findByRole("button", { name: "Review" }));
+    await user.click(await screen.findByRole("button", { name: "Review changes" }));
     const dialog = screen.getByRole("dialog", { name: "Weather changes" });
     await user.click(within(dialog).getByRole("button", { name: "Skip" }));
     await waitFor(() => expect(wired.applyReview).toHaveBeenCalledTimes(1));
@@ -980,7 +997,7 @@ describe("how long things take", () => {
     expect(setPacked).toHaveBeenCalledTimes(1);
     expect(setPacked).toHaveBeenCalledWith("tops", 2);
     fireEvent.click(
-      within(row("tops")).getByRole("button", { name: "Mark Everyday tops unpacked" }),
+      within(row("tops")).getByRole("button", { name: "Packed, mark Everyday tops unpacked" }),
     );
     await flush();
     expect(setPacked).toHaveBeenLastCalledWith("tops", 0);
@@ -1562,7 +1579,7 @@ describe("Ready is never revoked silently", () => {
     await ready("Lisbon");
     expect(screen.getByText("Ready", { selector: ".status-pill" })).toBeTruthy();
     await user.click(
-      within(row("tops")).getByRole("button", { name: "Mark Everyday tops unpacked" }),
+      within(row("tops")).getByRole("button", { name: "Packed, mark Everyday tops unpacked" }),
     );
     expect(await screen.findByText("No longer ready: an item was unchecked")).toBeTruthy();
     expect(tripOf(source, "lisbon").ready).toBe(false);
@@ -1583,7 +1600,7 @@ describe("the 'No longer ready' toast is for the change that revoked Ready, not 
     const { user, source } = setup("lisbon");
     await ready("Lisbon");
     await user.click(
-      within(row("tops")).getByRole("button", { name: "Mark Everyday tops unpacked" }),
+      within(row("tops")).getByRole("button", { name: "Packed, mark Everyday tops unpacked" }),
     );
     expect(await screen.findByText("No longer ready: an item was unchecked")).toBeTruthy();
     expect(tripOf(source, "lisbon").ready).toBe(false);
@@ -1592,9 +1609,9 @@ describe("the 'No longer ready' toast is for the change that revoked Ready, not 
       timeout: 6000,
     });
     await user.click(within(row("tops")).getByRole("button", { name: "Pack all Everyday tops" }));
-    await within(row("tops")).findByRole("button", { name: "Mark Everyday tops unpacked" });
+    await within(row("tops")).findByRole("button", { name: "Packed, mark Everyday tops unpacked" });
     await user.click(
-      within(row("tops")).getByRole("button", { name: "Mark Everyday tops unpacked" }),
+      within(row("tops")).getByRole("button", { name: "Packed, mark Everyday tops unpacked" }),
     );
     await within(row("tops")).findByRole("button", { name: "Pack all Everyday tops" });
     expect(screen.queryByText(/No longer ready/)).toBeNull();

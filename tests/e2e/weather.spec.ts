@@ -147,7 +147,7 @@ test("a changed forecast offers itemized changes; accepting some revokes Ready, 
 
   const banner = page.locator(".weather-review-banner");
   await expect(banner).toContainText(/\d+ weather changes? to review/);
-  await banner.getByRole("button", { name: "Review" }).click();
+  await banner.getByRole("button", { name: "Review changes" }).click();
   const review = page.getByRole("dialog", { name: "Weather changes" });
   await expect(
     review.getByText("Based on the weather for your stops. Choose what to add."),
@@ -247,7 +247,7 @@ test(
     // Wait for the banner itself (the weather is fetched again after the route edit), so a failure says what was missing.
     const banner = page.locator(".weather-review-banner");
     await expect(banner).toBeVisible();
-    await banner.getByRole("button", { name: "Review" }).click();
+    await banner.getByRole("button", { name: "Review changes" }).click();
     await expect(page.getByRole("dialog", { name: "Weather changes" })).toBeVisible();
     await expectAccessible(page, "weather review sheet");
   },

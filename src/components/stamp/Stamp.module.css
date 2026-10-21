@@ -20,7 +20,7 @@
 }
 
 .first {
-  color: var(--accent, #a8502d);
+  color: var(--accent);
   transform: rotate(-7deg);
 }
 
@@ -28,7 +28,7 @@
   position: relative;
   z-index: 1;
   margin-left: -26px;
-  color: var(--accent-2, #8a6a1f);
+  color: var(--accent-2);
   transform: rotate(7deg);
 }
 

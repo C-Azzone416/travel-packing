@@ -5,9 +5,12 @@ import { sampleLifecycleState } from "@/features/trips/fixtures";
 import {
   bagGate,
   checkLabel,
+  completeCount,
   isComplete,
+  leavesEyebrow,
   packedAnnouncement,
   progress,
+  sectionLinks,
   showReviewPrompt,
   showToiletries,
   tripSections,
@@ -159,11 +162,55 @@ describe("labels", () => {
       "Pack all Socks",
     );
     expect(checkLabel({ ...sanDiego().items[0], name: "Socks", packed: 2, qty: 2 })).toBe(
-      "Mark Socks unpacked",
+      "Packed, mark Socks unpacked",
     );
   });
 
   it("announces a count as 'Name n of m packed'", () => {
     expect(packedAnnouncement(socks)).toBe("Socks 2 of 5 packed");
+  });
+});
+
+describe("leavesEyebrow", () => {
+  it("counts down, then reads Under way once the trip has started", () => {
+    expect(leavesEyebrow(12)).toBe("Leaves in 12 days");
+    expect(leavesEyebrow(2)).toBe("Leaves in 2 days");
+    expect(leavesEyebrow(1)).toBe("Leaves tomorrow");
+    expect(leavesEyebrow(0)).toBe("Leaves today");
+    expect(leavesEyebrow(-3)).toBe("Under way");
+  });
+});
+
+describe("completeCount", () => {
+  it("counts items packed to their quantity", () => {
+    expect(
+      completeCount([
+        { packed: 2, qty: 2 },
+        { packed: 1, qty: 2 },
+        { packed: 0, qty: 1 },
+        { packed: 3, qty: 3 },
+      ]),
+    ).toBe(2);
+    expect(completeCount([])).toBe(0);
+  });
+});
+
+describe("sectionLinks", () => {
+  it("lists the main section always, and the others only when they have a place on the page", () => {
+    const sections = { main: [{}, {}], toiletries: [{}], returns: [], packLast: [{}] } as never;
+    expect(sectionLinks(sections, false)).toEqual([
+      { target: "block-main", label: "Everyday & occasion", count: 2 },
+      { target: "block-packlast", label: "Pack last", count: 1 },
+    ]);
+    expect(sectionLinks(sections, true).map((link) => link.target)).toEqual([
+      "block-main",
+      "block-toiletries",
+      "block-packlast",
+    ]);
+    const withReturn = { main: [], toiletries: [], returns: [{}], packLast: [] } as never;
+    expect(sectionLinks(withReturn, false).map((link) => link.target)).toEqual([
+      "block-main",
+      "block-return",
+    ]);
   });
 });
