@@ -11,7 +11,7 @@ export interface StampSpec {
   fullName: string;
 }
 
-export const MAX_CITY_LABEL = 10;
+export const MAX_CITY_LABEL = 9;
 
 function cityStamp(stop: TripStop | undefined): StampSpec {
   const full = (stop?.location.city ?? "").trim().toUpperCase();
@@ -25,9 +25,10 @@ function countryStamp(code: string): StampSpec {
 
 const cityKey = (stop: TripStop) => stop.location.city.trim().toLowerCase();
 
-/** Font size step for a stamp label: 5 characters or fewer is "large", otherwise "small" (spec §5.4). */
-export function stampLabelSize(label: string): "large" | "small" {
-  return label.replace("…", "").length <= 5 ? "large" : "small";
+/** Font size step for a stamp label: up to 5 characters, 6–7, then 8–9 (spec §5.4). */
+export function stampLabelSize(label: string): "large" | "medium" | "small" {
+  const length = label.replace("…", "").length;
+  return length <= 5 ? "large" : length <= 7 ? "medium" : "small";
 }
 
 export function selectStamps(stops: readonly TripStop[]): StampSpec[] {

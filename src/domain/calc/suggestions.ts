@@ -32,6 +32,8 @@ export interface Suggestion {
   /** Set on weather-driven lines: the stable id, why it is suggested, and where it is filed. */
   semanticId?: string;
   reason?: string;
+  /** Short pill label for a weather-driven line: "Rain", "Warm". */
+  tag?: string;
   groupId?: string;
   fromWeather?: boolean;
 }

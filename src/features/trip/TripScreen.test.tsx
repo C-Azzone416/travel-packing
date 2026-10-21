@@ -307,8 +307,8 @@ describe("packing", () => {
     expect(
       within(row("tops"))
         .getByRole("button", { name: "Packed, mark Everyday tops unpacked" })
-        .getAttribute("aria-pressed"),
-    ).toBe("true");
+        .hasAttribute("aria-pressed"),
+    ).toBe(false);
     expect(live().textContent).toBe("Everyday tops 2 of 2 packed");
     await user.click(
       within(row("tops")).getByRole("button", { name: "Packed, mark Everyday tops unpacked" }),

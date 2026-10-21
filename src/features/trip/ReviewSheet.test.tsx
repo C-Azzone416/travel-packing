@@ -20,6 +20,7 @@ const changes: WeatherChange[] = [
       qty: 1,
       optional: false,
       reason: "Rain likely in Cool City, Apr 5–7",
+      tag: "Rain",
       ruleSignature: "rain",
     },
   },

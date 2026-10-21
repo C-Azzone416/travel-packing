@@ -1,12 +1,15 @@
 "use client";
 
 import type { TripItem } from "@/domain/trip";
+import type { ItemGuidance } from "@/domain/weather/guidance";
 import { checkLabel, isComplete } from "./trip-view";
 
 export interface PackRowProps {
   item: TripItem;
   /** The last change to this row did not save. Shown beside the row as well as in the top-bar chip. */
   failed: boolean;
+  /** Weather pill and note, when the live forecast calls for this item. */
+  guidance?: ItemGuidance;
   onToggle: (itemId: string) => void;
   onIncrement: (itemId: string) => void;
   onDecrement: (itemId: string) => void;
@@ -17,6 +20,7 @@ export interface PackRowProps {
 export function PackRow({
   item,
   failed,
+  guidance,
   onToggle,
   onIncrement,
   onDecrement,
@@ -38,6 +42,12 @@ export function PackRow({
           {item.category} · tap to edit
           {item.section === "packlast" ? <span className="timing-tag">Pack last</span> : null}
         </span>
+        {guidance ? (
+          <span className="weather-guidance">
+            <span className="weather-pill">{guidance.tag}</span>
+            <span className="weather-note">{guidance.reason}</span>
+          </span>
+        ) : null}
       </button>
       <div className="qty-stepper" role="group" aria-label={`${item.name} packed quantity`}>
         <button
@@ -64,7 +74,6 @@ export function PackRow({
         type="button"
         className="pack-all"
         aria-label={checkLabel(item)}
-        aria-pressed={complete}
         onClick={() => onToggle(item.id)}
       >
         {complete ? "Packed" : "Pack all"}

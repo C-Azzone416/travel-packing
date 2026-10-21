@@ -12,6 +12,7 @@ import { useToast } from "@/components/ui/Toast";
 import type { Staple, TripItem } from "@/domain/trip";
 import type { LifecycleTrip } from "@/domain/trip-lifecycle";
 import { diffRecommendations, type WeatherChange } from "@/domain/weather/diff";
+import { weatherGuidance, type ItemGuidance } from "@/domain/weather/guidance";
 import { recommendPacking } from "@/domain/weather/recommend";
 import { TripsSourceError, type TripChange } from "@/features/trips/trips-source";
 import { useTripsSource } from "@/features/trips/TripsSourceProvider";
@@ -396,6 +397,15 @@ export function TripScreen({ tripId }: { tripId: string }) {
       ? diffRecommendations(trip.items, weatherRecommendation, suppressedWeather)
       : [];
 
+  // Pills only while weather is on and the forecast is usable; a stale item loses its pill when the forecast moves.
+  const guidance =
+    weather?.panel.kind === "ready" && weatherDays.length > 0
+      ? weatherGuidance(
+          trip.items.map((entry) => entry.id),
+          weatherRecommendation,
+        )
+      : new Map<string, ItemGuidance>();
+
   const setWeatherOptIn = async (weatherOptIn: boolean) => {
     if (!source.weather || !weather) return;
     try {
@@ -471,6 +481,7 @@ export function TripScreen({ tripId }: { tripId: string }) {
       key={item.id}
       item={item}
       failed={failedRows.has(item.id)}
+      guidance={guidance.get(item.id)}
       onToggle={() => setCount(item, item.packed >= item.qty ? 0 : item.qty, 0)}
       onIncrement={() => setCount(item, Math.min(item.qty, item.packed + 1), PACK_DEBOUNCE_MS)}
       onDecrement={() => setCount(item, Math.max(0, item.packed - 1), PACK_DEBOUNCE_MS)}

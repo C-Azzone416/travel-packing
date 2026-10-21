@@ -67,21 +67,23 @@ describe("selectStamps", () => {
     expect(labels([stop("Lisbon", "PT"), stop("Madrid", "")])).toEqual(["LISBON"]);
   });
 
-  it("truncates long city names at 10 characters with an ellipsis, keeping the full name", () => {
+  it("truncates long city names at 9 characters with an ellipsis, keeping the full name", () => {
     expect(selectStamps([stop("Johannesburg", "ZA")])).toEqual([
-      { kind: "city", label: "JOHANNESBU…", fullName: "JOHANNESBURG" },
+      { kind: "city", label: "JOHANNESB…", fullName: "JOHANNESBURG" },
     ]);
-    expect(labels([stop("Amsterdam1", "NL")])).toEqual(["AMSTERDAM1"]);
+    expect(labels([stop("Amsterdam", "NL")])).toEqual(["AMSTERDAM"]);
+    expect(labels([stop("Amsterdam1", "NL")])).toEqual(["AMSTERDAM…"]);
   });
 });
 
 describe("stampLabelSize", () => {
-  it("is large up to 5 characters and small beyond, ignoring the ellipsis", () => {
+  it("steps large (≤5), medium (6–7) and small (8–9), ignoring the ellipsis", () => {
     expect(stampLabelSize("PRT")).toBe("large");
-    expect(stampLabelSize("OSLO")).toBe("large");
     expect(stampLabelSize("PARIS")).toBe("large");
-    expect(stampLabelSize("LISBON")).toBe("small");
-    expect(stampLabelSize("JOHANNESBU…")).toBe("small");
+    expect(stampLabelSize("LISBON")).toBe("medium");
+    expect(stampLabelSize("BERGENS")).toBe("medium");
+    expect(stampLabelSize("REYKJAVIK")).toBe("small");
+    expect(stampLabelSize("AMSTERDAM…")).toBe("small");
   });
 });
 

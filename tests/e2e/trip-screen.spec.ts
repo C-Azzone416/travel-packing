@@ -72,7 +72,7 @@ test("check and uncheck, and partial quantities with announcements and limits", 
   await row(page, "tops").getByRole("button", { name: "Pack all Everyday tops" }).click();
   await expect(
     row(page, "tops").getByRole("button", { name: "Packed, mark Everyday tops unpacked" }),
-  ).toHaveAttribute("aria-pressed", "true");
+  ).toHaveText("Packed");
   await row(page, "tops")
     .getByRole("button", { name: "Packed, mark Everyday tops unpacked" })
     .click();

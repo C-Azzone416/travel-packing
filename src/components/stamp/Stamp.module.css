@@ -14,6 +14,7 @@
   height: 116px;
   border: 3px double currentColor;
   border-radius: 50%;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
   text-align: center;
   font-weight: 700;
   line-height: 1.1;
@@ -36,6 +37,7 @@
   max-width: 100%;
   overflow: hidden;
   white-space: nowrap;
+  text-overflow: clip;
   font-family: var(--font-display, inherit);
   font-weight: 800;
   letter-spacing: 0.12em;
@@ -45,8 +47,13 @@
   font-size: 27px;
 }
 
-.stamp[data-size="small"] .label {
+.stamp[data-size="medium"] .label {
   font-size: 18px;
+}
+
+.stamp[data-size="small"] .label {
+  font-size: 13px;
+  letter-spacing: 0.06em;
 }
 
 .date {
@@ -54,7 +61,8 @@
   padding: 2px 0;
   border-top: 1px solid currentColor;
   border-bottom: 1px solid currentColor;
-  font-size: 11px;
+  font-size: 12px;
+  font-weight: 700;
   letter-spacing: 0.08em;
 }
 
@@ -74,7 +82,10 @@
   .stamp[data-size="large"] .label {
     font-size: 21px;
   }
-  .stamp[data-size="small"] .label {
+  .stamp[data-size="medium"] .label {
     font-size: 15px;
+  }
+  .stamp[data-size="small"] .label {
+    font-size: 11px;
   }
 }

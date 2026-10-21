@@ -166,6 +166,9 @@ test("a changed forecast offers itemized changes; accepting some revokes Ready, 
   // The unchecked changes are suppressed: they do not come back after a reload.
   await page.reload();
   await expect(row(page, "tops-short")).toHaveCount(1);
+  // The live forecast still calls for the added item, so its row carries the weather pill and reason.
+  await expect(row(page, "tops-short").locator(".weather-pill")).toBeVisible();
+  await expect(row(page, "tops-short").locator(".weather-note")).not.toBeEmpty();
   const remaining = await page.locator(".weather-review-banner").count();
   expect(remaining).toBe(0);
 });

@@ -2729,11 +2729,18 @@ a.back {
   border-top: 4px solid var(--accent);
 }
 .hero-stamps {
-  position: absolute;
-  right: 44px;
-  bottom: 18px;
-  z-index: 5;
+  grid-column: 1 / -1;
+  margin-top: 14px;
   color: var(--accent);
+}
+@media (min-width: 900px) {
+  .hero-stamps {
+    position: absolute;
+    right: 44px;
+    bottom: 18px;
+    z-index: 5;
+    margin-top: 0;
+  }
 }
 .progress-line {
   margin: 6px 0 12px;
@@ -2895,11 +2902,6 @@ a.back {
 }
 
 @media (max-width: 720px) {
-  .hero-stamps {
-    position: static;
-    grid-column: 1 / -1;
-    margin-top: 14px;
-  }
   .pack-row {
     grid-template-columns: 28px minmax(0, 1fr) 1fr 1fr;
   }

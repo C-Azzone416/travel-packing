@@ -24,7 +24,7 @@ describe("Stamps", () => {
   it("names a city stamp as a departure and uses the full name", () => {
     render(
       <Stamps
-        stamps={[{ kind: "city", label: "JOHANNESBU…", fullName: "JOHANNESBURG" }]}
+        stamps={[{ kind: "city", label: "JOHANNESB…", fullName: "JOHANNESBURG" }]}
         departure="2026-01-09"
       />,
     );

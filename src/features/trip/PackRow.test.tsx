@@ -15,7 +15,7 @@ const item = (patch: Partial<TripItem> = {}): TripItem => ({
   ...patch,
 });
 
-function renderRow(patch: Partial<TripItem> = {}) {
+function renderRow(patch: Partial<TripItem> = {}, guidance?: { tag: string; reason: string }) {
   const handlers = {
     onToggle: vi.fn(),
     onIncrement: vi.fn(),
@@ -23,7 +23,9 @@ function renderRow(patch: Partial<TripItem> = {}) {
     onEdit: vi.fn(),
     onRetry: vi.fn(),
   };
-  const view = render(<PackRow item={item(patch)} failed={false} {...handlers} />);
+  const view = render(
+    <PackRow item={item(patch)} failed={false} guidance={guidance} {...handlers} />,
+  );
   return { ...view, ...handlers };
 }
 
@@ -33,7 +35,7 @@ describe("PackRow", () => {
     expect(container.querySelector(".check-state")?.getAttribute("aria-hidden")).toBe("true");
     const packAll = screen.getByRole("button", { name: "Pack all Socks" });
     expect(packAll.textContent).toBe("Pack all");
-    expect(packAll.getAttribute("aria-pressed")).toBe("false");
+    expect(packAll.hasAttribute("aria-pressed")).toBe(false);
     await userEvent.click(packAll);
     expect(onToggle).toHaveBeenCalledWith("socks");
     await userEvent.click(screen.getByRole("button", { name: "Edit target for Socks" }));
@@ -46,9 +48,23 @@ describe("PackRow", () => {
     expect(container.querySelector(".check-state")?.textContent).toBe("✓");
     const packed = screen.getByRole("button", { name: "Packed, mark Socks unpacked" });
     expect(packed.textContent).toBe("Packed");
-    expect(packed.getAttribute("aria-pressed")).toBe("true");
+    expect(packed.hasAttribute("aria-pressed")).toBe(false);
     expect(screen.getByRole("button", { name: "Edit target for Socks" })).toBeTruthy();
     await userEvent.click(packed);
     expect(onToggle).toHaveBeenCalledWith("socks");
+  });
+
+  it("shows the weather pill and its reason under the name only when guidance is given", () => {
+    const { container, unmount } = renderRow(
+      {},
+      { tag: "Rain", reason: "Rain likely in Lisbon, Oct 3–5" },
+    );
+    expect(container.querySelector(".weather-pill")?.textContent).toBe("Rain");
+    expect(container.querySelector(".weather-note")?.textContent).toBe(
+      "Rain likely in Lisbon, Oct 3–5",
+    );
+    unmount();
+    const plain = renderRow();
+    expect(plain.container.querySelector(".weather-pill")).toBeNull();
   });
 });
