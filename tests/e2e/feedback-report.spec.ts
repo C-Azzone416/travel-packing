@@ -1,28 +1,13 @@
 import { expect, test, type Page } from "@playwright/test";
-import { createFakeFramebriar, type FakeFramebriar } from "../../src/test/fake-framebriar";
+import { createFakeFramebriar } from "../../src/test/fake-framebriar";
 import { routeFramebriar } from "../../src/test/fake-framebriar-playwright";
 import { expectAccessible } from "./helpers/a11y";
-import { signInAsOwner } from "./helpers/auth";
+import { DEVICE } from "./helpers/device";
+import { connectedOnTrips, openSettingsFromNav } from "./helpers/feedback";
 
-// Capture, review and send a feedback report (#132), against the real app, the real SDK and the fake service. The report is
-// saved on this device first ("Saved on this device"); the fake service later confirms it ("Received").
-async function connectedOnTrips(page: Page, fake: FakeFramebriar) {
-  await signInAsOwner(page);
-  await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
-  await page
-    .getByRole("navigation", { name: "Primary navigation" })
-    .getByRole("link", { name: "Settings" })
-    .click();
-  await page.getByLabel("Invitation").fill(fake.issueInvitation());
-  await page.getByRole("button", { name: "Connect" }).click();
-  await expect(page.locator(".status-pill", { hasText: "Connected" })).toBeVisible();
-  await page
-    .getByRole("navigation", { name: "Primary navigation" })
-    .getByRole("link", { name: "Trips" })
-    .click();
-  await expect(page.getByRole("button", { name: "Send feedback" })).toBeEnabled();
-}
-
+// Capture, review and send a feedback report (#132, #133), against the real app, the real SDK and the fake service. The report is
+// saved on this device first ("Saved on this device"); the fake service later confirms it ("Received"). The flows that depend on
+// the screen (the sheet, the screenshot in WebKit) run on the phone as well as on desktop.
 async function writeAndSend(page: Page, text: string) {
   await page.getByRole("button", { name: "Send feedback" }).click();
   const dialog = page.getByRole("dialog", { name: "Send feedback" });
@@ -32,47 +17,58 @@ async function writeAndSend(page: Page, text: string) {
   return dialog;
 }
 
-test("capture, save offline, then deliver when the service is back: Saved first, Received later", async ({
-  page,
-  context,
-}) => {
-  const fake = createFakeFramebriar();
-  await routeFramebriar(context, fake);
-  await connectedOnTrips(page, fake);
+test(
+  "capture, save while offline, then deliver when the connection is back: Saved first, Received later",
+  DEVICE,
+  async ({ page, context }) => {
+    const fake = createFakeFramebriar();
+    await routeFramebriar(context, fake);
+    await connectedOnTrips(page, fake);
 
-  await page.getByRole("button", { name: "Send feedback" }).click();
-  const dialog = page.getByRole("dialog", { name: "Send feedback" });
-  // This is an e2e build, so the screenshot is on, ticked by default, and shown as a thumbnail.
-  await expect(
-    dialog.getByRole("checkbox", { name: "Include a screenshot of this screen" }),
-  ).toBeChecked();
-  await expect(
-    dialog.getByRole("img", { name: "Screenshot of the screen you were on" }),
-  ).toBeVisible();
-  await expectAccessible(page, "feedback sheet");
-  await expect(dialog.getByRole("button", { name: "Send" })).toBeDisabled();
+    await page.getByRole("button", { name: "Send feedback" }).click();
+    const dialog = page.getByRole("dialog", { name: "Send feedback" });
+    // This is an e2e build, so the screenshot is on, ticked by default, and shown as a thumbnail.
+    await expect(
+      dialog.getByRole("checkbox", { name: "Include a screenshot of this screen" }),
+    ).toBeChecked();
+    await expect(
+      dialog.getByRole("img", { name: "Screenshot of the screen you were on" }),
+    ).toBeVisible();
+    await expectAccessible(page, "feedback sheet");
+    await expect(dialog.getByRole("button", { name: "Send" })).toBeDisabled();
 
-  fake.setOffline(true);
-  await dialog.getByLabel("What happened?").fill("The bag count looks off");
-  await dialog.getByRole("button", { name: "Send" }).click();
-  await expect(dialog.getByRole("heading", { name: "Saved on this device" })).toBeVisible();
-  expect(fake.delivered()).toHaveLength(0);
+    // The browser goes offline with the sheet open: the sheet says so, and Send still works.
+    await context.setOffline(true);
+    await expect(
+      dialog.getByText("You’re offline. It will be saved here and sent when you’re back online."),
+    ).toBeVisible();
+    // Playwright's WebKit keeps storage in memory only and cannot store a picture in IndexedDB (real Safari can), so on the
+    // phone the saved report is notes-only; the capture itself was still taken in WebKit, as the thumbnail above shows.
+    const phone = test.info().project.name === "phone";
+    if (phone) {
+      await dialog.getByRole("checkbox", { name: "Include a screenshot of this screen" }).uncheck();
+    }
+    await dialog.getByLabel("What happened?").fill("The bag count looks off");
+    await dialog.getByRole("button", { name: "Send" }).click();
+    await expect(dialog.getByRole("heading", { name: "Saved on this device" })).toBeVisible();
+    expect(fake.delivered()).toHaveLength(0);
 
-  fake.setOffline(false);
-  await page.evaluate(() => window.dispatchEvent(new Event("online")));
-  await expect(dialog.getByRole("heading", { name: "Received. Thank you." })).toBeVisible({
-    timeout: 30_000,
-  });
-  const [delivered] = fake.delivered();
-  expect(fake.delivered()).toHaveLength(1);
-  expect(delivered.report.notes).toBe("The bag count looks off");
-  expect(delivered.report.scene).toBe("trips");
-  expect(delivered.media?.bytes).toBeGreaterThan(0);
-  // Only approved codes and numbers: no trip name, place, date from a trip, email or id.
-  expect(JSON.stringify(delivered.report)).not.toMatch(/San Diego|@|\/trips\//);
-  await dialog.getByRole("button", { name: "Done" }).click();
-  await expect(dialog).toHaveCount(0);
-});
+    await context.setOffline(false);
+    await expect(dialog.getByRole("heading", { name: "Received. Thank you." })).toBeVisible({
+      timeout: 40_000,
+    });
+    const [delivered] = fake.delivered();
+    expect(fake.delivered()).toHaveLength(1);
+    expect(delivered.report.notes).toBe("The bag count looks off");
+    expect(delivered.report.scene).toBe("trips");
+    if (phone) expect(delivered.media).toBeNull();
+    else expect(delivered.media?.bytes).toBeGreaterThan(0);
+    // Only approved codes and numbers: no trip name, place, email or id.
+    expect(JSON.stringify(delivered.report)).not.toMatch(/San Diego|@|\/trips\//);
+    await dialog.getByRole("button", { name: "Done" }).click();
+    await expect(dialog).toHaveCount(0);
+  },
+);
 
 test("a server error is retried until the report is received", async ({ page, context }) => {
   const fake = createFakeFramebriar();
@@ -82,7 +78,7 @@ test("a server error is retried until the report is received", async ({ page, co
 
   const dialog = await writeAndSend(page, "Retry me");
   await expect(dialog.getByRole("heading", { name: "Saved on this device" })).toBeVisible();
-  await page.getByRole("button", { name: "Done" }).click();
+  await dialog.getByRole("button", { name: "Done" }).click();
   await expect(page.getByText("Your feedback was received. Thank you.")).toBeVisible({
     timeout: 30_000,
   });
@@ -116,10 +112,7 @@ test("disconnecting keeps the reports waiting on this device", async ({ page, co
   await expect(dialog.getByRole("heading", { name: "Saved on this device" })).toBeVisible();
   await dialog.getByRole("button", { name: "Done" }).click();
 
-  await page
-    .getByRole("navigation", { name: "Primary navigation" })
-    .getByRole("link", { name: "Settings" })
-    .click();
+  await openSettingsFromNav(page);
   await expect(page.getByText("1 report waiting to send on this device.")).toBeVisible();
   await page.getByRole("button", { name: "Disconnect" }).click();
   await page
@@ -133,14 +126,10 @@ test("disconnecting keeps the reports waiting on this device", async ({ page, co
   expect(fake.delivered()).toHaveLength(0);
 });
 
-test("the Feedback button is not offered on Settings", async ({ page, context }) => {
+test("the Feedback button is not offered on Settings", DEVICE, async ({ page, context }) => {
   const fake = createFakeFramebriar();
   await routeFramebriar(context, fake);
   await connectedOnTrips(page, fake);
-  await page
-    .getByRole("navigation", { name: "Primary navigation" })
-    .getByRole("link", { name: "Settings" })
-    .click();
-  await expect(page.getByRole("heading", { name: "Send feedback to the developer" })).toBeVisible();
+  await openSettingsFromNav(page);
   await expect(page.getByRole("button", { name: "Send feedback" })).toHaveCount(0);
 });

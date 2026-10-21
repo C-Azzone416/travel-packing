@@ -52,6 +52,8 @@ export interface FakeFramebriarOptions {
   now?: () => number;
   /** Origins that get CORS headers. Default: any http://localhost:<port> or 127.0.0.1 page. */
   allowedOrigins?: readonly string[];
+  /** How long a new enrollment lasts. The service's is 30 days; a test can make it short to watch it expire. */
+  enrollmentMs?: number;
 }
 
 const token = () => randomBytes(32).toString("base64url");
@@ -65,7 +67,9 @@ export function createFakeFramebriar({
   gameId = "travel-packing",
   now = Date.now,
   allowedOrigins,
+  enrollmentMs = 30 * DAY,
 }: FakeFramebriarOptions = {}) {
+  let lifetime = enrollmentMs;
   const invitations = new Map<string, { usesLeft: number; expiresAt: number }>();
   const families = new Map<string, Family>(); // by refresh token
   const tickets = new Map<string, string>(); // upload ticket -> report id
@@ -221,7 +225,7 @@ export function createFakeFramebriar({
     invite.usesLeft -= 1;
     const family: Family = {
       refreshToken: token(),
-      refreshExpiresAt: now() + 30 * DAY,
+      refreshExpiresAt: now() + lifetime,
       revoked: false,
       attemptId,
       access: new Set(),
@@ -304,6 +308,10 @@ export function createFakeFramebriar({
         ...(failures.get(route) ?? []),
         ...Array.from({ length: times }, () => failure),
       ]);
+    },
+    /** Changes how long enrollments created from now on last. */
+    setEnrollmentMs(ms: number) {
+      lifetime = ms;
     },
     /** Every request throws a network error until turned back on. */
     setOffline(offline: boolean) {

@@ -4,7 +4,8 @@ The app sends feedback to the shared Framebriar service through its browser SDK,
 npm package on GitHub Packages (`masra91/framebriar`). We consume it and never change that repository or the service. The
 contract is that repository's `docs/general-feedback-v2.md` and `docs/distribution.md`.
 
-Nothing in this repository holds a token, an invitation or an endpoint credential. Every value below is a placeholder.
+Nothing in this repository holds a token, an invitation or an endpoint credential. Every value below is a placeholder. What
+is captured, owner setup and the Preview delivery check are in [feedback.md](feedback.md).
 
 ## Installing the package
 

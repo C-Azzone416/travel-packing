@@ -237,6 +237,32 @@ describe("connection, through the real SDK", () => {
     expect((await later.start()).notice).toBe("expired");
   });
 
+  it("an enrollment can be made short, and renewed at full length", async () => {
+    let clock = Date.now();
+    const fake = createFakeFramebriar({ now: () => clock, enrollmentMs: 60_000 });
+    const redeem = async () => {
+      const response = await fake.fetch(`${FRAMEBRIAR_ENDPOINT}/v1/access/redeem`, {
+        method: "POST",
+        body: JSON.stringify({
+          v: 1,
+          invitation: fake.issueInvitation(),
+          gameId: "travel-packing",
+          scopeVersion: 2,
+        }),
+      });
+      return (await response.json()) as { expiresAt: string; refreshExpiresAt: string };
+    };
+    const short = await redeem();
+    expect(Date.parse(short.refreshExpiresAt) - clock).toBe(60_000);
+    expect(Date.parse(short.expiresAt)).toBe(Date.parse(short.refreshExpiresAt));
+    fake.setEnrollmentMs(30 * 86_400_000);
+    const full = await redeem();
+    expect(Date.parse(full.refreshExpiresAt) - clock).toBe(30 * 86_400_000);
+    expect(Date.parse(full.expiresAt) - clock).toBe(3_600_000);
+    clock += 61_000;
+    expect(clock).toBeGreaterThan(Date.parse(short.refreshExpiresAt));
+  });
+
   it("disconnect forgets locally and revokes on the service", async () => {
     const { fake, access } = setup();
     await connected(fake, access);

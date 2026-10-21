@@ -73,6 +73,8 @@ export function useFeedbackAccess(): FeedbackAccessValue {
   return useContext(FeedbackAccessContext);
 }
 
+const loadLocalExport = () => import("@masra91/framebriar/browser/local-export");
+
 /** The SDK is only ever loaded in the browser, after the page is up, so the server render and unit tests never touch it. */
 async function loadAccess(): Promise<PlaytestAccess> {
   const { createPlaytestAccess } = await import("@masra91/framebriar/browser/playtest-access");
@@ -132,10 +134,13 @@ export function FeedbackAccessProvider({
   children,
   create = loadAccess,
   createOutbox = loadOutbox,
+  preload = loadLocalExport,
 }: {
   children: ReactNode;
   create?: () => Promise<PlaytestAccess>;
   createOutbox?: CreateOutbox;
+  /** Fetches the code that prepares a report, ahead of Send. Injectable so a test can see that it happens. */
+  preload?: () => Promise<unknown>;
 }) {
   const [status, setStatus] = useState<AccessStatus | null>(null);
   const [outbox, setOutbox] = useState<OutboxView>(NO_OUTBOX);
@@ -167,6 +172,8 @@ export function FeedbackAccessProvider({
           return;
         }
         outboxRef.current = box;
+        // Saving must work with no connection at all, so the code that prepares a report is fetched now, not at Send.
+        void preload().catch(() => undefined);
         if (box) unsubscribeOutbox = box.subscribe((next) => setOutbox(outboxView(next)));
         else setOutbox({ ...NO_OUTBOX, state: "storage-unavailable" });
         stop = () => {
@@ -193,7 +200,7 @@ export function FeedbackAccessProvider({
       accessRef.current?.dispose();
       accessRef.current = null;
     };
-  }, [create, createOutbox]);
+  }, [create, createOutbox, preload]);
 
   // Once connected, whatever is waiting is tried again (the SDK still honours each report's saved retry time).
   const connected = status?.connected === true;
@@ -217,7 +224,7 @@ export function FeedbackAccessProvider({
 
   const prepareReport = useCallback<FeedbackAccessValue["prepareReport"]>(
     async ({ notes, screenshot, context }) => {
-      const { prepareLocalFeedback } = await import("@masra91/framebriar/browser/local-export");
+      const { prepareLocalFeedback } = await loadLocalExport();
       return prepareLocalFeedback({ blob: screenshot, captureContext: context, notes });
     },
     [],
