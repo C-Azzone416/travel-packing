@@ -1,6 +1,9 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { ToastProvider } from "@/components/ui/Toast";
+import { FeedbackAccessProvider } from "@/features/feedback/FeedbackAccess";
+import { FeedbackButton } from "@/features/feedback/FeedbackButton";
+import { FeedbackNotice } from "@/features/feedback/FeedbackNotice";
 import { AppLocationProvider } from "@/features/trips/AppLocationProvider";
 import { providerEnabled } from "@/server/locations/provider-config";
 import { TripsSourceProvider } from "@/features/trips/TripsSourceProvider";
@@ -24,32 +27,38 @@ export function AppShell({ children, signOut, email, setupActions }: AppShellPro
     <ToastProvider>
       <SaveStatusProvider>
         <TripsSourceProvider>
-          <AppLocationProvider providerOn={providerEnabled()}>
-            <a className="skip-link" href="#main">
-              Skip to main content
-            </a>
-            <PreviewBanner />
-            <div className="app-shell">
-              <header className="topbar">
-                <div className="topbar-inner">
-                  <Link className="brand-button" href="/" aria-label="Packed Smart: go to trips">
-                    <span className="brand-mark" aria-hidden="true" />
-                    <strong>Packed Smart</strong>
-                  </Link>
-                  <Nav signOut={signOut} email={email} />
-                  <ConnectedSaveChip />
-                </div>
-              </header>
-              <main id="main" tabIndex={-1}>
-                {setupActions ? (
-                  <StaplesSetupGate actions={setupActions}>{children}</StaplesSetupGate>
-                ) : (
-                  children
-                )}
-              </main>
-            </div>
-            <RouteFocus />
-          </AppLocationProvider>
+          <FeedbackAccessProvider>
+            <AppLocationProvider providerOn={providerEnabled()}>
+              <a className="skip-link" href="#main">
+                Skip to main content
+              </a>
+              <PreviewBanner />
+              <div className="app-shell">
+                <header className="topbar">
+                  <div className="topbar-inner">
+                    <Link className="brand-button" href="/" aria-label="Packed Smart: go to trips">
+                      <span className="brand-mark" aria-hidden="true" />
+                      <strong>Packed Smart</strong>
+                    </Link>
+                    <Nav signOut={signOut} email={email} />
+                    <div className="topbar-end">
+                      <FeedbackButton />
+                      <ConnectedSaveChip />
+                    </div>
+                  </div>
+                </header>
+                <FeedbackNotice />
+                <main id="main" tabIndex={-1}>
+                  {setupActions ? (
+                    <StaplesSetupGate actions={setupActions}>{children}</StaplesSetupGate>
+                  ) : (
+                    children
+                  )}
+                </main>
+              </div>
+              <RouteFocus />
+            </AppLocationProvider>
+          </FeedbackAccessProvider>
         </TripsSourceProvider>
       </SaveStatusProvider>
     </ToastProvider>

@@ -3,8 +3,11 @@
 //
 // The CSP allows inline scripts and styles because Next.js emits its own inline bootstrap script and the app uses inline
 // styles; a nonce-based policy needs per-request middleware and is a follow-up. Everything else is closed: no foreign
-// origins for scripts, styles, images, fonts, frames or connections (the geocoder and weather providers are only ever
-// called by the server), no <object>, no framing at all, forms post only to this origin.
+// origins for scripts, styles, images, fonts or frames, and the one foreign connection is the feedback service, which
+// the browser SDK calls directly (#131; the geocoder and weather providers are only ever called by the server), no <object>, no framing at all, forms post only to this origin.
+
+/** The feedback service's origin, pinned by the SDK (FEEDBACK_ENDPOINT); a unit test keeps the two in step. */
+export const FEEDBACK_ORIGIN = "https://framebriar-masra91-poc.azurewebsites.net";
 
 export interface HeaderRule {
   key: string;
@@ -19,7 +22,10 @@ export function contentSecurityPolicy(development: boolean): string {
     ["style-src", "'self' 'unsafe-inline'"],
     ["img-src", "'self' data: blob:"],
     ["font-src", "'self'"],
-    ["connect-src", development ? "'self' ws: wss:" : "'self'"],
+    [
+      "connect-src",
+      development ? `'self' ${FEEDBACK_ORIGIN} ws: wss:` : `'self' ${FEEDBACK_ORIGIN}`,
+    ],
     ["frame-src", "'none'"],
     ["frame-ancestors", "'none'"],
     ["object-src", "'none'"],

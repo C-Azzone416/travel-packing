@@ -18,7 +18,7 @@ export interface RouteLike {
   abort(reason?: string): Promise<void>;
 }
 export interface Routable {
-  route(url: string, handler: (route: RouteLike) => Promise<void>): Promise<void>;
+  route(url: string, handler: (route: RouteLike) => Promise<void>): Promise<unknown>;
 }
 
 /** Everything the SDK sends goes to this one pinned address; the browser never reaches the real service. */

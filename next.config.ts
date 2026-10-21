@@ -47,6 +47,11 @@ interface WebpackApi {
 const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
 
 const nextConfig: NextConfig = {
+  // The commit this build was made from, so feedback reports name the build (#131). Not a secret; the SDK takes only
+  // 7 to 40 hex characters and the app turns anything else into null.
+  env: {
+    NEXT_PUBLIC_BUILD_SHA: process.env.VERCEL_GIT_COMMIT_SHA ?? process.env.GITHUB_SHA ?? "",
+  },
   // Security headers on every route (#22). `next dev` is the only development run; builds are production.
   async headers() {
     return [
