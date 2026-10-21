@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { OTHER_EMAIL, signIn, signInAsOwner } from "./helpers/auth";
+import { chooseFromMenu } from "./helpers/menu";
 import { expectAccessible } from "./helpers/a11y";
 import { DEVICE } from "./helpers/device";
 
@@ -37,10 +38,7 @@ test.describe("dashboard", DEVICE, () => {
   test("upcoming, with the quick view open", async ({ page }) => {
     await openDashboard(page);
     await expectAccessible(page, "dashboard upcoming");
-    await page
-      .getByRole("article", { name: "San Diego" })
-      .getByRole("button", { name: /Quick view/ })
-      .click();
+    await chooseFromMenu(page, "San Diego", "Quick view");
     await expectAccessible(page, "dashboard quick view");
   });
 
@@ -53,7 +51,7 @@ test.describe("dashboard", DEVICE, () => {
 
   test("recently deleted, with a removed trip to undo", async ({ page }) => {
     await openDashboard(page);
-    await page.getByRole("button", { name: "Remove: San Diego" }).click();
+    await chooseFromMenu(page, "San Diego", "Remove");
     await page.getByRole("dialog").getByRole("button", { name: "Remove trip" }).click();
     await page.getByRole("button", { name: /Past & archive/ }).click();
     await expect(page.getByRole("heading", { name: "Recently deleted" })).toBeVisible();
@@ -62,7 +60,7 @@ test.describe("dashboard", DEVICE, () => {
 
   test("the remove confirmation", async ({ page }) => {
     await openDashboard(page);
-    await page.getByRole("button", { name: "Remove: San Diego" }).click();
+    await chooseFromMenu(page, "San Diego", "Remove");
     await expect(page.getByRole("dialog")).toBeVisible();
     await expectAccessible(page, "remove dialog");
   });
@@ -235,7 +233,7 @@ test.describe("error states and toasts", DEVICE, () => {
     await page.route("**/*", (route) =>
       isAction(route.request()) ? route.abort("failed") : route.continue(),
     );
-    await page.getByRole("button", { name: "Archive: San Diego" }).click();
+    await chooseFromMenu(page, "San Diego", "Archive");
     const chip = page.getByRole("button", { name: "Couldn't save, retry" });
     await expect(chip).toBeVisible();
     await expectAccessible(page, "dashboard with the error chip");
@@ -268,7 +266,7 @@ test.describe("error states and toasts", DEVICE, () => {
 
   test("the Undo toast after removing a trip", async ({ page }) => {
     await openDashboard(page);
-    await page.getByRole("button", { name: "Remove: San Diego" }).click();
+    await chooseFromMenu(page, "San Diego", "Remove");
     await page.getByRole("dialog").getByRole("button", { name: "Remove trip" }).click();
     await expect(page.getByRole("button", { name: /Undo/ })).toBeVisible();
     await expectAccessible(page, "undo toast");
@@ -435,7 +433,7 @@ test.describe("design's known items", DEVICE, () => {
     await page.route("**/*", (route) =>
       route.request().method() === "POST" ? route.abort("failed") : route.continue(),
     );
-    await page.getByRole("button", { name: "Archive: San Diego" }).click();
+    await chooseFromMenu(page, "San Diego", "Archive");
     const chip = page.getByRole("button", { name: "Couldn't save, retry" });
     await expect(chip).toBeVisible();
     await page.unroute("**/*");

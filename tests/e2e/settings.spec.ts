@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { ownerEmailFor, signInAsOwner } from "./helpers/auth";
+import { chooseFromMenu } from "./helpers/menu";
 import { DEVICE } from "./helpers/device";
 
 // Settings and the truthful save states (#19), against the real app and database.
@@ -40,7 +41,7 @@ test("nothing is claimed saved before anything was, and 'Last saved' appears aft
     .getByRole("navigation", { name: "Primary navigation" })
     .getByRole("link", { name: "Trips" })
     .click();
-  await page.getByRole("button", { name: "Archive: San Diego" }).click();
+  await chooseFromMenu(page, "San Diego", "Archive");
   await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toHaveCount(0);
   await page.getByRole("link", { name: "Saved" }).click();
   await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
@@ -59,7 +60,7 @@ test("a failed save shows Error everywhere, never claims Saved, and Retry recove
   await page.route("**/*", (route) =>
     isAction(route.request()) ? route.abort("failed") : route.continue(),
   );
-  await page.getByRole("button", { name: "Archive: San Diego" }).click();
+  await chooseFromMenu(page, "San Diego", "Archive");
   const chip = page.getByRole("button", { name: "Couldn't save, retry" });
   await expect(chip).toBeVisible();
   await expect(page.getByRole("link", { name: "Saved" })).toHaveCount(0);

@@ -86,7 +86,7 @@ test("no horizontal scroll at 320px", DEVICE, async ({ page }) => {
 });
 
 test(
-  "navigation is a bottom bar on phones and a side rail on desktop",
+  "navigation is a bottom bar on phones and inline in the slim dark header on desktop",
   DEVICE,
   async ({ page }, testInfo) => {
     const box = await page.getByRole("navigation", { name: "Primary navigation" }).boundingBox();
@@ -95,11 +95,26 @@ test(
       expect(box!.y + box!.height).toBeGreaterThan(viewport.height - 24);
       expect(box!.width).toBeGreaterThan(viewport.width / 2);
     } else {
-      expect(box!.x).toBeLessThan(40);
-      expect(box!.width).toBeLessThan(120);
-      // The rail never overlaps the page content.
-      const main = await page.locator("main").boundingBox();
-      expect(main!.x).toBeGreaterThanOrEqual(box!.x + box!.width);
+      // One slim bar (#155): the links sit inside the 68px header, in one row, with no rail beside the page.
+      const header = (await page.locator("header.topbar").boundingBox())!;
+      expect(Math.round(header.height)).toBe(68);
+      expect(box!.y).toBeGreaterThanOrEqual(header.y);
+      expect(box!.y + box!.height).toBeLessThanOrEqual(header.y + header.height + 1);
+      const links = await page
+        .getByRole("navigation", { name: "Primary navigation" })
+        .getByRole("link")
+        .all();
+      const tops = await Promise.all(links.map(async (link) => (await link.boundingBox())!.y));
+      expect(new Set(tops.map(Math.round)).size).toBe(1);
+      // Nothing is pinned to the left edge below the bar, and main starts under the bar.
+      const main = (await page.locator("main").boundingBox())!;
+      expect(main.y).toBeGreaterThanOrEqual(header.y + header.height);
+      const current = page
+        .getByRole("navigation", { name: "Primary navigation" })
+        .locator('a[aria-current="page"]');
+      expect(await current.evaluate((node) => getComputedStyle(node).borderBottomWidth)).toBe(
+        "3px",
+      );
     }
   },
 );

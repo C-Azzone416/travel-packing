@@ -13,7 +13,6 @@
 
   --shadow: 0 14px 40px var(--ledger-shadow);
   --radius: 22px;
-  --nav-rail-width: 82px;
   font-family:
     var(--font-body),
     ui-sans-serif,
@@ -150,7 +149,9 @@ p {
   min-height: 100vh;
   padding-bottom: 86px;
 }
-/* The dark Field Ledger header (#143, spec §1/§3): full-bleed --header, 68px (60 on phones). */
+/* The dark Field Ledger header (#143, #155, design's ruling on #155): ONE slim full-bleed bar, 68px (60 on phones):
+   brand, the primary navigation inline (desktop), the status chip, then Sign out. On phones the same <nav> is the
+   fixed tab bar at the bottom. Roles only. */
 .topbar {
   background: var(--header);
   color: var(--header-ink);
@@ -159,21 +160,14 @@ p {
   height: 68px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   padding: 0 18px;
   max-width: 1120px;
   margin: 0 auto;
 }
-.topbar :focus-visible {
+.topbar .brand-button:focus-visible,
+.topbar .sync-chip:focus-visible {
   outline-color: var(--focus-on-header);
-}
-.topbar .brand-button small {
-  color: var(--header-muted);
-}
-.topbar .sync-chip {
-  background: var(--surface);
-  border-color: var(--surface);
 }
 .brand-button {
   min-height: 44px;
@@ -181,62 +175,78 @@ p {
   align-items: center;
   gap: 10px;
   padding: 6px;
-  border-radius: 14px;
+  border-radius: var(--control-radius);
   color: inherit;
   text-align: left;
   text-decoration: none;
 }
-.brand-button strong,
-.brand-button small {
-  display: block;
-}
 .brand-button strong {
+  font-family: var(--font-display), var(--font-body), sans-serif;
   letter-spacing: -0.02em;
-  font-size: 18px;
-}
-.brand-button small {
-  color: var(--muted-text);
-  font-size: 12px;
-  margin-top: 1px;
+  font-size: 22px;
+  font-weight: 800;
 }
 .brand-mark {
-  display: grid;
-  place-items: center;
-  width: 35px;
-  height: 35px;
-  border-radius: 13px;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--header-muted);
+  border-radius: var(--state-radius);
   background: var(--action);
-  color: var(--action-ink);
-  box-shadow: 0 7px 18px color-mix(in srgb, var(--accent) 23%, transparent);
 }
 
+/* The status chip: quiet text in the bar (design's #155 ruling). Still a persistent live region and a link to
+   Settings; the ::after keeps a 44px target without making the chip look heavy. */
 .sync-chip {
+  position: relative;
   flex: none;
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  min-height: 44px;
-  padding: 8px 14px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--surface) 75%, transparent);
-  color: var(--link);
-  font-size: 12px;
-  font-weight: 800;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--header-muted);
+  font-size: 13px;
+  font-weight: 600;
   text-decoration: none;
   cursor: pointer;
 }
+.sync-chip::after {
+  content: "";
+  position: absolute;
+  inset: -8px -6px;
+}
 .sync-chip.saving {
-  color: var(--ink);
+  color: var(--header-ink);
+}
+.sync-chip.saving .sync-icon {
+  font-size: 8px;
 }
 .sync-chip.error {
-  border-color: var(--danger-border);
-  background: var(--danger-surface);
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: var(--surface);
   color: var(--danger);
+  font-weight: 700;
 }
 .sync-icon {
   font-weight: 900;
+}
+@media (max-width: 720px) {
+  /* On a phone the idle chip is just the check; the word stays for screen readers. */
+  .sync-chip.saved .sync-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
 }
 
 main {
@@ -254,65 +264,58 @@ main {
   }
 }
 
+/* The tab bar (phones, <=720px): fixed to the bottom, a light --surface bar with four equal items. */
 .bottom-nav {
   position: fixed;
   z-index: 20;
-  left: 50%;
-  bottom: 12px;
-  transform: translateX(-50%);
-  width: calc(100% - 24px);
-  max-width: 520px;
+  left: 0;
+  right: 0;
+  bottom: 0;
   display: grid;
-  /* Three links, or four with Sign out: equal columns either way. */
+  /* Three links and Sign out: equal columns. */
   grid-auto-flow: column;
   grid-auto-columns: 1fr;
-  padding: 6px;
-  border: 1px solid var(--line);
-  border-radius: 21px;
-  background: color-mix(in srgb, var(--surface) 94%, transparent);
-  box-shadow: 0 16px 38px var(--ledger-shadow);
-  backdrop-filter: blur(16px);
+  padding: 0 0 env(safe-area-inset-bottom);
+  border-top: 1px solid var(--line);
+  background: var(--surface);
 }
-.bottom-nav a {
-  min-height: 52px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  border-radius: 15px;
-  color: var(--muted-text);
-  font-size: 12px;
-  font-weight: 800;
-  text-decoration: none;
-}
-.bottom-nav a span,
-.bottom-nav button span {
-  font-size: 18px;
-  line-height: 1;
-}
-.nav-signout {
-  display: grid;
-}
+.bottom-nav a,
 .bottom-nav button {
-  min-height: 52px;
+  position: relative;
+  min-height: 56px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 3px;
   border: 0;
-  border-radius: 15px;
+  border-radius: 0;
   background: none;
-  color: var(--muted-text);
+  color: var(--muted);
   font: inherit;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 600;
+  text-decoration: none;
   cursor: pointer;
 }
+.bottom-nav a span,
+.bottom-nav button span {
+  font-size: 20px;
+  line-height: 1;
+}
+.nav-signout {
+  display: grid;
+}
 .bottom-nav a[aria-current="page"] {
-  background: var(--seafoam-soft);
   color: var(--link);
+  font-weight: 700;
+}
+.bottom-nav a[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: var(--accent);
 }
 
 .actions {
@@ -551,44 +554,78 @@ main {
   }
 }
 
-@media (min-width: 900px) {
+@media (min-width: 721px) {
   .app-shell {
     padding-bottom: 30px;
   }
   .topbar-inner {
+    gap: 8px;
     padding-inline: 28px;
   }
   main {
     padding-inline: 28px;
   }
+  /* The primary navigation sits inline in the bar (no left rail, no bottom bar): the links follow the brand, the
+     status chip and Sign out go to the right. The nav box dissolves so its children share the bar's row. */
   .bottom-nav {
-    top: 98px;
-    bottom: auto;
-    left: 24px;
-    transform: none;
-    width: var(--nav-rail-width);
-    grid-auto-flow: row;
-    grid-template-columns: 1fr;
+    display: contents;
+  }
+  .brand-button {
+    margin-right: 20px;
   }
   .bottom-nav a,
   .bottom-nav button {
-    min-height: 66px;
+    position: relative;
+    min-height: 44px;
+    flex-direction: row;
+    gap: 6px;
+    padding: 0 14px;
+    border-radius: var(--control-radius);
+    color: var(--header-muted);
+    font-size: 15px;
+    font-weight: 600;
   }
-  /* Sign out sits at the end of the rail, under a divider, and looks like the other items. */
+  .bottom-nav a:hover,
+  .bottom-nav button:hover {
+    color: var(--header-ink);
+  }
+  .bottom-nav a span,
+  .bottom-nav button span {
+    display: none;
+  }
+  .bottom-nav a[aria-current="page"] {
+    color: var(--header-ink);
+    font-weight: 700;
+  }
+  /* The active underline sits on the bar's bottom edge, a mix that stays 3:1 on the header in every theme. */
+  .bottom-nav a[aria-current="page"]::before {
+    inset: auto 0 -12px;
+    height: 3px;
+    background: color-mix(in srgb, var(--header-ink) 50%, var(--accent));
+  }
+  .bottom-nav :focus-visible {
+    outline-color: var(--focus-on-header);
+  }
+  /* Right side: the chip, then Sign out. */
+  .topbar-inner > .sync-chip {
+    order: 8;
+    margin-left: auto;
+  }
   .nav-signout {
-    margin-top: 6px;
-    padding-top: 6px;
-    border-top: 1px solid var(--line);
+    order: 9;
+    display: flex;
+    margin-left: 12px;
+  }
+  .nav-signout button {
+    padding: 0 8px;
+    font-size: 14px;
+  }
+  .nav-signout button span {
+    display: inline;
+    font-size: 16px;
   }
   .toast-region {
     bottom: 24px;
-  }
-}
-
-/* Keep content clear of the fixed rail until the centered column has room. */
-@media (min-width: 900px) and (max-width: 1279px) {
-  .app-shell {
-    padding-left: calc(var(--nav-rail-width) + 28px);
   }
 }
 
@@ -2872,6 +2909,7 @@ a.back {
   outline: none;
 }
 .ledger-grid {
+  align-items: start;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 24px;
@@ -3010,17 +3048,8 @@ a.back {
 .add-item-form .field {
   flex: 1 1 220px;
 }
-.ledger-tools {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
-  margin-top: 16px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
-}
 .ledger-hero .quick-view {
-  margin-top: 12px;
+  margin-top: 16px;
 }
 
 .later-journeys {
@@ -3037,8 +3066,8 @@ a.back {
 }
 .later-journeys ul {
   display: grid;
-  gap: 16px;
-  margin: 16px 0 0;
+  gap: 0;
+  margin: 12px 0 0;
   padding: 0;
   list-style: none;
 }
@@ -3051,10 +3080,8 @@ a.back {
   display: grid;
   grid-template-columns: 56px minmax(0, 1fr);
   gap: 12px;
-  padding: 16px;
-  border: 1px solid var(--line);
-  border-radius: var(--control-radius);
-  background: var(--surface);
+  padding: 16px 0;
+  border-top: 1px solid var(--line);
 }
 .later-days {
   display: grid;
@@ -3092,9 +3119,9 @@ a.back {
 }
 .later-actions {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 4px 8px;
+  justify-content: space-between;
+  gap: 8px;
 }
 .later-link {
   display: inline-flex;
@@ -3157,14 +3184,82 @@ a.back {
   .ledger-actions .button {
     flex: 1 1 100%;
   }
-  .later-journey {
-    border-top: 4px solid var(--line-strong);
-  }
 }
 
-/* Quick view sits inline in the hero's and a journey's action rows, not on a row of its own (design on #148). */
-.ledger-tools .quick-view-toggle,
-.later-actions .quick-view-toggle {
-  width: auto;
-  margin: 0;
+/* The ⋯ menu (#155): a 44px button and a role="menu" panel under it, right-aligned (open upward when low). */
+.more-menu {
+  position: relative;
+  display: inline-block;
+}
+.more-menu-button {
+  width: 44px;
+  height: 44px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: var(--control-radius);
+  background: none;
+  color: var(--link);
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+}
+.more-menu-button:hover,
+.more-menu-button[aria-expanded="true"] {
+  background: var(--selection-surface);
+}
+.more-menu-button.secondary {
+  border-color: var(--line-strong);
+  background: var(--control-bg);
+  color: var(--ink);
+}
+.more-menu-button.secondary:hover,
+.more-menu-button.secondary[aria-expanded="true"] {
+  background: var(--selection-surface);
+}
+.more-menu-panel {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 200px;
+  max-width: calc(100vw - 32px);
+  padding: 4px 0;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--control-radius);
+  background: var(--popover);
+  box-shadow: 0 8px 24px var(--ledger-shadow);
+}
+.more-menu-panel.up {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+.more-menu-panel [role="menuitem"] {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.more-menu-panel [role="menuitem"]:hover,
+.more-menu-panel [role="menuitem"]:focus-visible {
+  background: var(--selection-surface);
+}
+.more-menu-panel [role="menuitem"].danger {
+  color: var(--danger);
+}
+.more-menu-panel hr {
+  margin: 4px 0;
+  border: 0;
+  border-top: 1px solid var(--line);
 }

@@ -152,7 +152,7 @@ describe("SaveChip", () => {
     const onRetry = vi.fn();
     render(<SaveChip status="error" onOpenError={onRetry} />);
     const chip = screen.getByRole("button", { name: "Couldn't save, retry" });
-    expect(chip.textContent).toContain("Couldn't save · Retry");
+    expect(chip.textContent).toContain("Not saved · Retry");
     expect(screen.queryByRole("link")).toBeNull();
     await userEvent.click(chip);
     expect(onRetry).toHaveBeenCalledOnce();
@@ -180,7 +180,7 @@ describe("PreviewBanner", () => {
 });
 
 describe("AppShell", () => {
-  it("puts the skip link first, then banner, header, main and navigation", () => {
+  it("puts the skip link first, then one banner holding the brand, the primary navigation and the save chip, then main", () => {
     render(
       <AppShell>
         <h1>Trips</h1>
@@ -194,8 +194,20 @@ describe("AppShell", () => {
     expect(main.id).toBe("main");
     expect(main.getAttribute("tabindex")).toBe("-1");
     expect(main.textContent).toBe("Trips");
-    expect(screen.getByRole("banner")).toBeTruthy();
-    expect(screen.getByRole("navigation", { name: "Primary navigation" })).toBeTruthy();
+    const banner = screen.getByRole("banner");
+    const nav = screen.getByRole("navigation", { name: "Primary navigation" });
+    expect(banner.contains(nav)).toBe(true);
+    // Brand, then the navigation, then the status chip, all before main in reading order.
+    const inBar = [...banner.querySelectorAll<HTMLElement>("a, button")];
+    expect(inBar[0].getAttribute("aria-label")).toBe("Carrywell: go to trips");
+    expect(inBar.slice(1, 4).map((node) => node.textContent?.trim())).toEqual([
+      expect.stringContaining("Trips"),
+      expect.stringContaining("Staples"),
+      expect.stringContaining("Settings"),
+    ]);
+    expect(inBar.at(-1)?.getAttribute("aria-label")).toBe("Saved");
+    expect(banner.compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(banner.textContent).not.toMatch(/packing companion/i);
   });
 
   it("brand link goes home and the save chip is present", () => {

@@ -4,8 +4,8 @@ export type SaveStatus = "saved" | "saving" | "error";
 
 const COPY: Record<SaveStatus, { text: string; label: string; glyph: string }> = {
   saved: { text: "Saved", label: "Saved", glyph: "✓" },
-  saving: { text: "Saving…", label: "Saving", glyph: "…" },
-  error: { text: "Couldn't save · Retry", label: "Couldn't save, retry", glyph: "!" },
+  saving: { text: "Saving…", label: "Saving", glyph: "●" },
+  error: { text: "Not saved · Retry", label: "Couldn't save, retry", glyph: "!" },
 };
 
 // The top-bar chip from #31. Saved/Saving open Settings (where "Last saved" lives); Error opens the retry sheet, so
@@ -23,7 +23,7 @@ export function SaveChip({
       <span className="sync-icon" aria-hidden="true">
         {glyph}
       </span>
-      <span>{text}</span>
+      <span className="sync-text">{text}</span>
     </>
   );
   return status === "error" ? (
