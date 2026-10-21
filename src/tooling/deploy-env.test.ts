@@ -31,6 +31,26 @@ const production = {
   DATABASE_URL_UNPOOLED: `postgres://u:p@${PROD_HOST}/db`,
 };
 
+describe("checkDeployEnv: screenshots (#130)", () => {
+  it("fails a production environment that switches screenshots on, naming the variable only", () => {
+    const problems = checkDeployEnv(
+      "production",
+      { ...production, FEEDBACK_SCREENSHOTS: "1" },
+      PROD_HOST,
+    );
+    expect(problems).toEqual([expect.stringContaining("FEEDBACK_SCREENSHOTS must be unset or 0")]);
+  });
+
+  it("accepts production with screenshots off, and a preview with them on", () => {
+    expect(
+      checkDeployEnv("production", { ...production, FEEDBACK_SCREENSHOTS: "0" }, PROD_HOST),
+    ).toEqual([]);
+    expect(checkDeployEnv("preview", { ...good, FEEDBACK_SCREENSHOTS: "1" }, PROD_HOST)).toEqual(
+      [],
+    );
+  });
+});
+
 describe("checkDeployEnv", () => {
   it("accepts a complete preview environment on its own database", () => {
     expect(checkDeployEnv("preview", good, PROD_HOST)).toEqual([]);

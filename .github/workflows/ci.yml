@@ -191,13 +191,18 @@ jobs:
           GITHUB_PACKAGES_TOKEN: ${{ github.token }} # read access to the private @masra91/framebriar package (install steps only)
         run: npm ci
 
+      # A production-mode build (VERCEL_ENV=production): the screenshot capture module resolves to its stub here.
       - name: Build
-        run: npm run build
+        run: npm run build:production
 
       # The e2e-only fake sign-in must not be in a deployable build. This build is made without NEXT_PUBLIC_E2E_BUILD,
       # exactly like production; the e2e-build job makes its own build with it.
       - name: Verify the e2e-only sign-in is not in the build
         run: npm run check:no-e2e-in-build
+
+      # Production never captures screenshots (#130): none of the capture code may be in this build.
+      - name: Verify no screenshot capture is in the production build
+        run: npm run check:no-capture-in-build
 
       # Nothing the browser can download may name a server secret, hold a secret-shaped value, or contain server-only
       # code (#22). The scan's own tests inject a fake secret and require it to fail.
@@ -210,6 +215,9 @@ jobs:
 
       - name: Verify the e2e-only sign-in is not in the webpack build
         run: npm run check:no-e2e-in-build
+
+      - name: Verify no screenshot capture is in the webpack build
+        run: npm run check:no-capture-in-build
 
       - name: Scan the webpack client bundle
         run: npm run check:client-bundle

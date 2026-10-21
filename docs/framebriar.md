@@ -40,6 +40,26 @@ GitHub Packages the default registry for every dependency.
 access. Until it does, the GitHub token gets a 401 on the package and every CI install fails. Vercel itself never installs: the
 deploy builds in Actions with `vercel build` and uploads the result, so the Vercel project needs no token.
 
+## Screenshots: the build switch (Production never captures)
+
+Feedback (notes and approved context codes) ships in every environment, Production included. Only **screenshot capture** is a
+build-time choice, `FEEDBACK_SCREENSHOTS`:
+
+| Build                                   | Capture code in the bundle                  |
+| --------------------------------------- | ------------------------------------------- |
+| Local development, e2e, Preview deploys | Yes (the default)                           |
+| Production (`VERCEL_ENV=production`)    | **Never.** Forced off, whatever else is set |
+| Anywhere with `FEEDBACK_SCREENSHOTS=0`  | No                                          |
+
+When off, `next.config.ts` resolves `@/features/feedback/screenshot-capture` to `screenshot-capture.disabled.ts` (the same
+mechanism as the e2e-only modules, for both Turbopack and webpack), so the capture code is not in the bundle at all. Import the
+module only by that exact specifier. Guards:
+
+- `npm run build:production` and `npm run build:webpack` build with `VERCEL_ENV=production`; CI and `npm run verify` then run
+  `npm run check:no-capture-in-build`, which fails if the module's marker is in `.next`.
+- The production deploy builds with `FEEDBACK_SCREENSHOTS=0`, and `check-deploy-env` fails a production environment where the
+  variable is set to anything but `0`. A preview may set it to `0` or `1`.
+
 ## The fake Framebriar service (tests only)
 
 `src/test/fake-framebriar.ts` is an in-process stand-in for the service. It answers the SDK's wire contract: invitation
