@@ -115,7 +115,7 @@ describe("the hero and Later journeys", () => {
     expect(base.snapshot().trips.find((trip) => trip.id === "later")?.archived).toBe(true);
   });
 
-  it("marks a ready trip Review bag, with the days-to-go numeral and a stamp slot left for FL-c", async () => {
+  it("marks a ready trip Review bag, with the days-to-go numeral and the route stamp in the hero slot", async () => {
     const state = sampleLifecycleState();
     state.trips = state.trips.map((trip) => ({ ...trip, ready: true }));
     const { container } =
@@ -123,7 +123,26 @@ describe("the hero and Later journeys", () => {
       { container: document.body });
     const hero = await screen.findByRole("article", { name: "San Diego" });
     expect(within(hero).getByRole("link", { name: "Review bag: San Diego" })).toBeTruthy();
-    expect(container.querySelector("[data-stamp-slot]")).toBeTruthy();
+    const slot = container.querySelector("[data-stamp-slot]") as HTMLElement;
+    expect(within(slot).getByRole("img", { name: "SAN DIEGO departure stamp" })).toBeTruthy();
+  });
+
+  it("shows the same stamps as the packing screen: two countries give two route stamps", async () => {
+    const state = sampleLifecycleState();
+    const [first] = state.trips;
+    const lisbon = sampleLifecycleState().trips.find((trip) => trip.id === "lisbon")!;
+    state.trips = [
+      {
+        ...first,
+        stops: [
+          { ...first.stops[0], leave: first.end },
+          { ...lisbon.stops[0], arrive: first.end, leave: first.end },
+        ],
+      },
+    ];
+    setup(state);
+    const hero = await screen.findByRole("article", { name: "San Diego" });
+    expect(within(hero).getByRole("img", { name: "USA, PRT route stamps" })).toBeTruthy();
   });
 });
 
