@@ -2,6 +2,7 @@
 // so nothing unexpected reaches the domain or the database.
 
 import { z } from "zod";
+import { ADDABLE_CATEGORIES } from "../../domain/item-ops";
 import { APPEARANCES } from "../../domain/appearance";
 import { THEME_IDS } from "../../domain/themes";
 import { MAX_STOPS } from "../../domain/trip-stops";
@@ -52,6 +53,13 @@ export const addToiletryItemInput = z.object({
   qty,
   packLast: z.boolean(),
   scope,
+});
+/** A custom item of any addable category (#147). The domain checks the same limits again; this gives field errors. */
+export const addItemInput = z.object({
+  tripId,
+  name,
+  category: z.enum(ADDABLE_CATEGORIES),
+  neededQty: qty,
 });
 export const updatePreferencesInput = z.object({ tripId, config: tripConfig });
 
