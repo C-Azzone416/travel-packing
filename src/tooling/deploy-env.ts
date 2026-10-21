@@ -2,6 +2,7 @@
 // It reports variable NAMES only, never values: a value could be a connection string or a secret.
 
 import { isPlainEmail } from "../server/auth/allowlist";
+import { screenshotEnvProblems } from "./feedback-screenshots";
 
 export type DeployTarget = "preview" | "production";
 type Env = Record<string, string | undefined>;
@@ -179,6 +180,8 @@ export function checkDeployEnv(
       if (problem) problems.push(`OWNER_EMAIL_ALLOWLIST ${problem}`);
     }
   }
+  // Production never captures screenshots (#130): FEEDBACK_SCREENSHOTS must be unset or 0 there.
+  problems.push(...screenshotEnvProblems(target, env));
   // Production may leave the provider unset (search off) or use the real one; any other value is a mistake.
   const provider = env.LOCATION_PROVIDER?.trim();
   if (target === "production" && provider && provider !== PREVIEW_LOCATION_PROVIDER) {

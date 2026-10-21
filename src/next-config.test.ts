@@ -130,3 +130,59 @@ describe("next.config: test-only modules are compiled in only for e2e builds", (
     });
   });
 });
+
+const CAPTURE = "@/features/feedback/screenshot-capture";
+const CAPTURE_STUB = "./src/features/feedback/screenshot-capture.disabled.ts";
+
+describe("next.config: screenshot capture is compiled in only when screenshots are switched on (#130)", () => {
+  it("lists exactly the capture module and its stub", async () => {
+    const { SCREENSHOT_ONLY_MODULES } = await loadModule();
+    expect(SCREENSHOT_ONLY_MODULES).toEqual([{ specifier: CAPTURE, stub: CAPTURE_STUB }]);
+  });
+
+  it.each([
+    ["a local or preview build", {}],
+    ["a preview deploy", { VERCEL_ENV: "preview" }],
+  ])("keeps the real capture in %s", async (_name, given) => {
+    const env: Record<string, string | undefined> = given;
+    vi.stubEnv("NEXT_PUBLIC_E2E_BUILD", "1");
+    vi.stubEnv("VERCEL_ENV", env.VERCEL_ENV ?? "");
+    const { default: config } = await loadModule();
+    expect(config.turbopack?.resolveAlias).toEqual({});
+    const { registered } = await runWebpack();
+    expect(registered).toEqual([]);
+  });
+
+  it.each([
+    ["production", { VERCEL_ENV: "production" }],
+    ["the off switch", { FEEDBACK_SCREENSHOTS: "0" }],
+    ["production with the switch on", { VERCEL_ENV: "production", FEEDBACK_SCREENSHOTS: "1" }],
+  ])(
+    "stubs the capture for %s, with Turbopack and with webpack, even in an e2e build",
+    async (_name, given) => {
+      const env: Record<string, string | undefined> = given;
+      vi.stubEnv("NEXT_PUBLIC_E2E_BUILD", "1");
+      vi.stubEnv("VERCEL_ENV", env.VERCEL_ENV ?? "");
+      vi.stubEnv("FEEDBACK_SCREENSHOTS", env.FEEDBACK_SCREENSHOTS ?? "");
+      const { default: config } = await loadModule();
+      expect(config.turbopack?.resolveAlias).toEqual({ [CAPTURE]: CAPTURE_STUB });
+      const { registered } = await runWebpack();
+      expect(registered).toHaveLength(1);
+      const resource = { request: CAPTURE };
+      expect(registered[0].pattern.test(CAPTURE)).toBe(true);
+      expect(registered[0].pattern.test(`${CAPTURE}.disabled`)).toBe(false);
+      registered[0].replace(resource);
+      expect(resource.request).toBe(resolve(CAPTURE_STUB));
+    },
+  );
+
+  it("stubs both the e2e-only modules and the capture in a production build that is not an e2e build", async () => {
+    vi.stubEnv("NEXT_PUBLIC_E2E_BUILD", "");
+    vi.stubEnv("VERCEL_ENV", "production");
+    const { default: config } = await loadModule();
+    expect(config.turbopack?.resolveAlias).toEqual({
+      ...Object.fromEntries(MODULES.map(([, specifier, stub]) => [specifier, stub])),
+      [CAPTURE]: CAPTURE_STUB,
+    });
+  });
+});

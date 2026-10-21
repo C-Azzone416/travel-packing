@@ -57,11 +57,22 @@ export const VERIFY_STEPS: readonly VerifyStep[] = [
     command: npm("test:coverage"),
     quick: true,
   },
-  { id: "build", label: "Production build", command: npm("build"), quick: false },
+  {
+    id: "build:production",
+    label: "Production build",
+    command: npm("build:production"),
+    quick: false,
+  },
   {
     id: "check:no-e2e-in-build",
     label: "No e2e code in the build",
     command: npm("check:no-e2e-in-build"),
+    quick: false,
+  },
+  {
+    id: "check:no-capture-in-build",
+    label: "No screenshot capture in the production build",
+    command: npm("check:no-capture-in-build"),
     quick: false,
   },
   {
@@ -75,6 +86,12 @@ export const VERIFY_STEPS: readonly VerifyStep[] = [
     id: "check:no-e2e-in-build",
     label: "No e2e code in the webpack build",
     command: npm("check:no-e2e-in-build"),
+    quick: false,
+  },
+  {
+    id: "check:no-capture-in-build",
+    label: "No screenshot capture in the webpack build",
+    command: npm("check:no-capture-in-build"),
     quick: false,
   },
   {

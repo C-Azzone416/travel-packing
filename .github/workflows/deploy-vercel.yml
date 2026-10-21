@@ -133,7 +133,7 @@ jobs:
       # code, never sees one).
       - name: Build
         run: |
-          if [ "$TARGET" = production ]; then vercel build --prod; else vercel build; fi
+          if [ "$TARGET" = production ]; then VERCEL_ENV=production FEEDBACK_SCREENSHOTS=0 vercel build --prod; else vercel build; fi
 
       # An output without server functions deploys "fine" and then answers every request with a 404; stop before uploading it.
       - name: The build output has server functions
