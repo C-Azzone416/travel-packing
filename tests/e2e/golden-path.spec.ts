@@ -32,7 +32,7 @@ test(
     await page.getByLabel("Leave", { exact: true }).fill("2026-11-12");
     await page.getByLabel("Return", { exact: true }).fill("2026-11-16");
     await page.getByRole("button", { name: "Continue to packing preferences" }).click();
-    await expect(page.getByRole("heading", { name: "3 everyday days" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "3 days of everyday clothes" })).toBeVisible();
     await page.getByRole("button", { name: "Save trip" }).click();
     await expect(page.locator(".toast-region")).toContainText("Trip saved");
     await expect(page.getByRole("article", { name: "London" })).toBeVisible();

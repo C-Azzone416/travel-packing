@@ -15,6 +15,7 @@ import { diffRecommendations, type WeatherChange } from "@/domain/weather/diff";
 import { recommendPacking } from "@/domain/weather/recommend";
 import { TripsSourceError, type TripChange } from "@/features/trips/trips-source";
 import { useTripsSource } from "@/features/trips/TripsSourceProvider";
+import { tripMathLine } from "@/features/trips/count-copy";
 import { RouteText } from "@/features/trips/RouteText";
 import { formatDays, formatRange, routeCities, routeIsTitle } from "@/features/trips/view";
 import { AddToiletryForm } from "./AddToiletryForm";
@@ -673,8 +674,7 @@ export function TripScreen({ tripId }: { tripId: string }) {
           <Card padded>
             <h3>Trip math</h3>
             <p className="tiny muted">
-              {formatDays(trip.days)} − outbound worn − return outfit ={" "}
-              <strong>{trip.dailyDays} everyday days</strong>.
+              {tripMathLine(trip.days, trip.dailyDays, trip.config.returnOutfit)}
             </p>
             <Button variant="ghost" small onClick={() => setDialog({ kind: "preferences" })}>
               Edit preferences

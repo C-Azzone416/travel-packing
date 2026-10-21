@@ -295,7 +295,7 @@ describe("step 2: shape the list", () => {
     expect(
       screen.getByText("Lisbon, Lisbon District, Portugal · Nov 12 – Nov 16 · 5 days"),
     ).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "3 everyday days" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "3 days of everyday clothes" })).toBeTruthy();
     expect(screen.queryByText(/Simulated/)).toBeNull();
     const row = (name: string) =>
       screen.getByText(name, { selector: "strong" }).closest(".review-row") as HTMLElement;
@@ -337,7 +337,7 @@ describe("step 2: shape the list", () => {
     expect(reuse.checked).toBe(false);
   });
 
-  it("return outfit off: shows what the calculator does, and the return set count drops to 0", async () => {
+  it("return outfit off: shows what the calculator does, and the third tile becomes the return day that is not counted", async () => {
     const { user } = setup();
     await toShapeStep(user);
     expect(
@@ -349,9 +349,14 @@ describe("step 2: shape the list", () => {
         "No separate return outfit. Your return day is not added to the everyday count.",
       ),
     ).toBeTruthy();
-    const returnSet = screen.getByText("RETURN SET").previousElementSibling as HTMLElement;
-    expect(returnSet.textContent).toBe("0");
-    expect(screen.getByRole("heading", { name: "3 everyday days" })).toBeTruthy();
+    const returnDay = screen.getByText("Return day, not counted")
+      .previousElementSibling as HTMLElement;
+    expect(returnDay.textContent).toBe("1");
+    expect(screen.queryByText("Set for the trip home")).toBeNull();
+    expect(
+      screen.getByText(/5 days away − 1 worn − 1 return day = 3 days of everyday clothes\./),
+    ).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "3 days of everyday clothes" })).toBeTruthy();
   });
 
   it("Edit trip details goes back with everything kept", async () => {
