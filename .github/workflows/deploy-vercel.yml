@@ -220,3 +220,15 @@ jobs:
         env:
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: npx tsx scripts/smoke-test.ts "https://${PREVIEW_ALIAS}"
+
+      # ---- tidy up (#135) -----------------------------------------------------------------------------------------------
+      # Caroline's retention decision: only the stable alias address stays reachable, so every other Preview deployment of this
+      # project is deleted, but only now, after the alias moved and its smoke test passed, and never a Production one. The script
+      # confirms the alias target itself (two ways) and deletes nothing if it cannot; it logs counts only and always exits 0, so
+      # tidying up can never fail a deploy that already succeeded. The first run after this lands also clears the old backlog.
+      - name: Delete superseded Preview deployments
+        if: env.TARGET == 'preview' && steps.alias_head.outputs.assign == 'true'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          DEPLOY_URL: ${{ steps.deploy.outputs.url }}
+        run: npx tsx scripts/cleanup-previews.ts "$DEPLOY_URL" "$PREVIEW_ALIAS"

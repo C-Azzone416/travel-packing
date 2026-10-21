@@ -149,6 +149,14 @@ The alias moves only when all of this holds, in this order, in the same job:
 
 then the alias itself is **smoke-tested** (the same checks as the deployment URL).
 
+**Old Preview deployments are deleted (#135).** Only the alias address should stay reachable: old per-deploy URLs keep talking to the Preview
+database with stale code (they caused the #119 lock-out). After the alias smoke test, the last step (`scripts/cleanup-previews.ts`, logic in
+`src/tooling/preview-cleanup.ts`) deletes every Preview deployment of the project except the one the alias points to, with the same
+`VERCEL_TOKEN` (`GET /v6/deployments?target=preview`, then `DELETE /v13/deployments/{id}`). It deletes nothing unless the alias target is
+confirmed two ways (the alias's own answer and this run's deployment agree) and is among the listed Previews; it checks each deployment's own
+target again, so Production is never touched; it skips builds still in progress (the next run takes them); it retries on 429. It logs counts only
+(`preview-cleanup: deleted N, kept 1`) and always exits 0, so it can never fail a deploy. The first run after it merged also clears the backlog.
+
 On Preview (`VERCEL_ENV=preview` at runtime) the app builds its reset-link return address from that stable origin and ignores the host the
 request arrived on (`src/server/auth/request-origin.ts`), so no per-deployment URL reaches an emailed link. Everywhere else (production, local) it is
 still derived from the request. The Neon Auth Preview project must trust exactly `https://travel-packing-preview.vercel.app` (add it under

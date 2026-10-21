@@ -72,6 +72,14 @@ export const ALIAS_SMOKE_STEP = [
   "VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
   'run: npx tsx scripts/smoke-test.ts "https://${PREVIEW_ALIAS}"',
 ];
+export const CLEANUP_STEP = [
+  "- name: Delete superseded Preview deployments",
+  "if: env.TARGET == 'preview' && steps.alias_head.outputs.assign == 'true'",
+  "env:",
+  "VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}",
+  "DEPLOY_URL: ${{ steps.deploy.outputs.url }}",
+  'run: npx tsx scripts/cleanup-previews.ts "$DEPLOY_URL" "$PREVIEW_ALIAS"',
+];
 
 /** What must be true of `.github/workflows/deploy-vercel.yml`. Returns the broken rules (empty when fine). */
 export function checkDeployWorkflow(workflow: string): string[] {
@@ -137,11 +145,11 @@ export function checkDeployWorkflow(workflow: string): string[] {
     }
   }
 
-  // Secrets: the Vercel token only in the three steps that talk to Vercel (pull, deploy, and assigning the Preview alias);
+  // Secrets: the Vercel token only in the four steps that talk to Vercel (pull, deploy, assigning the Preview alias and tidying up old Previews);
   // the database secret only in the deploy job.
-  if (count(/secrets\.VERCEL_TOKEN/g) !== 3)
+  if (count(/secrets\.VERCEL_TOKEN/g) !== 4)
     problems.push(
-      "VERCEL_TOKEN must be read by exactly three steps (pull, deploy and the Preview alias)",
+      "VERCEL_TOKEN must be read by exactly four steps (pull, deploy, the Preview alias and the Preview cleanup)",
     );
 
   // The stable Preview alias (#96): assigned only after a green deploy and smoke test, only for the develop head, only for a
@@ -183,6 +191,7 @@ export function checkDeployWorkflow(workflow: string): string[] {
     ["Is this run still the develop head?", ALIAS_HEAD_STEP, "develop head check"],
     ["Assign the stable Preview alias", ALIAS_SET_STEP, "alias assignment"],
     ["Smoke test the alias", ALIAS_SMOKE_STEP, "alias smoke test"],
+    ["Delete superseded Preview deployments", CLEANUP_STEP, "Preview cleanup"],
   ] as const) {
     const actual = stepLines(workflow, prefix);
     if (
@@ -211,6 +220,16 @@ export function checkDeployWorkflow(workflow: string): string[] {
   if (!(firstSmokeAt >= 0 && firstSmokeAt < headAt && headAt < aliasAt && aliasAt < lastSmokeAt)) {
     problems.push(
       "the order must be: smoke test, develop head check, alias set, smoke test of the alias",
+    );
+  }
+  // The cleanup (#135) comes last: after the alias moved and was smoke-tested, one step, only for the script that confirms the target.
+  const cleanupAt = workflow.indexOf("scripts/cleanup-previews.ts");
+  if (count(/scripts\/cleanup-previews\.ts/g) !== 1 || cleanupAt < lastSmokeAt) {
+    problems.push("the Preview cleanup must be one step, after the alias smoke test");
+  }
+  if (/\bvercel (remove|rm)\b/.test(code)) {
+    problems.push(
+      "old deployments are removed only by scripts/cleanup-previews.ts, never the vercel CLI",
     );
   }
   if (!/smoke-test\.ts "https:\/\/\$\{PREVIEW_ALIAS\}"/.test(workflow)) {
