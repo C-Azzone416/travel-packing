@@ -2691,3 +2691,50 @@ a.back {
   flex-wrap: wrap;
   gap: 8px;
 }
+
+/* Feedback report sheet (#132) */
+.field textarea {
+  width: 100%;
+  min-height: 112px;
+  max-height: 40vh;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 10px 14px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  resize: vertical;
+}
+.feedback-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  font-weight: 700;
+}
+.feedback-check input {
+  width: 22px;
+  height: 22px;
+  accent-color: var(--teal, #166d7a);
+}
+.feedback-shot {
+  display: grid;
+  gap: 6px;
+}
+.feedback-thumb {
+  max-width: min(160px, 100%);
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+.feedback-problem {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+}
+.feedback-result h3 {
+  margin: 0 0 6px;
+}
+.feedback-result p {
+  margin: 0;
+}
