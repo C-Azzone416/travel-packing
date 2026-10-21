@@ -20,6 +20,8 @@ export const SECRET_ENV_NAMES = [
   "OPEN_METEO_GEOCODING_URL",
   "LOCATION_PROVIDER",
   "WEATHER_PROVIDER",
+  "GITHUB_PACKAGES_TOKEN",
+  "NODE_AUTH_TOKEN",
   "OPEN_METEO_FORECAST_URL",
   "OPEN_METEO_ARCHIVE_URL",
 ] as const;
@@ -33,6 +35,8 @@ export const SECRET_VALUE_PATTERNS: readonly { name: string; pattern: RegExp }[]
   { name: "a private key", pattern: /-----BEGIN [A-Z ]*PRIVATE KEY-----/ },
   { name: "an AWS access key id", pattern: /\bAKIA[0-9A-Z]{16}\b/ },
   { name: "a GitHub token", pattern: /\bgh[pousr]_[A-Za-z0-9]{36,}\b/ },
+  { name: "a fine-grained GitHub token", pattern: /\bgithub_pat_[A-Za-z0-9_]{22,}\b/ },
+  { name: "an npm access token", pattern: /\bnpm_[A-Za-z0-9]{36}\b/ },
   { name: "a Stripe-style secret key", pattern: /\bsk_(?:live|test)_[A-Za-z0-9]{16,}\b/ },
 ];
 
@@ -45,6 +49,11 @@ export const SERVER_ONLY_MARKERS: readonly { name: string; text: string; source:
   },
   { name: "the data-layer runtime", text: "getDataContext", source: "src/server/data/runtime.ts" },
   { name: "the owner gate", text: "authorizeOwner", source: "src/server/auth/guard.ts" },
+  {
+    name: "the fake Framebriar service",
+    text: "framebriar-fake-service",
+    source: "src/test/fake-framebriar.ts",
+  },
   {
     name: "the weather provider",
     text: "createOpenMeteoWeatherProvider",
