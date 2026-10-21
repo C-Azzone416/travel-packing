@@ -237,7 +237,7 @@ describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
         "GH_TOKEN: ${{ github.token }}\n        run: |\n          head=",
         "GH_TOKEN: ${{ secrets.VERCEL_TOKEN }}\n        run: |\n          head=",
       ),
-      /develop head check step must be exactly as reviewed|exactly three steps/,
+      /develop head check step must be exactly as reviewed|exactly four steps/,
     ],
     [
       "a head check that does something else afterwards",
@@ -325,6 +325,40 @@ describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
       /still the develop head/,
     ],
     [
+      "the cleanup run for production too",
+      mutate(
+        "if: env.TARGET == 'preview' && steps.alias_head.outputs.assign == 'true'\n        env:\n          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}\n          DEPLOY_URL: ${{ steps.deploy.outputs.url }}\n        run: npx tsx scripts/cleanup-previews.ts",
+        "if: steps.alias_head.outputs.assign == 'true'\n        env:\n          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}\n          DEPLOY_URL: ${{ steps.deploy.outputs.url }}\n        run: npx tsx scripts/cleanup-previews.ts",
+      ),
+      /Preview cleanup step must be exactly as reviewed/,
+    ],
+    [
+      "the cleanup run without the alias having moved",
+      mutate(
+        "if: env.TARGET == 'preview' && steps.alias_head.outputs.assign == 'true'\n        env:\n          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}\n          DEPLOY_URL: ${{ steps.deploy.outputs.url }}\n        run: npx tsx scripts/cleanup-previews.ts",
+        "if: env.TARGET == 'preview'\n        env:\n          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}\n          DEPLOY_URL: ${{ steps.deploy.outputs.url }}\n        run: npx tsx scripts/cleanup-previews.ts",
+      ),
+      /Preview cleanup step must be exactly as reviewed/,
+    ],
+    [
+      "a cleanup that is allowed to fail the step quietly",
+      mutate(
+        'run: npx tsx scripts/cleanup-previews.ts "$DEPLOY_URL" "$PREVIEW_ALIAS"',
+        'run: npx tsx scripts/cleanup-previews.ts "$DEPLOY_URL" "$PREVIEW_ALIAS" || true',
+      ),
+      /Preview cleanup step must be exactly as reviewed/,
+    ],
+    [
+      "old deployments removed with the vercel CLI",
+      `${deploy.trimEnd()}\n      - name: Tidy\n        run: vercel remove old --yes\n`,
+      /never the vercel CLI/,
+    ],
+    [
+      "a second cleanup step",
+      `${deploy.trimEnd()}\n      - name: Again\n        run: npx tsx scripts/cleanup-previews.ts "$DEPLOY_URL" "$PREVIEW_ALIAS"\n`,
+      /one step, after the alias smoke test/,
+    ],
+    [
       "a step that runs after a failure",
       mutate(
         "- name: Smoke test the alias\n        if:",
@@ -367,9 +401,9 @@ describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
       /PREVIEW_ALIAS must be travel-packing-preview.vercel.app/,
     ],
     [
-      "a fourth Vercel token use",
+      "a fifth Vercel token use",
       `${deploy.trimEnd()}\n        X: \${{ secrets.VERCEL_TOKEN }}\n`,
-      /exactly three steps/,
+      /exactly four steps/,
     ],
     [
       "a preview deploy that leaves its target to Vercel",
@@ -420,7 +454,7 @@ describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
       `${deploy.trimEnd()}\n        X: \${{ secrets.DATABASE_URL }}\n`,
       /secrets\.DATABASE_URL must be read only by the secret injection step/,
     ],
-    ["a third Vercel token use", `${deploy}\n# ${"secrets"}.VERCEL_TOKEN\n`, /exactly three steps/],
+    ["a fifth Vercel token use", `${deploy}\n# ${"secrets"}.VERCEL_TOKEN\n`, /exactly four steps/],
     ["the pooled URL", `${deploy}\n          DATABASE_URL: x\n`, /never the pooled/],
     [
       "no direct URL secret",
