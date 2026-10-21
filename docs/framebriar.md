@@ -1,44 +1,30 @@
 # Framebriar: package access and the fake service (#127, #130)
 
-The app sends feedback to the shared Framebriar service through its browser SDK, `@masra91/framebriar`. The SDK is a **private**
-npm package on GitHub Packages (`masra91/framebriar`). We consume it and never change that repository or the service. The
-contract is that repository's `docs/general-feedback-v2.md` and `docs/distribution.md`.
+The app sends feedback to the shared Framebriar service through its browser SDK, `@masra91/framebriar`. The SDK is private.
+As a temporary CI workaround, this public repository vendors only the exact `0.4.1` npm distributable at
+`vendor/framebriar/framebriar-0.4.1.tgz`. It does not include the Framebriar service, owner admin tooling, infrastructure,
+credentials, invitations or backend configuration. We consume the SDK and never change the service here. The contract remains
+the private source repository's `docs/general-feedback-v2.md` and `docs/distribution.md`.
 
 Nothing in this repository holds a token, an invitation or an endpoint credential. Every value below is a placeholder.
 
 ## Installing the package
 
-`.npmrc` is committed and holds only the registry for the `@masra91` scope and a placeholder for the token:
+`package.json` pins the dependency to `file:vendor/framebriar/framebriar-0.4.1.tgz`; `package-lock.json` pins that archive's
+npm SHA-512 integrity. A normal `npm ci` installs it without `.npmrc`, `GITHUB_PACKAGES_TOKEN`, `packages: read`, or access to
+the private repository. The vendored artifact's source tag, commit, license, size and hashes are recorded in
+[`vendor/framebriar/README.md`](../vendor/framebriar/README.md).
 
-```ini
-@masra91:registry=https://npm.pkg.github.com
-//npm.pkg.github.com/:_authToken=${GITHUB_PACKAGES_TOKEN}
-```
+The package has no runtime npm dependencies. Its 32 extracted files match a fresh SDK build from private source tag `v0.4.1`
+byte-for-byte. The package manifest retains `license: UNLICENSED`; vendoring it does not make it open-source.
 
-The SDK version is pinned exactly in `package.json` (`0.4.1`) and in `package-lock.json`. Update it deliberately, in its own
-change, after reading that package's changelog.
+Update the archive deliberately and in its own change after reading the private package changelog. Use an already-authorized
+source route, compare the published distributable with the matching source tag, and update the archive and every provenance
+value together. Never copy the Framebriar backend, admin or infrastructure sources, and never add credentials, invitations,
+tokens or backend configuration to this repository.
 
-**Locally.** Export a token that can read the package, then install as usual:
-
-```sh
-export GITHUB_PACKAGES_TOKEN=$(gh auth token)   # a classic PAT with read:packages also works
-npm ci
-```
-
-`gh auth token` works when the account behind `gh` can read `masra91/framebriar` and its token includes `read:packages`
-(`gh auth refresh -s read:packages` adds it). Put the `export` in your shell profile, never in a file in this repository.
-Without it, `npm ci` fails with a 401 for that one package. The pre-push hook and `npm run verify` do not install anything,
-but they need the package to be present in `node_modules`.
-
-**In CI and deploy.** The `npm ci` step of every job in `ci.yml` and `deploy-vercel.yml` sets
-`GITHUB_PACKAGES_TOKEN: ${{ github.token }}` (and nothing else does), and the workflows grant `packages: read`.
-`npm run check:workflows` fails if an install step lacks the token, if any other step gets it, or if an installing job cannot
-read packages. We do not use `actions/setup-node`'s `registry-url`: it writes a second `.npmrc` that fights this one and makes
-GitHub Packages the default registry for every dependency.
-
-**Owner step (blocks CI).** The package's settings, **Manage Actions access**, must list `C-Azzone416/travel-packing` with read
-access. Until it does, the GitHub token gets a 401 on the package and every CI install fails. Vercel itself never installs: the
-deploy builds in Actions with `vercel build` and uploads the result, so the Vercel project needs no token.
+The shared Framebriar backend still owns its Azure Blob storage and the SDK continues to use the existing endpoint/protocol.
+This repository neither provisions nor configures Blob storage; runtime service access remains a separate operational setup.
 
 ## Screenshots: the build switch (Production never captures)
 

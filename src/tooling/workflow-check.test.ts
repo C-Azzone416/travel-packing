@@ -9,7 +9,6 @@ import {
   checkVercelCliLock,
   ciJob,
   MIN_CI_TIMEOUT_MINUTES,
-  packageAccessProblems,
   stepScript,
   stepLines,
   dependabotProblems,
@@ -39,7 +38,6 @@ describe("the real workflows", () => {
     expect(checkDeployWorkflow(deploy)).toEqual([]);
   });
 });
-
 describe("unpinnedActions", () => {
   it.each([
     ["a tag", "      - uses: actions/checkout@v4"],
@@ -1143,7 +1141,6 @@ describe("the ci summary script, run for real", () => {
     expect(run("full", { mode: "cancelled" })).not.toBe(0);
   });
 });
-
 describe("dependabotProblems (#225)", () => {
   const config = readFileSync(join(process.cwd(), ".github", "dependabot.yml"), "utf8");
 
@@ -1266,88 +1263,5 @@ describe("checkVercelCliLock", () => {
     expect(checkVercelCliLock(unpinned, pkg, lock).join("\n")).toMatch(
       /does not pin VERCEL_CLI_VERSION/,
     );
-  });
-});
-
-describe("packageAccessProblems (private package access, #130)", () => {
-  const TOKEN = "GITHUB_PACKAGES_TOKEN: ${{ github.token }}";
-
-  it.each([
-    ["ci.yml", ci],
-    ["deploy-vercel.yml", deploy],
-  ])(
-    "%s gives every install step the token and every installing job packages: read",
-    (_file, text) => {
-      expect(packageAccessProblems(text)).toEqual([]);
-      expect(text.split("\n").filter((line) => line.includes("run: npm ci"))).not.toHaveLength(0);
-    },
-  );
-
-  it("flags an install step without the token", () => {
-    const broken = ci.replace(
-      `          ${TOKEN} # read access to the private @masra91/framebriar package (install steps only)\n`,
-      "",
-    );
-    expect(broken).not.toBe(ci);
-    expect(
-      packageAccessProblems(broken).some((problem) => problem.includes("an install step must set")),
-    ).toBe(true);
-  });
-
-  it("flags the token on a step that does not install", () => {
-    const leaked = ci.replace(
-      "      - name: Check the build arrived\n",
-      `      - name: Check the build arrived\n        env:\n          ${TOKEN}\n`,
-    );
-    expect(leaked).not.toBe(ci);
-    expect(packageAccessProblems(leaked)).toContainEqual(
-      expect.stringContaining("install steps only"),
-    );
-  });
-
-  it("flags any other value for the token, such as a secret", () => {
-    const other = ci.replace(TOKEN, "GITHUB_PACKAGES_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN }}");
-    expect(other).not.toBe(ci);
-    expect(packageAccessProblems(other)).toContainEqual(
-      expect.stringContaining("the job's own token"),
-    );
-  });
-
-  it("flags a job that sets its own permissions without packages: read", () => {
-    const broken = ci.replace(
-      "      packages: read # installs the private @masra91/framebriar package\n      pull-requests: read # lists",
-      "      pull-requests: read # lists",
-    );
-    expect(broken).not.toBe(ci);
-    expect(packageAccessProblems(broken)).toContainEqual(expect.stringContaining("the mode job"));
-  });
-
-  it("flags inherited permissions that lack packages: read", () => {
-    const broken = ci.replace(
-      /^permissions:\n  contents: read\n  packages: read[^\n]*\n/m,
-      "permissions:\n  contents: read\n",
-    );
-    expect(broken).not.toBe(ci);
-    const problems = packageAccessProblems(broken);
-    for (const job of ["unit", "build", "e2e-build", "e2e"])
-      expect(problems).toContainEqual(expect.stringContaining(`the ${job} job`));
-  });
-
-  it("flags a calling job that caps the called workflow's packages access", () => {
-    const broken = ci.replace(
-      "      packages: read # the called workflow installs the private package\n",
-      "",
-    );
-    expect(broken).not.toBe(ci);
-    expect(packageAccessProblems(broken)).toContainEqual(expect.stringContaining("the deploy job"));
-  });
-
-  it("flags a deploy workflow without packages: read", () => {
-    const broken = mutate(/ {2}packages: read[^\n]*\n/, "");
-    expect(packageAccessProblems(broken).length).toBeGreaterThan(0);
-  });
-
-  it("has nothing to say about a workflow that installs nothing", () => {
-    expect(packageAccessProblems("jobs:\n  one:\n    steps:\n      - run: echo hi\n")).toEqual([]);
   });
 });

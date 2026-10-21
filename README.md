@@ -8,9 +8,8 @@ Responsive, same-origin Next.js (App Router, TypeScript strict) app. See
 
 Node 22 LTS (`.nvmrc`), npm.
 
-The feedback SDK `@masra91/framebriar` is a **private** GitHub Packages package, so `npm ci` needs `GITHUB_PACKAGES_TOKEN` set
-(see [docs/framebriar.md](docs/framebriar.md)):
-`export GITHUB_PACKAGES_TOKEN=$(gh auth token)`.
+The private feedback SDK `@masra91/framebriar` is temporarily vendored as its exact `0.4.1` npm archive, so `npm ci` needs
+no package-registry token. See [docs/framebriar.md](docs/framebriar.md) for provenance and the update procedure.
 
 ## Commands
 

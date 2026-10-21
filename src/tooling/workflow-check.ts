@@ -68,57 +68,6 @@ export function stepLines(workflow: string, namePrefix: string): string[] | null
   return out;
 }
 
-const PACKAGES_TOKEN_LINE = "GITHUB_PACKAGES_TOKEN: ${{ github.token }}";
-
-/**
- * Private package access (#130): the Framebriar SDK installs from GitHub Packages, so every `npm ci` step gets the job's
- * read-only token under the one name .npmrc expects, and nothing else does. A job that installs must be allowed to read
- * packages, whether it sets its own permissions or inherits them (a workflow that calls another caps it the same way).
- */
-export function packageAccessProblems(workflow: string): string[] {
-  const problems: string[] = [];
-  const lines = workflow.split("\n");
-  const tokenLines = lines.flatMap((line, index) =>
-    line.includes("GITHUB_PACKAGES_TOKEN") && !line.trim().startsWith("#") ? [index] : [],
-  );
-  const installSteps = lines.flatMap((line, index) =>
-    /^\s*run:\s*npm ci\s*$/.test(line) ? [index] : [],
-  );
-  const stepStart = (index: number) => {
-    for (let at = index; at >= 0; at -= 1) if (lines[at].trim().startsWith("- name:")) return at;
-    return 0;
-  };
-  for (const index of installSteps) {
-    const step = lines.slice(stepStart(index), index + 1).join("\n");
-    if (!step.includes(PACKAGES_TOKEN_LINE))
-      problems.push(`line ${index + 1}: an install step must set ${PACKAGES_TOKEN_LINE}`);
-  }
-  for (const index of tokenLines) {
-    if (!lines[index].includes(PACKAGES_TOKEN_LINE))
-      problems.push(`line ${index + 1}: GITHUB_PACKAGES_TOKEN may only be the job's own token`);
-    else if (!installSteps.some((install) => stepStart(install) <= index && index < install))
-      problems.push(`line ${index + 1}: GITHUB_PACKAGES_TOKEN belongs on install steps only`);
-  }
-  if (installSteps.length === 0) return problems;
-  const topPermissions = /^permissions:\n((?: {2}.*\n)+)/m.exec(workflow)?.[1] ?? "";
-  const jobNames = [...workflow.matchAll(/^ {2}([A-Za-z0-9_-]+):\s*$/gm)]
-    .map((match) => match[1])
-    .filter(
-      (name) =>
-        jobBody(workflow, name)?.includes("\n    steps:") ||
-        /uses: \.\//.test(jobBody(workflow, name) ?? ""),
-    );
-  for (const name of jobNames) {
-    const body = jobBody(workflow, name) ?? "";
-    const installs = /run:\s*npm ci/.test(body) || /uses:\s*\.\/\.github\/workflows\//.test(body);
-    if (!installs) continue;
-    const own = /^ {4}permissions:\s*\n((?: {6}.*\n)+)/m.exec(`${body}\n`)?.[1];
-    if (!/^\s*packages:\s*read\b/m.test(own ?? topPermissions))
-      problems.push(`the ${name} job installs the private package, so it needs packages: read`);
-  }
-  return problems;
-}
-
 /** The three steps that decide whether the stable alias moves, exactly as reviewed (#96). Any change is a deliberate edit here. */
 export const ALIAS_HEAD_STEP = [
   "- name: Is this run still the develop head? (preview only)",

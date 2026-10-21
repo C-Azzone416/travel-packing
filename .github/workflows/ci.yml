@@ -22,7 +22,6 @@ on:
 
 permissions:
   contents: read
-  packages: read # installs the private @masra91/framebriar package (needs the repo under its package "Manage Actions access")
 
 # A newer push to a pull request cancels its older run. A push to develop must never cancel a run that is deploying.
 concurrency:
@@ -37,7 +36,6 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
-      packages: read # installs the private @masra91/framebriar package
       pull-requests: read # lists the pull requests of a commit
       actions: read # reads earlier `ci` runs
     outputs:
@@ -51,8 +49,6 @@ jobs:
           cache: npm
 
       - name: Install
-        env:
-          GITHUB_PACKAGES_TOKEN: ${{ github.token }} # read access to the private @masra91/framebriar package (install steps only)
         run: npm ci
 
       - name: Decide how much to run
@@ -71,7 +67,6 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
-      packages: read # installs the private @masra91/framebriar package
       pull-requests: read # gitleaks lists a pull request's commits
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -89,8 +84,6 @@ jobs:
           cache: npm
 
       - name: Install
-        env:
-          GITHUB_PACKAGES_TOKEN: ${{ github.token }} # read access to the private @masra91/framebriar package (install steps only)
         run: npm ci
 
       # Fails on any committed file over 1 MiB or any local database, build, test, dependency, or env file.
@@ -147,8 +140,6 @@ jobs:
           cache: npm
 
       - name: Install
-        env:
-          GITHUB_PACKAGES_TOKEN: ${{ github.token }} # read access to the private @masra91/framebriar package (install steps only)
         run: npm ci
 
       # vitest exits non-zero when any coverage threshold (90%) is missed.
@@ -194,8 +185,6 @@ jobs:
           cache: npm
 
       - name: Install
-        env:
-          GITHUB_PACKAGES_TOKEN: ${{ github.token }} # read access to the private @masra91/framebriar package (install steps only)
         run: npm ci
 
       # A production-mode build (VERCEL_ENV=production): the screenshot capture module resolves to its stub here.
@@ -246,8 +235,6 @@ jobs:
           cache: npm
 
       - name: Install
-        env:
-          GITHUB_PACKAGES_TOKEN: ${{ github.token }} # read access to the private @masra91/framebriar package (install steps only)
         run: npm ci
 
       - name: Build for e2e
@@ -292,8 +279,6 @@ jobs:
           cache: npm
 
       - name: Install
-        env:
-          GITHUB_PACKAGES_TOKEN: ${{ github.token }} # read access to the private @masra91/framebriar package (install steps only)
         run: npm ci
 
       - name: Download the e2e build
@@ -386,6 +371,5 @@ jobs:
     permissions:
       contents: read
       actions: read
-      packages: read # the called workflow installs the private package
     uses: ./.github/workflows/deploy-vercel.yml
     secrets: inherit
