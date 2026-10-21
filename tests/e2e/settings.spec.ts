@@ -130,3 +130,42 @@ test(
     });
   },
 );
+
+// Field Ledger themes (#142): the choice applies at once, survives reload and navigation, and is account-level.
+test("the Theme choice applies at once and persists across reload, navigation and a device with no cookie", async ({
+  page,
+  context,
+}) => {
+  await openSettings(page);
+  const html = page.locator("html");
+  const accent = () =>
+    page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue("--accent").trim(),
+    );
+  await expect(html).toHaveAttribute("data-appearance", "base");
+  expect(await accent()).toBe("#a64a39");
+
+  await page.getByRole("radio", { name: /Deep Ocean/ }).check();
+  await expect(html).toHaveAttribute("data-appearance", "ocean");
+  expect(await accent()).toBe("#2d6674");
+  await expect(page.getByText("Current theme: Deep Ocean")).toBeVisible();
+  // Saved for real: wait for the "Last saved" proof before leaving.
+  await expect(page.getByText(/^Last saved /)).toBeVisible();
+
+  await page.reload();
+  await expect(html).toHaveAttribute("data-appearance", "ocean");
+  await expect(page.getByRole("radio", { name: /Deep Ocean/ })).toBeChecked();
+
+  await page
+    .getByRole("navigation", { name: "Primary navigation" })
+    .getByRole("link", { name: "Staples" })
+    .click();
+  await expect(html).toHaveAttribute("data-appearance", "ocean");
+
+  // A new device has the session but no cookie mirror: the account's choice still wins.
+  const cookies = await context.cookies();
+  await context.clearCookies({ name: "appearance" });
+  expect((await context.cookies()).length).toBe(cookies.length - 1);
+  await page.goto("/settings");
+  await expect(html).toHaveAttribute("data-appearance", "ocean");
+});

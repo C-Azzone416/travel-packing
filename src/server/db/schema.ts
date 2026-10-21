@@ -66,6 +66,8 @@ export const users = pgTable(
     /** The person agreed to send map coordinates and dates to the weather provider (epic #107). Off until chosen. */
     weatherOptIn: boolean("weather_opt_in").notNull().default(false),
     temperatureUnit: text("temperature_unit", { enum: TEMPERATURE_UNITS }).notNull().default("F"),
+    /** The colour theme the person chose (#139). Null until they choose one, which means Base; unknown values read as Base. */
+    appearance: text("appearance"),
     createdAt: createdAt(),
   },
   (table) => [check("users_temperature_unit_known", sql`${table.temperatureUnit} in ('F', 'C')`)],
