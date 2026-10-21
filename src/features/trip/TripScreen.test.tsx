@@ -900,8 +900,9 @@ describe("preferences and Ready", () => {
   it("shows the trip math", async () => {
     setup();
     await ready();
-    expect(screen.getByText(/5 days − outbound worn − return outfit =/)).toBeTruthy();
-    expect(screen.getByText("3 everyday days")).toBeTruthy();
+    expect(
+      screen.getByText("5 days away − 1 worn − 1 for home = 3 days of everyday clothes."),
+    ).toBeTruthy();
   });
 
   it("a trip with no confirmed location has no place line, and its header art is still its theme", async () => {
