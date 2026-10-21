@@ -210,3 +210,61 @@ describe("the review sheet", () => {
     fireEvent.keyDown(dialog, { key: "Escape" });
   });
 });
+
+describe("item weather pills", () => {
+  const jacket = () =>
+    document.querySelector('[data-item-id="weather-rain-jacket"]') as HTMLElement;
+  const pills = () => document.querySelectorAll(".weather-pill, .weather-note");
+
+  it("shows the tag and reason under an item the live forecast calls for", async () => {
+    setup({ weather: { kind: "ready", stops: rainy }, rainJacket: true });
+    await ready();
+    await waitFor(() => expect(jacket().querySelector(".weather-pill")).not.toBeNull());
+    expect(jacket().querySelector(".weather-pill")?.textContent).toBe("Rain");
+    expect(jacket().querySelector(".weather-note")?.textContent).toMatch(/^Rain on 2 days/);
+    // Only items the forecast names get one: the plain staples do not.
+    expect(document.querySelectorAll(".weather-pill").length).toBeGreaterThan(0);
+    expect(document.querySelector('[data-item-id="underwear"] .weather-pill')).toBeNull();
+  });
+
+  it("a stale item loses its pill when the forecast no longer calls for it", async () => {
+    setup({ weather: { kind: "ready", stops: dry }, rainJacket: true });
+    await ready();
+    // The dry forecast offers to remove the jacket (the panel has loaded), and the row carries no pill.
+    expect(await screen.findByRole("button", { name: "Review changes" })).toBeTruthy();
+    expect(jacket()).not.toBeNull();
+    expect(jacket().querySelector(".weather-pill")).toBeNull();
+    expect(jacket().querySelector(".weather-note")).toBeNull();
+  });
+
+  it("shows no pills when weather is off", async () => {
+    const { getTripWeather } = setup({ optedIn: false, rainJacket: true });
+    await ready();
+    expect(await screen.findByRole("button", { name: "Get weather" })).toBeTruthy();
+    expect(getTripWeather).not.toHaveBeenCalled();
+    expect(pills()).toHaveLength(0);
+  });
+
+  it("shows no pills when the weather service is unavailable", async () => {
+    setup({ weather: { kind: "unavailable" }, rainJacket: true });
+    await ready();
+    await screen.findByText("We couldn’t reach the weather service. Your list is unchanged.");
+    expect(pills()).toHaveLength(0);
+  });
+
+  it("shows no pills when the person is offline", async () => {
+    setup({ weather: { kind: "offline" }, rainJacket: true });
+    await ready();
+    await screen.findByText(/You’re offline\. Weather will load/);
+    expect(pills()).toHaveLength(0);
+  });
+
+  it("shows no pills when the answer has no usable day", async () => {
+    const empty: StopWeather[] = [{ stopIndex: 0, status: "ok", days: [] }];
+    setup({ weather: { kind: "ready", stops: empty }, rainJacket: true });
+    await ready();
+    await screen.findByRole("list", { name: "Weather by stop" }).catch(() => undefined);
+    await waitFor(() => expect(document.querySelector(".weather-panel")).not.toBeNull());
+    expect(pills()).toHaveLength(0);
+  });
+});
