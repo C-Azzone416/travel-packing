@@ -45,7 +45,7 @@ async function ready() {
 }
 
 describe("loading and errors", () => {
-  it("shows two skeleton cards (no spinner) with the title and New trip visible, then the trips", async () => {
+  it("shows two skeleton cards (no spinner) with the title and Plan a trip visible, then the trips", async () => {
     const gate = deferred<LifecycleState>();
     const base = memory(sampleLifecycleState());
     const source: TripsSource = { ...base, load: () => gate.promise };
@@ -54,7 +54,9 @@ describe("loading and errors", () => {
     expect(region.getAttribute("aria-busy")).toBe("true");
     expect(view.container.querySelectorAll(".skeleton-card")).toHaveLength(2);
     expect(screen.getByRole("heading", { name: "Trips", level: 1 })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "New trip" }).getAttribute("href")).toBe("/trips/new");
+    expect(screen.getByRole("link", { name: "Plan a trip" }).getAttribute("href")).toBe(
+      "/trips/new",
+    );
     await act(async () => gate.resolve(await base.load()));
     await ready();
     expect(screen.queryByRole("region", { name: "Loading trips" })).toBeNull();
@@ -174,7 +176,9 @@ describe("loading and errors", () => {
     const user = userEvent.setup();
     renderInApp(<TripsDashboard source={memory(sampleLifecycleState())} />);
     expect(user).toBeTruthy();
-    expect(await screen.findByRole("heading", { name: "Where are we going?" })).toBeTruthy();
+    expect(
+      await screen.findByRole("heading", { name: "Your travel ledger", level: 1 }),
+    ).toBeTruthy();
   });
 });
 
@@ -185,16 +189,18 @@ describe("upcoming view", () => {
     const sanDiego = card("San Diego");
     expect(within(sanDiego).getByText("California, United States")).toBeTruthy();
     expect(within(sanDiego).getByText(/Oct 23 – Oct 27/)).toBeTruthy();
-    expect(within(sanDiego).getByText("5 days")).toBeTruthy();
+    expect(within(sanDiego).getByText(/Oct 23 – Oct 27 · 4 nights/)).toBeTruthy();
     // The card carries no weather copy (the old simulated "Close forecast" label is gone).
     expect(within(sanDiego).queryByText(/forecast|Simulated/i)).toBeNull();
-    expect(within(sanDiego).getByText("24 left to pack")).toBeTruthy();
+    expect(within(sanDiego).getByText("24 left")).toBeTruthy();
     expect(within(sanDiego).getByText("6 of 30 packed")).toBeTruthy();
     const bar = within(sanDiego).getByRole("progressbar", { name: "San Diego packing progress" });
     expect(bar.getAttribute("aria-valuenow")).toBe("20");
     expect(bar.getAttribute("aria-valuetext")).toBe("20% packed");
     expect(
-      within(sanDiego).getByRole("link", { name: "Keep packing: San Diego" }).getAttribute("href"),
+      within(sanDiego)
+        .getByRole("link", { name: "Continue packing: San Diego" })
+        .getAttribute("href"),
     ).toBe("/trips/san-diego");
     expect(
       within(sanDiego).getByRole("link", { name: "Copy trip: San Diego" }).getAttribute("href"),
@@ -217,20 +223,21 @@ describe("upcoming view", () => {
     expect(screen.queryByRole("heading", { name: "Recently deleted" })).toBeNull();
   });
 
-  it("shows the hero with a New trip link and the tab counts", async () => {
+  it("shows the ledger heading with a Plan a trip link and the tab counts", async () => {
     setup();
     await ready();
-    expect(
-      screen.getByRole("heading", { name: "Pack for the trip, not the anxiety." }),
-    ).toBeTruthy();
-    expect(screen.getByRole("link", { name: /New trip/ }).getAttribute("href")).toBe("/trips/new");
+    expect(screen.getByRole("heading", { name: "Your travel ledger", level: 1 })).toBeTruthy();
+    expect(screen.getByText("1 journey ahead")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Plan a trip" }).getAttribute("href")).toBe(
+      "/trips/new",
+    );
     expect(tab(/Upcoming/).textContent).toContain("1");
     expect(tab(/Past & archive/).textContent).toContain("1");
     expect(tab(/Upcoming/).getAttribute("aria-pressed")).toBe("true");
     expect(screen.queryByText("Lisbon")).toBeNull();
   });
 
-  it("omits place and forecast for a destination without a confirmed location, and loads only the first card's art eagerly", async () => {
+  it("omits place and forecast for a destination without a confirmed location", async () => {
     const state = sampleLifecycleState();
     state.trips = [
       state.trips[0],
@@ -243,27 +250,24 @@ describe("upcoming view", () => {
         end: "2026-11-04",
       },
     ];
-    const { view } = setup(state);
+    setup(state);
     await ready();
     const typed = card("Somewhere typed");
     expect(within(typed).queryByText(/Simulated/)).toBeNull();
     expect(within(typed).queryByText(/United States/)).toBeNull();
-    // The picture is the trip's theme (inherited here from the San Diego row it was copied from), never its place.
-    expect(typed.querySelector("[data-art-key]")?.getAttribute("data-art-key")).toBe("beach");
-    const [first, second] = [...view.container.querySelectorAll("article img")];
-    expect(first.getAttribute("loading")).toBe("eager");
-    expect(second.getAttribute("loading")).toBe("lazy");
+    expect(within(typed).getByText("Nov 1")).toBeTruthy();
   });
 });
 
 describe("trip themes on cards", () => {
-  it("each card shows its trip's theme art, and a trip's theme is the only thing that picks it", async () => {
+  it("each Past & archive card shows its trip's theme art, and a trip's theme is the only thing that picks it", async () => {
     const state = sampleLifecycleState();
     state.trips = state.trips.map((trip) =>
-      trip.id === "san-diego" ? { ...trip, theme: "theme_park" as const } : trip,
+      trip.id === "san-diego" ? { ...trip, theme: "theme_park" as const, archived: true } : trip,
     );
-    setup(state);
-    await ready();
+    const { user } = setup(state);
+    await screen.findByRole("heading", { name: "Your travel ledger", level: 1 });
+    await user.click(tab(/Past & archive/));
     const sanDiego = card("San Diego");
     expect(sanDiego.querySelector("[data-art-key]")?.getAttribute("data-art-key")).toBe(
       "theme_park",
@@ -278,9 +282,7 @@ describe("past & archive view", () => {
     await ready();
     await user.click(tab(/Past & archive/));
     expect(screen.getByRole("heading", { name: "Past trips & archive", level: 1 })).toBeTruthy();
-    expect(
-      screen.queryByRole("heading", { name: "Pack for the trip, not the anxiety." }),
-    ).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Your travel ledger" })).toBeNull();
     const lisbon = card("Lisbon");
     expect(within(lisbon).getByText("Past trip")).toBeTruthy();
     expect(within(lisbon).getByText("Ready to go")).toBeTruthy();
@@ -296,7 +298,7 @@ describe("past & archive view", () => {
     empty.trips = [];
     const { user } = setup(empty);
     expect(await screen.findByText("No upcoming trips.")).toBeTruthy();
-    expect(screen.getByText(/Create a trip or restore one from Past & archive/)).toBeTruthy();
+    expect(screen.getByText(/Plan a trip or restore one from Past & archive/)).toBeTruthy();
     await user.click(tab(/Past & archive/));
     expect(screen.getByText("No past or archived trips yet.")).toBeTruthy();
     expect(screen.getByText(/Archived trips and trips whose return date has passed/)).toBeTruthy();
@@ -332,7 +334,7 @@ describe("archive and restore", () => {
     await user.click(screen.getByRole("button", { name: "Archive: San Diego" }));
     await waitFor(() =>
       expect(document.activeElement).toBe(
-        screen.getByRole("heading", { name: "Where are we going?" }),
+        screen.getByRole("heading", { name: "Your travel ledger", level: 1 }),
       ),
     );
   });

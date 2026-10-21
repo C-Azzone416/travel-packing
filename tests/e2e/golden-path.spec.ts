@@ -26,7 +26,7 @@ test(
     await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
 
     // Create: pick a destination, set the dates, continue, save.
-    await page.getByRole("link", { name: /New trip/ }).click();
+    await page.getByRole("link", { name: /Plan a trip/ }).click();
     await page.getByRole("combobox", { name: "Destination search" }).fill("lon");
     await page.getByRole("option", { name: /England/ }).click();
     await page.getByLabel("Leave", { exact: true }).fill("2026-11-12");
@@ -38,7 +38,7 @@ test(
     await expect(page.getByRole("article", { name: "London" })).toBeVisible();
 
     // Pack: open the trip and check every item. Finishing the Bathroom items opens the bag prompt; confirm it.
-    await page.getByRole("link", { name: "Keep packing: London" }).click();
+    await page.getByRole("link", { name: /(Continue|Keep) packing: London/ }).click();
     await expect(page.getByRole("heading", { name: "London", level: 1 })).toBeVisible();
     const row = (id: string) => page.locator(`[data-item-id="${id}"]`);
     const ids = await page

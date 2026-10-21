@@ -19,7 +19,7 @@ async function pickStop(page: Page, stop: number, text: string, option: RegExp) 
 }
 
 async function createThreeStopTrip(page: Page) {
-  await page.getByRole("link", { name: /New trip/ }).click();
+  await page.getByRole("link", { name: /Plan a trip/ }).click();
   await page.getByRole("combobox", { name: "Destination search" }).fill("lisbon");
   await page.getByRole("option", { name: /Lisbon/ }).click();
   await page.getByLabel("Leave", { exact: true }).fill("2026-11-12");
@@ -57,7 +57,7 @@ test(
     await expect(trip(page, "Lisbon → Paris → Rome")).toBeVisible();
 
     await trip(page, "Lisbon → Paris → Rome")
-      .getByRole("link", { name: /Keep packing/ })
+      .getByRole("link", { name: /(Continue|Keep) packing/ })
       .click();
     await expect(
       page.getByRole("heading", { name: "Lisbon → Paris → Rome", level: 1 }),
@@ -73,7 +73,7 @@ test("edit the route down to 2 stops, then copy the trip to new dates", async ({
   await page.getByRole("button", { name: "Continue to packing preferences" }).click();
   await page.getByRole("button", { name: "Save trip" }).click();
   await trip(page, "Lisbon → Paris → Rome")
-    .getByRole("link", { name: /Keep packing/ })
+    .getByRole("link", { name: /(Continue|Keep) packing/ })
     .click();
 
   await page.getByRole("button", { name: "Edit route" }).click();
@@ -128,7 +128,7 @@ test(
     await page.getByRole("button", { name: "Continue to packing preferences" }).click();
     await page.getByRole("button", { name: "Save trip" }).click();
     await trip(page, "Lisbon → Paris → Rome")
-      .getByRole("link", { name: /Keep packing/ })
+      .getByRole("link", { name: /(Continue|Keep) packing/ })
       .click();
     await expectAccessible(page, "trip with route chip");
     await page.getByRole("button", { name: "Edit route" }).click();

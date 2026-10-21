@@ -16,7 +16,7 @@ async function openDashboard(page: Page) {
 
 async function openSanDiego(page: Page) {
   await openDashboard(page);
-  await page.getByRole("link", { name: "Keep packing: San Diego" }).click();
+  await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
   await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
 }
 
@@ -37,13 +37,10 @@ test("home: the headline, three navigation items, one upcoming trip with a 'left
   page,
 }) => {
   await openDashboard(page);
-  await expect(
-    page.getByRole("heading", { name: "Pack for the trip, not the anxiety.", level: 1 }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Your travel ledger", level: 1 })).toBeVisible();
   await expect(nav(page).getByRole("link")).toHaveCount(3);
   await expect(page.getByRole("article")).toHaveCount(1);
-  await expect(page.locator(".status-pill.remaining")).toHaveCount(1);
-  await expect(page.locator(".status-pill.remaining")).toContainText(/left to pack/);
+  await expect(page.getByRole("article")).toContainText(/\d+ left/);
   await page.getByRole("button", { name: /Past & archive/ }).click();
   await expect(page.getByRole("article")).toHaveCount(1);
   await expect(page.getByText("Past trip").first()).toBeVisible();
@@ -55,7 +52,7 @@ test("dates: a later departure pulls the return forward and becomes its minimum"
   page,
 }) => {
   await openDashboard(page);
-  await page.getByRole("link", { name: /New trip/ }).click();
+  await page.getByRole("link", { name: /Plan a trip/ }).click();
   await page.getByLabel("Leave", { exact: true }).fill("2026-11-12");
   await page.getByLabel("Return", { exact: true }).fill("2026-11-16");
   await page.getByLabel("Leave", { exact: true }).fill("2026-12-20");
@@ -176,7 +173,7 @@ test("copy: a remembered Bathroom item travels to the copy, with nothing checked
   await expect(page.getByRole("article", { name: "Paris" })).toBeVisible();
   expect(await page.getByRole("article", { name: "San Diego" }).innerText()).toBe(before);
 
-  await page.getByRole("link", { name: "Keep packing: Paris" }).click();
+  await page.getByRole("link", { name: /(Continue|Keep) packing: Paris/ }).click();
   await expect(page.getByRole("heading", { name: "Paris", level: 1 })).toBeVisible();
   await expect(page.getByText("Face wash", { exact: true })).toBeVisible();
   await expect(row(page, "nice-makeup")).toHaveCount(1);
@@ -199,7 +196,7 @@ test("a tour of every screen raises no uncaught browser errors", DEVICE, async (
     // is the browser unloading the page, not an error in the app. Let them finish before the next hard navigation.
     await page.waitForLoadState("networkidle");
   }
-  await page.getByRole("link", { name: /New trip/ }).click();
+  await page.getByRole("link", { name: /Plan a trip/ }).click();
   await page.getByRole("combobox", { name: "Destination search" }).fill("lon");
   await expect(page.getByRole("option").first()).toBeVisible();
   expect(errors).toEqual([]);
