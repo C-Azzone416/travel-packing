@@ -12,6 +12,7 @@ import { useToast } from "@/components/ui/Toast";
 import type { Staple, TripItem } from "@/domain/trip";
 import type { LifecycleTrip } from "@/domain/trip-lifecycle";
 import { diffRecommendations, type WeatherChange } from "@/domain/weather/diff";
+import { weatherGuidance, type ItemGuidance } from "@/domain/weather/guidance";
 import { recommendPacking } from "@/domain/weather/recommend";
 import { TripsSourceError, type TripChange } from "@/features/trips/trips-source";
 import { useTripsSource } from "@/features/trips/TripsSourceProvider";
@@ -19,7 +20,11 @@ import { tripMathLine } from "@/features/trips/count-copy";
 import { RouteText } from "@/features/trips/RouteText";
 import { formatDays, formatRange, routeCities, routeIsTitle } from "@/features/trips/view";
 import { AddToiletryForm } from "./AddToiletryForm";
+import { Stamps } from "@/components/stamp/Stamp";
 import { themeFor } from "@/domain/themes";
+import { selectStamps } from "@/domain/stamps";
+import { daysBetween } from "@/domain/trip-stops";
+import { localToday } from "@/lib/today";
 import { EditRouteSheet } from "./EditRouteSheet";
 import { ItemEditor } from "./ItemEditor";
 import { PackRow } from "./PackRow";
@@ -28,8 +33,11 @@ import { ThemeSheet } from "./ThemeSheet";
 import { ToiletrySection } from "./ToiletrySection";
 import {
   bagGate,
+  completeCount,
+  leavesEyebrow,
   packedAnnouncement,
   progress,
+  sectionLinks,
   showReviewPrompt,
   showToiletries,
   tripSections,
@@ -94,11 +102,13 @@ function ListSection({
 }) {
   const visible = visibleItems(items, filter);
   return (
-    <section className="list-section" aria-labelledby={id}>
+    <section id={id.replace("section-", "block-")} className="list-section" aria-labelledby={id}>
       <div className="list-section-head">
         <div>
           <h3 id={id}>{title}</h3>
-          <div className="item-meta">{subtitle}</div>
+          <div className="item-meta">
+            {subtitle} · {completeCount(items)} of {items.length} complete
+          </div>
         </div>
         <span className="tag">{visible.length}</span>
       </div>
@@ -392,6 +402,15 @@ export function TripScreen({ tripId, openAdd = false }: { tripId: string; openAd
       ? diffRecommendations(trip.items, weatherRecommendation, suppressedWeather)
       : [];
 
+  // Pills only while weather is on and the forecast is usable; a stale item loses its pill when the forecast moves.
+  const guidance =
+    weather?.panel.kind === "ready" && weatherDays.length > 0
+      ? weatherGuidance(
+          trip.items.map((entry) => entry.id),
+          weatherRecommendation,
+        )
+      : new Map<string, ItemGuidance>();
+
   const setWeatherOptIn = async (weatherOptIn: boolean) => {
     if (!source.weather || !weather) return;
     try {
@@ -467,6 +486,7 @@ export function TripScreen({ tripId, openAdd = false }: { tripId: string; openAd
       key={item.id}
       item={item}
       failed={failedRows.has(item.id)}
+      guidance={guidance.get(item.id)}
       onToggle={() => setCount(item, item.packed >= item.qty ? 0 : item.qty, 0)}
       onIncrement={() => setCount(item, Math.min(item.qty, item.packed + 1), PACK_DEBOUNCE_MS)}
       onDecrement={() => setCount(item, Math.max(0, item.packed - 1), PACK_DEBOUNCE_MS)}
@@ -491,6 +511,9 @@ export function TripScreen({ tripId, openAdd = false }: { tripId: string; openAd
             ←
           </Link>
           <div className="head-copy destination-head-copy">
+            <p className="eyebrow hero-eyebrow">
+              {leavesEyebrow(daysBetween(localToday(), trip.start))}
+            </p>
             <h1>{trip.destination}</h1>
             {routeCities(trip).length && !routeIsTitle(trip) ? (
               <p className="route-chip">
@@ -509,6 +532,9 @@ export function TripScreen({ tripId, openAdd = false }: { tripId: string; openAd
             >
               Edit route
             </Button>
+          </div>
+          <div className="hero-stamps">
+            <Stamps stamps={selectStamps(trip.stops)} departure={trip.start} />
           </div>
           {trip.ready ? (
             <StatusBadge status="ready">Ready</StatusBadge>
@@ -557,6 +583,10 @@ export function TripScreen({ tripId, openAdd = false }: { tripId: string; openAd
               </div>
               <strong>{totals.percent}%</strong>
             </div>
+            <p className="progress-line">
+              {totals.packed} of {totals.total} packed
+              {totals.total - totals.packed > 0 ? ` / ${totals.total - totals.packed} left` : ""}
+            </p>
             <div
               className="progress-track"
               role="progressbar"
@@ -575,7 +605,7 @@ export function TripScreen({ tripId, openAdd = false }: { tripId: string; openAd
                 aria-pressed={filter === "all"}
                 onClick={() => setFilter("all")}
               >
-                All
+                All items
               </button>
               <button
                 type="button"
@@ -647,6 +677,19 @@ export function TripScreen({ tripId, openAdd = false }: { tripId: string; openAd
         </div>
 
         <aside className="side">
+          <nav className="sections-panel" aria-label="Packing sections">
+            <h3>Packing sections</h3>
+            <ul>
+              {sectionLinks(sections, showToiletries(trip, filter)).map((link) => (
+                <li key={link.target}>
+                  <a href={`#${link.target}`}>
+                    {link.label} <span className="muted">{link.count}</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+            <p className="tiny muted">Jump to a section of the list.</p>
+          </nav>
           {trip.ready ? (
             <Card padded className="ready-card">
               <p className="eyebrow">Confirmed after review</p>

@@ -1546,22 +1546,6 @@ input:disabled {
 .pack-row.complete .item-name {
   text-decoration: line-through;
 }
-.check-button {
-  width: 44px;
-  height: 44px;
-  display: grid;
-  place-items: center;
-  border: 2px solid var(--line-strong);
-  border-radius: 50%;
-  background: var(--control-bg);
-  color: var(--complete-ink);
-  font-weight: 900;
-  cursor: pointer;
-}
-.pack-row.complete .check-button {
-  border-color: var(--accent);
-  background: var(--action);
-}
 .item-body {
   display: grid;
   gap: 2px;
@@ -2661,6 +2645,214 @@ a.back {
 }
 .appearance-status {
   margin-bottom: 0;
+}
+
+/* Packing screen, Field Ledger (#144, spec §4). Role tokens only. */
+.hero-eyebrow {
+  margin: 0 0 4px;
+  color: var(--link);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.destination-head-content {
+  border-top: 4px solid var(--accent);
+}
+.hero-stamps {
+  grid-column: 1 / -1;
+  margin-top: 14px;
+  color: var(--accent);
+}
+@media (min-width: 900px) {
+  .hero-stamps {
+    position: absolute;
+    right: 44px;
+    bottom: 18px;
+    z-index: 5;
+    margin-top: 0;
+  }
+}
+.progress-line {
+  margin: 6px 0 12px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+.filter {
+  border-radius: var(--control-radius, 4px);
+}
+.filter.active {
+  border-color: var(--action-border);
+}
+
+.weather-review-banner {
+  background: var(--notice);
+  color: var(--notice-ink);
+}
+
+/* Row: state, name and note, stepper, Pack all / Packed, Edit target. The last three are fixed width, so a
+   completed row never moves a column. */
+.pack-row {
+  border-radius: var(--control-radius, 4px);
+  background: var(--control-bg);
+}
+.check-state {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 2px solid var(--line-strong);
+  border-radius: var(--state-radius, 50%);
+  color: var(--complete-ink);
+  font-size: 14px;
+  font-weight: 900;
+}
+.pack-row.complete .check-state {
+  border-color: var(--complete);
+  background: var(--complete);
+}
+.pack-row.complete .item-name {
+  color: var(--muted);
+}
+.pack-all,
+.edit-target {
+  min-width: 0;
+  min-height: 44px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--button-radius, 4px);
+  background: var(--control-bg);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.pack-row.complete .pack-all {
+  border-color: var(--complete);
+  background: var(--complete);
+  color: var(--complete-ink);
+}
+.weather-guidance {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.weather-pill {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--weather-pill);
+  color: var(--weather-pill-ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+.weather-note {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.sections-panel {
+  padding: 16px 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--control-radius, 4px);
+  background: var(--surface);
+}
+.sections-panel h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.sections-panel ul {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+.sections-panel a {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 44px;
+  color: var(--link);
+  font-weight: 600;
+}
+.list-section,
+.toiletry-section {
+  scroll-margin-top: 84px;
+}
+
+@media (min-width: 721px) {
+  .pack-row {
+    grid-template-columns: 28px minmax(0, 1fr) 210px 88px 88px;
+  }
+  .pack-row .qty-stepper {
+    grid-column: auto;
+    justify-self: stretch;
+    grid-template-columns: 44px 1fr 44px;
+  }
+}
+
+@media (max-width: 899px) {
+  /* The sections panel moves above the list as a wrapping chip row; the other side cards stay below it. */
+  .trip-layout .side {
+    display: contents;
+  }
+  .trip-layout .side > * {
+    order: 1;
+  }
+  .trip-layout .side > .sections-panel {
+    order: -1;
+    padding: 12px;
+  }
+  .sections-panel ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .sections-panel li a {
+    padding: 0 12px;
+    gap: 8px;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+  }
+  .sections-panel p {
+    display: none;
+  }
+}
+
+@media (min-width: 900px) {
+  .sections-panel {
+    position: sticky;
+    top: 84px;
+  }
+  .trip-layout .side {
+    position: static;
+  }
+}
+
+@media (max-width: 720px) {
+  .pack-row {
+    grid-template-columns: 28px minmax(0, 1fr) 1fr 1fr;
+  }
+  .pack-row .item-body {
+    grid-column: 2 / -1;
+  }
+  .pack-row .qty-stepper {
+    grid-column: 1 / -1;
+    grid-template-columns: 44px 1fr 44px;
+    justify-self: stretch;
+  }
+  .pack-row .pack-all {
+    grid-column: 1 / 3;
+  }
+  .pack-row .edit-target {
+    grid-column: 3 / -1;
+  }
+  .row-error {
+    grid-column: 1 / -1;
+  }
 }
 
 /* ---- Field Ledger dashboard (#143, spec §4). Roles only; the stamp slot belongs to FL-c (#144). */

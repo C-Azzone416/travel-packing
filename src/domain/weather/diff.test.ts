@@ -10,6 +10,7 @@ const extra = (semanticId: string, ruleSignature = "rain"): WeatherSuggestion =>
   qty: 1,
   optional: false,
   reason: `why ${semanticId}`,
+  tag: "Rain",
   ruleSignature,
 });
 

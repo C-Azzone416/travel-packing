@@ -1,0 +1,91 @@
+/* Route stamps (#144, spec §5): 116px circle (86px on phones), 3px double border in currentColor. */
+.cluster {
+  display: inline-flex;
+  align-items: center;
+}
+
+.stamp {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 116px;
+  height: 116px;
+  border: 3px double currentColor;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  text-align: center;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.first {
+  color: var(--accent);
+  transform: rotate(-7deg);
+}
+
+.second {
+  position: relative;
+  z-index: 1;
+  margin-left: -26px;
+  color: var(--accent-2);
+  transform: rotate(7deg);
+}
+
+.label {
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: clip;
+  font-family: var(--font-display, inherit);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.stamp[data-size="large"] .label {
+  font-size: 27px;
+}
+
+.stamp[data-size="medium"] .label {
+  font-size: 18px;
+}
+
+.stamp[data-size="small"] .label {
+  font-size: 13px;
+  letter-spacing: 0.06em;
+}
+
+.date {
+  margin: 4px 0 2px;
+  padding: 2px 0;
+  border-top: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.year {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+@media (max-width: 720px) {
+  .stamp {
+    width: 86px;
+    height: 86px;
+  }
+  .second {
+    margin-left: -18px;
+  }
+  .stamp[data-size="large"] .label {
+    font-size: 21px;
+  }
+  .stamp[data-size="medium"] .label {
+    font-size: 15px;
+  }
+  .stamp[data-size="small"] .label {
+    font-size: 11px;
+  }
+}

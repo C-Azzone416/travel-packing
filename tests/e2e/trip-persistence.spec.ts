@@ -44,7 +44,9 @@ test("a check and an uncheck are stored", async ({ page }) => {
   await expect(row(page, "tops")).toContainText("2/2");
   await page.reload();
   await expect(row(page, "tops")).toContainText("2/2");
-  await row(page, "tops").getByRole("button", { name: "Mark Everyday tops unpacked" }).click();
+  await row(page, "tops")
+    .getByRole("button", { name: "Packed, mark Everyday tops unpacked" })
+    .click();
   await expect(row(page, "tops")).toContainText("0/2");
   await page.reload();
   await expect(row(page, "tops")).toContainText("0/2");
