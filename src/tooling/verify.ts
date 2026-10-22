@@ -334,3 +334,111 @@ export function failedTestSummary(reportText: string): string[] {
   if (count > MAX_FAILURES) lines.push(`... and ${count - MAX_FAILURES} more`);
   return lines;
 }
+
+// ---------------------------------------------------------------- how the unit step ended (#150)
+// The unit step once died after every test file had passed, with no summary, no coverage table and no JSON report. A
+// test name cannot explain that, so the step's exit is recorded instead: the exit code and signal, which stage it
+// reached, how many files it reported against how many exist, the tail of what it wrote, and the machine's load and
+// memory at that moment. Instrumentation only: nothing here changes how the tests run.
+
+/** How far a vitest run got, judged from its own output and whether the JSON report exists. */
+export type UnitStage =
+  "no-output" | "running-tests" | "tests-finished" | "coverage-reported" | "report-written";
+
+/** Lines vitest prints for each finished test file: a pass (✓), a failure (❯ or ×) or a skipped file (↓). */
+const FILE_LINE = /^\s*(?:✓|❯|×|↓)\s+\S+\.test\.tsx?\b/;
+
+/** The number of test files vitest printed a result line for. */
+export function testFilesReported(output: string): number {
+  return output.split("\n").filter((line) => FILE_LINE.test(line)).length;
+}
+
+export function unitStage(output: string, reportWritten: boolean): UnitStage {
+  if (reportWritten) return "report-written";
+  if (/Coverage summary|% Stmts/.test(output)) return "coverage-reported";
+  if (/^\s*Test Files\s+\d+/m.test(output)) return "tests-finished";
+  return testFilesReported(output) > 0 ? "running-tests" : "no-output";
+}
+
+export interface UnitExitInput {
+  exitCode: number | null;
+  signal: string | null;
+  /** The spawn error, when the process could not run or its output overflowed. */
+  error?: string;
+  stdout: string;
+  stderr: string;
+  reportWritten: boolean;
+  testFilesExpected: number;
+  seconds: number;
+  loadAverage: readonly number[];
+  freeMemoryMb: number;
+  totalMemoryMb: number;
+  node: string;
+}
+
+export interface UnitExitRecord {
+  exitCode: number | null;
+  signal: string | null;
+  error: string | null;
+  stage: UnitStage;
+  testFilesReported: number;
+  testFilesExpected: number;
+  seconds: number;
+  stdoutBytes: number;
+  stderrBytes: number;
+  stderrTail: string[];
+  stdoutTail: string[];
+  loadAverage: number[];
+  freeMemoryMb: number;
+  totalMemoryMb: number;
+  node: string;
+}
+
+const tail = (text: string, count: number): string[] =>
+  text
+    .split("\n")
+    .filter((line) => line.trim() !== "")
+    .slice(-count);
+
+export function buildUnitExitRecord(input: UnitExitInput): UnitExitRecord {
+  return {
+    exitCode: input.exitCode,
+    signal: input.signal,
+    error: input.error ?? null,
+    stage: unitStage(input.stdout, input.reportWritten),
+    testFilesReported: testFilesReported(input.stdout),
+    testFilesExpected: input.testFilesExpected,
+    seconds: Math.round(input.seconds),
+    stdoutBytes: Buffer.byteLength(input.stdout),
+    stderrBytes: Buffer.byteLength(input.stderr),
+    stderrTail: tail(input.stderr, 15),
+    stdoutTail: tail(input.stdout, 10),
+    loadAverage: input.loadAverage.map((value) => Math.round(value * 100) / 100),
+    freeMemoryMb: Math.round(input.freeMemoryMb),
+    totalMemoryMb: Math.round(input.totalMemoryMb),
+    node: input.node,
+  };
+}
+
+const STAGE_TEXT: Record<UnitStage, string> = {
+  "no-output": "before any test file finished",
+  "running-tests": "while test files were still being reported (no summary was printed)",
+  "tests-finished": "after the test summary, before coverage was reported",
+  "coverage-reported": "after the coverage report, before the JSON report was written",
+  "report-written": "after the JSON report was written",
+};
+
+/** The lines the verify summary prints when the unit step fails: what happened, in words, then the evidence. */
+export function describeUnitExit(record: UnitExitRecord): string[] {
+  const ended = record.signal
+    ? `was killed by signal ${record.signal}`
+    : `exited with code ${record.exitCode ?? "none"}`;
+  const lines = [
+    `The unit step ${ended}${record.error ? ` (${record.error})` : ""}, ${STAGE_TEXT[record.stage]}.`,
+    `${record.testFilesReported} of ${record.testFilesExpected} test files had printed a result; it ran ${record.seconds}s, wrote ${record.stdoutBytes} bytes to stdout and ${record.stderrBytes} to stderr.`,
+    `Machine at the end: load ${record.loadAverage.join(" / ")}, ${record.freeMemoryMb} MB free of ${record.totalMemoryMb} MB, node ${record.node}.`,
+  ];
+  if (record.stderrTail.length)
+    lines.push("Last stderr lines:", ...record.stderrTail.map((line) => `    ${line}`));
+  return lines;
+}

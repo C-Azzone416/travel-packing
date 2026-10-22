@@ -2,7 +2,11 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  buildUnitExitRecord,
+  describeUnitExit,
   failedTestSummary,
+  testFilesReported,
+  unitStage,
   ciChecks,
   ciE2eProjects,
   e2eProjectParityProblems,
@@ -379,5 +383,132 @@ describe("the unit step keeps a report", () => {
     expect(step?.command).toContain(`--outputFile.json=${UNIT_REPORT}`);
     expect(step?.command).toContain("--reporter=json");
     expect(step?.command).toContain("--reporter=default");
+  });
+});
+
+describe("how the unit step ended (#150)", () => {
+  const passing = [
+    " ✓ src/domain/a.test.ts (3 tests) 5ms",
+    " ✓ src/features/b.test.tsx (4 tests) 40ms",
+    " ❯ src/features/c.test.tsx (2 tests | 1 failed) 8ms",
+    " ↓ src/features/d.test.ts (skipped)",
+    "stdout | src/features/b.test.tsx > a thing",
+    "some log line",
+  ].join("\n");
+  const summary = ["", " Test Files  3 passed (3)", "      Tests  9 passed (9)"].join("\n");
+  const coverage = ["----|---- % Stmts | % Branch", "Coverage summary", "Statements   : 99%"].join(
+    "\n",
+  );
+
+  it("counts the test files that printed a result line, whatever the result", () => {
+    expect(testFilesReported(passing)).toBe(4);
+    expect(testFilesReported("no result lines here\nsrc/not/a.test.ts mentioned in prose")).toBe(0);
+    expect(testFilesReported("")).toBe(0);
+  });
+
+  it("names how far the run got from its output and the report file", () => {
+    expect(unitStage("", false)).toBe("no-output");
+    expect(unitStage("Vite warning only", false)).toBe("no-output");
+    expect(unitStage(passing, false)).toBe("running-tests");
+    expect(unitStage(`${passing}\n${summary}`, false)).toBe("tests-finished");
+    expect(unitStage(`${passing}\n${summary}\n${coverage}`, false)).toBe("coverage-reported");
+    expect(unitStage(`${passing}\n${summary}\n${coverage}`, true)).toBe("report-written");
+    // The report on disk wins even if the output was cut short.
+    expect(unitStage(passing, true)).toBe("report-written");
+  });
+
+  const base = {
+    exitCode: 1,
+    signal: null,
+    stdout: passing,
+    stderr: "line one\n\nline two\n",
+    reportWritten: false,
+    testFilesExpected: 4,
+    seconds: 41.6,
+    loadAverage: [4.123, 3.987, 3.5],
+    freeMemoryMb: 1234.7,
+    totalMemoryMb: 16384,
+    node: "v26.9.0",
+  };
+
+  it("records the exit, the stage, the file counts, the tails and the machine, rounded", () => {
+    const record = buildUnitExitRecord(base);
+    expect(record).toMatchObject({
+      exitCode: 1,
+      signal: null,
+      error: null,
+      stage: "running-tests",
+      testFilesReported: 4,
+      testFilesExpected: 4,
+      seconds: 42,
+      stderrTail: ["line one", "line two"],
+      loadAverage: [4.12, 3.99, 3.5],
+      freeMemoryMb: 1235,
+      totalMemoryMb: 16384,
+      node: "v26.9.0",
+    });
+    expect(record.stdoutBytes).toBe(Buffer.byteLength(passing));
+    expect(record.stderrBytes).toBe(Buffer.byteLength(base.stderr));
+    expect(record.stdoutTail.at(-1)).toBe("some log line");
+  });
+
+  it("keeps only the last lines of a long tail, and records a spawn error and a signal", () => {
+    const long = Array.from({ length: 40 }, (_, at) => `err ${at}`).join("\n");
+    const record = buildUnitExitRecord({
+      ...base,
+      stderr: long,
+      exitCode: null,
+      signal: "SIGKILL",
+      error: "spawnSync ENOBUFS",
+    });
+    expect(record.stderrTail).toHaveLength(15);
+    expect(record.stderrTail[0]).toBe("err 25");
+    expect(record).toMatchObject({ exitCode: null, signal: "SIGKILL", error: "spawnSync ENOBUFS" });
+  });
+
+  it("says in words that the step died after the tests with no summary, the case #150 captured", () => {
+    const lines = describeUnitExit(buildUnitExitRecord({ ...base, testFilesExpected: 4 }));
+    expect(lines[0]).toBe(
+      "The unit step exited with code 1, while test files were still being reported (no summary was printed).",
+    );
+    expect(lines[1]).toMatch(
+      /^4 of 4 test files had printed a result; it ran 42s, wrote \d+ bytes to stdout and \d+ to stderr\.$/,
+    );
+    expect(lines[2]).toBe(
+      "Machine at the end: load 4.12 / 3.99 / 3.5, 1235 MB free of 16384 MB, node v26.9.0.",
+    );
+    expect(lines.slice(3)).toEqual(["Last stderr lines:", "    line one", "    line two"]);
+  });
+
+  it("names a signal and a spawn error, each stage, and leaves out an empty stderr tail", () => {
+    const killed = describeUnitExit(
+      buildUnitExitRecord({
+        ...base,
+        stdout: "",
+        stderr: "",
+        exitCode: null,
+        signal: "SIGSEGV",
+        error: "boom",
+      }),
+    );
+    expect(killed[0]).toBe(
+      "The unit step was killed by signal SIGSEGV (boom), before any test file finished.",
+    );
+    expect(killed).toHaveLength(3);
+    const stages = [
+      [`${passing}\n${summary}`, "after the test summary, before coverage was reported"],
+      [
+        `${passing}\n${summary}\n${coverage}`,
+        "after the coverage report, before the JSON report was written",
+      ],
+    ] as const;
+    for (const [stdout, words] of stages)
+      expect(describeUnitExit(buildUnitExitRecord({ ...base, stdout }))[0]).toContain(words);
+    expect(describeUnitExit(buildUnitExitRecord({ ...base, reportWritten: true }))[0]).toContain(
+      "after the JSON report was written",
+    );
+    expect(
+      describeUnitExit(buildUnitExitRecord({ ...base, exitCode: null, signal: null }))[0],
+    ).toContain("exited with code none");
   });
 });
