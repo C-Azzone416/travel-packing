@@ -18,6 +18,7 @@ const EXPECTED_TAGS = [
   "0005_trip_stops",
   "0006_saved_lists",
   "0007_appearance",
+  "0008_stamp_labels",
 ];
 
 // One in-memory Postgres for the file; each test starts from an empty public schema.

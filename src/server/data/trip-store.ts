@@ -4,6 +4,7 @@
 
 import { and, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
+import type { StampLabels } from "../../domain/stamps";
 import type { ThemeId } from "../../domain/themes";
 import type { Trip, TripConfig, TripItem } from "../../domain/trip";
 import {
@@ -45,6 +46,8 @@ export interface StoredTrip extends Trip {
   copiedFrom: string | null;
   archived: boolean;
   theme: ThemeId;
+  /** The owner's stamp label overrides (#151); absent reads as automatic. Loading always sets it. */
+  stampLabels?: StampLabels;
   deletedAt: Date | null;
 }
 
@@ -308,6 +311,7 @@ function toStoredTrip(
     copiedFrom: row.copiedFrom,
     archived: row.archived,
     theme: row.theme,
+    stampLabels: [row.stampLabel1, row.stampLabel2],
     deletedAt: row.deletedAt,
   };
 }
@@ -350,6 +354,8 @@ export async function insertTrip(db: Db, ownerId: string, given: StoredTrip): Pr
       archived: trip.archived,
       copiedFrom: trip.copiedFrom,
       theme: trip.theme,
+      stampLabel1: trip.stampLabels?.[0] ?? null,
+      stampLabel2: trip.stampLabels?.[1] ?? null,
     });
     await writeChildren(tx as Db, ownerId, trip);
   });
@@ -375,6 +381,10 @@ export async function saveTrip(db: Db, ownerId: string, given: StoredTrip): Prom
         ready: trip.ready,
         archived: trip.archived,
         theme: trip.theme,
+        // A trip handed in without labels leaves the stored ones alone (only an explicit value changes them).
+        ...(trip.stampLabels
+          ? { stampLabel1: trip.stampLabels[0], stampLabel2: trip.stampLabels[1] }
+          : {}),
         updatedAt: new Date(),
       })
       .where(

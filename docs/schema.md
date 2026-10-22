@@ -61,20 +61,21 @@ so quantity edits succeed instead of failing the cascade.
 
 ## Constraints
 
-| Rule                                   | Where                                                                              |
-| -------------------------------------- | ---------------------------------------------------------------------------------- |
-| `qty >= 1`                             | `staples_qty_positive`, `saved_list_items_qty_positive`, `trip_items_qty_positive` |
-| `0 <= packed <= qty`                   | `trip_item_progress_packed_range`                                                  |
-| `occasion_count` 1..8                  | `trip_preferences_occasion_count_range`                                            |
-| `end_date >= start_date`               | `trips_dates_ordered`                                                              |
-| `days >= 1`, `0 <= daily_days <= days` | `trips_days_positive`, `trips_daily_days_range`                                    |
-| Non-blank names / destination          | `*_not_blank`                                                                      |
-| `group_id` is null or `toiletry-bag`   | `staples_group_known`, `trip_items_group_known`                                    |
-| Stop `leave_date >= arrive_date`       | `trip_stops_dates_ordered` (a night per stop on multi-stop trips: `validateStops`) |
-| Stop place rules                       | `trip_stops_*` mirror the `trips_*` location checks                                |
-| Temperature unit `F` or `C`            | `users_temperature_unit_known`                                                     |
-| Enums                                  | `item_section`, `staple_cadence`, `weather_status`, `item_category`                |
-| Non-null owner on every row            | `owner_id NOT NULL` + FK to `users`                                                |
+| Rule                                   | Where                                                                                     |
+| -------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `qty >= 1`                             | `staples_qty_positive`, `saved_list_items_qty_positive`, `trip_items_qty_positive`        |
+| `0 <= packed <= qty`                   | `trip_item_progress_packed_range`                                                         |
+| `occasion_count` 1..8                  | `trip_preferences_occasion_count_range`                                                   |
+| `end_date >= start_date`               | `trips_dates_ordered`                                                                     |
+| Stamp label overrides (#151)           | `trips_stamp_label_1_format`, `trips_stamp_label_2_format`: null or exactly 3 of `A-Z0-9` |
+| `days >= 1`, `0 <= daily_days <= days` | `trips_days_positive`, `trips_daily_days_range`                                           |
+| Non-blank names / destination          | `*_not_blank`                                                                             |
+| `group_id` is null or `toiletry-bag`   | `staples_group_known`, `trip_items_group_known`                                           |
+| Stop `leave_date >= arrive_date`       | `trip_stops_dates_ordered` (a night per stop on multi-stop trips: `validateStops`)        |
+| Stop place rules                       | `trip_stops_*` mirror the `trips_*` location checks                                       |
+| Temperature unit `F` or `C`            | `users_temperature_unit_known`                                                            |
+| Enums                                  | `item_section`, `staple_cadence`, `weather_status`, `item_category`                       |
+| Non-null owner on every row            | `owner_id NOT NULL` + FK to `users`                                                       |
 
 `item_category` lists the strings the domain uses. The semantic category for everyday clothing is the single value
 `Clothing` (the plan's name); the prototype's calculator label `Clothes` was normalized to it (PM decision), and a
@@ -93,6 +94,7 @@ These reveal where and when someone travels. Keep them out of logs, analytics, f
 | `trips.location_region`, `trips.location_country`, `trips.location_country_code` | Region / country                                                                  |
 | `trips.latitude`, `trips.longitude`                                              | **Most sensitive.** About 1 km (rounded to 2 decimals before storage)             |
 | `trips.timezone`                                                                 | Narrows the destination                                                           |
+| `trips.stamp_label_1`, `trips.stamp_label_2`                                     | Optional 3-character stamp text the owner typed (#151); null = automatic          |
 | `trip_stops.city`, `trip_stops.location_*`                                       | Same class as `trips.location_*`: where the person goes, per stop                 |
 | `trip_stops.latitude`, `trip_stops.longitude`                                    | **Most sensitive**, as on trips (2 decimals; only for a provider place)           |
 | `trip_stops.arrive_date`, `trip_stops.leave_date`                                | Exact travel dates, per stop                                                      |

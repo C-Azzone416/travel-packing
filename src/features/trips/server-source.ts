@@ -61,6 +61,11 @@ export interface TripActions {
   reviewWeatherAgain(tripId: string): Promise<TripCommandResult>;
   updatePreferences(tripId: string, config: TripConfig): Promise<TripCommandResult>;
   setTheme(tripId: string, theme: ThemeId): Promise<TripCommandResult>;
+  setStampLabels(
+    tripId: string,
+    slot1: string | null,
+    slot2: string | null,
+  ): Promise<TripCommandResult>;
   setStops(tripId: string, stops: TripStop[]): Promise<TripCommandResult>;
 }
 
@@ -180,6 +185,7 @@ export function createServerTripsSource(
     reviewWeatherAgain: (id) => unwrapChange(trip.reviewWeatherAgain(id)),
     updatePreferences: (id, config) => unwrapChange(trip.updatePreferences(id, config)),
     setTheme: (id, theme) => unwrapChange(trip.setTheme(id, theme)),
+    setStampLabels: (id, slot1, slot2) => unwrapChange(trip.setStampLabels(id, slot1, slot2)),
     setStops: (id, stops) => unwrapChange(trip.setStops(id, stops)),
   };
 

@@ -29,6 +29,7 @@ import {
   type Signals,
 } from "@/domain/readiness";
 import { categoryCounts, listNameTaken, tripItemsFromList } from "@/domain/saved-lists";
+import { automaticStamps, normaliseStampLabel } from "@/domain/stamps";
 import { isThemeId, type ThemeId } from "@/domain/themes";
 import type { Scope, Staple, TripConfig } from "@/domain/trip";
 import {
@@ -122,6 +123,12 @@ export interface TripsSource {
   updatePreferences(tripId: string, config: TripConfig): Promise<TripChange>;
   /** Change the trip's picture (#48). Only the six built-in themes are accepted; nothing else about the trip changes. */
   setTheme(tripId: string, theme: ThemeId): Promise<TripChange>;
+  /**
+   * Set or clear the route stamps' labels (#151): the typed text per slot (trimmed, upper-cased, exactly 3 of A-Z and 0-9),
+   * or null / blank / the automatic label for no override. Rejects anything else, and a label for a second stamp the route
+   * does not have.
+   */
+  setStampLabels(tripId: string, slot1: string | null, slot2: string | null): Promise<TripChange>;
   /** Replace the trip's route (1-6 stops). Dates, day counts and calculated items follow; rejects an invalid route. */
   setStops(tripId: string, stops: TripStop[]): Promise<TripChange>;
   savedLists?: SavedListsCapability;
@@ -353,11 +360,29 @@ export function createMemoryTripsSource(
           destination:
             trip.destination === routeLabel(trip.stops) ? routeLabel(stops) : trip.destination,
           location: stops[0].location,
+          // The owner's text survives a route edit, except slot 2 once the route has no second stamp (#151).
+          stampLabels: [
+            trip.stampLabels?.[0] ?? null,
+            automaticStamps(stops).length < 2 ? null : (trip.stampLabels?.[1] ?? null),
+          ],
         };
       }),
     setTheme: (id, theme) => {
       if (!isThemeId(theme)) return Promise.reject(new TripsSourceError("INVALID_INPUT"));
       return direct(id, (trip) => ({ ...trip, theme }));
     },
+    setStampLabels: (id, slot1, slot2) =>
+      direct(id, (trip) => {
+        const automatic = automaticStamps(trip.stops);
+        const stored = [slot1, slot2].map((raw, index) => {
+          if (raw === null) return null;
+          const label = normaliseStampLabel(raw);
+          if (!label.ok || (index === 1 && label.label !== null && automatic.length < 2)) {
+            throw new TripsSourceError("INVALID_INPUT");
+          }
+          return label.label === automatic[index]?.label ? null : label.label;
+        });
+        return { ...trip, stampLabels: [stored[0], stored[1]] };
+      }),
   };
 }

@@ -83,6 +83,35 @@ describe("Stamps", () => {
   });
 });
 
+describe("Stamps with the owner's label (#151)", () => {
+  it("a custom stamp renders like a country stamp: no airport mark, and it names the city", () => {
+    const { container } = render(
+      <Stamps
+        stamps={[{ kind: "custom", label: "ABC", cityName: "Lisbon" }]}
+        departure="2026-01-09"
+      />,
+    );
+    expect(screen.getByRole("img", { name: "ABC, Lisbon, departure stamp" })).toBeTruthy();
+    expect(container.textContent).toBe("ABC09 JAN2026");
+    expect(container.textContent).not.toContain("✈");
+    expect(container.querySelector("[data-stamp]")?.getAttribute("data-stamp")).toBe("custom");
+  });
+
+  it("a preview can be compact and can wear the second stamp's colour", () => {
+    const { container } = render(
+      <Stamps
+        compact
+        firstSlot={2}
+        stamps={[{ kind: "custom", label: "XYZ" }]}
+        departure="2026-01-09"
+      />,
+    );
+    const cluster = container.firstElementChild as HTMLElement;
+    expect(cluster.className).toContain("compact");
+    expect(container.querySelector("[data-stamp]")?.className).toContain("second");
+  });
+});
+
 describe("the stamp stylesheet", () => {
   const css = readFileSync(join(process.cwd(), "src/components/stamp/Stamp.module.css"), "utf8");
   const rule = (selector: string) =>

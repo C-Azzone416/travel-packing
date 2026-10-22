@@ -1,0 +1,1524 @@
+{
+  "id": "923ae823-5edf-47a2-bc20-43ada21f6e6a",
+  "prevId": "849f37e5-2e92-4737-8150-f82b78e893f1",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.account_setups": {
+      "name": "account_setups",
+      "schema": "",
+      "columns": {
+        "email_digest": {
+          "name": "email_digest",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.saved_list_items": {
+      "name": "saved_list_items",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "list_id": {
+          "name": "list_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "owner_id": {
+          "name": "owner_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "semantic_id": {
+          "name": "semantic_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "category": {
+          "name": "category",
+          "type": "item_category",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "qty": {
+          "name": "qty",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        }
+      },
+      "indexes": {
+        "saved_list_items_list_order_idx": {
+          "name": "saved_list_items_list_order_idx",
+          "columns": [
+            {
+              "expression": "list_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "sort_order",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "saved_list_items_owner_id_users_id_fk": {
+          "name": "saved_list_items_owner_id_users_id_fk",
+          "tableFrom": "saved_list_items",
+          "tableTo": "users",
+          "columnsFrom": [
+            "owner_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "saved_list_items_list_fk": {
+          "name": "saved_list_items_list_fk",
+          "tableFrom": "saved_list_items",
+          "tableTo": "saved_lists",
+          "columnsFrom": [
+            "list_id",
+            "owner_id"
+          ],
+          "columnsTo": [
+            "id",
+            "owner_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "saved_list_items_list_semantic_unique": {
+          "name": "saved_list_items_list_semantic_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "list_id",
+            "semantic_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "saved_list_items_qty_positive": {
+          "name": "saved_list_items_qty_positive",
+          "value": "\"saved_list_items\".\"qty\" >= 1"
+        },
+        "saved_list_items_name_not_blank": {
+          "name": "saved_list_items_name_not_blank",
+          "value": "btrim(\"saved_list_items\".\"name\") <> ''"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.saved_lists": {
+      "name": "saved_lists",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "owner_id": {
+          "name": "owner_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "saved_lists_owner_idx": {
+          "name": "saved_lists_owner_idx",
+          "columns": [
+            {
+              "expression": "owner_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "saved_lists_owner_id_users_id_fk": {
+          "name": "saved_lists_owner_id_users_id_fk",
+          "tableFrom": "saved_lists",
+          "tableTo": "users",
+          "columnsFrom": [
+            "owner_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "saved_lists_id_owner_unique": {
+          "name": "saved_lists_id_owner_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "id",
+            "owner_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "saved_lists_name_not_blank": {
+          "name": "saved_lists_name_not_blank",
+          "value": "btrim(\"saved_lists\".\"name\") <> ''"
+        },
+        "saved_lists_name_short": {
+          "name": "saved_lists_name_short",
+          "value": "char_length(\"saved_lists\".\"name\") <= 80"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.staples": {
+      "name": "staples",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "owner_id": {
+          "name": "owner_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "semantic_id": {
+          "name": "semantic_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "category": {
+          "name": "category",
+          "type": "item_category",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "qty": {
+          "name": "qty",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cadence": {
+          "name": "cadence",
+          "type": "staple_cadence",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pack_last": {
+          "name": "pack_last",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "group_id": {
+          "name": "group_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "staples_owner_id_users_id_fk": {
+          "name": "staples_owner_id_users_id_fk",
+          "tableFrom": "staples",
+          "tableTo": "users",
+          "columnsFrom": [
+            "owner_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "staples_owner_semantic_unique": {
+          "name": "staples_owner_semantic_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "owner_id",
+            "semantic_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "staples_qty_positive": {
+          "name": "staples_qty_positive",
+          "value": "\"staples\".\"qty\" >= 1"
+        },
+        "staples_version_positive": {
+          "name": "staples_version_positive",
+          "value": "\"staples\".\"version\" >= 1"
+        },
+        "staples_name_not_blank": {
+          "name": "staples_name_not_blank",
+          "value": "btrim(\"staples\".\"name\") <> ''"
+        },
+        "staples_group_known": {
+          "name": "staples_group_known",
+          "value": "\"staples\".\"group_id\" is null or \"staples\".\"group_id\" = 'toiletry-bag'"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.trip_item_progress": {
+      "name": "trip_item_progress",
+      "schema": "",
+      "columns": {
+        "item_id": {
+          "name": "item_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "trip_id": {
+          "name": "trip_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "owner_id": {
+          "name": "owner_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "qty": {
+          "name": "qty",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "packed": {
+          "name": "packed",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "trip_item_progress_owner_id_users_id_fk": {
+          "name": "trip_item_progress_owner_id_users_id_fk",
+          "tableFrom": "trip_item_progress",
+          "tableTo": "users",
+          "columnsFrom": [
+            "owner_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "trip_item_progress_item_fk": {
+          "name": "trip_item_progress_item_fk",
+          "tableFrom": "trip_item_progress",
+          "tableTo": "trip_items",
+          "columnsFrom": [
+            "item_id",
+            "trip_id",
+            "owner_id",
+            "qty"
+          ],
+          "columnsTo": [
+            "id",
+            "trip_id",
+            "owner_id",
+            "qty"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "cascade"
+        }
+      },
+      "compositePrimaryKeys": {
+        "trip_item_progress_pk": {
+          "name": "trip_item_progress_pk",
+          "columns": [
+            "item_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "trip_item_progress_packed_range": {
+          "name": "trip_item_progress_packed_range",
+          "value": "\"trip_item_progress\".\"packed\" >= 0 and \"trip_item_progress\".\"packed\" <= \"trip_item_progress\".\"qty\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.trip_items": {
+      "name": "trip_items",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "trip_id": {
+          "name": "trip_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "owner_id": {
+          "name": "owner_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "semantic_id": {
+          "name": "semantic_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "category": {
+          "name": "category",
+          "type": "item_category",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "qty": {
+          "name": "qty",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "section": {
+          "name": "section",
+          "type": "item_section",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'main'"
+        },
+        "group_id": {
+          "name": "group_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "optional": {
+          "name": "optional",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "user_edited": {
+          "name": "user_edited",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "trip_items_trip_order_idx": {
+          "name": "trip_items_trip_order_idx",
+          "columns": [
+            {
+              "expression": "trip_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "sort_order",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "trip_items_owner_id_users_id_fk": {
+          "name": "trip_items_owner_id_users_id_fk",
+          "tableFrom": "trip_items",
+          "tableTo": "users",
+          "columnsFrom": [
+            "owner_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "trip_items_trip_fk": {
+          "name": "trip_items_trip_fk",
+          "tableFrom": "trip_items",
+          "tableTo": "trips",
+          "columnsFrom": [
+            "trip_id",
+            "owner_id"
+          ],
+          "columnsTo": [
+            "id",
+            "owner_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "trip_items_trip_semantic_unique": {
+          "name": "trip_items_trip_semantic_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "trip_id",
+            "semantic_id"
+          ]
+        },
+        "trip_items_progress_key": {
+          "name": "trip_items_progress_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "id",
+            "trip_id",
+            "owner_id",
+            "qty"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "trip_items_qty_positive": {
+          "name": "trip_items_qty_positive",
+          "value": "\"trip_items\".\"qty\" >= 1"
+        },
+        "trip_items_name_not_blank": {
+          "name": "trip_items_name_not_blank",
+          "value": "btrim(\"trip_items\".\"name\") <> ''"
+        },
+        "trip_items_group_known": {
+          "name": "trip_items_group_known",
+          "value": "\"trip_items\".\"group_id\" is null or \"trip_items\".\"group_id\" = 'toiletry-bag'"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.trip_preferences": {
+      "name": "trip_preferences",
+      "schema": "",
+      "columns": {
+        "trip_id": {
+          "name": "trip_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "owner_id": {
+          "name": "owner_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "laundry": {
+          "name": "laundry",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "spare": {
+          "name": "spare",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "nice_attire": {
+          "name": "nice_attire",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "occasion_count": {
+          "name": "occasion_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "reuse_nice": {
+          "name": "reuse_nice",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "return_outfit": {
+          "name": "return_outfit",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "suggestion_memory": {
+          "name": "suggestion_memory",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "suppressed_suggestions": {
+          "name": "suppressed_suggestions",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::text[]"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "trip_preferences_owner_id_users_id_fk": {
+          "name": "trip_preferences_owner_id_users_id_fk",
+          "tableFrom": "trip_preferences",
+          "tableTo": "users",
+          "columnsFrom": [
+            "owner_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "trip_preferences_trip_fk": {
+          "name": "trip_preferences_trip_fk",
+          "tableFrom": "trip_preferences",
+          "tableTo": "trips",
+          "columnsFrom": [
+            "trip_id",
+            "owner_id"
+          ],
+          "columnsTo": [
+            "id",
+            "owner_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "trip_preferences_occasion_count_range": {
+          "name": "trip_preferences_occasion_count_range",
+          "value": "\"trip_preferences\".\"occasion_count\" between 1 and 8"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.trip_stops": {
+      "name": "trip_stops",
+      "schema": "",
+      "columns": {
+        "trip_id": {
+          "name": "trip_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "owner_id": {
+          "name": "owner_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "city": {
+          "name": "city",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "location_id": {
+          "name": "location_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "location_label": {
+          "name": "location_label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "location_provider": {
+          "name": "location_provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "location_place_id": {
+          "name": "location_place_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "location_region": {
+          "name": "location_region",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "location_country": {
+          "name": "location_country",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "location_country_code": {
+          "name": "location_country_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "latitude": {
+          "name": "latitude",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "longitude": {
+          "name": "longitude",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "timezone": {
+          "name": "timezone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "arrive_date": {
+          "name": "arrive_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "leave_date": {
+          "name": "leave_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "trip_stops_owner_idx": {
+          "name": "trip_stops_owner_idx",
+          "columns": [
+            {
+              "expression": "owner_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "trip_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "trip_stops_owner_id_users_id_fk": {
+          "name": "trip_stops_owner_id_users_id_fk",
+          "tableFrom": "trip_stops",
+          "tableTo": "users",
+          "columnsFrom": [
+            "owner_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "trip_stops_trip_fk": {
+          "name": "trip_stops_trip_fk",
+          "tableFrom": "trip_stops",
+          "tableTo": "trips",
+          "columnsFrom": [
+            "trip_id",
+            "owner_id"
+          ],
+          "columnsTo": [
+            "id",
+            "owner_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "trip_stops_pk": {
+          "name": "trip_stops_pk",
+          "columns": [
+            "trip_id",
+            "position"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "trip_stops_position_range": {
+          "name": "trip_stops_position_range",
+          "value": "\"trip_stops\".\"position\" >= 0"
+        },
+        "trip_stops_dates_ordered": {
+          "name": "trip_stops_dates_ordered",
+          "value": "\"trip_stops\".\"leave_date\" >= \"trip_stops\".\"arrive_date\""
+        },
+        "trip_stops_city_not_blank": {
+          "name": "trip_stops_city_not_blank",
+          "value": "btrim(\"trip_stops\".\"city\") <> ''"
+        },
+        "trip_stops_latitude_range": {
+          "name": "trip_stops_latitude_range",
+          "value": "\"trip_stops\".\"latitude\" between -90 and 90"
+        },
+        "trip_stops_longitude_range": {
+          "name": "trip_stops_longitude_range",
+          "value": "\"trip_stops\".\"longitude\" between -180 and 180"
+        },
+        "trip_stops_coordinates_pair": {
+          "name": "trip_stops_coordinates_pair",
+          "value": "(\"trip_stops\".\"latitude\" is null) = (\"trip_stops\".\"longitude\" is null)"
+        },
+        "trip_stops_coordinates_need_provider": {
+          "name": "trip_stops_coordinates_need_provider",
+          "value": "\"trip_stops\".\"latitude\" is null or \"trip_stops\".\"location_provider\" is not null"
+        },
+        "trip_stops_provider_pair": {
+          "name": "trip_stops_provider_pair",
+          "value": "(\"trip_stops\".\"location_provider\" is null) = (\"trip_stops\".\"location_place_id\" is null)"
+        },
+        "trip_stops_country_code_length": {
+          "name": "trip_stops_country_code_length",
+          "value": "\"trip_stops\".\"location_country_code\" is null or char_length(\"trip_stops\".\"location_country_code\") = 2"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.trips": {
+      "name": "trips",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "owner_id": {
+          "name": "owner_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "destination": {
+          "name": "destination",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "location_id": {
+          "name": "location_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "location_label": {
+          "name": "location_label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "location_provider": {
+          "name": "location_provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "location_place_id": {
+          "name": "location_place_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "location_region": {
+          "name": "location_region",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "location_country": {
+          "name": "location_country",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "location_country_code": {
+          "name": "location_country_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "latitude": {
+          "name": "latitude",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "longitude": {
+          "name": "longitude",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "timezone": {
+          "name": "timezone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "start_date": {
+          "name": "start_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "end_date": {
+          "name": "end_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "days": {
+          "name": "days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "daily_days": {
+          "name": "daily_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "toiletry_bag_packed": {
+          "name": "toiletry_bag_packed",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "ready": {
+          "name": "ready",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "archived": {
+          "name": "archived",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "copied_from": {
+          "name": "copied_from",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "theme": {
+          "name": "theme",
+          "type": "trip_theme",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'travel'"
+        },
+        "stamp_label_1": {
+          "name": "stamp_label_1",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "stamp_label_2": {
+          "name": "stamp_label_2",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "trips_owner_start_idx": {
+          "name": "trips_owner_start_idx",
+          "columns": [
+            {
+              "expression": "owner_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "start_date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "trips_deleted_at_idx": {
+          "name": "trips_deleted_at_idx",
+          "columns": [
+            {
+              "expression": "deleted_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"trips\".\"deleted_at\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "trips_owner_id_users_id_fk": {
+          "name": "trips_owner_id_users_id_fk",
+          "tableFrom": "trips",
+          "tableTo": "users",
+          "columnsFrom": [
+            "owner_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "trips_copied_from_fk": {
+          "name": "trips_copied_from_fk",
+          "tableFrom": "trips",
+          "tableTo": "trips",
+          "columnsFrom": [
+            "copied_from"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "trips_id_owner_unique": {
+          "name": "trips_id_owner_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "id",
+            "owner_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "trips_dates_ordered": {
+          "name": "trips_dates_ordered",
+          "value": "\"trips\".\"end_date\" >= \"trips\".\"start_date\""
+        },
+        "trips_days_positive": {
+          "name": "trips_days_positive",
+          "value": "\"trips\".\"days\" >= 1"
+        },
+        "trips_daily_days_range": {
+          "name": "trips_daily_days_range",
+          "value": "\"trips\".\"daily_days\" >= 0 and \"trips\".\"daily_days\" <= \"trips\".\"days\""
+        },
+        "trips_destination_not_blank": {
+          "name": "trips_destination_not_blank",
+          "value": "btrim(\"trips\".\"destination\") <> ''"
+        },
+        "trips_stamp_label_1_format": {
+          "name": "trips_stamp_label_1_format",
+          "value": "\"trips\".\"stamp_label_1\" is null or \"trips\".\"stamp_label_1\" ~ '^[A-Z0-9]{3}$'"
+        },
+        "trips_stamp_label_2_format": {
+          "name": "trips_stamp_label_2_format",
+          "value": "\"trips\".\"stamp_label_2\" is null or \"trips\".\"stamp_label_2\" ~ '^[A-Z0-9]{3}$'"
+        },
+        "trips_latitude_range": {
+          "name": "trips_latitude_range",
+          "value": "\"trips\".\"latitude\" between -90 and 90"
+        },
+        "trips_longitude_range": {
+          "name": "trips_longitude_range",
+          "value": "\"trips\".\"longitude\" between -180 and 180"
+        },
+        "trips_coordinates_pair": {
+          "name": "trips_coordinates_pair",
+          "value": "(\"trips\".\"latitude\" is null) = (\"trips\".\"longitude\" is null)"
+        },
+        "trips_coordinates_need_provider": {
+          "name": "trips_coordinates_need_provider",
+          "value": "\"trips\".\"latitude\" is null or \"trips\".\"location_provider\" is not null"
+        },
+        "trips_provider_pair": {
+          "name": "trips_provider_pair",
+          "value": "(\"trips\".\"location_provider\" is null) = (\"trips\".\"location_place_id\" is null)"
+        },
+        "trips_country_code_length": {
+          "name": "trips_country_code_length",
+          "value": "\"trips\".\"location_country_code\" is null or char_length(\"trips\".\"location_country_code\") = 2"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.users": {
+      "name": "users",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "weather_opt_in": {
+          "name": "weather_opt_in",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "temperature_unit": {
+          "name": "temperature_unit",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'F'"
+        },
+        "appearance": {
+          "name": "appearance",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "users_temperature_unit_known": {
+          "name": "users_temperature_unit_known",
+          "value": "\"users\".\"temperature_unit\" in ('F', 'C')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.weather_suggestions": {
+      "name": "weather_suggestions",
+      "schema": "",
+      "columns": {
+        "trip_id": {
+          "name": "trip_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "owner_id": {
+          "name": "owner_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "suggestion_semantic_id": {
+          "name": "suggestion_semantic_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'weather-umbrella'"
+        },
+        "status": {
+          "name": "status",
+          "type": "weather_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "label": {
+          "name": "label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "rule_signature": {
+          "name": "rule_signature",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "weather_suggestions_owner_id_users_id_fk": {
+          "name": "weather_suggestions_owner_id_users_id_fk",
+          "tableFrom": "weather_suggestions",
+          "tableTo": "users",
+          "columnsFrom": [
+            "owner_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "weather_suggestions_trip_fk": {
+          "name": "weather_suggestions_trip_fk",
+          "tableFrom": "weather_suggestions",
+          "tableTo": "trips",
+          "columnsFrom": [
+            "trip_id",
+            "owner_id"
+          ],
+          "columnsTo": [
+            "id",
+            "owner_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "weather_suggestions_pk": {
+          "name": "weather_suggestions_pk",
+          "columns": [
+            "trip_id",
+            "suggestion_semantic_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "weather_suggestions_signature_short": {
+          "name": "weather_suggestions_signature_short",
+          "value": "char_length(\"weather_suggestions\".\"rule_signature\") <= 200"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "public.item_category": {
+      "name": "item_category",
+      "schema": "public",
+      "values": [
+        "Clothing",
+        "Nice attire",
+        "Bathroom",
+        "Toiletries",
+        "Tech",
+        "Other essentials",
+        "Accessories",
+        "Pack last",
+        "Return outfit",
+        "Weather suggestion"
+      ]
+    },
+    "public.item_section": {
+      "name": "item_section",
+      "schema": "public",
+      "values": [
+        "main",
+        "return",
+        "packlast"
+      ]
+    },
+    "public.staple_cadence": {
+      "name": "staple_cadence",
+      "schema": "public",
+      "values": [
+        "per day",
+        "per trip"
+      ]
+    },
+    "public.trip_theme": {
+      "name": "trip_theme",
+      "schema": "public",
+      "values": [
+        "travel",
+        "city",
+        "beach",
+        "outdoors",
+        "theme_park",
+        "home"
+      ]
+    },
+    "public.weather_status": {
+      "name": "weather_status",
+      "schema": "public",
+      "values": [
+        "pending",
+        "accepted",
+        "skipped"
+      ]
+    }
+  },
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}
