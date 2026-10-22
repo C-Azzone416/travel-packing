@@ -29,7 +29,10 @@ export function Stamps({ stamps, departure }: StampsProps) {
         >
           <span className={styles.label}>{stamp.label}</span>
           <span className={styles.date}>{when}</span>
-          <span className={styles.year}>{year}</span>
+          <span className={styles.year}>
+            {stamp.kind === "airport" ? <span aria-hidden="true">✈ </span> : null}
+            {year}
+          </span>
         </div>
       ))}
     </div>

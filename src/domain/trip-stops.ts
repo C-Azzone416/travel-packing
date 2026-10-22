@@ -30,6 +30,8 @@ export interface TripStop {
   arrive: string;
   /** YYYY-MM-DD; the next stop's arrive date. */
   leave: string;
+  /** IATA code of the one airport reliably serving this stop (#152). Derived on the server, never stored or sent back. */
+  airportCode?: string;
 }
 
 export const MAX_STOPS = 6;
