@@ -127,7 +127,7 @@ function ListSection({
   );
 }
 
-export function TripScreen({ tripId, openAdd = false }: { tripId: string; openAdd?: boolean }) {
+export function TripScreen({ tripId }: { tripId: string }) {
   const source = useTripsSource();
   const { track } = useSaveStatus();
   const toast = useToast();
@@ -135,7 +135,7 @@ export function TripScreen({ tripId, openAdd = false }: { tripId: string; openAd
   const [staples, setStaples] = useState<Staple[]>([]);
   const [reloads, setReloads] = useState(0);
   const [filter, setFilter] = useState<PackFilter>("all");
-  const [dialog, setDialog] = useState<Dialog>(openAdd ? { kind: "add-toiletry" } : null);
+  const [dialog, setDialog] = useState<Dialog>(null);
   const [submitting, setSubmitting] = useState(false);
   const [failedRows, setFailedRows] = useState<ReadonlySet<string>>(new Set());
   const [announcement, setAnnouncement] = useState("");
@@ -336,11 +336,6 @@ export function TripScreen({ tripId, openAdd = false }: { tripId: string; openAd
     });
 
   const close = () => setDialog(null);
-  // The dashboard's "+ Add item" arrives with ?add=item; once the form is closed the URL goes back to the plain trip.
-  const closeAdd = () => {
-    close();
-    if (openAdd) window.history.replaceState(null, "", `/trips/${tripId}`);
-  };
 
   if (load.phase === "loading") {
     return (
@@ -813,12 +808,12 @@ export function TripScreen({ tripId, openAdd = false }: { tripId: string; openAd
           initialName={dialog.name}
           initialQty={dialog.qty}
           saving={submitting}
-          onClose={closeAdd}
+          onClose={close}
           onAdd={(item) =>
             void act(() => source.addToiletryItem(tripId, item), {
               modal: true,
               staples: item.scope === "remember",
-              after: closeAdd,
+              after: close,
             })
           }
         />

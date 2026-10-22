@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useRef, useState, type FormEvent } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/Button";
 import { ADD_ITEM_NAME_MAX, ADD_ITEM_QTY_MAX, ADDABLE_CATEGORIES } from "@/domain/item-ops";
 import type { TripItem } from "@/domain/trip";
@@ -20,6 +21,10 @@ export interface AddItemInlineProps {
   onBathroom: (name: string, qty: number) => void;
   /** The item is already on the list: open its quantity editor. */
   onEditExisting: (itemId: string) => void;
+  /** "hero": the dashboard hero's action row (the toggle is one of its buttons, the form takes the next row). */
+  variant?: "packing" | "hero";
+  /** Where the form is drawn when it must sit apart from its button (the hero's full-width row under the actions). */
+  formHost?: HTMLElement | null;
 }
 
 const CATEGORY_CHOICES = [...ADDABLE_CATEGORIES, BATHROOM_CHOICE] as const;
@@ -35,6 +40,8 @@ export function AddItemInline({
   onAdd,
   onBathroom,
   onEditExisting,
+  variant = "packing",
+  formHost = null,
 }: AddItemInlineProps) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
@@ -97,8 +104,113 @@ export function AddItemInline({
 
   const existing = existingId ? items.find((item) => item.id === existingId) : null;
 
+  const formEl = (
+    <form className="add-item-form" id={panelId} onSubmit={submit} noValidate>
+      <div className="add-item-field">
+        <label className="field">
+          Item name
+          <input
+            ref={nameInput}
+            name="name"
+            value={name}
+            maxLength={ADD_ITEM_NAME_MAX}
+            placeholder="Camera"
+            autoFocus
+            aria-invalid={problems.name === true}
+            aria-describedby={problems.name ? `${panelId}-name` : undefined}
+            onChange={(event) => {
+              setName(event.target.value);
+              setProblems((current) => ({ ...current, name: false }));
+              edited();
+            }}
+          />
+        </label>
+        {problems.name ? (
+          <span id={`${panelId}-name`} className="field-error" role="alert">
+            Enter an item name.
+          </span>
+        ) : null}
+      </div>
+      <label className="field">
+        Category
+        <select
+          name="category"
+          value={category}
+          onChange={(event) => {
+            setCategory(event.target.value);
+            edited();
+          }}
+        >
+          {CATEGORY_CHOICES.map((choice) => (
+            <option key={choice} value={choice}>
+              {choice}
+            </option>
+          ))}
+        </select>
+      </label>
+      <div className="add-item-field">
+        <label className="field add-item-qty">
+          Needed
+          <input
+            name="qty"
+            type="number"
+            inputMode="numeric"
+            min={1}
+            max={ADD_ITEM_QTY_MAX}
+            value={qty}
+            aria-invalid={problems.qty === true}
+            aria-describedby={problems.qty ? `${panelId}-qty` : undefined}
+            onChange={(event) => {
+              setQty(event.target.value);
+              setProblems((current) => ({ ...current, qty: false }));
+              edited();
+            }}
+          />
+        </label>
+        {problems.qty ? (
+          <span id={`${panelId}-qty`} className="field-error" role="alert">
+            Enter a whole number from 1 to {ADD_ITEM_QTY_MAX}.
+          </span>
+        ) : null}
+      </div>
+      <div className="add-item-actions">
+        <Button type="submit" disabled={saving || busy}>
+          {isBathroom ? "Continue to Bathroom item" : "Add to list"}
+        </Button>
+        <Button variant="ghost" onClick={close}>
+          Cancel
+        </Button>
+      </div>
+      {isBathroom ? (
+        <p className="tiny muted add-item-note">
+          Bathroom items go in the toiletry bag, so they use the Bathroom form.
+        </p>
+      ) : null}
+      {existing ? (
+        <p className="add-item-exists" role="alert">
+          {existing.name} is already on your list (needed: {existing.qty}).{" "}
+          <button
+            type="button"
+            className="link-button"
+            onClick={() => {
+              close();
+              onEditExisting(existing.id);
+            }}
+          >
+            Edit quantity
+          </button>
+        </p>
+      ) : null}
+      {failed ? (
+        <p className="field-error" role="alert">
+          Couldn’t add that item. Nothing was changed.
+        </p>
+      ) : null}
+    </form>
+  );
+
   return (
-    <div className="add-item">
+    <div className={variant === "hero" ? "add-item hero" : "add-item"}>
       <Button
         ref={toggle}
         variant="secondary"
@@ -108,110 +220,7 @@ export function AddItemInline({
       >
         ＋ Add item
       </Button>
-      {open ? (
-        <form className="add-item-form" id={panelId} onSubmit={submit} noValidate>
-          <div className="add-item-field">
-            <label className="field">
-              Item name
-              <input
-                ref={nameInput}
-                name="name"
-                value={name}
-                maxLength={ADD_ITEM_NAME_MAX}
-                placeholder="Camera"
-                autoFocus
-                aria-invalid={problems.name === true}
-                aria-describedby={problems.name ? `${panelId}-name` : undefined}
-                onChange={(event) => {
-                  setName(event.target.value);
-                  setProblems((current) => ({ ...current, name: false }));
-                  edited();
-                }}
-              />
-            </label>
-            {problems.name ? (
-              <span id={`${panelId}-name`} className="field-error" role="alert">
-                Enter an item name.
-              </span>
-            ) : null}
-          </div>
-          <label className="field">
-            Category
-            <select
-              name="category"
-              value={category}
-              onChange={(event) => {
-                setCategory(event.target.value);
-                edited();
-              }}
-            >
-              {CATEGORY_CHOICES.map((choice) => (
-                <option key={choice} value={choice}>
-                  {choice}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="add-item-field">
-            <label className="field add-item-qty">
-              Needed
-              <input
-                name="qty"
-                type="number"
-                inputMode="numeric"
-                min={1}
-                max={ADD_ITEM_QTY_MAX}
-                value={qty}
-                aria-invalid={problems.qty === true}
-                aria-describedby={problems.qty ? `${panelId}-qty` : undefined}
-                onChange={(event) => {
-                  setQty(event.target.value);
-                  setProblems((current) => ({ ...current, qty: false }));
-                  edited();
-                }}
-              />
-            </label>
-            {problems.qty ? (
-              <span id={`${panelId}-qty`} className="field-error" role="alert">
-                Enter a whole number from 1 to {ADD_ITEM_QTY_MAX}.
-              </span>
-            ) : null}
-          </div>
-          <div className="add-item-actions">
-            <Button type="submit" disabled={saving || busy}>
-              {isBathroom ? "Continue to Bathroom item" : "Add to list"}
-            </Button>
-            <Button variant="ghost" onClick={close}>
-              Cancel
-            </Button>
-          </div>
-          {isBathroom ? (
-            <p className="tiny muted add-item-note">
-              Bathroom items go in the toiletry bag, so they use the Bathroom form.
-            </p>
-          ) : null}
-          {existing ? (
-            <p className="add-item-exists" role="alert">
-              {existing.name} is already on your list (needed: {existing.qty}).{" "}
-              <button
-                type="button"
-                className="link-button"
-                onClick={() => {
-                  close();
-                  onEditExisting(existing.id);
-                }}
-              >
-                Edit quantity
-              </button>
-            </p>
-          ) : null}
-          {failed ? (
-            <p className="field-error" role="alert">
-              Couldn’t add that item. Nothing was changed.
-            </p>
-          ) : null}
-        </form>
-      ) : null}
+      {open && formHost ? createPortal(formEl, formHost) : open ? formEl : null}
     </div>
   );
 }

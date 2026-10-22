@@ -3463,3 +3463,12 @@ a.back {
     width: 100%;
   }
 }
+
+/* The hero's inline "＋ Add item" (#147): the wrapper dissolves so the toggle is one of the action buttons; the form is
+   drawn into .add-item-host, a full-width row under the hero's stats and actions. */
+.add-item.hero {
+  display: contents;
+}
+.add-item-host:not(:empty) {
+  margin-top: 16px;
+}
