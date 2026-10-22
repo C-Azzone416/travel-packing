@@ -3784,6 +3784,7 @@ a.back {
     background: var(--paper);
   }
 }
+/* The group legend sits on its fieldset's top rule; room above it so the scroll area doesn't clip the first label. */
 .save-list-items {
-  padding-top: 6px;
+  padding-top: 16px;
 }

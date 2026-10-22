@@ -212,6 +212,10 @@ test("Save as a list: name it, untick an item, save, follow the link, and the li
   await expect(sheet.getByLabel("List name")).toHaveValue("San Diego");
   const total = await sheet.getByRole("checkbox").count();
   await expect(sheet.getByText(`${total} of ${total} items`)).toBeVisible();
+  // The first group's label sits inside the scroll area, not clipped above it.
+  const firstLabel = await sheet.locator(".save-list-group legend").first().boundingBox();
+  const itemsTop = (await sheet.locator(".save-list-items").boundingBox())?.y ?? 0;
+  expect(firstLabel?.y ?? -1).toBeGreaterThanOrEqual(itemsTop);
   await sheet.getByLabel("List name").fill("Beach week");
   await sheet.getByRole("checkbox", { name: /Sunglasses/ }).uncheck();
   await expect(sheet.getByText(`${total - 1} of ${total} items`)).toBeVisible();
