@@ -478,8 +478,23 @@ describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
     ],
     [
       "no production host passed",
-      mutate(/vars\.PRODUCTION_DB_HOST/g, "vars.OTHER"),
+      mutate(/secrets\.PRODUCTION_DB_HOST/g, "secrets.OTHER"),
       /PRODUCTION_DB_HOST must be passed/,
+    ],
+    [
+      "the production host read as a variable",
+      mutate("secrets.PRODUCTION_DB_HOST", "vars.PRODUCTION_DB_HOST"),
+      /PRODUCTION_DB_HOST must be a secret/,
+    ],
+    [
+      "the owner id read as a variable",
+      mutate("secrets.PREVIEW_SEED_OWNER_ID", "vars.PREVIEW_SEED_OWNER_ID"),
+      /PREVIEW_SEED_OWNER_ID must be a secret/,
+    ],
+    [
+      "the owner id not read at all",
+      mutate("secrets.PREVIEW_SEED_OWNER_ID", "secrets.OTHER"),
+      /read PREVIEW_SEED_OWNER_ID as a secret/,
     ],
   ])("%s", (_name, workflow, message) => {
     expect(checkDeployWorkflow(workflow).join("\n")).toMatch(message);
