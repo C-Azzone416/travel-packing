@@ -6,3 +6,25 @@
 .clubhouse/plugin-data-local/
 
 .clubhouse/agents.json.bak
+
+# Node / Next / test output
+node_modules/
+.next/
+coverage/
+playwright-report/
+test-results/
+next-env.d.ts
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+.DS_Store
+
+# Local PGlite databases (seed, dev)
+.data/
+
+# Written by the gitleaks action in CI
+results.sarif
+
+# Test report kept by npm run verify so a failure names its test (#150)
+.verify-logs/

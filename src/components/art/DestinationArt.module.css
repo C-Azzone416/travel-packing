@@ -1,0 +1,85 @@
+/* Decorative destination art. The box has a fixed size in every state, so a
+   broken image swaps to the neutral surface without shifting the layout. */
+.visual {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  background: var(--seafoam);
+}
+
+.visual::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--bg) 34%, transparent),
+    transparent 48%
+  );
+  pointer-events: none;
+}
+
+.failed::after {
+  display: none;
+}
+
+/* Every theme keeps its focal subject at about 72% across and 58% down, so one crop works for all of them. */
+.image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 72% 58%;
+}
+
+/* Trip card banner: compact on phones, taller as the grid widens. */
+.card {
+  height: 118px;
+  border-bottom: 1px solid var(--line);
+}
+
+@media (min-width: 431px) {
+  .card {
+    height: 132px;
+  }
+}
+
+@media (min-width: 660px) {
+  .card {
+    height: 148px;
+  }
+}
+
+/* Trip header: fills its container. The copy panel has its own background, so the phone scrim only softens the
+   bottom edge and the pastel illustrations stay visible. */
+.header {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+}
+
+.header::after {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg) 16%, transparent),
+    color-mix(in srgb, var(--bg) 12%, transparent) 42%,
+    color-mix(in srgb, var(--bg) 35%, transparent) 78%
+  );
+}
+
+@media (min-width: 431px) {
+  .header::after {
+    background: linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--bg) 93%, transparent) 0%,
+      color-mix(in srgb, var(--bg) 73%, transparent) 43%,
+      color-mix(in srgb, var(--bg) 8%, transparent) 76%
+    );
+  }
+}
+
+.failed.header::after {
+  display: none;
+}

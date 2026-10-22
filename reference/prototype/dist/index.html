@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#166D7A" />
+    <meta name="description" content="A private sample-data clickable wireframe for Caroline's personal packing app." />
+    <title>Caroline’s Packing Prototype</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="prototype-banner" role="note">
+      <span>Clickable wireframe</span>
+      <span>Sample data only · no account or cloud storage</span>
+    </div>
+    <div class="app-shell">
+      <header class="topbar">
+        <button class="brand-button" id="brand-home" type="button" aria-label="Go to trips">
+          <span class="brand-mark" aria-hidden="true">✦</span>
+          <span><strong>Carrywell</strong><small>Caroline’s packing companion</small></span>
+        </button>
+        <button class="sync-chip saved" id="sync-chip" type="button" aria-label="View simulated save status">
+          <span class="sync-dot" aria-hidden="true"></span><span id="sync-label">Saved</span>
+        </button>
+      </header>
+
+      <main id="app" tabindex="-1"></main>
+
+      <nav class="bottom-nav" aria-label="Primary navigation">
+        <button type="button" data-nav="trips" aria-current="page"><span aria-hidden="true">⌂</span>Trips</button>
+        <button type="button" data-nav="staples"><span aria-hidden="true">◇</span>Staples</button>
+        <button type="button" data-nav="settings"><span aria-hidden="true">⚙</span>Settings</button>
+      </nav>
+    </div>
+
+    <div id="modal-root"></div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="core.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
