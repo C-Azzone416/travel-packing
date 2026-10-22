@@ -7,6 +7,8 @@ export interface StampsProps {
   stamps: readonly StampSpec[];
   /** The trip's first departure, YYYY-MM-DD. */
   departure: string;
+  /** The stamps sit on a picture: each gets a backing disc. Off on the clean ledger hero, where the rules show through. */
+  onPicture?: boolean;
 }
 
 function dayMonth(date: string): { dayMonth: string; year: string } {
@@ -16,7 +18,7 @@ function dayMonth(date: string): { dayMonth: string; year: string } {
 
 // Route stamps (spec §5). Border, rings and text all follow currentColor so they can never drift apart. The
 // container carries the one accessible name; the inner text is hidden from assistive tech.
-export function Stamps({ stamps, departure }: StampsProps) {
+export function Stamps({ stamps, departure, onPicture = false }: StampsProps) {
   const { dayMonth: when, year } = dayMonth(departure);
   if (stamps.length === 0) return null;
   return (
@@ -24,8 +26,9 @@ export function Stamps({ stamps, departure }: StampsProps) {
       {stamps.slice(0, 2).map((stamp, index) => (
         <div
           key={`${stamp.kind}-${stamp.label}-${index}`}
-          className={`${styles.stamp} ${index === 0 ? styles.first : styles.second}`}
+          className={`${styles.stamp} ${index === 0 ? styles.first : styles.second}${onPicture ? ` ${styles.onPicture}` : ""}`}
           data-stamp={stamp.kind}
+          data-on-picture={onPicture ? "true" : undefined}
           aria-hidden="true"
         >
           <span className={styles.label}>{stamp.label}</span>

@@ -14,10 +14,15 @@
   height: 116px;
   border: 3px double currentColor;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--surface) 92%, transparent);
   text-align: center;
   font-weight: 700;
   line-height: 1.1;
+}
+
+/* Transparent by default: a stamp on paper lets the ruled ledger lines show through. Only a stamp that sits on a
+   picture gets a backing disc, so its ring and text keep their contrast on arbitrary pixels. */
+.onPicture {
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
 }
 
 .first {
