@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { logInfo, logWarning, redact, redactFields, REDACTED, setLogSink } from "./redact";
+import {
+  logInfo,
+  logWarning,
+  redact,
+  redactFields,
+  REDACTED,
+  SENSITIVE_KEYS,
+  setLogSink,
+} from "./redact";
 
 afterEach(() => setLogSink());
 
@@ -49,10 +57,20 @@ describe("redactFields", () => {
     },
   );
 
+  it.each([...SENSITIVE_KEYS])("never keeps the value of the sensitive field %s", (key) => {
+    expect(redactFields({ [key]: "Lisbon" })).toEqual({ [key]: REDACTED });
+  });
+
   it("redacts text inside other fields, hides objects, and keeps harmless values", () => {
     expect(
-      redactFields({ code: "INTERNAL", count: 3, ok: false, note: "for a@b.test", deep: { a: 1 } }),
-    ).toEqual({ code: "INTERNAL", count: 3, ok: false, note: `for ${REDACTED}`, deep: REDACTED });
+      redactFields({
+        code: "INTERNAL",
+        count: 3,
+        ok: false,
+        reason: "for a@b.test",
+        deep: { a: 1 },
+      }),
+    ).toEqual({ code: "INTERNAL", count: 3, ok: false, reason: `for ${REDACTED}`, deep: REDACTED });
   });
 });
 

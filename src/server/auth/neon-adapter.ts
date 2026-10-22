@@ -5,6 +5,7 @@
 // tested against a structural stand-in (NeonAuthLike) and type-checked against the SDK's real types in
 // auth-runtime.ts. Enabling it in production is blocked on #27.
 
+import "server-only";
 import { logAuthEvent } from "./safe-log";
 import type {
   AuthProvider,

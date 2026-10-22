@@ -27,7 +27,8 @@ export function redact(text: string): string {
 }
 
 /** Fields whose VALUES are never logged, whatever they contain. */
-const SENSITIVE_KEYS = new Set([
+/** Field names whose values are never logged (#22): trip, place, list and stamp text, and credentials. */
+export const SENSITIVE_KEYS = new Set([
   "email",
   "password",
   "token",
@@ -50,6 +51,22 @@ const SENSITIVE_KEYS = new Set([
   "trips",
   "staple",
   "staples",
+  "names",
+  "labels",
+  "destinations",
+  "stop",
+  "stops",
+  "list",
+  "lists",
+  "stamp",
+  "category",
+  "categories",
+  "title",
+  "note",
+  "notes",
+  "address",
+  "country",
+  "region",
 ]);
 
 export function redactFields(fields: Record<string, unknown>): Record<string, unknown> {

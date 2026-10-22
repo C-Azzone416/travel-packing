@@ -4,7 +4,8 @@ import { createMigratedDb, resetData } from "../db/__fixtures__/db";
 import type { Db } from "../db/retention";
 import { createFakeAuth, makeContext, OTHER_OWNER, OWNER, signedInAs } from "./__fixtures__/seed";
 import { fail } from "./result";
-import { refuse, run } from "./run";
+import { createRateLimiter } from "../locations/rate-limit";
+import { DATA_CALLS_PER_MINUTE, dataCallsPerMinute, refuse, run, setDataRateLimiter } from "./run";
 import { setDataLogSink } from "./safe-log";
 
 let ctx: Awaited<ReturnType<typeof createMigratedDb>>;
@@ -21,13 +22,47 @@ beforeEach(async () => {
   logged = [];
   setDataLogSink((line) => logged.push(line));
 });
-afterEach(() => setDataLogSink());
+afterEach(() => {
+  setDataLogSink();
+  setDataRateLimiter();
+});
 afterAll(async () => {
   await ctx.client.close();
 });
 
 const context = () => makeContext(ctx.db as unknown as Db, fake);
 const schema = z.object({ name: z.string().min(1) });
+
+describe("dataCallsPerMinute", () => {
+  it("uses DATA_CALLS_PER_MINUTE when it is a whole number in range, else the default", () => {
+    expect(dataCallsPerMinute({ DATA_CALLS_PER_MINUTE: " 5000 " })).toBe(5000);
+    for (const bad of [undefined, "", "0", "-1", "1.5", "abc", "100001", "1000000"]) {
+      expect(dataCallsPerMinute({ DATA_CALLS_PER_MINUTE: bad })).toBe(DATA_CALLS_PER_MINUTE);
+    }
+  });
+});
+
+describe("run rate limit (#22)", () => {
+  it("refuses an owner past the allowance with a retryable UNAVAILABLE, per owner, and recovers", async () => {
+    let now = 0;
+    setDataRateLimiter(createRateLimiter({ limit: 2, windowMs: 1000, now: () => now }));
+    let ran = 0;
+    const call = () => run(context(), schema, { name: "x" }, async () => ++ran);
+    expect((await call()).ok).toBe(true);
+    expect((await call()).ok).toBe(true);
+    const refused = await call();
+    expect(refused).toEqual(fail("UNAVAILABLE", { reason: "RATE_LIMITED" }));
+    expect(ran).toBe(2);
+    expect(logged).toContain(JSON.stringify({ scope: "data", event: "error:UNAVAILABLE" }));
+
+    signedInAs(fake, OTHER_OWNER);
+    expect((await call()).ok).toBe(true);
+
+    signedInAs(fake, OWNER);
+    now = 1001;
+    expect((await call()).ok).toBe(true);
+  });
+});
 
 describe("run", () => {
   it("passes the session's owner id and validated input to the handler", async () => {

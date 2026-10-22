@@ -1,6 +1,7 @@
 // Builds the DataContext the UI's server actions use: the real database, the auth runtime, and the real clock.
 // Returns null when the database is not configured, so callers can show a truthful error instead of crashing.
 
+import "server-only";
 import { getAuth } from "../auth/auth-runtime";
 import { getAppDb, resetAppDb } from "../db/app-db";
 import { selectResolver } from "../locations/resolver";
