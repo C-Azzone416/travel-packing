@@ -1,6 +1,7 @@
 // Runtime wiring: picks the provider from environment configuration. Fails closed: if configuration is
 // missing or invalid, the app is "unavailable" (nobody can sign in, every request is unauthenticated).
 
+import "server-only";
 import { getAppDb } from "@/server/db/app-db";
 import { logWarning } from "@/server/redact";
 import { parseAllowlist, type Allowlist } from "./allowlist";
