@@ -69,6 +69,7 @@ import {
   type SavedListItem,
 } from "../../domain/saved-lists";
 import {
+  createSavedList,
   deleteSavedList,
   getSavedList,
   listSavedListMetas,
@@ -849,5 +850,41 @@ export function removeSavedListItem(
       request.listId,
       detail.items.filter((item) => item.id !== request.itemId),
     );
+  });
+}
+
+export interface SavedListCreated {
+  id: string;
+  name: string;
+  itemCount: number;
+}
+
+/**
+ * Save the chosen items of one of the owner's trips as a new list (#169): a snapshot of name, category and needed
+ * quantity only, with no packed state and no trip details. Names are unique per owner once normalised (REJECTED /
+ * NAME_TAKEN); an item id that is not on the trip is INVALID_INPUT (itemIds); another owner's trip is NOT_FOUND. The
+ * trip is never changed. Duplicates are the screen's business: whatever it sends is saved, "keep both" included.
+ */
+export function saveTripAsList(
+  context: DataContext,
+  input: unknown,
+): Promise<Result<SavedListCreated>> {
+  return run(context, inputs.saveTripAsListInput, input, async (scope, request) => {
+    const trip = await mustLoad(scope, request.tripId);
+    const byId = new Map(trip.items.map((item) => [item.id, item]));
+    const picked = [...new Set(request.itemIds)].map((id) => byId.get(id));
+    if (picked.some((item) => !item)) refuse(fail("INVALID_INPUT", { fields: ["itemIds"] }));
+    const existing = await listSavedLists(scope.db, scope.ownerId);
+    if (listNameTaken(existing, request.name)) refuse(fail("REJECTED", { reason: "NAME_TAKEN" }));
+    const created = await createSavedList(scope.db, scope.ownerId, {
+      name: request.name,
+      items: (picked as StoredTrip["items"]).map((item) => ({
+        id: `item-${crypto.randomUUID()}`,
+        name: item.name,
+        category: item.category,
+        qty: item.qty,
+      })),
+    });
+    return { id: created.id, name: created.name, itemCount: created.items.length };
   });
 }

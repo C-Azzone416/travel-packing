@@ -192,6 +192,26 @@ export async function addItemAction(
   return { ok: false, code, ...(reason ? { reason } : {}), ...(fields ? { fields } : {}) };
 }
 
+export type SaveAsListActionResult =
+  | { ok: true; list: { id: string; name: string; itemCount: number } }
+  | { ok: false; code: ErrorCode; reason?: string; fields?: string[] };
+
+/** Save the chosen items of a trip as a new saved list (#169). NAME_TAKEN comes back as a reason, not an error page. */
+export async function saveAsListAction(
+  tripId: string,
+  name: string,
+  itemIds: string[],
+): Promise<SaveAsListActionResult> {
+  const context = await getDataContext();
+  if (!context) return { ok: false, code: "INTERNAL" };
+  const result = await service.saveTripAsList(context, { tripId, name, itemIds });
+  if (result.ok) return { ok: true, list: result.data };
+  if (result.error.code === "UNAUTHENTICATED") redirect(SIGN_IN_PATH);
+  if (result.error.code === "FORBIDDEN") redirect(ACCESS_DENIED_PATH);
+  const { code, reason, fields } = result.error;
+  return { ok: false, code, ...(reason ? { reason } : {}), ...(fields ? { fields } : {}) };
+}
+
 export async function confirmBagPlacementAction(tripId: string): Promise<TripCommandResult> {
   return command((context) => service.confirmToiletryBag(context, { tripId }));
 }
