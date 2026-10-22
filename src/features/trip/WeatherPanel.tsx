@@ -14,7 +14,33 @@ export type WeatherPanelState =
   | { kind: "offline" }
   | { kind: "ready"; stops: StopWeather[] };
 
+/** The "weather check" band (#155): shown full width under the hero only when the forecast moved. */
+export function WeatherReviewBanner({
+  changesCount,
+  onReview,
+}: {
+  changesCount: number;
+  onReview: () => void;
+}) {
+  if (changesCount <= 0) return null;
+  return (
+    <div className="weather-review-banner" role="region" aria-label="Weather check">
+      <div>
+        <span className="weather-check-label">Weather check</span>
+        <strong>
+          {changesCount} weather {changesCount === 1 ? "change" : "changes"} to review
+        </strong>
+      </div>
+      <Button small onClick={onReview}>
+        Review changes
+      </Button>
+    </div>
+  );
+}
+
 export interface WeatherPanelProps {
+  /** Rendered inside the trip hero as its weather strip: no card, and the review band is drawn elsewhere. */
+  embedded?: boolean;
   stops: TripStop[];
   state: WeatherPanelState;
   unit: TemperatureUnit;
@@ -55,6 +81,7 @@ function Skeleton({ count }: { count: number }) {
 }
 
 export function WeatherPanel({
+  embedded = false,
   stops,
   state,
   unit,
@@ -70,7 +97,12 @@ export function WeatherPanel({
   if (state.kind === "prompt") {
     if (customOnly) {
       return (
-        <Card as="section" padded className="weather-panel" aria-labelledby="weather-heading">
+        <Card
+          as="section"
+          padded
+          className="weather-panel weather-compact"
+          aria-labelledby="weather-heading"
+        >
           <h2 id="weather-heading">Weather</h2>
           <p>Weather needs a place from the map. Custom places are skipped.</p>
         </Card>
@@ -125,11 +157,13 @@ export function WeatherPanel({
     state.kind === "ready" &&
     state.stops.some((stop) => stop.days.some((day) => day.source === "typical"));
 
+  const Wrapper = embedded ? "section" : Card;
+  const wrapperProps = embedded
+    ? { className: "weather-panel weather-embedded" }
+    : { as: "section" as const, padded: true, className: "weather-panel" };
   return (
-    <Card
-      as="section"
-      padded
-      className="weather-panel"
+    <Wrapper
+      {...wrapperProps}
       aria-labelledby="weather-heading"
       aria-label={`Weather in degrees ${unit === "F" ? "Fahrenheit" : "Celsius"}`}
     >
@@ -139,7 +173,7 @@ export function WeatherPanel({
           ↻
         </Button>
       </div>
-      {changesCount > 0 ? (
+      {!embedded && changesCount > 0 ? (
         <div className="weather-review-banner">
           <strong>
             {changesCount} weather {changesCount === 1 ? "change" : "changes"} to review
@@ -226,6 +260,6 @@ export function WeatherPanel({
         </p>
       ) : null}
       <Attribution />
-    </Card>
+    </Wrapper>
   );
 }

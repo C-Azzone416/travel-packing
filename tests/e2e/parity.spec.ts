@@ -116,7 +116,7 @@ test("Nice outfits: switching off hides the Nice items, switching back on restor
   await row(page, "nice-shoes")
     .getByRole("button", { name: "Increase packed Dress shoes" })
     .click();
-  await expect(row(page, "nice-shoes")).toContainText("1/2");
+  await expect(row(page, "nice-shoes")).toContainText("1 of 2 packed");
 
   for (let round = 0; round < 2; round += 1) {
     await setPreference(page, "Nice outfits", false);
@@ -125,7 +125,7 @@ test("Nice outfits: switching off hides the Nice items, switching back on restor
     await expect(row(page, "nice-undergarments")).toHaveCount(0);
     await setPreference(page, "Nice outfits", true);
     await expect(row(page, "nice-shoes")).toHaveCount(1);
-    await expect(row(page, "nice-shoes")).toContainText("1/2");
+    await expect(row(page, "nice-shoes")).toContainText("1 of 2 packed");
     await expect(row(page, "nice-makeup")).toHaveCount(1);
     await expect(row(page, "nice-undergarments")).toHaveCount(1);
   }
@@ -160,7 +160,7 @@ test("copy: a remembered Bathroom item travels to the copy, with nothing checked
   await add.getByRole("radio", { name: /Remember for future trips/ }).check();
   await add.getByRole("button", { name: "Add toiletry item" }).click();
   await expect(page.getByText("Face wash", { exact: true })).toBeVisible();
-  await page.getByRole("link", { name: "Back to trips" }).click();
+  await page.getByRole("link", { name: "All trips" }).click();
   const source = page.getByRole("article", { name: "San Diego" });
   const before = await source.innerText();
 

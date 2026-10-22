@@ -20,10 +20,8 @@ const cardArtKey = (page: Page, name: string) =>
 // The Field Ledger dashboard (#143) shows no picture on upcoming trips, so read a trip's theme on its own screen.
 async function artKey(page: Page, name: string) {
   await page.getByRole("link", { name: new RegExp(`^(Continue|Keep) packing: ${name}$`) }).click();
-  const key = await page
-    .locator(".destination-trip-head [data-art-key]")
-    .getAttribute("data-art-key");
-  await page.getByRole("link", { name: "Back to trips" }).click();
+  const key = await page.locator(".trip-hero [data-art-key]").getAttribute("data-art-key");
+  await page.getByRole("link", { name: "All trips" }).click();
   await expect(card(page, name)).toBeVisible();
   return key;
 }
