@@ -13,7 +13,11 @@ import { TripsSourceProvider } from "@/features/trips/TripsSourceProvider";
 import type { StopWeather } from "@/domain/weather/types";
 import { TripScreen } from "./TripScreen";
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/trips/san-diego" }));
+const push = vi.fn();
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/trips/san-diego",
+  useRouter: () => ({ push }),
+}));
 
 const TOILETRIES = [
   "nice-makeup",
@@ -1707,5 +1711,72 @@ describe("inline ＋ Add item (#147)", () => {
       "Camera",
     );
     expect(tripOf(source).items.some((entry) => entry.name === "Camera")).toBe(false);
+  });
+});
+
+describe("Save as a list (#169)", () => {
+  const open = async (user: ReturnType<typeof userEvent.setup>) => {
+    await ready();
+    await user.click(screen.getByRole("button", { name: "Save as a list" }));
+    return screen.getByRole("dialog", { name: "Save as a list" });
+  };
+
+  it("is a secondary action in the hero, next to Edit route and Change theme", async () => {
+    setup();
+    await ready();
+    const actions = screen.getByRole("button", { name: "Save as a list" }).closest(".head-actions");
+    expect(within(actions as HTMLElement).getByRole("button", { name: "Edit route" })).toBeTruthy();
+    expect(
+      within(actions as HTMLElement).getByRole("button", { name: "Change theme" }),
+    ).toBeTruthy();
+  });
+
+  it("saves the trip's items as a list, says so with a link to the lists, and leaves the trip as it was", async () => {
+    push.mockClear();
+    const { user, source } = setup();
+    const before = JSON.stringify(tripOf(source));
+    const sheet = await open(user);
+    expect((within(sheet).getByLabelText("List name") as HTMLInputElement).value).toBe("San Diego");
+    const total = tripOf(source).items.length;
+    expect(within(sheet).getByText(`${total} of ${total} items`)).toBeTruthy();
+    await user.click(within(sheet).getByRole("button", { name: "Save list" }));
+    expect(await screen.findByText(`“San Diego” saved (${total} items).`)).toBeTruthy();
+    expect(screen.queryByRole("dialog", { name: "Save as a list" })).toBeNull();
+    expect(JSON.stringify(tripOf(source))).toBe(before);
+    await user.click(screen.getByRole("button", { name: "View lists" }));
+    expect(push).toHaveBeenCalledExactlyOnceWith("/staples/lists");
+  });
+
+  it("leaves unticked items out", async () => {
+    const { user } = setup();
+    const sheet = await open(user);
+    const total = within(sheet).getAllByRole("checkbox").length;
+    await user.click(within(sheet).getAllByRole("checkbox")[0]);
+    await user.click(within(sheet).getByRole("button", { name: "Save list" }));
+    expect(await screen.findByText(`“San Diego” saved (${total - 1} items).`)).toBeTruthy();
+  });
+
+  it("says when the name is taken, keeping the dialog open", async () => {
+    const { user } = setup();
+    let sheet = await open(user);
+    await user.click(within(sheet).getByRole("button", { name: "Save list" }));
+    await screen.findByText(/saved \(/);
+    sheet = await open(user);
+    await user.click(within(sheet).getByRole("button", { name: "Save list" }));
+    expect(
+      await within(screen.getByRole("dialog")).findByText(
+        /You already have a list called “San Diego”/,
+      ),
+    ).toBeTruthy();
+  });
+
+  it("says nothing changed, and keeps the dialog, when the save fails", async () => {
+    const { user } = setup("san-diego", (base) => ({
+      ...base,
+      saveAsList: () => Promise.reject(new Error("down")),
+    }));
+    const sheet = await open(user);
+    await user.click(within(sheet).getByRole("button", { name: "Save list" }));
+    expect(await within(sheet).findByText("Couldn’t save. Nothing was changed.")).toBeTruthy();
   });
 });

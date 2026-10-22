@@ -28,7 +28,7 @@ import {
   type CommandResult,
   type Signals,
 } from "@/domain/readiness";
-import { categoryCounts, tripItemsFromList } from "@/domain/saved-lists";
+import { categoryCounts, listNameTaken, tripItemsFromList } from "@/domain/saved-lists";
 import { isThemeId, type ThemeId } from "@/domain/themes";
 import type { Scope, Staple, TripConfig } from "@/domain/trip";
 import {
@@ -72,6 +72,13 @@ export interface SavedListsCapability {
   get(listId: string): Promise<SavedListDetail>;
 }
 
+/** What saving a trip as a list gives back: enough to say "“Beach week” saved (24 items)" and link to it. */
+export interface SavedListCreated {
+  id: string;
+  name: string;
+  itemCount: number;
+}
+
 export interface TripsSource {
   load(): Promise<LifecycleState>;
   archive(tripId: string): Promise<LifecycleState>;
@@ -100,6 +107,11 @@ export interface TripsSource {
    * (same normalised name and category; nothing is added), or INVALID_INPUT / NOT_FOUND / the error code.
    */
   addItem(tripId: string, input: NewCustomItem): Promise<TripChange>;
+  /**
+   * Save the chosen items of a trip as a new saved list (#169): a snapshot of name, category and needed quantity. Rejects
+   * with message NAME_TAKEN when the owner already has a list with that name (normalised), or the error code.
+   */
+  saveAsList(tripId: string, name: string, itemIds: string[]): Promise<SavedListCreated>;
   confirmBagPlacement(tripId: string): Promise<TripChange>;
   undoBagPlacement(tripId: string): Promise<TripChange>;
   markReady(tripId: string): Promise<TripChange>;
@@ -178,6 +190,8 @@ export function createMemoryTripsSource(
   let state = initial;
   // The owner's staples: "remember for future trips" edits change these, never an existing trip.
   let currentStaples: Staple[] = [...staples];
+  // The names of the saved lists made from trips (#169); the in-memory source keeps no more of them than that.
+  let madeLists: { id: string; name: string }[] = [];
 
   const apply = async (result: LifecycleResult): Promise<LifecycleState> => {
     if (!result.ok) throw new TripsSourceError(result.reason);
@@ -301,6 +315,18 @@ export function createMemoryTripsSource(
         }
         return added.trip;
       }),
+    saveAsList: async (id, name, itemIds) => {
+      const trip = find(id);
+      if (listNameTaken(madeLists, name)) throw new TripsSourceError("NAME_TAKEN");
+      const wanted = new Set(itemIds);
+      const items = trip.items.filter((item) => wanted.has(item.id));
+      if (items.length === 0 || items.length !== wanted.size) {
+        throw new TripsSourceError("INVALID_INPUT");
+      }
+      const list = { id: newId(), name: name.trim() };
+      madeLists = [...madeLists, list];
+      return { ...list, itemCount: items.length };
+    },
     confirmBagPlacement: (id) => command(id, confirmBagPlacement),
     undoBagPlacement: (id) => command(id, undoBagPlacement),
     markReady: (id) => command(id, markReady),

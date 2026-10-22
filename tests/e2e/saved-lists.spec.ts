@@ -192,3 +192,122 @@ test(
     expect(await overflow()).toBeLessThanOrEqual(0);
   },
 );
+
+// Save as a list (#169): from a trip's packing screen, through the real data layer.
+async function openSanDiego(page: Page) {
+  await page.clock.setFixedTime(NOW);
+  await signInAsOwner(page);
+  await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
+  await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
+  await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
+}
+
+test("Save as a list: name it, untick an item, save, follow the link, and the list holds name, category and quantity only", async ({
+  page,
+}) => {
+  await openSanDiego(page);
+  const trip = page.url();
+  await page.getByRole("button", { name: "Save as a list" }).click();
+  const sheet = page.getByRole("dialog", { name: "Save as a list" });
+  await expect(sheet.getByLabel("List name")).toHaveValue("San Diego");
+  const total = await sheet.getByRole("checkbox").count();
+  await expect(sheet.getByText(`${total} of ${total} items`)).toBeVisible();
+  // The first group's label sits inside the scroll area, not clipped above it.
+  const firstLabel = await sheet.locator(".save-list-group legend").first().boundingBox();
+  const itemsTop = (await sheet.locator(".save-list-items").boundingBox())?.y ?? 0;
+  expect(firstLabel?.y ?? -1).toBeGreaterThanOrEqual(itemsTop);
+  await sheet.getByLabel("List name").fill("Beach week");
+  await sheet.getByRole("checkbox", { name: /Sunglasses/ }).uncheck();
+  await expect(sheet.getByText(`${total - 1} of ${total} items`)).toBeVisible();
+  await sheet.getByRole("button", { name: "Save list" }).click();
+  await expect(page.getByText(`“Beach week” saved (${total - 1} items).`)).toBeVisible();
+  await page.getByRole("button", { name: "View lists" }).click();
+  await expect(page).toHaveURL(/\/staples\/lists$/);
+  const card = page.getByRole("article", { name: "Beach week" });
+  await expect(card.getByText(`${total - 1} items`, { exact: false })).toBeVisible();
+  await card.getByRole("link", { name: "Edit Beach week" }).click();
+  await expect(page.getByRole("heading", { name: "Beach week", level: 1 })).toBeVisible();
+  await expect(page.getByText("Sunglasses", { exact: true })).toHaveCount(0);
+  await expect(page.getByText(/Needed \d+/).first()).toBeVisible();
+  await expect(page.getByText(/packed/i)).toHaveCount(0);
+  // The trip is exactly as it was.
+  await page.goto(trip);
+  await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
+  await expect(page.locator('[data-item-id="sunglasses"]')).toBeVisible();
+});
+
+test("Save as a list: a taken name is refused, and two matching rows go through the duplicate prompt (keep both is two rows)", async ({
+  page,
+}) => {
+  await openSanDiego(page);
+  // Make two rows that read the same: rename Sunglasses to Everyday glasses (same category), for this trip only.
+  await page
+    .locator('[data-item-id="sunglasses"]')
+    .getByRole("button", { name: /^Sunglasses / })
+    .click();
+  const editor = page.getByRole("dialog", { name: "Edit item" });
+  await editor.getByLabel("Item name").fill("Everyday glasses");
+  await editor
+    .getByRole("button", { name: /Update this trip|Save/ })
+    .first()
+    .click();
+  await expect(
+    page.locator('[data-item-id="sunglasses"]').getByText("Everyday glasses"),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Save as a list" }).click();
+  let sheet = page.getByRole("dialog", { name: "Save as a list" });
+  await sheet.getByLabel("List name").fill("Twin glasses");
+  await sheet.getByRole("button", { name: "Save list" }).click();
+  const step = page.getByRole("dialog", { name: "Some items appear twice" });
+  await expect(step.getByText(/Nothing is combined or added together/)).toBeVisible();
+  for (const radio of await step.getByRole("radio").all()) await expect(radio).not.toBeChecked();
+  await expect(step.getByRole("button", { name: "Save list" })).toBeDisabled();
+  await step.getByRole("radio", { name: /Keep both/ }).check();
+  await step.getByRole("button", { name: "Save list" }).click();
+  await expect(page.getByText(/“Twin glasses” saved \(\d+ items\)\./)).toBeVisible();
+  await page.getByRole("button", { name: "View lists" }).click();
+  await page.getByRole("link", { name: "Edit Twin glasses" }).click();
+  await expect(page.getByText("Everyday glasses", { exact: true })).toHaveCount(2);
+
+  // The name is now taken.
+  await page.goBack();
+  await page.goBack();
+  await page.getByRole("button", { name: "Save as a list" }).click();
+  sheet = page.getByRole("dialog", { name: "Save as a list" });
+  await sheet.getByLabel("List name").fill("twin GLASSES");
+  await sheet
+    .getByRole("checkbox", { name: /Everyday glasses/ })
+    .first()
+    .uncheck();
+  await sheet.getByRole("button", { name: "Save list" }).click();
+  await expect(sheet.getByText(/You already have a list called/)).toBeVisible();
+});
+
+test(
+  "Save as a list: 44px targets, keyboard, and nothing scrolls sideways on a phone",
+  DEVICE,
+  async ({ page }) => {
+    await openSanDiego(page);
+    await page.getByRole("button", { name: "Save as a list" }).focus();
+    await page.keyboard.press("Enter");
+    const sheet = page.getByRole("dialog", { name: "Save as a list" });
+    await expect(sheet.getByLabel("List name")).toBeFocused();
+    for (const control of [
+      sheet.getByLabel("List name"),
+      sheet.getByRole("button", { name: "Save list" }),
+      sheet.getByRole("checkbox").first(),
+    ]) {
+      expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(27.9);
+    }
+    expect(
+      (await sheet.getByRole("button", { name: "Save list" }).boundingBox())!.height,
+    ).toBeGreaterThanOrEqual(43.9);
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+    await page.keyboard.press("Escape");
+    await expect(sheet).toHaveCount(0);
+  },
+);

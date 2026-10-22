@@ -157,6 +157,24 @@ describe("per-trip commands", () => {
     expect(sanDiego(source).items.filter((entry) => entry.name === "Camera")).toHaveLength(1);
   });
 
+  it("saveAsList saves the chosen items as a list, refuses a taken name and unknown items, and never changes the trip", async () => {
+    const { source } = setup();
+    const trip = sanDiego(source);
+    const before = JSON.stringify(trip);
+    const ids = trip.items.slice(0, 3).map((entry) => entry.id);
+    expect(await source.saveAsList("san-diego", " Beach week ", ids)).toMatchObject({
+      name: "Beach week",
+      itemCount: 3,
+    });
+    await expect(source.saveAsList("san-diego", "beach WEEK", ids)).rejects.toThrow("NAME_TAKEN");
+    await expect(source.saveAsList("san-diego", "Other", [])).rejects.toThrow("INVALID_INPUT");
+    await expect(source.saveAsList("san-diego", "Other", [...ids, "nope"])).rejects.toThrow(
+      "INVALID_INPUT",
+    );
+    await expect(source.saveAsList("nope", "Other", ids)).rejects.toThrow("NOT_FOUND");
+    expect(JSON.stringify(sanDiego(source))).toBe(before);
+  });
+
   it("listStaples returns the owner's current staples, including remembered changes", async () => {
     const { source } = setup();
     expect((await source.listStaples()).length).toBe(source.staplesSnapshot().length);

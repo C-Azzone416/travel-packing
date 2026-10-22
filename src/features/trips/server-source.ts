@@ -10,6 +10,7 @@ import type { TripStop } from "@/domain/trip-stops";
 import type {
   AcceptedWeatherDecision,
   AddItemActionResult,
+  SaveAsListActionResult,
   SkippedWeatherDecision,
   StaplesReadResult,
   TripCommandResult,
@@ -50,6 +51,7 @@ export interface TripActions {
   removeItem(tripId: string, itemId: string, scope: Scope): Promise<TripCommandResult>;
   addToiletryItem(tripId: string, item: NewToiletryItem): Promise<TripCommandResult>;
   addItem(tripId: string, item: NewCustomItem): Promise<AddItemActionResult>;
+  saveAsList(tripId: string, name: string, itemIds: string[]): Promise<SaveAsListActionResult>;
   confirmBagPlacement(tripId: string): Promise<TripCommandResult>;
   undoBagPlacement(tripId: string): Promise<TripCommandResult>;
   markReady(tripId: string): Promise<TripCommandResult>;
@@ -155,6 +157,13 @@ export function createServerTripsSource(
     editItem: (id, itemId, edit) => unwrapChange(trip.editItem(id, itemId, edit)),
     removeItem: (id, itemId, scope) => unwrapChange(trip.removeItem(id, itemId, scope)),
     addToiletryItem: (id, item) => unwrapChange(trip.addToiletryItem(id, item)),
+    saveAsList: async (id, name, itemIds) => {
+      const result = await trip.saveAsList(id, name, itemIds);
+      if (!result.ok) {
+        throw new TripsSourceError(result.reason === "NAME_TAKEN" ? "NAME_TAKEN" : result.code);
+      }
+      return result.list;
+    },
     addItem: async (id, item) => {
       const result = await trip.addItem(id, item);
       if (!result.ok) {

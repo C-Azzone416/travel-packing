@@ -11,7 +11,11 @@ import { TripsSourceProvider } from "@/features/trips/TripsSourceProvider";
 import { renderInApp } from "@/test/providers";
 import { TripScreen } from "./TripScreen";
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/trips/lisbon" }));
+const push = vi.fn();
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/trips/lisbon",
+  useRouter: () => ({ push }),
+}));
 
 const hot: DayWeather = {
   date: "2026-09-04",

@@ -3684,6 +3684,111 @@ a.back {
   flex: 1;
 }
 
+/* ---- Save as a list (#169, design §1). Role tokens only. */
+.save-list-form {
+  display: grid;
+  gap: 12px;
+}
+.save-list-count {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.save-list-items {
+  display: grid;
+  gap: 12px;
+}
+@media (min-width: 721px) {
+  .save-list-items {
+    max-height: 50vh;
+    overflow-y: auto;
+  }
+}
+.save-list-group {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-top: 1px solid var(--line-strong);
+}
+.save-list-group legend {
+  padding: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.save-list-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
+.save-list-row input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.save-list-box {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 2px solid var(--line-strong);
+  border-radius: var(--control-radius);
+  background: var(--control-bg);
+  color: transparent;
+  font-weight: 900;
+}
+.save-list-row input:checked + .save-list-box {
+  border-color: var(--complete);
+  background: var(--complete);
+  color: var(--complete-ink);
+}
+.save-list-row input:focus-visible + .save-list-box {
+  outline: 3px solid var(--accent-2);
+  outline-offset: 3px;
+}
+.save-list-copy {
+  display: grid;
+  min-width: 0;
+}
+.save-list-copy strong {
+  overflow-wrap: anywhere;
+}
+.save-list-copy small {
+  color: var(--muted);
+  font-size: 13px;
+}
+/* The footer stays in reach on a phone while the checklist scrolls. */
+@media (max-width: 720px) {
+  .modal:has(.save-list-form) {
+    max-height: calc(100vh - 18px);
+  }
+  .modal:has(.save-list-form) .modal-actions {
+    position: sticky;
+    bottom: -21px;
+    margin: 18px -21px -21px;
+    padding: 12px 21px;
+    border-top: 1px solid var(--line);
+    background: var(--paper);
+  }
+}
+/* The group legend sits on its fieldset's top rule; room above it so the scroll area doesn't clip the first label. */
+.save-list-items {
+  padding-top: 16px;
+}
+
 /* Create flow: Start from a saved list (#170, #140 spec §2). Single-select option cards like the theme options; role
    tokens only; one column, 720px at most. The card is the .start-entry: the radio label, then the Preview items text
    button and the preview, all inside it. */
