@@ -50,6 +50,7 @@ import {
   validateStops,
   type TripStop,
 } from "../../domain/trip-stops";
+import { automaticStamps, normaliseStampLabel } from "../../domain/stamps";
 import { and, eq, isNull } from "drizzle-orm";
 import { restoreDeletedTrip, softDeleteTrip } from "../db/retention";
 import * as schema from "../db/schema";
@@ -273,6 +274,30 @@ export function setTripTheme(context: DataContext, input: unknown) {
   return mutateTrip(context, inputs.setThemeInput, input, (trip, { theme }) => ({
     trip: { ...trip, theme },
   }));
+}
+
+/**
+ * Set or clear the owner's stamp labels for a trip (#151). Each slot is trimmed and upper-cased; blank, or the same as what
+ * the slot would say automatically, is stored as null so the stamp keeps following the route. Anything that is not exactly
+ * three of A-Z and 0-9, or a label for a second stamp the route does not have, is INVALID_INPUT naming `slot1` / `slot2`.
+ */
+export function setTripStampLabels(context: DataContext, input: unknown) {
+  return mutateTrip(context, inputs.setStampLabelsInput, input, (trip, request) => {
+    const automatic = automaticStamps(trip.stops);
+    const fields: string[] = [];
+    const stored = ([request.slot1, request.slot2] as const).map((raw, index) => {
+      const slot = index === 0 ? "slot1" : "slot2";
+      if (raw === null) return null;
+      const label = normaliseStampLabel(raw);
+      if (!label.ok || (index === 1 && label.label !== null && automatic.length < 2)) {
+        fields.push(slot);
+        return null;
+      }
+      return label.label === automatic[index]?.label ? null : label.label;
+    });
+    if (fields.length > 0) refuse(fail("INVALID_INPUT", { fields }));
+    return { trip: { ...trip, stampLabels: [stored[0], stored[1]] } };
+  });
 }
 
 // ---------------------------------------------------------------- weather (simulated)
@@ -558,6 +583,11 @@ export function setTripStops(context: DataContext, input: unknown) {
         place: stopPlace(stops[0].location),
         locationId: stops[0].location.id,
         locationLabel: stops[0].location.label,
+        // The owner's text survives a route edit, except slot 2 when the route no longer has a second stamp (#151).
+        stampLabels: [
+          current.stampLabels?.[0] ?? null,
+          automaticStamps(stops).length < 2 ? null : (current.stampLabels?.[1] ?? null),
+        ],
       };
       if (!(await saveTrip(txScope.db, txScope.ownerId, next))) refuse(fail("NOT_FOUND"));
       return mustLoad(txScope, request.tripId);

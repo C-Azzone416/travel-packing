@@ -169,6 +169,16 @@ describe("the hero and Later journeys", () => {
     const hero = await screen.findByRole("article", { name: "San Diego" });
     expect(within(hero).getByRole("img", { name: "USA, PRT route stamps" })).toBeTruthy();
   });
+
+  it("shows the owner's stamp label, read-only: the dashboard has no Edit stamp (#151)", async () => {
+    const state = sampleLifecycleState();
+    state.trips = [{ ...state.trips[0], stampLabels: ["ABC", null] }];
+    setup(state);
+    const hero = await screen.findByRole("article", { name: "San Diego" });
+    expect(within(hero).getByRole("img", { name: "ABC, San Diego, departure stamp" })).toBeTruthy();
+    expect(hero.textContent).not.toContain("✈");
+    expect(screen.queryByText("Edit stamp")).toBeNull();
+  });
 });
 
 describe("Remove on Later journeys and Past & archive cards", () => {

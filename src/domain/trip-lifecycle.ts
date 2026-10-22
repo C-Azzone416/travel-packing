@@ -5,6 +5,7 @@
 // (src/domain/calc). Only the id generator and "today" are injected: the domain has no hidden clock.
 
 import { buildTripItems, forecastLabel, normalizeTripDates, parseDate } from "./calc";
+import type { StampLabels } from "./stamps";
 import { DEFAULT_THEME, type ThemeId } from "./themes";
 import { TOILETRY_GROUP_ID } from "./toiletry-bag";
 import type { Staple, Trip, TripConfig, TripItem } from "./trip";
@@ -27,6 +28,8 @@ export interface LifecycleTrip extends Trip {
   archived: boolean;
   /** The trip's picture (#48). */
   theme: ThemeId;
+  /** The owner's stamp label overrides (#151); absent or [null, null] = automatic. A new or copied trip never has them. */
+  stampLabels?: StampLabels;
 }
 
 /** A stop being drafted: its place is unconfirmed until the person picks one. */

@@ -38,6 +38,7 @@ import {
   saveAsListAction,
   reviewWeatherAgainAction,
   setPackedAction,
+  setStampLabelsAction,
   setThemeAction,
   skipWeatherAction,
   togglePackedAction,
@@ -409,6 +410,32 @@ describe("themes", () => {
   });
 });
 
+describe("stamp labels (#151)", () => {
+  it("setStampLabelsAction stores the typed label upper-cased, clears it, and is validated", async () => {
+    const trip = await seedTrip(db(), OWNER.userId);
+    const set = changed(await setStampLabelsAction(trip.id, " abc ", null));
+    expect(set.trip.stampLabels).toEqual(["ABC", null]);
+    const read = await getTripAction(trip.id);
+    if (!read.ok) throw new Error("expected ok");
+    expect(read.trip.stampLabels).toEqual(["ABC", null]);
+    const cleared = changed(await setStampLabelsAction(trip.id, "", null));
+    expect(cleared.trip.stampLabels).toEqual([null, null]);
+    for (const bad of ["AB", "ABCD", "A C", "ÀBC"])
+      expect(await setStampLabelsAction(trip.id, bad, null), bad).toEqual({
+        ok: false,
+        code: "INVALID_INPUT",
+      });
+    expect(await setStampLabelsAction("not-a-uuid", "ABC", null)).toEqual({
+      ok: false,
+      code: "INVALID_INPUT",
+    });
+    expect(await setStampLabelsAction(MISSING, "ABC", null)).toEqual({
+      ok: false,
+      code: "NOT_FOUND",
+    });
+  });
+});
+
 describe("owner gate", () => {
   it("another owner's trip id is NOT_FOUND for every command, and nothing changes", async () => {
     const trip = await seedTrip(db(), OWNER.userId);
@@ -448,6 +475,7 @@ describe("owner gate", () => {
       ["reviewWeather", () => reviewWeatherAgainAction(trip.id)],
       ["preferences", () => updatePreferencesAction(trip.id, trip.config)],
       ["theme", () => setThemeAction(trip.id, "city")],
+      ["stamp labels", () => setStampLabelsAction(trip.id, "ABC", null)],
     ];
     for (const [name, attempt] of attempts)
       expect(await attempt(), name).toEqual({ ok: false, code: "NOT_FOUND" });
@@ -478,6 +506,7 @@ describe("owner gate", () => {
       () => markReadyAction(trip.id),
       () => updatePreferencesAction(trip.id, trip.config),
       () => setThemeAction(trip.id, "city"),
+      () => setStampLabelsAction(trip.id, "ABC", null),
     ];
     as(null);
     for (const call of calls) await expect(call()).rejects.toThrow("NEXT_REDIRECT:/sign-in");

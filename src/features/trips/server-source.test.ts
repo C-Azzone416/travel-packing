@@ -51,6 +51,7 @@ const TRIP_COMMANDS = [
   "reviewWeatherAgain",
   "updatePreferences",
   "setTheme",
+  "setStampLabels",
   "setStops",
 ] as const;
 
@@ -111,6 +112,7 @@ describe("createServerTripsSource: per-trip commands", () => {
       reviewWeatherAgain: () => source.reviewWeatherAgain("t"),
       updatePreferences: () => source.updatePreferences("t", config),
       setTheme: () => source.setTheme("t", "beach"),
+      setStampLabels: () => source.setStampLabels("t", "ABC", null),
       setStops: () => source.setStops("t", []),
     }) satisfies Record<(typeof TRIP_COMMANDS)[number], () => Promise<unknown>>;
 
@@ -137,6 +139,7 @@ describe("createServerTripsSource: per-trip commands", () => {
       ["reviewWeatherAgain", "t"],
       ["updatePreferences", "t", config],
       ["setTheme", "t", "beach"],
+      ["setStampLabels", "t", "ABC", null],
       ["setStops", "t", []],
     ]);
   });

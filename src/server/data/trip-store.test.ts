@@ -143,8 +143,30 @@ describe("the structured place (#47)", () => {
 });
 
 describe("round trip", () => {
+  it("stores and reloads the stamp label overrides, and saving a trip without them leaves them alone (#151)", async () => {
+    const trip = makeStoredTrip({ stampLabels: ["ABC", "7X9"] });
+    await seedOwner(db(), OWNER.userId);
+    await insertTrip(db(), OWNER.userId, trip);
+    expect((await loadTrip(db(), OWNER.userId, trip.id))?.stampLabels).toEqual(["ABC", "7X9"]);
+
+    const { stampLabels: _kept, ...withoutLabels } = trip;
+    void _kept;
+    expect(await saveTrip(db(), OWNER.userId, { ...withoutLabels, destination: "Elsewhere" })).toBe(
+      true,
+    );
+    const after = await loadTrip(db(), OWNER.userId, trip.id);
+    expect(after).toMatchObject({ destination: "Elsewhere", stampLabels: ["ABC", "7X9"] });
+
+    expect(await saveTrip(db(), OWNER.userId, { ...trip, stampLabels: [null, "XYZ"] })).toBe(true);
+    expect((await loadTrip(db(), OWNER.userId, trip.id))?.stampLabels).toEqual([null, "XYZ"]);
+  });
+
   it("stores and reloads a trip, its preferences, weather, and items with progress", async () => {
-    const trip = makeStoredTrip({ toiletryBagPacked: true, ready: true });
+    const trip = makeStoredTrip({
+      toiletryBagPacked: true,
+      ready: true,
+      stampLabels: [null, null],
+    });
     trip.items = trip.items.map((item, index) => ({ ...item, packed: index % 2 ? item.qty : 0 }));
     trip.suggestionMemory = { "nice-shoes": { ...trip.items[0], name: "Remembered" } };
     trip.suppressedSuggestions = { "nice-makeup": true };

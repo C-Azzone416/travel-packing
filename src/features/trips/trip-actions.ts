@@ -244,6 +244,15 @@ export async function setThemeAction(tripId: string, theme: ThemeId): Promise<Tr
   return command((context) => service.setTripTheme(context, { tripId, theme }));
 }
 
+/** Set or clear the stamp labels (#151): the typed text per slot, or null for automatic. The server validates every write. */
+export async function setStampLabelsAction(
+  tripId: string,
+  slot1: string | null,
+  slot2: string | null,
+): Promise<TripCommandResult> {
+  return command((context) => service.setTripStampLabels(context, { tripId, slot1, slot2 }));
+}
+
 export async function updatePreferencesAction(
   tripId: string,
   config: TripConfig,

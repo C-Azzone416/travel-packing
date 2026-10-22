@@ -79,7 +79,7 @@ export function NextDeparture({
           </p>
         </div>
         <div className="stamp-slot" data-stamp-slot>
-          <Stamps stamps={selectStamps(trip.stops)} departure={trip.start} />
+          <Stamps stamps={selectStamps(trip.stops, trip.stampLabels)} departure={trip.start} />
         </div>
       </div>
 

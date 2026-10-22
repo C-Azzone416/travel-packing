@@ -156,6 +156,12 @@ export const copyTripInput = z
 /** Replace the stops of a saved trip. */
 export const setStopsInput = z.object({ tripId, stops: stopsSelection });
 export const setThemeInput = z.object({ tripId, theme });
+/** Both stamp slots at once (#151): the typed text, or null for automatic. The service trims, upper-cases and validates. */
+export const setStampLabelsInput = z.object({
+  tripId,
+  slot1: z.string().max(64).nullable(),
+  slot2: z.string().max(64).nullable(),
+});
 
 export const stapleInput = z.object({
   semanticId: z.string().min(1).max(100),

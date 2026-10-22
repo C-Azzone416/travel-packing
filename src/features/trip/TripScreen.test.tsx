@@ -1423,6 +1423,103 @@ describe("the theme sheet's failure message", () => {
   });
 });
 
+describe("editing the stamp (#151)", () => {
+  const stampName = () =>
+    document.querySelector(".hero-stamps [role='img']")?.getAttribute("aria-label");
+  const editButton = () => screen.getByRole("button", { name: "Edit stamp" });
+  const toasts = () => document.querySelector(".toast-region") as HTMLElement;
+
+  it("shows an Edit stamp link under the stamp that opens the Stamp label sheet and gives focus back on close", async () => {
+    const { user } = setup();
+    await ready();
+    expect(document.querySelector(".hero-stamps")?.contains(editButton())).toBe(true);
+    await user.click(editButton());
+    const sheet = screen.getByRole("dialog", { name: "Stamp label" });
+    expect(within(sheet).getByRole("group", { name: "Stamp 1, automatic" })).toBeTruthy();
+    await user.click(within(sheet).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(editButton());
+  });
+
+  it("a custom label changes the stamp on the screen and is stored; the toast says Stamp updated", async () => {
+    const { user, source } = setup();
+    await ready();
+    const automatic = stampName();
+    await user.click(editButton());
+    await user.click(screen.getByRole("radio", { name: "Custom" }));
+    const field = screen.getByLabelText("Label");
+    await user.clear(field);
+    await user.type(field, "abc");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(stampName()).toContain("ABC");
+    expect(stampName()).not.toBe(automatic);
+    expect(tripOf(source).stampLabels).toEqual(["ABC", null]);
+    expect(within(toasts()).getByText("Stamp updated.")).toBeTruthy();
+    expect(document.activeElement).toBe(editButton());
+  });
+
+  it("Reset to automatic brings the derived label back, and the toast says so", async () => {
+    const { user, source } = setup();
+    await ready();
+    const automatic = stampName();
+    await user.click(editButton());
+    await user.click(screen.getByRole("radio", { name: "Custom" }));
+    await user.clear(screen.getByLabelText("Label"));
+    await user.type(screen.getByLabelText("Label"), "abc");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await user.click(editButton());
+    await user.click(screen.getByRole("button", { name: "Reset to automatic" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(stampName()).toBe(automatic);
+    expect(tripOf(source).stampLabels).toEqual([null, null]);
+    expect(within(toasts()).getByText("Stamp reset to automatic.")).toBeTruthy();
+  });
+
+  it("a failed save keeps the sheet open with the message, and Save tries again", async () => {
+    let fail = true;
+    const { user, source } = setup("san-diego", (base) => ({
+      ...base,
+      setStampLabels: (id, one, two) =>
+        fail ? Promise.reject(new Error("nope")) : base.setStampLabels(id, one, two),
+    }));
+    await ready();
+    await user.click(editButton());
+    await user.click(screen.getByRole("radio", { name: "Custom" }));
+    await user.clear(screen.getByLabelText("Label"));
+    await user.type(screen.getByLabelText("Label"), "abc");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    const sheet = screen.getByRole("dialog", { name: "Stamp label" });
+    await waitFor(() =>
+      expect(within(sheet).getByText(/Couldn’t save the stamp\. Nothing changed/)).toBeTruthy(),
+    );
+    expect(tripOf(source).stampLabels ?? [null, null]).toEqual([null, null]);
+    fail = false;
+    await user.click(within(sheet).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(tripOf(source).stampLabels).toEqual(["ABC", null]);
+  });
+
+  it("is cleared when the sheet is closed, so reopening starts clean", async () => {
+    const { user } = setup("san-diego", (base) => ({
+      ...base,
+      setStampLabels: () => Promise.reject(new Error("nope")),
+    }));
+    await ready();
+    await user.click(editButton());
+    await user.click(screen.getByRole("radio", { name: "Custom" }));
+    await user.clear(screen.getByLabelText("Label"));
+    await user.type(screen.getByLabelText("Label"), "abc");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await screen.findByText(/Couldn’t save the stamp/);
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await user.click(editButton());
+    expect(screen.queryByText(/Couldn’t save the stamp/)).toBeNull();
+  });
+});
+
 describe("accessible names of a packing row", () => {
   it("the edit button is named by what it shows, including the Pack last badge", async () => {
     setup();
