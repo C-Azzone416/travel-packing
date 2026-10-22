@@ -213,7 +213,7 @@ test(
     await page.emulateMedia({ reducedMotion: "reduce" });
     await openSanDiego(page);
     expect(await headerArt(page)).toBe("beach");
-    // Placement: on a phone the button sits outside the copy panel (so the picture shows); on desktop inside it.
+    // Placement (#155, audit 23): Edit route and Change theme sit side by side inside the copy panel at both sizes.
     const button = page.getByRole("button", { name: "Change theme" });
     const panel = (await page.locator(".destination-head-copy").boundingBox())!;
     const at = (await button.boundingBox())!;
@@ -223,7 +223,7 @@ test(
       at.x + at.width <= panel.x + panel.width &&
       at.y >= panel.y &&
       at.y + at.height <= panel.y + panel.height;
-    expect(inside, testInfo.project.name).toBe(testInfo.project.name === "desktop");
+    expect(inside, testInfo.project.name).toBe(true);
     if (testInfo.project.name === "phone") {
       const head = (await page.locator(".destination-trip-head").boundingBox())!;
       // The copy panel leaves at least a third of the header for the picture.

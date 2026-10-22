@@ -104,14 +104,12 @@ function ListSection({
   return (
     <section id={id.replace("section-", "block-")} className="list-section" aria-labelledby={id}>
       <div className="list-section-head">
-        <div>
-          <h3 id={id}>{title}</h3>
-          <div className="item-meta">
-            {subtitle} · {completeCount(items)} of {items.length} complete
-          </div>
-        </div>
-        <span className="tag">{visible.length}</span>
+        <h3 id={id}>{title}</h3>
+        <span className="list-section-count">
+          {completeCount(items)} of {items.length} complete
+        </span>
       </div>
+      <p className="item-meta list-section-sub">{subtitle}</p>
       <div className="packing-list">
         {visible.length ? (
           visible.map(renderRow)
@@ -524,14 +522,24 @@ export function TripScreen({ tripId, openAdd = false }: { tripId: string; openAd
               {place ? `${place} · ` : ""}
               {formatRange(trip)} · {formatDays(trip.days)}
             </p>
-            <Button
-              variant="secondary"
-              small
-              className="edit-route"
-              onClick={() => setDialog({ kind: "route" })}
-            >
-              Edit route
-            </Button>
+            <div className="head-actions">
+              <Button
+                variant="secondary"
+                small
+                className="edit-route"
+                onClick={() => setDialog({ kind: "route" })}
+              >
+                Edit route
+              </Button>
+              <Button
+                variant="secondary"
+                small
+                className="change-theme"
+                onClick={() => setDialog({ kind: "theme" })}
+              >
+                Change theme
+              </Button>
+            </div>
           </div>
           <div className="hero-stamps">
             <Stamps stamps={selectStamps(trip.stops)} departure={trip.start} />
@@ -541,14 +549,6 @@ export function TripScreen({ tripId, openAdd = false }: { tripId: string; openAd
           ) : (
             <StatusBadge status="draft">Packing</StatusBadge>
           )}
-          <Button
-            variant="secondary"
-            small
-            className="change-theme"
-            onClick={() => setDialog({ kind: "theme" })}
-          >
-            Change theme
-          </Button>
         </div>
       </div>
 
@@ -575,7 +575,7 @@ export function TripScreen({ tripId, openAdd = false }: { tripId: string; openAd
 
       <div className="trip-layout">
         <div>
-          <Card padded>
+          <div className="packing-panel">
             <div className="section-head packing-head">
               <div>
                 <h2>Packing list</h2>
@@ -673,7 +673,7 @@ export function TripScreen({ tripId, openAdd = false }: { tripId: string; openAd
                 </Link>
               </div>
             ) : null}
-          </Card>
+          </div>
         </div>
 
         <aside className="side">

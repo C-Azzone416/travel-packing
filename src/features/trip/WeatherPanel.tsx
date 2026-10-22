@@ -70,7 +70,12 @@ export function WeatherPanel({
   if (state.kind === "prompt") {
     if (customOnly) {
       return (
-        <Card as="section" padded className="weather-panel" aria-labelledby="weather-heading">
+        <Card
+          as="section"
+          padded
+          className="weather-panel weather-compact"
+          aria-labelledby="weather-heading"
+        >
           <h2 id="weather-heading">Weather</h2>
           <p>Weather needs a place from the map. Custom places are skipped.</p>
         </Card>

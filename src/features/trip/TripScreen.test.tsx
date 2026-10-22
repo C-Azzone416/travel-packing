@@ -159,7 +159,7 @@ describe("loading and states", () => {
     expect(main.getAttribute("href")).toBe("#block-main");
     expect(document.getElementById("block-main")).toBeTruthy();
     expect(
-      screen.getAllByText(/\d+ of \d+ complete/, { selector: ".item-meta" }).length,
+      screen.getAllByText(/\d+ of \d+ complete/, { selector: ".list-section-count" }).length,
     ).toBeGreaterThan(0);
   });
 
@@ -499,7 +499,7 @@ describe("toiletry bag gate", () => {
     setup();
     await ready();
     expect(screen.getByText("Toiletry bag not ready to place")).toBeTruthy();
-    expect(screen.getByText("Bathroom · 0 of 5 contents checked")).toBeTruthy();
+    expect(screen.getByText("0 of 5 contents checked")).toBeTruthy();
   });
 
   it("opens the placement prompt once when contents complete, never confirms by itself, and 'Not yet' dismisses it for the session", async () => {
