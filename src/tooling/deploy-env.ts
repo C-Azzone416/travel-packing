@@ -125,7 +125,7 @@ export function checkMigrationTarget(
 
 /**
  * Returns what is wrong with `env` for `target` (empty when it is fine). `productionDbHost` is the production
- * database's host name (not a secret), kept as a repository variable so previews can refuse it.
+ * database's host name (not a credential), kept as a repository secret (masked in logs) so previews can refuse it.
  */
 export function checkDeployEnv(
   target: DeployTarget,
