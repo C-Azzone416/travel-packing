@@ -3508,3 +3508,79 @@ a.back {
 .add-item-host:not(:empty) {
   margin-top: 16px;
 }
+
+/* Shared DuplicateResolver (#168, #140 spec §0): one fieldset per group, native radios drawn as 56px option cards like the
+   Settings theme options. Nothing is preselected. Role tokens only. */
+.duplicate-resolver {
+  display: grid;
+  gap: 20px;
+}
+.resolver-group {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.resolver-group legend {
+  margin-bottom: 4px;
+  padding: 0;
+  color: var(--ink);
+  font-size: 17px;
+}
+.resolver-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 10px 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--control-radius);
+  background: var(--control-bg);
+  color: var(--ink);
+  cursor: pointer;
+}
+.resolver-option:hover {
+  background: var(--selection-surface);
+}
+.resolver-option input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.resolver-option:has(input:checked) {
+  border: 2px solid var(--accent);
+  padding: 9px 15px;
+  background: var(--selection-surface);
+}
+.resolver-option:has(input:focus-visible) {
+  outline: 3px solid var(--accent-2);
+  outline-offset: 3px;
+}
+.resolver-copy {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.resolver-copy strong {
+  font-weight: 700;
+}
+.resolver-check {
+  display: none;
+  color: var(--accent);
+  font-weight: 800;
+}
+.resolver-option:has(input:checked) .resolver-check {
+  display: block;
+}
+.resolver-status {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
