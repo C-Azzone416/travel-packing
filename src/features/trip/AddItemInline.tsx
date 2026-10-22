@@ -177,7 +177,7 @@ export function AddItemInline({
         <Button type="submit" disabled={saving || busy}>
           {isBathroom ? "Continue to Bathroom item" : "Add to list"}
         </Button>
-        <Button variant="ghost" onClick={close}>
+        <Button variant="secondary" onClick={close}>
           Cancel
         </Button>
       </div>

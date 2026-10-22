@@ -3038,7 +3038,8 @@ a.back {
   .ledger-actions > .button:first-child {
     flex: 1 1 100%;
   }
-  .ledger-actions > .button:not(:first-child) {
+  .ledger-actions > .button:not(:first-child),
+  .ledger-actions .add-item.hero > .button {
     flex: 1 1 0;
     min-width: 0;
   }
