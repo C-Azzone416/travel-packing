@@ -162,9 +162,7 @@ export function StaplesScreen() {
                       <h2 id={id}>{section}</h2>
                       <p>{sectionDescription(section)}</p>
                     </div>
-                    <span className="category-count" aria-label={countLabel(staples.length)}>
-                      {staples.length}
-                    </span>
+                    <span className="category-count">{countLabel(staples.length)}</span>
                   </div>
                   {staples.length ? (
                     staples.map((staple) => (

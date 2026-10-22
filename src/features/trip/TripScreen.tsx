@@ -46,7 +46,8 @@ import {
 } from "./trip-view";
 import { revocationReason } from "./review-view";
 import { ReviewSheet } from "./ReviewSheet";
-import { WeatherPanel, type WeatherPanelState } from "./WeatherPanel";
+import { SHOW_TRIP_PICTURE } from "./hero-picture";
+import { WeatherPanel, WeatherReviewBanner, type WeatherPanelState } from "./WeatherPanel";
 import type { WeatherSettings, WeatherSuggestionState } from "@/server/data/weather-store";
 
 /** Taps on a quantity stepper settle for this long before one write carries the final count. */
@@ -104,14 +105,12 @@ function ListSection({
   return (
     <section id={id.replace("section-", "block-")} className="list-section" aria-labelledby={id}>
       <div className="list-section-head">
-        <div>
-          <h3 id={id}>{title}</h3>
-          <div className="item-meta">
-            {subtitle} · {completeCount(items)} of {items.length} complete
-          </div>
-        </div>
-        <span className="tag">{visible.length}</span>
+        <h3 id={id}>{title}</h3>
+        <span className="list-section-count">
+          {completeCount(items)} of {items.length} complete
+        </span>
       </div>
+      <p className="item-meta list-section-sub">{subtitle}</p>
       <div className="packing-list">
         {visible.length ? (
           visible.map(renderRow)
@@ -411,6 +410,10 @@ export function TripScreen({ tripId, openAdd = false }: { tripId: string; openAd
         )
       : new Map<string, ItemGuidance>();
 
+  // The forecast strip lives inside the hero; the opt-in prompt and the "weather is off" line stay below it.
+  const weatherEmbedded =
+    weather !== null && weather.panel.kind !== "prompt" && weather.panel.kind !== "off";
+
   const setWeatherOptIn = async (weatherOptIn: boolean) => {
     if (!source.weather || !weather) return;
     try {
@@ -504,59 +507,80 @@ export function TripScreen({ tripId, openAdd = false }: { tripId: string; openAd
 
   return (
     <section className="screen">
-      <div className="destination-trip-head">
-        <DestinationArt theme={trip.theme} variant="header" priority />
-        <div className="destination-head-content">
-          <Link className="back" href="/" aria-label="Back to trips">
-            ←
-          </Link>
-          <div className="head-copy destination-head-copy">
+      <section
+        className="trip-hero"
+        data-picture={SHOW_TRIP_PICTURE ? "on" : "off"}
+        aria-labelledby="trip-title"
+      >
+        <div className="hero-picture" aria-hidden="true">
+          <DestinationArt theme={trip.theme} variant="header" priority />
+        </div>
+        <Link className="back-link" href="/">
+          <span aria-hidden="true">←</span> All trips
+        </Link>
+        <div className="trip-hero-main">
+          <div className="trip-hero-copy">
             <p className="eyebrow hero-eyebrow">
               {leavesEyebrow(daysBetween(localToday(), trip.start))}
             </p>
-            <h1>{trip.destination}</h1>
+            <h1 id="trip-title">{trip.destination}</h1>
             {routeCities(trip).length && !routeIsTitle(trip) ? (
               <p className="route-chip">
                 <RouteText cities={routeCities(trip)} budget={64} />
               </p>
             ) : null}
-            <p>
+            <p className="trip-hero-dates">
               {place ? `${place} · ` : ""}
               {formatRange(trip)} · {formatDays(trip.days)}
             </p>
-            <Button
-              variant="secondary"
-              small
-              className="edit-route"
-              onClick={() => setDialog({ kind: "route" })}
-            >
-              Edit route
-            </Button>
+            <div className="head-actions">
+              <Button
+                variant="secondary"
+                small
+                className="edit-route"
+                onClick={() => setDialog({ kind: "route" })}
+              >
+                Edit route
+              </Button>
+              <Button
+                variant="secondary"
+                small
+                className="change-theme"
+                onClick={() => setDialog({ kind: "theme" })}
+              >
+                Change theme
+              </Button>
+            </div>
           </div>
           <div className="hero-stamps">
             <Stamps stamps={selectStamps(trip.stops)} departure={trip.start} />
           </div>
-          {trip.ready ? (
-            <StatusBadge status="ready">Ready</StatusBadge>
-          ) : (
-            <StatusBadge status="draft">Packing</StatusBadge>
-          )}
-          <Button
-            variant="secondary"
-            small
-            className="change-theme"
-            onClick={() => setDialog({ kind: "theme" })}
-          >
-            Change theme
-          </Button>
         </div>
-      </div>
+        {trip.ready ? <StatusBadge status="ready">Ready</StatusBadge> : null}
+        {weather && weatherStops.length > 0 && weatherEmbedded ? (
+          <WeatherPanel
+            embedded
+            stops={weatherStops}
+            state={weather.panel}
+            unit={weather.settings.temperatureUnit}
+            changesCount={weatherChanges.length}
+            onOptIn={() => void setWeatherOptIn(true)}
+            onDecline={() => void setWeatherOptIn(false)}
+            onTurnOn={() => void setWeatherOptIn(true)}
+            onRefresh={() => void loadWeather(trip, weather.settings)}
+            onReview={() => {
+              setWeatherReviewError(false);
+              setWeatherReviewOpen(true);
+            }}
+          />
+        ) : null}
+      </section>
 
       <p className="sr-only" role="status" aria-label="Packing updates">
         {announcement}
       </p>
 
-      {weather && weatherStops.length > 0 ? (
+      {weather && weatherStops.length > 0 && !weatherEmbedded ? (
         <WeatherPanel
           stops={weatherStops}
           state={weather.panel}
@@ -572,51 +596,58 @@ export function TripScreen({ tripId, openAdd = false }: { tripId: string; openAd
           }}
         />
       ) : null}
+      {weather && weatherEmbedded ? (
+        <WeatherReviewBanner
+          changesCount={weatherChanges.length}
+          onReview={() => {
+            setWeatherReviewError(false);
+            setWeatherReviewOpen(true);
+          }}
+        />
+      ) : null}
+
+      <div className="packing-top">
+        <div className="packing-progress">
+          <h2 className="sr-only">Packing list</h2>
+          <p className="progress-line">
+            {totals.packed} of {totals.total} packed
+            {totals.total - totals.packed > 0 ? ` / ${totals.total - totals.packed} left` : ""}
+          </p>
+          <div
+            className="progress-track"
+            role="progressbar"
+            aria-label="Packing progress"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={totals.percent}
+            aria-valuetext={`${totals.percent}% packed`}
+          >
+            <span style={{ width: `${totals.percent}%` }} />
+          </div>
+        </div>
+        <div className="filters" role="group" aria-label="Packing list filters">
+          <button
+            type="button"
+            className={filter === "all" ? "filter active" : "filter"}
+            aria-pressed={filter === "all"}
+            onClick={() => setFilter("all")}
+          >
+            All items
+          </button>
+          <button
+            type="button"
+            className={filter === "still" ? "filter active" : "filter"}
+            aria-pressed={filter === "still"}
+            onClick={() => setFilter("still")}
+          >
+            Still to pack
+          </button>
+        </div>
+      </div>
 
       <div className="trip-layout">
         <div>
-          <Card padded>
-            <div className="section-head packing-head">
-              <div>
-                <h2>Packing list</h2>
-                <p className="tiny muted">Partial quantities count as progress.</p>
-              </div>
-              <strong>{totals.percent}%</strong>
-            </div>
-            <p className="progress-line">
-              {totals.packed} of {totals.total} packed
-              {totals.total - totals.packed > 0 ? ` / ${totals.total - totals.packed} left` : ""}
-            </p>
-            <div
-              className="progress-track"
-              role="progressbar"
-              aria-label="Packing progress"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={totals.percent}
-              aria-valuetext={`${totals.percent}% packed`}
-            >
-              <span style={{ width: `${totals.percent}%` }} />
-            </div>
-            <div className="filters" role="group" aria-label="Packing list filters">
-              <button
-                type="button"
-                className={filter === "all" ? "filter active" : "filter"}
-                aria-pressed={filter === "all"}
-                onClick={() => setFilter("all")}
-              >
-                All items
-              </button>
-              <button
-                type="button"
-                className={filter === "still" ? "filter active" : "filter"}
-                aria-pressed={filter === "still"}
-                onClick={() => setFilter("still")}
-              >
-                Still to pack
-              </button>
-            </div>
-
+          <div className="packing-panel">
             <ListSection
               id="section-main"
               title="Everyday & occasion items"
@@ -673,7 +704,7 @@ export function TripScreen({ tripId, openAdd = false }: { tripId: string; openAd
                 </Link>
               </div>
             ) : null}
-          </Card>
+          </div>
         </div>
 
         <aside className="side">
@@ -682,9 +713,7 @@ export function TripScreen({ tripId, openAdd = false }: { tripId: string; openAd
             <ul>
               {sectionLinks(sections, showToiletries(trip, filter)).map((link) => (
                 <li key={link.target}>
-                  <a href={`#${link.target}`}>
-                    {link.label} <span className="muted">{link.count}</span>
-                  </a>
+                  <a href={`#${link.target}`}>{link.label}</a>
                 </li>
               ))}
             </ul>

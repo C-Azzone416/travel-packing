@@ -48,7 +48,7 @@ async function underwearQty(page: Page, tripName: string): Promise<number> {
     .first()
     .innerText();
   await page.goBack();
-  return Number(text.split("/")[1]);
+  return Number(/of (\d+) packed/.exec(text)?.[1]);
 }
 
 test("edit a staple: existing trips are unchanged, and the next new trip uses the new value", async ({
@@ -86,7 +86,8 @@ test("edit a staple: existing trips are unchanged, and the next new trip uses th
     .locator('[data-item-id="underwear"] .qty-stepper span')
     .first()
     .innerText();
-  expect(Number(text.split("/")[1])).toBeGreaterThan(parisBefore);
+  // "N of M packed": M is the needed count for the trip.
+  expect(Number(/of (\d+) packed/.exec(text)?.[1])).toBeGreaterThan(parisBefore);
 });
 
 test("add a staple: it is stored, and Pack last starts off", async ({ page }) => {

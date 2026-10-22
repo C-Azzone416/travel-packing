@@ -59,7 +59,7 @@ export function PackRow({
           −
         </button>
         <span role="img" aria-label={`${item.packed} of ${item.qty} packed`}>
-          {item.packed}/{item.qty}
+          {item.packed} of {item.qty} packed
         </span>
         <button
           type="button"

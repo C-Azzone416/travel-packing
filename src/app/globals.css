@@ -160,9 +160,7 @@ p {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 0 18px;
-  max-width: 1120px;
-  margin: 0 auto;
+  padding: 0 16px;
 }
 .topbar .brand-button:focus-visible,
 .topbar .sync-chip:focus-visible {
@@ -247,8 +245,9 @@ p {
   }
 }
 
+/* Content column 1224px (mockup), 24px gutters below that. */
 main {
-  width: min(100%, 1120px);
+  width: min(100%, 1272px);
   margin: 0 auto;
   padding: 8px 16px 36px;
 }
@@ -559,12 +558,13 @@ main {
   .app-shell {
     padding-bottom: 30px;
   }
+  /* Full-bleed bar: the brand circle sits 30px from the left edge, the right cluster 30px from the right (mockup). */
   .topbar-inner {
     gap: 8px;
-    padding-inline: 28px;
+    padding-inline: 30px;
   }
   main {
-    padding-inline: 28px;
+    padding-inline: 24px;
   }
   /* The primary navigation sits inline in the bar (no left rail, no bottom bar): the links follow the brand, the
      status chip and Sign out go to the right. The nav box dissolves so its children share the bar's row. */
@@ -607,15 +607,16 @@ main {
   .bottom-nav :focus-visible {
     outline-color: var(--focus-on-header);
   }
-  /* Right side: the chip, then Sign out. */
-  .topbar-inner > .sync-chip {
+  /* Right side: Sign out, then the status chip at the far edge, which is also their order in the DOM (so focus order
+     matches what is seen). */
+  .nav-signout {
     order: 8;
+    display: flex;
     margin-left: auto;
   }
-  .nav-signout {
+  .topbar-inner > .sync-chip {
     order: 9;
-    display: flex;
-    margin-left: 12px;
+    margin-left: 8px;
   }
   .nav-signout button {
     padding: 0 8px;
@@ -748,28 +749,30 @@ main {
   margin: 2px 0 0;
   font-size: 16px;
 }
+/* A small segmented filter: a 1px outline, the chosen segment filled with --ink (audit 27/28). */
 .quick-filters {
   display: inline-flex;
-  gap: 3px;
-  padding: 3px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   border-radius: var(--control-radius);
-  background: var(--control-bg);
+  overflow: hidden;
 }
 .quick-filters button {
   min-height: 44px;
   border: 0;
-  border-radius: 8px;
-  padding: 5px 10px;
+  border-radius: 0;
+  padding: 5px 12px;
   background: transparent;
-  color: var(--muted-text);
-  font-size: 12px;
-  font-weight: 850;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
   cursor: pointer;
 }
+.quick-filters button + button {
+  border-left: 1px solid var(--line-strong);
+}
 .quick-filters button[aria-pressed="true"] {
-  background: var(--seafoam-soft);
-  color: var(--link);
+  background: var(--ink);
+  color: var(--surface);
 }
 .quick-view-list {
   max-height: 250px;
@@ -1461,69 +1464,7 @@ input:disabled {
 }
 
 /* ---- Trip screen / packing list (#16). Ported from the prototype; sizes follow design's #12 and #16 gaps. */
-.destination-trip-head {
-  position: relative;
-  min-height: 236px;
-  overflow: hidden;
-  margin: 6px 0 18px;
-  border: 1px solid var(--line);
-  border-radius: var(--control-radius);
-  background: var(--seafoam);
-  box-shadow: var(--shadow);
-}
-.destination-head-content {
-  position: relative;
-  z-index: 4;
-  min-height: 236px;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: flex-start;
-  gap: 10px;
-  padding: 14px;
-}
-.destination-head-content .back {
-  display: inline-grid;
-  place-items: center;
-  background: color-mix(in srgb, var(--surface) 90%, transparent);
-  box-shadow: 0 5px 16px var(--ledger-shadow);
-  text-decoration: none;
-  color: var(--ink);
-}
-.destination-head-copy {
-  grid-column: 1 / -1;
-  align-self: end;
-  max-width: 560px;
-  padding: 13px 15px;
-  border: 1px solid var(--line);
-  border-radius: var(--control-radius);
-  background: color-mix(in srgb, var(--bg) 92%, transparent);
-  box-shadow: 0 8px 24px var(--ledger-shadow);
-}
-.destination-head-copy h1 {
-  margin-bottom: 6px;
-}
-.destination-head-copy p {
-  margin: 0;
-  color: var(--ink);
-  font-size: 13px;
-}
-.destination-head-content > .status-pill {
-  justify-self: end;
-  background-color: color-mix(in srgb, var(--bg) 92%, transparent);
-}
 
-.trip-layout {
-  display: grid;
-  gap: 16px;
-}
-.side {
-  display: grid;
-  gap: 12px;
-  align-content: start;
-}
-.packing-head {
-  margin-top: 0;
-}
 .filters {
   display: flex;
   gap: 8px;
@@ -1532,28 +1473,46 @@ input:disabled {
 .filter {
   min-height: 44px;
   padding: 8px 14px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   border-radius: var(--control-radius);
-  background: var(--control-bg);
-  font-weight: 800;
+  background: transparent;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
   cursor: pointer;
 }
 .filter.active {
-  border-color: var(--accent);
-  background: var(--action);
-  color: var(--action-ink);
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--surface);
 }
 .list-section {
   margin-top: 20px;
 }
+/* A group: 29px Bricolage heading, the muted "2 of 6 complete" at the right, a hairline rule under (audit 8). */
 .list-section-head {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
-  margin-bottom: 8px;
+  gap: 12px;
+  margin-bottom: 4px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line-strong);
 }
 .list-section-head h3 {
   margin: 0;
+  font-family: var(--font-display), var(--font-body), sans-serif;
+  font-size: 29px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.list-section-count {
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.list-section-sub {
+  margin: 6px 0 0;
 }
 /* The review has no heading between its title (h1) and its sections, so they are h2 in the outline but look the same. */
 .review-group .list-section-head h2 {
@@ -1563,7 +1522,11 @@ input:disabled {
 }
 .packing-list {
   display: grid;
-  gap: 8px;
+  gap: 0;
+}
+/* The list sits flat on the page: no card around it (audit 18). */
+.packing-panel {
+  min-width: 0;
 }
 
 .pack-row {
@@ -1572,10 +1535,11 @@ input:disabled {
   align-items: center;
   gap: 8px 10px;
   min-height: 62px;
-  padding: 9px 10px;
-  border: 1px solid var(--line);
-  border-radius: var(--control-radius);
-  background: var(--control-bg);
+  padding: 9px 0;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: none;
 }
 .pack-row .qty-stepper {
   grid-column: 2;
@@ -1610,14 +1574,15 @@ input:disabled {
   grid-template-columns: 44px 38px 44px;
   align-items: center;
   text-align: center;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   border-radius: var(--control-radius);
   overflow: hidden;
 }
 .qty-stepper button {
   min-height: 44px;
   border: 0;
-  background: var(--bg);
+  background: transparent;
+  color: var(--ink);
   cursor: pointer;
   font-size: 18px;
 }
@@ -1626,8 +1591,12 @@ input:disabled {
   cursor: not-allowed;
 }
 .qty-stepper span {
-  font-size: 12px;
-  font-weight: 900;
+  align-self: stretch;
+  display: grid;
+  place-items: center;
+  border-inline: 1px solid var(--line-strong);
+  font-size: 13px;
+  font-weight: 700;
 }
 .row-error {
   grid-column: 2 / -1;
@@ -1645,10 +1614,6 @@ input:disabled {
 
 .toiletry-section {
   margin-top: 20px;
-  padding: 16px;
-  border: 1px solid var(--line);
-  border-radius: var(--control-radius);
-  background: linear-gradient(145deg, var(--status-surface), var(--surface));
 }
 .toiletry-explainer {
   margin: 0 0 14px;
@@ -1663,9 +1628,9 @@ input:disabled {
   gap: 12px;
   margin-top: 14px;
   padding: 13px 14px;
-  border: 1px solid var(--line);
+  border: 0;
   border-radius: var(--control-radius);
-  background: var(--control-bg);
+  background: var(--detail-surface);
 }
 @media (max-width: 659px) {
   .bag-placement.pending {
@@ -1678,11 +1643,8 @@ input:disabled {
 }
 .bag-placement p {
   margin: 2px 0 0;
-  color: var(--muted-text);
+  color: var(--ink);
   font-size: 12px;
-}
-.bag-placement.waiting {
-  background: var(--bg);
 }
 .bag-placement.pending {
   border-color: var(--status-remaining-border);
@@ -1691,10 +1653,6 @@ input:disabled {
 .bag-placement.complete {
   border-color: var(--status-ready-border);
   background: var(--status-ready-bg);
-}
-/* The muted text colour is too light on the green "in the suitcase" card (contrast); use the ink colour there. */
-.bag-placement.complete p {
-  color: var(--ink);
 }
 .review-prompt {
   margin-top: 16px;
@@ -1795,27 +1753,6 @@ input:disabled {
   .pack-row .qty-stepper {
     grid-column: auto;
     justify-self: end;
-  }
-}
-
-@media (min-width: 660px) {
-  .destination-head-content {
-    padding: 18px;
-  }
-}
-
-@media (min-width: 900px) {
-  .destination-trip-head,
-  .destination-head-content {
-    min-height: 260px;
-  }
-  .trip-layout {
-    grid-template-columns: minmax(0, 1.25fr) minmax(310px, 0.75fr);
-    align-items: start;
-  }
-  .trip-layout .side {
-    position: sticky;
-    top: 18px;
   }
 }
 
@@ -2037,10 +1974,9 @@ input:disabled {
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  padding: 12px 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--control-radius);
-  background: color-mix(in srgb, var(--surface) 76%, transparent);
+  padding: 12px 0;
+  border: 0;
+  border-bottom: 1px solid var(--line-strong);
 }
 .staples-toolbar p {
   margin: 0;
@@ -2052,23 +1988,23 @@ input:disabled {
   gap: 12px;
 }
 .staple-category {
-  padding: 17px 18px 5px;
-  border: 1px solid var(--line);
-  border-radius: var(--control-radius);
-  background: color-mix(in srgb, var(--surface) 88%, transparent);
-  box-shadow: 0 8px 24px var(--ledger-shadow);
+  padding: 16px 0 4px;
+  border: 0;
 }
 .staple-category-head {
   display: flex;
-  align-items: flex-start;
+  align-items: baseline;
   justify-content: space-between;
   gap: 14px;
   padding-bottom: 8px;
-  border-bottom: 2px solid var(--seafoam-soft);
+  border-bottom: 1px solid var(--line-strong);
 }
 .staple-category-head h2 {
   margin: 0 0 3px;
-  font-size: 18px;
+  font-family: var(--font-display), var(--font-body), sans-serif;
+  font-size: 29px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
 }
 .staple-category-head p {
   margin: 0;
@@ -2076,14 +2012,9 @@ input:disabled {
   font-size: 12px;
 }
 .category-count {
-  min-width: 25px;
-  padding: 4px 7px;
-  border-radius: var(--control-radius);
-  background: var(--seafoam-soft);
-  color: var(--link);
-  font-size: 12px;
-  font-weight: 900;
-  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
 }
 .staple-row {
   display: grid;
@@ -2194,10 +2125,11 @@ input:disabled {
   display: grid;
   min-height: 44px;
   place-items: center;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   border-radius: var(--control-radius);
-  background: var(--bg);
-  font-weight: 800;
+  background: transparent;
+  color: var(--ink);
+  font-weight: 700;
   cursor: pointer;
 }
 .temperature-unit-options input {
@@ -2210,11 +2142,15 @@ input:disabled {
   cursor: pointer;
 }
 .temperature-unit-options label:has(input:checked) {
-  border-color: var(--accent);
-  background: var(--seafoam);
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--surface);
+}
+/* Disabled (weather off): the choices dim, but the selected unit stays at full strength so it can still be read. */
+.temperature-unit-options label:has(input:disabled):not(:has(input:checked)) {
+  opacity: 0.55;
 }
 .temperature-unit-options label:has(input:disabled) {
-  color: var(--muted-text);
   cursor: not-allowed;
 }
 .weather-credit {
@@ -2343,32 +2279,6 @@ a.back {
   outline-offset: 3px;
 }
 
-/* "Change theme": on a phone it sits on the header's bottom row beside the status chip, so the copy panel stays short
-   and the picture shows; from 660px it sits inside the copy panel under the trip's details. */
-.change-theme {
-  grid-column: 2;
-  justify-self: end;
-  align-self: center;
-  min-height: 44px;
-  margin: 0;
-  background-color: color-mix(in srgb, var(--bg) 92%, transparent);
-}
-@media (min-width: 660px) {
-  .change-theme {
-    grid-row: 2;
-    grid-column: 1 / -1;
-    justify-self: start;
-    align-self: end;
-    margin: 0 0 13px 15px;
-    z-index: 1;
-  }
-  /* Panel and button share row 2, so the button sits in the panel's bottom padding. */
-  .destination-head-copy {
-    grid-row: 2;
-    padding-bottom: 67px;
-  }
-}
-
 /* Multi-destination trips (epic #107, design #108): route text, stop cards, the summary strip. */
 .route-text {
   display: inline-block;
@@ -2382,16 +2292,6 @@ a.back {
   color: var(--muted-text);
   font-weight: 400;
 }
-.destination-head-copy p.route-chip {
-  display: inline-block;
-  margin: 0 0 6px;
-  padding: 3px 11px;
-  border-radius: var(--control-radius);
-  background: var(--seafoam-soft);
-  color: var(--ink);
-  font-size: 14px;
-  font-weight: 700;
-}
 .quick-view-route {
   margin: 0 0 8px;
   color: var(--ink);
@@ -2403,8 +2303,14 @@ a.back {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
 }
-.edit-route {
-  margin-top: 8px;
+.head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.head-actions .button {
+  min-height: 44px;
 }
 .add-stop-row {
   display: grid;
@@ -2686,42 +2592,11 @@ a.back {
 }
 
 /* Packing screen, Field Ledger (#144, spec §4). Role tokens only. */
-.hero-eyebrow {
-  margin: 0 0 4px;
-  color: var(--link);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.destination-head-content {
-  border-top: 4px solid var(--accent);
-}
-.hero-stamps {
-  grid-column: 1 / -1;
-  margin-top: 14px;
-  color: var(--accent);
-}
-@media (min-width: 900px) {
-  .hero-stamps {
-    position: absolute;
-    right: 44px;
-    bottom: 18px;
-    z-index: 5;
-    margin-top: 0;
-  }
-}
 .progress-line {
-  margin: 6px 0 12px;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 600;
-}
-.filter {
-  border-radius: var(--control-radius, 4px);
-}
-.filter.active {
-  border-color: var(--action-border);
+  margin: 6px 0 8px;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 700;
 }
 
 .weather-review-banner {
@@ -2731,10 +2606,6 @@ a.back {
 
 /* Row: state, name and note, stepper, Pack all / Packed, Edit target. The last three are fixed width, so a
    completed row never moves a column. */
-.pack-row {
-  border-radius: var(--control-radius, 4px);
-  background: var(--control-bg);
-}
 .check-state {
   display: grid;
   place-items: center;
@@ -2753,22 +2624,39 @@ a.back {
 .pack-row.complete .item-name {
   color: var(--muted);
 }
-.pack-all,
-.edit-target {
+.pack-all {
   min-width: 0;
   min-height: 44px;
   border: 1px solid var(--line-strong);
   border-radius: var(--button-radius, 4px);
-  background: var(--control-bg);
+  background: transparent;
   color: var(--ink);
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
 }
+/* Edit target is a text link, not a button (audit 19). */
+.edit-target {
+  min-width: 0;
+  min-height: 44px;
+  border: 0;
+  background: none;
+  color: var(--link);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.edit-target:hover {
+  text-decoration: underline;
+}
+/* A packed row shows "Packed" as quiet muted text in the same 88px column (still a button: it toggles back). */
 .pack-row.complete .pack-all {
-  border-color: var(--complete);
-  background: var(--complete);
-  color: var(--complete-ink);
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 16px;
+  font-weight: 500;
+  text-align: right;
 }
 .weather-guidance {
   display: flex;
@@ -2777,12 +2665,14 @@ a.back {
   gap: 8px;
 }
 .weather-pill {
-  padding: 2px 8px;
-  border-radius: 999px;
+  padding: 2px 6px;
+  border-radius: var(--control-radius);
   background: var(--weather-pill);
   color: var(--weather-pill-ink);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 .weather-note {
   font-size: 13px;
@@ -2790,10 +2680,9 @@ a.back {
 }
 
 .sections-panel {
-  padding: 16px 20px;
-  border: 1px solid var(--line);
-  border-radius: var(--control-radius, 4px);
-  background: var(--surface);
+  padding: 12px 0 0;
+  border: 0;
+  border-top: 1px solid var(--line-strong);
 }
 .sections-panel h3 {
   margin: 0 0 8px;
@@ -2815,6 +2704,10 @@ a.back {
   min-height: 44px;
   color: var(--link);
   font-weight: 600;
+  text-decoration: none;
+}
+.sections-panel a:hover {
+  text-decoration: underline;
 }
 .list-section,
 .toiletry-section {
@@ -2829,44 +2722,6 @@ a.back {
     grid-column: auto;
     justify-self: stretch;
     grid-template-columns: 44px 1fr 44px;
-  }
-}
-
-@media (max-width: 899px) {
-  /* The sections panel moves above the list as a wrapping chip row; the other side cards stay below it. */
-  .trip-layout .side {
-    display: contents;
-  }
-  .trip-layout .side > * {
-    order: 1;
-  }
-  .trip-layout .side > .sections-panel {
-    order: -1;
-    padding: 12px;
-  }
-  .sections-panel ul {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-  .sections-panel li a {
-    padding: 0 12px;
-    gap: 8px;
-    border: 1px solid var(--line-strong);
-    border-radius: var(--control-radius);
-  }
-  .sections-panel p {
-    display: none;
-  }
-}
-
-@media (min-width: 900px) {
-  .sections-panel {
-    position: sticky;
-    top: 84px;
-  }
-  .trip-layout .side {
-    position: static;
   }
 }
 
@@ -3234,6 +3089,7 @@ a.back {
   background: var(--selection-surface);
 }
 .more-menu-panel {
+  overflow-y: auto;
   position: absolute;
   z-index: 30;
   top: calc(100% + 4px);
@@ -3297,6 +3153,275 @@ a.back {
 .later-journeys li:first-child .later-journey {
   border-top: 0;
 }
-.topbar-inner > .sync-chip {
-  margin-left: auto;
+@media (max-width: 720px) {
+  .topbar-inner > .sync-chip {
+    margin-left: auto;
+  }
+}
+
+/* When there is no weather to show, the card collapses to one quiet 44px line (audit 24). */
+.weather-panel.weather-compact,
+.weather-panel.weather-off {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: none;
+}
+.weather-panel.weather-compact h2,
+.weather-panel.weather-off h2 {
+  margin: 0;
+  font-size: 15px;
+}
+.weather-panel.weather-compact p,
+.weather-panel.weather-off p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+.weather-panel {
+  margin-bottom: 16px;
+}
+/* The Trip math card and the other side cards are flat: a top rule, no box (audit 25). */
+.side .card:not(.ready-card) {
+  padding: 12px 0 0;
+  border: 0;
+  border-top: 1px solid var(--line-strong);
+  background: none;
+}
+
+/* ---- Trip screen (#155, design's corrections on #159): a clean cream hero card, the progress and filters on one
+   full-width row, then the list (about 1000px) beside a slim 190px sections column. */
+.trip-hero {
+  position: relative;
+  overflow: hidden;
+  margin: 8px 0 16px;
+  padding: 8px 28px 24px;
+  border: 1px solid var(--line);
+  border-top: 4px solid var(--accent);
+  border-radius: var(--control-radius);
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent 27px,
+      var(--ledger-rule) 27px,
+      var(--ledger-rule) 28px
+    ),
+    var(--surface);
+  box-shadow: 0 8px 24px var(--ledger-shadow);
+}
+.trip-hero > * {
+  position: relative;
+  z-index: 1;
+}
+/* The theme picture (#48) is an isolated optional layer: hidden until Caroline decides (hero-picture.ts). */
+.hero-picture {
+  display: none;
+}
+.trip-hero[data-picture="on"] .hero-picture {
+  display: block;
+  position: absolute;
+  z-index: 0;
+  inset: 0 0 0 60%;
+}
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--link);
+  font-size: 15px;
+  text-decoration: underline;
+}
+.trip-hero-main {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+.trip-hero-copy {
+  min-width: 0;
+}
+.hero-eyebrow {
+  margin: 0 0 4px;
+  color: var(--link);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.trip-hero h1 {
+  margin: 0 0 6px;
+  font-size: clamp(44px, 3.7vw, 56px);
+  line-height: 0.98;
+  letter-spacing: -0.04em;
+}
+.trip-hero-dates {
+  margin: 0;
+  color: var(--muted);
+}
+.trip-hero p.route-chip {
+  display: inline-block;
+  margin: 0 0 6px;
+  padding: 3px 8px;
+  border-radius: var(--control-radius);
+  background: var(--detail-surface);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+}
+.hero-stamps {
+  flex: none;
+  color: var(--accent);
+}
+.trip-hero > .status-pill {
+  position: absolute;
+  top: 16px;
+  right: 24px;
+}
+.weather-embedded {
+  margin-top: 20px;
+}
+.weather-embedded .weather-panel-head {
+  margin-bottom: 4px;
+}
+.weather-embedded .weather-panel-head h2 {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.weather-embedded .weather-list {
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  border-block: 1px solid var(--line);
+  background: var(--weather-surface);
+}
+.weather-embedded .weather-row {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+  padding: 12px 14px;
+  border-bottom: 0;
+}
+.weather-embedded .weather-row + .weather-row {
+  border-left: 1px solid var(--line);
+}
+.weather-embedded .weather-row.unavailable {
+  grid-template-columns: minmax(0, 1fr);
+}
+.weather-check-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.weather-review-banner {
+  margin: 0 0 16px;
+}
+.packing-top {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin: 8px 0 24px;
+}
+.packing-progress {
+  flex: 0 1 440px;
+  min-width: 0;
+}
+.packing-progress .progress-line {
+  margin: 0 0 8px;
+  font-size: 20px;
+}
+.trip-layout {
+  display: grid;
+  gap: 16px;
+}
+.side {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+.sections-panel ul {
+  gap: 0;
+}
+.sections-panel a {
+  min-height: 44px;
+  font-size: 16px;
+}
+.sections-panel p {
+  margin: 8px 0 0;
+  font-style: italic;
+}
+@media (min-width: 900px) {
+  .trip-layout {
+    grid-template-columns: minmax(0, 1fr) 190px;
+    column-gap: 32px;
+    align-items: start;
+  }
+  .sections-panel {
+    position: sticky;
+    top: 84px;
+  }
+}
+@media (max-width: 899px) {
+  /* Below 900 the sections panel moves above the list as a wrapping chip row; the other side cards stay below. */
+  .trip-layout .side {
+    display: contents;
+  }
+  .trip-layout .side > * {
+    order: 1;
+  }
+  .trip-layout .side > .sections-panel {
+    order: -1;
+    padding: 12px 0;
+  }
+  .sections-panel ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .sections-panel li a {
+    padding: 0 12px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--control-radius);
+  }
+  .sections-panel p {
+    display: none;
+  }
+}
+@media (max-width: 720px) {
+  .trip-hero {
+    padding: 4px 20px 20px;
+  }
+  .trip-hero-main {
+    flex-direction: column;
+    gap: 14px;
+  }
+  .trip-hero h1 {
+    font-size: 40px;
+  }
+  .weather-embedded .weather-list {
+    grid-auto-flow: row;
+  }
+  .weather-embedded .weather-row + .weather-row {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+  .packing-top {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .packing-progress {
+    flex-basis: auto;
+  }
+}
+.back-link span {
+  margin-right: 6px;
 }
