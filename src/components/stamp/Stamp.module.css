@@ -39,21 +39,9 @@
   white-space: nowrap;
   text-overflow: clip;
   font-family: var(--font-display, inherit);
+  font-size: 27px;
   font-weight: 800;
   letter-spacing: 0.12em;
-}
-
-.stamp[data-size="large"] .label {
-  font-size: 27px;
-}
-
-.stamp[data-size="medium"] .label {
-  font-size: 18px;
-}
-
-.stamp[data-size="small"] .label {
-  font-size: 13px;
-  letter-spacing: 0.06em;
 }
 
 .date {
@@ -79,13 +67,7 @@
   .second {
     margin-left: -18px;
   }
-  .stamp[data-size="large"] .label {
+  .label {
     font-size: 21px;
-  }
-  .stamp[data-size="medium"] .label {
-    font-size: 15px;
-  }
-  .stamp[data-size="small"] .label {
-    font-size: 11px;
   }
 }

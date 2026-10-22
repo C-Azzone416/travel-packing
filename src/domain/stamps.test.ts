@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { selectStamps, stampLabelSize, stampsAriaLabel } from "./stamps";
+import { selectStamps, stampsAriaLabel } from "./stamps";
 import type { TripStop } from "./trip-stops";
 
 function stop(city: string, countryCode: string | undefined, airportCode?: string): TripStop {
@@ -20,28 +20,14 @@ function stop(city: string, countryCode: string | undefined, airportCode?: strin
 
 const labels = (stops: TripStop[]) => selectStamps(stops).map((s) => s.label);
 
-describe("selectStamps", () => {
-  it("gives a first-city stamp for an empty list, with no label", () => {
-    expect(selectStamps([])).toEqual([{ kind: "city", label: "", fullName: "" }]);
-  });
-
-  it("gives one first-city stamp for a single stop", () => {
-    expect(selectStamps([stop("Lisbon", "PT")])).toEqual([
-      { kind: "city", label: "LISBON", fullName: "LISBON" },
-    ]);
-  });
-
-  it("gives one first-city stamp when every stop is the same city, even with differing case or space", () => {
-    expect(labels([stop("Lisbon", "PT"), stop(" lisbon ", "ES")])).toEqual(["LISBON"]);
-  });
-
+describe("selectStamps: the country route stamps", () => {
   it("gives one country stamp when all stops share a country", () => {
     expect(selectStamps([stop("Lisbon", "pt"), stop("Porto", "PT")])).toEqual([
-      { kind: "country", label: "PRT", fullName: "PRT" },
+      { kind: "country", label: "PRT" },
     ]);
   });
 
-  it("gives two stamps in route order for two countries, the second overlapping", () => {
+  it("gives two stamps in route order for two countries", () => {
     expect(labels([stop("Lisbon", "PT"), stop("Madrid", "ES")])).toEqual(["PRT", "ESP"]);
     expect(labels([stop("Madrid", "ES"), stop("Lisbon", "PT")])).toEqual(["ESP", "PRT"]);
   });
@@ -53,54 +39,51 @@ describe("selectStamps", () => {
     ]);
   });
 
-  it("falls back to the first city for three or more countries", () => {
-    expect(labels([stop("Lisbon", "PT"), stop("Madrid", "ES"), stop("Paris", "FR")])).toEqual([
-      "LISBON",
+  it("never shows an airport code on a country stamp", () => {
+    expect(labels([stop("Lisbon", "PT", "LIS"), stop("Madrid", "ES", "MAD")])).toEqual([
+      "PRT",
+      "ESP",
     ]);
-  });
-
-  it("falls back to the first city when any code is not in the table, never a subset", () => {
-    expect(labels([stop("Lisbon", "PT"), stop("Atlantis", "ZZ")])).toEqual(["LISBON"]);
-  });
-
-  it("falls back to the first city when any code is missing or empty", () => {
-    expect(labels([stop("Lisbon", "PT"), stop("Madrid", undefined)])).toEqual(["LISBON"]);
-    expect(labels([stop("Lisbon", "PT"), stop("Madrid", "")])).toEqual(["LISBON"]);
-  });
-
-  it("truncates long city names at 9 characters with an ellipsis, keeping the full name", () => {
-    expect(selectStamps([stop("Johannesburg", "ZA")])).toEqual([
-      { kind: "city", label: "JOHANNESB…", fullName: "JOHANNESBURG" },
-    ]);
-    expect(labels([stop("Amsterdam", "NL")])).toEqual(["AMSTERDAM"]);
-    expect(labels([stop("Amsterdam1", "NL")])).toEqual(["AMSTERDAM…"]);
   });
 });
 
-describe("selectStamps with airport codes (#152)", () => {
-  it("shows the airport code on a single-city stamp, keeping the city name for the accessible label", () => {
+describe("selectStamps: the first stop's stamp (single city and every fallback)", () => {
+  it("shows the airport code when the stop has one, naming the city in the accessible label", () => {
     const stamps = selectStamps([stop("Lisbon", "PT", "LIS")]);
-    expect(stamps).toEqual([
-      { kind: "airport", label: "LIS", fullName: "LISBON", cityName: "Lisbon" },
-    ]);
+    expect(stamps).toEqual([{ kind: "airport", label: "LIS", cityName: "Lisbon" }]);
     expect(stampsAriaLabel(stamps)).toBe("LIS airport, Lisbon, departure stamp");
   });
 
-  it("uses the first stop's code in every city fallback", () => {
-    expect(labels([stop("Lisbon", "PT", "LIS"), stop("Lisbon", "ES", "MAD")])).toEqual(["LIS"]);
+  it("uses the country's alpha-3 when the stop has no airport (Zermatt → CHE)", () => {
+    const stamps = selectStamps([stop("Zermatt", "CH")]);
+    expect(stamps).toEqual([{ kind: "place", label: "CHE", cityName: "Zermatt" }]);
+    expect(stampsAriaLabel(stamps)).toBe("CHE, Zermatt, departure stamp");
+  });
+
+  it("treats a lower-case or padded country code the same way", () => {
+    expect(labels([stop("Zermatt", " ch ")])).toEqual(["CHE"]);
+  });
+
+  it("gives one first-stop stamp when every stop is the same city, even with differing case or space", () => {
+    expect(labels([stop("Lisbon", "PT", "LIS"), stop(" lisbon ", "ES")])).toEqual(["LIS"]);
+  });
+
+  it("uses the first stop's code in every fallback: three countries, an unknown or a missing code", () => {
     expect(
       labels([stop("Lisbon", "PT", "LIS"), stop("Madrid", "ES", "MAD"), stop("Paris", "FR")]),
     ).toEqual(["LIS"]);
     expect(labels([stop("Lisbon", "PT", "LIS"), stop("Atlantis", "ZZ")])).toEqual(["LIS"]);
+    expect(labels([stop("Lisbon", "PT", "LIS"), stop("Madrid", undefined)])).toEqual(["LIS"]);
+    expect(labels([stop("Lisbon", "PT", "LIS"), stop("Madrid", "")])).toEqual(["LIS"]);
   });
 
-  it("keeps the city name when the first stop has no code, even if a later stop has one", () => {
+  it("falls back to the first stop's country when it has no airport, even if a later stop has one", () => {
     expect(
-      labels([stop("Lisbon", "PT"), stop("Madrid", "ES", "MAD"), stop("Paris", "FR")]),
-    ).toEqual(["LISBON"]);
+      labels([stop("Zermatt", "CH"), stop("Madrid", "ES", "MAD"), stop("Paris", "FR")]),
+    ).toEqual(["CHE"]);
   });
 
-  it("marks an airport code that collides with a country code (FRA, AUS) as an airport, not a country", () => {
+  it("marks an airport code that equals a country code (FRA, AUS) as an airport, not a country", () => {
     const [frankfurt] = selectStamps([stop("Frankfurt", "DE", "FRA")]);
     const [france] = selectStamps([stop("Paris", "FR"), stop("Nice", "FR")]);
     expect(frankfurt).toMatchObject({ label: "FRA", kind: "airport" });
@@ -109,42 +92,46 @@ describe("selectStamps with airport codes (#152)", () => {
     expect(stampsAriaLabel([france])).toBe("FRA route stamps");
   });
 
-  it("never shows a code on country stamps", () => {
-    expect(labels([stop("Lisbon", "PT", "LIS"), stop("Madrid", "ES", "MAD")])).toEqual([
-      "PRT",
-      "ESP",
-    ]);
-  });
-
-  it("ignores a code that is not three capital letters", () => {
+  it("ignores an airport code that is not three capital letters and uses the country instead", () => {
     for (const bad of ["lis", "LI", "LISB", "L1S"]) {
-      expect(labels([stop("Lisbon", "PT", bad)])).toEqual(["LISBON"]);
+      expect(selectStamps([stop("Lisbon", "PT", bad)])).toEqual([
+        { kind: "place", label: "PRT", cityName: "Lisbon" },
+      ]);
     }
   });
-});
 
-describe("stampLabelSize", () => {
-  it("steps large (≤5), medium (6–7) and small (8–9), ignoring the ellipsis", () => {
-    expect(stampLabelSize("PRT")).toBe("large");
-    expect(stampLabelSize("PARIS")).toBe("large");
-    expect(stampLabelSize("LISBON")).toBe("medium");
-    expect(stampLabelSize("BERGENS")).toBe("medium");
-    expect(stampLabelSize("REYKJAVIK")).toBe("small");
-    expect(stampLabelSize("AMSTERDAM…")).toBe("small");
+  it("gives no stamp when the first stop has neither an airport nor a valid country (never invented, never from the city)", () => {
+    expect(selectStamps([stop("Atlantis", "ZZ")])).toEqual([]);
+    expect(selectStamps([stop("Nowhere", undefined)])).toEqual([]);
+    expect(selectStamps([stop("Lisbon", "PT"), stop("Atlantis", "ZZ")])).toEqual([
+      { kind: "place", label: "PRT", cityName: "Lisbon" },
+    ]);
+    expect(selectStamps([stop("Atlantis", "ZZ"), stop("Lisbon", "PT")])).toEqual([]);
+  });
+
+  it("gives no stamp for an empty list", () => {
+    expect(selectStamps([])).toEqual([]);
+  });
+
+  it("every label is exactly three characters", () => {
+    const cases = [
+      [stop("Lisbon", "PT", "LIS")],
+      [stop("Zermatt", "CH")],
+      [stop("Johannesburg", "ZA")],
+      [stop("Lisbon", "PT"), stop("Madrid", "ES")],
+      [stop("Lisbon", "PT"), stop("Madrid", "ES"), stop("Paris", "FR")],
+    ];
+    for (const stops of cases)
+      for (const stamp of selectStamps(stops)) expect(stamp.label).toMatch(/^[A-Z]{3}$/);
   });
 });
 
 describe("stampsAriaLabel", () => {
-  it("names country stamps as a route and city stamps as a departure", () => {
-    expect(stampsAriaLabel(selectStamps([stop("Lisbon", "PT"), stop("Madrid", "ES")]))).toBe(
-      "PRT, ESP route stamps",
+  it("is empty for no stamps, and drops a missing city name cleanly", () => {
+    expect(stampsAriaLabel([])).toBe("");
+    expect(stampsAriaLabel([{ kind: "airport", label: "LIS", cityName: "" }])).toBe(
+      "LIS airport, departure stamp",
     );
-    expect(stampsAriaLabel(selectStamps([stop("Lisbon", "PT")]))).toBe("LISBON departure stamp");
-  });
-
-  it("uses the untruncated city name", () => {
-    expect(stampsAriaLabel(selectStamps([stop("Johannesburg", "ZA")]))).toBe(
-      "JOHANNESBURG departure stamp",
-    );
+    expect(stampsAriaLabel([{ kind: "place", label: "CHE" }])).toBe("CHE, departure stamp");
   });
 });
