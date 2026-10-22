@@ -130,7 +130,7 @@ function ListSection({
   );
 }
 
-export function TripScreen({ tripId }: { tripId: string }) {
+export function TripScreen({ tripId, openItemId }: { tripId: string; openItemId?: string }) {
   const source = useTripsSource();
   const router = useRouter();
   const { track } = useSaveStatus();
@@ -371,7 +371,44 @@ export function TripScreen({ tripId }: { tripId: string }) {
     return outcome;
   };
 
-  const close = () => setDialog(null);
+  // "Edit quantity" on the dashboard arrives with ?edit=<item id>: once the trip has loaded, that item's editor opens
+  // (once), the URL goes back to the plain trip, and closing the editor puts focus on that item's row.
+  const urlItem = useRef(openItemId);
+  const returnFocusTo = useRef<string | null>(null);
+  useEffect(() => {
+    if (load.phase !== "ready" || !urlItem.current) return;
+    const itemId = urlItem.current;
+    urlItem.current = undefined;
+    window.history.replaceState(null, "", `/trips/${tripId}`);
+    if (load.trip.items.some((entry) => entry.id === itemId)) {
+      returnFocusTo.current = itemId;
+      setDialog({ kind: "edit", itemId });
+    }
+  }, [load, tripId]);
+
+  // After the editor opened from ?edit= closes (Escape, ×, Save or Remove), focus goes to that item's Edit target, or to
+  // the list heading when the item is gone. It waits for the commit that removes the sheet and updates the row (a save
+  // re-renders the row after the write finishes), so it is an effect, not a timer.
+  const focusAfterClose = useRef<string | null>(null);
+  useEffect(() => {
+    const itemId = focusAfterClose.current;
+    if (!itemId || dialog || load.phase !== "ready") return;
+    focusAfterClose.current = null;
+    const row = document.querySelector<HTMLElement>(
+      `[data-item-id="${itemId.replaceAll('"', '\\"')}"]`,
+    );
+    (
+      row?.querySelector<HTMLElement>(".edit-target") ??
+      document.getElementById("packing-list-heading")
+    )?.focus();
+  }, [dialog, load]);
+
+  const close = () => {
+    setDialog(null);
+    // The sheet has no opener to give focus back to, so the screen puts it somewhere sensible itself (above).
+    focusAfterClose.current = returnFocusTo.current;
+    returnFocusTo.current = null;
+  };
 
   if (load.phase === "loading") {
     return (
@@ -666,7 +703,9 @@ export function TripScreen({ tripId }: { tripId: string }) {
 
       <div className="packing-top">
         <div className="packing-progress">
-          <h2 className="sr-only">Packing list</h2>
+          <h2 id="packing-list-heading" className="sr-only" tabIndex={-1}>
+            Packing list
+          </h2>
           <p className="progress-line">
             {totals.packed} of {totals.total} packed
             {totals.total - totals.packed > 0 ? ` / ${totals.total - totals.packed} left` : ""}

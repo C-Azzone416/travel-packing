@@ -286,7 +286,7 @@ describe("＋ Add item on the hero (#147)", () => {
     expect(screen.getByText(/of 32 packed/)).toBeTruthy();
   });
 
-  it("never doubles an item already on the list; Edit quantity goes to the trip screen", async () => {
+  it("never doubles an item already on the list; Edit quantity goes to that item's editor on the trip screen", async () => {
     push.mockClear();
     const { user, base } = setup();
     await screen.findByRole("article", { name: "San Diego" });
@@ -302,7 +302,7 @@ describe("＋ Add item on the hero (#147)", () => {
     expect(await screen.findByText(/Sunglasses is already on your list/)).toBeTruthy();
     expect(base.snapshot().trips[0].items).toHaveLength(before);
     await user.click(screen.getByRole("button", { name: "Edit quantity" }));
-    expect(push).toHaveBeenCalledExactlyOnceWith("/trips/san-diego");
+    expect(push).toHaveBeenCalledExactlyOnceWith("/trips/san-diego?edit=sunglasses");
   });
 
   it("hands Bathroom to the Bathroom form here too, filled in, and adds it to the hero trip", async () => {
