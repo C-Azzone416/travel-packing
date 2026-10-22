@@ -95,7 +95,15 @@ describe("Field Ledger role tokens", () => {
   });
 
   it("every var(--x) in the stylesheet resolves to a defined token", () => {
-    const defined = new Set<string>(["--font-body", "--font-display", "--font-serif"]);
+    // The font variables next/font sets on <html> at runtime (fonts.ts); --font-body and --font-display are composed
+    // from them in globals.css (#182).
+    const defined = new Set<string>([
+      "--font-body-latin",
+      "--font-body-ext",
+      "--font-display-latin",
+      "--font-display-ext",
+      "--font-serif",
+    ]);
     for (const css of [tokensCss, globalsCss]) {
       for (const m of stripCssComments(css).matchAll(/(--[\w-]+)\s*:/g)) defined.add(m[1]);
     }

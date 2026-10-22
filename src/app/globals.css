@@ -1,7 +1,29 @@
 /* Field Ledger (#139). The four themes' role tokens live in ledger-tokens.css; this file binds components to roles and
    never to a hex. The legacy names below are aliases onto roles so a theme switch reaches every screen. The semantic
    status colours are the same in all four themes (danger/warn/success are never themed). */
+/* The ledger type stacks (#182): the latin face, then latin-ext (loaded only when a name like Gdańsk or Łódź needs it),
+   then a metric-matched Arial fallback. next/font computes this fallback for a single family; the stack is composed
+   here, so the fallbacks are declared by hand with the values it computed for the same files, and they come last. */
+@font-face {
+  font-family: "Barlow Fallback";
+  src: local("Arial");
+  ascent-override: 103.13%;
+  descent-override: 20.63%;
+  line-gap-override: 0%;
+  size-adjust: 96.96%;
+}
+@font-face {
+  font-family: "Bricolage Grotesque Fallback";
+  src: local("Arial");
+  ascent-override: 82.39%;
+  descent-override: 23.92%;
+  line-gap-override: 0%;
+  size-adjust: 112.88%;
+}
 :root {
+  --font-body: var(--font-body-latin), var(--font-body-ext), "Barlow Fallback";
+  --font-display:
+    var(--font-display-latin), var(--font-display-ext), "Bricolage Grotesque Fallback";
   --linen: var(--bg);
   --paper: var(--surface);
   --teal: var(--accent);
