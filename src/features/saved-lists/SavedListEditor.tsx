@@ -164,7 +164,7 @@ export function SavedListEditor({ listId, actions }: SavedListEditorProps) {
       <section className="screen saved-list-page">
         {back}
         <div className="empty-state">
-          <strong>That list isn’t available.</strong>
+          <h1 className="empty-state-title">That list isn’t available.</h1>
           <p className="muted">It may have been deleted.</p>
         </div>
       </section>
@@ -176,7 +176,7 @@ export function SavedListEditor({ listId, actions }: SavedListEditorProps) {
       <section className="screen saved-list-page">
         {back}
         <div className="empty-state">
-          <strong>Couldn’t load this list.</strong>
+          <h1 className="empty-state-title">Couldn’t load this list.</h1>
           <p className="muted">Nothing was changed.</p>
           <Button
             onClick={() => {

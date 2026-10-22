@@ -95,6 +95,33 @@ describe("ModalSheet", () => {
     expect(document.activeElement).toBe(opener);
   });
 
+  it("gives focus back to the opener when a field in the sheet has autoFocus (it takes focus before the sheet looks)", async () => {
+    function AutoFocusHarness() {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <button onClick={() => setOpen(true)}>Open</button>
+          <ModalSheet open={open} title="Rename" onClose={() => setOpen(false)}>
+            <input aria-label="Name" autoFocus />
+          </ModalSheet>
+        </>
+      );
+    }
+    render(<AutoFocusHarness />);
+    const opener = screen.getByRole("button", { name: "Open" });
+    // By keyboard: focus the button and press Enter, as a person does.
+    opener.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "Name" }));
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(opener);
+    // And by pointer.
+    await userEvent.click(opener);
+    await userEvent.keyboard("{Escape}");
+    expect(document.activeElement).toBe(opener);
+  });
+
   it("leaves focus alone when something unrelated has focus (the pressed control is not what had it)", () => {
     render(
       <>
