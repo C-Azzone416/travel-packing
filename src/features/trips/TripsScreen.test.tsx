@@ -48,7 +48,8 @@ describe("TripsScreen", () => {
         </TripsSourceProvider>,
       );
       expect(await screen.findByRole("heading", { name: "San Diego" })).toBeTruthy();
-      await user.click(screen.getByRole("button", { name: "Remove: San Diego" }));
+      await user.click(screen.getByRole("button", { name: "More actions for San Diego" }));
+      await user.click(screen.getByRole("menuitem", { name: "Remove" }));
       await user.click(
         within(screen.getByRole("dialog")).getByRole("button", { name: "Remove trip" }),
       );

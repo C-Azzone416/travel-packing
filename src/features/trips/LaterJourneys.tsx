@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Button, buttonClassName } from "@/components/ui/Button";
+import { MoreMenu } from "@/components/ui/MoreMenu";
 import type { LifecycleTrip } from "@/domain/trip-lifecycle";
 import { QuickView } from "./QuickView";
 import { useState } from "react";
@@ -66,45 +66,22 @@ function Journey({ trip, view, today, busy, onArchive, onRemove }: LaterJourneyP
             >
               {view.ready ? "Review bag" : "Keep packing"}
             </Link>
-            <button
-              className="quick-view-toggle"
-              type="button"
-              aria-expanded={quickOpen}
-              aria-controls={quickId}
-              onClick={() => setQuickOpen((open) => !open)}
-            >
-              <span>Quick view</span>
-              <span className="chevron" aria-hidden="true">
-                {quickOpen ? "⌃" : "⌄"}
-              </span>
-            </button>
-            <Link
-              className={buttonClassName({ variant: "ghost", small: true })}
-              href={`/trips/new?copy=${trip.id}`}
-              aria-label={`Copy trip: ${view.destination}`}
-            >
-              Copy trip
-            </Link>
-            {view.canArchive ? (
-              <Button
-                variant="ghost"
-                small
-                disabled={busy}
-                aria-label={`Archive: ${view.destination}`}
-                onClick={() => onArchive(trip.id)}
-              >
-                Archive
-              </Button>
-            ) : null}
-            <Button
-              variant="ghost"
-              small
+            <MoreMenu
+              subject={view.destination}
               disabled={busy}
-              aria-label={`Remove: ${view.destination}`}
-              onClick={() => onRemove(trip.id)}
-            >
-              Remove
-            </Button>
+              items={[
+                {
+                  key: "quick",
+                  label: quickOpen ? "Hide quick view" : "Quick view",
+                  onSelect: () => setQuickOpen((open) => !open),
+                },
+                { key: "copy", label: "Copy trip", href: `/trips/new?copy=${trip.id}` },
+                ...(view.canArchive
+                  ? [{ key: "archive", label: "Archive", onSelect: () => onArchive(trip.id) }]
+                  : []),
+                { key: "remove", label: "Remove", danger: true, onSelect: () => onRemove(trip.id) },
+              ]}
+            />
           </div>
           {quickOpen ? <QuickView trip={trip} id={quickId} /> : null}
         </div>
@@ -129,8 +106,10 @@ export function LaterJourneys({
 }) {
   return (
     <aside className="later-journeys" aria-labelledby="later-journeys-title">
-      <p className="eyebrow">Afterwards</p>
-      <h2 id="later-journeys-title">Later journeys</h2>
+      <div className="later-head">
+        <h2 id="later-journeys-title">Later journeys</h2>
+        <span>{entries.length === 1 ? "1 trip" : `${entries.length} trips`}</span>
+      </div>
       {entries.length === 0 ? (
         <p className="muted tiny">Nothing else planned yet.</p>
       ) : (
