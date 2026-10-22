@@ -37,13 +37,24 @@ function rules(css: string): Rule[] {
 const themeRule = (id: string) =>
   rules(tokensCss).find((rule) => rule.selector.includes(`:root[data-appearance="${id}"]`));
 
-function luminance(color: string): number {
-  const [r, g, b] = [1, 3, 5]
-    .map((i) => parseInt(color.slice(i, i + 2), 16) / 255)
-    .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+type Rgb = [number, number, number];
+/** A token value as sRGB: #rrggbb, or rgb(r g b / a) composited over `under` (the tints are translucent). */
+function toRgb(value: string, under?: string): Rgb {
+  const hex = value.match(/^#([0-9a-f]{6})$/i);
+  if (hex) return [0, 2, 4].map((i) => parseInt(hex[1].slice(i, i + 2), 16)) as Rgb;
+  const fn = value.match(/^rgb\(\s*(\d+)\s+(\d+)\s+(\d+)(?:\s*\/\s*([\d.]+))?\s*\)$/);
+  if (!fn || !under) throw new Error(`cannot read colour ${value}`);
+  const alpha = fn[4] === undefined ? 1 : Number(fn[4]);
+  const base = toRgb(under);
+  return [1, 2, 3].map((i) => Number(fn[i]) * alpha + base[i - 1] * (1 - alpha)) as Rgb;
 }
-function contrast(a: string, b: string): number {
+function luminance([r, g, b]: Rgb): number {
+  const [lr, lg, lb] = [r, g, b]
+    .map((c) => c / 255)
+    .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * lr + 0.7152 * lg + 0.0722 * lb;
+}
+function contrast(a: Rgb, b: Rgb): number {
   const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
   return (hi + 0.05) / (lo + 0.05);
 }
@@ -92,19 +103,46 @@ describe("Field Ledger role tokens", () => {
     expect(used.filter((name) => !defined.has(name))).toEqual([]);
   });
 
-  it.each(APPEARANCES)("%s keeps the contrast the spec's ◆ values were adjusted for", (id) => {
+  // The spec's §6 table (#139), read from the real tokens for every theme: text 4.5:1, UI and graphics 3:1. Hover tints are
+  // composited over the surface they sit on. Disabled controls are exempt (the spec keeps the state in text and cursor).
+  const TEXT = 4.5;
+  const UI = 3;
+  type Check = [name: string, fg: string, bg: string, target: number, over?: string];
+  const CHECKS: Check[] = [
+    ["ink / surface", "--ink", "--surface", TEXT],
+    ["ink / bg", "--ink", "--bg", TEXT],
+    ["muted / surface", "--muted", "--surface", TEXT],
+    ["muted / bg", "--muted", "--bg", TEXT],
+    ["link / surface", "--link", "--surface", TEXT],
+    ["link / bg", "--link", "--bg", TEXT],
+    ["action-ink / action", "--action-ink", "--action", TEXT],
+    ["header-ink / header", "--header-ink", "--header", TEXT],
+    ["header-muted / header", "--header-muted", "--header", TEXT],
+    ["weather-pill-ink / pill", "--weather-pill-ink", "--weather-pill", TEXT],
+    ["notice-ink / notice", "--notice-ink", "--notice", TEXT],
+    ["hover: ink / selection tint", "--ink", "--selection-surface", TEXT, "--surface"],
+    ["hover: link / selection tint", "--link", "--selection-surface", TEXT, "--surface"],
+    ["focus ring / bg", "--accent-2", "--bg", UI],
+    ["focus ring / surface", "--accent-2", "--surface", UI],
+    ["focus ring / header", "--focus-on-header", "--header", UI],
+    ["completed: check / complete fill", "--complete-ink", "--complete", UI],
+    ["completed: fill / surface", "--complete", "--surface", UI],
+    ["completed: struck name (muted) / bg", "--muted", "--bg", TEXT],
+    ["control border / surface", "--line-strong", "--surface", UI],
+    ["control border / control-bg", "--line-strong", "--control-bg", UI],
+    ["progress / track", "--progress", "--track", UI],
+    ["stamp 1 / surface", "--accent", "--surface", UI],
+    ["stamp 2 / surface", "--accent-2", "--surface", UI],
+  ]; // prettier-ignore
+
+  it.each(APPEARANCES)("%s meets the spec's contrast table (§6)", (id) => {
     const t = themeRule(id)?.decls ?? {};
-    expect(contrast(t["--muted"], t["--bg"])).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(t["--muted"], t["--surface"])).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(t["--link"], t["--bg"])).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(t["--link"], t["--surface"])).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(t["--action-ink"], t["--action"])).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(t["--ink"], t["--bg"])).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(t["--accent-2"], t["--surface"])).toBeGreaterThanOrEqual(3);
-    expect(contrast(t["--accent-2"], t["--bg"])).toBeGreaterThanOrEqual(3);
-    expect(contrast(t["--focus-on-header"], t["--header"])).toBeGreaterThanOrEqual(3);
-    expect(contrast(t["--progress"], t["--track"])).toBeGreaterThanOrEqual(3);
-    expect(contrast(t["--line-strong"], t["--surface"])).toBeGreaterThanOrEqual(3);
+    const failures = CHECKS.flatMap(([name, fg, bg, target, over]) => {
+      const under = over ? t[over] : undefined;
+      const ratio = contrast(toRgb(t[fg], under), toRgb(t[bg], under ?? t["--surface"]));
+      return ratio >= target ? [] : [`${name}: ${ratio.toFixed(2)} < ${target}`];
+    });
+    expect(failures).toEqual([]);
   });
 
   it("the focus ring is a solid 3px --accent-2 outline with a 3px offset", () => {
