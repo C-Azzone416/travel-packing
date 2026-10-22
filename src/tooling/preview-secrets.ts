@@ -1,7 +1,6 @@
-// Preview only (#20): `vercel pull` cannot read a Vercel Secret (write-only), so it writes the redaction marker in its
-// place. The four Secrets below are therefore injected, right after the pull and before the check and the build, from the
-// GitHub `preview` environment's secrets (the workflow hands them in through step `env:` from `secrets.*` only, so
-// GitHub masks them). Nothing here ever returns, logs or throws a value: every message names the variable alone.
+// `vercel pull` cannot read a Vercel Secret (write-only), so it writes the redaction marker in its place. The four
+// Secrets below are therefore injected, right after the pull and before the check and build, from the selected GitHub
+// environment's secrets. Nothing here ever returns, logs or throws a value: every message names the variable alone.
 
 import { parseBuildEnvFile } from "./deploy-env";
 

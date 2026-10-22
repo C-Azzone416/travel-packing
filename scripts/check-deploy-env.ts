@@ -2,12 +2,7 @@
 // Reads PRODUCTION_DB_HOST from the environment. Run it AFTER the preview secrets are injected (see inject-preview-secrets.ts). Prints variable names only.
 
 import { readFileSync } from "node:fs";
-import {
-  checkDeployEnv,
-  parseBuildEnvFile,
-  parseEnvFile,
-  type DeployTarget,
-} from "../src/tooling/deploy-env";
+import { checkDeployEnv, parseBuildEnvFile, type DeployTarget } from "../src/tooling/deploy-env";
 
 const [target, file] = process.argv.slice(2);
 if ((target !== "preview" && target !== "production") || !file) {
@@ -16,8 +11,8 @@ if ((target !== "preview" && target !== "production") || !file) {
 }
 const problems = checkDeployEnv(
   target as DeployTarget,
-  // A preview is read the way `vercel build` reads it (after the Secrets were injected); production is read as before.
-  (target === "preview" ? parseBuildEnvFile : parseEnvFile)(readFileSync(file, "utf8")),
+  // Both targets are checked exactly as `vercel build` reads the file after their Secrets are injected.
+  parseBuildEnvFile(readFileSync(file, "utf8")),
   process.env.PRODUCTION_DB_HOST,
 );
 if (problems.length) {

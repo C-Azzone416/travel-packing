@@ -15,16 +15,14 @@ by a manual run) builds with a pinned Vercel CLI and deploys the prebuilt output
    (`scripts/require-ci.ts`): the latest `ci` run on the typed commit must be complete and green, or the run stops.
    The same check is available to anyone before a merge: `npm run ci:gate -- <pr number or full sha>`.
 2. `vercel pull` for the target, then the five build settings that decide which builder `vercel build` uses (framework, build command,
-   output directory, root directory, install command; settings only, never the ids) are printed to the log. The repo's `vercel.json` names the framework (`nextjs`) so the repo, not the dashboard, decides the builder. **Preview only:** the four Vercel Secrets are then written into the pulled file from the
-   GitHub `preview` environment (see [Preview secrets](#preview-secrets)). Then `scripts/check-deploy-env.ts` checks the
+   output directory, root directory, install command; settings only, never the ids) are printed to the log. The repo's `vercel.json` names the framework (`nextjs`) so the repo, not the dashboard, decides the builder. The four write-only Vercel Secrets are then written into the pulled file from the selected GitHub environment (see [Deploy secrets](#deploy-secrets)). Then `scripts/check-deploy-env.ts` checks the
    file the build will use. It prints variable **names** only, and fails when:
    - any test-only variable is present (`NEXT_PUBLIC_E2E_BUILD`, anything starting with `AUTH_E2E_`, `E2E_DATABASE_URL`, `SEED_DATABASE_URL`, `OPEN_METEO_GEOCODING_URL`);
    - a required variable is missing, or `NEON_AUTH_COOKIE_SECRET` is shorter than the 32 characters sign-in needs;
-   - **preview only:** any required variable is still Vercel's redaction marker (`[SENSITIVE]`, what `vercel pull` writes
+   - any required variable is still Vercel's redaction marker (`[SENSITIVE]`, what `vercel pull` writes
      for a Secret it cannot read), or either database URL is not a `postgres://` / `postgresql://` URL with a host, or
-     `OWNER_EMAIL_ALLOWLIST` is empty or is not a comma-separated list of well-formed emails. (The app itself also accepts `;` or spaces between addresses; the preview check insists on commas so the list is read the same way everywhere.) A preview file is also read
-     the way `vercel build` reads it. A production run is checked exactly as before; extending these checks to
-     production is a follow-up for when Production work resumes;
+     `OWNER_EMAIL_ALLOWLIST` is empty or is not a comma-separated list of well-formed emails. Both target files are read
+     exactly the way `vercel build` reads them;
    - `LOCATION_PROVIDER` is set to anything but `open-meteo` (required in preview; optional in production, where unset
      means location search is off);
    - `PRODUCTION_DB_HOST` is unset or is not a bare host name (a full connection URL is refused, never guessed at), or `DATABASE_URL` /
@@ -98,7 +96,7 @@ GitHub **environment `preview`**:
 
 - secret `DATABASE_URL_UNPOOLED` — the **preview** Neon branch's direct connection string;
 - secrets `DATABASE_URL` (the preview branch's pooled connection string), `OWNER_EMAIL_ALLOWLIST` and
-  `NEON_AUTH_COOKIE_SECRET` (the same values as the Vercel Preview Secrets, see [Preview secrets](#preview-secrets));
+  `NEON_AUTH_COOKIE_SECRET` (the same values as the Vercel Preview Secrets, see [Deploy secrets](#deploy-secrets));
 - variable `PREVIEW_DB_HOST` — that preview database's host name (the seed allowlist);
 - variable `PREVIEW_SEED_OWNER_ID` — the Better Auth user id of the preview owner whose account should see the sample trips. **Leave it unset for the first run** ([First preview bootstrap](#first-preview-bootstrap)); set it after the owner has signed up and verified;
 - secret `VERCEL_AUTOMATION_BYPASS_SECRET` — only if Vercel deployment protection is on for previews.
@@ -106,8 +104,10 @@ GitHub **environment `preview`**:
 In both GitHub environments, restrict deployment branches (`preview`: `develop` only; `production`: `main` only), so a
 branch or pull request can never pick up an environment's secrets.
 
-GitHub **environment `production`**: the secret `DATABASE_URL_UNPOOLED` for the **production** database. Production
-secrets exist only in this environment, so the preview job can never read them. (GitHub's native required reviewers are
+GitHub **environment `production`**: secrets `DATABASE_URL` (the production pooled connection string),
+`DATABASE_URL_UNPOOLED` (the production direct connection string), `OWNER_EMAIL_ALLOWLIST`, and
+`NEON_AUTH_COOKIE_SECRET`; each matches the corresponding Vercel Production Secret. Production secrets exist only in
+this environment, so the preview job can never read them. (GitHub's native required reviewers are
 not available on this plan, so the approval is the explicit gate below; if the plan ever allows required reviewers,
 add them as a second lock, not a replacement.)
 
@@ -121,6 +121,7 @@ Vercel project environment variables, per environment (Preview and Production ge
 | `NEON_AUTH_COOKIE_SECRET` | its own random value         | its own random value  |
 | `OWNER_EMAIL_ALLOWLIST`   | preview owner(s)             | Caroline              |
 | `LOCATION_PROVIDER`       | `open-meteo` (required)      | unset or `open-meteo` |
+| `WEATHER_PROVIDER`        | `open-meteo`                 | `open-meteo`          |
 
 Never set `NEXT_PUBLIC_E2E_BUILD`, `AUTH_E2E_*`, `E2E_DATABASE_URL` or `OPEN_METEO_GEOCODING_URL` in Vercel or GitHub. Never expose the
 production `DATABASE_URL` to the Preview environment.
@@ -171,14 +172,14 @@ every reset and finish-setup link on Preview is built on exactly that origin. So
 3. If the alias step ever fails with "in use" or a refusal, **do not** trust that origin in Neon; tell the PM (someone else may hold the name, and reset links on Preview would point at their site).
 4. Until the alias is ours, reset and finish-setup links on Preview point at an unassigned name and will not work.
 
-## Preview secrets
+## Deploy secrets
 
 `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `OWNER_EMAIL_ALLOWLIST` and `NEON_AUTH_COOKIE_SECRET` are stored in Vercel as
 **Secrets** (write-only). `vercel pull` cannot read a Secret, so it writes the 11-character redaction marker
-`[SENSITIVE]` into `.vercel/.env.preview.local` instead, and `vercel build` would use that marker as if it were the
-value. So, for a **preview** run only, the step "Inject the Preview secrets" replaces exactly those four entries in the
-pulled file with the GitHub `preview` environment's secrets of the same names, right after the pull and before the check
-and the build (`scripts/inject-preview-secrets.ts`).
+`[SENSITIVE]` into the pulled target file instead, and `vercel build` would use that marker as if it were the value. The
+step "Inject deployment secrets" replaces exactly those four entries with the selected GitHub environment's secrets of
+the same names, right after the pull and before the check and build (`scripts/inject-deploy-secrets.ts`). Preview and
+Production use the same names but separate values and separate GitHub environments.
 
 - The values reach the script only through the step's `env:` from `secrets.*`, so GitHub masks them. They are never
   printed (the script prints variable names only), never put on the run summary, never uploaded and never committed. The
@@ -186,15 +187,13 @@ and the build (`scripts/inject-preview-secrets.ts`).
 - Fails closed: if any of the four is missing, empty, or cannot be written to the file faithfully (leading or trailing
   whitespace, a carriage return, or a literal backslash followed by `n`), the run stops and names only the variable.
   Quotes, backslashes, `$`, `#` and newlines inside a value are written correctly for the reader `vercel build` uses.
-- The validator (step 2) then checks the injected file (preview only, see above): no variable may still be the
-  redaction marker, both database URLs must be Postgres URLs, the preview database must not be on `PRODUCTION_DB_HOST`,
-  the allowlist must be well-formed emails and the cookie secret at least 32 characters.
-- **Production is untouched**: the step does not run for a production deploy, which never receives these secrets from
-  this step (its handling of Secrets is a separate, deferred piece of work).
-- **Rotating a preview secret means updating BOTH places together**: the Vercel Preview Secret (what the running preview
-  uses) and the GitHub `preview` environment secret (what the build and the check use). If they differ, the deployed app
-  and the build disagree, and Vercel will not show you the old value to compare. Generate the new value once, apply it
-  to both, then discard it.
+- The validator (step 2) then checks the injected file: no variable may still be the redaction marker, both database
+  URLs must be Postgres URLs, the target must use the correct database host, the allowlist must be well-formed emails,
+  and the cookie secret must be at least 32 characters.
+- **Rotating a target secret means updating both copies together**: the Vercel Secret used by the running target and
+  the matching GitHub environment secret used by its build and check. If they differ, the deployed app and build
+  disagree, and Vercel will not show the old value to compare. Generate the new value once, apply it to both, then
+  discard it.
 
 ### Checking that Vercel and GitHub hold the same allowlist
 
@@ -202,14 +201,14 @@ Both copies of `OWNER_EMAIL_ALLOWLIST` (and the cookie secret) are write-only se
 **fingerprints** instead (#93): a 12-character keyed digest (HMAC, keyed from `NEON_AUTH_COOKIE_SECRET`) of the normalized, sorted
 addresses, plus a count. It contains no address and cannot be tested against guessed addresses without the cookie secret.
 
-- GitHub's copy: the deploy log's step "Inject the Preview secrets" prints `allowlist N entries (M malformed), fingerprint <12 hex>`.
+- GitHub's copy: the deploy log's step "Inject deployment secrets" prints `allowlist N entries (M malformed), fingerprint <12 hex>`.
 - Vercel's copy: the running app logs `{"scope":"auth","event":"allowlist-loaded","entries":N,"malformed":M,"fingerprint":"<12 hex>"}` once when it starts.
   Read it with `vercel logs --deployment <url> --query allowlist-loaded` (or the project's Logs page, filter `allowlist-loaded`) after the first request.
 - Same fingerprint: the two copies match. Different: the allowlist **or the cookie secret** differs between Vercel and GitHub; rotate
   both together (see above). `entries: 0` means the allowlist is empty or unset in that copy.
   `malformed` counts entries that are not plain addresses (for example wrapped in quotes or angle brackets from a paste, or with a `mailto:` prefix):
   such an entry can never equal the address someone signs up with, so `malformed` above 0 on the Vercel side is the first thing to fix (set the value
-  as bare addresses separated by commas). The preview deploy check refuses such an entry in GitHub's copy.
+  as bare addresses separated by commas). The deploy check refuses such an entry in GitHub's copy.
 
 This is deliberately not an HTTP endpoint (a public "is this address allowed?" check would be an oracle). Whether the deployed app
 admits a particular address is shown by the sign-up events in docs/auth-screens.md ("Why did no code arrive?").
