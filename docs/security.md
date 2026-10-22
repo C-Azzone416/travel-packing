@@ -48,4 +48,5 @@ ESLint forbids raw `console.*` in app code outside those sinks.
   the issue, that approach is for Caroline to review (#28).
 - **Data layer (reads and writes):** every call goes through `run()` in `src/server/data/run.ts`, which allows an
   owner 300 calls a minute (`DATA_CALLS_PER_MINUTE`) and answers past that with `UNAVAILABLE` (reason `RATE_LIMITED`,
-  "try again"). It is a guard rail far above normal use; tests in `run.test.ts`.
+  "try again"; the screens already show their error with Retry for that code, never an empty page). It is a guard rail far above normal
+  use, overridable with `DATA_CALLS_PER_MINUTE` (the e2e config raises it); tests in `run.test.ts`.

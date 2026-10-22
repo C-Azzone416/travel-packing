@@ -36,8 +36,21 @@ export interface OwnerScope {
  * limit across instances is Caroline's call (#28).
  */
 export const DATA_CALLS_PER_MINUTE = 300;
+
+/**
+ * Calls a minute per owner from DATA_CALLS_PER_MINUTE: a whole number from 1 to 100000. Anything else (unset, blank,
+ * fractional, zero, text) uses the default, so a bad value never switches the limit off. The browser tests raise it
+ * because one owner drives a whole suite through a fast run.
+ */
+export function dataCallsPerMinute(env: Record<string, string | undefined> = process.env): number {
+  const raw = env.DATA_CALLS_PER_MINUTE?.trim() ?? "";
+  if (!/^\d{1,6}$/.test(raw)) return DATA_CALLS_PER_MINUTE;
+  const value = Number(raw);
+  return value >= 1 && value <= 100_000 ? value : DATA_CALLS_PER_MINUTE;
+}
+
 const defaultLimiter = (): RateLimiter =>
-  createRateLimiter({ limit: DATA_CALLS_PER_MINUTE, windowMs: 60_000 });
+  createRateLimiter({ limit: dataCallsPerMinute(), windowMs: 60_000 });
 let limiter = defaultLimiter();
 
 /** Test hook: swap the limiter (for example one with an injected clock). Call with no argument to reset it. */

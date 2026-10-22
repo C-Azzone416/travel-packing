@@ -5,7 +5,7 @@ import type { Db } from "../db/retention";
 import { createFakeAuth, makeContext, OTHER_OWNER, OWNER, signedInAs } from "./__fixtures__/seed";
 import { fail } from "./result";
 import { createRateLimiter } from "../locations/rate-limit";
-import { refuse, run, setDataRateLimiter } from "./run";
+import { DATA_CALLS_PER_MINUTE, dataCallsPerMinute, refuse, run, setDataRateLimiter } from "./run";
 import { setDataLogSink } from "./safe-log";
 
 let ctx: Awaited<ReturnType<typeof createMigratedDb>>;
@@ -32,6 +32,15 @@ afterAll(async () => {
 
 const context = () => makeContext(ctx.db as unknown as Db, fake);
 const schema = z.object({ name: z.string().min(1) });
+
+describe("dataCallsPerMinute", () => {
+  it("uses DATA_CALLS_PER_MINUTE when it is a whole number in range, else the default", () => {
+    expect(dataCallsPerMinute({ DATA_CALLS_PER_MINUTE: " 5000 " })).toBe(5000);
+    for (const bad of [undefined, "", "0", "-1", "1.5", "abc", "100001", "1000000"]) {
+      expect(dataCallsPerMinute({ DATA_CALLS_PER_MINUTE: bad })).toBe(DATA_CALLS_PER_MINUTE);
+    }
+  });
+});
 
 describe("run rate limit (#22)", () => {
   it("refuses an owner past the allowance with a retryable UNAVAILABLE, per owner, and recovers", async () => {

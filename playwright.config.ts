@@ -21,6 +21,8 @@ const e2eEnv = {
   OWNER_EMAIL_ALLOWLIST: ALLOWLISTED_EMAILS.join(","),
   // Many tests search at once as the same owner; production keeps the default of 20 a minute.
   LOCATION_SEARCHES_PER_MINUTE: "1000",
+  // One owner drives the whole suite through a fast run; production keeps the default of 300 data-layer calls a minute (#22).
+  DATA_CALLS_PER_MINUTE: "100000",
   // Every e2e test signs in as one of a few owners from one address; production keeps the default of 10 per 15 minutes.
   SIGN_IN_ATTEMPTS_PER_15_MIN: "10000",
   // The account screens wait out a floor so an allowed and an unlisted address take the same time (#27); tests skip it.
