@@ -553,7 +553,11 @@ export function TripScreen({ tripId, openAdd = false }: { tripId: string; openAd
             </div>
           </div>
           <div className="hero-stamps">
-            <Stamps stamps={selectStamps(trip.stops)} departure={trip.start} />
+            <Stamps
+              stamps={selectStamps(trip.stops)}
+              departure={trip.start}
+              onPicture={SHOW_TRIP_PICTURE}
+            />
           </div>
         </div>
         {trip.ready ? <StatusBadge status="ready">Ready</StatusBadge> : null}

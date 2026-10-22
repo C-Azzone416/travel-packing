@@ -153,6 +153,8 @@ describe("loading and states", () => {
       screen.getByText(/^(Leaves in \d+ days|Leaves tomorrow|Leaves today|Under way)$/),
     ).toBeTruthy();
     expect(screen.getByRole("img", { name: /departure stamp$|route stamps$/ })).toBeTruthy();
+    // The trip picture is off on the packing hero, so its stamp is transparent (no backing disc).
+    expect(document.querySelector("[data-stamp]")?.hasAttribute("data-on-picture")).toBe(false);
     expect(
       screen.getByText(/^\d+ of \d+ packed( \/ \d+ left)?$/, { selector: ".progress-line" }),
     ).toBeTruthy();
