@@ -926,6 +926,12 @@ main {
   color: var(--muted-text);
   text-align: center;
 }
+/* The page's one h1 on a screen that has nothing else to show, looking exactly like the bold line it replaced. */
+.empty-state-title {
+  margin: 0;
+  font: inherit;
+  font-weight: 700;
+}
 .empty-state.compact {
   padding: 14px;
   text-align: left;
@@ -1989,6 +1995,8 @@ input:disabled {
 }
 .staples-shell {
   display: grid;
+  /* minmax(0, 1fr): a row's content may shrink the column instead of widening it past a narrow screen (#21). */
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
 }
 .staples-toolbar {

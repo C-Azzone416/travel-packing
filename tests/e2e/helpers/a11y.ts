@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 
 // Accessibility checks for #21: axe-core against WCAG 2.2 AA (and the A levels below it) on the page as it is right
 // now. The spec fails on ANY violation, not only serious or critical ones, so a regression is caught at its first
@@ -77,4 +77,27 @@ export async function expectAccessible(page: Page, label: string, options: A11yO
     help: violation.help,
   }));
   expect(summary, `axe violations: ${label}`).toEqual([]);
+}
+
+/**
+ * A dialog's keyboard behaviour (#21): it opens from the keyboard, Tab and Shift+Tab stay inside it however many times they
+ * are pressed, Escape closes it, and focus goes back to what opened it. The page behind it is checked by ModalSheet's own
+ * tests (inert); this is the end-to-end proof, for each dialog a screen adds.
+ */
+export async function expectDialogKeyboard(page: Page, opener: Locator, dialog: Locator) {
+  await opener.focus();
+  await page.keyboard.press("Enter");
+  await expect(dialog).toBeVisible();
+  const inside = () => dialog.evaluate((node) => node.contains(document.activeElement));
+  for (let press = 0; press < 14; press += 1) {
+    await page.keyboard.press("Tab");
+    expect(await inside(), `Tab ${press + 1} stays in the dialog`).toBe(true);
+  }
+  for (let press = 0; press < 14; press += 1) {
+    await page.keyboard.press("Shift+Tab");
+    expect(await inside(), `Shift+Tab ${press + 1} stays in the dialog`).toBe(true);
+  }
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(opener).toBeFocused();
 }

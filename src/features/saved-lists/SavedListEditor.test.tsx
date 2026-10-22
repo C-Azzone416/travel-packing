@@ -83,7 +83,9 @@ describe("SavedListEditor", () => {
     setup({
       get: vi.fn(async () => ({ ok: false as const, code: "NOT_FOUND" as const })) as never,
     });
-    expect(await screen.findByText("That list isn’t available.")).toBeTruthy();
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "That list isn’t available." }),
+    ).toBeTruthy();
   });
 
   it("offers Try again when the load fails, then shows the list", async () => {

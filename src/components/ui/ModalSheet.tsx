@@ -27,17 +27,37 @@ if (typeof document !== "undefined") {
   );
 }
 
+// The last control focused outside any dialog. A sheet whose form has `autoFocus` moves focus into itself while it mounts, before
+// this module can look, so the control that opened it (reached by keyboard) is found here instead.
+let lastOutsideFocus: HTMLElement | null = null;
+if (typeof document !== "undefined") {
+  document.addEventListener(
+    "focusin",
+    (event) => {
+      const target = event.target;
+      if (target instanceof HTMLElement && !target.closest('[role="dialog"]'))
+        lastOutsideFocus = target;
+    },
+    true,
+  );
+}
+
 /**
  * What to give focus back to when a sheet closes. The control that was just pressed, when focus did not land on something else
- * (it is still on <body>, or on an ancestor of the control as in Safari); otherwise whatever has focus.
+ * (it is still on <body>, or on an ancestor of the control as in Safari); otherwise whatever has focus. Focus that has already
+ * moved into a dialog (an `autoFocus` field) is not an opener: the last control focused outside one is.
  */
 function openerNow(): HTMLElement | null {
   const active = document.activeElement;
-  const focused = active instanceof HTMLElement && active !== document.body ? active : null;
+  const focused =
+    active instanceof HTMLElement && active !== document.body && !active.closest('[role="dialog"]')
+      ? active
+      : null;
   const pressed =
     lastPressed?.isConnected && Date.now() - lastPressedAt < PRESS_FRESH_MS ? lastPressed : null;
   if (pressed && (!focused || focused.contains(pressed))) return pressed;
-  return focused;
+  if (focused) return focused;
+  return lastOutsideFocus?.isConnected ? lastOutsideFocus : null;
 }
 
 export interface ModalSheetProps {
