@@ -3716,6 +3716,7 @@ a.back {
   color: var(--muted);
 }
 .start-option {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
