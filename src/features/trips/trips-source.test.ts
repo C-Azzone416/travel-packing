@@ -131,6 +131,31 @@ describe("per-trip commands", () => {
   const item = (trip: { items: { id: string; packed: number; qty: number }[] }, id: string) =>
     trip.items.find((entry) => entry.id === id)!;
 
+  it("addItem adds an unpacked custom item, revokes Ready, and refuses an item that is already there", async () => {
+    const { source } = setup();
+    const { trip } = await source.addItem("san-diego", {
+      name: "Camera",
+      category: "Tech",
+      neededQty: 2,
+    });
+    expect(trip.items.find((entry) => entry.name === "Camera")).toMatchObject({
+      category: "Tech",
+      qty: 2,
+      packed: 0,
+    });
+    expect(trip.ready).toBe(false);
+    await expect(
+      source.addItem("san-diego", { name: " camera ", category: "Tech", neededQty: 1 }),
+    ).rejects.toThrow("EXISTS");
+    await expect(
+      source.addItem("san-diego", { name: "Lens", category: "Bathroom", neededQty: 1 }),
+    ).rejects.toThrow("INVALID_INPUT");
+    await expect(
+      source.addItem("nope", { name: "Lens", category: "Tech", neededQty: 1 }),
+    ).rejects.toThrow("NOT_FOUND");
+    expect(sanDiego(source).items.filter((entry) => entry.name === "Camera")).toHaveLength(1);
+  });
+
   it("listStaples returns the owner's current staples, including remembered changes", async () => {
     const { source } = setup();
     expect((await source.listStaples()).length).toBe(source.staplesSnapshot().length);

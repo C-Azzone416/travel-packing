@@ -6,7 +6,8 @@ import { renderInApp } from "@/test/providers";
 import { TripsScreen } from "./TripsScreen";
 import { TripsSourceProvider } from "./TripsSourceProvider";
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
+const push = vi.fn();
+vi.mock("next/navigation", () => ({ usePathname: () => "/", useRouter: () => ({ push }) }));
 
 // The server actions are replaced by a stateful stand-in (in tests only; production reads the data layer).
 const control = vi.hoisted(() => ({ failLoad: false }));

@@ -7,7 +7,9 @@ import { Stamps } from "@/components/stamp/Stamp";
 import { selectStamps } from "@/domain/stamps";
 import { MoreMenu } from "@/components/ui/MoreMenu";
 import type { LifecycleTrip } from "@/domain/trip-lifecycle";
+import { AddItemInline } from "@/features/trip/AddItemInline";
 import { QuickView } from "./QuickView";
+import type { NewCustomItem } from "./trips-source";
 import { RouteText } from "./RouteText";
 import type { DepartureView, TripCardView, WeatherCell } from "./view";
 
@@ -26,6 +28,12 @@ export interface NextDepartureProps {
   weather: HeroWeather;
   busy: boolean;
   onEdit: (id: string) => void;
+  /** The inline "＋ Add item" (#147): resolves true once the item is saved. */
+  onAddItem: (item: NewCustomItem) => Promise<boolean>;
+  /** Bathroom was chosen: the dashboard opens the Bathroom form with these values. */
+  onBathroom: (name: string, qty: number) => void;
+  /** The item is already on the list: go to the trip screen to edit its quantity. */
+  onEditExisting: (itemId: string) => void;
   onArchive: (id: string) => void;
   onRemove: (id: string) => void;
 }
@@ -33,8 +41,7 @@ export interface NextDepartureProps {
 /**
  * The roomy hero for the next departure (#139 spec §4): route, dates and nights, the route stamps (the same selectStamps output
  * as the packing screen), a compact one-cell-per-stay weather strip, the days-to-go numeral, packed progress and the actions.
- * Continue packing is the one primary action; Edit trip and + Add item are secondary. + Add item is an interim: it opens
- * the trip screen with the existing add form (the inline input is #147).
+ * Continue packing is the one primary action; Edit trip and ＋ Add item (a disclosed inline input, #147) are secondary.
  */
 export function NextDeparture({
   trip,
@@ -43,10 +50,14 @@ export function NextDeparture({
   weather,
   busy,
   onEdit,
+  onAddItem,
+  onBathroom,
+  onEditExisting,
   onArchive,
   onRemove,
 }: NextDepartureProps) {
   const [quickOpen, setQuickOpen] = useState(false);
+  const [formHost, setFormHost] = useState<HTMLElement | null>(null);
   const titleId = `next-title-${trip.id}`;
   const quickId = `quick-view-${trip.id}`;
 
@@ -132,13 +143,15 @@ export function NextDeparture({
           >
             Edit trip
           </Button>
-          <Link
-            className={buttonClassName({ variant: "secondary" })}
-            href={`/trips/${trip.id}?add=item`}
-            aria-label={`Add item: ${view.destination}`}
-          >
-            ＋ Add item
-          </Link>
+          <AddItemInline
+            variant="hero"
+            formHost={formHost}
+            items={trip.items}
+            busy={busy}
+            onAdd={onAddItem}
+            onBathroom={onBathroom}
+            onEditExisting={onEditExisting}
+          />
           <MoreMenu
             variant="secondary"
             subject={view.destination}
@@ -159,6 +172,7 @@ export function NextDeparture({
         </div>
       </div>
 
+      <div className="add-item-host" ref={setFormHost} />
       {quickOpen ? <QuickView trip={trip} id={quickId} /> : null}
     </article>
   );

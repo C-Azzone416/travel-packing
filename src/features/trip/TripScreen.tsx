@@ -14,7 +14,11 @@ import type { LifecycleTrip } from "@/domain/trip-lifecycle";
 import { diffRecommendations, type WeatherChange } from "@/domain/weather/diff";
 import { weatherGuidance, type ItemGuidance } from "@/domain/weather/guidance";
 import { recommendPacking } from "@/domain/weather/recommend";
-import { TripsSourceError, type TripChange } from "@/features/trips/trips-source";
+import {
+  TripsSourceError,
+  type NewCustomItem,
+  type TripChange,
+} from "@/features/trips/trips-source";
 import { useTripsSource } from "@/features/trips/TripsSourceProvider";
 import { tripMathLine } from "@/features/trips/count-copy";
 import { RouteText } from "@/features/trips/RouteText";
@@ -25,6 +29,7 @@ import { themeFor } from "@/domain/themes";
 import { selectStamps } from "@/domain/stamps";
 import { daysBetween } from "@/domain/trip-stops";
 import { localToday } from "@/lib/today";
+import { AddItemInline } from "./AddItemInline";
 import { EditRouteSheet } from "./EditRouteSheet";
 import { ItemEditor } from "./ItemEditor";
 import { PackRow } from "./PackRow";
@@ -61,7 +66,7 @@ type Load =
 type Dialog =
   | null
   | { kind: "edit"; itemId: string }
-  | { kind: "add-toiletry" }
+  | { kind: "add-toiletry"; name?: string; qty?: number }
   | { kind: "bag" }
   | { kind: "preferences" }
   | { kind: "theme" }
@@ -122,7 +127,7 @@ function ListSection({
   );
 }
 
-export function TripScreen({ tripId, openAdd = false }: { tripId: string; openAdd?: boolean }) {
+export function TripScreen({ tripId }: { tripId: string }) {
   const source = useTripsSource();
   const { track } = useSaveStatus();
   const toast = useToast();
@@ -130,7 +135,7 @@ export function TripScreen({ tripId, openAdd = false }: { tripId: string; openAd
   const [staples, setStaples] = useState<Staple[]>([]);
   const [reloads, setReloads] = useState(0);
   const [filter, setFilter] = useState<PackFilter>("all");
-  const [dialog, setDialog] = useState<Dialog>(openAdd ? { kind: "add-toiletry" } : null);
+  const [dialog, setDialog] = useState<Dialog>(null);
   const [submitting, setSubmitting] = useState(false);
   const [failedRows, setFailedRows] = useState<ReadonlySet<string>>(new Set());
   const [announcement, setAnnouncement] = useState("");
@@ -320,12 +325,17 @@ export function TripScreen({ tripId, openAdd = false }: { tripId: string; openAd
     };
   }, [flush]);
 
+  /** The inline "＋ Add item": resolves true when the source saved it, so the form can fold away. */
+  const addCustomItem = (item: NewCustomItem): Promise<boolean> =>
+    new Promise((resolve) => {
+      void act(() => source.addItem(tripId, item), {
+        announce: () => `${item.name.trim()} added to ${item.category}.`,
+        after: () => resolve(true),
+        onFail: () => resolve(false),
+      });
+    });
+
   const close = () => setDialog(null);
-  // The dashboard's "+ Add item" arrives with ?add=item; once the form is closed the URL goes back to the plain trip.
-  const closeAdd = () => {
-    close();
-    if (openAdd) window.history.replaceState(null, "", `/trips/${tripId}`);
-  };
 
   if (load.phase === "loading") {
     return (
@@ -553,7 +563,11 @@ export function TripScreen({ tripId, openAdd = false }: { tripId: string; openAd
             </div>
           </div>
           <div className="hero-stamps">
-            <Stamps stamps={selectStamps(trip.stops)} departure={trip.start} />
+            <Stamps
+              stamps={selectStamps(trip.stops)}
+              departure={trip.start}
+              onPicture={SHOW_TRIP_PICTURE}
+            />
           </div>
         </div>
         {trip.ready ? <StatusBadge status="ready">Ready</StatusBadge> : null}
@@ -648,6 +662,13 @@ export function TripScreen({ tripId, openAdd = false }: { tripId: string; openAd
       <div className="trip-layout">
         <div>
           <div className="packing-panel">
+            <AddItemInline
+              items={trip.items}
+              busy={submitting}
+              onAdd={addCustomItem}
+              onBathroom={(name, qty) => setDialog({ kind: "add-toiletry", name, qty })}
+              onEditExisting={(itemId) => setDialog({ kind: "edit", itemId })}
+            />
             <ListSection
               id="section-main"
               title="Everyday & occasion items"
@@ -788,13 +809,15 @@ export function TripScreen({ tripId, openAdd = false }: { tripId: string; openAd
       {dialog?.kind === "add-toiletry" ? (
         <AddToiletryForm
           destination={trip.destination}
+          initialName={dialog.name}
+          initialQty={dialog.qty}
           saving={submitting}
-          onClose={closeAdd}
+          onClose={close}
           onAdd={(item) =>
             void act(() => source.addToiletryItem(tripId, item), {
               modal: true,
               staples: item.scope === "remember",
-              after: closeAdd,
+              after: close,
             })
           }
         />

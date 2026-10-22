@@ -8,7 +8,8 @@ import { sampleLifecycleState } from "./fixtures";
 import { TripsDashboard } from "./TripsDashboard";
 import { createMemoryTripsSource, type TripsSource } from "./trips-source";
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
+const push = vi.fn();
+vi.mock("next/navigation", () => ({ usePathname: () => "/", useRouter: () => ({ push }) }));
 
 const TODAY = () => "2026-10-16";
 

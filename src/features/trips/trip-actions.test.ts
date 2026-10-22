@@ -21,6 +21,7 @@ vi.mock("next/navigation", () => ({
 
 import {
   acceptWeatherAction,
+  addItemAction,
   applyWeatherReviewAction,
   addToiletryItemAction,
   confirmBagPlacementAction,
@@ -497,5 +498,61 @@ describe("owner gate", () => {
     const read = await getTripAction(trip.id);
     if (!read.ok) throw new Error("expected ok");
     for (const id of ids) expect(read.trip.items.find((entry) => entry.id === id)!.packed).toBe(1);
+  });
+});
+
+describe("addItemAction (#147)", () => {
+  it("adds the item and returns the trip in the screen's shape", async () => {
+    const trip = await seedTrip(db(), OWNER.userId, { ready: true });
+    const result = await addItemAction(trip.id, { name: "Camera", category: "Tech", neededQty: 2 });
+    if (!result.ok) throw new Error(`expected ok, got ${result.code}`);
+    expect(result.trip.items.find((entry) => entry.name === "Camera")).toMatchObject({
+      category: "Tech",
+      qty: 2,
+      packed: 0,
+    });
+    expect(result.trip.ready).toBe(false);
+    expect(result.signals).toEqual({ promptBagPlacement: false, reviewPrompt: false });
+  });
+
+  it("says EXISTS, with nothing added, for an item that is already there", async () => {
+    const trip = await seedTrip(db(), OWNER.userId);
+    const item = { name: "Camera", category: "Tech", neededQty: 1 };
+    await addItemAction(trip.id, item);
+    expect(await addItemAction(trip.id, { ...item, name: " camera " })).toEqual({
+      ok: false,
+      code: "REJECTED",
+      reason: "EXISTS",
+    });
+  });
+
+  it("names the bad fields, and a missing or another owner's trip is NOT_FOUND, not an error page", async () => {
+    const trip = await seedTrip(db(), OWNER.userId);
+    expect(await addItemAction(trip.id, { name: "", category: "Nope", neededQty: 0 })).toEqual({
+      ok: false,
+      code: "INVALID_INPUT",
+      fields: expect.arrayContaining(["name", "category", "neededQty"]),
+    });
+    const ok = { name: "Camera", category: "Tech", neededQty: 1 };
+    expect(await addItemAction(MISSING, ok)).toEqual({ ok: false, code: "NOT_FOUND" });
+    as(OTHER_OWNER);
+    expect(await addItemAction(trip.id, ok)).toEqual({ ok: false, code: "NOT_FOUND" });
+  });
+
+  it("sends a signed-out caller to sign-in", async () => {
+    as(null);
+    await expect(
+      addItemAction(MISSING, { name: "Camera", category: "Tech", neededQty: 1 }),
+    ).rejects.toThrow("NEXT_REDIRECT:/sign-in");
+  });
+
+  it("fails without a data context", async () => {
+    current = null;
+    expect(
+      await addItemAction(MISSING, { name: "Camera", category: "Tech", neededQty: 1 }),
+    ).toEqual({
+      ok: false,
+      code: "INTERNAL",
+    });
   });
 });
