@@ -257,26 +257,42 @@ test.describe("narrow screens", DEVICE, () => {
   test("nothing scrolls sideways at 320px on the lists page, the editor, and the packing screen with its new sheets", async ({
     page,
   }) => {
+    // On a failure the message names the widest elements, so a CI-only difference (fonts, scrollbars) can be fixed from the log.
     const overflow = () =>
-      page.evaluate(
-        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-      );
+      page.evaluate(() => {
+        const over = document.documentElement.scrollWidth - document.documentElement.clientWidth;
+        if (over <= 0) return { over, offenders: "" };
+        const offenders = [...document.querySelectorAll("body *")]
+          .map((el) => ({ el, right: el.getBoundingClientRect().right }))
+          .filter((entry) => entry.right > document.documentElement.clientWidth + 0.5)
+          .slice(0, 8)
+          .map(
+            ({ el, right }) =>
+              `${el.tagName.toLowerCase()}.${String(el.className).slice(0, 40)} right=${Math.round(right)}`,
+          )
+          .join("; ");
+        return { over, offenders };
+      });
+    const expectNoSidewaysScroll = async (label: string) => {
+      const { over, offenders } = await overflow();
+      expect(over, `${label}: ${offenders}`).toBeLessThanOrEqual(0);
+    };
     await openLists(page);
-    expect(await overflow(), "lists page").toBeLessThanOrEqual(0);
+    await expectNoSidewaysScroll("lists page");
     await page.getByRole("link", { name: "Edit Beach week" }).click();
     await expect(page.getByRole("heading", { name: "Beach week", level: 1 })).toBeVisible();
-    expect(await overflow(), "list editor").toBeLessThanOrEqual(0);
+    await expectNoSidewaysScroll("list editor");
     await page.goto("/");
     await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
     await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
-    expect(await overflow(), "packing screen").toBeLessThanOrEqual(0);
+    await expectNoSidewaysScroll("packing screen");
     for (const [opener, dialog] of [
       ["Save as a list", "Save as a list"],
       ["Edit stamp", "Stamp label"],
     ]) {
       await page.getByRole("button", { name: opener }).click();
       await expect(page.getByRole("dialog", { name: dialog })).toBeVisible();
-      expect(await overflow(), dialog).toBeLessThanOrEqual(0);
+      await expectNoSidewaysScroll(dialog);
       await page.keyboard.press("Escape");
     }
   });
