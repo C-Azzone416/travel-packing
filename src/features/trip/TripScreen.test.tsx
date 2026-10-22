@@ -568,42 +568,6 @@ describe("toiletry bag gate", () => {
     expect(screen.queryByRole("heading", { name: "Toiletries" })).toBeNull();
   });
 
-  it("opens the Add a Bathroom item form on load when asked (the dashboard's + Add item)", async () => {
-    renderInApp(
-      <TripsSourceProvider source={memory()}>
-        <TripScreen tripId="san-diego" openAdd />
-      </TripsSourceProvider>,
-    );
-    expect(await screen.findByRole("dialog", { name: "Add a Bathroom item" })).toBeTruthy();
-  });
-
-  it("takes ?add=item out of the URL once the add form is closed or used", async () => {
-    window.history.replaceState(null, "", "/trips/san-diego?add=item");
-    const user = userEvent.setup();
-    const { unmount } = renderInApp(
-      <TripsSourceProvider source={memory()}>
-        <TripScreen tripId="san-diego" openAdd />
-      </TripsSourceProvider>,
-    );
-    const dialog = await screen.findByRole("dialog", { name: "Add a Bathroom item" });
-    expect(window.location.search).toBe("?add=item");
-    expect(dialog).toBeTruthy();
-    await user.keyboard("{Escape}");
-    expect(window.location.pathname + window.location.search).toBe("/trips/san-diego");
-    unmount();
-
-    window.history.replaceState(null, "", "/trips/san-diego?add=item");
-    renderInApp(
-      <TripsSourceProvider source={memory()}>
-        <TripScreen tripId="san-diego" openAdd />
-      </TripsSourceProvider>,
-    );
-    const second = await screen.findByRole("dialog", { name: "Add a Bathroom item" });
-    await user.type(within(second).getByLabelText("Item name"), "Floss");
-    await user.click(within(second).getByRole("button", { name: "Add toiletry item" }));
-    await waitFor(() => expect(window.location.search).toBe(""));
-  });
-
   it("adds a Bathroom item: validated, one normal checkbox, resetting an already placed bag", async () => {
     const { user, source } = setup("lisbon");
     await ready("Lisbon");
@@ -1658,4 +1622,90 @@ describe("the 'No longer ready' toast is for the change that revoked Ready, not 
     await within(row("tops")).findByRole("button", { name: "Pack all Everyday tops" });
     expect(screen.queryByText(/No longer ready/)).toBeNull();
   }, 20_000);
+});
+
+describe("inline ＋ Add item (#147)", () => {
+  const openForm = async (user: ReturnType<typeof userEvent.setup>) => {
+    await ready();
+    await user.click(screen.getByRole("button", { name: "＋ Add item" }));
+  };
+
+  it("adds an unpacked item of the chosen category and quantity, announces it, and folds the form away", async () => {
+    const { user, source } = setup();
+    await openForm(user);
+    await user.type(screen.getByRole("textbox", { name: "Item name" }), "Camera");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Category" }), "Tech");
+    await user.clear(screen.getByRole("spinbutton", { name: "Needed" }));
+    await user.type(screen.getByRole("spinbutton", { name: "Needed" }), "2");
+    await user.click(screen.getByRole("button", { name: "Add to list" }));
+    await waitFor(() => expect(screen.queryByRole("textbox", { name: "Item name" })).toBeNull());
+    const added = tripOf(source).items.find((entry) => entry.name === "Camera")!;
+    expect(added).toMatchObject({ category: "Tech", qty: 2, packed: 0, section: "main" });
+    expect(row(added.id)).toBeTruthy();
+    expect(live().textContent).toBe("Camera added to Tech.");
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "＋ Add item" }));
+  });
+
+  it("revokes Ready like every other item edit", async () => {
+    const { user, source } = setup("lisbon");
+    await ready("Lisbon");
+    expect(tripOf(source, "lisbon").ready).toBe(true);
+    await user.click(screen.getByRole("button", { name: "＋ Add item" }));
+    await user.type(screen.getByRole("textbox", { name: "Item name" }), "Camera");
+    await user.click(screen.getByRole("button", { name: "Add to list" }));
+    await waitFor(() => expect(tripOf(source, "lisbon").ready).toBe(false));
+  });
+
+  it("never doubles an item already on the list: says so, and Edit quantity opens that item's editor", async () => {
+    const { user, source } = setup();
+    await openForm(user);
+    const before = tripOf(source).items.length;
+    const sunglasses = tripOf(source).items.find((entry) => entry.id === "sunglasses")!;
+    await user.type(screen.getByRole("textbox", { name: "Item name" }), "  sunglasses ");
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Category" }),
+      sunglasses.category,
+    );
+    await user.click(screen.getByRole("button", { name: "Add to list" }));
+    expect(await screen.findByText(/Sunglasses is already on your list/)).toBeTruthy();
+    expect(tripOf(source).items).toHaveLength(before);
+    await user.click(screen.getByRole("button", { name: "Edit quantity" }));
+    const dialog = await screen.findByRole("dialog", { name: "Edit item" });
+    expect((within(dialog).getByLabelText("Item name") as HTMLInputElement).value).toBe(
+      "Sunglasses",
+    );
+  });
+
+  it("hands Bathroom to the Bathroom form with the name and quantity filled in", async () => {
+    const { user, source } = setup();
+    await openForm(user);
+    await user.type(screen.getByRole("textbox", { name: "Item name" }), "Floss");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Category" }), "Bathroom");
+    await user.clear(screen.getByRole("spinbutton", { name: "Needed" }));
+    await user.type(screen.getByRole("spinbutton", { name: "Needed" }), "2");
+    await user.click(screen.getByRole("button", { name: "Continue to Bathroom item" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add a Bathroom item" });
+    expect((within(dialog).getByLabelText("Item name") as HTMLInputElement).value).toBe("Floss");
+    expect((within(dialog).getByLabelText("Quantity") as HTMLInputElement).value).toBe("2");
+    expect(tripOf(source).items.some((entry) => entry.name === "Floss")).toBe(false);
+    await user.click(within(dialog).getByRole("button", { name: "Add toiletry item" }));
+    await waitFor(() =>
+      expect(tripOf(source).items.some((entry) => entry.name === "Floss")).toBe(true),
+    );
+  });
+
+  it("keeps the typed values and says nothing changed when the save fails", async () => {
+    const { user, source } = setup("san-diego", (base) => ({
+      ...base,
+      addItem: () => Promise.reject(new Error("down")),
+    }));
+    await openForm(user);
+    await user.type(screen.getByRole("textbox", { name: "Item name" }), "Camera");
+    await user.click(screen.getByRole("button", { name: "Add to list" }));
+    expect(await screen.findByText("Couldn’t add that item. Nothing was changed.")).toBeTruthy();
+    expect((screen.getByRole("textbox", { name: "Item name" }) as HTMLInputElement).value).toBe(
+      "Camera",
+    );
+    expect(tripOf(source).items.some((entry) => entry.name === "Camera")).toBe(false);
+  });
 });

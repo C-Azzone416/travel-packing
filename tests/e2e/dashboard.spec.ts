@@ -196,7 +196,7 @@ test(
 );
 
 // Field Ledger dashboard (#143): the hero, its actions and the dark header.
-test("the hero leads with the next departure; Add item opens the add form on the trip screen; Edit trip opens the route sheet", async ({
+test("the hero leads with the next departure; Edit trip opens the route sheet", async ({
   page,
 }) => {
   await openDashboard(page);
@@ -224,9 +224,6 @@ test("the hero leads with the next departure; Add item opens the add form on the
   await expect(page.getByRole("dialog", { name: "Edit route" })).toBeVisible();
   await page.getByRole("button", { name: "Cancel" }).click();
   await expect(page.getByRole("dialog", { name: "Edit route" })).toHaveCount(0);
-
-  await hero.getByRole("link", { name: "Add item: San Diego" }).click();
-  await expect(page.getByRole("dialog", { name: "Add a Bathroom item" })).toBeVisible();
 });
 
 test("no horizontal scroll at 390 and 1280, and the sidebar sits beside the hero only on wide screens", async ({
@@ -246,4 +243,76 @@ test("no horizontal scroll at 390 and 1280, and the sidebar sits beside the hero
     const later = await page.getByRole("complementary", { name: "Later journeys" }).boundingBox();
     expect(later!.x > hero!.x + hero!.width - 1).toBe(beside);
   }
+});
+
+// Generic add-item (#147): the hero's inline "＋ Add item".
+test("the hero's ＋ Add item adds an item inline, never doubles it, and hands Bathroom to its form", async ({
+  page,
+}) => {
+  await openDashboard(page);
+  const hero = card(page, "San Diego");
+  const toggle = hero.getByRole("button", { name: "＋ Add item" });
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(hero.getByRole("textbox")).toHaveCount(0);
+  const progress = () => hero.getByText(/of \d+ packed/).innerText();
+  const before = await progress();
+
+  await toggle.click();
+  for (const control of [
+    hero.getByRole("textbox", { name: "Item name" }),
+    hero.getByRole("combobox", { name: "Category" }),
+    hero.getByRole("spinbutton", { name: "Needed" }),
+    hero.getByRole("button", { name: "Add to list" }),
+  ]) {
+    expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(43.9);
+  }
+  await hero.getByRole("textbox", { name: "Item name" }).fill("Camera");
+  await hero.getByRole("combobox", { name: "Category" }).selectOption("Tech");
+  await hero.getByRole("spinbutton", { name: "Needed" }).fill("2");
+  await hero.getByRole("button", { name: "Add to list" }).click();
+  await expect(page.getByText("Camera added to Tech")).toBeVisible();
+  await expect(hero.getByRole("textbox")).toHaveCount(0);
+  expect(await progress()).not.toBe(before);
+
+  // It is stored: it is on the trip screen, once, after a reload.
+  await page.reload();
+  await hero.getByRole("link", { name: "Continue packing: San Diego" }).click();
+  await expect(page.locator("[data-item-id]").filter({ hasText: "Camera" })).toHaveCount(1);
+  await page.getByRole("link", { name: "All trips" }).click();
+
+  // The same item again is not added: the form says so and Edit quantity opens the trip screen.
+  await toggle.click();
+  await hero.getByRole("textbox", { name: "Item name" }).fill(" camera ");
+  await hero.getByRole("combobox", { name: "Category" }).selectOption("Tech");
+  await hero.getByRole("button", { name: "Add to list" }).click();
+  await expect(hero.getByText(/Camera is already on your list \(needed: 2\)/)).toBeVisible();
+  await hero.getByRole("button", { name: "Edit quantity" }).click();
+  await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
+  await page.getByRole("link", { name: "All trips" }).click();
+
+  // Bathroom hands off to the Bathroom form, filled in, right on the dashboard.
+  await toggle.click();
+  await hero.getByRole("textbox", { name: "Item name" }).fill("Floss");
+  await hero.getByRole("combobox", { name: "Category" }).selectOption("Bathroom");
+  await hero.getByRole("button", { name: "Continue to Bathroom item" }).click();
+  const bathroom = page.getByRole("dialog", { name: "Add a Bathroom item" });
+  await expect(bathroom.getByLabel("Item name")).toHaveValue("Floss");
+  await bathroom.getByRole("button", { name: "Add toiletry item" }).click();
+  await expect(page.getByText("Floss added to Bathroom")).toBeVisible();
+});
+
+test("the hero's ＋ Add item is keyboard operable and fits a phone", DEVICE, async ({ page }) => {
+  await openDashboard(page);
+  const hero = card(page, "San Diego");
+  await hero.getByRole("button", { name: "＋ Add item" }).focus();
+  await page.keyboard.press("Enter");
+  await expect(hero.getByRole("textbox", { name: "Item name" })).toBeFocused();
+  await page.keyboard.type("Charger cable");
+  await page.keyboard.press("Enter");
+  await expect(page.getByText("Charger cable added to Clothing")).toBeVisible();
+  await hero.getByRole("button", { name: "＋ Add item" }).click();
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow).toBeLessThanOrEqual(0);
 });

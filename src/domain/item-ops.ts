@@ -12,6 +12,7 @@ import {
 } from "./readiness";
 import { TOILETRY_GROUP_ID, toiletryItems } from "./toiletry-bag";
 import { niceAccessoryKey } from "./calc";
+import { duplicateKey } from "./saved-lists";
 import type { ItemSection, Scope, Staple, SuggestFn, Trip, TripConfig, TripItem } from "./trip";
 
 /** Ids the calculator owns; everything else on a trip is user-added or canonical (Pack last, return, ...). */
@@ -318,6 +319,81 @@ export function addToiletryItem<T extends Trip>(
     groupId: TOILETRY_GROUP_ID,
   };
   return accepted(added.trip, input.scope === "remember" ? [...staples, staple] : staples);
+}
+
+// ---------------------------------------------------------------- generic add-item (#147)
+
+/**
+ * The categories a person can add a custom item to. Bathroom items have their own flow (they gate bag placement),
+ * and "Pack last", "Return outfit" and "Weather suggestion" are timing or system groupings, not places to put things.
+ */
+export const ADDABLE_CATEGORIES = [
+  "Clothing",
+  "Nice attire",
+  "Tech",
+  "Other essentials",
+  "Accessories",
+] as const;
+export type AddableCategory = (typeof ADDABLE_CATEGORIES)[number];
+
+export const ADD_ITEM_NAME_MAX = 120;
+export const ADD_ITEM_QTY_MAX = 999;
+
+export interface AddItemInput {
+  /** Caller-chosen unique id for the new item. */
+  id: string;
+  name: string;
+  category: string;
+  neededQty: number;
+}
+
+export type AddItemRejection = "EMPTY_NAME" | "NAME_TOO_LONG" | "INVALID_CATEGORY" | "INVALID_QTY";
+
+export type AddItemResult<T> =
+  | { ok: true; trip: T; item: TripItem }
+  /** The trip already has this item (same normalised name and category). Nothing was added; edit its quantity instead. */
+  | { ok: false; reason: "EXISTS"; existing: TripItem; trip: T }
+  | { ok: false; reason: AddItemRejection | "DUPLICATE_ID"; trip: T };
+
+/** The trip's item with this normalised name and category, if any (the rule #141's saved lists use). */
+export function findExistingItem(
+  trip: Pick<Trip, "items">,
+  name: string,
+  category: string,
+): TripItem | null {
+  const key = duplicateKey(name, category);
+  return trip.items.find((item) => duplicateKey(item.name, item.category) === key) ?? null;
+}
+
+/**
+ * Add a custom item to a trip: unpacked, in the "main" timing, for this trip only (no staple is touched). Always
+ * revokes Ready, like every other item edit. An item that is already there is never added twice: the result is a
+ * typed EXISTS with the item that matches, so the UI can offer to edit its quantity.
+ */
+export function addCustomItem<T extends Trip>(trip: T, input: AddItemInput): AddItemResult<T> {
+  const name = input.name.trim().replace(/\s+/g, " ");
+  if (!name) return { ok: false, reason: "EMPTY_NAME", trip };
+  if (name.length > ADD_ITEM_NAME_MAX) return { ok: false, reason: "NAME_TOO_LONG", trip };
+  if (!(ADDABLE_CATEGORIES as readonly string[]).includes(input.category)) {
+    return { ok: false, reason: "INVALID_CATEGORY", trip };
+  }
+  const qty = input.neededQty;
+  if (!Number.isInteger(qty) || qty < 1 || qty > ADD_ITEM_QTY_MAX) {
+    return { ok: false, reason: "INVALID_QTY", trip };
+  }
+  const existing = findExistingItem(trip, name, input.category);
+  if (existing) return { ok: false, reason: "EXISTS", existing, trip };
+  const item: TripItem = {
+    id: input.id,
+    name,
+    category: input.category,
+    qty,
+    packed: 0,
+    section: "main",
+  };
+  const added = addItem(trip, item);
+  if (!added.ok) return { ok: false, reason: "DUPLICATE_ID", trip };
+  return { ok: true, trip: added.trip, item };
 }
 
 /**

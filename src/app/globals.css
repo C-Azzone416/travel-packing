@@ -2901,18 +2901,6 @@ a.back {
   flex-wrap: wrap;
   gap: 8px;
 }
-.add-item-form {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 12px;
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid var(--line);
-}
-.add-item-form .field {
-  flex: 1 1 220px;
-}
 .ledger-hero .quick-view {
   margin-top: 16px;
 }
@@ -3050,7 +3038,8 @@ a.back {
   .ledger-actions > .button:first-child {
     flex: 1 1 100%;
   }
-  .ledger-actions > .button:not(:first-child) {
+  .ledger-actions > .button:not(:first-child),
+  .ledger-actions .add-item.hero > .button {
     flex: 1 1 0;
     min-width: 0;
   }
@@ -3424,4 +3413,63 @@ a.back {
 }
 .back-link span {
   margin-right: 6px;
+}
+
+/* ---- Inline "＋ Add item" on the packing screen (#147). 44px controls; stacks on phones. */
+.add-item {
+  margin: 16px 0 0;
+}
+.add-item-form {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 0.8fr);
+  align-items: start;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--control-radius);
+  background: var(--surface);
+}
+.add-item-form input,
+.add-item-form select {
+  min-height: 44px;
+}
+.add-item-actions,
+.add-item-note,
+.add-item-exists {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+.add-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.add-item-exists {
+  padding: 10px 12px;
+  border-left: 4px solid var(--warn);
+  background: var(--status-remaining-bg);
+  color: var(--status-remaining-text);
+}
+.add-item-exists .link-button {
+  min-height: 44px;
+  padding-inline: 8px;
+  font-weight: 700;
+}
+@media (max-width: 720px) {
+  .add-item-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .add-item .button {
+    width: 100%;
+  }
+}
+
+/* The hero's inline "＋ Add item" (#147): the wrapper dissolves so the toggle is one of the action buttons; the form is
+   drawn into .add-item-host, a full-width row under the hero's stats and actions. */
+.add-item.hero {
+  display: contents;
+}
+.add-item-host:not(:empty) {
+  margin-top: 16px;
 }

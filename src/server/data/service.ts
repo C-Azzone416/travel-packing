@@ -6,6 +6,7 @@ import type { ZodType } from "zod";
 import { calculateSuggestions, normalizeTripDates, packingDays, tripDays } from "../../domain/calc";
 import {
   acceptWeather,
+  addCustomItem,
   addToiletryItem,
   editItem,
   recalculateSuggestions,
@@ -214,6 +215,34 @@ export function addToiletryItemToTrip(context: DataContext, input: unknown) {
       }),
     ),
   );
+}
+
+/**
+ * Add a custom item of any addable category to one of the owner's trips (#147). An item that is already there is
+ * REJECTED with reason EXISTS (nothing is saved), a bad category or quantity is INVALID_INPUT with the field names,
+ * and another owner's trip id is NOT_FOUND.
+ */
+export function addItemToTrip(context: DataContext, input: unknown) {
+  return mutateTrip(context, inputs.addItemInput, input, (trip, request) => {
+    const added = addCustomItem(trip, {
+      id: `custom-${crypto.randomUUID()}`,
+      name: request.name,
+      category: request.category,
+      neededQty: request.neededQty,
+    });
+    if (!added.ok) {
+      const invalid: Record<string, string> = {
+        EMPTY_NAME: "name",
+        NAME_TOO_LONG: "name",
+        INVALID_CATEGORY: "category",
+        INVALID_QTY: "neededQty",
+      };
+      const field = invalid[added.reason];
+      if (field) refuse(fail("INVALID_INPUT", { fields: [field] }));
+      refuse(fail("REJECTED", { reason: added.reason }));
+    }
+    return { trip: added.trip };
+  });
 }
 
 export function updateTripPreferences(context: DataContext, input: unknown) {
