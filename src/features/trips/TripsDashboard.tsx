@@ -17,6 +17,7 @@ import {
 import { localToday } from "@/lib/today";
 import { AddToiletryForm } from "@/features/trip/AddToiletryForm";
 import { EditRouteSheet } from "@/features/trip/EditRouteSheet";
+import { editItemHref } from "@/features/trip/edit-link";
 import { LaterJourneys } from "./LaterJourneys";
 import { NextDeparture, type HeroWeather } from "./NextDeparture";
 import { TripCard } from "./TripCard";
@@ -374,7 +375,7 @@ export function TripsDashboard({ source, getToday = localToday }: TripsDashboard
                 }}
                 onAddItem={(item) => addItem(hero.id, item)}
                 onBathroom={(name, qty) => setBathroom({ tripId: hero.id, name, qty })}
-                onEditExisting={() => router.push(`/trips/${hero.id}`)}
+                onEditExisting={(itemId) => router.push(editItemHref(hero.id, itemId))}
                 onArchive={archive}
                 onRemove={setRemoving}
               />
