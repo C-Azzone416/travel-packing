@@ -41,15 +41,15 @@ const isAction = (request: { method(): string; url(): string }) =>
 test("a check and an uncheck are stored", async ({ page }) => {
   await openSanDiego(page);
   await row(page, "tops").getByRole("button", { name: "Pack all Everyday tops" }).click();
-  await expect(row(page, "tops")).toContainText("2/2");
+  await expect(row(page, "tops")).toContainText("2 of 2 packed");
   await page.reload();
-  await expect(row(page, "tops")).toContainText("2/2");
+  await expect(row(page, "tops")).toContainText("2 of 2 packed");
   await row(page, "tops")
     .getByRole("button", { name: "Packed, mark Everyday tops unpacked" })
     .click();
-  await expect(row(page, "tops")).toContainText("0/2");
+  await expect(row(page, "tops")).toContainText("0 of 2 packed");
   await page.reload();
-  await expect(row(page, "tops")).toContainText("0/2");
+  await expect(row(page, "tops")).toContainText("0 of 2 packed");
 });
 
 test("fast taps on a stepper show at once and are stored as ONE write with the final count", async ({
@@ -61,18 +61,18 @@ test("fast taps on a stepper show at once and are stored as ONE write with the f
     if (isAction(request)) writes.push(request.url());
   });
   const up = row(page, "socks").getByRole("button", { name: "Increase packed Socks" });
-  await expect(row(page, "socks")).toContainText("1/4");
+  await expect(row(page, "socks")).toContainText("1 of 4 packed");
   await up.click();
   await up.click();
   await up.click();
   // The tapped count is on screen before anything has been sent.
-  await expect(row(page, "socks")).toContainText("4/4");
+  await expect(row(page, "socks")).toContainText("4 of 4 packed");
   expect(writes).toHaveLength(0);
   await expect.poll(() => writes.length).toBe(1);
   await page.waitForTimeout(600);
   expect(writes).toHaveLength(1);
   await page.reload();
-  await expect(row(page, "socks")).toContainText("4/4");
+  await expect(row(page, "socks")).toContainText("4 of 4 packed");
 });
 
 test("the toiletry bag gate and its placement are stored", async ({ page }) => {
@@ -171,7 +171,7 @@ test("when the network fails the row says 'Not saved · Retry', keeps the user's
   const retryBox = (await retry.boundingBox())!;
   expect(retryBox.height).toBeGreaterThanOrEqual(43.9);
   expect(retryBox.width).toBeGreaterThanOrEqual(43.9);
-  await expect(socks).toContainText("3/4");
+  await expect(socks).toContainText("3 of 4 packed");
   await expect(page.getByRole("button", { name: "Not saved, retry" })).toBeVisible();
   await page.screenshot({
     path: `test-results/screenshots/${testInfo.project.name}-trip-not-saved.png`,
@@ -182,7 +182,7 @@ test("when the network fails the row says 'Not saved · Retry', keeps the user's
   await expect(retry).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Saved" })).toBeVisible();
   await page.reload();
-  await expect(row(page, "socks")).toContainText("3/4");
+  await expect(row(page, "socks")).toContainText("3 of 4 packed");
 });
 
 test("another signed-in owner cannot open this owner's trip, and sees the same page as for a missing one", async ({
@@ -204,7 +204,7 @@ test("another signed-in owner cannot open this owner's trip, and sees the same p
 });
 
 const headerArt = (page: Page) =>
-  page.locator(".destination-trip-head [data-art-key]").getAttribute("data-art-key");
+  page.locator(".trip-hero [data-art-key]").getAttribute("data-art-key");
 
 test(
   "changing the theme from the trip header is stored, and the dashboard card shows it",
@@ -213,22 +213,17 @@ test(
     await page.emulateMedia({ reducedMotion: "reduce" });
     await openSanDiego(page);
     expect(await headerArt(page)).toBe("beach");
-    // Placement (#155, audit 23): Edit route and Change theme sit side by side inside the copy panel at both sizes.
+    // Placement (#155): Edit route and Change theme sit side by side in the hero card, under the title.
     const button = page.getByRole("button", { name: "Change theme" });
-    const panel = (await page.locator(".destination-head-copy").boundingBox())!;
+    const hero = (await page.locator(".trip-hero").boundingBox())!;
     const at = (await button.boundingBox())!;
     expect(at.height).toBeGreaterThanOrEqual(43.9);
-    const inside =
-      at.x >= panel.x &&
-      at.x + at.width <= panel.x + panel.width &&
-      at.y >= panel.y &&
-      at.y + at.height <= panel.y + panel.height;
-    expect(inside, testInfo.project.name).toBe(true);
-    if (testInfo.project.name === "phone") {
-      const head = (await page.locator(".destination-trip-head").boundingBox())!;
-      // The copy panel leaves at least a third of the header for the picture.
-      expect(panel.height).toBeLessThan(head.height * 0.67);
-    }
+    expect(at.x).toBeGreaterThanOrEqual(hero.x);
+    expect(at.x + at.width).toBeLessThanOrEqual(hero.x + hero.width);
+    const edit = (await page.getByRole("button", { name: "Edit route" }).boundingBox())!;
+    expect(Math.abs(edit.y - at.y)).toBeLessThan(2);
+    // The theme picture is an optional layer that is off for now: the saved theme is still on the page, just hidden.
+    await expect(page.locator(".trip-hero .hero-picture")).toBeHidden();
     await button.click();
     const sheet = page.getByRole("dialog", { name: "Change theme" });
     await expect(sheet.getByRole("radio", { name: "Beach" })).toBeChecked();
@@ -266,7 +261,7 @@ test(
 
     await page.reload();
     expect(await headerArt(page)).toBe("outdoors");
-    await page.getByRole("link", { name: "Back to trips" }).click();
+    await page.getByRole("link", { name: "All trips" }).click();
     await expect(page.getByRole("article", { name: "San Diego" })).toBeVisible();
   },
 );

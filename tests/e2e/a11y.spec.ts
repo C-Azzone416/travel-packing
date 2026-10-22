@@ -340,7 +340,7 @@ test.describe("narrow screens and large text", DEVICE, () => {
     await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
     expect(await overflow(), "trip screen").toBeLessThanOrEqual(0);
     await expectAccessible(page, "trip screen at 320px");
-    await page.getByRole("link", { name: "Back to trips" }).click();
+    await page.getByRole("link", { name: "All trips" }).click();
     await page
       .getByRole("navigation", { name: "Primary navigation" })
       .getByRole("link", { name: "Settings" })

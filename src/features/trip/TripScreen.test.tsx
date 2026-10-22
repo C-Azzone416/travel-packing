@@ -138,8 +138,8 @@ describe("loading and states", () => {
     await act(async () => gate.resolve());
     expect(await ready()).toBeTruthy();
     expect(screen.getByText("California, United States · Oct 23 – Oct 27 · 5 days")).toBeTruthy();
-    expect(screen.getByText("Packing", { selector: ".status-pill" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Back to trips" }).getAttribute("href")).toBe("/");
+    expect(screen.queryByText("Ready", { selector: ".status-pill" })).toBeNull();
+    expect(screen.getByRole("link", { name: "All trips" }).getAttribute("href")).toBe("/");
     const bar = screen.getByRole("progressbar", { name: "Packing progress" });
     expect(bar.getAttribute("aria-valuenow")).toBe("20");
     expect(bar.getAttribute("aria-valuetext")).toBe("20% packed");
@@ -153,7 +153,9 @@ describe("loading and states", () => {
       screen.getByText(/^(Leaves in \d+ days|Leaves tomorrow|Leaves today|Under way)$/),
     ).toBeTruthy();
     expect(screen.getByRole("img", { name: /departure stamp$|route stamps$/ })).toBeTruthy();
-    expect(screen.getByText(/^\d+ of \d+ packed( \/ \d+ left)?$/)).toBeTruthy();
+    expect(
+      screen.getByText(/^\d+ of \d+ packed( \/ \d+ left)?$/, { selector: ".progress-line" }),
+    ).toBeTruthy();
     const panel = screen.getByRole("navigation", { name: "Packing sections" });
     const main = within(panel).getByRole("link", { name: /Everyday & occasion/ });
     expect(main.getAttribute("href")).toBe("#block-main");
@@ -325,7 +327,7 @@ describe("packing", () => {
     await user.click(up());
     // The tapped count shows at once, before anything is sent.
     expect(live().textContent).toBe("Underwear 3 of 4 packed");
-    expect(within(underwear).getByText("3/4")).toBeTruthy();
+    expect(within(underwear).getByText("3 of 4 packed")).toBeTruthy();
     await user.click(up());
     expect(up().getAttribute("aria-disabled")).toBe("true");
     await user.click(up());
@@ -334,7 +336,7 @@ describe("packing", () => {
     expect(down().getAttribute("aria-disabled")).toBe("true");
     await user.click(down());
     await waitFor(() => expect(itemOf(source, "underwear").packed).toBe(0));
-    expect(within(underwear).getByText("0/4")).toBeTruthy();
+    expect(within(underwear).getByText("0 of 4 packed")).toBeTruthy();
   });
 
   it("sends ONE write per item with the final count after the taps settle", async () => {
@@ -351,7 +353,7 @@ describe("packing", () => {
     for (let n = 0; n < 3; n++)
       await user.click(within(socks).getByRole("button", { name: "Increase packed Socks" }));
     expect(setPacked).not.toHaveBeenCalled();
-    expect(within(socks).getByText("4/4")).toBeTruthy();
+    expect(within(socks).getByText("4 of 4 packed")).toBeTruthy();
     await waitFor(() => expect(itemOf(source, "socks").packed).toBe(4));
     expect(setPacked).toHaveBeenCalledTimes(1);
     expect(setPacked).toHaveBeenCalledWith("socks", 4);
@@ -375,13 +377,13 @@ describe("packing", () => {
     await waitFor(() => expect(calls).toEqual([2]));
     // A tap during the first write: shown at once, not sent in parallel.
     await user.click(up());
-    expect(within(socks).getByText("3/4")).toBeTruthy();
+    expect(within(socks).getByText("3 of 4 packed")).toBeTruthy();
     await new Promise((resolve) => setTimeout(resolve, 450));
     expect(calls).toEqual([2]);
     await act(async () => gate.resolve());
     await waitFor(() => expect(calls).toEqual([2, 3]));
     await waitFor(() => expect(itemOf(source, "socks").packed).toBe(3));
-    expect(within(socks).getByText("3/4")).toBeTruthy();
+    expect(within(socks).getByText("3 of 4 packed")).toBeTruthy();
   });
 
   it("a check or uncheck is sent at once, not after a pause", async () => {
@@ -418,7 +420,7 @@ describe("packing", () => {
     expect(screen.getByRole("button", { name: "Not saved, retry" })).toBeTruthy();
     // The row keeps showing what the user did, and nothing was stored.
     expect(itemOf(source, "tops").packed).toBe(1);
-    expect(within(row("tops")).getByText("2/2")).toBeTruthy();
+    expect(within(row("tops")).getByText("2 of 2 packed")).toBeTruthy();
     fail = false;
     await user.click(within(row("tops")).getByRole("button", { name: "Not saved · Retry" }));
     await waitFor(() => expect(itemOf(source, "tops").packed).toBe(2));
@@ -484,7 +486,7 @@ describe("packing", () => {
     const review = await screen.findByRole("link", { name: "Review your bag" });
     expect(review.getAttribute("href")).toBe("/trips/san-diego/review");
     expect(tripOf(source).ready).toBe(false);
-    expect(screen.getByText("Packing", { selector: ".status-pill" })).toBeTruthy();
+    expect(screen.queryByText("Ready", { selector: ".status-pill" })).toBeNull();
     expect(screen.queryByText("You’re ready to go.")).toBeNull();
   });
 });
@@ -1192,7 +1194,7 @@ describe("dialog submits wait for the source", () => {
 
 describe("changing the theme", () => {
   const artKey = () =>
-    document.querySelector(".destination-trip-head [data-art-key]")?.getAttribute("data-art-key");
+    document.querySelector(".trip-hero [data-art-key]")?.getAttribute("data-art-key");
   const changeButton = () => screen.getByRole("button", { name: "Change theme" });
 
   it("opens a sheet with the current theme selected, Save and Cancel, and no other controls changed", async () => {
@@ -1464,7 +1466,9 @@ describe("accessible names of a packing row", () => {
   it("the packed count is readable, not hidden: '1 of 2 packed'", async () => {
     setup();
     await ready();
-    expect(within(row("tops")).getByRole("img", { name: "1 of 2 packed" }).textContent).toBe("1/2");
+    expect(within(row("tops")).getByRole("img", { name: "1 of 2 packed" }).textContent).toBe(
+      "1 of 2 packed",
+    );
   });
 });
 
@@ -1619,7 +1623,7 @@ describe("Ready is never revoked silently", () => {
     );
     expect(await screen.findByText("No longer ready: an item was unchecked")).toBeTruthy();
     expect(tripOf(source, "lisbon").ready).toBe(false);
-    expect(screen.getByText("Packing", { selector: ".status-pill" })).toBeTruthy();
+    expect(screen.queryByText("Ready", { selector: ".status-pill" })).toBeNull();
   });
 
   it("says nothing when a change leaves the trip as it was", async () => {
