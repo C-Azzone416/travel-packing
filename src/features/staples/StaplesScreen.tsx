@@ -7,6 +7,7 @@ import { useToast } from "@/components/ui/Toast";
 import type { Staple } from "@/domain/trip";
 import { useTripsSource } from "@/features/trips/TripsSourceProvider";
 import { StapleEditor } from "./StapleEditor";
+import { StaplesTabs } from "./StaplesTabs";
 import {
   countLabel,
   groupStaples,
@@ -90,11 +91,13 @@ export function StaplesScreen() {
       ) : null}
     </div>
   );
+  const tabs = <StaplesTabs current="staples" />;
 
   if (load.phase === "loading") {
     return (
       <section className="screen" aria-busy="true" aria-label="Loading staples">
         {head}
+        {tabs}
         <div className="staples-shell">
           {[0, 1, 2, 3].map((row) => (
             <div className="skeleton-row" key={row} aria-hidden="true" />
@@ -108,6 +111,7 @@ export function StaplesScreen() {
     return (
       <section className="screen">
         {head}
+        {tabs}
         <div className="empty-state">
           <strong>Couldn’t load your staples.</strong>
           <p className="muted">Nothing was changed.</p>
@@ -130,6 +134,7 @@ export function StaplesScreen() {
   return (
     <section className="screen">
       {head}
+      {tabs}
       <p className="sr-only" role="status" aria-label="Staples updates">
         {announcement}
       </p>

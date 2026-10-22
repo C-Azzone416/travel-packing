@@ -61,6 +61,30 @@ export const addItemInput = z.object({
   category: z.enum(ADDABLE_CATEGORIES),
   neededQty: qty,
 });
+// ---------------------------------------------------------------- saved lists (#167)
+const savedListId = z.uuid();
+const savedListName = z.string().trim().min(1).max(60);
+const savedListItemName = z.string().trim().min(1).max(120);
+const savedListQty = z.number().int().min(1).max(999);
+export const savedListOnly = z.object({ listId: savedListId });
+export const renameSavedListInput = z.object({ listId: savedListId, name: savedListName });
+export const addSavedListItemInput = z.object({
+  listId: savedListId,
+  name: savedListItemName,
+  category: z.enum(ITEM_CATEGORIES),
+  qty: savedListQty,
+});
+export const updateSavedListItemInput = z.object({
+  listId: savedListId,
+  itemId: z.string().min(1).max(100),
+  name: savedListItemName,
+  category: z.enum(ITEM_CATEGORIES),
+  qty: savedListQty,
+});
+export const removeSavedListItemInput = z.object({
+  listId: savedListId,
+  itemId: z.string().min(1).max(100),
+});
 export const updatePreferencesInput = z.object({ tripId, config: tripConfig });
 
 /**
