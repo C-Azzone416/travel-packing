@@ -37,6 +37,8 @@ const actions = vi.hoisted(() => {
     }),
     fetchTripWeather: vi.fn().mockResolvedValue({ kind: "ready", stops: [] }),
     previewWeatherAction: vi.fn().mockResolvedValue({ kind: "ready", stops: [] }),
+    listSavedListsAction: vi.fn().mockResolvedValue({ ok: true, lists: [{ id: "l1" }] }),
+    getSavedListAction: vi.fn().mockResolvedValue({ ok: true, list: { id: "l1", items: [] } }),
     commands: Object.fromEntries(
       [
         "setPackedAction",
@@ -78,6 +80,10 @@ vi.mock("./trip-actions", () => ({
 vi.mock("@/features/settings/weather-actions", () => ({
   getWeatherSettingsAction: actions.getWeatherSettingsAction,
   updateWeatherSettingsAction: actions.updateWeatherSettingsAction,
+}));
+vi.mock("../staples/saved-list-actions", () => ({
+  listSavedListsAction: actions.listSavedListsAction,
+  getSavedListAction: actions.getSavedListAction,
 }));
 vi.mock("./weather-client", () => ({ fetchTripWeather: actions.fetchTripWeather }));
 vi.mock("./weather-preview-action", () => ({
@@ -309,6 +315,22 @@ describe("TripsSourceProvider", () => {
       ]);
     });
 
+    it("reads the owner's saved lists through the list and get actions, and turns a refusal into an error (#170)", async () => {
+      let captured!: TripsSource;
+      render(
+        <TripsSourceProvider>
+          <Capture onSource={(source) => (captured = source)} />
+        </TripsSourceProvider>,
+      );
+      expect(await captured.savedLists!.list()).toEqual([{ id: "l1" }]);
+      expect(await captured.savedLists!.get("l1")).toEqual({ id: "l1", items: [] });
+      expect(actions.getSavedListAction).toHaveBeenCalledWith("l1");
+      actions.listSavedListsAction.mockResolvedValueOnce({ ok: false, code: "INTERNAL" });
+      await expect(captured.savedLists!.list()).rejects.toThrow("INTERNAL");
+      actions.getSavedListAction.mockResolvedValueOnce({ ok: false, code: "NOT_FOUND" });
+      await expect(captured.savedLists!.get("other")).rejects.toThrow("NOT_FOUND");
+    });
+
     it("covers every method of the port", () => {
       let captured!: TripsSource;
       render(
@@ -316,7 +338,7 @@ describe("TripsSourceProvider", () => {
           <Capture onSource={(source) => (captured = source)} />
         </TripsSourceProvider>,
       );
-      expect([...WIRING.map(([name]) => name), "weather"].sort()).toEqual(
+      expect([...WIRING.map(([name]) => name), "weather", "savedLists"].sort()).toEqual(
         Object.keys(captured).sort(),
       );
     });

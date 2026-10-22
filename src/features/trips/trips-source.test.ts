@@ -3,6 +3,7 @@ import { LOCATIONS } from "@/domain/locations";
 import { classifyTrip, startCopyDraft, startDraft } from "@/domain/trip-lifecycle";
 import { DEFAULT_TRIP_CONFIG } from "./draft";
 import { sampleLifecycleState } from "./fixtures";
+import type { SavedListDetail } from "@/server/data/service";
 import { createMemoryTripsSource, TripsSourceError } from "./trips-source";
 
 function setup(now = 1_000) {
@@ -424,5 +425,84 @@ describe("per-trip commands", () => {
     expect(changed.items.find((entry) => entry.id === "underwear")?.packed).toBe(underwear);
     expect(changed.ready).toBe(false);
     await expect(source.updatePreferences("nope", next)).rejects.toThrow("NOT_FOUND");
+  });
+});
+
+describe("saved lists in the memory source (#170)", () => {
+  const BEACH: SavedListDetail = {
+    id: "beach",
+    name: "Beach week",
+    updatedAt: "2026-10-12T10:00:00.000Z",
+    items: [
+      { id: "a", name: "Towel", category: "Other essentials", qty: 2 },
+      { id: "b", name: "Sunscreen", category: "Bathroom", qty: 1 },
+    ],
+  };
+  const EMPTY: SavedListDetail = {
+    id: "empty",
+    name: "Empty",
+    updatedAt: "2026-10-01T10:00:00.000Z",
+    items: [],
+  };
+  const draftFor = (extra: object = {}) => ({
+    ...startDraft(DEFAULT_TRIP_CONFIG, "2026-11-12", "2026-11-16"),
+    location: LOCATIONS[0],
+    ...extra,
+  });
+
+  function listSetup(lists?: readonly SavedListDetail[]) {
+    let counter = 0;
+    return createMemoryTripsSource(sampleLifecycleState(), {
+      now: () => 1,
+      newId: () => `new-${++counter}`,
+      today: () => "2026-10-16",
+      ...(lists ? { savedLists: lists } : {}),
+    });
+  }
+
+  it("has no savedLists capability unless given lists", () => {
+    expect(listSetup().savedLists).toBeUndefined();
+    expect(listSetup([BEACH]).savedLists).toBeDefined();
+  });
+
+  it("lists summaries (count, categories) and gets one list, NOT_FOUND for an unknown id", async () => {
+    const source = listSetup([BEACH, EMPTY]);
+    const summaries = await source.savedLists!.list();
+    expect(summaries.map((entry) => [entry.id, entry.itemCount])).toEqual([
+      ["beach", 2],
+      ["empty", 0],
+    ]);
+    expect(summaries[0].categories).toEqual([
+      { category: "Bathroom", count: 1 },
+      { category: "Other essentials", count: 1 },
+    ]);
+    expect((await source.savedLists!.get("beach")).items).toHaveLength(2);
+    await expect(source.savedLists!.get("nope")).rejects.toThrow("NOT_FOUND");
+  });
+
+  it("creates a trip from exactly the list's items, unpacked, Bathroom in the toiletries group", async () => {
+    const source = listSetup([BEACH]);
+    const trip = await source.createTrip(draftFor({ savedListId: "beach" }));
+    expect(trip.items.map((item) => [item.name, item.qty, item.packed])).toEqual([
+      ["Towel", 2, 0],
+      ["Sunscreen", 1, 0],
+    ]);
+    expect(trip.items[1].groupId).toBe("toiletry-bag");
+  });
+
+  it("refuses an unknown list (NOT_FOUND) and an empty one (INVALID_INPUT), creating nothing", async () => {
+    const source = listSetup([BEACH, EMPTY]);
+    const before = source.snapshot().trips.length;
+    await expect(source.createTrip(draftFor({ savedListId: "nope" }))).rejects.toThrow("NOT_FOUND");
+    await expect(source.createTrip(draftFor({ savedListId: "empty" }))).rejects.toThrow(
+      "INVALID_INPUT",
+    );
+    expect(source.snapshot().trips).toHaveLength(before);
+  });
+
+  it("creates the usual staples trip when the draft names no list", async () => {
+    const source = listSetup([BEACH]);
+    const trip = await source.createTrip(draftFor());
+    expect(trip.items.some((item) => item.id === "socks")).toBe(true);
   });
 });
