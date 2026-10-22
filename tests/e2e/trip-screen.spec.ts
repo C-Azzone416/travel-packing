@@ -52,7 +52,7 @@ test("shows the trip with progress, and the All / Still to pack filter", async (
     "aria-valuenow",
     "20",
   );
-  await expect(page.getByText("Packing", { exact: true })).toBeVisible();
+  await expect(page.locator(".trip-hero > .status-pill")).toHaveCount(0);
   await expect(row(page, "sleepwear")).toBeVisible();
   await page.getByRole("button", { name: "Still to pack" }).click();
   await expect(page.getByRole("button", { name: "Still to pack" })).toHaveAttribute(
@@ -81,9 +81,9 @@ test("check and uncheck, and partial quantities with announcements and limits", 
   ).toBeVisible();
 
   const underwear = row(page, "underwear");
-  await expect(underwear).toContainText("2/4");
+  await expect(underwear).toContainText("2 of 4 packed");
   await underwear.getByRole("button", { name: "Increase packed Underwear" }).click();
-  await expect(underwear).toContainText("3/4");
+  await expect(underwear).toContainText("3 of 4 packed");
   await expect(status(page)).toHaveText("Underwear 3 of 4 packed");
   await underwear.getByRole("button", { name: "Increase packed Underwear" }).click();
   await expect(
@@ -91,13 +91,13 @@ test("check and uncheck, and partial quantities with announcements and limits", 
   ).toHaveAttribute("aria-disabled", "true");
   // At the limit the button stays focusable but a press does nothing (Playwright treats aria-disabled as not clickable).
   await underwear.getByRole("button", { name: "Increase packed Underwear" }).click({ force: true });
-  await expect(underwear).toContainText("4/4");
+  await expect(underwear).toContainText("4 of 4 packed");
   for (let n = 0; n < 4; n++)
     await underwear.getByRole("button", { name: "Decrease packed Underwear" }).click();
   await expect(
     underwear.getByRole("button", { name: "Decrease packed Underwear" }),
   ).toHaveAttribute("aria-disabled", "true");
-  await expect(underwear).toContainText("0/4");
+  await expect(underwear).toContainText("0 of 4 packed");
 });
 
 test("the toiletry bag walks every state: waiting, ready to place, in the suitcase, undo, and invalidation", async ({
@@ -173,7 +173,7 @@ test("completing the last item only reveals Review your bag; it never marks the 
   const review = page.getByRole("link", { name: "Review your bag" });
   await expect(review).toBeVisible();
   await expect(review).toHaveAttribute("href", /^\/trips\/[0-9a-f-]{36}\/review$/);
-  await expect(page.getByText("Packing", { exact: true })).toBeVisible();
+  await expect(page.locator(".trip-hero > .status-pill")).toHaveCount(0);
   await expect(page.getByText("You’re ready to go.")).toHaveCount(0);
 });
 
@@ -190,7 +190,7 @@ test("a trip-only edit leaves the staples alone: a new trip still has the defaul
   await dialog.getByRole("button", { name: "Save item" }).click();
   await expect(row(page, "sunglasses")).toContainText("Beach sunglasses");
 
-  await page.getByRole("link", { name: "Back to trips" }).click();
+  await page.getByRole("link", { name: "All trips" }).click();
   await page.getByRole("link", { name: /Plan a trip/ }).click();
   await page.getByRole("combobox", { name: "Destination search" }).fill("paris");
   await page.getByRole("option", { name: /Paris/ }).click();
@@ -217,14 +217,14 @@ test("a remembered edit changes future trips, but neither this trip's history no
   await expect(row(page, "sunglasses")).toContainText("Polarized sunglasses");
 
   // Another existing trip keeps its history.
-  await page.getByRole("link", { name: "Back to trips" }).click();
+  await page.getByRole("link", { name: "All trips" }).click();
   await page.getByRole("button", { name: /Past & archive/ }).click();
   await page.getByRole("link", { name: "Review bag: Lisbon" }).click();
   await expect(row(page, "sunglasses")).toContainText("Sunglasses");
   await expect(row(page, "sunglasses")).not.toContainText("Polarized");
 
   // A trip made afterwards gets the remembered version.
-  await page.getByRole("link", { name: "Back to trips" }).click();
+  await page.getByRole("link", { name: "All trips" }).click();
   await page.getByRole("link", { name: /Plan a trip/ }).click();
   await page.getByRole("combobox", { name: "Destination search" }).fill("paris");
   await page.getByRole("option", { name: /Paris/ }).click();
@@ -309,7 +309,7 @@ test("editing preferences recalculates the list and revokes Ready", async ({ pag
   await dialog.getByRole("switch", { name: "Laundry access" }).uncheck();
   await dialog.getByRole("button", { name: "Update this trip" }).click();
   await expect(page.getByText("You’re ready to go.")).toHaveCount(0);
-  await expect(page.getByText("Packing", { exact: true })).toBeVisible();
+  await expect(page.locator(".trip-hero > .status-pill")).toHaveCount(0);
 });
 
 test("Mark as not ready keeps every packed count", async ({ page }) => {
@@ -361,7 +361,7 @@ test(
     }
     await underwear.getByRole("button", { name: "Increase packed Underwear" }).focus();
     await page.keyboard.press("Enter");
-    await expect(underwear).toContainText("3/4");
+    await expect(underwear).toContainText("3 of 4 packed");
     await underwear.getByRole("button", { name: /^Underwear / }).focus();
     await page.keyboard.press("Enter");
     const dialog = page.getByRole("dialog", { name: "Edit item" });
@@ -467,7 +467,7 @@ test("ledger packing screen: stamp, sections panel, no overflow, and a completed
   await openSanDiego(page);
   await expect(page.getByRole("img", { name: /departure stamp$|route stamps$/ })).toBeVisible();
   await expect(page.getByText(/^Leaves in \d+ days$/)).toBeVisible();
-  await expect(page.getByText(/^\d+ of \d+ packed/)).toBeVisible();
+  await expect(page.locator(".progress-line")).toContainText(/\d+ of \d+ packed/);
 
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth > document.documentElement.clientWidth,

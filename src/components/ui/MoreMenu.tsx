@@ -1,7 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
 
 export type MoreMenuItem =
   | { key: string; label: string; onSelect: () => void; danger?: boolean }
@@ -43,11 +51,22 @@ export function MoreMenu({ subject, items, variant = "ghost", disabled = false }
     if (returnFocus) button.current?.focus();
   }, []);
 
-  // Open upward when there is no room below the button.
+  // Open upward when there is no room below the button. "Below" ends at the top of the bottom tab bar on a phone
+  // (it is fixed over the page), not at the window edge; when neither side fits, the panel scrolls.
   useEffect(() => {
     if (!open || !panel.current || !button.current) return;
-    const below = window.innerHeight - button.current.getBoundingClientRect().bottom;
-    setUp(below < panel.current.offsetHeight + 8);
+    const box = button.current.getBoundingClientRect();
+    const tabBar = document.querySelector<HTMLElement>(".bottom-nav");
+    const floor =
+      tabBar && getComputedStyle(tabBar).position === "fixed"
+        ? tabBar.getBoundingClientRect().top
+        : window.innerHeight;
+    const below = floor - box.bottom - 8;
+    const above = box.top - 8;
+    const height = panel.current.scrollHeight;
+    const flip = below < height && above > below;
+    setUp(flip);
+    panel.current.style.maxHeight = `${Math.max(120, Math.floor(flip ? above : below))}px`;
   }, [open]);
 
   // A click outside closes without stealing focus.
