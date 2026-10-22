@@ -206,6 +206,20 @@ describe("the Start from a saved list step", () => {
     expect(await screen.findByText(/Couldn’t load this list\. Nothing was changed\./)).toBeTruthy();
   });
 
+  it("shows Preview items as a text button inside its list's card, not a separate bordered button", async () => {
+    const { user } = setup({ lists: [BEACH] });
+    await toStartStep(user);
+    const toggle = screen.getByRole("button", { name: "Preview items in Beach week" });
+    expect(toggle.closest(".start-entry")).toBe(
+      screen.getByRole("radio", { name: /Beach week/ }).closest(".start-entry"),
+    );
+    expect(toggle.className).toBe("start-preview-toggle");
+    await user.click(toggle);
+    expect(
+      screen.getByRole("region", { name: "Items in Beach week" }).closest(".start-entry"),
+    ).toBe(toggle.closest(".start-entry"));
+  });
+
   it("an empty list cannot be chosen and says why", async () => {
     const { user } = setup({ lists: [WORK, EMPTY] });
     await toStartStep(user);
@@ -279,6 +293,26 @@ describe("a trip that starts from a list", () => {
     expect(screen.getByRole("region", { name: "Bathroom" })).toBeTruthy();
     expect(screen.getByRole("region", { name: "Tech" })).toBeTruthy();
     expect(screen.getByText(/Not on your dashboard yet/)).toBeTruthy();
+  });
+
+  it("uses the neutral secondary style for Edit trip details, Change starting point and Cancel draft; only Save trip is primary", async () => {
+    const { user } = setup({ lists: [BEACH] });
+    await toReview(user);
+    for (const name of ["Edit trip details", "Change starting point", "Cancel draft"]) {
+      const button = screen.getByRole("button", { name });
+      expect(button.className, name).toContain("secondary");
+      expect(button.className, name).not.toContain("ghost");
+    }
+    const save = screen.getByRole("button", { name: "Save trip" });
+    expect(save.className).not.toMatch(/secondary|ghost/);
+  });
+
+  it("keeps the review's two cards in one spaced stack", async () => {
+    const { user } = setup({ lists: [BEACH] });
+    await toReview(user);
+    const stack = document.querySelector(".list-shape") as HTMLElement;
+    expect(stack.children).toHaveLength(2);
+    expect(stack.querySelectorAll(".card")).toHaveLength(2);
   });
 
   it("saves the list's items only: copies, all unpacked, Bathroom in the toiletries group, no staples", async () => {

@@ -113,6 +113,27 @@ describe("createTrip with a saved list", () => {
     ).toEqual([2, 1]);
   });
 
+  it("puts a Toiletries row (made with the Bathroom form) in the toiletries group, like a Bathroom row, so the bag sees it", async () => {
+    const list = await createSavedList(db(), OWNER.userId, {
+      name: "Bag",
+      items: [
+        { id: "razor", name: "Razor", category: "Toiletries", qty: 1 },
+        { id: "shampoo", name: "Shampoo", category: "Bathroom", qty: 1 },
+        { id: "hat", name: "Sun hat", category: "Accessories", qty: 1 },
+      ],
+    });
+    const created = data(await service.createTrip(context(), { ...trip, savedListId: list.id }));
+    const group = (name: string) => created.items.find((item) => item.name === name)?.groupId;
+    expect(group("Razor")).toBe("toiletry-bag");
+    expect(group("Shampoo")).toBe("toiletry-bag");
+    expect(group("Sun hat")).toBeUndefined();
+    // And it survives a reload from the database, which is where the bag is read from.
+    const reloaded = data(await service.getTrip(context(), { tripId: created.id }));
+    expect(
+      reloaded.items.filter((item) => item.groupId === "toiletry-bag").map((item) => item.name),
+    ).toEqual(["Razor", "Shampoo"]);
+  });
+
   it("is a copy: editing or deleting the list later never changes the trip, and two trips from one list are independent", async () => {
     const list = await createSavedList(db(), OWNER.userId, beach);
     const first = data(await service.createTrip(context(), { ...trip, savedListId: list.id }));

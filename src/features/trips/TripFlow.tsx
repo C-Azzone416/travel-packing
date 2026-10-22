@@ -670,26 +670,28 @@ function ListShape({
         `${where} · ${formatRange(draft)} · ${formatDays(days)}`,
         `Starting from “${list.name}”`,
       )}
-      <ListReview list={list} />
-      <Card padded>
-        <div className="callout">
-          <strong>Not on your dashboard yet.</strong> Review the list, then use Save trip.
-        </div>
-        <div className="actions">
-          <Button disabled={saving} aria-busy={saving} onClick={onSave}>
-            {saving ? "Saving…" : "Save trip"}
-          </Button>
-          <Button variant="secondary" disabled={saving} onClick={onBack}>
-            Edit trip details
-          </Button>
-          <Button variant="ghost" disabled={saving} onClick={onChange}>
-            Change starting point
-          </Button>
-          <Button variant="ghost" disabled={saving} onClick={onCancel}>
-            Cancel draft
-          </Button>
-        </div>
-      </Card>
+      <div className="list-shape">
+        <ListReview list={list} />
+        <Card padded>
+          <div className="callout">
+            <strong>Not on your dashboard yet.</strong> Review the list, then use Save trip.
+          </div>
+          <div className="actions">
+            <Button disabled={saving} aria-busy={saving} onClick={onSave}>
+              {saving ? "Saving…" : "Save trip"}
+            </Button>
+            <Button variant="secondary" disabled={saving} onClick={onBack}>
+              Edit trip details
+            </Button>
+            <Button variant="secondary" disabled={saving} onClick={onChange}>
+              Change starting point
+            </Button>
+            <Button variant="secondary" disabled={saving} onClick={onCancel}>
+              Cancel draft
+            </Button>
+          </div>
+        </Card>
+      </div>
     </>
   );
 }

@@ -97,8 +97,12 @@ export function applySavedLists(
 
 // ---------------------------------------------------------------- starting a trip from one list (#170)
 
-/** The Bathroom items of a trip live in the toiletries group, like the staples and the Bathroom form make them. */
-export const isBathroomCategory = (category: string): boolean => category === "Bathroom";
+/**
+ * Rows that belong in the toiletries group (the bag). The category is "Bathroom" for staples and recommendations and
+ * "Toiletries" for an item made with the Bathroom form, so a list can hold either; both go in the bag.
+ */
+export const isBathroomCategory = (category: string): boolean =>
+  category === "Bathroom" || category === "Toiletries";
 
 /**
  * The items a new trip gets from one saved list: a copy of every row, packed = 0, in the list's order, with fresh ids

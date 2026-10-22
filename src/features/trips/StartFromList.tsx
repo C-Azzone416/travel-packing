@@ -61,29 +61,31 @@ export function StartFromList({
   return (
     <Card padded>
       <div className="start-options" role="radiogroup" aria-label="Starting point">
-        <label className="start-option">
-          <input
-            type="radio"
-            name={group}
-            checked={chosenId === null}
-            onChange={() => onChoose(null)}
-          />
-          <span className="start-copy">
-            <strong>No saved list</strong>
-            <span>Staples plus recommendations for this trip’s length.</span>
-            <span>The usual starting point.</span>
-          </span>
-          <span className="start-check" aria-hidden="true">
-            ✓
-          </span>
-        </label>
+        <div className="start-entry">
+          <label className="start-option">
+            <input
+              type="radio"
+              name={group}
+              checked={chosenId === null}
+              onChange={() => onChoose(null)}
+            />
+            <span className="start-copy">
+              <strong>No saved list</strong>
+              <span>Staples plus recommendations for this trip’s length.</span>
+              <span>The usual starting point.</span>
+            </span>
+            <span className="start-check" aria-hidden="true">
+              ✓
+            </span>
+          </label>
+        </div>
         {lists.map((list) => {
           const empty = list.itemCount === 0;
           const preview = previews[list.id];
           const panel = `${group}-items-${list.id}`;
           return (
-            <div key={list.id} className="start-entry">
-              <label className="start-option" data-empty={empty ? "true" : undefined}>
+            <div key={list.id} className="start-entry" data-empty={empty ? "true" : undefined}>
+              <label className="start-option">
                 <input
                   type="radio"
                   name={group}
@@ -103,15 +105,15 @@ export function StartFromList({
                 </span>
               </label>
               {empty ? null : (
-                <Button
-                  variant="ghost"
-                  small
+                <button
+                  type="button"
+                  className="start-preview-toggle"
                   aria-expanded={open === list.id}
                   aria-controls={panel}
                   onClick={() => togglePreview(list.id)}
                 >
                   Preview items <span className="sr-only">in {list.name}</span>
-                </Button>
+                </button>
               )}
               {open === list.id ? (
                 <div

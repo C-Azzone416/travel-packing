@@ -170,6 +170,26 @@ describe("tripItemsFromList (#170)", () => {
     expect(isBathroomCategory("Clothing")).toBe(false);
   });
 
+  it("puts a Toiletries row in the bag too: an item made with the Bathroom form is stored as Toiletries", () => {
+    const items = tripItemsFromList(
+      list("l", [
+        ["a", "Razor", "Toiletries", 1],
+        ["b", "Shampoo", "Bathroom", 1],
+        ["c", "Hat", "Accessories", 1],
+        ["d", "Floss", "toiletries", 1],
+      ]),
+    );
+    expect(items.map((item) => [item.name, item.groupId === TOILETRY_GROUP_ID])).toEqual([
+      ["Razor", true],
+      ["Shampoo", true],
+      ["Hat", false],
+      // Categories are exact names: a different spelling is not guessed at.
+      ["Floss", false],
+    ]);
+    expect(isBathroomCategory("Toiletries")).toBe(true);
+    expect(isBathroomCategory("Toiletry")).toBe(false);
+  });
+
   it("is a copy: changing the list afterwards cannot reach the items already made", () => {
     const source = list("l", [["a", "Hat", "Accessories", 1]]);
     const items = tripItemsFromList(source);

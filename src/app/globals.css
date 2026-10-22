@@ -3685,58 +3685,56 @@ a.back {
 }
 
 /* Create flow: Start from a saved list (#170, #140 spec §2). Single-select option cards like the theme options; role
-   tokens only; one column, 720px at most. */
+   tokens only; one column, 720px at most. The card is the .start-entry: the radio label, then the Preview items text
+   button and the preview, all inside it. */
 .start-options {
   display: grid;
   gap: 12px;
   max-width: 720px;
 }
 .start-entry {
-  display: grid;
-  gap: 4px;
-  justify-items: start;
-}
-.start-option {
   position: relative;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  min-height: 72px;
-  padding: 12px 16px;
+  display: grid;
   border: 1px solid var(--line-strong);
   border-radius: var(--control-radius);
   background: var(--control-bg);
   color: var(--ink);
-  cursor: pointer;
 }
-.start-option:hover {
+.start-entry:hover {
   background: var(--selection-surface);
+}
+.start-entry:has(input:checked) {
+  border: 2px solid var(--accent);
+  background: var(--selection-surface);
+}
+.start-entry:has(input:focus-visible) {
+  outline: 3px solid var(--accent-2);
+  outline-offset: 3px;
+}
+.start-entry[data-empty="true"] {
+  background: var(--track);
+  color: var(--muted);
+}
+.start-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 72px;
+  padding: 12px 16px;
+  cursor: pointer;
 }
 .start-option input {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
   margin: 0;
   opacity: 0;
   cursor: pointer;
 }
-.start-option:has(input:checked) {
-  border: 2px solid var(--accent);
-  padding: 11px 15px;
-  background: var(--selection-surface);
-}
-.start-option:has(input:focus-visible) {
-  outline: 3px solid var(--accent-2);
-  outline-offset: 3px;
-}
-.start-option[data-empty="true"] {
-  background: var(--track);
-  color: var(--muted);
-  cursor: not-allowed;
-}
-.start-option[data-empty="true"] input {
+.start-entry[data-empty="true"] .start-option,
+.start-entry[data-empty="true"] input {
   cursor: not-allowed;
 }
 .start-copy {
@@ -3759,17 +3757,33 @@ a.back {
   color: var(--accent);
   font-weight: 800;
 }
-.start-option:has(input:checked) .start-check {
+.start-entry:has(input:checked) .start-check {
   display: block;
 }
+/* A quiet text button inside the card (above the radio's click area), still a 44px target. */
+.start-preview-toggle {
+  position: relative;
+  z-index: 1;
+  justify-self: start;
+  min-height: 44px;
+  margin: -8px 0 0 16px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--link);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
 .start-preview {
-  width: 100%;
+  position: relative;
+  z-index: 1;
   max-height: 240px;
+  margin: 0 16px 12px;
   overflow-y: auto;
-  padding: 4px 16px;
-  border: 1px solid var(--line);
-  border-radius: var(--control-radius);
-  background: var(--surface);
+  border-top: 1px solid var(--line);
 }
 .start-preview ul {
   margin: 0;
@@ -3797,7 +3811,20 @@ a.back {
   margin-top: 16px;
   max-width: 720px;
 }
+/* Review your list: the two cards sit apart, and the category headings are the 29px group headings. */
+.list-shape {
+  display: grid;
+  gap: 16px;
+}
 .list-review h3 {
-  margin: 16px 0 4px;
-  font-size: 16px;
+  margin: 24px 0 4px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line-strong);
+  font-family: var(--font-display), var(--font-body), sans-serif;
+  font-size: 29px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.list-review > section:first-child h3 {
+  margin-top: 12px;
 }
