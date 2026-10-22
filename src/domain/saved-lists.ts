@@ -93,3 +93,43 @@ export function applySavedLists(
   }
   return { planned, duplicates };
 }
+
+// ---------------------------------------------------------------- managing lists (#167)
+
+/** A list's name is compared case-, accent- and space-insensitively when checking it is unique per owner. */
+export function listNameTaken(
+  lists: readonly Pick<SavedList, "id" | "name">[],
+  name: string,
+  exceptId: string | null = null,
+): boolean {
+  const wanted = normaliseName(name);
+  return lists.some((list) => list.id !== exceptId && normaliseName(list.name) === wanted);
+}
+
+/** The other item in this list with the same normalised name and category, if there is one. */
+export function findListItemDuplicate(
+  items: readonly SavedListItem[],
+  name: string,
+  category: string,
+  exceptId: string | null = null,
+): SavedListItem | null {
+  const key = duplicateKey(name, category);
+  return (
+    items.find((item) => item.id !== exceptId && duplicateKey(item.name, item.category) === key) ??
+    null
+  );
+}
+
+export interface CategoryCount {
+  category: string;
+  count: number;
+}
+
+/** "Clothing 12 · Bathroom 7": the categories a list holds, biggest first (ties by name). */
+export function categoryCounts(items: readonly SavedListItem[]): CategoryCount[] {
+  const counts = new Map<string, number>();
+  for (const item of items) counts.set(item.category, (counts.get(item.category) ?? 0) + 1);
+  return [...counts]
+    .map(([category, count]) => ({ category, count }))
+    .sort((a, b) => b.count - a.count || a.category.localeCompare(b.category));
+}

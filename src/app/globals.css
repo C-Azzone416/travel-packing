@@ -3473,3 +3473,100 @@ a.back {
 .add-item-host:not(:empty) {
   margin-top: 16px;
 }
+
+/* ---- Saved lists (#167, design §3/§4). Role tokens only. */
+.staples-tabs a {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: -1px;
+  border-bottom: 3px solid transparent;
+  padding: 0 2px;
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.staples-tabs a.active {
+  border-bottom-color: var(--accent);
+  color: var(--ink);
+}
+.saved-lists {
+  display: grid;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.saved-list-card {
+  padding: 16px 20px 12px;
+  border: 1px solid var(--line);
+  border-top: 4px solid var(--line-strong);
+  background: var(--surface);
+}
+@media (min-width: 721px) {
+  .saved-list-card {
+    border-top-width: 1px;
+    border-left: 4px solid var(--accent);
+  }
+}
+.saved-list-card h2 {
+  margin: 0 0 4px;
+  font-family: var(--font-display), var(--font-body), sans-serif;
+  font-size: 24px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+.saved-list-meta,
+.saved-list-categories {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.saved-list-categories {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.saved-list-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin-top: 12px;
+}
+.danger-text {
+  color: var(--danger);
+}
+.saved-list-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+.saved-list-toolbar p {
+  margin: 0;
+}
+
+/* Saved lists pages share the Staples column (760px), and so does the tab switcher above the Staples list. */
+.saved-list-page,
+.staples-tabs {
+  max-width: 760px;
+  margin-inline: auto;
+}
+.staples-tabs {
+  margin-bottom: 16px;
+}
+.saved-list-page .staples-page-head {
+  margin-inline: 0;
+}
+.list-item-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 66px;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--line);
+}
+.list-item-row .staple-name {
+  flex: 1;
+}

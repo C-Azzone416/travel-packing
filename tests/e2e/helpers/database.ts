@@ -19,6 +19,8 @@ export async function resetOwnerData(ownerId: string): Promise<void> {
   try {
     const db = drizzle(pool, { schema }) as unknown as Db;
     await db.delete(schema.trips).where(eq(schema.trips.ownerId, ownerId));
+    // Saved lists (#167) start empty for every test too.
+    await db.delete(schema.savedLists).where(eq(schema.savedLists.ownerId, ownerId));
     // Weather starts opted out, in Fahrenheit, and the theme unchosen (Base), for every test (both live on the user).
     await db
       .update(schema.users)
@@ -39,6 +41,45 @@ export async function markTripReady(ownerId: string, destination: string): Promi
       .update(schema.trips)
       .set({ ready: true })
       .where(and(eq(schema.trips.ownerId, ownerId), eq(schema.trips.destination, destination)));
+  } finally {
+    await pool.end();
+  }
+}
+
+export interface SeedListItem {
+  id: string;
+  name: string;
+  category: (typeof schema.ITEM_CATEGORIES)[number];
+  qty: number;
+}
+
+/** Put one saved list (with its items) in the owner's account, as if it had been saved from a trip (#167). */
+export async function seedSavedList(
+  ownerId: string,
+  name: string,
+  items: SeedListItem[],
+): Promise<string> {
+  const pool = new Pool({ connectionString: E2E_DATABASE_URL, max: 1 });
+  try {
+    const db = drizzle(pool, { schema }) as unknown as Db;
+    const [row] = await db
+      .insert(schema.savedLists)
+      .values({ ownerId, name })
+      .returning({ id: schema.savedLists.id });
+    if (items.length > 0) {
+      await db.insert(schema.savedListItems).values(
+        items.map((item, index) => ({
+          listId: row.id,
+          ownerId,
+          semanticId: item.id,
+          name: item.name,
+          category: item.category,
+          qty: item.qty,
+          sortOrder: index,
+        })),
+      );
+    }
+    return row.id;
   } finally {
     await pool.end();
   }
