@@ -32,6 +32,20 @@ export async function resetOwnerData(ownerId: string): Promise<void> {
   }
 }
 
+/**
+ * Choose the owner's theme on the account directly, as if they had picked it on Settings (which is covered by settings.spec).
+ * The Settings screen shows the account's theme, so a spec that wants a theme there needs this and not only the cookie.
+ */
+export async function setOwnerAppearance(ownerId: string, appearance: string): Promise<void> {
+  const pool = new Pool({ connectionString: E2E_DATABASE_URL, max: 1 });
+  try {
+    const db = drizzle(pool, { schema }) as unknown as Db;
+    await db.update(schema.users).set({ appearance }).where(eq(schema.users.id, ownerId));
+  } finally {
+    await pool.end();
+  }
+}
+
 /** Mark one of the owner's trips Ready directly (the weather review revokes it; getting there by packing is slow). */
 export async function markTripReady(ownerId: string, destination: string): Promise<void> {
   const pool = new Pool({ connectionString: E2E_DATABASE_URL, max: 1 });
