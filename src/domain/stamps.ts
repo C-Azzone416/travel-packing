@@ -1,62 +1,64 @@
-// Which route stamps to show for a trip (#144, spec §5). Pure; never infers a country from a city name.
+// Which route stamps to show for a trip (#144 spec §5, #157). Pure. Every label is exactly three characters: an airport
+// IATA code or a country alpha-3 code. A label is never invented and never derived from a city name.
 
 import { alpha3For } from "./iso-alpha3";
 import type { TripStop } from "./trip-stops";
 
 export interface StampSpec {
-  /** "airport" looks like a country code (FRA, AUS), so it is marked apart in the rendering and the accessible label. */
-  kind: "country" | "city" | "airport";
-  /** Text on the stamp: an alpha-3 code, an airport code, or the uppercased city name cut to 9 characters and an ellipsis. */
+  /**
+   * country: a route stamp (alpha-3 of a country on the route).
+   * airport: the largest airport serving the first stop; its code can equal a country's (FRA, AUS), so it is marked
+   * apart in the rendering and the accessible label.
+   * place: the first stop has no airport, so its country's alpha-3 stands in; it renders like a country stamp.
+   */
+  kind: "country" | "airport" | "place";
+  /** Exactly three characters. */
   label: string;
-  /** Untruncated name or code, for the accessible label. */
-  fullName: string;
-  /** The city as the person entered it (airport stamps only), for "LIS airport, Lisbon, departure stamp". */
+  /** The first stop's city as entered, for "LIS airport, Lisbon, departure stamp" (airport and place stamps). */
   cityName?: string;
 }
 
-export const MAX_CITY_LABEL = 9;
-
-function cityStamp(stop: TripStop | undefined): StampSpec {
-  const name = (stop?.location.city ?? "").trim();
-  const full = name.toUpperCase();
-  // A reliably matched airport code (#152) replaces the city name on the stamp; the name stays in the accessible label.
-  if (stop?.airportCode && /^[A-Z]{3}$/.test(stop.airportCode))
-    return { kind: "airport", label: stop.airportCode, fullName: full, cityName: name };
-  const label = full.length > MAX_CITY_LABEL ? `${full.slice(0, MAX_CITY_LABEL)}…` : full;
-  return { kind: "city", label, fullName: full };
-}
-
 function countryStamp(code: string): StampSpec {
-  return { kind: "country", label: code, fullName: code };
+  return { kind: "country", label: code };
 }
+
+/** The stamp for a trip's first stop: its airport code, else its country's alpha-3, else nothing. */
+function firstStopStamp(stop: TripStop | undefined): StampSpec | null {
+  if (!stop) return null;
+  const cityName = stop.location.city.trim();
+  if (stop.airportCode && /^[A-Z]{3}$/.test(stop.airportCode))
+    return { kind: "airport", label: stop.airportCode, cityName };
+  const code = alpha3For(stop.location.countryCode);
+  return code ? { kind: "place", label: code, cityName } : null;
+}
+
+const fallback = (stop: TripStop | undefined): StampSpec[] => {
+  const stamp = firstStopStamp(stop);
+  return stamp ? [stamp] : [];
+};
 
 const cityKey = (stop: TripStop) => stop.location.city.trim().toLowerCase();
-
-/** Font size step for a stamp label: up to 5 characters, 6–7, then 8–9 (spec §5.4). */
-export function stampLabelSize(label: string): "large" | "medium" | "small" {
-  const length = label.replace("…", "").length;
-  return length <= 5 ? "large" : length <= 7 ? "medium" : "small";
-}
 
 export function selectStamps(stops: readonly TripStop[]): StampSpec[] {
   const first = stops[0];
   if (stops.length < 2 || stops.every((stop) => cityKey(stop) === cityKey(first))) {
-    return [cityStamp(first)];
+    return fallback(first);
   }
   const codes: string[] = [];
   for (const stop of stops) {
     const code = alpha3For(stop.location.countryCode);
-    if (!code) return [cityStamp(first)];
+    if (!code) return fallback(first);
     if (!codes.includes(code)) codes.push(code);
   }
-  return codes.length === 1 || codes.length === 2 ? codes.map(countryStamp) : [cityStamp(first)];
+  return codes.length === 1 || codes.length === 2 ? codes.map(countryStamp) : fallback(first);
 }
 
-/** "PRT, ESP route stamps", "LISBON departure stamp" or "LIS airport, Lisbon, departure stamp". */
+/** "PRT, ESP route stamps", "LIS airport, Lisbon, departure stamp" or "CHE, Zermatt, departure stamp". */
 export function stampsAriaLabel(stamps: readonly StampSpec[]): string {
-  if (stamps[0]?.kind === "country")
-    return `${stamps.map((s) => s.fullName).join(", ")} route stamps`;
-  if (stamps[0]?.kind === "airport")
-    return `${stamps[0].label} airport, ${stamps[0].cityName ?? stamps[0].fullName}, departure stamp`;
-  return `${stamps[0]?.fullName ?? ""} departure stamp`;
+  const first = stamps[0];
+  if (!first) return "";
+  if (first.kind === "country") return `${stamps.map((s) => s.label).join(", ")} route stamps`;
+  const place = first.cityName ? `, ${first.cityName}` : "";
+  if (first.kind === "airport") return `${first.label} airport${place}, departure stamp`;
+  return `${first.label}${place}, departure stamp`;
 }
