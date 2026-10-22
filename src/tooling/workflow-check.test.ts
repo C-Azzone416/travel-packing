@@ -59,10 +59,9 @@ describe("unpinnedActions", () => {
 
 /** The real workflow with the injection step moved to after the env check (wrong order). */
 function movedInjection(): string {
-  const block =
-    /( {6}# Preview only\. `vercel pull`[\s\S]*?inject-preview-secrets\.ts[^\n]*\n\n)/.exec(
-      deploy,
-    )?.[1];
+  const block = /( {6}# `vercel pull`[\s\S]*?inject-deploy-secrets\.ts[^\n]*\n\n)/.exec(
+    deploy,
+  )?.[1];
   expect(block).toBeTruthy();
   const anchor = "      # `vercel build` works";
   expect(deploy).toContain(anchor);
@@ -158,24 +157,19 @@ describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
     [
       "no secret injection step",
       mutate(
-        / {6}- name: Inject the Preview secrets[\s\S]*?inject-preview-secrets\.ts[^\n]*\n\n/,
+        / {6}- name: Inject deployment secrets[\s\S]*?inject-deploy-secrets\.ts[^\n]*\n\n/,
         "",
       ),
       /injection step is missing/,
     ],
     ["the injection after the env check", movedInjection(), /after vercel pull and before/],
     [
-      "an unconditional injection",
-      mutate(/(- name: Inject the Preview secrets[^\n]*\n)\s+if: env\.TARGET == 'preview'\n/, "$1"),
-      /injection must run only when TARGET is preview/,
-    ],
-    [
-      "an injection for production too",
+      "an injection restricted to Preview",
       mutate(
-        /(- name: Inject the Preview secrets[^\n]*\n\s+if: )env\.TARGET == 'preview'/,
-        "$1always()",
+        /(- name: Inject deployment secrets[^\n]*\n)/,
+        "$1        if: env.TARGET == 'preview'\n",
       ),
-      /injection must run only when TARGET is preview/,
+      /must run for both Preview and Production/,
     ],
     [
       "an injected value from a variable",
@@ -428,16 +422,16 @@ describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
     [
       "an extra command beside the injection script",
       mutate(
-        'run: npx tsx scripts/inject-preview-secrets.ts ".vercel/.env.${TARGET}.local"',
-        'run: npx tsx scripts/inject-preview-secrets.ts ".vercel/.env.${TARGET}.local" && env',
+        'run: npx tsx scripts/inject-deploy-secrets.ts ".vercel/.env.${TARGET}.local"',
+        'run: npx tsx scripts/inject-deploy-secrets.ts ".vercel/.env.${TARGET}.local" && env',
       ),
       /exactly the injection script/,
     ],
     [
       "the injection script run on a different file",
       mutate(
-        'inject-preview-secrets.ts ".vercel/.env.${TARGET}.local"',
-        "inject-preview-secrets.ts other.env",
+        'inject-deploy-secrets.ts ".vercel/.env.${TARGET}.local"',
+        "inject-deploy-secrets.ts other.env",
       ),
       /exactly the injection script/,
     ],
