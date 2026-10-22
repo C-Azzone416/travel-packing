@@ -552,6 +552,48 @@ describe("the trip store", () => {
     ]);
   });
 
+  it("derives an airport code for a provider stop with one airport nearby, and none for a curated or ambiguous stop (#152)", async () => {
+    await seedOwner(db(), OWNER.userId);
+    const porto = makeStoredTrip({
+      stops: [],
+      place: {
+        provider: "open-meteo",
+        placeId: "9",
+        region: "Porto",
+        country: "Portugal",
+        countryCode: "PT",
+        latitude: 41.15,
+        longitude: -8.61,
+        timezone: "Europe/Lisbon",
+      },
+    });
+    await insertTrip(db(), OWNER.userId, porto);
+    expect((await loadTrip(db(), OWNER.userId, porto.id))?.stops[0].airportCode).toBe("OPO");
+
+    const paris = makeStoredTrip({
+      stops: [],
+      place: {
+        provider: "open-meteo",
+        placeId: "10",
+        region: "Île-de-France",
+        country: "France",
+        countryCode: "FR",
+        latitude: 48.86,
+        longitude: 2.35,
+        timezone: "Europe/Paris",
+      },
+    });
+    await insertTrip(db(), OWNER.userId, paris);
+    expect(await loadTrip(db(), OWNER.userId, paris.id)).toMatchObject({
+      stops: [expect.not.objectContaining({ airportCode: expect.anything() })],
+    });
+
+    const curated = makeStoredTrip({ stops: [], place: null });
+    await insertTrip(db(), OWNER.userId, curated);
+    const stop = (await loadTrip(db(), OWNER.userId, curated.id))?.stops[0];
+    expect(stop && "airportCode" in stop).toBe(false);
+  });
+
   it("a trip with no place at all still gets one stop (city from the title)", async () => {
     await seedOwner(db(), OWNER.userId);
     const trip = makeStoredTrip({ stops: [], locationId: null, locationLabel: null });

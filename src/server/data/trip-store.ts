@@ -14,6 +14,7 @@ import {
 } from "../../domain/trip-stops";
 import type { Db } from "../db/retention";
 import * as schema from "../db/schema";
+import { airportCodeFor } from "../airports/airport-code";
 import { ITEM_CATEGORIES } from "../db/schema";
 import { fail } from "./result";
 import { refuse } from "./run";
@@ -199,7 +200,17 @@ function toStop(row: StopRow): TripStop {
     }
     if (row.timezone !== null) location.timezone = row.timezone;
   }
-  return { location, arrive: row.arriveDate, leave: row.leaveDate };
+  const airportCode = airportCodeFor({
+    latitude: location.latitude,
+    longitude: location.longitude,
+    countryCode: location.countryCode,
+  });
+  return {
+    location,
+    arrive: row.arriveDate,
+    leave: row.leaveDate,
+    ...(airportCode ? { airportCode } : {}),
+  };
 }
 
 function stopValues(ownerId: string, tripId: string, stop: TripStop, position: number) {
