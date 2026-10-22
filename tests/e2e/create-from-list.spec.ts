@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { ownerEmailFor, signInAsOwner } from "./helpers/auth";
 import { seedSavedList } from "./helpers/database";
 import { DEVICE } from "./helpers/device";
+import { chooseFromMenu } from "./helpers/menu";
 
 // Create flow: Start from a saved list (#170), against the real database. A chosen list REPLACES staples and the
 // length-based recommendations; none chosen is today's flow; a copy never offers the step.
@@ -82,7 +83,8 @@ test("with saved lists: choose one, review it, and the new trip is exactly the l
   await expect(page.getByText("Socks", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Underwear", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Toiletries" })).toBeVisible();
-  await expect(page.getByText("0 of 6 packed / 6 left")).toBeVisible();
+  // 6 units plus the toiletry bag, which counts as one more step.
+  await expect(page.getByText("0 of 7 packed / 7 left")).toBeVisible();
 });
 
 test("with saved lists but none chosen: today's Shape the list, staples and recommendations", async ({
@@ -97,7 +99,7 @@ test("with saved lists but none chosen: today's Shape the list, staples and reco
   await page.getByRole("button", { name: "Save trip" }).click();
   await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
   await page.getByRole("link", { name: "Keep packing: Lisbon" }).click();
-  await expect(rows(page).filter({ hasText: "Socks" })).toBeVisible();
+  await expect(page.locator('[data-item-id="socks"]')).toBeVisible();
   await expect(page.getByText("Beach towel")).toHaveCount(0);
 });
 
@@ -132,8 +134,8 @@ test("without any saved list there is no list step at all", async ({ page }) => 
 test("copying a trip never offers the list step, even when lists exist", async ({ page }) => {
   await openDashboard(page);
   await seedBeach();
-  await page.goto("/trips/new?copy=lisbon");
-  await expect(page.getByText(/^Copy of /)).toBeVisible();
+  await chooseFromMenu(page, "San Diego", "Copy trip");
+  await expect(page.getByText("Copy of San Diego")).toBeVisible();
   await pickLisbon(page);
   await page.getByRole("button", { name: "Continue to packing preferences" }).click();
   await expect(page.getByRole("heading", { name: "Shape the list", level: 1 })).toBeVisible();
