@@ -1995,6 +1995,8 @@ input:disabled {
 }
 .staples-shell {
   display: grid;
+  /* minmax(0, 1fr): a row's content may shrink the column instead of widening it past a narrow screen (#21). */
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
 }
 .staples-toolbar {

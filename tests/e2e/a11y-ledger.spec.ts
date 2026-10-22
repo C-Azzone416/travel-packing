@@ -282,6 +282,20 @@ test.describe("narrow screens", DEVICE, () => {
     await page.getByRole("link", { name: "Edit Beach week" }).click();
     await expect(page.getByRole("heading", { name: "Beach week", level: 1 })).toBeVisible();
     await expectNoSidewaysScroll("list editor");
+    // A long unbreakable name must wrap inside the row, not widen the page (the editor's grid column once grew to the row's
+    // content, which overflowed by 3px on CI's Linux fonts and by 148px with a name like this one).
+    await seedSavedList(ownerId(), "Long names", [
+      {
+        id: "long",
+        name: "Supercalifragilisticexpialidocious travel adapter",
+        category: "Tech",
+        qty: 1,
+      },
+    ]);
+    await page.goto("/staples/lists");
+    await page.getByRole("link", { name: "Edit Long names" }).click();
+    await expect(page.getByRole("heading", { name: "Long names", level: 1 })).toBeVisible();
+    await expectNoSidewaysScroll("list editor with a long item name");
     await page.goto("/");
     await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
     await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
