@@ -152,6 +152,7 @@ describe("SavedListsScreen", () => {
     await screen.findByRole("article", { name: "Beach week" });
     await user.click(screen.getByRole("button", { name: "Delete Beach week" }));
     const sheet = screen.getByRole("dialog", { name: "Delete “Beach week”?" });
+    expect(within(sheet).getByText(/This can't be undone\./)).toBeTruthy();
     expect(
       within(sheet).getByText(/Trips already made from this list aren't affected/),
     ).toBeTruthy();

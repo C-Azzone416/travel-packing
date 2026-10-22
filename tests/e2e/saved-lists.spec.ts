@@ -86,6 +86,7 @@ test("deletes a list only after confirming, and says existing trips are not affe
   await openLists(page);
   await page.getByRole("button", { name: "Delete Beach week" }).click();
   const sheet = page.getByRole("dialog", { name: "Delete “Beach week”?" });
+  await expect(sheet.getByText(/This can't be undone\./)).toBeVisible();
   await expect(sheet.getByText(/Trips already made from this list aren't affected/)).toBeVisible();
   await sheet.getByRole("button", { name: "Cancel" }).click();
   await expect(card(page, "Beach week")).toBeVisible();

@@ -11,8 +11,8 @@ export interface DeleteListSheetProps {
   onClose: () => void;
 }
 
-// Delete a saved list (#167). The words matter: trips made from a list keep their own copy. Permanent for now (no undo);
-// the final behaviour is Caroline's call.
+// Delete a saved list (#167). The words matter: trips made from a list keep their own copy. Permanent, and the sheet says so
+// (Caroline's decision): no undo.
 export function DeleteListSheet({ name, onDelete, onClose }: DeleteListSheetProps) {
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -30,7 +30,7 @@ export function DeleteListSheet({ name, onDelete, onClose }: DeleteListSheetProp
     <ModalSheet
       open
       title={`Delete “${name}”?`}
-      description="Trips already made from this list aren't affected. The list and its items are removed."
+      description="This can't be undone. Trips already made from this list aren't affected. The list and its items are removed."
       onClose={onClose}
       actions={
         <>
