@@ -6,6 +6,7 @@
 
 import { ZodError, type ZodType } from "zod";
 import { authorizeOwner } from "../auth/guard";
+import { createRateLimiter, type RateLimiter } from "../locations/rate-limit";
 import type { DataContext } from "./context";
 import { fail, ok, type Result } from "./result";
 import { logDataEvent } from "./safe-log";
@@ -29,6 +30,21 @@ export interface OwnerScope {
   ownerId: string;
 }
 
+/**
+ * A guard rail on every data-layer call (reads and writes), per signed-in owner (#22): 300 a minute, far above normal
+ * use, so a runaway client or script cannot hammer the database. State is per server instance (memory); a shared
+ * limit across instances is Caroline's call (#28).
+ */
+export const DATA_CALLS_PER_MINUTE = 300;
+const defaultLimiter = (): RateLimiter =>
+  createRateLimiter({ limit: DATA_CALLS_PER_MINUTE, windowMs: 60_000 });
+let limiter = defaultLimiter();
+
+/** Test hook: swap the limiter (for example one with an injected clock). Call with no argument to reset it. */
+export function setDataRateLimiter(next?: RateLimiter): void {
+  limiter = next ?? defaultLimiter();
+}
+
 /** The app-side owner row every other row references. Safe to call repeatedly. */
 async function ensureUser(db: Db, ownerId: string): Promise<void> {
   await db.insert(schema.users).values({ id: ownerId }).onConflictDoNothing();
@@ -45,6 +61,11 @@ export async function run<Input, Output>(
     const code = decision.status === "unauthenticated" ? "UNAUTHENTICATED" : "FORBIDDEN";
     logDataEvent(`error:${code}`);
     return fail(code);
+  }
+
+  if (!limiter.consume(decision.session.userId).ok) {
+    logDataEvent("error:UNAVAILABLE");
+    return fail("UNAVAILABLE", { reason: "RATE_LIMITED" });
   }
 
   const parsed = inputSchema.safeParse(rawInput);

@@ -4,7 +4,13 @@ import { fileURLToPath } from "node:url";
 
 export default defineConfig({
   plugins: [react()],
-  resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+      // The real package throws outside React Server Components; in unit tests it is a no-op.
+      "server-only": fileURLToPath(new URL("./src/test/server-only.ts", import.meta.url)),
+    },
+  },
   test: {
     environment: "node",
     // Threads use about 19% less CPU than the default forks here (same tests, same coverage); CI minutes are billed.

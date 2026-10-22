@@ -9,6 +9,10 @@ What the repository checks automatically, and what it deliberately does not do y
   (a database URL with a password, a private key, common token shapes) or contain server-only code. Findings print the
   file and the problem, never the matched text. `src/tooling/bundle-scan.test.ts` injects fake secrets and proves the
   scan, and the CLI, fail on them.
+- **`server-only`** is imported by the data runtime (`src/server/data/runtime.ts`), the auth runtime and the Neon adapter,
+  so importing them from a client component fails the build. Modules the CLI scripts and e2e helpers load under plain
+  Node (`db/`, `seed/`, `auth/allowlist-fingerprint`) deliberately do not import it; the scan above still guards them.
+  Unit tests alias the package to a no-op (`vitest.config.ts`).
 - **E2E-only code** stays out of builds (`npm run check:no-e2e-in-build`).
 - **Dependency audit:** `npm audit --omit=dev --audit-level=high` fails the build; Dependabot opens weekly update PRs
   for npm and GitHub Actions (they go through the normal gates, nothing auto-merges).
@@ -41,5 +45,7 @@ ESLint forbids raw `console.*` in app code outside those sinks.
   revisit if the app is ever hosted elsewhere.
 - **Place search:** per session (`LOCATION_SEARCHES_PER_MINUTE`, from #47).
 - **Limits are per server instance (memory).** A limit shared across instances needs a store the app does not have; per
-  the issue, that approach is for Caroline to review (#28). Mutation endpoints are owner-gated and locked but not yet
-  rate limited for the same reason.
+  the issue, that approach is for Caroline to review (#28).
+- **Data layer (reads and writes):** every call goes through `run()` in `src/server/data/run.ts`, which allows an
+  owner 300 calls a minute (`DATA_CALLS_PER_MINUTE`) and answers past that with `UNAVAILABLE` (reason `RATE_LIMITED`,
+  "try again"). It is a guard rail far above normal use; tests in `run.test.ts`.
