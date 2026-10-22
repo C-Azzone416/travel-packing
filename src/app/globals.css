@@ -1603,7 +1603,7 @@ input:disabled {
 }
 /* The "Pack last" badge never touches the name before it (design: 6 to 8 px). */
 .timing-tag {
-  margin-left: 6px;
+  margin-left: 7px;
 }
 .qty-stepper {
   display: grid;
