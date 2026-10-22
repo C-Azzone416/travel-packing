@@ -44,8 +44,18 @@ const SAN_DIEGO = {
   id: "us-ca-san-diego",
   city: "San Diego",
   label: "San Diego, California, United States",
+  region: "California",
+  country: "United States",
+  countryCode: "US",
 };
-const LISBON = { id: "pt-lisbon", city: "Lisbon", label: "Lisbon, Lisbon District, Portugal" };
+const LISBON = {
+  id: "pt-lisbon",
+  city: "Lisbon",
+  label: "Lisbon, Lisbon District, Portugal",
+  region: "Lisbon District",
+  country: "Portugal",
+  countryCode: "PT",
+};
 
 const SAMPLE_CONFIG: TripConfig = {
   laundry: false,
@@ -58,7 +68,14 @@ const SAMPLE_CONFIG: TripConfig = {
 
 function sampleTrip(
   id: string,
-  place: { id: string; city: string; label: string },
+  place: {
+    id: string;
+    city: string;
+    label: string;
+    region: string;
+    country: string;
+    countryCode: string;
+  },
   start: string,
   end: string,
   config: TripConfig,
@@ -71,6 +88,17 @@ function sampleTrip(
     destination: place.city,
     locationId: place.id,
     locationLabel: place.label,
+    // A curated place: its country is known (so the trip's stamp can show it) but it has no coordinates or provider.
+    place: {
+      provider: null,
+      placeId: null,
+      region: place.region,
+      country: place.country,
+      countryCode: place.countryCode,
+      latitude: null,
+      longitude: null,
+      timezone: null,
+    },
     start,
     end,
     stops: [],
