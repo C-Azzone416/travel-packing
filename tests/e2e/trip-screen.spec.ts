@@ -491,3 +491,83 @@ test("ledger packing screen: stamp, sections panel, no overflow, and a completed
   expect(after?.x).toBe(before?.x);
   expect(after?.width).toBe(before?.width);
 });
+
+// Generic add-item (#147): the packing screen's inline "＋ Add item".
+test("＋ Add item adds an unpacked item of the chosen category, never doubles it, and hands Bathroom to its form", async ({
+  page,
+}) => {
+  await openSanDiego(page);
+  const total = () => page.locator("[data-item-id]").count();
+  const before = await total();
+
+  const toggle = page.getByRole("button", { name: "＋ Add item" });
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await toggle.click();
+  // Closed by default, 44px controls once open.
+  for (const control of [
+    page.getByRole("textbox", { name: "Item name" }),
+    page.getByRole("combobox", { name: "Category" }),
+    page.getByRole("spinbutton", { name: "Needed" }),
+    page.getByRole("button", { name: "Add to list" }),
+  ]) {
+    expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  }
+  await page.getByRole("textbox", { name: "Item name" }).fill("Camera");
+  await page.getByRole("combobox", { name: "Category" }).selectOption("Tech");
+  await page.getByRole("spinbutton", { name: "Needed" }).fill("2");
+  await page.getByRole("button", { name: "Add to list" }).click();
+
+  await expect(status(page)).toHaveText("Camera added to Tech.");
+  await expect(toggle).toBeFocused();
+  await expect(page.getByRole("textbox", { name: "Item name" })).toHaveCount(0);
+  const camera = page.locator("[data-item-id]").filter({ hasText: "Camera" });
+  await expect(camera).toHaveCount(1);
+  await expect(camera.getByRole("img", { name: "0 of 2 packed" })).toBeVisible();
+  expect(await total()).toBe(before + 1);
+
+  // Saved for real: still there after a reload, still one row.
+  await page.reload();
+  await expect(page.locator("[data-item-id]").filter({ hasText: "Camera" })).toHaveCount(1);
+
+  // The same item again is not added: the form says so and offers the quantity editor.
+  await toggle.click();
+  await page.getByRole("textbox", { name: "Item name" }).fill("  camera ");
+  await page.getByRole("combobox", { name: "Category" }).selectOption("Tech");
+  await page.getByRole("button", { name: "Add to list" }).click();
+  await expect(page.getByText(/Camera is already on your list \(needed: 2\)/)).toBeVisible();
+  expect(await total()).toBe(before + 1);
+  await page.getByRole("button", { name: "Edit quantity" }).click();
+  await expect(page.getByRole("dialog", { name: "Edit item" })).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  // Bathroom hands off to the existing form, filled in.
+  await toggle.click();
+  await page.getByRole("textbox", { name: "Item name" }).fill("Floss");
+  await page.getByRole("combobox", { name: "Category" }).selectOption("Bathroom");
+  await page.getByRole("button", { name: "Continue to Bathroom item" }).click();
+  const bathroom = page.getByRole("dialog", { name: "Add a Bathroom item" });
+  await expect(bathroom.getByLabel("Item name")).toHaveValue("Floss");
+  await bathroom.getByRole("button", { name: "Add toiletry item" }).click();
+  await expect(page.locator("[data-item-id]").filter({ hasText: "Floss" })).toHaveCount(1);
+});
+
+test(
+  "＋ Add item is keyboard operable and fits a phone without sideways scrolling",
+  DEVICE,
+  async ({ page }) => {
+    await openSanDiego(page);
+    await page.getByRole("button", { name: "＋ Add item" }).focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("textbox", { name: "Item name" })).toBeFocused();
+    await page.keyboard.type("Charger cable");
+    await page.keyboard.press("Enter");
+    await expect(page.locator("[data-item-id]").filter({ hasText: "Charger cable" })).toHaveCount(
+      1,
+    );
+    await page.getByRole("button", { name: "＋ Add item" }).click();
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+  },
+);

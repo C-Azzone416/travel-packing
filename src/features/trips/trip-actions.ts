@@ -19,7 +19,7 @@ import type { ErrorCode, Result } from "@/server/data/result";
 import { getDataContext } from "@/server/data/runtime";
 import * as service from "@/server/data/service";
 import { toLifecycleTrip } from "@/server/trips/to-lifecycle";
-import type { NewToiletryItem } from "./trips-source";
+import type { NewCustomItem, NewToiletryItem } from "./trips-source";
 import type { WeatherSuggestionState } from "@/server/data/weather-store";
 
 export type TripReadResult = { ok: true; trip: LifecycleTrip } | { ok: false; code: ErrorCode };
@@ -159,6 +159,37 @@ export async function addToiletryItemAction(
       scope: item.scope,
     }),
   );
+}
+
+/** A refusal that carries why: the field names for INVALID_INPUT, or EXISTS when the trip already has the item. */
+export type AddItemActionResult =
+  | { ok: true; trip: LifecycleTrip; signals: Signals }
+  | { ok: false; code: ErrorCode; reason?: string; fields?: string[] };
+
+/** Add a custom item of any addable category to a trip (#147). Nothing is added twice: EXISTS comes back instead. */
+export async function addItemAction(
+  tripId: string,
+  item: NewCustomItem,
+): Promise<AddItemActionResult> {
+  const context = await getDataContext();
+  if (!context) return { ok: false, code: "INTERNAL" };
+  const result = await service.addItemToTrip(context, {
+    tripId,
+    name: item.name,
+    category: item.category,
+    neededQty: item.neededQty,
+  });
+  if (result.ok) {
+    return {
+      ok: true,
+      trip: toLifecycleTrip(result.data.trip),
+      signals: result.data.signals ?? NO_SIGNALS,
+    };
+  }
+  if (result.error.code === "UNAUTHENTICATED") redirect(SIGN_IN_PATH);
+  if (result.error.code === "FORBIDDEN") redirect(ACCESS_DENIED_PATH);
+  const { code, reason, fields } = result.error;
+  return { ok: false, code, ...(reason ? { reason } : {}), ...(fields ? { fields } : {}) };
 }
 
 export async function confirmBagPlacementAction(tripId: string): Promise<TripCommandResult> {

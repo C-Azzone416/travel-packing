@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   acceptWeather,
+  ADD_ITEM_NAME_MAX,
+  ADD_ITEM_QTY_MAX,
+  ADDABLE_CATEGORIES,
+  addCustomItem,
+  findExistingItem,
   editItem,
   findIdentityViolations,
   recalculateSuggestions,
@@ -816,5 +821,114 @@ describe("rememberPreview", () => {
           preview.perDay,
         );
     }
+  });
+});
+
+describe("addCustomItem (#147)", () => {
+  const base = (): Trip => ({
+    ...makeTrip(),
+    items: [item("socks", "Socks", "Clothing", 3), item("charger", "Phone charger", "Tech", 1)],
+    ready: true,
+  });
+  const add = (over: Partial<Parameters<typeof addCustomItem>[1]> = {}, trip: Trip = base()) =>
+    addCustomItem(trip, {
+      id: "custom-1",
+      name: "Camera",
+      category: "Tech",
+      neededQty: 2,
+      ...over,
+    });
+
+  it("adds an unpacked item of the given category and quantity, for this trip only, and revokes Ready", () => {
+    const result = add();
+    if (!result.ok) throw new Error(result.reason);
+    expect(result.item).toEqual({
+      id: "custom-1",
+      name: "Camera",
+      category: "Tech",
+      qty: 2,
+      packed: 0,
+      section: "main",
+    });
+    expect(result.trip.items.at(-1)).toEqual(result.item);
+    expect(result.trip.items).toHaveLength(3);
+    expect(result.trip.ready).toBe(false);
+    expect(base().ready).toBe(true);
+  });
+
+  it.each(ADDABLE_CATEGORIES)("accepts the %s category", (category) => {
+    expect(add({ category }).ok).toBe(true);
+  });
+
+  it.each([
+    "Bathroom",
+    "Toiletries",
+    "Pack last",
+    "Return outfit",
+    "Weather suggestion",
+    "",
+    "Misc",
+  ])("refuses %j as a category", (category) => {
+    expect(add({ category })).toMatchObject({ ok: false, reason: "INVALID_CATEGORY" });
+  });
+
+  it("trims and collapses the name, and refuses an empty or over-long one", () => {
+    const result = add({ name: "  Travel   camera " });
+    if (!result.ok) throw new Error(result.reason);
+    expect(result.item.name).toBe("Travel camera");
+    expect(add({ name: "   " })).toMatchObject({ ok: false, reason: "EMPTY_NAME" });
+    expect(add({ name: "x".repeat(ADD_ITEM_NAME_MAX) }).ok).toBe(true);
+    expect(add({ name: "x".repeat(ADD_ITEM_NAME_MAX + 1) })).toMatchObject({
+      ok: false,
+      reason: "NAME_TOO_LONG",
+    });
+  });
+
+  it.each([0, -1, 1.5, ADD_ITEM_QTY_MAX + 1, Number.NaN, Infinity])(
+    "refuses a needed quantity of %s instead of clamping it",
+    (neededQty) => {
+      expect(add({ neededQty })).toMatchObject({ ok: false, reason: "INVALID_QTY" });
+    },
+  );
+
+  it("accepts the quantity bounds", () => {
+    expect(add({ neededQty: 1 }).ok).toBe(true);
+    expect(add({ neededQty: ADD_ITEM_QTY_MAX, name: "Bulk" }).ok).toBe(true);
+  });
+
+  it("reports an item that is already there (same normalised name and category) and changes nothing", () => {
+    const trip = base();
+    for (const name of ["Socks", "socks", "  SOCKS ", "Sócks"]) {
+      const result = add({ name, category: "Clothing" }, trip);
+      expect(result).toMatchObject({ ok: false, reason: "EXISTS" });
+      if (result.ok || result.reason !== "EXISTS") throw new Error("expected EXISTS");
+      expect(result.existing.id).toBe("socks");
+      expect(result.trip).toBe(trip);
+    }
+    expect(trip.items).toHaveLength(2);
+    expect(trip.ready).toBe(true);
+  });
+
+  it("allows the same name in a different category", () => {
+    expect(add({ name: "Socks", category: "Accessories" }).ok).toBe(true);
+  });
+
+  it("never adds a second row for an item it just added", () => {
+    const first = add();
+    if (!first.ok) throw new Error(first.reason);
+    expect(add({ id: "custom-2" }, first.trip)).toMatchObject({ ok: false, reason: "EXISTS" });
+  });
+
+  it("refuses an id the trip already uses", () => {
+    expect(add({ id: "socks", name: "Brand new" })).toMatchObject({
+      ok: false,
+      reason: "DUPLICATE_ID",
+    });
+  });
+
+  it("finds an existing item by name and category", () => {
+    const trip = base();
+    expect(findExistingItem(trip, "phone CHARGER", "Tech")?.id).toBe("charger");
+    expect(findExistingItem(trip, "phone charger", "Clothing")).toBeNull();
   });
 });

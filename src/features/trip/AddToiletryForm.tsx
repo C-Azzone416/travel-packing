@@ -13,12 +13,22 @@ export interface AddToiletryFormProps {
   saving: boolean;
   onClose: () => void;
   onAdd: (item: NewToiletryItem) => void;
+  /** Filled in when the person arrives from "＋ Add item" with Bathroom chosen. */
+  initialName?: string;
+  initialQty?: number;
 }
 
 // Adds one normal Bathroom checkbox, for this trip or for future trips too, optionally flagged Pack last.
-export function AddToiletryForm({ destination, saving, onClose, onAdd }: AddToiletryFormProps) {
-  const [name, setName] = useState("");
-  const [qty, setQty] = useState("1");
+export function AddToiletryForm({
+  destination,
+  saving,
+  onClose,
+  onAdd,
+  initialName = "",
+  initialQty = 1,
+}: AddToiletryFormProps) {
+  const [name, setName] = useState(initialName);
+  const [qty, setQty] = useState(String(initialQty));
   const [packLast, setPackLast] = useState(false);
   const [scope, setScope] = useState<Scope>("this-trip");
   const [nameError, setNameError] = useState(false);

@@ -5,6 +5,7 @@
 import { calculateSuggestions, DEFAULT_STAPLES, packingDays, tripDays } from "@/domain/calc";
 import {
   acceptWeather,
+  addCustomItem,
   addToiletryItem,
   editItem,
   recalculateSuggestions,
@@ -54,6 +55,13 @@ export interface TripChange {
 
 export type NewToiletryItem = Omit<ToiletryItemInput, "id">;
 
+/** A custom item of any addable category (#147). */
+export interface NewCustomItem {
+  name: string;
+  category: string;
+  neededQty: number;
+}
+
 export interface TripsSource {
   load(): Promise<LifecycleState>;
   archive(tripId: string): Promise<LifecycleState>;
@@ -77,6 +85,11 @@ export interface TripsSource {
   editItem(tripId: string, itemId: string, edit: ItemEdit): Promise<TripChange>;
   removeItem(tripId: string, itemId: string, scope: Scope): Promise<TripChange>;
   addToiletryItem(tripId: string, input: NewToiletryItem): Promise<TripChange>;
+  /**
+   * Add a custom item of any addable category (#147). Rejects with message EXISTS when the trip already has it
+   * (same normalised name and category; nothing is added), or INVALID_INPUT / NOT_FOUND / the error code.
+   */
+  addItem(tripId: string, input: NewCustomItem): Promise<TripChange>;
   confirmBagPlacement(tripId: string): Promise<TripChange>;
   undoBagPlacement(tripId: string): Promise<TripChange>;
   markReady(tripId: string): Promise<TripChange>;
@@ -225,6 +238,19 @@ export function createMemoryTripsSource(
       itemOp(id, (trip, owned) => removeTripItem(trip, owned, itemId, scope)),
     addToiletryItem: (id, input) =>
       itemOp(id, (trip, owned) => addToiletryItem(trip, owned, { ...input, id: newId() })),
+    addItem: (id, input) =>
+      direct(id, (trip) => {
+        const added = addCustomItem(trip, {
+          id: newId(),
+          name: input.name,
+          category: input.category,
+          neededQty: input.neededQty,
+        });
+        if (!added.ok) {
+          throw new TripsSourceError(added.reason === "EXISTS" ? "EXISTS" : "INVALID_INPUT");
+        }
+        return added.trip;
+      }),
     confirmBagPlacement: (id) => command(id, confirmBagPlacement),
     undoBagPlacement: (id) => command(id, undoBagPlacement),
     markReady: (id) => command(id, markReady),

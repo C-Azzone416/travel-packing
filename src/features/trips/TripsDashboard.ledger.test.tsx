@@ -8,7 +8,8 @@ import { sampleLifecycleState } from "./fixtures";
 import { TripsDashboard } from "./TripsDashboard";
 import { createMemoryTripsSource, type TripsSource } from "./trips-source";
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
+const push = vi.fn();
+vi.mock("next/navigation", () => ({ usePathname: () => "/", useRouter: () => ({ push }) }));
 
 const TODAY = () => "2026-10-16";
 
@@ -254,14 +255,102 @@ describe("the hero's weather strip", () => {
   });
 });
 
-describe("+ Add item (interim until #147)", () => {
-  it("is a secondary link to the trip screen with the add form requested", async () => {
-    setup();
+describe("＋ Add item on the hero (#147)", () => {
+  const toggle = () => screen.getByRole("button", { name: "＋ Add item" });
+
+  it("is a closed disclosure button in the hero's action row until asked", async () => {
+    const { user } = setup();
     const hero = await screen.findByRole("article", { name: "San Diego" });
-    const add = within(hero).getByRole("link", { name: "Add item: San Diego" });
-    expect(add.getAttribute("href")).toBe("/trips/san-diego?add=item");
-    expect(add.className).toContain("secondary");
+    expect(toggle().getAttribute("aria-expanded")).toBe("false");
     expect(within(hero).queryByRole("textbox")).toBeNull();
+    expect(within(hero).queryByRole("link", { name: /Add item/ })).toBeNull();
+    await user.click(toggle());
+    expect(toggle().getAttribute("aria-expanded")).toBe("true");
+    expect(within(hero).getByRole("textbox", { name: "Item name" })).toBeTruthy();
+  });
+
+  it("adds an unpacked item of the chosen category to the hero trip, says so, and folds away", async () => {
+    const { user, base } = setup();
+    await screen.findByRole("article", { name: "San Diego" });
+    await user.click(toggle());
+    await user.type(screen.getByRole("textbox", { name: "Item name" }), "Camera");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Category" }), "Tech");
+    await user.clear(screen.getByRole("spinbutton", { name: "Needed" }));
+    await user.type(screen.getByRole("spinbutton", { name: "Needed" }), "2");
+    await user.click(screen.getByRole("button", { name: "Add to list" }));
+    await waitFor(() => expect(screen.queryByRole("textbox", { name: "Item name" })).toBeNull());
+    const added = base.snapshot().trips[0].items.find((item) => item.name === "Camera")!;
+    expect(added).toMatchObject({ category: "Tech", qty: 2, packed: 0 });
+    expect(await screen.findByText("Camera added to Tech")).toBeTruthy();
+    // The hero's progress reflects two more to pack.
+    expect(screen.getByText(/of 32 packed/)).toBeTruthy();
+  });
+
+  it("never doubles an item already on the list; Edit quantity goes to the trip screen", async () => {
+    push.mockClear();
+    const { user, base } = setup();
+    await screen.findByRole("article", { name: "San Diego" });
+    const sunglasses = base.snapshot().trips[0].items.find((item) => item.id === "sunglasses")!;
+    const before = base.snapshot().trips[0].items.length;
+    await user.click(toggle());
+    await user.type(screen.getByRole("textbox", { name: "Item name" }), "sunglasses");
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Category" }),
+      sunglasses.category,
+    );
+    await user.click(screen.getByRole("button", { name: "Add to list" }));
+    expect(await screen.findByText(/Sunglasses is already on your list/)).toBeTruthy();
+    expect(base.snapshot().trips[0].items).toHaveLength(before);
+    await user.click(screen.getByRole("button", { name: "Edit quantity" }));
+    expect(push).toHaveBeenCalledExactlyOnceWith("/trips/san-diego");
+  });
+
+  it("hands Bathroom to the Bathroom form here too, filled in, and adds it to the hero trip", async () => {
+    const { user, base } = setup();
+    await screen.findByRole("article", { name: "San Diego" });
+    await user.click(toggle());
+    await user.type(screen.getByRole("textbox", { name: "Item name" }), "Floss");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Category" }), "Bathroom");
+    await user.click(screen.getByRole("button", { name: "Continue to Bathroom item" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add a Bathroom item" });
+    expect((within(dialog).getByLabelText("Item name") as HTMLInputElement).value).toBe("Floss");
+    await user.click(within(dialog).getByRole("button", { name: "Add toiletry item" }));
+    await waitFor(() =>
+      expect(base.snapshot().trips[0].items.some((item) => item.name === "Floss")).toBe(true),
+    );
+    expect(await screen.findByText("Floss added to Bathroom")).toBeTruthy();
+    expect(screen.queryByRole("dialog", { name: "Add a Bathroom item" })).toBeNull();
+  });
+
+  it("says nothing changed, and keeps the typed values, when the save fails", async () => {
+    const { user } = setup(undefined, (base) => ({
+      ...base,
+      addItem: () => Promise.reject(new Error("down")),
+    }));
+    await screen.findByRole("article", { name: "San Diego" });
+    await user.click(toggle());
+    await user.type(screen.getByRole("textbox", { name: "Item name" }), "Camera");
+    await user.click(screen.getByRole("button", { name: "Add to list" }));
+    expect(await screen.findByText("Couldn’t add that item. Nothing was changed.")).toBeTruthy();
+    expect((screen.getByRole("textbox", { name: "Item name" }) as HTMLInputElement).value).toBe(
+      "Camera",
+    );
+  });
+
+  it("keeps the Bathroom form open and says so when its save fails", async () => {
+    const { user } = setup(undefined, (base) => ({
+      ...base,
+      addToiletryItem: () => Promise.reject(new Error("down")),
+    }));
+    await screen.findByRole("article", { name: "San Diego" });
+    await user.click(toggle());
+    await user.type(screen.getByRole("textbox", { name: "Item name" }), "Floss");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Category" }), "Bathroom");
+    await user.click(screen.getByRole("button", { name: "Continue to Bathroom item" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add a Bathroom item" });
+    await user.click(within(dialog).getByRole("button", { name: "Add toiletry item" }));
+    expect(await screen.findByText("Couldn’t add that item. Nothing was changed.")).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: "Add a Bathroom item" })).toBeTruthy();
   });
 });
 

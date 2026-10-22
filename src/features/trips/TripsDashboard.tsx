@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, buttonClassName } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -14,11 +15,12 @@ import {
   type LifecycleTrip,
 } from "@/domain/trip-lifecycle";
 import { localToday } from "@/lib/today";
+import { AddToiletryForm } from "@/features/trip/AddToiletryForm";
 import { EditRouteSheet } from "@/features/trip/EditRouteSheet";
 import { LaterJourneys } from "./LaterJourneys";
 import { NextDeparture, type HeroWeather } from "./NextDeparture";
 import { TripCard } from "./TripCard";
-import type { TripsSource } from "./trips-source";
+import type { NewCustomItem, NewToiletryItem, TripsSource } from "./trips-source";
 import {
   departureView,
   formatRange,
@@ -54,6 +56,11 @@ export function TripsDashboard({ source, getToday = localToday }: TripsDashboard
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   const [reloads, setReloads] = useState(0);
+  const router = useRouter();
+  const [bathroom, setBathroom] = useState<{ tripId: string; name: string; qty: number } | null>(
+    null,
+  );
+  const [bathroomSaving, setBathroomSaving] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [editFailed, setEditFailed] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -216,6 +223,40 @@ export function TripsDashboard({ source, getToday = localToday }: TripsDashboard
     );
   }
 
+  /** The hero's inline "＋ Add item" (#147): true once the source saved it, so the form folds away. */
+  async function addItem(id: string, item: NewCustomItem): Promise<boolean> {
+    return track(
+      async () => {
+        await source.addItem(id, item);
+        return source.load();
+      },
+      (next) => {
+        setLoad({ phase: "ready", state: next, today: getToday() });
+        toast.show(`${item.name.trim()} added to ${item.category}`);
+      },
+    )
+      .then(() => true)
+      .catch(() => false);
+  }
+
+  /** Bathroom items gate bag placement, so they use the Bathroom form, here as on the packing screen. */
+  function addBathroomItem(id: string, item: NewToiletryItem) {
+    setBathroomSaving(true);
+    track(
+      async () => {
+        await source.addToiletryItem(id, item);
+        return source.load();
+      },
+      (next) => {
+        setLoad({ phase: "ready", state: next, today: getToday() });
+        setBathroom(null);
+        toast.show(`${item.name.trim()} added to Bathroom`);
+      },
+    )
+      .catch(() => toast.show("Couldn’t add that item. Nothing was changed."))
+      .finally(() => setBathroomSaving(false));
+  }
+
   function saveRoute(id: string, stops: Parameters<typeof source.setStops>[1]) {
     setEditFailed(false);
     setSaving(true);
@@ -331,6 +372,9 @@ export function TripsDashboard({ source, getToday = localToday }: TripsDashboard
                   setEditFailed(false);
                   setEditing(id);
                 }}
+                onAddItem={(item) => addItem(hero.id, item)}
+                onBathroom={(name, qty) => setBathroom({ tripId: hero.id, name, qty })}
+                onEditExisting={() => router.push(`/trips/${hero.id}`)}
                 onArchive={archive}
                 onRemove={setRemoving}
               />
@@ -387,6 +431,17 @@ export function TripsDashboard({ source, getToday = localToday }: TripsDashboard
             )}
           </Card>
         </>
+      ) : null}
+
+      {bathroom && state.trips.some((trip) => trip.id === bathroom.tripId) ? (
+        <AddToiletryForm
+          destination={state.trips.find((trip) => trip.id === bathroom.tripId)!.destination}
+          saving={bathroomSaving}
+          initialName={bathroom.name}
+          initialQty={bathroom.qty}
+          onClose={() => setBathroom(null)}
+          onAdd={(item) => addBathroomItem(bathroom.tripId, item)}
+        />
       ) : null}
 
       {editTarget ? (

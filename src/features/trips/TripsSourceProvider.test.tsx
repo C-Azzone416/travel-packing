@@ -46,6 +46,7 @@ const actions = vi.hoisted(() => {
         "editItemAction",
         "removeItemAction",
         "addToiletryItemAction",
+        "addItemAction",
         "confirmBagPlacementAction",
         "undoBagPlacementAction",
         "markReadyAction",
@@ -209,6 +210,12 @@ describe("TripsSourceProvider", () => {
         (s) => s.addToiletryItem("t", toiletry),
         () => actions.commands.addToiletryItemAction,
         ["t", toiletry],
+      ],
+      [
+        "addItem",
+        (s) => s.addItem("t", { name: "Camera", category: "Tech", neededQty: 2 }),
+        () => actions.commands.addItemAction,
+        ["t", { name: "Camera", category: "Tech", neededQty: 2 }],
       ],
       [
         "confirmBagPlacement",

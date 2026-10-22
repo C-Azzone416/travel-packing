@@ -173,6 +173,16 @@ const OPERATIONS: Operation[] = [
       }),
   ],
   [
+    "addItemToTrip",
+    (tripId) =>
+      service.addItemToTrip(context(), {
+        tripId,
+        name: "Camera",
+        category: "Tech",
+        neededQty: 1,
+      }),
+  ],
+  [
     "updateTripPreferences",
     (tripId) =>
       service.updateTripPreferences(context(), { tripId, config: { ...CONFIG, laundry: true } }),
@@ -732,6 +742,97 @@ describe("item operations", () => {
     expect(reloaded.config.niceAttire).toBe(false);
     expect(Object.keys(reloaded.suggestionMemory)).toContain("nice-top");
     expect(reloaded.ready).toBe(false);
+  });
+});
+
+describe("addItemToTrip (#147)", () => {
+  const camera = { name: "Camera", category: "Tech", neededQty: 2 };
+
+  it("adds an unpacked item of the given category and quantity, revokes Ready, and persists it", async () => {
+    const trip = await seedTrip(db(), OWNER.userId, { ready: true });
+    const result = data(await service.addItemToTrip(context(), { tripId: trip.id, ...camera }));
+    const added = result.trip.items.find((entry) => entry.name === "Camera")!;
+    expect(added).toMatchObject({ category: "Tech", qty: 2, packed: 0, section: "main" });
+    expect(added.id).toMatch(/^custom-/);
+    expect(result.trip.ready).toBe(false);
+    const stored = await loadTrip(db(), OWNER.userId, trip.id);
+    expect(stored?.items.find((entry) => entry.id === added.id)).toMatchObject({
+      qty: 2,
+      packed: 0,
+    });
+    expect(stored?.items).toHaveLength(trip.items.length + 1);
+  });
+
+  it("does not touch the owner's staples", async () => {
+    const trip = await seedTrip(db(), OWNER.userId);
+    data(await service.listStaplesForOwner(context()));
+    const before = await ctx.client.query('SELECT * FROM "staples" ORDER BY semantic_id');
+    data(await service.addItemToTrip(context(), { tripId: trip.id, ...camera }));
+    expect((await ctx.client.query('SELECT * FROM "staples" ORDER BY semantic_id')).rows).toEqual(
+      before.rows,
+    );
+  });
+
+  it("never adds a second row for an item that is there: REJECTED with reason EXISTS, nothing saved", async () => {
+    const trip = await seedTrip(db(), OWNER.userId, { ready: true });
+    data(await service.addItemToTrip(context(), { tripId: trip.id, ...camera }));
+    const before = JSON.stringify(await loadTrip(db(), OWNER.userId, trip.id));
+    for (const name of ["Camera", "  camera ", "CAMÉRA".replace("É", "E")]) {
+      const again = await service.addItemToTrip(context(), { tripId: trip.id, ...camera, name });
+      expect(errorOf(again)).toMatchObject({ code: "REJECTED", reason: "EXISTS" });
+    }
+    expect(JSON.stringify(await loadTrip(db(), OWNER.userId, trip.id))).toBe(before);
+  });
+
+  it("refuses a calculated item that is already on the list, in its own category", async () => {
+    const trip = await seedTrip(db(), OWNER.userId);
+    const socks = trip.items.find((entry) => entry.id === "socks")!;
+    const again = await service.addItemToTrip(context(), {
+      tripId: trip.id,
+      name: socks.name,
+      category: socks.category,
+      neededQty: 1,
+    });
+    expect(errorOf(again)).toMatchObject({ code: "REJECTED", reason: "EXISTS" });
+  });
+
+  it.each([
+    ["an unknown category", { category: "Gadgets" }, "category"],
+    ["the Bathroom category (its own flow)", { category: "Bathroom" }, "category"],
+    ["a blank name", { name: "   " }, "name"],
+    ["a name over 120 characters", { name: "x".repeat(121) }, "name"],
+    ["a zero quantity", { neededQty: 0 }, "neededQty"],
+    ["a quantity over 999", { neededQty: 1000 }, "neededQty"],
+    ["a fractional quantity", { neededQty: 1.5 }, "neededQty"],
+    ["a text quantity", { neededQty: "2" }, "neededQty"],
+  ])(
+    "rejects %s as INVALID_INPUT naming the field, and saves nothing",
+    async (_label, bad, field) => {
+      const trip = await seedTrip(db(), OWNER.userId);
+      const before = JSON.stringify(await loadTrip(db(), OWNER.userId, trip.id));
+      const result = await service.addItemToTrip(context(), { tripId: trip.id, ...camera, ...bad });
+      expect(errorOf(result)).toMatchObject({ code: "INVALID_INPUT", fields: [field] });
+      expect(JSON.stringify(await loadTrip(db(), OWNER.userId, trip.id))).toBe(before);
+    },
+  );
+
+  it("answers NOT_FOUND for a missing trip id, a malformed one is INVALID_INPUT", async () => {
+    expect(
+      errorOf(await service.addItemToTrip(context(), { tripId: newUuid(), ...camera }))?.code,
+    ).toBe("NOT_FOUND");
+    expect(
+      errorOf(await service.addItemToTrip(context(), { tripId: "nope", ...camera }))?.code,
+    ).toBe("INVALID_INPUT");
+  });
+
+  it("another owner's trip is NOT_FOUND and stays unchanged", async () => {
+    const theirs = await seedTrip(db(), OTHER_OWNER.userId);
+    as(OWNER);
+    const before = JSON.stringify(await loadTrip(db(), OTHER_OWNER.userId, theirs.id));
+    expect(
+      errorOf(await service.addItemToTrip(context(), { tripId: theirs.id, ...camera }))?.code,
+    ).toBe("NOT_FOUND");
+    expect(JSON.stringify(await loadTrip(db(), OTHER_OWNER.userId, theirs.id))).toBe(before);
   });
 });
 

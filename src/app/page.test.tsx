@@ -8,7 +8,8 @@ import SettingsPage, { metadata as settingsMetadata } from "./settings/page";
 import StaplesPage, { metadata as staplesMetadata } from "./staples/page";
 import { metadata as rootMetadata, viewport } from "./layout";
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
+const push = vi.fn();
+vi.mock("next/navigation", () => ({ usePathname: () => "/", useRouter: () => ({ push }) }));
 vi.mock("next/headers", () => ({
   headers: async () => new Headers(),
   cookies: async () => ({ get: () => undefined }),
