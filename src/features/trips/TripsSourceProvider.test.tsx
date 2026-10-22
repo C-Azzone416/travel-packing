@@ -47,6 +47,7 @@ const actions = vi.hoisted(() => {
         "removeItemAction",
         "addToiletryItemAction",
         "addItemAction",
+        "saveAsListAction",
         "confirmBagPlacementAction",
         "undoBagPlacementAction",
         "markReadyAction",
@@ -216,6 +217,12 @@ describe("TripsSourceProvider", () => {
         (s) => s.addItem("t", { name: "Camera", category: "Tech", neededQty: 2 }),
         () => actions.commands.addItemAction,
         ["t", { name: "Camera", category: "Tech", neededQty: 2 }],
+      ],
+      [
+        "saveAsList",
+        (s) => s.saveAsList("t", "Beach week", ["a", "b"]),
+        () => actions.commands.saveAsListAction,
+        ["t", "Beach week", ["a", "b"]],
       ],
       [
         "confirmBagPlacement",

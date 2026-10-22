@@ -85,6 +85,11 @@ export const removeSavedListItemInput = z.object({
   listId: savedListId,
   itemId: z.string().min(1).max(100),
 });
+export const saveTripAsListInput = z.object({
+  tripId,
+  name: savedListName,
+  itemIds: z.array(z.string().min(1).max(100)).min(1).max(500),
+});
 export const updatePreferencesInput = z.object({ tripId, config: tripConfig });
 
 /**
