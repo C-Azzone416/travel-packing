@@ -25,3 +25,6 @@ next-env.d.ts
 
 # Written by the gitleaks action in CI
 results.sarif
+
+# Test report kept by npm run verify so a failure names its test (#150)
+.verify-logs/
