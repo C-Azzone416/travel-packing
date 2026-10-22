@@ -52,6 +52,11 @@ export interface TripDraft {
   config: TripConfig;
   /** Chosen on step 1; Travel until changed, and a copy starts from the source trip's theme. */
   theme: ThemeId;
+  /**
+   * The one saved list this new trip starts from (#170), or absent for today's staples plus recommendations. Only a
+   * new (not copied) trip can have one. Just the id: the server loads the list itself, owner-scoped.
+   */
+  savedListId?: string | null;
 }
 
 export interface DeletedTrip {
@@ -153,6 +158,15 @@ export function setDraftTheme(draft: TripDraft, theme: ThemeId): TripDraft {
   return { ...draft, theme };
 }
 
+/** Start from this saved list (or, with null, from staples and recommendations again). A copy never has one. */
+export function setDraftSavedList(draft: TripDraft, savedListId: string | null): TripDraft {
+  if (draft.mode === "copy" || savedListId === null) {
+    const { savedListId: _dropped, ...rest } = draft;
+    return rest;
+  }
+  return { ...draft, savedListId };
+}
+
 /** Confirm the first stop's place (the only stop of a single-destination trip). */
 export function selectDraftLocation(draft: TripDraft, location: SampleLocation): TripDraft {
   return setDraftStopLocation(draft, 0, location);
@@ -233,15 +247,19 @@ export function buildTrip(
   copiedFrom: string | null = null,
   theme: ThemeId = DEFAULT_THEME,
   stops?: readonly TripStop[],
+  /** Replaces the calculated items (a saved list); the day counts still come from the dates. */
+  listItems?: readonly TripItem[],
 ): LifecycleTrip {
   const built = buildTripItems({ ...config, start, end }, staples);
-  const items: TripItem[] = built.items
-    .filter((entry) => entry.qty > 0)
-    .map((entry) =>
-      BATHROOM_NAMES.has(entry.name.toLowerCase())
-        ? { ...entry, groupId: TOILETRY_GROUP_ID }
-        : entry,
-    );
+  const items: TripItem[] = listItems
+    ? listItems.map((item) => ({ ...item }))
+    : built.items
+        .filter((entry) => entry.qty > 0)
+        .map((entry) =>
+          BATHROOM_NAMES.has(entry.name.toLowerCase())
+            ? { ...entry, groupId: TOILETRY_GROUP_ID }
+            : entry,
+        );
 
   return {
     id: deps.newId(),
@@ -281,6 +299,8 @@ export function saveDraft(
   state: LifecycleState,
   staples: Staple[],
   deps: TripBuilderDeps,
+  /** A saved list's items (#170): the trip starts from exactly these, with no staples or length-based items. */
+  listItems?: readonly TripItem[],
 ): LifecycleResult {
   const draft = state.draft;
   if (!draft) return { ok: false, reason: "NO_DRAFT", state };
@@ -310,6 +330,7 @@ export function saveDraft(
     draft.sourceId,
     draft.theme,
     confirmed,
+    listItems,
   );
   return { ok: true, state: { ...state, trips: [trip, ...state.trips], draft: null }, trip };
 }

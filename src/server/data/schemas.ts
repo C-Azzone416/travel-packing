@@ -141,6 +141,8 @@ export const createTripInput = z
     config: tripConfig,
     /** Travel when left out. */
     theme: theme.optional(),
+    /** Start from this saved list instead of staples and recommendations (#170). Looked up by owner, never trusted. */
+    savedListId: savedListId.optional(),
   })
   .superRefine(oneRouteForm);
 export const copyTripInput = z

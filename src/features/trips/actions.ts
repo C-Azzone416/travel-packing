@@ -96,7 +96,12 @@ export async function createTripAction(draft: TripDraft): Promise<CreateTripActi
             ...where,
             theme: draft.theme,
           })
-        : await service.createTrip(context, { ...where, config: draft.config, theme: draft.theme });
+        : await service.createTrip(context, {
+            ...where,
+            config: draft.config,
+            theme: draft.theme,
+            ...(draft.savedListId ? { savedListId: draft.savedListId } : {}),
+          });
   if (saved.ok) return { ok: true, trip: toLifecycleTrip(saved.data) };
   if (saved.error.code === "UNAUTHENTICATED") redirect(SIGN_IN_PATH);
   if (saved.error.code === "FORBIDDEN") redirect(ACCESS_DENIED_PATH);

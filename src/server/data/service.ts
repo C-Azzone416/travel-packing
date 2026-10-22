@@ -35,6 +35,7 @@ import {
   saveDraft,
   selectDraftLocation,
   setDraftConfig,
+  setDraftSavedList,
   setDraftStops,
   setDraftTheme,
   startCopyDraft,
@@ -65,6 +66,7 @@ import {
   categoryCounts,
   findListItemDuplicate,
   listNameTaken,
+  tripItemsFromList,
   type CategoryCount,
   type SavedListItem,
 } from "../../domain/saved-lists";
@@ -401,10 +403,18 @@ async function buildNewTrip(
 ): Promise<StoredTrip> {
   await ensureDefaultStaples(scope.db, scope.ownerId);
   const staples = await listStaples(scope.db, scope.ownerId);
-  const saved = saveDraft(beginDraft(emptyLifecycleState(), draft), staples, {
-    newId: () => crypto.randomUUID(),
-    today: todayOf(context),
-  });
+  // A saved list replaces staples and recommendations (#170). It is looked up by this owner: another owner's list, or
+  // one that is gone, is NOT_FOUND exactly like a missing one, and an empty list has nothing to start a trip from.
+  const list = draft.savedListId
+    ? await getSavedList(scope.db, scope.ownerId, draft.savedListId)
+    : null;
+  if (list && list.items.length === 0) refuse(fail("INVALID_INPUT", { fields: ["savedListId"] }));
+  const saved = saveDraft(
+    beginDraft(emptyLifecycleState(), draft),
+    staples,
+    { newId: () => crypto.randomUUID(), today: todayOf(context) },
+    list ? tripItemsFromList(list) : undefined,
+  );
   if (!saved.ok) refuse(fail("INVALID_INPUT", { fields: ["location", "start", "end"] }));
   return toStoredTrip(saved.trip);
 }
@@ -453,7 +463,11 @@ export function createTrip(context: DataContext, input: unknown): Promise<Result
           await resolveStops(context, request.stops),
         )
       : await singleStopDraft(context, request, begin);
-    return saveNewTrip(scope, context, draft);
+    return saveNewTrip(
+      scope,
+      context,
+      request.savedListId ? setDraftSavedList(draft, request.savedListId) : draft,
+    );
   });
 }
 

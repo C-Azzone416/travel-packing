@@ -16,6 +16,7 @@ import {
   draftStops,
   selectDraftLocation,
   setDraftConfig,
+  setDraftSavedList,
   setDraftStops,
   setDraftTheme,
   type LifecycleTrip,
@@ -27,6 +28,7 @@ import type { TripStop } from "@/domain/trip-stops";
 import { diffRecommendations, type WeatherChange } from "@/domain/weather/diff";
 import { recommendPacking, type WeatherRecommendation } from "@/domain/weather/recommend";
 import type { StopWeather } from "@/domain/weather/types";
+import type { SavedListDetail, SavedListSummary } from "@/server/data/service";
 import type { WeatherSettings } from "@/server/data/weather-store";
 import { localToday } from "@/lib/today";
 import {
@@ -41,17 +43,19 @@ import {
   returnOutfitHelp,
   withDates,
 } from "./draft";
+import { ListReview } from "./ListReview";
 import { LocationPicker } from "./LocationPicker";
 import { useLocationProvider } from "./LocationProviderContext";
 import { ClampedText } from "@/features/trip/ClampedText";
 import { countCallout, countTiles, everydayHeading } from "./count-copy";
+import { StartFromList } from "./StartFromList";
 import { StopList } from "./StopList";
 import { addStop } from "./stops-draft";
 import { ThemePicker } from "./ThemePicker";
 import { useTripsSource } from "./TripsSourceProvider";
 import { formatDays, formatRange } from "./view";
 
-type Step = "details" | "shape";
+type Step = "details" | "start" | "shape";
 
 const COPY_DATE_NOTICE = "Choose a new start date for the copy.";
 type DraftWeather =
@@ -207,6 +211,28 @@ function FlowBody({
   const [saving, setSaving] = useState(false);
   const [announcement, setAnnouncement] = useState("");
   const [weather, setWeather] = useState<DraftWeather>({ kind: "hidden" });
+  // "Start from a saved list" (#170): offered only for a new trip whose owner has at least one list.
+  const [lists, setLists] = useState<readonly SavedListSummary[]>([]);
+  const [chosenId, setChosenId] = useState<string | null>(null);
+  const [chosenList, setChosenList] = useState<SavedListDetail | null>(null);
+  const [startBusy, setStartBusy] = useState(false);
+  const [startError, setStartError] = useState(false);
+  const savedLists = source.savedLists;
+  const hasListStep = from === null && lists.length > 0;
+
+  useEffect(() => {
+    if (!savedLists || from !== null) return;
+    let cancelled = false;
+    savedLists.list().then(
+      (found) => {
+        if (!cancelled) setLists(found);
+      },
+      () => undefined,
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [savedLists, from]);
 
   const previewStops = useMemo(
     () =>
@@ -281,6 +307,8 @@ function FlowBody({
     setSaving(true);
     track(
       async () => {
+        // A list trip is just the list: weather is not mixed in here, it arrives through the packing screen's review.
+        if (chosenList) return source.createTrip(setDraftSavedList(draft, chosenList.id));
         if (source.weather && weather.kind === "ready") {
           const recommendation = recommendationForDraft(draft, weather.stops, previewStops);
           const baseline = calculateSuggestions({
@@ -327,6 +355,36 @@ function FlowBody({
     }
   }
 
+  function enterShape(list: SavedListDetail | null) {
+    setStep("shape");
+    // A list trip has no weather-built items, so the preview is only fetched for staples plus recommendations.
+    if (!list) void loadWeatherPreview();
+  }
+
+  async function continueFromStart() {
+    if (chosenId === null) {
+      setChosenList(null);
+      setStartError(false);
+      enterShape(null);
+      return;
+    }
+    if (chosenList?.id === chosenId) {
+      enterShape(chosenList);
+      return;
+    }
+    setStartBusy(true);
+    setStartError(false);
+    try {
+      const list = await (savedLists as NonNullable<typeof savedLists>).get(chosenId);
+      setChosenList(list);
+      enterShape(list);
+    } catch {
+      setStartError(true);
+    } finally {
+      setStartBusy(false);
+    }
+  }
+
   const header = (title: string, lede: string, eyebrowText: string) => (
     <div className="page-head">
       <button
@@ -360,8 +418,8 @@ function FlowBody({
             onSubmit={(event) => {
               event.preventDefault();
               if (!blocker) {
-                setStep("shape");
-                void loadWeatherPreview();
+                if (hasListStep) setStep("start");
+                else enterShape(null);
               }
             }}
           >
@@ -488,7 +546,7 @@ function FlowBody({
                   setAttempted(true);
                 }}
               >
-                Continue to packing preferences
+                {hasListStep ? "Continue" : "Continue to packing preferences"}
               </button>
               <Button variant="secondary" onClick={requestCancel}>
                 Cancel draft
@@ -501,6 +559,41 @@ function FlowBody({
             ) : null}
           </form>
         </>
+      ) : step === "start" ? (
+        <>
+          {header(
+            "Start from a saved list",
+            "Optional. Pick one list to start from, or keep today’s staples and recommendations.",
+            eyebrow,
+          )}
+          <StartFromList
+            lists={lists}
+            chosenId={chosenId}
+            onChoose={(id) => {
+              setChosenId(id);
+              setStartError(false);
+              if (id !== chosenList?.id) setChosenList(null);
+              // Part of the draft, so choosing a list counts as a change when the person tries to leave.
+              setDraft(setDraftSavedList(draft, id));
+            }}
+            loadList={(id) => (savedLists as NonNullable<typeof savedLists>).get(id)}
+            busy={startBusy}
+            error={startError}
+            onContinue={() => void continueFromStart()}
+            onBack={() => setStep("details")}
+          />
+        </>
+      ) : chosenList ? (
+        <ListShape
+          draft={draft}
+          list={chosenList}
+          header={header}
+          saving={saving}
+          onChange={() => setStep("start")}
+          onBack={() => setStep("details")}
+          onSave={save}
+          onCancel={requestCancel}
+        />
       ) : (
         <ShapeStep
           draft={draft}
@@ -515,7 +608,7 @@ function FlowBody({
           onWeatherRefresh={() =>
             void loadWeatherPreview("settings" in weather ? weather.settings : undefined)
           }
-          onBack={() => setStep("details")}
+          onBack={() => setStep(hasListStep ? "start" : "details")}
           onSave={save}
           onCancel={requestCancel}
         />
@@ -540,6 +633,66 @@ function FlowBody({
         {null}
       </ModalSheet>
     </section>
+  );
+}
+
+interface ListShapeProps {
+  draft: TripDraft;
+  list: SavedListDetail;
+  header: (title: string, lede: string, eyebrow: string) => React.ReactNode;
+  saving: boolean;
+  onChange: () => void;
+  onBack: () => void;
+  onSave: () => void;
+  onCancel: () => void;
+}
+
+/** "Review your list": the trip starts from one saved list, shown read-only (#170, #140 spec §2). */
+function ListShape({
+  draft,
+  list,
+  header,
+  saving,
+  onChange,
+  onBack,
+  onSave,
+  onCancel,
+}: ListShapeProps) {
+  const stops = draftStops(draft);
+  const location = draft.location as SampleLocation;
+  const where =
+    stops.length > 1 ? stops.map((stop) => stop.location?.city).join(" → ") : location.label;
+  const days = calculateSuggestions({ ...draft.config, start: draft.start, end: draft.end }).days;
+  return (
+    <>
+      {header(
+        "Review your list",
+        `${where} · ${formatRange(draft)} · ${formatDays(days)}`,
+        `Starting from “${list.name}”`,
+      )}
+      <div className="list-shape">
+        <ListReview list={list} />
+        <Card padded>
+          <div className="callout">
+            <strong>Not on your dashboard yet.</strong> Review the list, then use Save trip.
+          </div>
+          <div className="actions">
+            <Button disabled={saving} aria-busy={saving} onClick={onSave}>
+              {saving ? "Saving…" : "Save trip"}
+            </Button>
+            <Button variant="secondary" disabled={saving} onClick={onBack}>
+              Edit trip details
+            </Button>
+            <Button variant="secondary" disabled={saving} onClick={onChange}>
+              Change starting point
+            </Button>
+            <Button variant="secondary" disabled={saving} onClick={onCancel}>
+              Cancel draft
+            </Button>
+          </div>
+        </Card>
+      </div>
+    </>
   );
 }
 

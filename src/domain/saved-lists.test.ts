@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { TripItem } from "./calc";
-import { applySavedLists, normaliseName, type SavedList } from "./saved-lists";
+import {
+  applySavedLists,
+  isBathroomCategory,
+  listCollisions,
+  normaliseName,
+  tripItemsFromList,
+  type SavedList,
+} from "./saved-lists";
+import { TOILETRY_GROUP_ID } from "./toiletry-bag";
 
 const list = (id: string, items: [string, string, string, number][]): SavedList => ({
   id,
@@ -134,5 +142,89 @@ describe("managing lists (#167)", () => {
       { category: "Clothing", count: 1 },
     ]);
     expect(categoryCounts([])).toEqual([]);
+  });
+});
+
+describe("tripItemsFromList (#170)", () => {
+  const beach = list("beach", [
+    ["a", "Towel", "Other essentials", 2],
+    ["b", "Sunscreen", "Bathroom", 1],
+    ["c", "Towel", "Other essentials", 1],
+  ]);
+
+  it("copies every row, in order, unpacked, with fresh ids, never merging or summing the repeats", () => {
+    const items = tripItemsFromList(beach);
+    expect(items.map((item) => [item.id, item.name, item.qty, item.packed, item.section])).toEqual([
+      ["saved:beach:a", "Towel", 2, 0, "main"],
+      ["saved:beach:b", "Sunscreen", 1, 0, "main"],
+      ["saved:beach:c", "Towel", 1, 0, "main"],
+    ]);
+  });
+
+  it("puts Bathroom rows in the toiletries group and no other row", () => {
+    const items = tripItemsFromList(beach);
+    expect(
+      items.filter((item) => item.groupId === TOILETRY_GROUP_ID).map((item) => item.name),
+    ).toEqual(["Sunscreen"]);
+    expect(isBathroomCategory("Bathroom")).toBe(true);
+    expect(isBathroomCategory("Clothing")).toBe(false);
+  });
+
+  it("puts a Toiletries row in the bag too: an item made with the Bathroom form is stored as Toiletries", () => {
+    const items = tripItemsFromList(
+      list("l", [
+        ["a", "Razor", "Toiletries", 1],
+        ["b", "Shampoo", "Bathroom", 1],
+        ["c", "Hat", "Accessories", 1],
+        ["d", "Floss", "toiletries", 1],
+      ]),
+    );
+    expect(items.map((item) => [item.name, item.groupId === TOILETRY_GROUP_ID])).toEqual([
+      ["Razor", true],
+      ["Shampoo", true],
+      ["Hat", false],
+      // Categories are exact names: a different spelling is not guessed at.
+      ["Floss", false],
+    ]);
+    expect(isBathroomCategory("Toiletries")).toBe(true);
+    expect(isBathroomCategory("Toiletry")).toBe(false);
+  });
+
+  it("is a copy: changing the list afterwards cannot reach the items already made", () => {
+    const source = list("l", [["a", "Hat", "Accessories", 1]]);
+    const items = tripItemsFromList(source);
+    source.items[0].qty = 9;
+    expect(items[0].qty).toBe(1);
+    expect(tripItemsFromList({ id: "l", name: "l", items: [] })).toEqual([]);
+  });
+});
+
+describe("listCollisions (#170, the apply-time safety check)", () => {
+  const beach = list("beach", [
+    ["a", "Towel", "Other essentials", 2],
+    ["b", "Sunscreen", "Bathroom", 1],
+    ["c", "Towel", "Other essentials", 1],
+  ]);
+
+  it("reports nothing when the trip has no items yet, even if the list repeats a row inside itself", () => {
+    expect(listCollisions([], beach)).toEqual([]);
+  });
+
+  it("reports a group for each list row that matches an item the trip already has (name and category, normalised)", () => {
+    const existing = [draftItem("  sunscreen ", "Bathroom"), draftItem("Hat", "Accessories")];
+    const groups = listCollisions(existing, beach);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].items.map((item) => item.listId)).toEqual(["", "beach"]);
+    expect(groups[0].items.map((item) => item.name.trim())).toEqual(["sunscreen", "Sunscreen"]);
+  });
+
+  it("lists every row of the list that matches in the same group, once per key, and ignores a different category", () => {
+    const groups = listCollisions(
+      [draftItem("Towel", "Other essentials"), draftItem("Towel", "Tech")],
+      beach,
+    );
+    expect(groups).toHaveLength(1);
+    expect(groups[0].items.filter((item) => item.listId === "beach")).toHaveLength(2);
+    expect(groups[0].items.filter((item) => item.listId === "")).toHaveLength(1);
   });
 });
