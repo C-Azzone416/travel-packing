@@ -205,6 +205,7 @@ test("the hero leads with the next departure; Add item opens the add form on the
   const hero = card(page, "San Diego");
   await expect(hero.getByText("Next departure · Oct 23")).toBeVisible();
   await expect(hero.getByText("days to go")).toBeVisible();
+  await expect(hero.getByRole("img", { name: /departure stamp$|route stamps$/ })).toBeVisible();
   await expect(hero.getByRole("link", { name: "Continue packing: San Diego" })).toBeVisible();
   // The header is the dark role token, not a hard-coded colour.
   const headerBackground = await page

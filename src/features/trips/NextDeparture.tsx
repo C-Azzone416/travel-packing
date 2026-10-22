@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Button, buttonClassName } from "@/components/ui/Button";
+import { Stamps } from "@/components/stamp/Stamp";
+import { selectStamps } from "@/domain/stamps";
 import type { LifecycleTrip } from "@/domain/trip-lifecycle";
 import { QuickView } from "./QuickView";
 import { RouteText } from "./RouteText";
@@ -28,8 +30,8 @@ export interface NextDepartureProps {
 }
 
 /**
- * The roomy hero for the next departure (#139 spec §4): route, dates and nights, a stamp slot (a plain placeholder
- * until FL-c), a compact one-cell-per-stay weather strip, the days-to-go numeral, packed progress and the actions.
+ * The roomy hero for the next departure (#139 spec §4): route, dates and nights, the route stamps (the same selectStamps output
+ * as the packing screen), a compact one-cell-per-stay weather strip, the days-to-go numeral, packed progress and the actions.
  * Continue packing is the one primary action; Edit trip and + Add item are secondary. + Add item is an interim: it opens
  * the trip screen with the existing add form (the inline input is #147).
  */
@@ -64,8 +66,9 @@ export function NextDeparture({
             {departure.range} · {departure.nightsLabel}
           </p>
         </div>
-        {/* FL-c (#144) renders the route stamps here. */}
-        <div className="stamp-slot" data-stamp-slot aria-hidden="true" />
+        <div className="stamp-slot" data-stamp-slot>
+          <Stamps stamps={selectStamps(trip.stops)} departure={trip.start} />
+        </div>
       </div>
 
       {weather.phase === "ready" && weather.cells.length > 0 ? (
