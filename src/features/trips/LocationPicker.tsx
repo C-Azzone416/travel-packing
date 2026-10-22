@@ -148,6 +148,7 @@ export function LocationPicker({
         aria-controls={listId}
         aria-activedescendant={showList && active >= 0 ? optionId(active) : undefined}
         aria-invalid={!selected}
+        data-empty={query === "" ? "true" : undefined}
         aria-describedby={noteId}
         onChange={(event) => {
           // Editing the text after confirming clears the confirmation.

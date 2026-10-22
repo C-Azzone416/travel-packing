@@ -1991,13 +1991,30 @@ input:disabled {
   padding: 16px 0 4px;
   border: 0;
 }
+/* Title and count share the first row on one baseline; the lede sits under the title. */
 .staple-category-head {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "title count"
+    "lede lede";
   align-items: baseline;
-  justify-content: space-between;
-  gap: 14px;
+  column-gap: 14px;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--line-strong);
+}
+.staple-category-head > div {
+  display: contents;
+}
+.staple-category-head h2 {
+  grid-area: title;
+}
+.staple-category-head p {
+  grid-area: lede;
+}
+.staple-category-head .category-count {
+  grid-area: count;
+  white-space: nowrap;
 }
 .staple-category-head h2 {
   margin: 0 0 3px;
@@ -2077,7 +2094,7 @@ input:disabled {
     margin: 0 0 8px;
   }
   .staple-category {
-    padding: 15px 14px 4px;
+    padding: 15px 0 4px;
   }
   .staple-row {
     gap: 7px;
@@ -3415,6 +3432,24 @@ a.back {
   margin-right: 6px;
 }
 
+/* Polish (#160): below 480px the lede takes the full width and + Add sits on its own row beneath it. */
+@media (max-width: 479px) {
+  .staples-page-head {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+  .staples-page-head .head-copy {
+    flex: 1 1 100%;
+  }
+}
+
+/* The empty, untouched Destination search stays neutral; it only turns to the warning style once there is text that is
+   not yet a confirmed place. */
+.location-picker input[role="combobox"][data-empty][aria-invalid="true"] {
+  border: 1px solid var(--line-strong);
+  box-shadow: none;
+}
+
 /* ---- Inline "＋ Add item" on the packing screen (#147). 44px controls; stacks on phones. */
 .add-item {
   margin: 16px 0 0;
@@ -3571,4 +3606,80 @@ a.back {
 }
 .list-item-row .staple-name {
   flex: 1;
+}
+
+/* Shared DuplicateResolver (#168, #140 spec §0): one fieldset per group, native radios drawn as 56px option cards like the
+   Settings theme options. Nothing is preselected. Role tokens only. */
+.duplicate-resolver {
+  display: grid;
+  gap: 20px;
+}
+.resolver-group {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.resolver-group legend {
+  margin-bottom: 4px;
+  padding: 0;
+  color: var(--ink);
+  font-size: 17px;
+}
+.resolver-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 10px 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--control-radius);
+  background: var(--control-bg);
+  color: var(--ink);
+  cursor: pointer;
+}
+.resolver-option:hover {
+  background: var(--selection-surface);
+}
+.resolver-option input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.resolver-option:has(input:checked) {
+  border: 2px solid var(--accent);
+  padding: 9px 15px;
+  background: var(--selection-surface);
+}
+.resolver-option:has(input:focus-visible) {
+  outline: 3px solid var(--accent-2);
+  outline-offset: 3px;
+}
+.resolver-copy {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.resolver-copy strong {
+  font-weight: 700;
+}
+.resolver-check {
+  display: none;
+  color: var(--accent);
+  font-weight: 800;
+}
+.resolver-option:has(input:checked) .resolver-check {
+  display: block;
+}
+.resolver-status {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
 }
