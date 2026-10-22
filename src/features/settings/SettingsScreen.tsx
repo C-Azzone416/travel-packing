@@ -116,7 +116,7 @@ export function SettingsScreen({
 
   return (
     <section className="screen">
-      <div className="page-head">
+      <div className="page-head settings-head">
         <div className="head-copy">
           <p className="eyebrow">Settings</p>
           <h1>Settings</h1>

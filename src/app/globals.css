@@ -2141,6 +2141,13 @@ input:disabled {
   max-width: 760px;
   margin-inline: auto;
 }
+/* On a wide screen the cards are a centred 760px column; the heading and lede share it (#178). Phone is unchanged. */
+@media (min-width: 900px) {
+  .settings-head {
+    max-width: 760px;
+    margin-inline: auto;
+  }
+}
 .settings-grid h2 {
   margin: 0 0 8px;
   font-size: 18px;
