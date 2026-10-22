@@ -1,7 +1,7 @@
 // Saved lists persistence (#140). Every query is scoped by owner_id, including child-table queries, so another
 // owner's list can't be listed, read, applied, changed or deleted. Nothing here touches trip rows (snapshots).
 
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import type { SavedList, SavedListItem } from "../../domain/saved-lists";
 import type { Db } from "../db/retention";
 import * as schema from "../db/schema";
@@ -162,4 +162,25 @@ export async function deleteSavedList(db: Db, ownerId: string, listId: string): 
     .where(and(eq(schema.savedLists.id, listId), eq(schema.savedLists.ownerId, ownerId)))
     .returning({ id: schema.savedLists.id });
   if (deleted.length === 0) refuse(fail("NOT_FOUND"));
+}
+
+export interface SavedListMeta {
+  id: string;
+  name: string;
+  /** ISO timestamp of the last change to the list or its items. */
+  updatedAt: string;
+}
+
+/** The owner's lists, newest change first, with when each last changed. Items are loaded separately. */
+export async function listSavedListMetas(db: Db, ownerId: string): Promise<SavedListMeta[]> {
+  const rows = await db
+    .select({
+      id: schema.savedLists.id,
+      name: schema.savedLists.name,
+      updatedAt: schema.savedLists.updatedAt,
+    })
+    .from(schema.savedLists)
+    .where(eq(schema.savedLists.ownerId, ownerId))
+    .orderBy(desc(schema.savedLists.updatedAt), asc(schema.savedLists.id));
+  return rows.map((row) => ({ ...row, updatedAt: row.updatedAt.toISOString() }));
 }

@@ -62,6 +62,20 @@ import { round2 } from "../locations/open-meteo";
 import type { Appearance } from "../../domain/appearance";
 import { readAppearance, writeAppearance } from "./appearance-store";
 import {
+  categoryCounts,
+  findListItemDuplicate,
+  listNameTaken,
+  type CategoryCount,
+  type SavedListItem,
+} from "../../domain/saved-lists";
+import {
+  deleteSavedList,
+  getSavedList,
+  listSavedListMetas,
+  listSavedLists,
+  updateSavedList,
+} from "./saved-list-store";
+import {
   insertTrip,
   loadTrip,
   loadTrips,
@@ -690,4 +704,150 @@ export function applyTripWeatherReview(
       return { trip };
     }),
   );
+}
+
+// ---------------------------------------------------------------- saved lists management (#167)
+// Lists are created from a trip's packing screen (a later mission); here the owner reads, renames, edits and deletes them.
+// Every call is owner-scoped: another owner's list is NOT_FOUND, exactly like a missing one. Trips are never touched.
+
+export interface SavedListSummary {
+  id: string;
+  name: string;
+  itemCount: number;
+  /** ISO timestamp of the last change. */
+  updatedAt: string;
+  categories: CategoryCount[];
+}
+
+export interface SavedListDetail {
+  id: string;
+  name: string;
+  updatedAt: string;
+  items: SavedListItem[];
+}
+
+/** The owner's lists, newest change first: name, item count, when it changed and what it holds. */
+export function listSavedListSummaries(context: DataContext): Promise<Result<SavedListSummary[]>> {
+  return run(context, inputs.none, {}, async (scope) => {
+    const [metas, lists] = await Promise.all([
+      listSavedListMetas(scope.db, scope.ownerId),
+      listSavedLists(scope.db, scope.ownerId),
+    ]);
+    const byId = new Map(lists.map((list) => [list.id, list]));
+    return metas.map((meta) => {
+      const items = byId.get(meta.id)?.items ?? [];
+      return { ...meta, itemCount: items.length, categories: categoryCounts(items) };
+    });
+  });
+}
+
+async function loadDetail(scope: OwnerScope, listId: string): Promise<SavedListDetail> {
+  const metas = await listSavedListMetas(scope.db, scope.ownerId);
+  const meta = metas.find((entry) => entry.id === listId);
+  if (!meta) refuse(fail("NOT_FOUND"));
+  const list = await getSavedList(scope.db, scope.ownerId, listId);
+  return { id: list.id, name: list.name, updatedAt: meta.updatedAt, items: list.items };
+}
+
+export function getSavedListDetail(
+  context: DataContext,
+  input: unknown,
+): Promise<Result<SavedListDetail>> {
+  return run(context, inputs.savedListOnly, input, (scope, { listId }) =>
+    loadDetail(scope, listId),
+  );
+}
+
+/** Rename a list. Names are unique per owner once normalised (case, accents, spaces): REJECTED with NAME_TAKEN. */
+export function renameSavedList(
+  context: DataContext,
+  input: unknown,
+): Promise<Result<SavedListDetail>> {
+  return run(context, inputs.renameSavedListInput, input, async (scope, { listId, name }) => {
+    const detail = await loadDetail(scope, listId);
+    const others = await listSavedLists(scope.db, scope.ownerId);
+    if (listNameTaken(others, name, listId)) refuse(fail("REJECTED", { reason: "NAME_TAKEN" }));
+    await updateSavedList(scope.db, scope.ownerId, listId, { name, items: detail.items });
+    return loadDetail(scope, listId);
+  });
+}
+
+/** Delete a list and its items. Trips made from it keep their own copy. */
+export function deleteSavedListById(
+  context: DataContext,
+  input: unknown,
+): Promise<Result<{ id: string }>> {
+  return run(context, inputs.savedListOnly, input, async (scope, { listId }) => {
+    await deleteSavedList(scope.db, scope.ownerId, listId);
+    return { id: listId };
+  });
+}
+
+/** Replace a list's items (name unchanged) and return the saved detail. */
+async function saveItems(
+  scope: OwnerScope,
+  listId: string,
+  items: SavedListItem[],
+): Promise<SavedListDetail> {
+  const detail = await loadDetail(scope, listId);
+  await updateSavedList(scope.db, scope.ownerId, listId, { name: detail.name, items });
+  return loadDetail(scope, listId);
+}
+
+/** Add an item to a list. An item already there (same normalised name and category) is REJECTED with EXISTS. */
+export function addSavedListItem(
+  context: DataContext,
+  input: unknown,
+): Promise<Result<SavedListDetail>> {
+  return run(context, inputs.addSavedListItemInput, input, async (scope, request) => {
+    const detail = await loadDetail(scope, request.listId);
+    if (findListItemDuplicate(detail.items, request.name, request.category)) {
+      refuse(fail("REJECTED", { reason: "EXISTS" }));
+    }
+    const item: SavedListItem = {
+      id: `item-${crypto.randomUUID()}`,
+      name: request.name,
+      category: request.category,
+      qty: request.qty,
+    };
+    return saveItems(scope, request.listId, [...detail.items, item]);
+  });
+}
+
+/** Change one item's name, category or quantity. EXISTS if it would now match another item; NOT_FOUND for a bad item id. */
+export function updateSavedListItem(
+  context: DataContext,
+  input: unknown,
+): Promise<Result<SavedListDetail>> {
+  return run(context, inputs.updateSavedListItemInput, input, async (scope, request) => {
+    const detail = await loadDetail(scope, request.listId);
+    if (!detail.items.some((item) => item.id === request.itemId)) refuse(fail("NOT_FOUND"));
+    if (findListItemDuplicate(detail.items, request.name, request.category, request.itemId)) {
+      refuse(fail("REJECTED", { reason: "EXISTS" }));
+    }
+    return saveItems(
+      scope,
+      request.listId,
+      detail.items.map((item) =>
+        item.id === request.itemId
+          ? { id: item.id, name: request.name, category: request.category, qty: request.qty }
+          : item,
+      ),
+    );
+  });
+}
+
+export function removeSavedListItem(
+  context: DataContext,
+  input: unknown,
+): Promise<Result<SavedListDetail>> {
+  return run(context, inputs.removeSavedListItemInput, input, async (scope, request) => {
+    const detail = await loadDetail(scope, request.listId);
+    if (!detail.items.some((item) => item.id === request.itemId)) refuse(fail("NOT_FOUND"));
+    return saveItems(
+      scope,
+      request.listId,
+      detail.items.filter((item) => item.id !== request.itemId),
+    );
+  });
 }

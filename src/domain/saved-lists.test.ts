@@ -94,3 +94,45 @@ describe("applySavedLists", () => {
     expect(applySavedLists([], [])).toEqual({ planned: [], duplicates: [] });
   });
 });
+
+describe("managing lists (#167)", () => {
+  const items = [
+    { id: "a", name: "Toothbrush", category: "Bathroom", qty: 1 },
+    { id: "b", name: "Charger", category: "Tech", qty: 1 },
+  ];
+
+  it("finds a list name that is taken, ignoring case, accents and spaces, except the list's own", async () => {
+    const { listNameTaken } = await import("./saved-lists");
+    const lists = [
+      { id: "1", name: "Beach week" },
+      { id: "2", name: "Ski" },
+    ];
+    expect(listNameTaken(lists, " BEACH  week ")).toBe(true);
+    expect(listNameTaken(lists, "Béach week")).toBe(true);
+    expect(listNameTaken(lists, "Beach week", "1")).toBe(false);
+    expect(listNameTaken(lists, "Lake")).toBe(false);
+  });
+
+  it("finds the other item with the same normalised name and category", async () => {
+    const { findListItemDuplicate } = await import("./saved-lists");
+    expect(findListItemDuplicate(items, " toothbrush ", "Bathroom")?.id).toBe("a");
+    expect(findListItemDuplicate(items, "Toothbrush", "Tech")).toBeNull();
+    expect(findListItemDuplicate(items, "Toothbrush", "Bathroom", "a")).toBeNull();
+  });
+
+  it("counts the categories, biggest first and ties by name", async () => {
+    const { categoryCounts } = await import("./saved-lists");
+    expect(
+      categoryCounts([
+        ...items,
+        { id: "c", name: "Cable", category: "Tech", qty: 1 },
+        { id: "d", name: "Shirt", category: "Clothing", qty: 1 },
+      ]),
+    ).toEqual([
+      { category: "Tech", count: 2 },
+      { category: "Bathroom", count: 1 },
+      { category: "Clothing", count: 1 },
+    ]);
+    expect(categoryCounts([])).toEqual([]);
+  });
+});
