@@ -342,3 +342,119 @@ describe("list items", () => {
     expect(data(await service.listSavedListSummaries(context()))[0].id).toBe(b.id);
   });
 });
+
+describe("saveTripAsList (#169)", () => {
+  async function seedTrip() {
+    const trip = makeStoredTrip({ destination: "Beach week" });
+    await insertTrip(db(), OWNER.userId, trip);
+    return trip;
+  }
+
+  it("saves the chosen items as a new list: name, category and needed quantity only, in the order given", async () => {
+    const trip = await seedTrip();
+    const picks = trip.items.slice(0, 3);
+    const created = data(
+      await service.saveTripAsList(context(), {
+        tripId: trip.id,
+        name: "  Beach week ",
+        itemIds: picks.map((item) => item.id),
+      }),
+    );
+    expect(created).toMatchObject({ name: "Beach week", itemCount: 3 });
+    const detail = data(await service.getSavedListDetail(context(), { listId: created.id }));
+    expect(detail.items.map((item) => [item.name, item.category, item.qty])).toEqual(
+      picks.map((item) => [item.name, item.category, item.qty]),
+    );
+    // A snapshot of the three fields: no packed count, section, trip id or other trip detail travels with it.
+    for (const item of detail.items) {
+      expect(Object.keys(item).sort()).toEqual(["category", "id", "name", "qty"]);
+      expect(item.id).toMatch(/^item-/);
+    }
+  });
+
+  it("leaves the trip untouched", async () => {
+    const trip = await seedTrip();
+    const before = JSON.stringify(await loadTrip(db(), OWNER.userId, trip.id));
+    data(
+      await service.saveTripAsList(context(), {
+        tripId: trip.id,
+        name: "Copy",
+        itemIds: [trip.items[0].id],
+      }),
+    );
+    expect(JSON.stringify(await loadTrip(db(), OWNER.userId, trip.id))).toBe(before);
+  });
+
+  it("keeps two rows that read the same when both are sent (keep both is the screen's choice)", async () => {
+    const trip = await seedTrip();
+    const [first, second] = trip.items;
+    const created = data(
+      await service.saveTripAsList(context(), {
+        tripId: trip.id,
+        name: "Twins",
+        itemIds: [first.id, second.id],
+      }),
+    );
+    expect(created.itemCount).toBe(2);
+  });
+
+  it("refuses a name another list has (normalised) with NAME_TAKEN, and saves nothing", async () => {
+    const trip = await seedTrip();
+    await createSavedList(db(), OWNER.userId, { name: "Beach week", items: [] });
+    expect(
+      errorOf(
+        await service.saveTripAsList(context(), {
+          tripId: trip.id,
+          name: " BEACH  week",
+          itemIds: [trip.items[0].id],
+        }),
+      ),
+    ).toMatchObject({ code: "REJECTED", reason: "NAME_TAKEN" });
+    expect(data(await service.listSavedListSummaries(context()))).toHaveLength(1);
+  });
+
+  it.each([
+    ["no items", { itemIds: [] }, "itemIds"],
+    ["a blank name", { name: " " }, "name"],
+    ["a name over 60 characters", { name: "x".repeat(61) }, "name"],
+  ])("rejects %s as INVALID_INPUT naming the field", async (_label, bad, field) => {
+    const trip = await seedTrip();
+    expect(
+      errorOf(
+        await service.saveTripAsList(context(), {
+          tripId: trip.id,
+          name: "Ok",
+          itemIds: [trip.items[0].id],
+          ...bad,
+        }),
+      ),
+    ).toMatchObject({ code: "INVALID_INPUT", fields: [field] });
+  });
+
+  it("rejects an item id that is not on the trip, and saves nothing", async () => {
+    const trip = await seedTrip();
+    expect(
+      errorOf(
+        await service.saveTripAsList(context(), {
+          tripId: trip.id,
+          name: "Ok",
+          itemIds: [trip.items[0].id, "not-on-the-trip"],
+        }),
+      ),
+    ).toMatchObject({ code: "INVALID_INPUT", fields: ["itemIds"] });
+    expect(data(await service.listSavedListSummaries(context()))).toEqual([]);
+  });
+
+  it("is NOT_FOUND for a missing trip and for another owner's, and never shows up in their lists", async () => {
+    const trip = await seedTrip();
+    const input = { name: "Mine", itemIds: [trip.items[0].id] };
+    expect(
+      errorOf(await service.saveTripAsList(context(), { tripId: MISSING, ...input }))?.code,
+    ).toBe("NOT_FOUND");
+    as(OTHER_OWNER);
+    expect(
+      errorOf(await service.saveTripAsList(context(), { tripId: trip.id, ...input }))?.code,
+    ).toBe("NOT_FOUND");
+    expect(data(await service.listSavedListSummaries(context()))).toEqual([]);
+  });
+});

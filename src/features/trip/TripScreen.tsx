@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { DestinationArt } from "@/components/art/DestinationArt";
 import { useSaveStatus } from "@/components/shell/SaveStatus";
@@ -30,6 +31,7 @@ import { selectStamps } from "@/domain/stamps";
 import { daysBetween } from "@/domain/trip-stops";
 import { localToday } from "@/lib/today";
 import { AddItemInline } from "./AddItemInline";
+import { SaveAsListSheet, type SaveOutcome } from "./SaveAsListSheet";
 import { EditRouteSheet } from "./EditRouteSheet";
 import { ItemEditor } from "./ItemEditor";
 import { PackRow } from "./PackRow";
@@ -67,6 +69,7 @@ type Dialog =
   | null
   | { kind: "edit"; itemId: string }
   | { kind: "add-toiletry"; name?: string; qty?: number }
+  | { kind: "save-list" }
   | { kind: "bag" }
   | { kind: "preferences" }
   | { kind: "theme" }
@@ -129,6 +132,7 @@ function ListSection({
 
 export function TripScreen({ tripId }: { tripId: string }) {
   const source = useTripsSource();
+  const router = useRouter();
   const { track } = useSaveStatus();
   const toast = useToast();
   const [load, setLoad] = useState<Load>({ phase: "loading" });
@@ -334,6 +338,38 @@ export function TripScreen({ tripId }: { tripId: string }) {
         onFail: () => resolve(false),
       });
     });
+
+  /** Save the chosen items as a new saved list (#169); the trip itself is not changed. */
+  const saveList = async (name: string, itemIds: string[]): Promise<SaveOutcome> => {
+    let outcome: SaveOutcome = { ok: true };
+    let created: Awaited<ReturnType<typeof source.saveAsList>> | null = null;
+    try {
+      await track(async () => {
+        try {
+          created = await source.saveAsList(tripId, name, itemIds);
+        } catch (error) {
+          if (error instanceof TripsSourceError && error.message === "NAME_TAKEN") {
+            outcome = { ok: false, reason: "NAME_TAKEN" };
+            return;
+          }
+          throw error;
+        }
+      });
+    } catch {
+      return { ok: false, reason: "FAILED" };
+    }
+    if (created) {
+      const list: { name: string; itemCount: number } = created;
+      setDialog(null);
+      toast.show(
+        `“${list.name}” saved (${list.itemCount} ${list.itemCount === 1 ? "item" : "items"}).`,
+        {
+          action: { label: "View lists", onAction: () => router.push("/staples/lists") },
+        },
+      );
+    }
+    return outcome;
+  };
 
   const close = () => setDialog(null);
 
@@ -559,6 +595,14 @@ export function TripScreen({ tripId }: { tripId: string }) {
                 onClick={() => setDialog({ kind: "theme" })}
               >
                 Change theme
+              </Button>
+              <Button
+                variant="secondary"
+                small
+                className="save-as-list"
+                onClick={() => setDialog({ kind: "save-list" })}
+              >
+                Save as a list
               </Button>
             </div>
           </div>
@@ -804,6 +848,14 @@ export function TripScreen({ tripId }: { tripId: string }) {
               after: close,
             })
           }
+        />
+      ) : null}
+      {dialog?.kind === "save-list" ? (
+        <SaveAsListSheet
+          tripName={trip.destination}
+          items={trip.items}
+          onSave={saveList}
+          onClose={close}
         />
       ) : null}
       {dialog?.kind === "add-toiletry" ? (

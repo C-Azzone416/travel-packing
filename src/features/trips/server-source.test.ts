@@ -193,6 +193,32 @@ describe("createServerTripsSource: per-trip commands", () => {
   );
 });
 
+describe("createServerTripsSource: saveAsList (#169)", () => {
+  const list = { id: "l1", name: "Beach week", itemCount: 2 };
+
+  it("passes the name and item ids to its action and returns the created list", async () => {
+    const { fakes } = tripActions();
+    fakes.saveAsList = vi.fn(async () => ({ ok: true, list }) as const);
+    const source = createServerTripsSource(actions().fakes, fakes);
+    expect(await source.saveAsList("t", "Beach week", ["a", "b"])).toEqual(list);
+    expect(fakes.saveAsList).toHaveBeenCalledWith("t", "Beach week", ["a", "b"]);
+  });
+
+  it("says NAME_TAKEN, not a code, when the owner already has that list name; other refusals carry the code", async () => {
+    const { fakes } = tripActions();
+    const source = createServerTripsSource(actions().fakes, fakes);
+    fakes.saveAsList = vi.fn(
+      async () => ({ ok: false, code: "REJECTED", reason: "NAME_TAKEN" }) as const,
+    );
+    const taken = await source.saveAsList("t", "x", ["a"]).catch((caught: unknown) => caught);
+    expect((taken as Error).message).toBe("NAME_TAKEN");
+    fakes.saveAsList = vi.fn(async () => ({ ok: false, code: "NOT_FOUND" }) as const);
+    const missing = await source.saveAsList("t", "x", ["a"]).catch((caught: unknown) => caught);
+    expect(missing).toBeInstanceOf(TripsSourceError);
+    expect((missing as Error).message).toBe("NOT_FOUND");
+  });
+});
+
 describe("createServerTripsSource: addItem (#147)", () => {
   it("says EXISTS, not a code, when the trip already has the item", async () => {
     const { fakes } = tripActions();

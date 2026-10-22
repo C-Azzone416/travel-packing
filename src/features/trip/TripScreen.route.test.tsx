@@ -9,7 +9,11 @@ import type { LifecycleState } from "@/domain/trip-lifecycle";
 import { TripsSourceProvider } from "@/features/trips/TripsSourceProvider";
 import { TripScreen } from "./TripScreen";
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/trips/san-diego" }));
+const push = vi.fn();
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/trips/san-diego",
+  useRouter: () => ({ push }),
+}));
 
 function stateWithRoute(title = "San Diego → Lisbon"): LifecycleState {
   const state = sampleLifecycleState();

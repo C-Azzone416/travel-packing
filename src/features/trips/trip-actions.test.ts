@@ -35,6 +35,7 @@ import {
   markNotReadyAction,
   markReadyAction,
   removeItemAction,
+  saveAsListAction,
   reviewWeatherAgainAction,
   setPackedAction,
   setThemeAction,
@@ -554,5 +555,45 @@ describe("addItemAction (#147)", () => {
       ok: false,
       code: "INTERNAL",
     });
+  });
+});
+
+describe("saveAsListAction (#169)", () => {
+  it("saves the chosen items as a list and says how many", async () => {
+    const trip = await seedTrip(db(), OWNER.userId, { destination: "Beach week" });
+    const ids = trip.items.slice(0, 2).map((item) => item.id);
+    expect(await saveAsListAction(trip.id, "Beach week", ids)).toEqual({
+      ok: true,
+      list: { id: expect.any(String), name: "Beach week", itemCount: 2 },
+    });
+  });
+
+  it("hands NAME_TAKEN and the invalid fields back as data, and NOT_FOUND for another owner's trip", async () => {
+    const trip = await seedTrip(db(), OWNER.userId);
+    const ids = [trip.items[0].id];
+    await saveAsListAction(trip.id, "Taken", ids);
+    expect(await saveAsListAction(trip.id, "taken", ids)).toEqual({
+      ok: false,
+      code: "REJECTED",
+      reason: "NAME_TAKEN",
+    });
+    expect(await saveAsListAction(trip.id, "Ok", [])).toEqual({
+      ok: false,
+      code: "INVALID_INPUT",
+      fields: ["itemIds"],
+    });
+    as(OTHER_OWNER);
+    expect(await saveAsListAction(trip.id, "Mine", ids)).toEqual({ ok: false, code: "NOT_FOUND" });
+  });
+
+  it("redirects a signed-out caller and fails without a data context", async () => {
+    as(null);
+    await expect(saveAsListAction(MISSING, "x", ["a"])).rejects.toThrow("NEXT_REDIRECT:/sign-in");
+    as({ userId: "intruder", email: "intruder@example.test" });
+    await expect(saveAsListAction(MISSING, "x", ["a"])).rejects.toThrow(
+      "NEXT_REDIRECT:/access-denied",
+    );
+    current = null;
+    expect(await saveAsListAction(MISSING, "x", ["a"])).toEqual({ ok: false, code: "INTERNAL" });
   });
 });
