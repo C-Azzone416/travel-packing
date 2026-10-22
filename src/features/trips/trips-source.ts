@@ -28,7 +28,7 @@ import {
   type CommandResult,
   type Signals,
 } from "@/domain/readiness";
-import { listNameTaken } from "@/domain/saved-lists";
+import { categoryCounts, listNameTaken, tripItemsFromList } from "@/domain/saved-lists";
 import { isThemeId, type ThemeId } from "@/domain/themes";
 import type { Scope, Staple, TripConfig } from "@/domain/trip";
 import {
@@ -44,6 +44,7 @@ import {
 } from "@/domain/trip-lifecycle";
 import { routeLabel, tripDatesFromStops, validateStops, type TripStop } from "@/domain/trip-stops";
 import { localToday } from "@/lib/today";
+import type { SavedListDetail, SavedListSummary } from "@/server/data/service";
 import type { WeatherSettings, WeatherSuggestionState } from "@/server/data/weather-store";
 import type { AcceptedWeatherDecision, SkippedWeatherDecision } from "./trip-actions";
 import type { WeatherFetchResult } from "./weather-client";
@@ -61,6 +62,14 @@ export interface NewCustomItem {
   name: string;
   category: string;
   neededQty: number;
+}
+
+/** The owner's saved lists, for the create flow's "Start from a saved list" step (#170). Absent on sources without them. */
+export interface SavedListsCapability {
+  /** Newest change first. */
+  list(): Promise<SavedListSummary[]>;
+  /** One list with its items; rejects NOT_FOUND for an id that is not the owner's. */
+  get(listId: string): Promise<SavedListDetail>;
 }
 
 /** What saving a trip as a list gives back: enough to say "“Beach week” saved (24 items)" and link to it. */
@@ -115,6 +124,7 @@ export interface TripsSource {
   setTheme(tripId: string, theme: ThemeId): Promise<TripChange>;
   /** Replace the trip's route (1-6 stops). Dates, day counts and calculated items follow; rejects an invalid route. */
   setStops(tripId: string, stops: TripStop[]): Promise<TripChange>;
+  savedLists?: SavedListsCapability;
   /** Live weather integration exists on the real source. Memory/unit sources may leave it out. */
   weather?: {
     getSettings(): Promise<WeatherSettings>;
@@ -147,7 +157,22 @@ export interface MemorySourceOptions {
   newId?: () => string;
   today?: () => string;
   staples?: readonly Staple[];
+  /** The owner's saved lists (#170). Left out, the source has none and the create flow shows no list step. */
+  savedLists?: readonly SavedListDetail[];
 }
+
+const summaryOf = (
+  id: string,
+  name: string,
+  updatedAt: string,
+  items: SavedListDetail["items"],
+): SavedListSummary => ({
+  id,
+  name,
+  updatedAt,
+  itemCount: items.length,
+  categories: categoryCounts(items),
+});
 
 const NO_SIGNALS: Signals = { promptBagPlacement: false, reviewPrompt: false };
 
@@ -159,13 +184,14 @@ export function createMemoryTripsSource(
     newId = () => crypto.randomUUID(),
     today = localToday,
     staples = DEFAULT_STAPLES,
+    savedLists,
   }: MemorySourceOptions,
 ): TripsSource & { snapshot(): LifecycleState; staplesSnapshot(): Staple[] } {
   let state = initial;
   // The owner's staples: "remember for future trips" edits change these, never an existing trip.
   let currentStaples: Staple[] = [...staples];
   // The names of the saved lists made from trips (#169); the in-memory source keeps no more of them than that.
-  let savedLists: { id: string; name: string }[] = [];
+  let madeLists: { id: string; name: string }[] = [];
 
   const apply = async (result: LifecycleResult): Promise<LifecycleState> => {
     if (!result.ok) throw new TripsSourceError(result.reason);
@@ -216,15 +242,38 @@ export function createMemoryTripsSource(
     return { trip, signals: NO_SIGNALS };
   };
 
+  const lists = savedLists
+    ? {
+        list: async () =>
+          savedLists.map(({ id, name, updatedAt, items }) => summaryOf(id, name, updatedAt, items)),
+        get: async (listId: string) => {
+          const found = savedLists.find((entry) => entry.id === listId);
+          if (!found) throw new TripsSourceError("NOT_FOUND");
+          return found;
+        },
+      }
+    : undefined;
+
   return {
     snapshot: () => state,
     staplesSnapshot: () => currentStaples,
+    ...(lists ? { savedLists: lists } : {}),
     load: async () => state,
     archive: (id) => apply(archiveTrip(state, id)),
     restore: (id) => apply(restoreTrip(state, id)),
     remove: (id) => apply(removeTrip(state, id, now())),
     createTrip: async (draft) => {
-      const result = saveDraft({ ...state, draft }, [...currentStaples], { newId, today: today() });
+      const list = draft.savedListId
+        ? (savedLists ?? []).find((entry) => entry.id === draft.savedListId)
+        : null;
+      if (draft.savedListId && !list) throw new TripsSourceError("NOT_FOUND");
+      if (list && list.items.length === 0) throw new TripsSourceError("INVALID_INPUT");
+      const result = saveDraft(
+        { ...state, draft },
+        [...currentStaples],
+        { newId, today: today() },
+        list ? tripItemsFromList(list) : undefined,
+      );
       if (!result.ok) throw new TripsSourceError(result.reason);
       state = { ...result.state, draft: null };
       return result.trip;
@@ -268,14 +317,14 @@ export function createMemoryTripsSource(
       }),
     saveAsList: async (id, name, itemIds) => {
       const trip = find(id);
-      if (listNameTaken(savedLists, name)) throw new TripsSourceError("NAME_TAKEN");
+      if (listNameTaken(madeLists, name)) throw new TripsSourceError("NAME_TAKEN");
       const wanted = new Set(itemIds);
       const items = trip.items.filter((item) => wanted.has(item.id));
       if (items.length === 0 || items.length !== wanted.size) {
         throw new TripsSourceError("INVALID_INPUT");
       }
       const list = { id: newId(), name: name.trim() };
-      savedLists = [...savedLists, list];
+      madeLists = [...madeLists, list];
       return { ...list, itemCount: items.length };
     },
     confirmBagPlacement: (id) => command(id, confirmBagPlacement),

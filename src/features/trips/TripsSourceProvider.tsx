@@ -10,6 +10,7 @@ import {
   restoreTripAction,
   undoRemoveTripAction,
 } from "./actions";
+import { getSavedListAction, listSavedListsAction } from "../staples/saved-list-actions";
 import { createServerTripsSource } from "./server-source";
 import {
   applyWeatherReviewAction,
@@ -123,6 +124,7 @@ export function TripsSourceProvider({
           listSuggestions: listWeatherSuggestionsAction,
           applyReview: applyWeatherReviewAction,
         },
+        { list: listSavedListsAction, get: getSavedListAction },
       ),
   );
   return <TripsSourceContext.Provider value={value}>{children}</TripsSourceContext.Provider>;

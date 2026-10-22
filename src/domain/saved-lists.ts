@@ -3,6 +3,7 @@
 // step decides what to do with them.
 
 import type { TripItem } from "./calc";
+import { TOILETRY_GROUP_ID } from "./toiletry-bag";
 
 export interface SavedListItem {
   /** Stable identity within its list. */
@@ -92,6 +93,58 @@ export function applySavedLists(
       duplicates.push({ key, items });
   }
   return { planned, duplicates };
+}
+
+// ---------------------------------------------------------------- starting a trip from one list (#170)
+
+/**
+ * Rows that belong in the toiletries group (the bag). The category is "Bathroom" for staples and recommendations and
+ * "Toiletries" for an item made with the Bathroom form, so a list can hold either; both go in the bag.
+ */
+export const isBathroomCategory = (category: string): boolean =>
+  category === "Bathroom" || category === "Toiletries";
+
+/**
+ * The items a new trip gets from one saved list: a copy of every row, packed = 0, in the list's order, with fresh ids
+ * (`saved:<listId>:<itemId>`) so later edits to the list never reach the trip and two trips from one list never share
+ * anything. Bathroom rows go into the toiletries group. Nothing is merged, dropped or summed.
+ */
+export function tripItemsFromList(list: SavedList): TripItem[] {
+  return list.items.map((item) => ({
+    id: `saved:${list.id}:${item.id}`,
+    name: item.name,
+    category: item.category,
+    qty: item.qty,
+    packed: 0,
+    section: "main",
+    ...(isBathroomCategory(item.category) ? { groupId: TOILETRY_GROUP_ID } : {}),
+  }));
+}
+
+/**
+ * Groups where an item the trip ALREADY has matches a row of the list (same normalised name and category): the
+ * apply-time safety check (#140 spec §2). Rows that only match each other inside the list are NOT reported: the person
+ * decided those when the list was saved ("keep both" is allowed), so they never prompt again.
+ */
+export function listCollisions(existing: readonly TripItem[], list: SavedList): DuplicateGroup[] {
+  const planned = tripItemsFromList(list).map((item) => ({ ...item, listId: list.id }));
+  const groups: DuplicateGroup[] = [];
+  const seen = new Set<string>();
+  for (const item of planned) {
+    const key = duplicateKey(item.name, item.category);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const have = existing.filter((entry) => duplicateKey(entry.name, entry.category) === key);
+    if (have.length === 0) continue;
+    groups.push({
+      key,
+      items: [
+        ...have.map((entry) => ({ ...entry, listId: "" })),
+        ...planned.filter((entry) => duplicateKey(entry.name, entry.category) === key),
+      ],
+    });
+  }
+  return groups;
 }
 
 // ---------------------------------------------------------------- managing lists (#167)

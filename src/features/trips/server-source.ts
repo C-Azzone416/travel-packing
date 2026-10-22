@@ -18,6 +18,7 @@ import type {
   WeatherSuggestionsResult,
 } from "./trip-actions";
 import type { WeatherSettingsResult } from "../settings/weather-actions";
+import type { SavedListResult, SavedListsResult } from "../staples/saved-list-actions";
 import type { WeatherFetchResult } from "./weather-client";
 import type { WeatherSettings, WeatherSuggestionState } from "@/server/data/weather-store";
 import {
@@ -127,10 +128,16 @@ async function unwrapWeatherSuggestions(
   return result.suggestions;
 }
 
+export interface SavedListActions {
+  list(): Promise<SavedListsResult>;
+  get(listId: string): Promise<SavedListResult>;
+}
+
 export function createServerTripsSource(
   actions: TripsActions,
   trip: TripActions,
   weather?: WeatherActions,
+  lists?: SavedListActions,
 ): TripsSource {
   const source: TripsSource = {
     load: () => unwrap(actions.load()),
@@ -187,6 +194,21 @@ export function createServerTripsSource(
       listSuggestions: (id) => unwrapWeatherSuggestions(weather.listSuggestions(id)),
       applyReview: (id, accepted, skipped) =>
         unwrapChange(weather.applyReview(id, accepted, skipped)),
+    };
+  }
+
+  if (lists) {
+    source.savedLists = {
+      list: async () => {
+        const result = await lists.list();
+        if (!result.ok) throw new TripsSourceError(result.code);
+        return result.lists;
+      },
+      get: async (listId) => {
+        const result = await lists.get(listId);
+        if (!result.ok) throw new TripsSourceError(result.code);
+        return result.list;
+      },
     };
   }
 
