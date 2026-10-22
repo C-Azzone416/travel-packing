@@ -106,8 +106,10 @@ export function LaterJourneys({
 }) {
   return (
     <aside className="later-journeys" aria-labelledby="later-journeys-title">
-      <p className="eyebrow">Afterwards</p>
-      <h2 id="later-journeys-title">Later journeys</h2>
+      <div className="later-head">
+        <h2 id="later-journeys-title">Later journeys</h2>
+        <span>{entries.length === 1 ? "1 trip" : `${entries.length} trips`}</span>
+      </div>
       {entries.length === 0 ? (
         <p className="muted tiny">Nothing else planned yet.</p>
       ) : (

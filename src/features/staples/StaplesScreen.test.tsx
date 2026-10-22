@@ -291,7 +291,7 @@ describe("adding a staple", () => {
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", { name: "Add staple" }),
     );
-    expect(await screen.findByRole("button", { name: /couldn.t save/i })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /not saved/i })).toBeTruthy();
     expect(screen.getByRole("dialog", { name: "Add a staple" })).toBeTruthy();
     expect(screen.queryByText("Hat saved for future trips.")).toBeNull();
   });

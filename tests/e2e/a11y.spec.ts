@@ -234,7 +234,7 @@ test.describe("error states and toasts", DEVICE, () => {
       isAction(route.request()) ? route.abort("failed") : route.continue(),
     );
     await chooseFromMenu(page, "San Diego", "Archive");
-    const chip = page.getByRole("button", { name: "Couldn't save, retry" });
+    const chip = page.getByRole("button", { name: "Not saved, retry" });
     await expect(chip).toBeVisible();
     await expectAccessible(page, "dashboard with the error chip");
     await chip.click();
@@ -434,7 +434,7 @@ test.describe("design's known items", DEVICE, () => {
       route.request().method() === "POST" ? route.abort("failed") : route.continue(),
     );
     await chooseFromMenu(page, "San Diego", "Archive");
-    const chip = page.getByRole("button", { name: "Couldn't save, retry" });
+    const chip = page.getByRole("button", { name: "Not saved, retry" });
     await expect(chip).toBeVisible();
     await page.unroute("**/*");
     // One line of 12px text plus padding: well under two lines.
@@ -553,7 +553,7 @@ test("screenshots of the visual fixes (after)", DEVICE, async ({ page }, testInf
     .locator('[data-item-id="socks"]')
     .getByRole("button", { name: "Increase packed Socks" })
     .click();
-  await expect(page.getByRole("button", { name: "Couldn't save, retry" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Not saved, retry" })).toBeVisible();
   await page.evaluate(() => window.scrollTo(0, 0));
   await shot("error-chip");
 });

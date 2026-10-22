@@ -5,7 +5,7 @@ export type SaveStatus = "saved" | "saving" | "error";
 const COPY: Record<SaveStatus, { text: string; label: string; glyph: string }> = {
   saved: { text: "Saved", label: "Saved", glyph: "✓" },
   saving: { text: "Saving…", label: "Saving", glyph: "●" },
-  error: { text: "Not saved · Retry", label: "Couldn't save, retry", glyph: "!" },
+  error: { text: "Not saved · Retry", label: "Not saved, retry", glyph: "!" },
 };
 
 // The top-bar chip from #31. Saved/Saving open Settings (where "Last saved" lives); Error opens the retry sheet, so

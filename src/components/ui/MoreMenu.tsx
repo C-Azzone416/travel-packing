@@ -70,6 +70,8 @@ export function MoreMenu({ subject, items, variant = "ghost", disabled = false }
     if (event.key === "Escape" && open) {
       event.preventDefault();
       close(true);
+    } else if (event.key === "Tab" && open) {
+      close(false);
     } else if (event.key === "ArrowDown") {
       event.preventDefault();
       openOn(0);

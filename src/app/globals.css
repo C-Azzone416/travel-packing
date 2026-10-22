@@ -12,7 +12,6 @@
   --muted-text: var(--muted);
 
   --shadow: 0 14px 40px var(--ledger-shadow);
-  --radius: 22px;
   font-family:
     var(--font-body),
     ui-sans-serif,
@@ -110,7 +109,7 @@ p {
   left: 12px;
   top: -80px;
   padding: 12px 16px;
-  border-radius: 12px;
+  border-radius: var(--control-radius);
   background: var(--ink);
   color: var(--surface);
   font-weight: 800;
@@ -196,7 +195,7 @@ p {
 }
 
 /* The status chip: quiet text in the bar (design's #155 ruling). Still a persistent live region and a link to
-   Settings; the ::after keeps a 44px target without making the chip look heavy. */
+   Settings, 44px tall like every target. */
 .sync-chip {
   position: relative;
   flex: none;
@@ -204,7 +203,7 @@ p {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 28px;
+  min-height: 44px;
   padding: 0 4px;
   border: 0;
   background: transparent;
@@ -213,11 +212,6 @@ p {
   font-weight: 600;
   text-decoration: none;
   cursor: pointer;
-}
-.sync-chip::after {
-  content: "";
-  position: absolute;
-  inset: -8px -6px;
 }
 .sync-chip.saving {
   color: var(--header-ink);
@@ -237,7 +231,11 @@ p {
   font-weight: 900;
 }
 @media (max-width: 720px) {
-  /* On a phone the idle chip is just the check; the word stays for screen readers. */
+  /* On a phone the idle chip is just the check (still a 44px target); the word stays for screen readers. */
+  .sync-chip {
+    min-width: 44px;
+    justify-content: center;
+  }
   .sync-chip.saved .sync-text {
     position: absolute;
     width: 1px;
@@ -330,12 +328,13 @@ main {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  border: 1px solid transparent;
-  border-radius: 14px;
+  border: 1px solid var(--action-border);
+  border-radius: var(--button-radius);
   padding: 10px 16px;
   background: var(--action);
   color: var(--action-ink);
-  font-weight: 850;
+  font-size: 14px;
+  font-weight: 700;
   cursor: pointer;
   text-decoration: none;
 }
@@ -347,9 +346,9 @@ main {
   cursor: not-allowed;
 }
 .button.secondary {
-  background: var(--control-bg);
+  background: transparent;
   color: var(--ink);
-  border-color: var(--line);
+  border-color: var(--line-strong);
 }
 .button.secondary:hover {
   background: var(--seafoam-soft);
@@ -381,25 +380,27 @@ main {
 
 .card {
   border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: color-mix(in srgb, var(--surface) 88%, transparent);
-  box-shadow: 0 8px 24px var(--ledger-shadow);
+  border-radius: var(--control-radius);
+  background: var(--surface);
 }
 .card.padded {
   padding: 20px;
 }
 
+/* Tags are flat rectangles (spec §1): small uppercase labels, never saturated fills. */
 .status-pill {
   display: inline-flex;
   align-items: center;
   width: fit-content;
   gap: 6px;
-  border-radius: 999px;
-  padding: 6px 10px;
-  background: var(--seafoam-soft);
-  color: var(--link);
-  font-size: 12px;
-  font-weight: 850;
+  border-radius: var(--control-radius);
+  padding: 4px 8px;
+  background: var(--status-surface);
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 .status-pill.ready {
   border: 1px solid var(--status-ready-border);
@@ -432,7 +433,7 @@ main {
   max-height: calc(100vh - 36px);
   overflow: auto;
   padding: 21px;
-  border-radius: 25px;
+  border-radius: var(--control-radius);
   background: var(--paper);
   box-shadow: 0 28px 80px var(--ledger-shadow);
   animation: modalIn 0.18s ease-out;
@@ -466,7 +467,7 @@ main {
   height: 44px;
   margin: -6px -6px 0 0;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--control-radius);
   background: var(--control-bg);
   color: var(--ink);
   font-size: 22px;
@@ -500,7 +501,7 @@ main {
   align-items: center;
   gap: 12px;
   padding: 8px 8px 8px 16px;
-  border-radius: 999px;
+  border-radius: var(--control-radius);
   background: var(--ink);
   color: var(--surface);
   font-size: 13px;
@@ -512,7 +513,7 @@ main {
   min-height: 44px;
   padding: 0 14px;
   border: 1px solid color-mix(in srgb, var(--surface) 50%, transparent);
-  border-radius: 999px;
+  border-radius: var(--control-radius);
   background: transparent;
   color: var(--surface);
   font-weight: 850;
@@ -537,7 +538,7 @@ main {
   gap: 12px;
   padding: 10px 10px 10px 16px;
   border: 1px solid var(--danger-border);
-  border-radius: 16px;
+  border-radius: var(--control-radius);
   background: var(--danger-surface);
   color: var(--danger);
   font-size: 14px;
@@ -689,9 +690,9 @@ main {
   margin: 9px 0 15px;
 }
 .progress-track {
-  height: 9px;
+  height: 6px;
   overflow: hidden;
-  border-radius: 999px;
+  border-radius: 2px;
   background: var(--track);
 }
 .progress-track span {
@@ -719,7 +720,7 @@ main {
   margin: -2px 0 13px;
   padding: 8px 11px;
   border: 1px solid var(--line);
-  border-radius: 13px;
+  border-radius: var(--control-radius);
   background: var(--bg);
   color: var(--ink);
   font-weight: 850;
@@ -733,7 +734,7 @@ main {
   margin: -3px 0 15px;
   padding: 14px;
   border: 1px solid var(--line);
-  border-radius: 17px;
+  border-radius: var(--control-radius);
   background: var(--surface);
 }
 .quick-view-head {
@@ -752,7 +753,7 @@ main {
   gap: 3px;
   padding: 3px;
   border: 1px solid var(--line);
-  border-radius: 11px;
+  border-radius: var(--control-radius);
   background: var(--control-bg);
 }
 .quick-filters button {
@@ -809,13 +810,15 @@ main {
 .timing-tag {
   display: inline-flex;
   align-items: center;
-  padding: 3px 7px;
-  border: 1px solid var(--accent);
-  border-radius: 999px;
-  background: var(--action);
-  color: var(--action-ink);
-  font-size: 12px;
-  font-weight: 900;
+  padding: 3px 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--control-radius);
+  background: var(--detail-surface);
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   line-height: 1.15;
   white-space: nowrap;
 }
@@ -826,7 +829,7 @@ main {
   gap: 10px;
   margin: 11px 0;
   padding: 10px;
-  border-radius: 12px;
+  border-radius: var(--control-radius);
   background: var(--control-bg);
 }
 .quick-bag-row strong,
@@ -840,7 +843,7 @@ main {
 }
 .quick-bag-status {
   padding: 5px 8px;
-  border-radius: 999px;
+  border-radius: var(--control-radius);
   font-size: 12px;
   font-weight: 900;
   white-space: nowrap;
@@ -858,47 +861,44 @@ main {
   color: var(--ink);
 }
 
+/* Upcoming / Past & archive: a flat row of two text tabs, the active one underlined (#155; no box, no count bubbles). */
 .trip-tabs {
-  display: inline-flex;
+  display: flex;
   flex-wrap: wrap;
-  max-width: 100%;
-  gap: 5px;
-  margin: 0 0 14px;
-  padding: 5px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--surface) 78%, transparent);
+  gap: 4px 20px;
+  margin: 0 0 16px;
+  border-bottom: 1px solid var(--line);
 }
 .trip-tabs button {
   min-height: 44px;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
+  margin-bottom: -1px;
   border: 0;
-  border-radius: 12px;
-  padding: 8px 12px;
+  border-bottom: 3px solid transparent;
+  border-radius: 0;
+  padding: 0 2px;
   background: transparent;
-  color: var(--muted-text);
-  font-weight: 850;
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 700;
   cursor: pointer;
 }
 .trip-tabs button.active {
-  background: var(--seafoam-soft);
-  color: var(--link);
+  border-bottom-color: var(--accent);
+  color: var(--ink);
 }
 .trip-tabs span {
-  min-width: 20px;
-  padding: 2px 6px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--surface) 85%, transparent);
-  font-size: 12px;
-  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .empty-state {
   padding: 24px;
   border: 1px dashed var(--line-strong);
-  border-radius: 18px;
+  border-radius: var(--control-radius);
   color: var(--muted-text);
   text-align: center;
 }
@@ -952,7 +952,7 @@ main {
   min-width: 44px;
   min-height: 44px;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--control-radius);
   background: var(--control-bg);
   cursor: pointer;
   font-size: 18px;
@@ -992,7 +992,7 @@ select {
   width: 100%;
   min-height: 46px;
   border: 1px solid var(--line-strong);
-  border-radius: 13px;
+  border-radius: var(--control-radius);
   background: var(--control-bg);
   color: var(--ink);
   padding: 10px 12px;
@@ -1095,7 +1095,7 @@ input:disabled {
 .callout {
   margin: 14px 0;
   padding: 14px;
-  border-radius: 16px;
+  border-radius: var(--control-radius);
   background: var(--seafoam-soft);
   color: var(--ink);
   font-size: 13px;
@@ -1111,7 +1111,7 @@ input:disabled {
 }
 .count-summary div {
   padding: 11px;
-  border-radius: 14px;
+  border-radius: var(--control-radius);
   background: var(--bg);
   text-align: center;
 }
@@ -1126,7 +1126,7 @@ input:disabled {
 .weather-card {
   padding: 16px;
   border: 1px solid var(--line);
-  border-radius: 20px;
+  border-radius: var(--control-radius);
   background: linear-gradient(145deg, var(--status-surface), var(--surface));
 }
 .weather-card h3 {
@@ -1163,7 +1163,7 @@ input:disabled {
 .weather-review-banner,
 .weather-ready-callout {
   padding: 12px;
-  border-radius: 14px;
+  border-radius: var(--control-radius);
   background: var(--status-remaining-bg);
   color: var(--status-remaining-text);
 }
@@ -1202,7 +1202,7 @@ input:disabled {
   align-items: center;
   justify-content: center;
   padding: 4px 10px;
-  border-radius: 999px;
+  border-radius: var(--control-radius);
   font-size: 12px;
   font-weight: 700;
   text-align: center;
@@ -1325,12 +1325,14 @@ input:disabled {
   display: inline-flex;
   align-items: center;
   width: fit-content;
-  border-radius: 999px;
-  padding: 6px 10px;
-  background: var(--seafoam-soft);
-  color: var(--link);
-  font-size: 12px;
-  font-weight: 850;
+  border-radius: var(--control-radius);
+  padding: 4px 8px;
+  background: var(--detail-surface);
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 .review-group {
   margin: 18px 0;
@@ -1381,7 +1383,7 @@ input:disabled {
   gap: 1px 10px;
   padding: 9px 12px;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--control-radius);
   background: var(--control-bg);
   cursor: pointer;
 }
@@ -1416,7 +1418,7 @@ input:disabled {
   margin-top: 8px;
   padding: 12px 14px;
   border: 1px solid var(--status-ready-border);
-  border-radius: 15px;
+  border-radius: var(--control-radius);
   background: var(--status-ready-bg);
   color: var(--status-ready-text);
 }
@@ -1466,7 +1468,7 @@ input:disabled {
   overflow: hidden;
   margin: 6px 0 18px;
   border: 1px solid var(--line);
-  border-radius: 28px;
+  border-radius: var(--control-radius);
   background: var(--seafoam);
   box-shadow: var(--shadow);
 }
@@ -1494,7 +1496,7 @@ input:disabled {
   max-width: 560px;
   padding: 13px 15px;
   border: 1px solid var(--line);
-  border-radius: 20px;
+  border-radius: var(--control-radius);
   background: color-mix(in srgb, var(--bg) 92%, transparent);
   box-shadow: 0 8px 24px var(--ledger-shadow);
 }
@@ -1532,7 +1534,7 @@ input:disabled {
   min-height: 44px;
   padding: 8px 14px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--control-radius);
   background: var(--control-bg);
   font-weight: 800;
   cursor: pointer;
@@ -1573,7 +1575,7 @@ input:disabled {
   min-height: 62px;
   padding: 9px 10px;
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--control-radius);
   background: var(--control-bg);
 }
 .pack-row .qty-stepper {
@@ -1610,7 +1612,7 @@ input:disabled {
   align-items: center;
   text-align: center;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--control-radius);
   overflow: hidden;
 }
 .qty-stepper button {
@@ -1646,7 +1648,7 @@ input:disabled {
   margin-top: 20px;
   padding: 16px;
   border: 1px solid var(--line);
-  border-radius: 20px;
+  border-radius: var(--control-radius);
   background: linear-gradient(145deg, var(--status-surface), var(--surface));
 }
 .toiletry-explainer {
@@ -1663,7 +1665,7 @@ input:disabled {
   margin-top: 14px;
   padding: 13px 14px;
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--control-radius);
   background: var(--control-bg);
 }
 @media (max-width: 659px) {
@@ -1698,7 +1700,7 @@ input:disabled {
 .review-prompt {
   margin-top: 16px;
   padding: 18px;
-  border-radius: 20px;
+  border-radius: var(--control-radius);
   background: var(--ink);
   color: var(--action-ink);
 }
@@ -1751,7 +1753,7 @@ input:disabled {
   min-height: 44px;
   padding: 13px;
   border: 1px solid var(--line);
-  border-radius: 15px;
+  border-radius: var(--control-radius);
   cursor: pointer;
 }
 .choice:has(input:checked) {
@@ -1876,7 +1878,7 @@ input:disabled {
   width: 100%;
   min-height: 44px;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--control-radius);
   padding: 10px 14px;
   background: var(--control-bg);
   color: var(--ink);
@@ -1901,7 +1903,7 @@ input:disabled {
 .auth-error {
   margin: 0;
   border: 1px solid var(--danger-border);
-  border-radius: 12px;
+  border-radius: var(--control-radius);
   padding: 10px 12px;
   background: var(--danger-surface);
   color: var(--danger);
@@ -1931,7 +1933,7 @@ input:disabled {
 }
 .auth-notice {
   margin: 12px 0 0;
-  border-radius: 12px;
+  border-radius: var(--control-radius);
   padding: 10px 12px;
   background: var(--seafoam-soft);
   color: var(--ink);
@@ -2038,7 +2040,7 @@ input:disabled {
   gap: 14px;
   padding: 12px 14px;
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--control-radius);
   background: color-mix(in srgb, var(--surface) 76%, transparent);
 }
 .staples-toolbar p {
@@ -2053,7 +2055,7 @@ input:disabled {
 .staple-category {
   padding: 17px 18px 5px;
   border: 1px solid var(--line);
-  border-radius: 20px;
+  border-radius: var(--control-radius);
   background: color-mix(in srgb, var(--surface) 88%, transparent);
   box-shadow: 0 8px 24px var(--ledger-shadow);
 }
@@ -2077,7 +2079,7 @@ input:disabled {
 .category-count {
   min-width: 25px;
   padding: 4px 7px;
-  border-radius: 999px;
+  border-radius: var(--control-radius);
   background: var(--seafoam-soft);
   color: var(--link);
   font-size: 12px;
@@ -2115,7 +2117,7 @@ input:disabled {
   min-width: 44px;
   min-height: 44px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--control-radius);
   background: white;
   cursor: pointer;
 }
@@ -2131,7 +2133,7 @@ input:disabled {
 .skeleton-row {
   height: 44px;
   margin: 10px 0;
-  border-radius: 10px;
+  border-radius: var(--control-radius);
   background: var(--seafoam-soft);
 }
 @media (max-width: 659px) {
@@ -2194,7 +2196,7 @@ input:disabled {
   min-height: 44px;
   place-items: center;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--control-radius);
   background: var(--bg);
   font-weight: 800;
   cursor: pointer;
@@ -2276,7 +2278,7 @@ a.back {
   min-height: 44px;
   padding: 8px;
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--control-radius);
   background: var(--control-bg);
   cursor: pointer;
 }
@@ -2298,7 +2300,7 @@ a.back {
   display: block;
   aspect-ratio: 3 / 2;
   overflow: hidden;
-  border-radius: 10px;
+  border-radius: var(--control-radius);
   background: var(--seafoam);
 }
 .theme-thumb img {
@@ -2385,7 +2387,7 @@ a.back {
   display: inline-block;
   margin: 0 0 6px;
   padding: 3px 11px;
-  border-radius: 14px;
+  border-radius: var(--control-radius);
   background: var(--seafoam-soft);
   color: var(--ink);
   font-size: 14px;
@@ -2490,7 +2492,7 @@ a.back {
   justify-self: start;
   align-self: end;
   padding: 3px 10px;
-  border-radius: 999px;
+  border-radius: var(--control-radius);
   background: var(--seafoam-soft);
   color: var(--ink);
   font-size: 13px;
@@ -2499,7 +2501,7 @@ a.back {
 .route-summary {
   margin: 0;
   padding: 12px;
-  border-radius: 14px;
+  border-radius: var(--control-radius);
   background: var(--seafoam-soft);
   color: var(--ink);
   font-weight: 700;
@@ -2852,7 +2854,7 @@ a.back {
     padding: 0 12px;
     gap: 8px;
     border: 1px solid var(--line-strong);
-    border-radius: 999px;
+    border-radius: var(--control-radius);
   }
   .sections-panel p {
     display: none;
@@ -2927,7 +2929,15 @@ a.back {
   border: 1px solid var(--line);
   border-top: 4px solid var(--accent);
   border-radius: var(--control-radius);
-  background: var(--surface);
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent 27px,
+      var(--ledger-rule) 27px,
+      var(--ledger-rule) 28px
+    ),
+    var(--surface);
   box-shadow: 0 8px 24px var(--ledger-shadow);
 }
 .ledger-hero-top {
@@ -3009,20 +3019,21 @@ a.back {
   margin-top: 24px;
 }
 .days-to-go {
-  display: grid;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
   line-height: 1;
 }
 .days-to-go strong {
   font-family: var(--font-display), var(--font-body), sans-serif;
-  font-size: 64px;
+  font-size: 44px;
   font-weight: 800;
   letter-spacing: -0.04em;
-  color: var(--accent);
+  color: var(--ink);
 }
 .days-to-go span {
-  margin-top: 4px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
 }
 .ledger-progress .progress-track span {
   background: var(--progress);
@@ -3092,7 +3103,7 @@ a.back {
   font-family: var(--font-display), var(--font-body), sans-serif;
   font-size: 34px;
   font-weight: 800;
-  color: var(--accent);
+  color: var(--ink);
 }
 .later-days span {
   margin-top: 4px;
@@ -3181,8 +3192,13 @@ a.back {
     grid-template-columns: minmax(0, 1fr);
     gap: 16px;
   }
-  .ledger-actions .button {
+  /* Continue packing takes the first row; Edit trip, Add item and the ⋯ share the next one. */
+  .ledger-actions > .button:first-child {
     flex: 1 1 100%;
+  }
+  .ledger-actions > .button:not(:first-child) {
+    flex: 1 1 0;
+    min-width: 0;
   }
 }
 
@@ -3262,4 +3278,26 @@ a.back {
   margin: 4px 0;
   border: 0;
   border-top: 1px solid var(--line);
+}
+
+.later-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.later-head h2 {
+  margin: 0;
+}
+.later-head span {
+  color: var(--muted);
+  font-size: 13px;
+}
+.later-journeys li:first-child .later-journey {
+  border-top: 0;
+}
+.topbar-inner > .sync-chip {
+  margin-left: auto;
 }

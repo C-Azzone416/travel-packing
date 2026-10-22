@@ -89,21 +89,24 @@ test(
   "navigation is a bottom bar on phones and inline in the slim dark header on desktop",
   DEVICE,
   async ({ page }, testInfo) => {
-    const box = await page.getByRole("navigation", { name: "Primary navigation" }).boundingBox();
     const viewport = page.viewportSize()!;
     if (testInfo.project.name === "phone") {
+      const box = await page.getByRole("navigation", { name: "Primary navigation" }).boundingBox();
       expect(box!.y + box!.height).toBeGreaterThan(viewport.height - 24);
       expect(box!.width).toBeGreaterThan(viewport.width / 2);
     } else {
       // One slim bar (#155): the links sit inside the 68px header, in one row, with no rail beside the page.
       const header = (await page.locator("header.topbar").boundingBox())!;
       expect(Math.round(header.height)).toBe(68);
-      expect(box!.y).toBeGreaterThanOrEqual(header.y);
-      expect(box!.y + box!.height).toBeLessThanOrEqual(header.y + header.height + 1);
       const links = await page
         .getByRole("navigation", { name: "Primary navigation" })
         .getByRole("link")
         .all();
+      for (const link of links) {
+        const box = (await link.boundingBox())!;
+        expect(box.y).toBeGreaterThanOrEqual(header.y);
+        expect(box.y + box.height).toBeLessThanOrEqual(header.y + header.height + 1);
+      }
       const tops = await Promise.all(links.map(async (link) => (await link.boundingBox())!.y));
       expect(new Set(tops.map(Math.round)).size).toBe(1);
       // Nothing is pinned to the left edge below the bar, and main starts under the bar.
@@ -112,7 +115,8 @@ test(
       const current = page
         .getByRole("navigation", { name: "Primary navigation" })
         .locator('a[aria-current="page"]');
-      expect(await current.evaluate((node) => getComputedStyle(node).borderBottomWidth)).toBe(
+      // The current page carries a 3px underline (the ::before), on top of its bold, brighter text.
+      expect(await current.evaluate((node) => getComputedStyle(node, "::before").height)).toBe(
         "3px",
       );
     }

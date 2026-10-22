@@ -101,7 +101,7 @@ describe("loading and errors", () => {
       renderInApp(<TripsDashboard source={{ ...base, load }} getToday={TODAY} />);
       await act(async () => {});
       expect(screen.getByText("Couldn’t load your trips.")).toBeTruthy();
-      const chip = screen.getByRole("button", { name: "Couldn't save, retry" });
+      const chip = screen.getByRole("button", { name: "Not saved, retry" });
       act(() => chip.click());
       act(() =>
         within(screen.getByRole("dialog", { name: "Couldn’t save" }))
@@ -137,7 +137,7 @@ describe("loading and errors", () => {
     const { user } = setup(undefined, () => ({ ...base, load }));
     expect(await screen.findByText("Couldn’t load your trips.")).toBeTruthy();
     expect(screen.getByText("Nothing was changed.")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Couldn't save, retry" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Not saved, retry" })).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Try again" }));
     await ready();
     expect(load).toHaveBeenCalledTimes(2);
@@ -152,7 +152,7 @@ describe("loading and errors", () => {
       .mockImplementation(() => base.load());
     const { user } = setup(undefined, () => ({ ...base, load }));
     await screen.findByText("Couldn’t load your trips.");
-    await user.click(screen.getByRole("button", { name: "Couldn't save, retry" }));
+    await user.click(screen.getByRole("button", { name: "Not saved, retry" }));
     await user.click(
       within(screen.getByRole("dialog", { name: "Couldn’t save" })).getByRole("button", {
         name: "Retry",
@@ -384,13 +384,13 @@ describe("archive and restore", () => {
     }));
     await ready();
     await choose(user, "San Diego", "Archive");
-    await screen.findByRole("button", { name: "Couldn't save, retry" });
+    await screen.findByRole("button", { name: "Not saved, retry" });
     expect(card("San Diego")).toBeTruthy();
     expect(
       (screen.getByRole("button", { name: "More actions for San Diego" }) as HTMLButtonElement)
         .disabled,
     ).toBe(false);
-    await user.click(screen.getByRole("button", { name: "Couldn't save, retry" }));
+    await user.click(screen.getByRole("button", { name: "Not saved, retry" }));
     await user.click(
       within(screen.getByRole("dialog", { name: "Couldn’t save" })).getByRole("button", {
         name: "Retry",
@@ -478,7 +478,7 @@ describe("remove, confirm and undo", () => {
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", { name: "Remove trip" }),
     );
-    await screen.findByRole("button", { name: "Couldn't save, retry" });
+    await screen.findByRole("button", { name: "Not saved, retry" });
     expect(card("San Diego")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
   });
@@ -494,7 +494,7 @@ describe("remove, confirm and undo", () => {
       within(screen.getByRole("dialog")).getByRole("button", { name: "Remove trip" }),
     );
     await user.click(await screen.findByRole("button", { name: "Undo" }));
-    await screen.findByRole("button", { name: "Couldn't save, retry" });
+    await screen.findByRole("button", { name: "Not saved, retry" });
     expect(screen.queryByText("San Diego restored")).toBeNull();
   });
 });

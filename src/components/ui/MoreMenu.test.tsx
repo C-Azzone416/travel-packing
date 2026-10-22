@@ -90,6 +90,12 @@ describe("MoreMenu", () => {
     expect(screen.queryByRole("menu")).toBeNull();
     expect(document.activeElement).toBe(button());
     await user.click(button());
+    await vi.waitFor(() => expect(document.activeElement).toBe(items()[0]));
+    await user.keyboard("{Tab}");
+    expect(screen.queryByRole("menu")).toBeNull();
+    // Tab straight from the button (before focus has moved into the menu) closes it too.
+    button().focus();
+    await user.keyboard("{Enter}");
     await user.keyboard("{Tab}");
     expect(screen.queryByRole("menu")).toBeNull();
   });

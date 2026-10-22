@@ -61,7 +61,7 @@ test("a failed save shows Error everywhere, never claims Saved, and Retry recove
     isAction(route.request()) ? route.abort("failed") : route.continue(),
   );
   await chooseFromMenu(page, "San Diego", "Archive");
-  const chip = page.getByRole("button", { name: "Couldn't save, retry" });
+  const chip = page.getByRole("button", { name: "Not saved, retry" });
   await expect(chip).toBeVisible();
   await expect(page.getByRole("link", { name: "Saved" })).toHaveCount(0);
 
@@ -73,7 +73,7 @@ test("a failed save shows Error everywhere, never claims Saved, and Retry recove
     path: `test-results/screenshots/${testInfo.project.name}-settings-error-sheet.png`,
   });
   await sheet.getByRole("button", { name: "Dismiss" }).click();
-  await expect(page.getByRole("button", { name: "Couldn't save, retry" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Not saved, retry" })).toBeVisible();
 
   // Settings tells the same truth.
   await page
@@ -95,7 +95,7 @@ test("a failed save shows Error everywhere, never claims Saved, and Retry recove
 
   // Network back: Retry stores the change, and only then does it say Saved.
   await page.unroute("**/*");
-  await page.getByRole("button", { name: "Couldn't save, retry" }).click();
+  await page.getByRole("button", { name: "Not saved, retry" }).click();
   await page
     .getByRole("dialog", { name: "Couldn’t save" })
     .getByRole("button", { name: "Retry" })
