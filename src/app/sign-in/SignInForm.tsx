@@ -7,7 +7,7 @@ import { SignInView } from "./SignInView";
 
 const INITIAL_STATE: SignInState = { error: null };
 
-export function SignInForm() {
+export function SignInForm({ notice }: { notice?: string | null }) {
   const [state, action, pending] = useActionState(signInAction, INITIAL_STATE);
   const [showPassword, setShowPassword] = useState(false);
   return (
@@ -15,6 +15,7 @@ export function SignInForm() {
       action={action}
       error={state.error}
       pending={pending}
+      notice={notice}
       showPassword={showPassword}
       onTogglePassword={() => setShowPassword((current) => !current)}
     />

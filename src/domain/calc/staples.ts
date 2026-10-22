@@ -1,5 +1,5 @@
 import { TOILETRY_GROUP_ID } from "../toiletry-bag";
-import { calculateSuggestions, type CalcConfig } from "./suggestions";
+import { calculateSuggestions, type CalcConfig, type WeatherInput } from "./suggestions";
 
 export type StapleCadence = "per day" | "per trip";
 export type ItemSection = "main" | "packlast" | "return";
@@ -163,13 +163,18 @@ function returnOutfitItems(): TripItem[] {
 // the four-item return outfit, default Pack last items, then the staples merged
 // over them. A matching staple REPLACES the calculated item's qty (never sums),
 // and spare adds +1 on top for the underwear and socks staples only.
-export function buildTripItems(config: CalcConfig, staples: readonly Staple[]): TripItems {
-  const computed = calculateSuggestions(config);
+export function buildTripItems(
+  config: CalcConfig,
+  staples: readonly Staple[],
+  weather?: WeatherInput,
+): TripItems {
+  const computed = calculateSuggestions(config, weather);
 
   const items: TripItem[] = computed.items.map((entry) => {
     const suggested = newItem(entry.id, entry.name, entry.category, entry.qty, "main");
     suggested.optional = Boolean(entry.optional);
     if (entry.id === "nice-makeup") suggested.groupId = TOILETRY_GROUP_ID;
+    if (entry.groupId) suggested.groupId = entry.groupId;
     return suggested;
   });
   items.push(newItem("sunglasses", "Sunglasses", "Accessories", 1, "main"));

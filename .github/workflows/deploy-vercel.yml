@@ -1,14 +1,19 @@
 name: Deploy to Vercel
 
-# A push to develop deploys a preview, automatically. Production is NEVER deployed by a push: it is released by hand, with
-# a manual run ("Run workflow") on main by the repository owner who types the full SHA of the commit being released (the
-# `gate` job below enforces it; see "Production release gate" in docs/deploy.md). No direct GitHub-Vercel integration.
+# The preview deploy is CALLED by ci.yml (its `deploy` job, `needs: ci`) after a green push to develop, so there is no
+# second workflow polling for CI. Production is NEVER deployed by a push: it is released by hand, with a manual run
+# ("Run workflow") on main by the repository owner who types the full SHA of the commit being released (the `gate` job
+# below enforces it; see "Production release gate" in docs/deploy.md). In a called workflow the event, ref and sha are the
+# caller's, so the gate sees a push to develop and can only choose preview. No direct GitHub-Vercel integration.
 # Each deploy runs in the GitHub environment `preview` or `production` (each restricted to its branch), and each holds
 # its OWN DATABASE_URL_UNPOOLED secret, so a preview run can never read production's.
 on:
-  push:
-    branches:
-      - develop
+  workflow_call:
+    inputs:
+      release_sha:
+        description: Production only (never passed by the caller). The full SHA of the commit being released.
+        required: false
+        type: string
   workflow_dispatch:
     inputs:
       release_sha:
@@ -26,6 +31,7 @@ permissions:
 
 env:
   VERCEL_CLI_VERSION: 64.5.0 # pinned (never a moving tag)
+  PREVIEW_ALIAS: travel-packing-preview.vercel.app # the one stable Preview address (also PREVIEW_ORIGIN in request-origin.ts)
   VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
   VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
 
@@ -64,7 +70,7 @@ jobs:
   deploy:
     needs: gate
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 30 # the build, migration and deploy; the CI check below is a single look, not a wait
     environment: ${{ needs.gate.outputs.target }}
     env:
       TARGET: ${{ needs.gate.outputs.target }}
@@ -79,22 +85,13 @@ jobs:
       - name: Install
         run: npm ci
 
-      - name: Require green CI for this commit
+      # A preview deploy only exists after `ci` passed (the caller's `needs: ci`). A manual production run has no such
+      # guarantee, so it looks once, at this exact commit: a green, completed, latest `ci` run, or it stops. No waiting.
+      - name: Require green CI for this commit (production)
+        if: github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          for _ in $(seq 1 40); do
-            conclusion=$(gh run list --workflow ci.yml --commit "$GITHUB_SHA" --json status,conclusion \
-              --jq '[.[] | select(.status == "completed")] | first | .conclusion // "pending"')
-            echo "ci for $GITHUB_SHA: $conclusion"
-            case "$conclusion" in
-              success) exit 0 ;;
-              pending) sleep 30 ;;
-              *) echo "CI did not succeed; not deploying." >&2; exit 1 ;;
-            esac
-          done
-          echo "Timed out waiting for CI." >&2
-          exit 1
+        run: npx tsx scripts/require-ci.ts "$GITHUB_SHA"
 
       - name: Install Vercel CLI (pinned)
         run: npm install --global "vercel@${VERCEL_CLI_VERSION}"
@@ -106,6 +103,23 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: vercel pull --yes --environment="$TARGET" --token="$VERCEL_TOKEN"
 
+      # `vercel pull` cannot read a Vercel Secret (they are write-only) and writes a redaction marker in its place, so
+      # these four are written into the pulled file from the selected GitHub environment's secrets. Preview and Production
+      # carry separate values under the same names. They reach the script only through secrets.* (so GitHub masks them)
+      # and are never printed. Rotating one means updating Vercel AND the matching GitHub environment.
+      # Which builder the build uses depends on the project's settings (framework preset and build/output/root/install
+      # overrides), which live in Vercel, not the repo. Print those five settings (never anything else from the file).
+      - name: Show the Vercel project's build settings
+        run: npx tsx scripts/print-project-settings.ts
+
+      - name: Inject deployment secrets (values not shown)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+          OWNER_EMAIL_ALLOWLIST: ${{ secrets.OWNER_EMAIL_ALLOWLIST }}
+          NEON_AUTH_COOKIE_SECRET: ${{ secrets.NEON_AUTH_COOKIE_SECRET }}
+        run: npx tsx scripts/inject-deploy-secrets.ts ".vercel/.env.${TARGET}.local"
+
       - name: Check the deploy environment (names only, no values)
         env:
           PRODUCTION_DB_HOST: ${{ secrets.PRODUCTION_DB_HOST }}
@@ -116,6 +130,10 @@ jobs:
       - name: Build
         run: |
           if [ "$TARGET" = production ]; then vercel build --prod; else vercel build; fi
+
+      # An output without server functions deploys "fine" and then answers every request with a 404; stop before uploading it.
+      - name: The build output has server functions
+        run: npx tsx scripts/check-build-output.ts
 
       - name: No test-only code in the build
         run: npm run check:no-e2e-in-build
@@ -146,21 +164,72 @@ jobs:
           PRODUCTION_DB_HOST: ${{ secrets.PRODUCTION_DB_HOST }}
         run: npm run db:seed:preview
 
+      # Preview deploys name their target outright: without it Vercel assigns a project's FIRST deployment to production. The CLI's
+      # own output (it prints which kind it made) is kept for the next step, which fails the run if the target is not the one meant.
       - name: Deploy
         id: deploy
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
+          log="$RUNNER_TEMP/deploy.log"
+          status=0
           if [ "$TARGET" = production ]; then
-            url=$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")
+            url=$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN" 2>"$log") || status=$?
           else
-            url=$(vercel deploy --prebuilt --token="$VERCEL_TOKEN")
+            url=$(vercel deploy --prebuilt --target=preview --token="$VERCEL_TOKEN" 2>"$log") || status=$?
           fi
+          cat "$log" >&2
+          if [ "$status" -ne 0 ]; then exit "$status"; fi
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "Deployed ($TARGET): $url" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check the deployment landed in the right environment
+        run: npx tsx scripts/check-deploy-target.ts "$TARGET" "$RUNNER_TEMP/deploy.log"
 
       - name: Smoke test
         env:
           DEPLOY_URL: ${{ steps.deploy.outputs.url }}
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: npx tsx scripts/smoke-test.ts "$DEPLOY_URL"
+
+      # ---- the stable Preview alias (#96) -------------------------------------------------------------------------------
+      # Reached only after a successful deploy AND smoke test: an earlier failing step ends the job, and none of these steps
+      # uses always() or failure(), so a failed build, deploy or smoke test never touches the alias. Production never gets one.
+      # Deploys are serialized by this workflow's concurrency group and never cancelled; an older run can still finish after a
+      # newer push, so the alias moves only if this run's commit is STILL the develop head.
+      - name: Is this run still the develop head? (preview only)
+        id: alias_head
+        if: env.TARGET == 'preview'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          head=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/develop" --jq .object.sha)
+          npx tsx scripts/check-alias-head.ts "$GITHUB_SHA" "$head"
+
+      # Not `vercel alias set`: the CLI loads the token's USER first (GET /v2/user), which answers 404 for this token, so it fails
+      # with "User not found." however the scope is given (develop runs after #99 and #100). The script makes the two documented
+      # REST calls instead (look up the deployment, assign the alias), with the same token and the team id.
+      - name: Assign the stable Preview alias
+        if: env.TARGET == 'preview' && steps.alias_head.outputs.assign == 'true'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          DEPLOY_URL: ${{ steps.deploy.outputs.url }}
+        run: npx tsx scripts/assign-alias.ts "$DEPLOY_URL" "$PREVIEW_ALIAS"
+
+      - name: Smoke test the alias
+        if: env.TARGET == 'preview' && steps.alias_head.outputs.assign == 'true'
+        env:
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: npx tsx scripts/smoke-test.ts "https://${PREVIEW_ALIAS}"
+
+      # ---- tidy up (#135) -----------------------------------------------------------------------------------------------
+      # Caroline's retention decision: only the stable alias address stays reachable, so every other Preview deployment of this
+      # project is deleted, but only now, after the alias moved and its smoke test passed, and never a Production one. The script
+      # confirms the alias target itself (two ways) and deletes nothing if it cannot; it logs counts only and always exits 0, so
+      # tidying up can never fail a deploy that already succeeded. The first run after this lands also clears the old backlog.
+      - name: Delete superseded Preview deployments
+        if: env.TARGET == 'preview' && steps.alias_head.outputs.assign == 'true'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          DEPLOY_URL: ${{ steps.deploy.outputs.url }}
+        run: npx tsx scripts/cleanup-previews.ts "$DEPLOY_URL" "$PREVIEW_ALIAS"

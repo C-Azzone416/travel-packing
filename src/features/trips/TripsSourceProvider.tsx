@@ -4,14 +4,19 @@ import { createContext, useContext, useState, type ReactNode } from "react";
 import {
   archiveTripAction,
   createTripAction,
+  createTripWithWeatherAction,
   loadTripsAction,
   removeTripAction,
   restoreTripAction,
   undoRemoveTripAction,
 } from "./actions";
+import { getSavedListAction, listSavedListsAction } from "../staples/saved-list-actions";
 import { createServerTripsSource } from "./server-source";
 import {
+  applyWeatherReviewAction,
   acceptWeatherAction,
+  addItemAction,
+  saveAsListAction,
   addToiletryItemAction,
   confirmBagPlacementAction,
   decrementPackedAction,
@@ -19,11 +24,14 @@ import {
   getTripAction,
   incrementPackedAction,
   listStaplesAction,
+  listWeatherSuggestionsAction,
   markNotReadyAction,
   markReadyAction,
   removeItemAction,
   reviewWeatherAgainAction,
   setPackedAction,
+  setStopsAction,
+  setStampLabelsAction,
   setThemeAction,
   skipWeatherAction,
   togglePackedAction,
@@ -32,6 +40,13 @@ import {
   upsertStapleAction,
 } from "./trip-actions";
 import type { TripsSource } from "./trips-source";
+import {
+  getWeatherSettingsAction,
+  updateWeatherSettingsAction,
+} from "@/features/settings/weather-actions";
+import { fetchTripWeather } from "./weather-client";
+import { previewWeatherAction } from "./weather-preview-action";
+import type { TripStop } from "@/domain/trip-stops";
 
 const TripsSourceContext = createContext<TripsSource | null>(null);
 
@@ -74,6 +89,8 @@ export function TripsSourceProvider({
           editItem: editItemAction,
           removeItem: removeItemAction,
           addToiletryItem: addToiletryItemAction,
+          addItem: addItemAction,
+          saveAsList: saveAsListAction,
           confirmBagPlacement: confirmBagPlacementAction,
           undoBagPlacement: undoBagPlacementAction,
           markReady: markReadyAction,
@@ -83,7 +100,33 @@ export function TripsSourceProvider({
           reviewWeatherAgain: reviewWeatherAgainAction,
           updatePreferences: updatePreferencesAction,
           setTheme: setThemeAction,
+          setStampLabels: setStampLabelsAction,
+          setStops: setStopsAction,
         },
+        {
+          getSettings: getWeatherSettingsAction,
+          updateSettings: updateWeatherSettingsAction,
+          getTripWeather: fetchTripWeather,
+          previewDraft: (stops: TripStop[]) =>
+            previewWeatherAction(
+              stops.map((stop, stopIndex, all) => ({
+                stopIndex,
+                arrive: stop.arrive,
+                leave: stop.leave,
+                includeLeave: stopIndex === all.length - 1,
+                ...(stop.location.latitude === undefined
+                  ? {}
+                  : { latitude: stop.location.latitude }),
+                ...(stop.location.longitude === undefined
+                  ? {}
+                  : { longitude: stop.location.longitude }),
+              })),
+            ),
+          createTripWithReview: createTripWithWeatherAction,
+          listSuggestions: listWeatherSuggestionsAction,
+          applyReview: applyWeatherReviewAction,
+        },
+        { list: listSavedListsAction, get: getSavedListAction },
       ),
   );
   return <TripsSourceContext.Provider value={value}>{children}</TripsSourceContext.Provider>;

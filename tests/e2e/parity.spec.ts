@@ -1,5 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
+import { chooseFromMenu } from "./helpers/menu";
+import { DEVICE } from "./helpers/device";
 
 // Parity with the approved prototype's browser test (reference/prototype/tests/browser.test.mjs), on the production app
 // and its real database. Most scenarios are covered by the feature specs; docs/parity.md maps EVERY prototype scenario to
@@ -15,7 +17,7 @@ async function openDashboard(page: Page) {
 
 async function openSanDiego(page: Page) {
   await openDashboard(page);
-  await page.getByRole("link", { name: "Keep packing: San Diego" }).click();
+  await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
   await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
 }
 
@@ -36,13 +38,10 @@ test("home: the headline, three navigation items, one upcoming trip with a 'left
   page,
 }) => {
   await openDashboard(page);
-  await expect(
-    page.getByRole("heading", { name: "Pack for the trip, not the anxiety.", level: 1 }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Your travel ledger", level: 1 })).toBeVisible();
   await expect(nav(page).getByRole("link")).toHaveCount(3);
   await expect(page.getByRole("article")).toHaveCount(1);
-  await expect(page.locator(".status-pill.remaining")).toHaveCount(1);
-  await expect(page.locator(".status-pill.remaining")).toContainText(/left to pack/);
+  await expect(page.getByRole("article")).toContainText(/\d+ left/);
   await page.getByRole("button", { name: /Past & archive/ }).click();
   await expect(page.getByRole("article")).toHaveCount(1);
   await expect(page.getByText("Past trip").first()).toBeVisible();
@@ -54,7 +53,7 @@ test("dates: a later departure pulls the return forward and becomes its minimum"
   page,
 }) => {
   await openDashboard(page);
-  await page.getByRole("link", { name: /New trip/ }).click();
+  await page.getByRole("link", { name: /Plan a trip/ }).click();
   await page.getByLabel("Leave", { exact: true }).fill("2026-11-12");
   await page.getByLabel("Return", { exact: true }).fill("2026-11-16");
   await page.getByLabel("Leave", { exact: true }).fill("2026-12-20");
@@ -117,7 +116,7 @@ test("Nice outfits: switching off hides the Nice items, switching back on restor
   await row(page, "nice-shoes")
     .getByRole("button", { name: "Increase packed Dress shoes" })
     .click();
-  await expect(row(page, "nice-shoes")).toContainText("1/2");
+  await expect(row(page, "nice-shoes")).toContainText("1 of 2 packed");
 
   for (let round = 0; round < 2; round += 1) {
     await setPreference(page, "Nice outfits", false);
@@ -126,7 +125,7 @@ test("Nice outfits: switching off hides the Nice items, switching back on restor
     await expect(row(page, "nice-undergarments")).toHaveCount(0);
     await setPreference(page, "Nice outfits", true);
     await expect(row(page, "nice-shoes")).toHaveCount(1);
-    await expect(row(page, "nice-shoes")).toContainText("1/2");
+    await expect(row(page, "nice-shoes")).toContainText("1 of 2 packed");
     await expect(row(page, "nice-makeup")).toHaveCount(1);
     await expect(row(page, "nice-undergarments")).toHaveCount(1);
   }
@@ -161,11 +160,11 @@ test("copy: a remembered Bathroom item travels to the copy, with nothing checked
   await add.getByRole("radio", { name: /Remember for future trips/ }).check();
   await add.getByRole("button", { name: "Add toiletry item" }).click();
   await expect(page.getByText("Face wash", { exact: true })).toBeVisible();
-  await page.getByRole("link", { name: "Back to trips" }).click();
+  await page.getByRole("link", { name: "All trips" }).click();
   const source = page.getByRole("article", { name: "San Diego" });
   const before = await source.innerText();
 
-  await source.getByRole("link", { name: "Copy trip: San Diego" }).click();
+  await chooseFromMenu(page, "San Diego", "Copy trip");
   await page.getByRole("combobox", { name: "Destination search" }).fill("paris");
   await page.getByRole("option", { name: /Paris/ }).click();
   await page.getByLabel("Leave", { exact: true }).fill("2026-12-04");
@@ -175,7 +174,7 @@ test("copy: a remembered Bathroom item travels to the copy, with nothing checked
   await expect(page.getByRole("article", { name: "Paris" })).toBeVisible();
   expect(await page.getByRole("article", { name: "San Diego" }).innerText()).toBe(before);
 
-  await page.getByRole("link", { name: "Keep packing: Paris" }).click();
+  await page.getByRole("link", { name: /(Continue|Keep) packing: Paris/ }).click();
   await expect(page.getByRole("heading", { name: "Paris", level: 1 })).toBeVisible();
   await expect(page.getByText("Face wash", { exact: true })).toBeVisible();
   await expect(row(page, "nice-makeup")).toHaveCount(1);
@@ -185,7 +184,7 @@ test("copy: a remembered Bathroom item travels to the copy, with nothing checked
   await expect(page.getByText("Toiletry bag not ready to place")).toBeVisible();
 });
 
-test("a tour of every screen raises no uncaught browser errors", async ({ page }) => {
+test("a tour of every screen raises no uncaught browser errors", DEVICE, async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await openSanDiego(page);
@@ -193,8 +192,12 @@ test("a tour of every screen raises no uncaught browser errors", async ({ page }
   for (const path of ["/", "/staples", "/settings", `/trips/${id}`, `/trips/${id}/review`, "/"]) {
     await page.goto(path);
     await expect(page.locator("main")).toBeVisible();
+    // Next prefetches the linked screens once a page is up. Leaving while those requests are in flight cancels them, and WebKit
+    // reports the cancelled fetch as an unhandled "Fetch API cannot load ... due to access control checks" from the router, which
+    // is the browser unloading the page, not an error in the app. Let them finish before the next hard navigation.
+    await page.waitForLoadState("networkidle");
   }
-  await page.getByRole("link", { name: /New trip/ }).click();
+  await page.getByRole("link", { name: /Plan a trip/ }).click();
   await page.getByRole("combobox", { name: "Destination search" }).fill("lon");
   await expect(page.getByRole("option").first()).toBeVisible();
   expect(errors).toEqual([]);

@@ -33,7 +33,7 @@ describe("formatRange", () => {
 });
 
 describe("tripCardView", () => {
-  it("describes an upcoming, partly packed trip with no eyebrow and a forecast", () => {
+  it("describes an upcoming, partly packed trip with no eyebrow and no weather copy", () => {
     const view = tripCardView(sanDiego(), TODAY, "upcoming");
     expect(view).toMatchObject({
       id: "san-diego",
@@ -47,7 +47,6 @@ describe("tripCardView", () => {
       percent: 20,
       range: "Oct 23 – Oct 27",
       days: 5,
-      forecast: "Close forecast",
       canArchive: true,
       canRestore: false,
     });
@@ -86,18 +85,14 @@ describe("tripCardView", () => {
     expect(tripCardView(endsToday, "2026-10-17", "archive").eyebrow).toBe("Past trip");
   });
 
-  it("hides the forecast for a trip that is already past, but keeps it for an archived future trip", () => {
-    expect(tripCardView(lisbon(), TODAY, "archive").forecast).toBeNull();
-    expect(tripCardView(withPatch(sanDiego(), { archived: true }), TODAY, "archive").forecast).toBe(
-      "Close forecast",
-    );
-    expect(tripCardView(sanDiego(), "2026-10-28", "archive").forecast).toBeNull();
+  it("carries no weather copy: the dashboard fetches no weather, so the card says nothing about the forecast", () => {
+    expect(tripCardView(sanDiego(), TODAY, "upcoming")).not.toHaveProperty("forecast");
+    expect(tripCardView(lisbon(), TODAY, "archive")).not.toHaveProperty("forecast");
   });
 
-  it("has no place and no forecast without a confirmed location", () => {
+  it("has no place without a confirmed location", () => {
     const view = tripCardView(withPatch(sanDiego(), { location: null }), TODAY, "upcoming");
     expect(view.place).toBeNull();
-    expect(view.forecast).toBeNull();
   });
 
   it("shows only the parts of the place that exist (no dangling comma for an empty country or region)", () => {
@@ -221,5 +216,130 @@ describe("quickViewModel", () => {
     quickViewModel(trip, "still");
     quickViewModel(trip, "all");
     expect(trip).toEqual(before);
+  });
+});
+
+describe("route display (epic #107)", () => {
+  it("lists a multi-stop trip's cities, and nothing for a single destination", async () => {
+    const { routeCities } = await import("./view");
+    const stop = (city: string) => ({
+      location: { id: city, city, region: "", country: "", countryCode: "", label: city },
+      arrive: "2030-05-01",
+      leave: "2030-05-02",
+    });
+    expect(routeCities({ stops: [stop("A"), stop("B")] })).toEqual(["A", "B"]);
+    expect(routeCities({ stops: [stop("A")] })).toEqual([]);
+    expect(routeCities({ stops: [] })).toEqual([]);
+  });
+
+  it("shows a route that fits in full, and a long one as first, an ellipsis and last", async () => {
+    const { routeDisplay } = await import("./view");
+    expect(routeDisplay(["Lisbon", "Porto", "Madrid"])).toMatchObject({
+      cities: ["Lisbon", "Porto", "Madrid"],
+      shortened: false,
+      spoken: "Route: Lisbon, then Porto, then Madrid.",
+    });
+    const long = routeDisplay(["Lisbon", "Porto", "Madrid", "Barcelona", "Valencia"]);
+    expect(long).toMatchObject({ cities: ["Lisbon", "…", "Valencia"], shortened: true, count: 5 });
+    expect(routeDisplay(["Lisbon", "Porto", "Madrid", "Barcelona", "Valencia"], 80).shortened).toBe(
+      false,
+    );
+  });
+
+  it("never shortens a two-city route", async () => {
+    const { routeDisplay } = await import("./view");
+    expect(
+      routeDisplay(["A very long city name indeed", "Another very long city name"]).shortened,
+    ).toBe(false);
+  });
+});
+
+describe("Field Ledger dashboard view models (#143)", () => {
+  it("counts days to go, nights and the range from today", async () => {
+    const { departureView } = await import("./view");
+    expect(departureView(sanDiego(), TODAY)).toMatchObject({
+      daysToGo: 7,
+      daysLabel: "days to go",
+      startShort: "Oct 23",
+      range: "Oct 23 – Oct 27",
+      nights: 4,
+      nightsLabel: "4 nights",
+    });
+    expect(departureView(sanDiego(), "2026-10-22")).toMatchObject({
+      daysToGo: 1,
+      daysLabel: "day to go",
+    });
+    expect(departureView(sanDiego(), "2026-10-25")).toMatchObject({
+      daysToGo: 0,
+      daysLabel: "under way",
+    });
+    expect(departureView({ start: "2026-10-23", end: "2026-10-24" }, TODAY).nightsLabel).toBe(
+      "1 night",
+    );
+  });
+
+  it("labels the journeys ahead", async () => {
+    const { journeysAheadLabel } = await import("./view");
+    expect([0, 1, 3].map(journeysAheadLabel)).toEqual([
+      "No journeys ahead",
+      "1 journey ahead",
+      "3 journeys ahead",
+    ]);
+  });
+
+  it("builds one compact weather cell per stay that has weather, in the person's unit", async () => {
+    const { weatherCells } = await import("./view");
+    const stop = (city: string, arrive: string, leave: string) => ({
+      location: { id: city, city, region: "", country: "", countryCode: "", label: city },
+      arrive,
+      leave,
+    });
+    const day = (stopIndex: number, over: Record<string, unknown> = {}) => ({
+      date: "2030-05-01",
+      stopIndex,
+      source: "forecast" as const,
+      highC: 20,
+      lowC: 10,
+      precipProbability: 0,
+      precipMm: 0,
+      snowCm: 0,
+      uvIndexMax: null,
+      sunshineHours: null,
+      ...over,
+    });
+    const stops = [
+      stop("A", "2030-05-01", "2030-05-03"),
+      stop("B", "2030-05-03", "2030-05-05"),
+      stop("C", "2030-05-05", "2030-05-06"),
+      stop("D", "2030-05-06", "2030-05-07"),
+    ];
+    const weather = [
+      { stopIndex: 0, status: "ok" as const, days: [day(0), day(0)] },
+      {
+        stopIndex: 1,
+        status: "ok" as const,
+        days: [
+          day(1, { precipProbability: 0.9, source: "typical" }),
+          day(1, { source: "typical" }),
+        ],
+      },
+      { stopIndex: 2, status: "unavailable" as const, days: [] },
+      { stopIndex: 3, status: "ok" as const, days: [day(3, { snowCm: 5 })] },
+    ];
+    const cells = weatherCells(stops, weather, "F");
+    expect(cells.map((cell) => cell.city)).toEqual(["A", "B", "D"]);
+    expect(cells[0]).toMatchObject({
+      range: "68° / 50°",
+      note: "Mostly dry",
+      source: "Forecast",
+      glyph: "sun",
+    });
+    expect(cells[1]).toMatchObject({
+      note: "Rain on 1 of 2 days",
+      source: "Typical",
+      glyph: "rain",
+    });
+    expect(cells[2]).toMatchObject({ note: "Snow likely", glyph: "snow" });
+    expect(weatherCells(stops, weather, "C")[0].range).toBe("20° / 10°");
   });
 });

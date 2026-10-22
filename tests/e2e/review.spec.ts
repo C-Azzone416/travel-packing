@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
+import { DEVICE } from "./helpers/device";
 
 // "Review your bag" and explicit Ready against a REAL Postgres (#17): what the page shows after a reload is what was
 // stored. Each test starts from this project's freshly seeded owner: San Diego partly packed and not Ready, Lisbon
@@ -16,7 +17,7 @@ async function openReview(page: Page, trip: "San Diego" | "Lisbon", id: "san-die
   await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
   // The trip's id is stored by the data layer, so reach the review by the link the screens give.
   if (trip === "San Diego") {
-    await page.getByRole("link", { name: "Keep packing: San Diego" }).click();
+    await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
   } else {
     await page.getByRole("button", { name: /Past & archive/ }).click();
     await page.getByRole("link", { name: "Review bag: Lisbon" }).click();
@@ -151,7 +152,7 @@ test("another owner's trip id is not available", async ({ page }) => {
 });
 
 // Design's screenshot set for the review screen.
-test("screenshots of the review screen", async ({ page }, testInfo) => {
+test("screenshots of the review screen", DEVICE, async ({ page }, testInfo) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   const shot = (name: string, fullPage = true) =>
     page.screenshot({
@@ -173,22 +174,24 @@ test("screenshots of the review screen", async ({ page }, testInfo) => {
   await shot("revoked", false);
 });
 
-test("every control on the review is a 44px target on phone, and nothing scrolls sideways", async ({
-  page,
-}, testInfo) => {
-  await openSanDiegoReviewFromTrip(page);
-  if (testInfo.project.name === "phone") {
-    for (const control of [
-      unpacked(page).first(),
-      ready(page),
-      page.getByRole("link", { name: "Back to packing list" }).last(),
-    ]) {
-      const box = (await control.boundingBox())!;
-      expect(Math.round(box.height)).toBeGreaterThanOrEqual(44);
+test(
+  "every control on the review is a 44px target on phone, and nothing scrolls sideways",
+  DEVICE,
+  async ({ page }, testInfo) => {
+    await openSanDiegoReviewFromTrip(page);
+    if (testInfo.project.name === "phone") {
+      for (const control of [
+        unpacked(page).first(),
+        ready(page),
+        page.getByRole("link", { name: "Back to packing list" }).last(),
+      ]) {
+        const box = (await control.boundingBox())!;
+        expect(Math.round(box.height)).toBeGreaterThanOrEqual(44);
+      }
     }
-  }
-  const overflow = await page.evaluate(
-    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-  );
-  expect(overflow).toBeLessThanOrEqual(0);
-});
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+  },
+);

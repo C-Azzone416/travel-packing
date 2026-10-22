@@ -1,8 +1,10 @@
+import { selectStamps } from "@/domain/stamps";
 import { describe, expect, it } from "vitest";
 import { LOCATIONS } from "@/domain/locations";
 import { classifyTrip, startCopyDraft, startDraft } from "@/domain/trip-lifecycle";
 import { DEFAULT_TRIP_CONFIG } from "./draft";
 import { sampleLifecycleState } from "./fixtures";
+import type { SavedListDetail } from "@/server/data/service";
 import { createMemoryTripsSource, TripsSourceError } from "./trips-source";
 
 function setup(now = 1_000) {
@@ -131,6 +133,49 @@ describe("per-trip commands", () => {
   const item = (trip: { items: { id: string; packed: number; qty: number }[] }, id: string) =>
     trip.items.find((entry) => entry.id === id)!;
 
+  it("addItem adds an unpacked custom item, revokes Ready, and refuses an item that is already there", async () => {
+    const { source } = setup();
+    const { trip } = await source.addItem("san-diego", {
+      name: "Camera",
+      category: "Tech",
+      neededQty: 2,
+    });
+    expect(trip.items.find((entry) => entry.name === "Camera")).toMatchObject({
+      category: "Tech",
+      qty: 2,
+      packed: 0,
+    });
+    expect(trip.ready).toBe(false);
+    await expect(
+      source.addItem("san-diego", { name: " camera ", category: "Tech", neededQty: 1 }),
+    ).rejects.toThrow("EXISTS");
+    await expect(
+      source.addItem("san-diego", { name: "Lens", category: "Bathroom", neededQty: 1 }),
+    ).rejects.toThrow("INVALID_INPUT");
+    await expect(
+      source.addItem("nope", { name: "Lens", category: "Tech", neededQty: 1 }),
+    ).rejects.toThrow("NOT_FOUND");
+    expect(sanDiego(source).items.filter((entry) => entry.name === "Camera")).toHaveLength(1);
+  });
+
+  it("saveAsList saves the chosen items as a list, refuses a taken name and unknown items, and never changes the trip", async () => {
+    const { source } = setup();
+    const trip = sanDiego(source);
+    const before = JSON.stringify(trip);
+    const ids = trip.items.slice(0, 3).map((entry) => entry.id);
+    expect(await source.saveAsList("san-diego", " Beach week ", ids)).toMatchObject({
+      name: "Beach week",
+      itemCount: 3,
+    });
+    await expect(source.saveAsList("san-diego", "beach WEEK", ids)).rejects.toThrow("NAME_TAKEN");
+    await expect(source.saveAsList("san-diego", "Other", [])).rejects.toThrow("INVALID_INPUT");
+    await expect(source.saveAsList("san-diego", "Other", [...ids, "nope"])).rejects.toThrow(
+      "INVALID_INPUT",
+    );
+    await expect(source.saveAsList("nope", "Other", ids)).rejects.toThrow("NOT_FOUND");
+    expect(JSON.stringify(sanDiego(source))).toBe(before);
+  });
+
   it("listStaples returns the owner's current staples, including remembered changes", async () => {
     const { source } = setup();
     expect((await source.listStaples()).length).toBe(source.staplesSnapshot().length);
@@ -197,6 +242,45 @@ describe("per-trip commands", () => {
     for (const theme of ["volcano", "", "Beach", null, undefined, 3])
       await expect(source.setTheme("lisbon", theme as never)).rejects.toThrow("INVALID_INPUT");
     await expect(source.setTheme("nope", "city")).rejects.toThrow("NOT_FOUND");
+    expect(source.snapshot()).toBe(before);
+  });
+
+  it("setStampLabels stores the typed label, clears it, and leaves the rest of the trip alone (#151)", async () => {
+    const { source } = setup();
+    const before = (await source.getTrip("lisbon"))!;
+    const set = await source.setStampLabels("lisbon", " abc ", null);
+    expect(set.trip).toEqual({ ...before, stampLabels: ["ABC", null] });
+    expect((await source.getTrip("lisbon")).stampLabels).toEqual(["ABC", null]);
+    // Another trip is untouched.
+    expect((await source.getTrip("san-diego")).stampLabels ?? [null, null]).toEqual([null, null]);
+    const cleared = await source.setStampLabels("lisbon", "  ", null);
+    expect(cleared.trip.stampLabels).toEqual([null, null]);
+  });
+
+  it("setStampLabels stores Ab1 as AB1 (#187)", async () => {
+    const { source } = setup();
+    expect((await source.setStampLabels("lisbon", "Ab1", null)).trip.stampLabels).toEqual([
+      "AB1",
+      null,
+    ]);
+  });
+
+  it("setStampLabels stores nothing for the label the stamp already shows", async () => {
+    const { source } = setup();
+    const automatic = selectStamps((await source.getTrip("lisbon")).stops)[0].label;
+    const change = await source.setStampLabels("lisbon", automatic.toLowerCase(), null);
+    expect(change.trip.stampLabels).toEqual([null, null]);
+  });
+
+  it("setStampLabels refuses a bad label or a second stamp that is not there (INVALID_INPUT), and an unknown trip (NOT_FOUND)", async () => {
+    const { source } = setup();
+    const before = source.snapshot();
+    for (const bad of ["AB", "ABCD", "A C", "A-C", "ÀBC", "AB😀", "ſab", "ıab", "ﬁx"])
+      await expect(source.setStampLabels("lisbon", bad, null), bad).rejects.toThrow(
+        "INVALID_INPUT",
+      );
+    await expect(source.setStampLabels("lisbon", null, "XYZ")).rejects.toThrow("INVALID_INPUT");
+    await expect(source.setStampLabels("nope", "ABC", null)).rejects.toThrow("NOT_FOUND");
     expect(source.snapshot()).toBe(before);
   });
 
@@ -399,5 +483,84 @@ describe("per-trip commands", () => {
     expect(changed.items.find((entry) => entry.id === "underwear")?.packed).toBe(underwear);
     expect(changed.ready).toBe(false);
     await expect(source.updatePreferences("nope", next)).rejects.toThrow("NOT_FOUND");
+  });
+});
+
+describe("saved lists in the memory source (#170)", () => {
+  const BEACH: SavedListDetail = {
+    id: "beach",
+    name: "Beach week",
+    updatedAt: "2026-10-12T10:00:00.000Z",
+    items: [
+      { id: "a", name: "Towel", category: "Other essentials", qty: 2 },
+      { id: "b", name: "Sunscreen", category: "Bathroom", qty: 1 },
+    ],
+  };
+  const EMPTY: SavedListDetail = {
+    id: "empty",
+    name: "Empty",
+    updatedAt: "2026-10-01T10:00:00.000Z",
+    items: [],
+  };
+  const draftFor = (extra: object = {}) => ({
+    ...startDraft(DEFAULT_TRIP_CONFIG, "2026-11-12", "2026-11-16"),
+    location: LOCATIONS[0],
+    ...extra,
+  });
+
+  function listSetup(lists?: readonly SavedListDetail[]) {
+    let counter = 0;
+    return createMemoryTripsSource(sampleLifecycleState(), {
+      now: () => 1,
+      newId: () => `new-${++counter}`,
+      today: () => "2026-10-16",
+      ...(lists ? { savedLists: lists } : {}),
+    });
+  }
+
+  it("has no savedLists capability unless given lists", () => {
+    expect(listSetup().savedLists).toBeUndefined();
+    expect(listSetup([BEACH]).savedLists).toBeDefined();
+  });
+
+  it("lists summaries (count, categories) and gets one list, NOT_FOUND for an unknown id", async () => {
+    const source = listSetup([BEACH, EMPTY]);
+    const summaries = await source.savedLists!.list();
+    expect(summaries.map((entry) => [entry.id, entry.itemCount])).toEqual([
+      ["beach", 2],
+      ["empty", 0],
+    ]);
+    expect(summaries[0].categories).toEqual([
+      { category: "Bathroom", count: 1 },
+      { category: "Other essentials", count: 1 },
+    ]);
+    expect((await source.savedLists!.get("beach")).items).toHaveLength(2);
+    await expect(source.savedLists!.get("nope")).rejects.toThrow("NOT_FOUND");
+  });
+
+  it("creates a trip from exactly the list's items, unpacked, Bathroom in the toiletries group", async () => {
+    const source = listSetup([BEACH]);
+    const trip = await source.createTrip(draftFor({ savedListId: "beach" }));
+    expect(trip.items.map((item) => [item.name, item.qty, item.packed])).toEqual([
+      ["Towel", 2, 0],
+      ["Sunscreen", 1, 0],
+    ]);
+    expect(trip.items[1].groupId).toBe("toiletry-bag");
+  });
+
+  it("refuses an unknown list (NOT_FOUND) and an empty one (INVALID_INPUT), creating nothing", async () => {
+    const source = listSetup([BEACH, EMPTY]);
+    const before = source.snapshot().trips.length;
+    await expect(source.createTrip(draftFor({ savedListId: "nope" }))).rejects.toThrow("NOT_FOUND");
+    await expect(source.createTrip(draftFor({ savedListId: "empty" }))).rejects.toThrow(
+      "INVALID_INPUT",
+    );
+    expect(source.snapshot().trips).toHaveLength(before);
+  });
+
+  it("creates the usual staples trip when the draft names no list", async () => {
+    const source = listSetup([BEACH]);
+    const trip = await source.createTrip(draftFor());
+    expect(trip.items.some((item) => item.id === "socks")).toBe(true);
   });
 });

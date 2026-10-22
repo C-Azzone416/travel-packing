@@ -9,7 +9,14 @@ import { PreviewBanner } from "./PreviewBanner";
 import { RouteFocus } from "./RouteFocus";
 import { ConnectedSaveChip, SaveStatusProvider } from "./SaveStatus";
 
-export function AppShell({ children }: { children: ReactNode }) {
+export interface AppShellProps {
+  children: ReactNode;
+  /** Both given: the nav gets a Sign out item (#117). */
+  signOut?: () => Promise<void>;
+  email?: string | null;
+}
+
+export function AppShell({ children, signOut, email }: AppShellProps) {
   return (
     <ToastProvider>
       <SaveStatusProvider>
@@ -21,24 +28,18 @@ export function AppShell({ children }: { children: ReactNode }) {
             <PreviewBanner />
             <div className="app-shell">
               <header className="topbar">
-                <Link
-                  className="brand-button"
-                  href="/"
-                  aria-label="Carrywell, Caroline’s packing companion: go to trips"
-                >
-                  <span className="brand-mark" aria-hidden="true">
-                    ✦
-                  </span>
-                  <span>
-                    <strong>Carrywell</strong> <small>Caroline’s packing companion</small>
-                  </span>
-                </Link>
-                <ConnectedSaveChip />
+                <div className="topbar-inner">
+                  <Link className="brand-button" href="/" aria-label="Carrywell: go to trips">
+                    <span className="brand-mark" aria-hidden="true" />
+                    <strong>Carrywell</strong>
+                  </Link>
+                  <Nav signOut={signOut} email={email} />
+                  <ConnectedSaveChip />
+                </div>
               </header>
               <main id="main" tabIndex={-1}>
                 {children}
               </main>
-              <Nav />
             </div>
             <RouteFocus />
           </AppLocationProvider>

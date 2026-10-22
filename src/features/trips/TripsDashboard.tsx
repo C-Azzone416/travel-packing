@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, buttonClassName } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ModalSheet } from "@/components/ui/ModalSheet";
@@ -14,9 +15,21 @@ import {
   type LifecycleTrip,
 } from "@/domain/trip-lifecycle";
 import { localToday } from "@/lib/today";
+import { AddToiletryForm } from "@/features/trip/AddToiletryForm";
+import { EditRouteSheet } from "@/features/trip/EditRouteSheet";
+import { editItemHref } from "@/features/trip/edit-link";
+import { LaterJourneys } from "./LaterJourneys";
+import { NextDeparture, type HeroWeather } from "./NextDeparture";
 import { TripCard } from "./TripCard";
-import type { TripsSource } from "./trips-source";
-import { formatRange, tripCardView, type TripListView } from "./view";
+import type { NewCustomItem, NewToiletryItem, TripsSource } from "./trips-source";
+import {
+  departureView,
+  formatRange,
+  journeysAheadLabel,
+  tripCardView,
+  weatherCells,
+  type TripListView,
+} from "./view";
 
 type Load =
   | { phase: "loading" }
@@ -29,6 +42,11 @@ export interface TripsDashboardProps {
   getToday?: () => string;
 }
 
+/** Earliest departure first (stable for equal dates), so the hero is always the next trip, not the newest one. */
+function byDeparture(trips: LifecycleTrip[]): LifecycleTrip[] {
+  return [...trips].sort((a, b) => a.start.localeCompare(b.start));
+}
+
 export function TripsDashboard({ source, getToday = localToday }: TripsDashboardProps) {
   const { track } = useSaveStatus();
   const toast = useToast();
@@ -39,6 +57,64 @@ export function TripsDashboard({ source, getToday = localToday }: TripsDashboard
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   const [reloads, setReloads] = useState(0);
+  const router = useRouter();
+  const [bathroom, setBathroom] = useState<{ tripId: string; name: string; qty: number } | null>(
+    null,
+  );
+  const [bathroomSaving, setBathroomSaving] = useState(false);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [editFailed, setEditFailed] = useState(false);
+  const [saving, setSaving] = useState(false);
+  // The last weather answer and which hero route it was for; a stale one is never shown for another route.
+  const [fetched, setFetched] = useState<{ key: string; value: HeroWeather } | null>(null);
+
+  // The hero is the first upcoming trip; only its weather is fetched (a compact strip, one cell per stay).
+  const heroTrip =
+    load.phase === "ready"
+      ? (byDeparture(upcomingTrips(load.state.trips, load.today))[0] ?? null)
+      : null;
+  const heroId = heroTrip?.id ?? null;
+  const heroRoute = useMemo(
+    () =>
+      heroTrip?.stops
+        .map((stop) => [stop.location.city, stop.arrive, stop.leave].join("|"))
+        .join(";"),
+    [heroTrip],
+  );
+  const weatherKey = heroId ? `${heroId}#${heroRoute}` : null;
+  useEffect(() => {
+    const weatherSource = source.weather;
+    if (!heroId || !weatherKey || !weatherSource) return;
+    let cancelled = false;
+    const answer = (value: HeroWeather) => {
+      if (!cancelled) setFetched({ key: weatherKey, value });
+    };
+    void (async () => {
+      try {
+        const settings = await weatherSource.getSettings();
+        if (!settings.weatherOptIn) return answer({ phase: "none" });
+        const result = await weatherSource.getTripWeather(heroId);
+        if (result.kind !== "ready") return answer({ phase: "unavailable" });
+        answer({
+          phase: "ready",
+          cells: weatherCells(heroTrip?.stops ?? [], result.stops, settings.temperatureUnit),
+        });
+      } catch {
+        answer({ phase: "unavailable" });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // weatherKey stands for the hero and its stops: a changed route is a new question for the weather service.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [source, weatherKey]);
+  const weather: HeroWeather =
+    !weatherKey || !source.weather
+      ? { phase: "none" }
+      : fetched?.key === weatherKey
+        ? fetched.value
+        : { phase: "loading" };
 
   useEffect(() => {
     let cancelled = false;
@@ -101,7 +177,7 @@ export function TripsDashboard({ source, getToday = localToday }: TripsDashboard
           ))}
         </div>
         <Link className={buttonClassName()} href="/trips/new">
-          New trip
+          Plan a trip
         </Link>
       </section>
     );
@@ -148,93 +224,181 @@ export function TripsDashboard({ source, getToday = localToday }: TripsDashboard
     );
   }
 
+  /** The hero's inline "＋ Add item" (#147): true once the source saved it, so the form folds away. */
+  async function addItem(id: string, item: NewCustomItem): Promise<boolean> {
+    return track(
+      async () => {
+        await source.addItem(id, item);
+        return source.load();
+      },
+      (next) => {
+        setLoad({ phase: "ready", state: next, today: getToday() });
+        toast.show(`${item.name.trim()} added to ${item.category}`);
+      },
+    )
+      .then(() => true)
+      .catch(() => false);
+  }
+
+  /** Bathroom items gate bag placement, so they use the Bathroom form, here as on the packing screen. */
+  function addBathroomItem(id: string, item: NewToiletryItem) {
+    setBathroomSaving(true);
+    track(
+      async () => {
+        await source.addToiletryItem(id, item);
+        return source.load();
+      },
+      (next) => {
+        setLoad({ phase: "ready", state: next, today: getToday() });
+        setBathroom(null);
+        toast.show(`${item.name.trim()} added to Bathroom`);
+      },
+    )
+      .catch(() => toast.show("Couldn’t add that item. Nothing was changed."))
+      .finally(() => setBathroomSaving(false));
+  }
+
+  function saveRoute(id: string, stops: Parameters<typeof source.setStops>[1]) {
+    setEditFailed(false);
+    setSaving(true);
+    track(
+      async () => {
+        await source.setStops(id, stops);
+        return source.load();
+      },
+      (next) => {
+        setLoad({ phase: "ready", state: next, today: getToday() });
+        setEditing(null);
+      },
+    )
+      .catch(() => setEditFailed(true))
+      .finally(() => setSaving(false));
+  }
+
+  const archive = (id: string) => void run(id, () => source.archive(id));
+
+  const tabs = (
+    <div className="trip-tabs" role="group" aria-label="Trip views">
+      <button
+        type="button"
+        aria-pressed={!archiveView}
+        className={archiveView ? "" : "active"}
+        onClick={() => setView("upcoming")}
+      >
+        Upcoming <span>{upcoming.length}</span>
+      </button>
+      <button
+        type="button"
+        aria-pressed={archiveView}
+        className={archiveView ? "active" : ""}
+        onClick={() => setView("archive")}
+      >
+        Past & archive <span>{past.length}</span>
+      </button>
+    </div>
+  );
+  const departures = byDeparture(upcoming);
+  const hero = departures[0] ?? null;
+  const editTarget = state.trips.find((trip) => trip.id === editing) ?? null;
+
   return (
     <section className="screen">
       {archiveView ? (
-        <div className="page-head">
-          <div className="head-copy">
-            <p className="eyebrow">Trip history</p>
-            <h1>Past trips & archive</h1>
-            <p className="muted">
-              Past dates appear here automatically. Archiving is separate from whether a trip is
-              Ready.
-            </p>
-          </div>
-        </div>
-      ) : (
-        <div className="hero">
-          <div className="hero-art" aria-hidden="true">
-            <div className="sun" />
-            <div className="hill one" />
-            <div className="hill two" />
-          </div>
-          <div className="hero-copy">
-            <p className="eyebrow">Less remembering. More ready.</p>
-            <h1>Pack for the trip, not the anxiety.</h1>
-            <p>
-              Create a personal list that accounts for your travel days, return outfit, laundry
-              plans, and the things you pack last.
-            </p>
-            <div className="actions">
-              <Link className={buttonClassName()} href="/trips/new">
-                ＋ New trip
-              </Link>
+        <>
+          <div className="page-head">
+            <div className="head-copy">
+              <p className="eyebrow">Trip history</p>
+              <h1>Past trips & archive</h1>
+              <p className="muted">
+                Past dates appear here automatically. Archiving is separate from whether a trip is
+                Ready.
+              </p>
             </div>
           </div>
-        </div>
-      )}
-
-      <div className="section-head">
-        <div>
-          <p className="eyebrow">Your trips</p>
-          <h2 ref={headingRef} tabIndex={-1}>
-            {archiveView ? "Trip history" : "Where are we going?"}
-          </h2>
-        </div>
-      </div>
-      <div className="trip-tabs" role="group" aria-label="Trip views">
-        <button
-          type="button"
-          aria-pressed={!archiveView}
-          className={archiveView ? "" : "active"}
-          onClick={() => setView("upcoming")}
-        >
-          Upcoming <span>{upcoming.length}</span>
-        </button>
-        <button
-          type="button"
-          aria-pressed={archiveView}
-          className={archiveView ? "active" : ""}
-          onClick={() => setView("archive")}
-        >
-          Past & archive <span>{past.length}</span>
-        </button>
-      </div>
-
-      <div className="card-grid">
-        {visible.length === 0 ? (
-          <div className="empty-state">
-            <strong>{archiveView ? "No past or archived trips yet." : "No upcoming trips."}</strong>
-            <br />
-            {archiveView
-              ? "Archived trips and trips whose return date has passed will appear here."
-              : "Create a trip or restore one from Past & archive."}
+          <div className="section-head">
+            <div>
+              <p className="eyebrow">Your trips</p>
+              <h2 ref={headingRef} tabIndex={-1}>
+                Trip history
+              </h2>
+            </div>
           </div>
-        ) : (
-          visible.map((trip, index) => (
-            <TripCard
-              key={trip.id}
-              trip={trip}
-              view={tripCardView(trip, today, view)}
-              first={index === 0}
-              busy={busy.has(trip.id)}
-              onArchive={(id) => void run(id, () => source.archive(id))}
-              onRestore={(id) => void run(id, () => source.restore(id))}
-              onRemove={setRemoving}
-            />
-          ))
-        )}
-      </div>
+          {tabs}
+          <div className="card-grid">
+            {visible.length === 0 ? (
+              <div className="empty-state">
+                <strong>No past or archived trips yet.</strong>
+                <br />
+                Archived trips and trips whose return date has passed will appear here.
+              </div>
+            ) : (
+              visible.map((trip, index) => (
+                <TripCard
+                  key={trip.id}
+                  trip={trip}
+                  view={tripCardView(trip, today, view)}
+                  first={index === 0}
+                  busy={busy.has(trip.id)}
+                  onArchive={archive}
+                  onRestore={(id) => void run(id, () => source.restore(id))}
+                  onRemove={setRemoving}
+                />
+              ))
+            )}
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="ledger-head">
+            <div>
+              <p className="eyebrow">{journeysAheadLabel(upcoming.length)}</p>
+              <h1 ref={headingRef} tabIndex={-1}>
+                Your travel ledger
+              </h1>
+            </div>
+            <Link className={buttonClassName()} href="/trips/new">
+              Plan a trip
+            </Link>
+          </div>
+          {tabs}
+          {hero ? (
+            <div className="ledger-grid">
+              <NextDeparture
+                trip={hero}
+                view={tripCardView(hero, today, view)}
+                departure={departureView(hero, today)}
+                weather={weather}
+                busy={busy.has(hero.id)}
+                onEdit={(id) => {
+                  setEditFailed(false);
+                  setEditing(id);
+                }}
+                onAddItem={(item) => addItem(hero.id, item)}
+                onBathroom={(name, qty) => setBathroom({ tripId: hero.id, name, qty })}
+                onEditExisting={(itemId) => router.push(editItemHref(hero.id, itemId))}
+                onArchive={archive}
+                onRemove={setRemoving}
+              />
+              <LaterJourneys
+                entries={departures.slice(1).map((trip) => ({
+                  trip,
+                  view: tripCardView(trip, today, view),
+                }))}
+                today={today}
+                busy={busy}
+                onArchive={archive}
+                onRemove={setRemoving}
+              />
+            </div>
+          ) : (
+            <div className="empty-state">
+              <strong>No upcoming trips.</strong>
+              <br />
+              Plan a trip or restore one from Past & archive.
+            </div>
+          )}
+        </>
+      )}
 
       {archiveView ? (
         <>
@@ -268,6 +432,30 @@ export function TripsDashboard({ source, getToday = localToday }: TripsDashboard
             )}
           </Card>
         </>
+      ) : null}
+
+      {bathroom && state.trips.some((trip) => trip.id === bathroom.tripId) ? (
+        <AddToiletryForm
+          destination={state.trips.find((trip) => trip.id === bathroom.tripId)!.destination}
+          saving={bathroomSaving}
+          initialName={bathroom.name}
+          initialQty={bathroom.qty}
+          onClose={() => setBathroom(null)}
+          onAdd={(item) => addBathroomItem(bathroom.tripId, item)}
+        />
+      ) : null}
+
+      {editTarget ? (
+        <EditRouteSheet
+          stops={editTarget.stops}
+          saving={saving}
+          failed={editFailed}
+          onClose={() => {
+            setEditFailed(false);
+            setEditing(null);
+          }}
+          onSave={(stops) => saveRoute(editTarget.id, stops)}
+        />
       ) : null}
 
       {removeTarget ? (

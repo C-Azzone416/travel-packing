@@ -21,9 +21,24 @@ const actions = vi.hoisted(() => {
       ),
     ),
     createTripAction: vi.fn().mockResolvedValue({ ok: true, trip }),
+    createTripWithWeatherAction: vi.fn().mockResolvedValue({ ok: true, trip }),
     getTripAction: vi.fn().mockResolvedValue({ ok: true, trip }),
     listStaplesAction: vi.fn().mockResolvedValue({ ok: true, staples: [] }),
     upsertStapleAction: vi.fn().mockResolvedValue({ ok: true, staples: [] }),
+    listWeatherSuggestionsAction: vi.fn().mockResolvedValue({ ok: true, suggestions: [] }),
+    applyWeatherReviewAction: vi.fn().mockResolvedValue(change),
+    getWeatherSettingsAction: vi.fn().mockResolvedValue({
+      ok: true,
+      settings: { optedIn: false, temperatureUnit: "F" },
+    }),
+    updateWeatherSettingsAction: vi.fn().mockResolvedValue({
+      ok: true,
+      settings: { optedIn: true, temperatureUnit: "F" },
+    }),
+    fetchTripWeather: vi.fn().mockResolvedValue({ kind: "ready", stops: [] }),
+    previewWeatherAction: vi.fn().mockResolvedValue({ kind: "ready", stops: [] }),
+    listSavedListsAction: vi.fn().mockResolvedValue({ ok: true, lists: [{ id: "l1" }] }),
+    getSavedListAction: vi.fn().mockResolvedValue({ ok: true, list: { id: "l1", items: [] } }),
     commands: Object.fromEntries(
       [
         "setPackedAction",
@@ -33,6 +48,8 @@ const actions = vi.hoisted(() => {
         "editItemAction",
         "removeItemAction",
         "addToiletryItemAction",
+        "addItemAction",
+        "saveAsListAction",
         "confirmBagPlacementAction",
         "undoBagPlacementAction",
         "markReadyAction",
@@ -42,6 +59,8 @@ const actions = vi.hoisted(() => {
         "reviewWeatherAgainAction",
         "updatePreferencesAction",
         "setThemeAction",
+        "setStampLabelsAction",
+        "setStopsAction",
       ].map(command),
     ),
   };
@@ -49,13 +68,28 @@ const actions = vi.hoisted(() => {
 vi.mock("./actions", () => ({
   loadTripsAction: actions.loadTripsAction,
   createTripAction: actions.createTripAction,
+  createTripWithWeatherAction: actions.createTripWithWeatherAction,
   ...actions.dashboard,
 }));
 vi.mock("./trip-actions", () => ({
   getTripAction: actions.getTripAction,
   listStaplesAction: actions.listStaplesAction,
   upsertStapleAction: actions.upsertStapleAction,
+  listWeatherSuggestionsAction: actions.listWeatherSuggestionsAction,
+  applyWeatherReviewAction: actions.applyWeatherReviewAction,
   ...actions.commands,
+}));
+vi.mock("@/features/settings/weather-actions", () => ({
+  getWeatherSettingsAction: actions.getWeatherSettingsAction,
+  updateWeatherSettingsAction: actions.updateWeatherSettingsAction,
+}));
+vi.mock("../staples/saved-list-actions", () => ({
+  listSavedListsAction: actions.listSavedListsAction,
+  getSavedListAction: actions.getSavedListAction,
+}));
+vi.mock("./weather-client", () => ({ fetchTripWeather: actions.fetchTripWeather }));
+vi.mock("./weather-preview-action", () => ({
+  previewWeatherAction: actions.previewWeatherAction,
 }));
 actions.loadTripsAction.mockResolvedValue({
   ok: true,
@@ -186,6 +220,18 @@ describe("TripsSourceProvider", () => {
         ["t", toiletry],
       ],
       [
+        "addItem",
+        (s) => s.addItem("t", { name: "Camera", category: "Tech", neededQty: 2 }),
+        () => actions.commands.addItemAction,
+        ["t", { name: "Camera", category: "Tech", neededQty: 2 }],
+      ],
+      [
+        "saveAsList",
+        (s) => s.saveAsList("t", "Beach week", ["a", "b"]),
+        () => actions.commands.saveAsListAction,
+        ["t", "Beach week", ["a", "b"]],
+      ],
+      [
         "confirmBagPlacement",
         (s) => s.confirmBagPlacement("t"),
         () => actions.commands.confirmBagPlacementAction,
@@ -229,6 +275,13 @@ describe("TripsSourceProvider", () => {
         () => actions.commands.setThemeAction,
         ["t", "city"],
       ],
+      [
+        "setStampLabels",
+        (s) => s.setStampLabels("t", "ABC", null),
+        () => actions.commands.setStampLabelsAction,
+        ["t", "ABC", null],
+      ],
+      ["setStops", (s) => s.setStops("t", []), () => actions.commands.setStopsAction, ["t", []]],
     ];
 
     const everyAction = () => [
@@ -246,6 +299,52 @@ describe("TripsSourceProvider", () => {
       return null;
     }
 
+    it("previews a draft with provider-minimal stops: dates and coordinates only, the last stop includes its leave day", async () => {
+      let captured!: TripsSource;
+      render(
+        <TripsSourceProvider>
+          <Capture onSource={(source) => (captured = source)} />
+        </TripsSourceProvider>,
+      );
+      actions.previewWeatherAction.mockClear();
+      const place = { id: "x", city: "A", region: "", country: "", countryCode: "", label: "A" };
+      await captured.weather!.previewDraft([
+        {
+          location: { ...place, latitude: 1.5, longitude: 2.5, city: "Secret name" },
+          arrive: "2030-05-01",
+          leave: "2030-05-03",
+        },
+        { location: place, arrive: "2030-05-03", leave: "2030-05-05" },
+      ]);
+      expect(actions.previewWeatherAction).toHaveBeenCalledWith([
+        {
+          stopIndex: 0,
+          arrive: "2030-05-01",
+          leave: "2030-05-03",
+          includeLeave: false,
+          latitude: 1.5,
+          longitude: 2.5,
+        },
+        { stopIndex: 1, arrive: "2030-05-03", leave: "2030-05-05", includeLeave: true },
+      ]);
+    });
+
+    it("reads the owner's saved lists through the list and get actions, and turns a refusal into an error (#170)", async () => {
+      let captured!: TripsSource;
+      render(
+        <TripsSourceProvider>
+          <Capture onSource={(source) => (captured = source)} />
+        </TripsSourceProvider>,
+      );
+      expect(await captured.savedLists!.list()).toEqual([{ id: "l1" }]);
+      expect(await captured.savedLists!.get("l1")).toEqual({ id: "l1", items: [] });
+      expect(actions.getSavedListAction).toHaveBeenCalledWith("l1");
+      actions.listSavedListsAction.mockResolvedValueOnce({ ok: false, code: "INTERNAL" });
+      await expect(captured.savedLists!.list()).rejects.toThrow("INTERNAL");
+      actions.getSavedListAction.mockResolvedValueOnce({ ok: false, code: "NOT_FOUND" });
+      await expect(captured.savedLists!.get("other")).rejects.toThrow("NOT_FOUND");
+    });
+
     it("covers every method of the port", () => {
       let captured!: TripsSource;
       render(
@@ -253,7 +352,9 @@ describe("TripsSourceProvider", () => {
           <Capture onSource={(source) => (captured = source)} />
         </TripsSourceProvider>,
       );
-      expect(WIRING.map(([name]) => name).sort()).toEqual(Object.keys(captured).sort());
+      expect([...WIRING.map(([name]) => name), "weather", "savedLists"].sort()).toEqual(
+        Object.keys(captured).sort(),
+      );
     });
 
     it.each(WIRING)("%s", async (_name, call, target, args) => {

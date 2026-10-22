@@ -4,7 +4,7 @@
   position: relative;
   overflow: hidden;
   isolation: isolate;
-  background: var(--seafoam, #b9ddd0);
+  background: var(--seafoam);
 }
 
 .visual::after {
@@ -12,7 +12,11 @@
   position: absolute;
   z-index: 1;
   inset: 0;
-  background: linear-gradient(90deg, rgba(245, 247, 242, 0.34), transparent 48%);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--bg) 34%, transparent),
+    transparent 48%
+  );
   pointer-events: none;
 }
 
@@ -33,7 +37,7 @@
 /* Trip card banner: compact on phones, taller as the grid widens. */
 .card {
   height: 118px;
-  border-bottom: 1px solid rgba(24, 61, 69, 0.12);
+  border-bottom: 1px solid var(--line);
 }
 
 @media (min-width: 431px) {
@@ -59,9 +63,9 @@
 .header::after {
   background: linear-gradient(
     180deg,
-    rgba(245, 247, 242, 0.16),
-    rgba(245, 247, 242, 0.12) 42%,
-    rgba(245, 247, 242, 0.35) 78%
+    color-mix(in srgb, var(--bg) 16%, transparent),
+    color-mix(in srgb, var(--bg) 12%, transparent) 42%,
+    color-mix(in srgb, var(--bg) 35%, transparent) 78%
   );
 }
 
@@ -69,9 +73,9 @@
   .header::after {
     background: linear-gradient(
       90deg,
-      rgba(245, 247, 242, 0.93) 0%,
-      rgba(245, 247, 242, 0.73) 43%,
-      rgba(245, 247, 242, 0.08) 76%
+      color-mix(in srgb, var(--bg) 93%, transparent) 0%,
+      color-mix(in srgb, var(--bg) 73%, transparent) 43%,
+      color-mix(in srgb, var(--bg) 8%, transparent) 76%
     );
   }
 }

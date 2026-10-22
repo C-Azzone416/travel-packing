@@ -54,8 +54,8 @@ describe("loading and states", () => {
     await title();
     const headings = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
     expect(headings).toEqual(["Clothing", "Bathroom", "Tech", "Other essentials"]);
-    expect(within(section("Clothing")).getByLabelText("3 staples")).toBeTruthy();
-    expect(within(section("Bathroom")).getByLabelText("4 staples")).toBeTruthy();
+    expect(within(section("Clothing")).getByText("3 staples")).toBeTruthy();
+    expect(within(section("Bathroom")).getByText("4 staples")).toBeTruthy();
     expect(screen.getByText("My staples")).toBeTruthy();
     expect(screen.getByText(/Changes here never rewrite existing trips/)).toBeTruthy();
     expect(screen.queryByText(/sample|saved to my staples/i)).toBeNull();
@@ -186,7 +186,7 @@ describe("adding a staple", () => {
     expect(saved).toMatchObject({ qty: 2, cadence: "per day", category: "Tech", packLast: false });
     expect(saved.id).toMatch(/^staple-/);
     expect(within(section("Tech")).getByText("Phone charger")).toBeTruthy();
-    expect(within(section("Tech")).getByLabelText("3 staples")).toBeTruthy();
+    expect(within(section("Tech")).getByText("3 staples")).toBeTruthy();
     expect(await screen.findByText("Phone charger saved for future trips.")).toBeTruthy();
     expect(JSON.stringify(source.snapshot().trips)).toBe(tripsBefore);
   });
@@ -291,7 +291,7 @@ describe("adding a staple", () => {
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", { name: "Add staple" }),
     );
-    expect(await screen.findByRole("button", { name: /couldn.t save/i })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /not saved/i })).toBeTruthy();
     expect(screen.getByRole("dialog", { name: "Add a staple" })).toBeTruthy();
     expect(screen.queryByText("Hat saved for future trips.")).toBeNull();
   });

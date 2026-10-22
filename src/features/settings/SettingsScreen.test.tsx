@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { useEffect } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { SaveStatusProvider, useSaveStatus } from "@/components/shell/SaveStatus";
+import { ToastProvider } from "@/components/ui/Toast";
 import { lastSavedText, SettingsScreen } from "./SettingsScreen";
 
 let tracker: ReturnType<typeof useSaveStatus>;
@@ -15,14 +16,41 @@ function Capture() {
   return null;
 }
 
-function setup(email: string | null = "owner@example.test", signOut = vi.fn(async () => {})) {
+function setup(
+  email: string | null = "owner@example.test",
+  signOut = vi.fn(async () => {}),
+  updateWeather?: (change: { weatherOptIn?: boolean; temperatureUnit?: "F" | "C" }) => Promise<
+    | { ok: true; settings: { weatherOptIn: boolean; temperatureUnit: "F" | "C" } }
+    | {
+        ok: false;
+        code: "INTERNAL";
+        settings: { weatherOptIn: boolean; temperatureUnit: "F" | "C" };
+      }
+  >,
+) {
+  let saved = { weatherOptIn: false, temperatureUnit: "F" as "F" | "C" };
+  const update =
+    updateWeather ??
+    vi.fn(async (change: { weatherOptIn?: boolean; temperatureUnit?: "F" | "C" }) => {
+      saved = { ...saved, ...change };
+      return { ok: true as const, settings: saved };
+    });
   const view = render(
-    <SaveStatusProvider>
-      <Capture />
-      <SettingsScreen email={email} signOut={signOut} />
-    </SaveStatusProvider>,
+    <ToastProvider>
+      <SaveStatusProvider>
+        <Capture />
+        <SettingsScreen
+          email={email}
+          signOut={signOut}
+          initialWeather={{ weatherOptIn: false, temperatureUnit: "F" }}
+          updateWeather={update}
+          initialAppearance="base"
+          updateAppearance={async (appearance) => ({ ok: true as const, appearance })}
+        />
+      </SaveStatusProvider>
+    </ToastProvider>,
   );
-  return { signOut, ...view };
+  return { signOut, updateWeather: update, ...view };
 }
 
 describe("SettingsScreen", () => {
@@ -108,6 +136,42 @@ describe("SettingsScreen", () => {
     const { container } = setup();
     expect(container.textContent).not.toMatch(/offline|waiting|simulat|sample|reset/i);
     expect(screen.queryByRole("heading", { name: "Data" })).toBeNull();
+  });
+
+  it("saves weather opt-in and units, and keeps units unavailable while weather is off", async () => {
+    const { updateWeather } = setup();
+    const weather = screen.getByRole("switch", { name: "Weather for my trips" });
+    const celsius = screen.getByRole("radio", { name: "°C" });
+    expect((celsius as HTMLInputElement).disabled).toBe(true);
+
+    await userEvent.click(weather);
+    expect(updateWeather).toHaveBeenCalledWith({ weatherOptIn: true });
+    expect((celsius as HTMLInputElement).disabled).toBe(false);
+    await userEvent.click(celsius);
+    expect(updateWeather).toHaveBeenCalledWith({ temperatureUnit: "C" });
+
+    await userEvent.click(weather);
+    expect(await screen.findByText("Weather is off. Your lists are unchanged.")).toBeTruthy();
+    expect((celsius as HTMLInputElement).disabled).toBe(true);
+  });
+
+  it("rolls back a weather setting and reports a failed write", async () => {
+    const failed = vi.fn(async () => ({
+      ok: false as const,
+      code: "INTERNAL" as const,
+      settings: { weatherOptIn: false, temperatureUnit: "F" as const },
+    }));
+    setup(
+      "owner@example.test",
+      vi.fn(async () => {}),
+      failed,
+    );
+    const weather = screen.getByRole("switch", { name: "Weather for my trips" });
+    await userEvent.click(weather);
+    expect(
+      await screen.findByText("Couldn’t save that setting. Nothing was changed."),
+    ).toBeTruthy();
+    expect((weather as HTMLInputElement).checked).toBe(false);
   });
 });
 

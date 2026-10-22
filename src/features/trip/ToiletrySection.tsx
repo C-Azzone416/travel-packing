@@ -31,16 +31,14 @@ export function ToiletrySection({
   const visible = filter === "still" ? items.filter((item) => item.packed < item.qty) : items;
   const titleId = `toiletry-title-${tripId}`;
   return (
-    <section className="toiletry-section" aria-labelledby={titleId}>
+    <section id="block-toiletries" className="toiletry-section" aria-labelledby={titleId}>
       <div className="list-section-head">
-        <div>
-          <h3 id={titleId}>Toiletries</h3>
-          <div className="item-meta">
-            Bathroom · {gate.checked} of {gate.total} contents checked
-          </div>
-        </div>
-        <span className="tag">{visible.length}</span>
+        <h3 id={titleId}>Toiletries</h3>
+        <span className="list-section-count">
+          {gate.checked} of {gate.total} contents checked
+        </span>
       </div>
+      <p className="item-meta list-section-sub">Bathroom</p>
       <p className="tiny muted toiletry-explainer">
         Check each item normally. After every required item is checked, confirm the separate step of
         putting the toiletry bag in the suitcase.

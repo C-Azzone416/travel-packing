@@ -6,7 +6,8 @@ import { renderInApp } from "@/test/providers";
 import { TripsScreen } from "./TripsScreen";
 import { TripsSourceProvider } from "./TripsSourceProvider";
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
+const push = vi.fn();
+vi.mock("next/navigation", () => ({ usePathname: () => "/", useRouter: () => ({ push }) }));
 
 // The server actions are replaced by a stateful stand-in (in tests only; production reads the data layer).
 const control = vi.hoisted(() => ({ failLoad: false }));
@@ -26,6 +27,10 @@ vi.mock("./actions", async () => {
     removeTripAction: (id: string) => ok(source.remove(id)),
     undoRemoveTripAction: (id: string) => ok(source.undoRemove(id)),
     createTripAction: async () => ({ ok: false as const, code: "INTERNAL" as const }),
+    createTripWithWeatherAction: async () => ({
+      ok: false as const,
+      code: "INTERNAL" as const,
+    }),
   };
 });
 
@@ -44,7 +49,8 @@ describe("TripsScreen", () => {
         </TripsSourceProvider>,
       );
       expect(await screen.findByRole("heading", { name: "San Diego" })).toBeTruthy();
-      await user.click(screen.getByRole("button", { name: "Remove: San Diego" }));
+      await user.click(screen.getByRole("button", { name: "More actions for San Diego" }));
+      await user.click(screen.getByRole("menuitem", { name: "Remove" }));
       await user.click(
         within(screen.getByRole("dialog")).getByRole("button", { name: "Remove trip" }),
       );

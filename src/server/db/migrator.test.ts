@@ -14,11 +14,18 @@ const EXPECTED_TAGS = [
   "0001_progress_clamp_trigger",
   "0002_location_columns",
   "0003_trip_theme",
+  "0004_account_setups",
+  "0005_trip_stops",
+  "0006_saved_lists",
+  "0007_appearance",
+  "0008_stamp_labels",
 ];
 
 // One in-memory Postgres for the file; each test starts from an empty public schema.
 const client = new PGlite();
 const migrations = loadMigrations(MIGRATIONS_DIR);
+// The set before trip stops (0005), for the tests that predate it.
+const upToAccountSetups = migrations.slice(0, 5);
 
 beforeEach(async () => {
   await client.exec("DROP SCHEMA public CASCADE; CREATE SCHEMA public;");
@@ -70,10 +77,14 @@ describe("migrateUp", () => {
     expect(await migrateUp(client, migrations)).toEqual(EXPECTED_TAGS);
     expect(await appliedMigrations(client)).toEqual(EXPECTED_TAGS);
     expect(await userTables()).toEqual([
+      "account_setups",
+      "saved_list_items",
+      "saved_lists",
       "staples",
       "trip_item_progress",
       "trip_items",
       "trip_preferences",
+      "trip_stops",
       "trips",
       "users",
       "weather_suggestions",
@@ -127,8 +138,9 @@ describe("migrateDown", () => {
   });
 
   it("rolls back only the requested number of steps, newest first", async () => {
-    await migrateUp(client, migrations);
-    expect(await migrateDown(client, migrations, 3)).toEqual([
+    await migrateUp(client, upToAccountSetups);
+    expect(await migrateDown(client, upToAccountSetups, 4)).toEqual([
+      EXPECTED_TAGS[4],
       EXPECTED_TAGS[3],
       EXPECTED_TAGS[2],
       EXPECTED_TAGS[1],
@@ -155,9 +167,13 @@ describe("migrateDown", () => {
       "longitude",
       "timezone",
     ];
-    await migrateUp(client, migrations);
+    await migrateUp(client, upToAccountSetups);
     expect(await tripColumns()).toEqual(expect.arrayContaining(added));
-    expect(await migrateDown(client, migrations, 2)).toEqual([EXPECTED_TAGS[3], EXPECTED_TAGS[2]]);
+    expect(await migrateDown(client, upToAccountSetups, 3)).toEqual([
+      EXPECTED_TAGS[4],
+      EXPECTED_TAGS[3],
+      EXPECTED_TAGS[2],
+    ]);
     const remaining = await tripColumns();
     for (const column of added) expect(remaining).not.toContain(column);
     expect(remaining).toEqual(
@@ -165,7 +181,7 @@ describe("migrateDown", () => {
     );
     expect(await appliedMigrations(client)).toEqual(EXPECTED_TAGS.slice(0, 2));
     expect(await userFunctions()).toEqual(["clamp_progress_to_qty"]);
-    await migrateUp(client, migrations);
+    await migrateUp(client, upToAccountSetups);
     expect(await tripColumns()).toEqual(expect.arrayContaining(added));
   });
 
@@ -183,17 +199,26 @@ describe("migrateDown", () => {
        INSERT INTO "trips" ("owner_id","destination","start_date","end_date","days","daily_days")
        VALUES ('u1','Anywhere','2030-04-01','2030-04-03',3,1)`,
     );
-    await migrateUp(client, migrations);
+    await migrateUp(client, migrations.slice(0, 4));
     const [column] = await themeColumn();
     expect(column.is_nullable).toBe("NO");
     expect(column.column_default).toContain("travel");
     const old = await client.query<{ theme: string }>(`SELECT theme FROM trips`);
     expect(old.rows).toEqual([{ theme: "travel" }]);
     await expect(client.query(`UPDATE trips SET theme = 'volcano'`)).rejects.toThrow();
-    expect(await migrateDown(client, migrations, 1)).toEqual([EXPECTED_TAGS[3]]);
+    expect(await migrateDown(client, migrations.slice(0, 4), 1)).toEqual([EXPECTED_TAGS[3]]);
     expect(await themeColumn()).toEqual([]);
     expect(await userTypes()).not.toContain("trip_theme");
-    expect(await migrateUp(client, migrations)).toEqual([EXPECTED_TAGS[3]]);
+    expect(await migrateUp(client, migrations.slice(0, 4))).toEqual([EXPECTED_TAGS[3]]);
+  });
+
+  it("rolling back just the account setups drops the table, and up restores it empty", async () => {
+    await migrateUp(client, upToAccountSetups);
+    await client.exec(`INSERT INTO "account_setups" ("email_digest") VALUES ('abc')`);
+    expect(await migrateDown(client, upToAccountSetups, 1)).toEqual([EXPECTED_TAGS[4]]);
+    expect(await userTables()).not.toContain("account_setups");
+    expect(await migrateUp(client, upToAccountSetups)).toEqual([EXPECTED_TAGS[4]]);
+    expect((await client.query(`SELECT * FROM "account_setups"`)).rows).toEqual([]);
   });
 
   it("does nothing on an empty database", async () => {

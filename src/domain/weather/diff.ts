@@ -1,0 +1,165 @@
+import type { Suggestion } from "../calc/suggestions";
+import type { WeatherRecommendation, WeatherSuggestion } from "./recommend";
+
+/** Every id the engine can emit as a conditional item; only these are ever offered for removal. */
+export const WEATHER_EXTRA_IDS = [
+  "layer-light",
+  "layer-warm",
+  "cold-accessories",
+  "weather-umbrella",
+  "weather-rain-jacket",
+  "weather-swimsuit",
+  "weather-sunscreen",
+  "weather-sun-hat",
+  "weather-snow-boots",
+] as const;
+
+export const CLOTHING_SPLIT_ID = "clothing-split";
+/** The title for a trip still on Everyday tops/bottoms, and for one already split by weather. */
+export const SPLIT_TITLE = "Split clothing by weather";
+export const UPDATE_SPLIT_TITLE = "Update clothing split";
+const SPLIT_NAMES: Record<string, string> = {
+  "tops-short": "Short-sleeve tops",
+  "tops-long": "Long-sleeve tops",
+  "bottoms-shorts": "Shorts",
+  "bottoms-pants": "Pants",
+};
+const SPLIT_IDS = ["tops-short", "tops-long", "bottoms-shorts", "bottoms-pants"];
+const CLOTHING_IDS = ["tops", "bottoms", ...SPLIT_IDS];
+
+export interface SavedItem {
+  id: string;
+  qty: number;
+  userEdited?: boolean;
+}
+
+export type WeatherChange =
+  | {
+      kind: "add";
+      semanticId: string;
+      title: string;
+      reason: string;
+      ruleSignature: string;
+      userEdited: false;
+      item: WeatherSuggestion;
+    }
+  | {
+      kind: "remove";
+      semanticId: string;
+      title: string;
+      reason: string;
+      ruleSignature: string;
+      /** True when the person edited the saved item: offered, and the review must not overwrite it. */
+      userEdited: boolean;
+    }
+  | {
+      kind: "split";
+      semanticId: typeof CLOTHING_SPLIT_ID;
+      title: string;
+      reason: string;
+      ruleSignature: string;
+      userEdited: boolean;
+      clothing: Suggestion[];
+    };
+
+/** Skipped changes: semantic id -> the ruleSignature that was skipped. */
+export type SuppressedChanges = Readonly<Record<string, string>>;
+
+const nameFor = (id: string) => WEATHER_EXTRA_NAMES[id] ?? id;
+const WEATHER_EXTRA_NAMES: Record<string, string> = {
+  "layer-light": "Light jacket or sweater",
+  "layer-warm": "Warm coat",
+  "cold-accessories": "Hat and gloves",
+  "weather-umbrella": "Compact umbrella",
+  "weather-rain-jacket": "Rain jacket",
+  "weather-swimsuit": "Swimsuit",
+  "weather-sunscreen": "Sunscreen",
+  "weather-sun-hat": "Sun hat",
+  "weather-snow-boots": "Waterproof boots",
+};
+
+/** "Short-sleeve tops: 3 → 5, Pants: 2 → 0": only the lines whose count changes, for a trip already split by weather. */
+function splitDifferences(
+  have: readonly { id: string; qty: number }[],
+  wanted: readonly { id: string; name: string; qty: number }[],
+): string {
+  const was = new Map(have.map((line) => [line.id, line.qty]));
+  const now = new Map(wanted.map((line) => [line.id, line.qty]));
+  const lines = wanted
+    .filter((line) => (was.get(line.id) ?? 0) !== line.qty)
+    .map((line) => `${line.name}: ${was.get(line.id) ?? 0} → ${line.qty}`);
+  const dropped = have
+    .filter((line) => SPLIT_IDS.includes(line.id) && !now.has(line.id) && line.qty > 0)
+    .map((line) => `${SPLIT_NAMES[line.id]}: ${line.qty} → 0`);
+  return [...lines, ...dropped].join(", ");
+}
+
+function splitSignature(lines: readonly { id: string; qty: number }[]): string {
+  return lines
+    .map((line) => `${line.id}:${line.qty}`)
+    .sort()
+    .join("|");
+}
+
+/**
+ * What the weather now recommends that the saved list does not have (#110, epic §4). Pure: it never edits
+ * anything. Items the person edited are reported with `userEdited` so the sheet offers instead of overwriting,
+ * and a skipped change stays hidden until its ruleSignature changes.
+ */
+export function diffRecommendations(
+  saved: readonly SavedItem[],
+  recommendation: WeatherRecommendation,
+  suppressed: SuppressedChanges = {},
+): WeatherChange[] {
+  const changes: WeatherChange[] = [];
+  const byId = new Map(saved.map((item) => [item.id, item]));
+
+  for (const extra of recommendation.extras) {
+    if (byId.has(extra.semanticId)) continue;
+    changes.push({
+      kind: "add",
+      semanticId: extra.semanticId,
+      title: extra.name,
+      reason: extra.reason,
+      ruleSignature: extra.ruleSignature,
+      userEdited: false,
+      item: extra,
+    });
+  }
+
+  const recommended = new Set(recommendation.extras.map((extra) => extra.semanticId));
+  for (const id of WEATHER_EXTRA_IDS) {
+    const item = byId.get(id);
+    if (!item || recommended.has(id)) continue;
+    changes.push({
+      kind: "remove",
+      semanticId: id,
+      title: nameFor(id),
+      reason: "The weather no longer calls for this",
+      ruleSignature: "removed",
+      userEdited: Boolean(item.userEdited),
+    });
+  }
+
+  const wanted = recommendation.clothing.filter((line) => line.semanticId);
+  if (wanted.length) {
+    const have = saved.filter((item) => CLOTHING_IDS.includes(item.id));
+    const wantedSignature = splitSignature(wanted);
+    if (splitSignature(have) !== wantedSignature) {
+      const alreadySplit = have.some((item) => SPLIT_IDS.includes(item.id));
+      changes.push({
+        kind: "split",
+        semanticId: CLOTHING_SPLIT_ID,
+        title: alreadySplit ? UPDATE_SPLIT_TITLE : SPLIT_TITLE,
+        reason: alreadySplit
+          ? splitDifferences(have, wanted)
+          : wanted.map((line) => `${line.qty} × ${line.name}`).join(", "),
+        ruleSignature: wantedSignature,
+        userEdited: have.some((item) => item.userEdited),
+        clothing: wanted,
+      });
+    }
+  }
+
+  return changes.filter((change) => suppressed[change.semanticId] !== change.ruleSignature);
+}

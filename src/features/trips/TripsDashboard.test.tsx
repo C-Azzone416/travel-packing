@@ -8,7 +8,8 @@ import { sampleLifecycleState } from "./fixtures";
 import { TripsDashboard } from "./TripsDashboard";
 import { createMemoryTripsSource, type TripsSource } from "./trips-source";
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
+const push = vi.fn();
+vi.mock("next/navigation", () => ({ usePathname: () => "/", useRouter: () => ({ push }) }));
 
 const TODAY = () => "2026-10-16";
 
@@ -28,6 +29,11 @@ function memory(initial: LifecycleState) {
 }
 
 const card = (name: string) => screen.getByRole("article", { name });
+/** Open a trip's ⋯ menu and choose one item (the Field Ledger dashboard keeps these actions behind it, #155). */
+async function choose(user: ReturnType<typeof userEvent.setup>, trip: string, item: string) {
+  await user.click(screen.getByRole("button", { name: `More actions for ${trip}` }));
+  await user.click(screen.getByRole("menuitem", { name: item }));
+}
 const tab = (name: RegExp) => screen.getByRole("button", { name });
 
 function deferred<T>() {
@@ -45,7 +51,7 @@ async function ready() {
 }
 
 describe("loading and errors", () => {
-  it("shows two skeleton cards (no spinner) with the title and New trip visible, then the trips", async () => {
+  it("shows two skeleton cards (no spinner) with the title and Plan a trip visible, then the trips", async () => {
     const gate = deferred<LifecycleState>();
     const base = memory(sampleLifecycleState());
     const source: TripsSource = { ...base, load: () => gate.promise };
@@ -54,7 +60,9 @@ describe("loading and errors", () => {
     expect(region.getAttribute("aria-busy")).toBe("true");
     expect(view.container.querySelectorAll(".skeleton-card")).toHaveLength(2);
     expect(screen.getByRole("heading", { name: "Trips", level: 1 })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "New trip" }).getAttribute("href")).toBe("/trips/new");
+    expect(screen.getByRole("link", { name: "Plan a trip" }).getAttribute("href")).toBe(
+      "/trips/new",
+    );
     await act(async () => gate.resolve(await base.load()));
     await ready();
     expect(screen.queryByRole("region", { name: "Loading trips" })).toBeNull();
@@ -94,7 +102,7 @@ describe("loading and errors", () => {
       renderInApp(<TripsDashboard source={{ ...base, load }} getToday={TODAY} />);
       await act(async () => {});
       expect(screen.getByText("Couldn’t load your trips.")).toBeTruthy();
-      const chip = screen.getByRole("button", { name: "Couldn't save, retry" });
+      const chip = screen.getByRole("button", { name: "Not saved, retry" });
       act(() => chip.click());
       act(() =>
         within(screen.getByRole("dialog", { name: "Couldn’t save" }))
@@ -130,7 +138,7 @@ describe("loading and errors", () => {
     const { user } = setup(undefined, () => ({ ...base, load }));
     expect(await screen.findByText("Couldn’t load your trips.")).toBeTruthy();
     expect(screen.getByText("Nothing was changed.")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Couldn't save, retry" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Not saved, retry" })).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Try again" }));
     await ready();
     expect(load).toHaveBeenCalledTimes(2);
@@ -145,7 +153,7 @@ describe("loading and errors", () => {
       .mockImplementation(() => base.load());
     const { user } = setup(undefined, () => ({ ...base, load }));
     await screen.findByText("Couldn’t load your trips.");
-    await user.click(screen.getByRole("button", { name: "Couldn't save, retry" }));
+    await user.click(screen.getByRole("button", { name: "Not saved, retry" }));
     await user.click(
       within(screen.getByRole("dialog", { name: "Couldn’t save" })).getByRole("button", {
         name: "Retry",
@@ -174,32 +182,48 @@ describe("loading and errors", () => {
     const user = userEvent.setup();
     renderInApp(<TripsDashboard source={memory(sampleLifecycleState())} />);
     expect(user).toBeTruthy();
-    expect(await screen.findByRole("heading", { name: "Where are we going?" })).toBeTruthy();
+    expect(
+      await screen.findByRole("heading", { name: "Your travel ledger", level: 1 }),
+    ).toBeTruthy();
   });
 });
 
 describe("upcoming view", () => {
   it("renders the upcoming trip card with truthful details and no sample copy", async () => {
-    setup();
+    const { user } = setup();
     await ready();
     const sanDiego = card("San Diego");
     expect(within(sanDiego).getByText("California, United States")).toBeTruthy();
     expect(within(sanDiego).getByText(/Oct 23 – Oct 27/)).toBeTruthy();
-    expect(within(sanDiego).getByText("5 days")).toBeTruthy();
-    expect(within(sanDiego).getByText("Close forecast · Simulated")).toBeTruthy();
-    expect(within(sanDiego).getByText("24 left to pack")).toBeTruthy();
+    expect(within(sanDiego).getByText(/Oct 23 – Oct 27 · 4 nights/)).toBeTruthy();
+    // The card carries no weather copy (the old simulated "Close forecast" label is gone).
+    expect(within(sanDiego).queryByText(/forecast|Simulated/i)).toBeNull();
+    expect(within(sanDiego).getByText("24 left")).toBeTruthy();
     expect(within(sanDiego).getByText("6 of 30 packed")).toBeTruthy();
     const bar = within(sanDiego).getByRole("progressbar", { name: "San Diego packing progress" });
     expect(bar.getAttribute("aria-valuenow")).toBe("20");
     expect(bar.getAttribute("aria-valuetext")).toBe("20% packed");
     expect(
-      within(sanDiego).getByRole("link", { name: "Keep packing: San Diego" }).getAttribute("href"),
+      within(sanDiego)
+        .getByRole("link", { name: "Continue packing: San Diego" })
+        .getAttribute("href"),
     ).toBe("/trips/san-diego");
+
+    // Quick view, Copy trip, Archive and Remove live in the ⋯ menu.
+    await user.click(within(sanDiego).getByRole("button", { name: "More actions for San Diego" }));
+    const menu = screen.getByRole("menu", { name: "Actions for San Diego" });
     expect(
-      within(sanDiego).getByRole("link", { name: "Copy trip: San Diego" }).getAttribute("href"),
-    ).toBe("/trips/new?copy=san-diego");
-    expect(within(sanDiego).getByRole("button", { name: "Archive: San Diego" })).toBeTruthy();
-    expect(within(sanDiego).getByRole("button", { name: "Remove: San Diego" })).toBeTruthy();
+      within(menu)
+        .getAllByRole("menuitem")
+        .map((item) => item.textContent),
+    ).toEqual(["Quick view", "Copy trip", "Archive", "Remove"]);
+    expect(within(menu).getByRole("menuitem", { name: "Copy trip" }).getAttribute("href")).toBe(
+      "/trips/new?copy=san-diego",
+    );
+    await user.keyboard("{Escape}");
+    expect(
+      within(sanDiego).getByRole("button", { name: "More actions for San Diego" }),
+    ).toBeTruthy();
     expect(within(sanDiego).queryByText(/Upcoming trip|Past trip|Archived trip/)).toBeNull();
     expect(document.body.textContent).not.toMatch(/sample|Sample/);
     expect(screen.queryByText(/Illustrative/)).toBeNull();
@@ -216,20 +240,21 @@ describe("upcoming view", () => {
     expect(screen.queryByRole("heading", { name: "Recently deleted" })).toBeNull();
   });
 
-  it("shows the hero with a New trip link and the tab counts", async () => {
+  it("shows the ledger heading with a Plan a trip link and the tab counts", async () => {
     setup();
     await ready();
-    expect(
-      screen.getByRole("heading", { name: "Pack for the trip, not the anxiety." }),
-    ).toBeTruthy();
-    expect(screen.getByRole("link", { name: /New trip/ }).getAttribute("href")).toBe("/trips/new");
+    expect(screen.getByRole("heading", { name: "Your travel ledger", level: 1 })).toBeTruthy();
+    expect(screen.getByText("1 journey ahead")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Plan a trip" }).getAttribute("href")).toBe(
+      "/trips/new",
+    );
     expect(tab(/Upcoming/).textContent).toContain("1");
     expect(tab(/Past & archive/).textContent).toContain("1");
     expect(tab(/Upcoming/).getAttribute("aria-pressed")).toBe("true");
     expect(screen.queryByText("Lisbon")).toBeNull();
   });
 
-  it("omits place and forecast for a destination without a confirmed location, and loads only the first card's art eagerly", async () => {
+  it("omits place and forecast for a destination without a confirmed location", async () => {
     const state = sampleLifecycleState();
     state.trips = [
       state.trips[0],
@@ -242,27 +267,24 @@ describe("upcoming view", () => {
         end: "2026-11-04",
       },
     ];
-    const { view } = setup(state);
+    setup(state);
     await ready();
     const typed = card("Somewhere typed");
     expect(within(typed).queryByText(/Simulated/)).toBeNull();
     expect(within(typed).queryByText(/United States/)).toBeNull();
-    // The picture is the trip's theme (inherited here from the San Diego row it was copied from), never its place.
-    expect(typed.querySelector("[data-art-key]")?.getAttribute("data-art-key")).toBe("beach");
-    const [first, second] = [...view.container.querySelectorAll("article img")];
-    expect(first.getAttribute("loading")).toBe("eager");
-    expect(second.getAttribute("loading")).toBe("lazy");
+    expect(within(typed).getByText("Nov 1")).toBeTruthy();
   });
 });
 
 describe("trip themes on cards", () => {
-  it("each card shows its trip's theme art, and a trip's theme is the only thing that picks it", async () => {
+  it("each Past & archive card shows its trip's theme art, and a trip's theme is the only thing that picks it", async () => {
     const state = sampleLifecycleState();
     state.trips = state.trips.map((trip) =>
-      trip.id === "san-diego" ? { ...trip, theme: "theme_park" as const } : trip,
+      trip.id === "san-diego" ? { ...trip, theme: "theme_park" as const, archived: true } : trip,
     );
-    setup(state);
-    await ready();
+    const { user } = setup(state);
+    await screen.findByRole("heading", { name: "Your travel ledger", level: 1 });
+    await user.click(tab(/Past & archive/));
     const sanDiego = card("San Diego");
     expect(sanDiego.querySelector("[data-art-key]")?.getAttribute("data-art-key")).toBe(
       "theme_park",
@@ -277,9 +299,7 @@ describe("past & archive view", () => {
     await ready();
     await user.click(tab(/Past & archive/));
     expect(screen.getByRole("heading", { name: "Past trips & archive", level: 1 })).toBeTruthy();
-    expect(
-      screen.queryByRole("heading", { name: "Pack for the trip, not the anxiety." }),
-    ).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Your travel ledger" })).toBeNull();
     const lisbon = card("Lisbon");
     expect(within(lisbon).getByText("Past trip")).toBeTruthy();
     expect(within(lisbon).getByText("Ready to go")).toBeTruthy();
@@ -295,7 +315,7 @@ describe("past & archive view", () => {
     empty.trips = [];
     const { user } = setup(empty);
     expect(await screen.findByText("No upcoming trips.")).toBeTruthy();
-    expect(screen.getByText(/Create a trip or restore one from Past & archive/)).toBeTruthy();
+    expect(screen.getByText(/Plan a trip or restore one from Past & archive/)).toBeTruthy();
     await user.click(tab(/Past & archive/));
     expect(screen.getByText("No past or archived trips yet.")).toBeTruthy();
     expect(screen.getByText(/Archived trips and trips whose return date has passed/)).toBeTruthy();
@@ -306,7 +326,7 @@ describe("archive and restore", () => {
   it("archive moves the trip to Past & archive, restore brings it back to Upcoming", async () => {
     const { user, source } = setup();
     await ready();
-    await user.click(screen.getByRole("button", { name: "Archive: San Diego" }));
+    await choose(user, "San Diego", "Archive");
     await waitFor(() => expect(screen.queryByRole("heading", { name: "San Diego" })).toBeNull());
     expect(screen.getByText("No upcoming trips.")).toBeTruthy();
     expect(tab(/Upcoming/).textContent).toContain("0");
@@ -328,10 +348,10 @@ describe("archive and restore", () => {
   it("moves focus to the list heading after an action so focus is not lost", async () => {
     const { user } = setup();
     await ready();
-    await user.click(screen.getByRole("button", { name: "Archive: San Diego" }));
+    await choose(user, "San Diego", "Archive");
     await waitFor(() =>
       expect(document.activeElement).toBe(
-        screen.getByRole("heading", { name: "Where are we going?" }),
+        screen.getByRole("heading", { name: "Your travel ledger", level: 1 }),
       ),
     );
   });
@@ -340,14 +360,16 @@ describe("archive and restore", () => {
     const gate = deferred<LifecycleState>();
     const { user, source } = setup(undefined, (base) => ({ ...base, archive: () => gate.promise }));
     await ready();
-    await user.click(screen.getByRole("button", { name: "Archive: San Diego" }));
+    await choose(user, "San Diego", "Archive");
     const sanDiego = card("San Diego");
     expect(sanDiego.getAttribute("aria-busy")).toBe("true");
-    for (const name of ["Archive: San Diego", "Remove: San Diego"]) {
-      expect((within(sanDiego).getByRole("button", { name }) as HTMLButtonElement).disabled).toBe(
-        true,
-      );
-    }
+    expect(
+      (
+        within(sanDiego).getByRole("button", {
+          name: "More actions for San Diego",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
     expect(source.snapshot().trips.find((t) => t.id === "san-diego")?.archived).toBe(false);
     await act(async () => gate.resolve(await source.archive("san-diego")));
     await waitFor(() => expect(screen.queryByRole("heading", { name: "San Diego" })).toBeNull());
@@ -362,13 +384,14 @@ describe("archive and restore", () => {
         .mockImplementation((id: string) => base.archive(id)),
     }));
     await ready();
-    await user.click(screen.getByRole("button", { name: "Archive: San Diego" }));
-    await screen.findByRole("button", { name: "Couldn't save, retry" });
+    await choose(user, "San Diego", "Archive");
+    await screen.findByRole("button", { name: "Not saved, retry" });
     expect(card("San Diego")).toBeTruthy();
     expect(
-      (screen.getByRole("button", { name: "Archive: San Diego" }) as HTMLButtonElement).disabled,
+      (screen.getByRole("button", { name: "More actions for San Diego" }) as HTMLButtonElement)
+        .disabled,
     ).toBe(false);
-    await user.click(screen.getByRole("button", { name: "Couldn't save, retry" }));
+    await user.click(screen.getByRole("button", { name: "Not saved, retry" }));
     await user.click(
       within(screen.getByRole("dialog", { name: "Couldn’t save" })).getByRole("button", {
         name: "Retry",
@@ -384,7 +407,7 @@ describe("remove, confirm and undo", () => {
     const { user, source } = setup();
     await ready();
     const before = source.snapshot();
-    await user.click(screen.getByRole("button", { name: "Remove: San Diego" }));
+    await choose(user, "San Diego", "Remove");
     const dialog = screen.getByRole("dialog", { name: "Remove San Diego?" });
     expect(within(dialog).getByText(/moves to Recently deleted/)).toBeTruthy();
     expect(document.activeElement).toBe(within(dialog).getByRole("button", { name: "Cancel" }));
@@ -397,19 +420,21 @@ describe("remove, confirm and undo", () => {
     const { user, source } = setup();
     await ready();
     const before = source.snapshot();
-    await user.click(screen.getByRole("button", { name: "Remove: San Diego" }));
+    await choose(user, "San Diego", "Remove");
     expect(screen.getByRole("dialog")).toBeTruthy();
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(source.snapshot()).toBe(before);
-    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Remove: San Diego" }));
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: "More actions for San Diego" }),
+    );
   });
 
   it("remove -> confirm -> undo restores the identical trip", async () => {
     const { user, source } = setup();
     await ready();
     const original = structuredClone(source.snapshot().trips.find((t) => t.id === "san-diego"));
-    await user.click(screen.getByRole("button", { name: "Remove: San Diego" }));
+    await choose(user, "San Diego", "Remove");
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", { name: "Remove trip" }),
     );
@@ -427,7 +452,7 @@ describe("remove, confirm and undo", () => {
   it("lists the removed trip under Recently deleted, where Undo remove brings it back", async () => {
     const { user, source } = setup();
     await ready();
-    await user.click(screen.getByRole("button", { name: "Remove: San Diego" }));
+    await choose(user, "San Diego", "Remove");
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", { name: "Remove trip" }),
     );
@@ -450,11 +475,11 @@ describe("remove, confirm and undo", () => {
       remove: () => Promise.reject(new Error("nope")),
     }));
     await ready();
-    await user.click(screen.getByRole("button", { name: "Remove: San Diego" }));
+    await choose(user, "San Diego", "Remove");
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", { name: "Remove trip" }),
     );
-    await screen.findByRole("button", { name: "Couldn't save, retry" });
+    await screen.findByRole("button", { name: "Not saved, retry" });
     expect(card("San Diego")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
   });
@@ -465,28 +490,25 @@ describe("remove, confirm and undo", () => {
       undoRemove: () => Promise.reject(new Error("nope")),
     }));
     await ready();
-    await user.click(screen.getByRole("button", { name: "Remove: San Diego" }));
+    await choose(user, "San Diego", "Remove");
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", { name: "Remove trip" }),
     );
     await user.click(await screen.findByRole("button", { name: "Undo" }));
-    await screen.findByRole("button", { name: "Couldn't save, retry" });
+    await screen.findByRole("button", { name: "Not saved, retry" });
     expect(screen.queryByText("San Diego restored")).toBeNull();
   });
 });
 
 describe("quick view", () => {
-  it("is collapsed by default and toggles with aria-expanded and aria-controls", async () => {
+  it("is collapsed by default and the ⋯ menu toggles it, with the menu item saying what it will do", async () => {
     const { user } = setup();
     await ready();
-    const toggle = within(card("San Diego")).getByRole("button", { name: /Quick view/ });
-    expect(toggle.getAttribute("aria-expanded")).toBe("false");
     expect(document.getElementById("quick-view-san-diego")).toBeNull();
-    await user.click(toggle);
-    expect(toggle.getAttribute("aria-expanded")).toBe("true");
-    expect(toggle.getAttribute("aria-controls")).toBe("quick-view-san-diego");
+    await choose(user, "San Diego", "Quick view");
     expect(document.getElementById("quick-view-san-diego")).not.toBeNull();
-    await user.click(toggle);
+    await user.click(screen.getByRole("button", { name: "More actions for San Diego" }));
+    await user.click(screen.getByRole("menuitem", { name: "Hide quick view" }));
     expect(document.getElementById("quick-view-san-diego")).toBeNull();
   });
 
@@ -505,7 +527,7 @@ describe("quick view", () => {
     const beforeJson = JSON.stringify(before);
     const progress = within(card("San Diego")).getByText("6 of 30 packed");
 
-    await user.click(within(card("San Diego")).getByRole("button", { name: /Quick view/ }));
+    await choose(user, "San Diego", "Quick view");
     const quick = document.getElementById("quick-view-san-diego") as HTMLElement;
     expect(within(quick).getByText("Read-only preview")).toBeTruthy();
     // Its list scrolls, so it must be reachable and named for keyboard and screen-reader users.
@@ -544,7 +566,7 @@ describe("quick view", () => {
     };
     const { user } = setup(state);
     await ready();
-    await user.click(within(card("San Diego")).getByRole("button", { name: /Quick view/ }));
+    await choose(user, "San Diego", "Quick view");
     expect(screen.getByRole("status", { name: "Quick view result count" }).textContent).toBe(
       "1 item shown",
     );
@@ -574,7 +596,7 @@ describe("quick view", () => {
   it("flags Pack last rows in the quick view", async () => {
     const { user } = setup();
     await ready();
-    await user.click(within(card("San Diego")).getByRole("button", { name: /Quick view/ }));
+    await choose(user, "San Diego", "Quick view");
     const quick = document.getElementById("quick-view-san-diego") as HTMLElement;
     const laptop = within(quick).getByText("Laptop").closest(".quick-view-row") as HTMLElement;
     expect(within(laptop).getByText("Pack last")).toBeTruthy();

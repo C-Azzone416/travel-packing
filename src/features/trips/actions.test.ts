@@ -6,10 +6,12 @@ import {
   makeContext,
   OTHER_OWNER,
   OWNER,
+  seedOwner,
   seedTrip,
   signedInAs,
 } from "@/server/data/__fixtures__/seed";
 import type { DataContext } from "@/server/data/context";
+import { createSavedList } from "@/server/data/saved-list-store";
 import { CONFIG } from "@/server/data/__fixtures__/seed";
 
 let current: DataContext | null = null;
@@ -24,6 +26,7 @@ import type { TripDraft } from "@/domain/trip-lifecycle";
 import {
   archiveTripAction,
   createTripAction,
+  createTripWithWeatherAction,
   loadTripsAction,
   removeTripAction,
   restoreTripAction,
@@ -150,6 +153,51 @@ describe("trips server actions", () => {
       ]);
     });
 
+    it("starts a new trip from one of the owner's saved lists when the draft names one (#170)", async () => {
+      await seedOwner(db(), OWNER.userId);
+      const list = await createSavedList(db(), OWNER.userId, {
+        name: "Beach week",
+        items: [{ id: "towel", name: "Towel", category: "Other essentials", qty: 2 }],
+      });
+      const result = await createTripAction(draft({ savedListId: list.id }));
+      if (!result.ok) throw new Error(`expected ok, got ${result.code}`);
+      expect(result.trip.items.map((entry) => [entry.name, entry.qty, entry.packed])).toEqual([
+        ["Towel", 2, 0],
+      ]);
+    });
+
+    it("refuses a saved list that is not the signed-in owner's", async () => {
+      await seedOwner(db(), OTHER_OWNER.userId);
+      const theirs = await createSavedList(db(), OTHER_OWNER.userId, {
+        name: "Theirs",
+        items: [{ id: "a", name: "Hat", category: "Accessories", qty: 1 }],
+      });
+      expect(await createTripAction(draft({ savedListId: theirs.id }))).toEqual({
+        ok: false,
+        code: "NOT_FOUND",
+      });
+    });
+
+    it("ignores a saved list on a copy: a copy never starts from one", async () => {
+      const source = await seedTrip(db(), OWNER.userId);
+      await seedOwner(db(), OWNER.userId);
+      const list = await createSavedList(db(), OWNER.userId, {
+        name: "Beach week",
+        items: [{ id: "towel", name: "Towel", category: "Other essentials", qty: 2 }],
+      });
+      const result = await createTripAction(
+        draft({
+          mode: "copy",
+          sourceId: source.id,
+          start: "2030-06-01",
+          end: "2030-06-03",
+          savedListId: list.id,
+        }),
+      );
+      if (!result.ok) throw new Error(`expected ok, got ${result.code}`);
+      expect(result.trip.items.some((entry) => entry.name === "Towel")).toBe(false);
+    });
+
     it("copies one of the owner's own trips, recording where it came from", async () => {
       const source = await seedTrip(db(), OWNER.userId);
       const result = await createTripAction(
@@ -158,6 +206,47 @@ describe("trips server actions", () => {
       if (!result.ok) throw new Error(`expected ok, got ${result.code}`);
       expect(result.trip.copiedFrom).toBe(source.id);
       expect(result.trip.id).not.toBe(source.id);
+    });
+
+    it("atomically saves the draft with its Shape-the-list weather rows", async () => {
+      const result = await createTripWithWeatherAction(draft(), [
+        {
+          kind: "add",
+          semanticId: "weather-umbrella",
+          ruleSignature: "rain",
+          item: {
+            semanticId: "weather-umbrella",
+            name: "Compact umbrella",
+            category: "Accessories",
+            qty: 1,
+            optional: false,
+          },
+        },
+      ]);
+      if (!result.ok) throw new Error(`expected ok, got ${result.code}`);
+      expect(result.trip.items.find((item) => item.id === "weather-umbrella")).toMatchObject({
+        name: "Compact umbrella",
+        packed: 0,
+      });
+      expect(result.trip.weather.status).toBe("accepted");
+
+      await resetData(ctx.client);
+      const invalid = await createTripWithWeatherAction(draft(), [
+        {
+          kind: "add",
+          semanticId: "bad",
+          ruleSignature: "bad",
+          item: {
+            semanticId: "bad",
+            name: "Bad",
+            category: "Accessories",
+            qty: 0,
+            optional: false,
+          },
+        },
+      ]);
+      expect(invalid).toEqual({ ok: false, code: "INVALID_INPUT" });
+      expect(stateOf(await loadTripsAction()).trips).toEqual([]);
     });
 
     it("cannot copy another owner's trip (NOT_FOUND)", async () => {

@@ -74,8 +74,44 @@ export function progress(trip: LifecycleTrip): { packed: number; total: number; 
 export const showReviewPrompt = (trip: LifecycleTrip): boolean => allPacked(trip) && !trip.ready;
 
 export const checkLabel = (item: TripItem): string =>
-  isComplete(item) ? `Mark ${item.name} unpacked` : `Pack all ${item.name}`;
+  isComplete(item) ? `Packed, mark ${item.name} unpacked` : `Pack all ${item.name}`;
 
 /** "Socks 2 of 5 packed": the text a live region announces after a +/- tap. */
 export const packedAnnouncement = (item: Pick<TripItem, "name" | "packed" | "qty">): string =>
   `${item.name} ${item.packed} of ${item.qty} packed`;
+
+/** "Leaves in 12 days", "Leaves tomorrow", "Leaves today"; a trip already under way reads "Under way". */
+export function leavesEyebrow(daysUntil: number): string {
+  if (daysUntil < 0) return "Under way";
+  if (daysUntil === 0) return "Leaves today";
+  if (daysUntil === 1) return "Leaves tomorrow";
+  return `Leaves in ${daysUntil} days`;
+}
+
+export const completeCount = (items: readonly Pick<TripItem, "packed" | "qty">[]): number =>
+  items.filter(isComplete).length;
+
+export interface SectionLink {
+  /** The id of the section block the link jumps to. */
+  target: string;
+  label: string;
+  count: number;
+}
+
+/** The sections the Packing sections panel links to, in page order; empty sections are left out. */
+export function sectionLinks(sections: TripSections, showBag: boolean): SectionLink[] {
+  const links: SectionLink[] = [
+    { target: "block-main", label: "Everyday & occasion", count: sections.main.length },
+  ];
+  if (showBag)
+    links.push({
+      target: "block-toiletries",
+      label: "Toiletries",
+      count: sections.toiletries.length,
+    });
+  if (sections.returns.length)
+    links.push({ target: "block-return", label: "Return outfit", count: sections.returns.length });
+  if (sections.packLast.length)
+    links.push({ target: "block-packlast", label: "Pack last", count: sections.packLast.length });
+  return links;
+}

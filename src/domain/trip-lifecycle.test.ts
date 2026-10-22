@@ -16,6 +16,7 @@ import {
   selectDraftLocation,
   setDraftConfig,
   setDraftDates,
+  setDraftSavedList,
   setDraftTheme,
   startCopyDraft,
   startDraft,
@@ -431,6 +432,67 @@ describe("buildTrip", () => {
     );
     expect(byId(bathroom, "contacts")?.groupId).toBe(TOILETRY_GROUP_ID);
     expect(byId(bathroom, "deodorant")?.groupId).toBe(TOILETRY_GROUP_ID);
+  });
+});
+
+describe("a trip that starts from a saved list (#170)", () => {
+  const listItems = [
+    {
+      id: "saved:l:1",
+      name: "Swimsuit",
+      category: "Clothing",
+      qty: 2,
+      packed: 0,
+      section: "main" as const,
+    },
+    {
+      id: "saved:l:2",
+      name: "Sunscreen",
+      category: "Bathroom",
+      qty: 1,
+      packed: 0,
+      section: "main" as const,
+      groupId: TOILETRY_GROUP_ID,
+    },
+  ];
+
+  it("setDraftSavedList records the list, clears it with null, and never applies to a copy", () => {
+    const draft = startDraft(CONFIG, "2030-05-01", "2030-05-06");
+    const chosen = setDraftSavedList(draft, "list-1");
+    expect(chosen.savedListId).toBe("list-1");
+    expect("savedListId" in setDraftSavedList(chosen, null)).toBe(false);
+    const copy = startCopyDraft(savedTrip(), "2030-06-01", "2030-06-03");
+    expect("savedListId" in setDraftSavedList(copy, "list-1")).toBe(false);
+  });
+
+  it("saveDraft builds the trip from exactly the list's items, and the dates still give the day counts", () => {
+    const draft = selectDraftLocation(
+      startDraft(CONFIG, "2030-05-01", "2030-05-06"),
+      OTHER_LOCATION,
+    );
+    const result = saveDraft(
+      beginDraft(emptyLifecycleState(), draft),
+      STAPLES,
+      makeDeps(),
+      listItems,
+    );
+    if (!result.ok) throw new Error(result.reason);
+    expect(result.trip.items.map((item) => item.id)).toEqual(["saved:l:1", "saved:l:2"]);
+    expect(result.trip.items.every((item) => item.packed === 0)).toBe(true);
+    expect(result.trip.days).toBe(6);
+    expect(result.trip.items).not.toBe(listItems);
+    expect(result.trip.items[0]).not.toBe(listItems[0]);
+  });
+
+  it("without list items it is the staples and calculation, as before", () => {
+    const draft = selectDraftLocation(
+      startDraft(CONFIG, "2030-05-01", "2030-05-06"),
+      OTHER_LOCATION,
+    );
+    const result = saveDraft(beginDraft(emptyLifecycleState(), draft), STAPLES, makeDeps());
+    if (!result.ok) throw new Error(result.reason);
+    expect(result.trip.items.some((item) => item.id.startsWith("saved:"))).toBe(false);
+    expect(result.trip.items.length).toBeGreaterThan(2);
   });
 });
 

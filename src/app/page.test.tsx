@@ -8,13 +8,36 @@ import SettingsPage, { metadata as settingsMetadata } from "./settings/page";
 import StaplesPage, { metadata as staplesMetadata } from "./staples/page";
 import { metadata as rootMetadata, viewport } from "./layout";
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
+const push = vi.fn();
+vi.mock("next/navigation", () => ({ usePathname: () => "/", useRouter: () => ({ push }) }));
+vi.mock("next/headers", () => ({
+  headers: async () => new Headers(),
+  cookies: async () => ({ get: () => undefined }),
+}));
+vi.mock("./fonts", () => ({ fontClassNames: "" }));
+vi.mock("@/features/settings/saved-appearance", () => ({
+  readSavedAppearance: async () => "base",
+  appearanceForRequest: async () => "base",
+}));
+vi.mock("@/features/settings/appearance-actions", () => ({
+  updateAppearanceAction: async (appearance: string) => ({ ok: true, appearance }),
+}));
 vi.mock("@/server/auth/auth-runtime", () => ({
   getAuth: async () => ({
     provider: { getSession: async () => ({ userId: "u", email: "owner@example.test" }) },
   }),
 }));
 vi.mock("@/app/sign-in/actions", () => ({ signOutAction: async () => {} }));
+vi.mock("@/features/settings/weather-actions", () => ({
+  getWeatherSettingsAction: async () => ({
+    ok: true,
+    settings: { weatherOptIn: false, temperatureUnit: "F" },
+  }),
+  updateWeatherSettingsAction: async () => ({
+    ok: true,
+    settings: { weatherOptIn: false, temperatureUnit: "F" },
+  }),
+}));
 
 describe("screens", () => {
   it("Staples renders its screen, starting in its loading state", () => {
@@ -33,7 +56,9 @@ describe("screens", () => {
 
   it("Settings renders the signed-in account and a Sign out button", async () => {
     const html = renderToStaticMarkup(
-      <SaveStatusProvider>{await SettingsPage()}</SaveStatusProvider>,
+      <ToastProvider>
+        <SaveStatusProvider>{await SettingsPage()}</SaveStatusProvider>
+      </ToastProvider>,
     );
     expect(html).toContain("<h1>Settings</h1>");
     expect(html).toContain("owner@example.test");
@@ -67,6 +92,6 @@ describe("root layout metadata", () => {
   });
 
   it("sets the brand theme color", () => {
-    expect(viewport.themeColor).toBe("#166D7A");
+    expect(viewport.themeColor).toBe("#e9e3d6");
   });
 });

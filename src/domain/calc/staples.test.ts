@@ -301,3 +301,27 @@ describe("default staples", () => {
     expect(items.filter((item) => item.name === "Chargers")).toHaveLength(1);
   });
 });
+
+describe("weather suggestions in buildTripItems", () => {
+  it("keeps a weather suggestion's toiletry group", () => {
+    const config = { start: "2026-10-01", end: "2026-10-08", returnOutfit: true };
+    const built = buildTripItems(config, [], {
+      days: [
+        {
+          date: "2026-10-03",
+          stopIndex: 0,
+          source: "forecast",
+          highC: 28,
+          lowC: 18,
+          precipProbability: 0,
+          precipMm: 0,
+          snowCm: 0,
+          uvIndexMax: 7,
+          sunshineHours: 9,
+        },
+      ],
+    });
+    expect(built.items.find((i) => i.id === "weather-sunscreen")?.groupId).toBe("toiletry-bag");
+    expect(built.items.find((i) => i.id === "tops")).toBeUndefined();
+  });
+});

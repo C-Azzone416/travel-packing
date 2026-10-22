@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import type { LifecycleTrip } from "@/domain/trip-lifecycle";
 import { QuickView } from "./QuickView";
+import { RouteText } from "./RouteText";
 import { formatDays, type TripCardView } from "./view";
 
 export interface TripCardProps {
@@ -52,14 +53,23 @@ export function TripCard({
           <div>
             {view.eyebrow ? <p className="eyebrow">{view.eyebrow}</p> : null}
             <h2 id={`trip-title-${trip.id}`}>{view.destination}</h2>
-            {view.place ? <div className="item-meta">{view.place}</div> : null}
+            {view.route.length ? (
+              <div className="item-meta">
+                {view.routeIsTitle ? (
+                  `${view.route.length} stops`
+                ) : (
+                  <RouteText cities={view.route} />
+                )}
+              </div>
+            ) : view.place ? (
+              <div className="item-meta">{view.place}</div>
+            ) : null}
           </div>
           {status}
         </div>
         <div className="meta">
           <span>◷ {view.range}</span>
           <span>{formatDays(view.days)}</span>
-          {view.forecast ? <span>{view.forecast} · Simulated</span> : null}
         </div>
         <div
           className="progress-track"

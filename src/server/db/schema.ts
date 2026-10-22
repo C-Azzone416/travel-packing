@@ -30,6 +30,7 @@ import {
 
 export const ITEM_SECTIONS = ["main", "return", "packlast"] as const;
 export const STAPLE_CADENCES = ["per day", "per trip"] as const;
+export const TEMPERATURE_UNITS = ["F", "C"] as const;
 export const WEATHER_STATUSES = ["pending", "accepted", "skipped"] as const;
 /** Category strings the domain uses. "Clothing" is the single semantic name (the prototype's "Clothes" was normalized to it). */
 export const ITEM_CATEGORIES = [
@@ -58,9 +59,29 @@ const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull(
 const updatedAt = () => timestamp("updated_at", { withTimezone: true }).notNull().defaultNow();
 
 /** App-side mirror of the auth user (id comes from the auth provider, #9). Owner of every other row. */
-export const users = pgTable("users", {
-  id: text("id").primaryKey(),
-  createdAt: createdAt(),
+export const users = pgTable(
+  "users",
+  {
+    id: text("id").primaryKey(),
+    /** The person agreed to send map coordinates and dates to the weather provider (epic #107). Off until chosen. */
+    weatherOptIn: boolean("weather_opt_in").notNull().default(false),
+    temperatureUnit: text("temperature_unit", { enum: TEMPERATURE_UNITS }).notNull().default("F"),
+    /** The colour theme the person chose (#139). Null until they choose one, which means Base; unknown values read as Base. */
+    appearance: text("appearance"),
+    createdAt: createdAt(),
+  },
+  (table) => [check("users_temperature_unit_known", sql`${table.temperatureUnit} in ('F', 'C')`)],
+);
+
+/**
+ * Accounts whose password was set through an emailed link (#83). Sign-in is refused for any address without a row here,
+ * so a password chosen by someone else before the owner verified the address can never open a session. Keyed by an HMAC-SHA-256
+ * digest of the normalized email, because there is no user id before the first session and the app stores no raw
+ * addresses. A row is created only when a reset link (setup or forgot-password) is used successfully, and never removed.
+ */
+export const accountSetups = pgTable("account_setups", {
+  emailDigest: text("email_digest").primaryKey(),
+  completedAt: timestamp("completed_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 const ownerId = () =>
@@ -97,6 +118,54 @@ export const staples = pgTable(
   ],
 );
 
+/**
+ * A named, owner-scoped list of items to add to new trips (#140). Like staples it is a template: applying it copies
+ * items into the trip, and nothing here is referenced by trip rows, so editing or deleting a list never touches a trip.
+ * Carries no packed counts, Ready state or trip metadata.
+ */
+export const savedLists = pgTable(
+  "saved_lists",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ownerId: ownerId(),
+    name: text("name").notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    unique("saved_lists_id_owner_unique").on(table.id, table.ownerId),
+    check("saved_lists_name_not_blank", sql`btrim(${table.name}) <> ''`),
+    check("saved_lists_name_short", sql`char_length(${table.name}) <= 80`),
+    index("saved_lists_owner_idx").on(table.ownerId),
+  ],
+);
+
+/** One item of a saved list: identity (semantic_id), name, category and the needed quantity only. */
+export const savedListItems = pgTable(
+  "saved_list_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    listId: uuid("list_id").notNull(),
+    ownerId: ownerId(),
+    semanticId: text("semantic_id").notNull(),
+    name: text("name").notNull(),
+    category: itemCategory("category").notNull(),
+    qty: integer("qty").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (table) => [
+    foreignKey({
+      name: "saved_list_items_list_fk",
+      columns: [table.listId, table.ownerId],
+      foreignColumns: [savedLists.id, savedLists.ownerId],
+    }).onDelete("cascade"),
+    unique("saved_list_items_list_semantic_unique").on(table.listId, table.semanticId),
+    check("saved_list_items_qty_positive", sql`${table.qty} >= 1`),
+    check("saved_list_items_name_not_blank", sql`btrim(${table.name}) <> ''`),
+    index("saved_list_items_list_order_idx").on(table.listId, table.sortOrder),
+  ],
+);
+
 /** One saved trip. start_date, end_date, destination and location_* are privacy-sensitive (docs/schema.md). */
 export const trips = pgTable(
   "trips",
@@ -126,6 +195,12 @@ export const trips = pgTable(
     copiedFrom: uuid("copied_from"),
     /** The picture shown on the trip card and header (#48). Not sensitive: one of six fixed names. */
     theme: tripTheme("theme").notNull().default("travel"),
+    /**
+     * The owner's override of the route stamps' labels (#151), one per stamp slot in route order. Null = automatic. Only the
+     * override is stored: automatic labels are derived from the stops. Exactly three letters or numbers.
+     */
+    stampLabel1: text("stamp_label_1"),
+    stampLabel2: text("stamp_label_2"),
     /** Recoverable delete: set = "recently deleted". Null = live. */
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: createdAt(),
@@ -146,6 +221,14 @@ export const trips = pgTable(
       sql`${table.dailyDays} >= 0 and ${table.dailyDays} <= ${table.days}`,
     ),
     check("trips_destination_not_blank", sql`btrim(${table.destination}) <> ''`),
+    check(
+      "trips_stamp_label_1_format",
+      sql`${table.stampLabel1} is null or ${table.stampLabel1} ~ '^[A-Z0-9]{3}$'`,
+    ),
+    check(
+      "trips_stamp_label_2_format",
+      sql`${table.stampLabel2} is null or ${table.stampLabel2} ~ '^[A-Z0-9]{3}$'`,
+    ),
     check("trips_latitude_range", sql`${table.latitude} between -90 and 90`),
     check("trips_longitude_range", sql`${table.longitude} between -180 and 180`),
     // Coordinates come as a pair, and only with a provider place: a curated trip has none.
@@ -170,6 +253,65 @@ export const trips = pgTable(
     index("trips_deleted_at_idx")
       .on(table.deletedAt)
       .where(sql`${table.deletedAt} is not null`),
+  ],
+);
+
+/**
+ * The ordered stops of a trip (epic #107). Same place columns and checks as trips.location_*, plus the city
+ * (trips keeps it in `destination`, which is only a title). Contiguity across rows is enforced by the domain
+ * (`validateStops`); the database holds each stop's own rules. Privacy class: same as trips.location_* and dates.
+ */
+export const tripStops = pgTable(
+  "trip_stops",
+  {
+    tripId: uuid("trip_id").notNull(),
+    ownerId: ownerId(),
+    position: integer("position").notNull(),
+    city: text("city").notNull(),
+    locationId: text("location_id"),
+    locationLabel: text("location_label"),
+    locationProvider: text("location_provider"),
+    locationPlaceId: text("location_place_id"),
+    locationRegion: text("location_region"),
+    locationCountry: text("location_country"),
+    locationCountryCode: text("location_country_code"),
+    /** Rounded to 2 decimals (about 1 km) before storage. The most sensitive columns here (docs/schema.md). */
+    latitude: numeric("latitude", { precision: 5, scale: 2 }),
+    longitude: numeric("longitude", { precision: 5, scale: 2 }),
+    timezone: text("timezone"),
+    arriveDate: date("arrive_date", { mode: "string" }).notNull(),
+    leaveDate: date("leave_date", { mode: "string" }).notNull(),
+  },
+  (table) => [
+    primaryKey({ name: "trip_stops_pk", columns: [table.tripId, table.position] }),
+    foreignKey({
+      name: "trip_stops_trip_fk",
+      columns: [table.tripId, table.ownerId],
+      foreignColumns: [trips.id, trips.ownerId],
+    }).onDelete("cascade"),
+    check("trip_stops_position_range", sql`${table.position} >= 0`),
+    // A single stop may be a day trip (leave = arrive); the domain requires a night per stop on multi-stop trips.
+    check("trip_stops_dates_ordered", sql`${table.leaveDate} >= ${table.arriveDate}`),
+    check("trip_stops_city_not_blank", sql`btrim(${table.city}) <> ''`),
+    check("trip_stops_latitude_range", sql`${table.latitude} between -90 and 90`),
+    check("trip_stops_longitude_range", sql`${table.longitude} between -180 and 180`),
+    check(
+      "trip_stops_coordinates_pair",
+      sql`(${table.latitude} is null) = (${table.longitude} is null)`,
+    ),
+    check(
+      "trip_stops_coordinates_need_provider",
+      sql`${table.latitude} is null or ${table.locationProvider} is not null`,
+    ),
+    check(
+      "trip_stops_provider_pair",
+      sql`(${table.locationProvider} is null) = (${table.locationPlaceId} is null)`,
+    ),
+    check(
+      "trip_stops_country_code_length",
+      sql`${table.locationCountryCode} is null or char_length(${table.locationCountryCode}) = 2`,
+    ),
+    index("trip_stops_owner_idx").on(table.ownerId, table.tripId),
   ],
 );
 
@@ -276,22 +418,29 @@ export const tripItemProgress = pgTable(
   ],
 );
 
-/** The simulated weather suggestion for a trip (one per trip). Reviewing never mutates the item list. */
+/**
+ * The state of one weather-driven suggestion on a trip: one row per (trip, semantic id). `rule_signature` is a short
+ * text naming the rule that fired (never raw weather), so a skipped suggestion stays skipped until it changes.
+ * The legacy simulated umbrella (`weather-umbrella`) also keeps its `label`.
+ */
 export const weatherSuggestions = pgTable(
   "weather_suggestions",
   {
-    tripId: uuid("trip_id").primaryKey(),
+    tripId: uuid("trip_id").notNull(),
     ownerId: ownerId(),
+    semanticId: text("suggestion_semantic_id").notNull().default("weather-umbrella"),
     status: weatherStatus("status").notNull().default("pending"),
-    label: text("label").notNull(),
-    suggestionSemanticId: text("suggestion_semantic_id").notNull().default("weather-umbrella"),
+    label: text("label").notNull().default(""),
+    ruleSignature: text("rule_signature").notNull().default(""),
     updatedAt: updatedAt(),
   },
   (table) => [
+    primaryKey({ name: "weather_suggestions_pk", columns: [table.tripId, table.semanticId] }),
     foreignKey({
       name: "weather_suggestions_trip_fk",
       columns: [table.tripId, table.ownerId],
       foreignColumns: [trips.id, trips.ownerId],
     }).onDelete("cascade"),
+    check("weather_suggestions_signature_short", sql`char_length(${table.ruleSignature}) <= 200`),
   ],
 );

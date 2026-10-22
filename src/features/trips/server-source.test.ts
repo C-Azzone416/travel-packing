@@ -41,6 +41,7 @@ const TRIP_COMMANDS = [
   "editItem",
   "removeItem",
   "addToiletryItem",
+  "addItem",
   "confirmBagPlacement",
   "undoBagPlacement",
   "markReady",
@@ -50,6 +51,8 @@ const TRIP_COMMANDS = [
   "reviewWeatherAgain",
   "updatePreferences",
   "setTheme",
+  "setStampLabels",
+  "setStops",
 ] as const;
 
 function tripActions(result: TripCommandResult = { ok: true, trip, signals }) {
@@ -79,6 +82,7 @@ function tripActions(result: TripCommandResult = { ok: true, trip, signals }) {
 
 const edit = { name: "Shades", qty: 2, timing: "main", scope: "this-trip" } as const;
 const toiletry = { name: "Face wash", qty: 1, packLast: false, scope: "this-trip" } as const;
+const camera = { name: "Camera", category: "Tech", neededQty: 2 };
 const config = {
   laundry: true,
   spare: true,
@@ -98,6 +102,7 @@ describe("createServerTripsSource: per-trip commands", () => {
       editItem: () => source.editItem("t", "i", edit),
       removeItem: () => source.removeItem("t", "i", "remember"),
       addToiletryItem: () => source.addToiletryItem("t", toiletry),
+      addItem: () => source.addItem("t", camera),
       confirmBagPlacement: () => source.confirmBagPlacement("t"),
       undoBagPlacement: () => source.undoBagPlacement("t"),
       markReady: () => source.markReady("t"),
@@ -107,6 +112,8 @@ describe("createServerTripsSource: per-trip commands", () => {
       reviewWeatherAgain: () => source.reviewWeatherAgain("t"),
       updatePreferences: () => source.updatePreferences("t", config),
       setTheme: () => source.setTheme("t", "beach"),
+      setStampLabels: () => source.setStampLabels("t", "ABC", null),
+      setStops: () => source.setStops("t", []),
     }) satisfies Record<(typeof TRIP_COMMANDS)[number], () => Promise<unknown>>;
 
   it("passes every command's arguments to the matching action and returns the trip and signals", async () => {
@@ -122,6 +129,7 @@ describe("createServerTripsSource: per-trip commands", () => {
       ["editItem", "t", "i", edit],
       ["removeItem", "t", "i", "remember"],
       ["addToiletryItem", "t", toiletry],
+      ["addItem", "t", camera],
       ["confirmBagPlacement", "t"],
       ["undoBagPlacement", "t"],
       ["markReady", "t"],
@@ -131,6 +139,8 @@ describe("createServerTripsSource: per-trip commands", () => {
       ["reviewWeatherAgain", "t"],
       ["updatePreferences", "t", config],
       ["setTheme", "t", "beach"],
+      ["setStampLabels", "t", "ABC", null],
+      ["setStops", "t", []],
     ]);
   });
 
@@ -184,6 +194,55 @@ describe("createServerTripsSource: per-trip commands", () => {
       }
     },
   );
+});
+
+describe("createServerTripsSource: saveAsList (#169)", () => {
+  const list = { id: "l1", name: "Beach week", itemCount: 2 };
+
+  it("passes the name and item ids to its action and returns the created list", async () => {
+    const { fakes } = tripActions();
+    fakes.saveAsList = vi.fn(async () => ({ ok: true, list }) as const);
+    const source = createServerTripsSource(actions().fakes, fakes);
+    expect(await source.saveAsList("t", "Beach week", ["a", "b"])).toEqual(list);
+    expect(fakes.saveAsList).toHaveBeenCalledWith("t", "Beach week", ["a", "b"]);
+  });
+
+  it("says NAME_TAKEN, not a code, when the owner already has that list name; other refusals carry the code", async () => {
+    const { fakes } = tripActions();
+    const source = createServerTripsSource(actions().fakes, fakes);
+    fakes.saveAsList = vi.fn(
+      async () => ({ ok: false, code: "REJECTED", reason: "NAME_TAKEN" }) as const,
+    );
+    const taken = await source.saveAsList("t", "x", ["a"]).catch((caught: unknown) => caught);
+    expect((taken as Error).message).toBe("NAME_TAKEN");
+    fakes.saveAsList = vi.fn(async () => ({ ok: false, code: "NOT_FOUND" }) as const);
+    const missing = await source.saveAsList("t", "x", ["a"]).catch((caught: unknown) => caught);
+    expect(missing).toBeInstanceOf(TripsSourceError);
+    expect((missing as Error).message).toBe("NOT_FOUND");
+  });
+});
+
+describe("createServerTripsSource: addItem (#147)", () => {
+  it("says EXISTS, not a code, when the trip already has the item", async () => {
+    const { fakes } = tripActions();
+    fakes.addItem = vi.fn(async () => ({ ok: false, code: "REJECTED", reason: "EXISTS" }) as const);
+    const source = createServerTripsSource(actions().fakes, fakes);
+    const error = await source.addItem("t", camera).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(TripsSourceError);
+    expect((error as Error).message).toBe("EXISTS");
+  });
+
+  it("carries only the code for any other refusal", async () => {
+    const { fakes } = tripActions();
+    fakes.addItem = vi.fn(async () => ({
+      ok: false as const,
+      code: "INVALID_INPUT" as const,
+      fields: ["neededQty"],
+    }));
+    const source = createServerTripsSource(actions().fakes, fakes);
+    const error = await source.addItem("t", camera).catch((caught: unknown) => caught);
+    expect((error as Error).message).toBe("INVALID_INPUT");
+  });
 });
 
 describe("createServerTripsSource", () => {

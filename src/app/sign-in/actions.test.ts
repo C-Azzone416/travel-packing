@@ -1,9 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createFakeAuth } from "@/server/auth/__fixtures__/fake-auth";
+import { createMemorySetupStore } from "@/server/auth/account-setup";
 import { parseAllowlist } from "@/server/auth/allowlist";
+import { createSetupSeals } from "@/server/auth/setup-seal";
 
 const fake = createFakeAuth([
   { email: "owner@example.test", password: "pw-owner", userId: "u1" },
+  { email: "pending@example.test", password: "pw-pending", userId: "u3", verified: false },
+  { email: "waiting@example.test", password: "pw-waiting", userId: "u4", verified: false },
+  { email: "owner2@example.test", password: "pw-owner2", userId: "u5", unfinished: true },
   { email: "intruder@example.test", password: "pw-intruder", userId: "u2" },
 ]);
 let available = true;
@@ -11,13 +16,26 @@ let available = true;
 vi.mock("@/server/auth/auth-runtime", () => ({
   getAuth: async () => ({
     provider: fake,
-    allowlist: parseAllowlist("owner@example.test"),
+    allowlist: parseAllowlist("owner@example.test, waiting@example.test, owner2@example.test"),
+    seals: createSetupSeals("s".repeat(40)),
+    setup: createMemorySetupStore(),
     available,
   }),
 }));
 let forwardedFor: string | null = "203.0.113.7";
+let hostHeader: string | null = "app.example.test";
+const jar = new Map<string, string>();
 vi.mock("next/headers", () => ({
-  headers: async () => new Headers(forwardedFor ? { "x-forwarded-for": forwardedFor } : {}),
+  headers: async () =>
+    new Headers({
+      ...(forwardedFor ? { "x-forwarded-for": forwardedFor } : {}),
+      ...(hostHeader ? { host: hostHeader } : {}),
+    }),
+  cookies: async () => ({
+    get: (name: string) => (jar.has(name) ? { name, value: jar.get(name) } : undefined),
+    set: (name: string, value: string) => void jar.set(name, value),
+    delete: (name: string) => void jar.delete(name),
+  }),
 }));
 vi.mock("next/navigation", () => ({
   redirect: (path: string) => {
@@ -26,6 +44,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { signInAction, signOutAction } from "./actions";
+import { resetFlowLimits } from "@/server/auth/flow-limits";
 import { resetSignInLimits } from "@/server/auth/sign-in-limit";
 import { setAuthLogSink } from "@/server/auth/safe-log";
 import { INVALID_CREDENTIALS_MESSAGE, RATE_LIMITED_MESSAGE, UNAVAILABLE_MESSAGE } from "./state";
@@ -38,11 +57,144 @@ const form = (email: string, password: string) => {
 };
 
 beforeEach(() => {
+  jar.clear();
+  resetFlowLimits();
   fake.current = null;
   available = true;
   forwardedFor = "203.0.113.7";
+  hostHeader = "app.example.test";
   resetSignInLimits();
   setAuthLogSink(() => {});
+});
+
+describe("signInAction before the password was set through a link (#83)", () => {
+  it("gives no session: it sends the setup link, remembers the address, and says 'check your email'", async () => {
+    fake.flows.calls.length = 0;
+    await expect(
+      signInAction({ error: null }, form("owner2@example.test", "pw-owner2")),
+    ).rejects.toThrow("NEXT_REDIRECT:/finish-setup");
+    expect(fake.current).toBeNull();
+    expect(jar.get("cw-pending-email")).toBe("owner2@example.test");
+    expect(fake.flows.calls).toHaveLength(1);
+    expect(fake.flows.calls[0].method).toBe("requestPasswordReset");
+    const [email, link] = fake.flows.calls[0].args as string[];
+    expect(email).toBe("owner2@example.test");
+    // The setup variant of the link, naming the address it is for.
+    const url = new URL(link);
+    expect(url.searchParams.get("setup")).toBe("1");
+    expect(url.searchParams.get("for")).toBeTruthy();
+  });
+
+  it("is not counted as a failed attempt (the password was right)", async () => {
+    for (let i = 0; i < 9; i += 1) {
+      expect(await signInAction({ error: null }, form("owner2@example.test", "wrong"))).toEqual({
+        error: INVALID_CREDENTIALS_MESSAGE,
+      });
+    }
+    await expect(
+      signInAction({ error: null }, form("owner2@example.test", "pw-owner2")),
+    ).rejects.toThrow("NEXT_REDIRECT:/finish-setup");
+    for (let i = 0; i < 9; i += 1) {
+      expect(await signInAction({ error: null }, form("owner2@example.test", "wrong"))).toEqual({
+        error: INVALID_CREDENTIALS_MESSAGE,
+      });
+    }
+  });
+
+  it("still goes to 'check your email' when the host cannot be worked out, sending nothing", async () => {
+    hostHeader = null;
+    fake.flows.calls.length = 0;
+    await expect(
+      signInAction({ error: null }, form("owner2@example.test", "pw-owner2")),
+    ).rejects.toThrow("NEXT_REDIRECT:/finish-setup");
+    expect(fake.flows.calls).toEqual([]);
+  });
+
+  it("holds a repeat inside the 30-second gap without sending another link", async () => {
+    fake.flows.calls.length = 0;
+    for (let i = 0; i < 2; i += 1) {
+      await expect(
+        signInAction({ error: null }, form("owner2@example.test", "pw-owner2")),
+      ).rejects.toThrow("NEXT_REDIRECT:/finish-setup");
+    }
+    expect(fake.flows.calls).toHaveLength(1);
+  });
+});
+
+describe("signInAction with an unverified account", () => {
+  // This is the recovery path for an expired or lost code: the person proves the password and gets a fresh code.
+  it("sends a fresh code to an allowlisted address, remembers it, and goes to the code screen", async () => {
+    fake.flows.calls.length = 0;
+    await expect(
+      signInAction({ error: null }, form(" Waiting@Example.test ".toLowerCase(), "pw-waiting")),
+    ).rejects.toThrow("NEXT_REDIRECT:/verify");
+    expect(fake.flows.calls).toEqual([
+      { method: "resendVerificationCode", args: ["waiting@example.test"] },
+    ]);
+    expect(jar.get("cw-pending-email")).toBe("waiting@example.test");
+    expect(fake.current).toBeNull();
+  });
+
+  it("sends nothing for an address that is not on the allowlist, but behaves the same on screen", async () => {
+    fake.flows.calls.length = 0;
+    await expect(
+      signInAction({ error: null }, form("pending@example.test", "pw-pending")),
+    ).rejects.toThrow("NEXT_REDIRECT:/verify");
+    expect(fake.flows.calls).toEqual([]);
+  });
+
+  it("holds a second request inside the 30-second gap without sending another code", async () => {
+    fake.flows.calls.length = 0;
+    for (let i = 0; i < 2; i += 1) {
+      await expect(
+        signInAction({ error: null }, form("waiting@example.test", "pw-waiting")),
+      ).rejects.toThrow("NEXT_REDIRECT:/verify");
+    }
+    expect(fake.flows.calls).toHaveLength(1);
+  });
+
+  it("clears the failed-attempt count for the pair, because the password was right", async () => {
+    for (let i = 0; i < 9; i += 1) {
+      expect(await signInAction({ error: null }, form("waiting@example.test", "wrong"))).toEqual({
+        error: INVALID_CREDENTIALS_MESSAGE,
+      });
+    }
+    await expect(
+      signInAction({ error: null }, form("waiting@example.test", "pw-waiting")),
+    ).rejects.toThrow("NEXT_REDIRECT:/verify");
+    // Nine more wrong passwords would have tripped the limit of ten had the count not been cleared.
+    for (let i = 0; i < 9; i += 1) {
+      expect(await signInAction({ error: null }, form("waiting@example.test", "wrong"))).toEqual({
+        error: INVALID_CREDENTIALS_MESSAGE,
+      });
+    }
+  });
+
+  it("sends the person to the code screen with a new code, remembering the address", async () => {
+    await expect(
+      signInAction({ error: null }, form("  pending@example.test ", "pw-pending")),
+    ).rejects.toThrow("NEXT_REDIRECT:/verify");
+    expect(fake.current).toBeNull();
+    expect(jar.get("cw-pending-email")).toBe("pending@example.test");
+  });
+
+  it("is not counted as a failed attempt (the password was right)", async () => {
+    for (let i = 0; i < 12; i += 1) {
+      await expect(
+        signInAction({ error: null }, form("pending@example.test", "pw-pending")),
+      ).rejects.toThrow("NEXT_REDIRECT:/verify");
+    }
+    await expect(
+      signInAction({ error: null }, form("owner@example.test", "pw-owner")),
+    ).rejects.toThrow("NEXT_REDIRECT:/");
+  });
+
+  it("still gives the generic error for a wrong password on the same account", async () => {
+    expect(await signInAction({ error: null }, form("pending@example.test", "wrong"))).toEqual({
+      error: INVALID_CREDENTIALS_MESSAGE,
+    });
+    expect(jar.size).toBe(0);
+  });
 });
 
 describe("signInAction", () => {
@@ -85,6 +237,13 @@ describe("signOutAction", () => {
     fake.current = { userId: "u1", email: "owner@example.test" };
     await expect(signOutAction()).rejects.toThrow("NEXT_REDIRECT:/sign-in");
     expect(fake.current).toBeNull();
+  });
+
+  it("clears the theme cookie so it does not outlive the session", async () => {
+    jar.set("appearance", "ocean");
+    fake.current = { userId: "u1", email: "owner@example.test" };
+    await expect(signOutAction()).rejects.toThrow("NEXT_REDIRECT:/sign-in");
+    expect(jar.has("appearance")).toBe(false);
   });
 });
 

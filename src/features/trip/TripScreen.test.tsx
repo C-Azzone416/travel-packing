@@ -10,9 +10,14 @@ import {
   type TripsSource,
 } from "@/features/trips/trips-source";
 import { TripsSourceProvider } from "@/features/trips/TripsSourceProvider";
+import type { StopWeather } from "@/domain/weather/types";
 import { TripScreen } from "./TripScreen";
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/trips/san-diego" }));
+const push = vi.fn();
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/trips/san-diego",
+  useRouter: () => ({ push }),
+}));
 
 const TOILETRIES = [
   "nice-makeup",
@@ -31,13 +36,17 @@ function memory() {
   });
 }
 
-function setup(tripId = "san-diego", wrap?: (base: ReturnType<typeof memory>) => TripsSource) {
+function setup(
+  tripId = "san-diego",
+  wrap?: (base: ReturnType<typeof memory>) => TripsSource,
+  openItemId?: string,
+) {
   const base = memory();
   const source = wrap ? wrap(base) : base;
   const user = userEvent.setup();
   const view = renderInApp(
     <TripsSourceProvider source={source}>
-      <TripScreen tripId={tripId} />
+      <TripScreen tripId={tripId} openItemId={openItemId} />
     </TripsSourceProvider>,
   );
   return { user, source: base, view };
@@ -57,6 +66,73 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+function withWeather(base: ReturnType<typeof memory>, optedIn = false) {
+  let weatherOptIn = optedIn;
+  const weather: StopWeather[] = [
+    {
+      stopIndex: 0,
+      status: "ok",
+      days: [
+        {
+          date: "2026-09-04",
+          stopIndex: 0,
+          source: "forecast",
+          highC: 20,
+          lowC: 16,
+          precipProbability: 0.8,
+          precipMm: 4,
+          snowCm: 0,
+          uvIndexMax: 1,
+          sunshineHours: 1,
+        },
+      ],
+    },
+  ];
+  const getTripWeather = vi.fn().mockResolvedValue({ kind: "ready", stops: weather });
+  const listSuggestions = vi.fn().mockResolvedValue([]);
+  const updateSettings = vi.fn(async (change: { weatherOptIn?: boolean }) => {
+    weatherOptIn = change.weatherOptIn ?? weatherOptIn;
+    return { weatherOptIn, temperatureUnit: "F" as const };
+  });
+  const applyReview = vi.fn(async (id: string, _accepted: unknown[], _skipped: unknown[]) => {
+    void [_accepted, _skipped];
+    const change = await base.acceptWeather(id);
+    return {
+      ...change,
+      trip: {
+        ...change.trip,
+        stops: change.trip.stops.map((stop) => ({
+          ...stop,
+          location: { ...stop.location, latitude: 38.72, longitude: -9.14 },
+        })),
+      },
+    };
+  });
+  const source: TripsSource = {
+    ...base,
+    getTrip: async (id) => {
+      const trip = await base.getTrip(id);
+      return {
+        ...trip,
+        stops: trip.stops.map((stop) => ({
+          ...stop,
+          location: { ...stop.location, latitude: 38.72, longitude: -9.14 },
+        })),
+      };
+    },
+    weather: {
+      getSettings: async () => ({ weatherOptIn, temperatureUnit: "F" }),
+      updateSettings,
+      getTripWeather,
+      previewDraft: vi.fn().mockResolvedValue({ kind: "ready", stops: weather }),
+      createTripWithReview: vi.fn((draft) => base.createTrip(draft)),
+      listSuggestions,
+      applyReview,
+    },
+  };
+  return { source, getTripWeather, updateSettings, applyReview, listSuggestions };
+}
+
 describe("loading and states", () => {
   it("shows a loading state, then the trip with its header, progress and Packing badge", async () => {
     const gate = deferred<void>();
@@ -70,12 +146,33 @@ describe("loading and states", () => {
     await act(async () => gate.resolve());
     expect(await ready()).toBeTruthy();
     expect(screen.getByText("California, United States · Oct 23 – Oct 27 · 5 days")).toBeTruthy();
-    expect(screen.getByText("Packing", { selector: ".status-pill" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Back to trips" }).getAttribute("href")).toBe("/");
+    expect(screen.queryByText("Ready", { selector: ".status-pill" })).toBeNull();
+    expect(screen.getByRole("link", { name: "All trips" }).getAttribute("href")).toBe("/");
     const bar = screen.getByRole("progressbar", { name: "Packing progress" });
     expect(bar.getAttribute("aria-valuenow")).toBe("20");
     expect(bar.getAttribute("aria-valuetext")).toBe("20% packed");
     expect(screen.queryByText(/sample/i)).toBeNull();
+  });
+
+  it("shows the ledger hero (departure eyebrow, route stamp), the packed line and the sections panel", async () => {
+    setup("san-diego");
+    await ready();
+    expect(
+      screen.getByText(/^(Leaves in \d+ days|Leaves tomorrow|Leaves today|Under way)$/),
+    ).toBeTruthy();
+    expect(screen.getByRole("img", { name: /departure stamp$|route stamps$/ })).toBeTruthy();
+    // The trip picture is off on the packing hero, so its stamp is transparent (no backing disc).
+    expect(document.querySelector("[data-stamp]")?.hasAttribute("data-on-picture")).toBe(false);
+    expect(
+      screen.getByText(/^\d+ of \d+ packed( \/ \d+ left)?$/, { selector: ".progress-line" }),
+    ).toBeTruthy();
+    const panel = screen.getByRole("navigation", { name: "Packing sections" });
+    const main = within(panel).getByRole("link", { name: /Everyday & occasion/ });
+    expect(main.getAttribute("href")).toBe("#block-main");
+    expect(document.getElementById("block-main")).toBeTruthy();
+    expect(
+      screen.getAllByText(/\d+ of \d+ complete/, { selector: ".list-section-count" }).length,
+    ).toBeGreaterThan(0);
   });
 
   it("shows Ready for a Ready trip, with the Ready card and review links", async () => {
@@ -121,7 +218,7 @@ describe("loading and states", () => {
       </TripsSourceProvider>,
     );
     expect(await screen.findByText("Couldn’t load this trip.")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Couldn't save, retry" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Not saved, retry" })).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Try again" }));
     expect(await ready()).toBeTruthy();
     expect(getTrip).toHaveBeenCalledTimes(2);
@@ -141,7 +238,7 @@ describe("loading and states", () => {
       </TripsSourceProvider>,
     );
     await screen.findByText("Couldn’t load this trip.");
-    await user.click(screen.getByRole("button", { name: "Couldn't save, retry" }));
+    await user.click(screen.getByRole("button", { name: "Not saved, retry" }));
     await user.click(
       within(screen.getByRole("dialog", { name: "Couldn’t save" })).getByRole("button", {
         name: "Retry",
@@ -200,7 +297,7 @@ describe("filters", () => {
     );
     expect(row("sleepwear")).toBeNull();
     expect(row("underwear")).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: "All" }));
+    await user.click(screen.getByRole("button", { name: "All items" }));
     expect(row("sleepwear")).toBeTruthy();
   });
 
@@ -221,12 +318,12 @@ describe("packing", () => {
     await waitFor(() => expect(itemOf(source, "tops").packed).toBe(itemOf(source, "tops").qty));
     expect(
       within(row("tops"))
-        .getByRole("button", { name: "Mark Everyday tops unpacked" })
-        .getAttribute("aria-pressed"),
-    ).toBe("true");
+        .getByRole("button", { name: "Packed, mark Everyday tops unpacked" })
+        .hasAttribute("aria-pressed"),
+    ).toBe(false);
     expect(live().textContent).toBe("Everyday tops 2 of 2 packed");
     await user.click(
-      within(row("tops")).getByRole("button", { name: "Mark Everyday tops unpacked" }),
+      within(row("tops")).getByRole("button", { name: "Packed, mark Everyday tops unpacked" }),
     );
     await waitFor(() => expect(itemOf(source, "tops").packed).toBe(0));
   });
@@ -240,7 +337,7 @@ describe("packing", () => {
     await user.click(up());
     // The tapped count shows at once, before anything is sent.
     expect(live().textContent).toBe("Underwear 3 of 4 packed");
-    expect(within(underwear).getByText("3/4")).toBeTruthy();
+    expect(within(underwear).getByText("3 of 4 packed")).toBeTruthy();
     await user.click(up());
     expect(up().getAttribute("aria-disabled")).toBe("true");
     await user.click(up());
@@ -249,7 +346,7 @@ describe("packing", () => {
     expect(down().getAttribute("aria-disabled")).toBe("true");
     await user.click(down());
     await waitFor(() => expect(itemOf(source, "underwear").packed).toBe(0));
-    expect(within(underwear).getByText("0/4")).toBeTruthy();
+    expect(within(underwear).getByText("0 of 4 packed")).toBeTruthy();
   });
 
   it("sends ONE write per item with the final count after the taps settle", async () => {
@@ -266,7 +363,7 @@ describe("packing", () => {
     for (let n = 0; n < 3; n++)
       await user.click(within(socks).getByRole("button", { name: "Increase packed Socks" }));
     expect(setPacked).not.toHaveBeenCalled();
-    expect(within(socks).getByText("4/4")).toBeTruthy();
+    expect(within(socks).getByText("4 of 4 packed")).toBeTruthy();
     await waitFor(() => expect(itemOf(source, "socks").packed).toBe(4));
     expect(setPacked).toHaveBeenCalledTimes(1);
     expect(setPacked).toHaveBeenCalledWith("socks", 4);
@@ -290,13 +387,13 @@ describe("packing", () => {
     await waitFor(() => expect(calls).toEqual([2]));
     // A tap during the first write: shown at once, not sent in parallel.
     await user.click(up());
-    expect(within(socks).getByText("3/4")).toBeTruthy();
+    expect(within(socks).getByText("3 of 4 packed")).toBeTruthy();
     await new Promise((resolve) => setTimeout(resolve, 450));
     expect(calls).toEqual([2]);
     await act(async () => gate.resolve());
     await waitFor(() => expect(calls).toEqual([2, 3]));
     await waitFor(() => expect(itemOf(source, "socks").packed).toBe(3));
-    expect(within(socks).getByText("3/4")).toBeTruthy();
+    expect(within(socks).getByText("3 of 4 packed")).toBeTruthy();
   });
 
   it("a check or uncheck is sent at once, not after a pause", async () => {
@@ -305,7 +402,7 @@ describe("packing", () => {
     await user.click(within(row("tops")).getByRole("button", { name: "Pack all Everyday tops" }));
     await waitFor(() => expect(itemOf(source, "tops").packed).toBe(itemOf(source, "tops").qty));
     await user.click(
-      within(row("tops")).getByRole("button", { name: "Mark Everyday tops unpacked" }),
+      within(row("tops")).getByRole("button", { name: "Packed, mark Everyday tops unpacked" }),
     );
     await waitFor(() => expect(itemOf(source, "tops").packed).toBe(0));
   });
@@ -330,10 +427,10 @@ describe("packing", () => {
     expect(
       await within(row("tops")).findByRole("button", { name: "Not saved · Retry" }),
     ).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Couldn't save, retry" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Not saved, retry" })).toBeTruthy();
     // The row keeps showing what the user did, and nothing was stored.
     expect(itemOf(source, "tops").packed).toBe(1);
-    expect(within(row("tops")).getByText("2/2")).toBeTruthy();
+    expect(within(row("tops")).getByText("2 of 2 packed")).toBeTruthy();
     fail = false;
     await user.click(within(row("tops")).getByRole("button", { name: "Not saved · Retry" }));
     await waitFor(() => expect(itemOf(source, "tops").packed).toBe(2));
@@ -377,7 +474,7 @@ describe("packing", () => {
       await within(row("socks")).findByRole("button", { name: "Not saved · Retry" }),
     ).toBeTruthy();
     fail = false;
-    await user.click(screen.getByRole("button", { name: "Couldn't save, retry" }));
+    await user.click(screen.getByRole("button", { name: "Not saved, retry" }));
     await user.click(
       within(screen.getByRole("dialog", { name: "Couldn’t save" })).getByRole("button", {
         name: "Retry",
@@ -399,7 +496,7 @@ describe("packing", () => {
     const review = await screen.findByRole("link", { name: "Review your bag" });
     expect(review.getAttribute("href")).toBe("/trips/san-diego/review");
     expect(tripOf(source).ready).toBe(false);
-    expect(screen.getByText("Packing", { selector: ".status-pill" })).toBeTruthy();
+    expect(screen.queryByText("Ready", { selector: ".status-pill" })).toBeNull();
     expect(screen.queryByText("You’re ready to go.")).toBeNull();
   });
 });
@@ -414,7 +511,7 @@ describe("toiletry bag gate", () => {
     setup();
     await ready();
     expect(screen.getByText("Toiletry bag not ready to place")).toBeTruthy();
-    expect(screen.getByText("Bathroom · 0 of 5 contents checked")).toBeTruthy();
+    expect(screen.getByText("0 of 5 contents checked")).toBeTruthy();
   });
 
   it("opens the placement prompt once when contents complete, never confirms by itself, and 'Not yet' dismisses it for the session", async () => {
@@ -429,7 +526,7 @@ describe("toiletry bag gate", () => {
     expect(screen.getByText("Toiletry bag ready to place")).toBeTruthy();
     // Uncheck and recheck: the prompt stays dismissed, the persistent button remains.
     await user.click(
-      within(row("last-contacts")).getByRole("button", { name: "Mark Contacts unpacked" }),
+      within(row("last-contacts")).getByRole("button", { name: "Packed, mark Contacts unpacked" }),
     );
     await user.click(
       within(row("last-contacts")).getByRole("button", { name: "Pack all Contacts" }),
@@ -466,7 +563,7 @@ describe("toiletry bag gate", () => {
     await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Confirm" }));
     await screen.findByText("Toiletry bag is in the suitcase");
     await user.click(
-      within(row("last-contacts")).getByRole("button", { name: "Mark Contacts unpacked" }),
+      within(row("last-contacts")).getByRole("button", { name: "Packed, mark Contacts unpacked" }),
     );
     expect(await screen.findByText("Toiletry bag not ready to place")).toBeTruthy();
   });
@@ -677,49 +774,103 @@ describe("item editor", () => {
 });
 
 describe("weather", () => {
-  it("shows the pending suggestion as simulated, and nothing changes until it is accepted", async () => {
-    const { user, source } = setup("lisbon");
+  it("asks with the privacy copy and makes no provider call until the person opts in", async () => {
+    let wired!: ReturnType<typeof withWeather>;
+    const { user } = setup("lisbon", (base) => {
+      wired = withWeather(base);
+      return wired.source;
+    });
     await ready("Lisbon");
-    expect(screen.getByText("Simulated · Seasonal outlook")).toBeTruthy();
-    expect(screen.getAllByText(/simulated suggestion, not a real forecast/).length).toBeGreaterThan(
-      0,
-    );
-    await user.click(screen.getByRole("button", { name: "Review suggestion" }));
-    const dialog = screen.getByRole("dialog", { name: "Add a compact umbrella?" });
-    expect(
-      within(dialog).getByText("Accepting changes your list, so Ready will turn off."),
-    ).toBeTruthy();
-    await user.keyboard("{Escape}");
-    expect(tripOf(source, "lisbon").weather.status).toBe("pending");
-    expect(tripOf(source, "lisbon").ready).toBe(true);
+    expect(await screen.findByText("Get weather for your stops?")).toBeTruthy();
+    expect(screen.getByText(/Only map coordinates and dates are sent to Open-Meteo/)).toBeTruthy();
+    expect(wired.getTripWeather).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Get weather" }));
+    await waitFor(() => expect(wired.getTripWeather).toHaveBeenCalledWith("lisbon"));
+    expect(await screen.findByText("Forecast")).toBeTruthy();
+    expect(screen.getByText(/Weather data by Open-Meteo.com/)).toBeTruthy();
   });
 
-  it("accepting adds exactly one umbrella and revokes Ready", async () => {
-    const { user, source } = setup("lisbon");
+  it("reviews real recommendation diffs, applies selected changes and revokes Ready", async () => {
+    let wired!: ReturnType<typeof withWeather>;
+    const { user, source } = setup("lisbon", (base) => {
+      wired = withWeather(base, true);
+      return wired.source;
+    });
     await ready("Lisbon");
-    await user.click(screen.getByRole("button", { name: "Review suggestion" }));
-    await user.click(screen.getByRole("button", { name: "Accept umbrella" }));
-    await waitFor(() => expect(row("weather-umbrella")).toBeTruthy());
-    expect(
-      tripOf(source, "lisbon").items.filter((item) => item.id === "weather-umbrella"),
-    ).toHaveLength(1);
+    await user.click(await screen.findByRole("button", { name: "Review changes" }));
+    const dialog = screen.getByRole("dialog", { name: "Weather changes" });
+    expect(within(dialog).getByText(/takes this trip out of Ready/)).toBeTruthy();
+    expect(within(dialog).getByText("Add Compact umbrella")).toBeTruthy();
+    await user.click(within(dialog).getByRole("button", { name: /Add selected/ }));
+    await waitFor(() => expect(wired.applyReview).toHaveBeenCalledTimes(1));
+    expect(wired.applyReview.mock.calls[0][0]).toBe("lisbon");
+    expect(wired.applyReview.mock.calls[0][1]).toEqual(
+      expect.arrayContaining([expect.objectContaining({ semanticId: "weather-umbrella" })]),
+    );
     expect(tripOf(source, "lisbon").ready).toBe(false);
-    expect(screen.getByText("Simulated · accepted")).toBeTruthy();
     expect(screen.queryByText("You’re ready to go.")).toBeNull();
   });
 
-  it("does not warn about Ready for a trip that is not Ready, and Skip changes only the weather state; Review again reopens it", async () => {
-    const { user, source } = setup();
-    await ready();
-    await user.click(screen.getByRole("button", { name: "Review suggestion" }));
-    const dialog = screen.getByRole("dialog", { name: "Add a compact umbrella?" });
-    expect(within(dialog).queryByText(/Ready will turn off/)).toBeNull();
+  it("offers no changes when no stop has usable weather: the list stays as it is", async () => {
+    let wired!: ReturnType<typeof withWeather>;
+    setup("lisbon", (base) => {
+      wired = withWeather(base, true);
+      wired.getTripWeather.mockResolvedValue({
+        kind: "ready",
+        stops: [{ stopIndex: 0, status: "unavailable", days: [] }],
+      });
+      return wired.source;
+    });
+    await ready("Lisbon");
+    expect(
+      await screen.findByText("We couldn’t reach the weather service. Your list is unchanged."),
+    ).toBeTruthy();
+    expect(screen.queryByText(/weather changes? to review/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Review changes" })).toBeNull();
+  });
+
+  it("asks the weather service again when the route is edited", async () => {
+    let wired!: ReturnType<typeof withWeather>;
+    const { user } = setup("lisbon", (base) => {
+      wired = withWeather(base, true);
+      return wired.source;
+    });
+    await ready("Lisbon");
+    await waitFor(() => expect(wired.getTripWeather).toHaveBeenCalledTimes(1));
+    await user.click(screen.getByRole("button", { name: "Edit route" }));
+    const sheet = screen.getByRole("dialog", { name: "Edit route" });
+    fireEvent.change(within(sheet).getByLabelText("Leave"), { target: { value: "2026-09-09" } });
+    await user.click(within(sheet).getByRole("button", { name: "Save route" }));
+    await waitFor(() => expect(wired.getTripWeather).toHaveBeenCalledTimes(2));
+  });
+
+  it("persists skipped signatures and can turn weather off without a provider call", async () => {
+    let wired!: ReturnType<typeof withWeather>;
+    const { user, view } = setup("lisbon", (base) => {
+      wired = withWeather(base, true);
+      return wired.source;
+    });
+    await ready("Lisbon");
+    await user.click(await screen.findByRole("button", { name: "Review changes" }));
+    const dialog = screen.getByRole("dialog", { name: "Weather changes" });
     await user.click(within(dialog).getByRole("button", { name: "Skip" }));
-    await waitFor(() => expect(screen.getByText("Simulated · skipped")).toBeTruthy());
-    expect(tripOf(source).items.some((item) => item.id === "weather-umbrella")).toBe(false);
-    await user.click(screen.getByRole("button", { name: "Review again" }));
-    expect(await screen.findByRole("dialog", { name: "Add a compact umbrella?" })).toBeTruthy();
-    expect(tripOf(source).weather.status).toBe("pending");
+    await waitFor(() => expect(wired.applyReview).toHaveBeenCalledTimes(1));
+    expect(wired.applyReview.mock.calls[0][1]).toEqual([]);
+    expect(wired.applyReview.mock.calls[0][2]).toEqual(
+      expect.arrayContaining([expect.objectContaining({ semanticId: "weather-umbrella" })]),
+    );
+
+    view.unmount();
+    // Turning off is exercised from the first-run Not now choice, which also dismisses this trip's prompt.
+    let off!: ReturnType<typeof withWeather>;
+    const second = setup("lisbon", (base) => {
+      off = withWeather(base);
+      return off.source;
+    });
+    await ready("Lisbon");
+    await second.user.click(screen.getByRole("button", { name: "Not now" }));
+    await waitFor(() => expect(off.updateSettings).toHaveBeenCalledWith({ weatherOptIn: false }));
+    expect(off.getTripWeather).not.toHaveBeenCalled();
   });
 });
 
@@ -778,8 +929,9 @@ describe("preferences and Ready", () => {
   it("shows the trip math", async () => {
     setup();
     await ready();
-    expect(screen.getByText(/5 days − outbound worn − return outfit =/)).toBeTruthy();
-    expect(screen.getByText("3 everyday days")).toBeTruthy();
+    expect(
+      screen.getByText("5 days away − 1 worn − 1 for home = 3 days of everyday clothes."),
+    ).toBeTruthy();
   });
 
   it("a trip with no confirmed location has no place line, and its header art is still its theme", async () => {
@@ -857,7 +1009,7 @@ describe("how long things take", () => {
     expect(setPacked).toHaveBeenCalledTimes(1);
     expect(setPacked).toHaveBeenCalledWith("tops", 2);
     fireEvent.click(
-      within(row("tops")).getByRole("button", { name: "Mark Everyday tops unpacked" }),
+      within(row("tops")).getByRole("button", { name: "Packed, mark Everyday tops unpacked" }),
     );
     await flush();
     expect(setPacked).toHaveBeenLastCalledWith("tops", 0);
@@ -1016,7 +1168,7 @@ describe("dialog submits wait for the source", () => {
 
 describe("changing the theme", () => {
   const artKey = () =>
-    document.querySelector(".destination-trip-head [data-art-key]")?.getAttribute("data-art-key");
+    document.querySelector(".trip-hero [data-art-key]")?.getAttribute("data-art-key");
   const changeButton = () => screen.getByRole("button", { name: "Change theme" });
 
   it("opens a sheet with the current theme selected, Save and Cancel, and no other controls changed", async () => {
@@ -1134,7 +1286,7 @@ describe("changing the theme", () => {
     await user.click(changeButton());
     await user.click(screen.getByRole("radio", { name: "City" }));
     await user.click(screen.getByRole("button", { name: "Save theme" }));
-    expect(await screen.findByRole("button", { name: "Couldn't save, retry" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Not saved, retry" })).toBeTruthy();
     const sheet = screen.getByRole("dialog", { name: "Change theme" });
     // The chip is behind the sheet, so the sheet says so itself.
     expect(within(sheet).getByRole("alert").textContent).toMatch(/Couldn’t save the theme/);
@@ -1271,6 +1423,103 @@ describe("the theme sheet's failure message", () => {
   });
 });
 
+describe("editing the stamp (#151)", () => {
+  const stampName = () =>
+    document.querySelector(".hero-stamps [role='img']")?.getAttribute("aria-label");
+  const editButton = () => screen.getByRole("button", { name: "Edit stamp" });
+  const toasts = () => document.querySelector(".toast-region") as HTMLElement;
+
+  it("shows an Edit stamp link under the stamp that opens the Stamp label sheet and gives focus back on close", async () => {
+    const { user } = setup();
+    await ready();
+    expect(document.querySelector(".hero-stamps")?.contains(editButton())).toBe(true);
+    await user.click(editButton());
+    const sheet = screen.getByRole("dialog", { name: "Stamp label" });
+    expect(within(sheet).getByRole("group", { name: "Stamp 1, automatic" })).toBeTruthy();
+    await user.click(within(sheet).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(editButton());
+  });
+
+  it("a custom label changes the stamp on the screen and is stored; the toast says Stamp updated", async () => {
+    const { user, source } = setup();
+    await ready();
+    const automatic = stampName();
+    await user.click(editButton());
+    await user.click(screen.getByRole("radio", { name: "Custom" }));
+    const field = screen.getByLabelText("Label");
+    await user.clear(field);
+    await user.type(field, "abc");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(stampName()).toContain("ABC");
+    expect(stampName()).not.toBe(automatic);
+    expect(tripOf(source).stampLabels).toEqual(["ABC", null]);
+    expect(within(toasts()).getByText("Stamp updated.")).toBeTruthy();
+    expect(document.activeElement).toBe(editButton());
+  });
+
+  it("Reset to automatic brings the derived label back, and the toast says so", async () => {
+    const { user, source } = setup();
+    await ready();
+    const automatic = stampName();
+    await user.click(editButton());
+    await user.click(screen.getByRole("radio", { name: "Custom" }));
+    await user.clear(screen.getByLabelText("Label"));
+    await user.type(screen.getByLabelText("Label"), "abc");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await user.click(editButton());
+    await user.click(screen.getByRole("button", { name: "Reset to automatic" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(stampName()).toBe(automatic);
+    expect(tripOf(source).stampLabels).toEqual([null, null]);
+    expect(within(toasts()).getByText("Stamp reset to automatic.")).toBeTruthy();
+  });
+
+  it("a failed save keeps the sheet open with the message, and Save tries again", async () => {
+    let fail = true;
+    const { user, source } = setup("san-diego", (base) => ({
+      ...base,
+      setStampLabels: (id, one, two) =>
+        fail ? Promise.reject(new Error("nope")) : base.setStampLabels(id, one, two),
+    }));
+    await ready();
+    await user.click(editButton());
+    await user.click(screen.getByRole("radio", { name: "Custom" }));
+    await user.clear(screen.getByLabelText("Label"));
+    await user.type(screen.getByLabelText("Label"), "abc");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    const sheet = screen.getByRole("dialog", { name: "Stamp label" });
+    await waitFor(() =>
+      expect(within(sheet).getByText(/Couldn’t save the stamp\. Nothing changed/)).toBeTruthy(),
+    );
+    expect(tripOf(source).stampLabels ?? [null, null]).toEqual([null, null]);
+    fail = false;
+    await user.click(within(sheet).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(tripOf(source).stampLabels).toEqual(["ABC", null]);
+  });
+
+  it("is cleared when the sheet is closed, so reopening starts clean", async () => {
+    const { user } = setup("san-diego", (base) => ({
+      ...base,
+      setStampLabels: () => Promise.reject(new Error("nope")),
+    }));
+    await ready();
+    await user.click(editButton());
+    await user.click(screen.getByRole("radio", { name: "Custom" }));
+    await user.clear(screen.getByLabelText("Label"));
+    await user.type(screen.getByLabelText("Label"), "abc");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await screen.findByText(/Couldn’t save the stamp/);
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await user.click(editButton());
+    expect(screen.queryByText(/Couldn’t save the stamp/)).toBeNull();
+  });
+});
+
 describe("accessible names of a packing row", () => {
   it("the edit button is named by what it shows, including the Pack last badge", async () => {
     setup();
@@ -1288,7 +1537,9 @@ describe("accessible names of a packing row", () => {
   it("the packed count is readable, not hidden: '1 of 2 packed'", async () => {
     setup();
     await ready();
-    expect(within(row("tops")).getByRole("img", { name: "1 of 2 packed" }).textContent).toBe("1/2");
+    expect(within(row("tops")).getByRole("img", { name: "1 of 2 packed" }).textContent).toBe(
+      "1 of 2 packed",
+    );
   });
 });
 
@@ -1314,7 +1565,7 @@ describe("closing dialogs without saving", () => {
     expect(source.snapshot()).toBe(before);
   });
 
-  it("dialogs with their own safe choice have no close button: the remove confirm, the bag prompt and the weather dialog", async () => {
+  it("a remove confirmation with its own safe choice has no close button", async () => {
     const { user } = setup();
     await ready();
     await user.click(within(row("nice-shoes")).getByRole("button", { name: /^Dress shoes / }));
@@ -1323,10 +1574,6 @@ describe("closing dialogs without saving", () => {
     expect(closeButton()).toBeNull();
     await user.click(screen.getByRole("button", { name: "Keep item" }));
     await user.keyboard("{Escape}");
-
-    await user.click(screen.getByRole("button", { name: "Review suggestion" }));
-    expect(screen.getByRole("dialog", { name: "Add a compact umbrella?" })).toBeTruthy();
-    expect(closeButton()).toBeNull();
   });
 });
 
@@ -1344,7 +1591,7 @@ describe("edges", () => {
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", { name: "Update this trip" }),
     );
-    expect(await screen.findByRole("button", { name: "Couldn't save, retry" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Not saved, retry" })).toBeTruthy();
     expect(screen.getByRole("dialog", { name: "Edit packing preferences" })).toBeTruthy();
     expect(tripOf(source).config.laundry).toBe(false);
     expect(
@@ -1443,11 +1690,11 @@ describe("Ready is never revoked silently", () => {
     await ready("Lisbon");
     expect(screen.getByText("Ready", { selector: ".status-pill" })).toBeTruthy();
     await user.click(
-      within(row("tops")).getByRole("button", { name: "Mark Everyday tops unpacked" }),
+      within(row("tops")).getByRole("button", { name: "Packed, mark Everyday tops unpacked" }),
     );
     expect(await screen.findByText("No longer ready: an item was unchecked")).toBeTruthy();
     expect(tripOf(source, "lisbon").ready).toBe(false);
-    expect(screen.getByText("Packing", { selector: ".status-pill" })).toBeTruthy();
+    expect(screen.queryByText("Ready", { selector: ".status-pill" })).toBeNull();
   });
 
   it("says nothing when a change leaves the trip as it was", async () => {
@@ -1464,7 +1711,7 @@ describe("the 'No longer ready' toast is for the change that revoked Ready, not 
     const { user, source } = setup("lisbon");
     await ready("Lisbon");
     await user.click(
-      within(row("tops")).getByRole("button", { name: "Mark Everyday tops unpacked" }),
+      within(row("tops")).getByRole("button", { name: "Packed, mark Everyday tops unpacked" }),
     );
     expect(await screen.findByText("No longer ready: an item was unchecked")).toBeTruthy();
     expect(tripOf(source, "lisbon").ready).toBe(false);
@@ -1473,11 +1720,277 @@ describe("the 'No longer ready' toast is for the change that revoked Ready, not 
       timeout: 6000,
     });
     await user.click(within(row("tops")).getByRole("button", { name: "Pack all Everyday tops" }));
-    await within(row("tops")).findByRole("button", { name: "Mark Everyday tops unpacked" });
+    await within(row("tops")).findByRole("button", { name: "Packed, mark Everyday tops unpacked" });
     await user.click(
-      within(row("tops")).getByRole("button", { name: "Mark Everyday tops unpacked" }),
+      within(row("tops")).getByRole("button", { name: "Packed, mark Everyday tops unpacked" }),
     );
     await within(row("tops")).findByRole("button", { name: "Pack all Everyday tops" });
     expect(screen.queryByText(/No longer ready/)).toBeNull();
   }, 20_000);
+});
+
+describe("inline ＋ Add item (#147)", () => {
+  const openForm = async (user: ReturnType<typeof userEvent.setup>) => {
+    await ready();
+    await user.click(screen.getByRole("button", { name: "＋ Add item" }));
+  };
+
+  it("adds an unpacked item of the chosen category and quantity, announces it, and folds the form away", async () => {
+    const { user, source } = setup();
+    await openForm(user);
+    await user.type(screen.getByRole("textbox", { name: "Item name" }), "Camera");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Category" }), "Tech");
+    await user.clear(screen.getByRole("spinbutton", { name: "Needed" }));
+    await user.type(screen.getByRole("spinbutton", { name: "Needed" }), "2");
+    await user.click(screen.getByRole("button", { name: "Add to list" }));
+    await waitFor(() => expect(screen.queryByRole("textbox", { name: "Item name" })).toBeNull());
+    const added = tripOf(source).items.find((entry) => entry.name === "Camera")!;
+    expect(added).toMatchObject({ category: "Tech", qty: 2, packed: 0, section: "main" });
+    expect(row(added.id)).toBeTruthy();
+    expect(live().textContent).toBe("Camera added to Tech.");
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "＋ Add item" }));
+  });
+
+  it("revokes Ready like every other item edit", async () => {
+    const { user, source } = setup("lisbon");
+    await ready("Lisbon");
+    expect(tripOf(source, "lisbon").ready).toBe(true);
+    await user.click(screen.getByRole("button", { name: "＋ Add item" }));
+    await user.type(screen.getByRole("textbox", { name: "Item name" }), "Camera");
+    await user.click(screen.getByRole("button", { name: "Add to list" }));
+    await waitFor(() => expect(tripOf(source, "lisbon").ready).toBe(false));
+  });
+
+  it("never doubles an item already on the list: says so, and Edit quantity opens that item's editor", async () => {
+    const { user, source } = setup();
+    await openForm(user);
+    const before = tripOf(source).items.length;
+    const sunglasses = tripOf(source).items.find((entry) => entry.id === "sunglasses")!;
+    await user.type(screen.getByRole("textbox", { name: "Item name" }), "  sunglasses ");
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Category" }),
+      sunglasses.category,
+    );
+    await user.click(screen.getByRole("button", { name: "Add to list" }));
+    expect(await screen.findByText(/Sunglasses is already on your list/)).toBeTruthy();
+    expect(tripOf(source).items).toHaveLength(before);
+    await user.click(screen.getByRole("button", { name: "Edit quantity" }));
+    const dialog = await screen.findByRole("dialog", { name: "Edit item" });
+    expect((within(dialog).getByLabelText("Item name") as HTMLInputElement).value).toBe(
+      "Sunglasses",
+    );
+  });
+
+  it("hands Bathroom to the Bathroom form with the name and quantity filled in", async () => {
+    const { user, source } = setup();
+    await openForm(user);
+    await user.type(screen.getByRole("textbox", { name: "Item name" }), "Floss");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Category" }), "Bathroom");
+    await user.clear(screen.getByRole("spinbutton", { name: "Needed" }));
+    await user.type(screen.getByRole("spinbutton", { name: "Needed" }), "2");
+    await user.click(screen.getByRole("button", { name: "Continue to Bathroom item" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add a Bathroom item" });
+    expect((within(dialog).getByLabelText("Item name") as HTMLInputElement).value).toBe("Floss");
+    expect((within(dialog).getByLabelText("Quantity") as HTMLInputElement).value).toBe("2");
+    expect(tripOf(source).items.some((entry) => entry.name === "Floss")).toBe(false);
+    await user.click(within(dialog).getByRole("button", { name: "Add toiletry item" }));
+    await waitFor(() =>
+      expect(tripOf(source).items.some((entry) => entry.name === "Floss")).toBe(true),
+    );
+  });
+
+  it("keeps the typed values and says nothing changed when the save fails", async () => {
+    const { user, source } = setup("san-diego", (base) => ({
+      ...base,
+      addItem: () => Promise.reject(new Error("down")),
+    }));
+    await openForm(user);
+    await user.type(screen.getByRole("textbox", { name: "Item name" }), "Camera");
+    await user.click(screen.getByRole("button", { name: "Add to list" }));
+    expect(await screen.findByText("Couldn’t add that item. Nothing was changed.")).toBeTruthy();
+    expect((screen.getByRole("textbox", { name: "Item name" }) as HTMLInputElement).value).toBe(
+      "Camera",
+    );
+    expect(tripOf(source).items.some((entry) => entry.name === "Camera")).toBe(false);
+  });
+});
+
+describe("Save as a list (#169)", () => {
+  const open = async (user: ReturnType<typeof userEvent.setup>) => {
+    await ready();
+    await user.click(screen.getByRole("button", { name: "Save as a list" }));
+    return screen.getByRole("dialog", { name: "Save as a list" });
+  };
+
+  it("is a secondary action in the hero, next to Edit route and Change theme", async () => {
+    setup();
+    await ready();
+    const actions = screen.getByRole("button", { name: "Save as a list" }).closest(".head-actions");
+    expect(within(actions as HTMLElement).getByRole("button", { name: "Edit route" })).toBeTruthy();
+    expect(
+      within(actions as HTMLElement).getByRole("button", { name: "Change theme" }),
+    ).toBeTruthy();
+  });
+
+  it("saves the trip's items as a list, says so with a link to the lists, and leaves the trip as it was", async () => {
+    push.mockClear();
+    const { user, source } = setup();
+    const before = JSON.stringify(tripOf(source));
+    const sheet = await open(user);
+    expect((within(sheet).getByLabelText("List name") as HTMLInputElement).value).toBe("San Diego");
+    const total = tripOf(source).items.length;
+    expect(within(sheet).getByText(`${total} of ${total} items`)).toBeTruthy();
+    await user.click(within(sheet).getByRole("button", { name: "Save list" }));
+    expect(await screen.findByText(`“San Diego” saved (${total} items).`)).toBeTruthy();
+    expect(screen.queryByRole("dialog", { name: "Save as a list" })).toBeNull();
+    expect(JSON.stringify(tripOf(source))).toBe(before);
+    await user.click(screen.getByRole("button", { name: "View lists" }));
+    expect(push).toHaveBeenCalledExactlyOnceWith("/staples/lists");
+  });
+
+  it("leaves unticked items out", async () => {
+    const { user } = setup();
+    const sheet = await open(user);
+    const total = within(sheet).getAllByRole("checkbox").length;
+    await user.click(within(sheet).getAllByRole("checkbox")[0]);
+    await user.click(within(sheet).getByRole("button", { name: "Save list" }));
+    expect(await screen.findByText(`“San Diego” saved (${total - 1} items).`)).toBeTruthy();
+  });
+
+  it("says when the name is taken, keeping the dialog open", async () => {
+    const { user } = setup();
+    let sheet = await open(user);
+    await user.click(within(sheet).getByRole("button", { name: "Save list" }));
+    await screen.findByText(/saved \(/);
+    sheet = await open(user);
+    await user.click(within(sheet).getByRole("button", { name: "Save list" }));
+    expect(
+      await within(screen.getByRole("dialog")).findByText(
+        /You already have a list called “San Diego”/,
+      ),
+    ).toBeTruthy();
+  });
+
+  it("says nothing changed, and keeps the dialog, when the save fails", async () => {
+    const { user } = setup("san-diego", (base) => ({
+      ...base,
+      saveAsList: () => Promise.reject(new Error("down")),
+    }));
+    const sheet = await open(user);
+    await user.click(within(sheet).getByRole("button", { name: "Save list" }));
+    expect(await within(sheet).findByText("Couldn’t save. Nothing was changed.")).toBeTruthy();
+  });
+});
+
+describe("opening an item's editor from the dashboard (?edit=, #166)", () => {
+  it("opens that item's editor once the trip has loaded, and puts the URL back to the plain trip", async () => {
+    const replaceState = vi.spyOn(window.history, "replaceState");
+    try {
+      setup("san-diego", undefined, "sunglasses");
+      const dialog = await screen.findByRole("dialog", { name: "Edit item" });
+      expect((within(dialog).getByLabelText("Item name") as HTMLInputElement).value).toBe(
+        "Sunglasses",
+      );
+      expect(replaceState).toHaveBeenCalledExactlyOnceWith(null, "", "/trips/san-diego");
+    } finally {
+      replaceState.mockRestore();
+    }
+  });
+
+  it("opens it only once: closing the editor does not bring it back", async () => {
+    const { user } = setup("san-diego", undefined, "sunglasses");
+    await screen.findByRole("dialog", { name: "Edit item" });
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit item" })).toBeNull());
+    await user.click(screen.getByRole("button", { name: "Still to pack" }));
+    await user.click(screen.getByRole("button", { name: "All items" }));
+    expect(screen.queryByRole("dialog", { name: "Edit item" })).toBeNull();
+  });
+
+  it("puts focus on that item's Edit target button when the editor closes (it has no opener to return to)", async () => {
+    const { user } = setup("san-diego", undefined, "sunglasses");
+    await screen.findByRole("dialog", { name: "Edit item" });
+    await user.keyboard("{Escape}");
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        within(row("sunglasses")).getByRole("button", { name: /^Edit target for Sunglasses/ }),
+      ),
+    );
+  });
+
+  it("also lands focus on the row after a save", async () => {
+    const { user } = setup("san-diego", undefined, "sunglasses");
+    const dialog = await screen.findByRole("dialog", { name: "Edit item" });
+    await user.click(within(dialog).getByRole("button", { name: /^Save/ }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit item" })).toBeNull());
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        within(row("sunglasses")).getByRole("button", { name: /^Edit target for Sunglasses/ }),
+      ),
+    );
+  });
+
+  it("after a SAVE that finishes later, focus still lands on the item's Edit target once the updated row is mounted", async () => {
+    const gate = deferred<void>();
+    const { user } = setup(
+      "san-diego",
+      (base) => ({
+        ...base,
+        editItem: async (id, itemId, edit) => {
+          await gate.promise;
+          return base.editItem(id, itemId, edit);
+        },
+      }),
+      "sunglasses",
+    );
+    const dialog = await screen.findByRole("dialog", { name: "Edit item" });
+    await user.click(within(dialog).getByRole("button", { name: /^Save/ }));
+    // Still saving: the sheet stays open, nothing is focused on the row yet.
+    expect(screen.getByRole("dialog", { name: "Edit item" })).toBeTruthy();
+    await act(async () => gate.resolve());
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit item" })).toBeNull());
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        within(row("sunglasses")).getByRole("button", { name: /^Edit target for Sunglasses/ }),
+      ),
+    );
+  });
+
+  it("falls back to the list heading when the item is gone after the editor closes (a Remove)", async () => {
+    const { user } = setup("san-diego", undefined, "nice-shoes");
+    const dialog = await screen.findByRole("dialog", { name: "Edit item" });
+    await user.click(within(dialog).getByRole("button", { name: "Remove item" }));
+    const confirm = await screen.findByRole("dialog", { name: "Remove Dress shoes?" });
+    await user.click(within(confirm).getByRole("button", { name: "Remove item" }));
+    await waitFor(() => expect(row("nice-shoes")).toBeNull());
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByRole("heading", { name: "Packing list", level: 2 }),
+      ),
+    );
+  });
+
+  it("opens nothing for an item that is not on the trip, but still cleans the URL", async () => {
+    const replaceState = vi.spyOn(window.history, "replaceState");
+    try {
+      setup("san-diego", undefined, "no-such-item");
+      await ready();
+      expect(screen.queryByRole("dialog", { name: "Edit item" })).toBeNull();
+      expect(replaceState).toHaveBeenCalledExactlyOnceWith(null, "", "/trips/san-diego");
+    } finally {
+      replaceState.mockRestore();
+    }
+  });
+
+  it("leaves the URL and focus alone when no item was asked for", async () => {
+    const replaceState = vi.spyOn(window.history, "replaceState");
+    try {
+      setup();
+      await ready();
+      expect(screen.queryByRole("dialog", { name: "Edit item" })).toBeNull();
+      expect(replaceState).not.toHaveBeenCalled();
+    } finally {
+      replaceState.mockRestore();
+    }
+  });
 });

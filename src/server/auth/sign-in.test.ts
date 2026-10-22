@@ -49,6 +49,13 @@ describe("signInOwner", () => {
     expect(fake.current).toBeNull();
   });
 
+  it("reports a right password for an account never set up through a link as 'unfinished', with no session", async () => {
+    fake = createFakeAuth([{ ...OWNER, unfinished: true }]);
+    expect(await signInOwner(auth(), OWNER.email, OWNER.password)).toBe("unfinished");
+    expect(fake.current).toBeNull();
+    expect(events()).toEqual(["sign-in-setup-pending"]);
+  });
+
   it("denies a valid account that is not allowlisted and ends the session", async () => {
     expect(await signInOwner(auth(), OTHER.email, OTHER.password)).toBe("denied");
     expect(fake.current).toBeNull();

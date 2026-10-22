@@ -26,6 +26,7 @@ const config = [
       "src/server/auth/safe-log.ts",
       "src/server/data/safe-log.ts",
       "src/server/locations/search-handler.ts",
+      "src/server/weather/safe-log.ts",
       "src/server/seed/cli.ts",
     ],
     rules: { "no-console": "error" },

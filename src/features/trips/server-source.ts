@@ -6,9 +6,24 @@ import type { CreateTripActionResult, TripsActionResult } from "./actions";
 import type { ItemEdit } from "@/domain/item-ops";
 import type { ThemeId } from "@/domain/themes";
 import type { Scope, Staple, TripConfig } from "@/domain/trip";
-import type { StaplesReadResult, TripCommandResult, TripReadResult } from "./trip-actions";
+import type { TripStop } from "@/domain/trip-stops";
+import type {
+  AcceptedWeatherDecision,
+  AddItemActionResult,
+  SaveAsListActionResult,
+  SkippedWeatherDecision,
+  StaplesReadResult,
+  TripCommandResult,
+  TripReadResult,
+  WeatherSuggestionsResult,
+} from "./trip-actions";
+import type { WeatherSettingsResult } from "../settings/weather-actions";
+import type { SavedListResult, SavedListsResult } from "../staples/saved-list-actions";
+import type { WeatherFetchResult } from "./weather-client";
+import type { WeatherSettings, WeatherSuggestionState } from "@/server/data/weather-store";
 import {
   TripsSourceError,
+  type NewCustomItem,
   type NewToiletryItem,
   type TripChange,
   type TripsSource,
@@ -35,6 +50,8 @@ export interface TripActions {
   editItem(tripId: string, itemId: string, edit: ItemEdit): Promise<TripCommandResult>;
   removeItem(tripId: string, itemId: string, scope: Scope): Promise<TripCommandResult>;
   addToiletryItem(tripId: string, item: NewToiletryItem): Promise<TripCommandResult>;
+  addItem(tripId: string, item: NewCustomItem): Promise<AddItemActionResult>;
+  saveAsList(tripId: string, name: string, itemIds: string[]): Promise<SaveAsListActionResult>;
   confirmBagPlacement(tripId: string): Promise<TripCommandResult>;
   undoBagPlacement(tripId: string): Promise<TripCommandResult>;
   markReady(tripId: string): Promise<TripCommandResult>;
@@ -44,6 +61,29 @@ export interface TripActions {
   reviewWeatherAgain(tripId: string): Promise<TripCommandResult>;
   updatePreferences(tripId: string, config: TripConfig): Promise<TripCommandResult>;
   setTheme(tripId: string, theme: ThemeId): Promise<TripCommandResult>;
+  setStampLabels(
+    tripId: string,
+    slot1: string | null,
+    slot2: string | null,
+  ): Promise<TripCommandResult>;
+  setStops(tripId: string, stops: TripStop[]): Promise<TripCommandResult>;
+}
+
+export interface WeatherActions {
+  getSettings(): Promise<WeatherSettingsResult>;
+  updateSettings(change: Partial<WeatherSettings>): Promise<WeatherSettingsResult>;
+  getTripWeather(tripId: string): Promise<WeatherFetchResult>;
+  previewDraft(stops: TripStop[]): Promise<WeatherFetchResult>;
+  createTripWithReview(
+    draft: TripDraft,
+    accepted: AcceptedWeatherDecision[],
+  ): Promise<CreateTripActionResult>;
+  listSuggestions(tripId: string): Promise<WeatherSuggestionsResult>;
+  applyReview(
+    tripId: string,
+    accepted: AcceptedWeatherDecision[],
+    skipped: SkippedWeatherDecision[],
+  ): Promise<TripCommandResult>;
 }
 
 /** A failed action becomes a TripsSourceError carrying only the error code (never data). */
@@ -77,8 +117,34 @@ async function unwrapStaples(pending: Promise<StaplesReadResult>): Promise<Stapl
   return result.staples;
 }
 
-export function createServerTripsSource(actions: TripsActions, trip: TripActions): TripsSource {
-  return {
+async function unwrapWeatherSettings(
+  pending: Promise<WeatherSettingsResult>,
+): Promise<WeatherSettings> {
+  const result = await pending;
+  if (!result.ok) throw new TripsSourceError(result.code);
+  return result.settings;
+}
+
+async function unwrapWeatherSuggestions(
+  pending: Promise<WeatherSuggestionsResult>,
+): Promise<WeatherSuggestionState[]> {
+  const result = await pending;
+  if (!result.ok) throw new TripsSourceError(result.code);
+  return result.suggestions;
+}
+
+export interface SavedListActions {
+  list(): Promise<SavedListsResult>;
+  get(listId: string): Promise<SavedListResult>;
+}
+
+export function createServerTripsSource(
+  actions: TripsActions,
+  trip: TripActions,
+  weather?: WeatherActions,
+  lists?: SavedListActions,
+): TripsSource {
+  const source: TripsSource = {
     load: () => unwrap(actions.load()),
     archive: (id) => unwrap(actions.archive(id)),
     restore: (id) => unwrap(actions.restore(id)),
@@ -96,6 +162,20 @@ export function createServerTripsSource(actions: TripsActions, trip: TripActions
     editItem: (id, itemId, edit) => unwrapChange(trip.editItem(id, itemId, edit)),
     removeItem: (id, itemId, scope) => unwrapChange(trip.removeItem(id, itemId, scope)),
     addToiletryItem: (id, item) => unwrapChange(trip.addToiletryItem(id, item)),
+    saveAsList: async (id, name, itemIds) => {
+      const result = await trip.saveAsList(id, name, itemIds);
+      if (!result.ok) {
+        throw new TripsSourceError(result.reason === "NAME_TAKEN" ? "NAME_TAKEN" : result.code);
+      }
+      return result.list;
+    },
+    addItem: async (id, item) => {
+      const result = await trip.addItem(id, item);
+      if (!result.ok) {
+        throw new TripsSourceError(result.reason === "EXISTS" ? "EXISTS" : result.code);
+      }
+      return { trip: result.trip, signals: result.signals };
+    },
     confirmBagPlacement: (id) => unwrapChange(trip.confirmBagPlacement(id)),
     undoBagPlacement: (id) => unwrapChange(trip.undoBagPlacement(id)),
     markReady: (id) => unwrapChange(trip.markReady(id)),
@@ -105,5 +185,38 @@ export function createServerTripsSource(actions: TripsActions, trip: TripActions
     reviewWeatherAgain: (id) => unwrapChange(trip.reviewWeatherAgain(id)),
     updatePreferences: (id, config) => unwrapChange(trip.updatePreferences(id, config)),
     setTheme: (id, theme) => unwrapChange(trip.setTheme(id, theme)),
+    setStampLabels: (id, slot1, slot2) => unwrapChange(trip.setStampLabels(id, slot1, slot2)),
+    setStops: (id, stops) => unwrapChange(trip.setStops(id, stops)),
   };
+
+  if (weather) {
+    source.weather = {
+      getSettings: () => unwrapWeatherSettings(weather.getSettings()),
+      updateSettings: (change) => unwrapWeatherSettings(weather.updateSettings(change)),
+      getTripWeather: (id) => weather.getTripWeather(id),
+      previewDraft: (stops) => weather.previewDraft(stops),
+      createTripWithReview: (draft, accepted) =>
+        unwrapTrip(weather.createTripWithReview(draft, accepted)),
+      listSuggestions: (id) => unwrapWeatherSuggestions(weather.listSuggestions(id)),
+      applyReview: (id, accepted, skipped) =>
+        unwrapChange(weather.applyReview(id, accepted, skipped)),
+    };
+  }
+
+  if (lists) {
+    source.savedLists = {
+      list: async () => {
+        const result = await lists.list();
+        if (!result.ok) throw new TripsSourceError(result.code);
+        return result.lists;
+      },
+      get: async (listId) => {
+        const result = await lists.get(listId);
+        if (!result.ok) throw new TripsSourceError(result.code);
+        return result.list;
+      },
+    };
+  }
+
+  return source;
 }

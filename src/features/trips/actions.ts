@@ -1,7 +1,13 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import type { LifecycleState, LifecycleTrip, TripDraft } from "@/domain/trip-lifecycle";
+import {
+  draftStops,
+  type LifecycleState,
+  type LifecycleTrip,
+  type TripDraft,
+} from "@/domain/trip-lifecycle";
+import type { AcceptedWeatherDecision } from "./trip-actions";
 import * as service from "@/server/data/service";
 import type { DataContext } from "@/server/data/context";
 import type { ErrorCode, Result } from "@/server/data/result";
@@ -69,23 +75,69 @@ export async function undoRemoveTripAction(tripId: string): Promise<TripsActionR
 export async function createTripAction(draft: TripDraft): Promise<CreateTripActionResult> {
   const context = await getDataContext();
   if (!context) return { ok: false, code: "INTERNAL" };
-  const saved = !draft?.location
-    ? ({ ok: false, error: { code: "INVALID_INPUT" } } as const)
-    : draft.mode === "copy" && draft.sourceId
-      ? await service.copyTrip(context, {
-          sourceId: draft.sourceId,
+  const route = draft ? draftStops(draft) : [];
+  // A route of several stops goes as `stops`; one destination keeps the single-destination form.
+  const where =
+    route.length > 1
+      ? {
+          stops: route.map((stop) => ({
+            location: { id: stop.location?.id ?? "" },
+            arrive: stop.arrive,
+            leave: stop.leave,
+          })),
+        }
+      : { location: { id: draft?.location?.id ?? "" }, start: draft?.start, end: draft?.end };
+  const saved =
+    !route.length || route.some((stop) => !stop.location)
+      ? ({ ok: false, error: { code: "INVALID_INPUT" } } as const)
+      : draft.mode === "copy" && draft.sourceId
+        ? await service.copyTrip(context, {
+            sourceId: draft.sourceId,
+            ...where,
+            theme: draft.theme,
+          })
+        : await service.createTrip(context, {
+            ...where,
+            config: draft.config,
+            theme: draft.theme,
+            ...(draft.savedListId ? { savedListId: draft.savedListId } : {}),
+          });
+  if (saved.ok) return { ok: true, trip: toLifecycleTrip(saved.data) };
+  if (saved.error.code === "UNAUTHENTICATED") redirect(SIGN_IN_PATH);
+  if (saved.error.code === "FORBIDDEN") redirect(ACCESS_DENIED_PATH);
+  return { ok: false, code: saved.error.code };
+}
+
+/** Atomically save a draft and the weather rows already shown on Shape the list. */
+export async function createTripWithWeatherAction(
+  draft: TripDraft,
+  accepted: AcceptedWeatherDecision[],
+): Promise<CreateTripActionResult> {
+  const context = await getDataContext();
+  if (!context) return { ok: false, code: "INTERNAL" };
+  if (!draft?.location) return { ok: false, code: "INVALID_INPUT" };
+  const route =
+    draft.stops && draft.stops.length > 1
+      ? {
+          stops: draftStops(draft).map((stop) => ({
+            location: { id: stop.location?.id ?? "" },
+            arrive: stop.arrive,
+            leave: stop.leave,
+          })),
+        }
+      : {
           location: { id: draft.location.id },
           start: draft.start,
           end: draft.end,
-          theme: draft.theme,
-        })
-      : await service.createTrip(context, {
-          location: { id: draft.location.id },
-          start: draft.start,
-          end: draft.end,
-          config: draft.config,
-          theme: draft.theme,
-        });
+        };
+  const saved = await service.createTripWithWeatherReview(context, {
+    mode: draft.mode,
+    sourceId: draft.sourceId,
+    ...route,
+    config: draft.config,
+    theme: draft.theme,
+    accepted,
+  });
   if (saved.ok) return { ok: true, trip: toLifecycleTrip(saved.data) };
   if (saved.error.code === "UNAUTHENTICATED") redirect(SIGN_IN_PATH);
   if (saved.error.code === "FORBIDDEN") redirect(ACCESS_DENIED_PATH);

@@ -1,6 +1,11 @@
-import { defineConfig } from "@playwright/test";
+import { defineConfig, devices } from "@playwright/test";
 import { join } from "node:path";
-import { ALLOWLISTED_EMAILS, E2E_PASSWORD, SEEDED_OWNER_IDS } from "./tests/e2e/helpers/auth";
+import {
+  ALLOWLISTED_EMAILS,
+  E2E_PASSWORD,
+  SEEDED_OWNER_IDS,
+  SETUP_COMPLETE_EMAILS,
+} from "./tests/e2e/helpers/auth";
 import { E2E_DATABASE_URL } from "./tests/e2e/helpers/database";
 import { E2E_DB_PORT, FAKE_GEOCODER_PORT, OPEN_METEO_PORT, PORT } from "./tests/e2e/support/ports";
 
@@ -18,7 +23,15 @@ const e2eEnv = {
   LOCATION_SEARCHES_PER_MINUTE: "1000",
   // Every e2e test signs in as one of a few owners from one address; production keeps the default of 10 per 15 minutes.
   SIGN_IN_ATTEMPTS_PER_15_MIN: "10000",
+  // The account screens wait out a floor so an allowed and an unlisted address take the same time (#27); tests skip it.
+  AUTH_FLOW_MIN_MS: "0",
+  // Every e2e test signs up from one address; production keeps the default of 10 sign-ups an hour per caller.
+  AUTH_FLOW_CALLERS_PER_HOUR: "10000",
 };
+
+// CI builds the e2e variant once (the `e2e-build` job) and hands it to each browser job, which sets E2E_PREBUILT=1 to start
+// that build instead of making another. Locally nothing sets it, so the app is built from your checkout as before.
+const prebuilt = process.env.E2E_PREBUILT === "1";
 
 // Servers are never reused: reusing whatever happens to be listening could silently test another checkout's code.
 export default defineConfig({
@@ -26,6 +39,9 @@ export default defineConfig({
   // One worker: the e2e database is a single PGlite instance, which serializes every connection, so parallel tests
   // queue behind each other and time out waiting for the dashboard. (CI already runs one worker.)
   workers: 1,
+  // CI prints every test with its duration (`list`) and annotates failures on the PR (`github`); the default `dot` hid
+  // both. A failed attempt keeps its trace (uploaded with the report) so a flaky test can be diagnosed, not guessed at.
+  reporter: process.env.CI ? [["list"], ["github"]] : "list",
   webServer: [
     {
       // A real Postgres (PGlite behind the wire protocol), migrated and seeded with the synthetic sample set, in
@@ -34,10 +50,18 @@ export default defineConfig({
       port: E2E_DB_PORT,
       reuseExistingServer: false,
       timeout: 60_000,
-      env: { E2E_DB_PORT: String(E2E_DB_PORT), E2E_SEED_OWNERS: SEEDED_OWNER_IDS.join(",") },
+      env: {
+        E2E_DB_PORT: String(E2E_DB_PORT),
+        E2E_SEED_OWNERS: SEEDED_OWNER_IDS.join(","),
+        E2E_SETUP_EMAILS: SETUP_COMPLETE_EMAILS.join(","),
+        // Keys the setup records the same way the app does in an e2e build (its sign-in password).
+        E2E_SETUP_SECRET: E2E_PASSWORD,
+      },
     },
     {
-      command: `npm run build && npm run start -- --port ${PORT}`,
+      command: prebuilt
+        ? `npm run start -- --port ${PORT}`
+        : `npm run build && npm run start -- --port ${PORT}`,
       url: `http://localhost:${PORT}`,
       reuseExistingServer: false,
       timeout: 180_000,
@@ -65,9 +89,22 @@ export default defineConfig({
       },
     },
   ],
-  use: { baseURL: `http://localhost:${PORT}` },
+  use: { baseURL: `http://localhost:${PORT}`, trace: process.env.CI ? "retain-on-failure" : "off" },
   projects: [
-    { name: "phone", use: { browserName: "chromium", viewport: { width: 390, height: 844 } } },
+    // A real phone: Playwright's iPhone 15 profile (WebKit, mobile user agent, touch, 3x pixel ratio, the Safari viewport).
+    // It runs ONLY the specs tagged @device (tests/e2e/helpers/device.ts): the ones whose outcome depends on the device
+    // (layout, tap targets, overflow, navigation, sheets, accessibility at phone size, the golden path). The app's logic
+    // and data flows are the same on every device, so they run once, on desktop.
+    // WebKit on a shared CI runner is slower than Chromium, so a phone test gets 60 s instead of 30 s (assertion timeouts
+    // are unchanged) and one retry in CI. A test that passes only on retry is reported as "flaky": file or fix it (docs/e2e.md).
+    {
+      name: "phone",
+      grep: /@device/,
+      timeout: 60_000,
+      retries: process.env.CI ? 1 : 0,
+      use: { ...devices["iPhone 15"] },
+    },
+    // Every test, in Chromium at a desktop size.
     { name: "desktop", use: { browserName: "chromium", viewport: { width: 1440, height: 1000 } } },
   ],
 });

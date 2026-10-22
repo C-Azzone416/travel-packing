@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
 import { FAKE_GEOCODER_PORT, OPEN_METEO_PORT } from "./support/ports";
+import { DEVICE } from "./helpers/device";
 
 // Two copies of the app run during e2e (see playwright.config.ts and support/ports.ts): the default one
 // (LOCATION_PROVIDER unset, so the curated list) and one with LOCATION_PROVIDER=open-meteo, pointed at a
@@ -20,7 +21,7 @@ const received = async (name: string): Promise<FakeQuery[]> => {
 
 async function openNewTrip(page: Page) {
   await signInAsOwner(page);
-  await page.getByRole("link", { name: /New trip/ }).click();
+  await page.getByRole("link", { name: /Plan a trip/ }).click();
   await expect(page.getByRole("heading", { name: "Confirm the trip" })).toBeVisible();
 }
 
@@ -108,23 +109,26 @@ test.describe("open-meteo mode (LOCATION_PROVIDER=open-meteo, fake geocoder)", (
     ).toBeVisible();
   });
 
-  test("the label, box, helper line and results are spaced so the focus ring is never covered", async ({
-    page,
-  }, testInfo) => {
-    await openNewTrip(page);
-    const field = page.getByRole("combobox", { name: "Destination search" });
-    await field.fill(`spring${testInfo.project.name}`);
-    await expect(page.getByRole("option")).toHaveCount(2);
-    const box = async (locator: ReturnType<typeof page.locator>) => (await locator.boundingBox())!;
-    const label = await box(page.locator("label.field", { hasText: "Destination search" }));
-    const input = await box(field);
-    const helper = await box(page.locator(".location-picker .tiny.muted").first());
-    const results = await box(page.getByRole("listbox"));
-    // The 3px focus ring plus its 2px offset needs at least 5px around the box.
-    expect(input.y - (label.y + label.height)).toBeGreaterThanOrEqual(5);
-    expect(helper.y - (input.y + input.height)).toBeGreaterThanOrEqual(5);
-    expect(results.y - (helper.y + helper.height)).toBeGreaterThanOrEqual(5);
-  });
+  test(
+    "the label, box, helper line and results are spaced so the focus ring is never covered",
+    DEVICE,
+    async ({ page }, testInfo) => {
+      await openNewTrip(page);
+      const field = page.getByRole("combobox", { name: "Destination search" });
+      await field.fill(`spring${testInfo.project.name}`);
+      await expect(page.getByRole("option")).toHaveCount(2);
+      const box = async (locator: ReturnType<typeof page.locator>) =>
+        (await locator.boundingBox())!;
+      const label = await box(page.locator("label.field", { hasText: "Destination search" }));
+      const input = await box(field);
+      const helper = await box(page.locator(".location-picker .tiny.muted").first());
+      const results = await box(page.getByRole("listbox"));
+      // The 3px focus ring plus its 2px offset needs at least 5px around the box.
+      expect(input.y - (label.y + label.height)).toBeGreaterThanOrEqual(5);
+      expect(helper.y - (input.y + input.height)).toBeGreaterThanOrEqual(5);
+      expect(results.y - (helper.y + helper.height)).toBeGreaterThanOrEqual(5);
+    },
+  );
 
   test("a provider place with no country is neither listed nor counted", async ({ page }) => {
     await openNewTrip(page);
@@ -180,7 +184,7 @@ test.describe("open-meteo mode (LOCATION_PROVIDER=open-meteo, fake geocoder)", (
     await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
   });
 
-  test("screenshots of the picker states", async ({ page }, testInfo) => {
+  test("screenshots of the picker states", DEVICE, async ({ page }, testInfo) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.clock.setFixedTime(new Date("2026-10-16T12:00:00"));
     const shot = (name: string) =>

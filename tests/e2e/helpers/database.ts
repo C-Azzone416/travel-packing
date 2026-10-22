@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import { SAMPLE_TODAY } from "../../../src/server/seed/sample-data";
@@ -19,7 +19,81 @@ export async function resetOwnerData(ownerId: string): Promise<void> {
   try {
     const db = drizzle(pool, { schema }) as unknown as Db;
     await db.delete(schema.trips).where(eq(schema.trips.ownerId, ownerId));
+    // Saved lists (#167) start empty for every test too.
+    await db.delete(schema.savedLists).where(eq(schema.savedLists.ownerId, ownerId));
+    // Weather starts opted out, in Fahrenheit, and the theme unchosen (Base), for every test (both live on the user).
+    await db
+      .update(schema.users)
+      .set({ weatherOptIn: false, temperatureUnit: "F", appearance: null })
+      .where(eq(schema.users.id, ownerId));
     await seedSyntheticData(db, ownerId, SAMPLE_TODAY);
+  } finally {
+    await pool.end();
+  }
+}
+
+/**
+ * Choose the owner's theme on the account directly, as if they had picked it on Settings (which is covered by settings.spec).
+ * The Settings screen shows the account's theme, so a spec that wants a theme there needs this and not only the cookie.
+ */
+export async function setOwnerAppearance(ownerId: string, appearance: string): Promise<void> {
+  const pool = new Pool({ connectionString: E2E_DATABASE_URL, max: 1 });
+  try {
+    const db = drizzle(pool, { schema }) as unknown as Db;
+    await db.update(schema.users).set({ appearance }).where(eq(schema.users.id, ownerId));
+  } finally {
+    await pool.end();
+  }
+}
+
+/** Mark one of the owner's trips Ready directly (the weather review revokes it; getting there by packing is slow). */
+export async function markTripReady(ownerId: string, destination: string): Promise<void> {
+  const pool = new Pool({ connectionString: E2E_DATABASE_URL, max: 1 });
+  try {
+    const db = drizzle(pool, { schema }) as unknown as Db;
+    await db
+      .update(schema.trips)
+      .set({ ready: true })
+      .where(and(eq(schema.trips.ownerId, ownerId), eq(schema.trips.destination, destination)));
+  } finally {
+    await pool.end();
+  }
+}
+
+export interface SeedListItem {
+  id: string;
+  name: string;
+  category: (typeof schema.ITEM_CATEGORIES)[number];
+  qty: number;
+}
+
+/** Put one saved list (with its items) in the owner's account, as if it had been saved from a trip (#167). */
+export async function seedSavedList(
+  ownerId: string,
+  name: string,
+  items: SeedListItem[],
+): Promise<string> {
+  const pool = new Pool({ connectionString: E2E_DATABASE_URL, max: 1 });
+  try {
+    const db = drizzle(pool, { schema }) as unknown as Db;
+    const [row] = await db
+      .insert(schema.savedLists)
+      .values({ ownerId, name })
+      .returning({ id: schema.savedLists.id });
+    if (items.length > 0) {
+      await db.insert(schema.savedListItems).values(
+        items.map((item, index) => ({
+          listId: row.id,
+          ownerId,
+          semanticId: item.id,
+          name: item.name,
+          category: item.category,
+          qty: item.qty,
+          sortOrder: index,
+        })),
+      );
+    }
+    return row.id;
   } finally {
     await pool.end();
   }

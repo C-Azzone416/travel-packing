@@ -26,6 +26,13 @@ const child = spawn("npx", ["next", "start", "--port", PORT], {
     ...process.env,
     LOCATION_PROVIDER: "open-meteo",
     OPEN_METEO_GEOCODING_URL: `http://127.0.0.1:${process.env.E2E_FAKE_GEO_PORT ?? 3102}/v1/search`,
+    // Weather comes from the same local fake (never the real service). Only an e2e build honors these URLs.
+    WEATHER_PROVIDER: "open-meteo",
+    // Every weather spec signs in as the same owner within a minute; production keeps the default of 30 requests a minute.
+    // (Without this the later specs ran into the limit on a fast runner and saw "couldn't reach the weather service".)
+    WEATHER_REQUESTS_PER_MINUTE: "1000",
+    OPEN_METEO_FORECAST_URL: `http://127.0.0.1:${process.env.E2E_FAKE_GEO_PORT ?? 3102}/v1/forecast`,
+    OPEN_METEO_ARCHIVE_URL: `http://127.0.0.1:${process.env.E2E_FAKE_GEO_PORT ?? 3102}/v1/archive`,
     NEXT_PUBLIC_E2E_BUILD: "1",
     AUTH_E2E_STATE_DIR:
       process.env.AUTH_E2E_STATE_DIR ?? join(process.cwd(), "test-results", "e2e-sessions"),

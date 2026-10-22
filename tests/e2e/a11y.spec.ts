@@ -1,6 +1,8 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { OTHER_EMAIL, signIn, signInAsOwner } from "./helpers/auth";
+import { chooseFromMenu } from "./helpers/menu";
 import { expectAccessible } from "./helpers/a11y";
+import { DEVICE } from "./helpers/device";
 
 // Axe checks (#21) for every screen and every dialog, at both viewports (the two Playwright projects). Each state is
 // reached the way a person reaches it, against the real e2e database.
@@ -12,7 +14,7 @@ async function openDashboard(page: Page) {
   await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
 }
 
-test.describe("signed out", () => {
+test.describe("signed out", DEVICE, () => {
   test("sign-in", async ({ page }) => {
     await page.goto("/sign-in");
     await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
@@ -32,14 +34,11 @@ test.describe("signed out", () => {
   });
 });
 
-test.describe("dashboard", () => {
+test.describe("dashboard", DEVICE, () => {
   test("upcoming, with the quick view open", async ({ page }) => {
     await openDashboard(page);
     await expectAccessible(page, "dashboard upcoming");
-    await page
-      .getByRole("article", { name: "San Diego" })
-      .getByRole("button", { name: /Quick view/ })
-      .click();
+    await chooseFromMenu(page, "San Diego", "Quick view");
     await expectAccessible(page, "dashboard quick view");
   });
 
@@ -52,7 +51,7 @@ test.describe("dashboard", () => {
 
   test("recently deleted, with a removed trip to undo", async ({ page }) => {
     await openDashboard(page);
-    await page.getByRole("button", { name: "Remove: San Diego" }).click();
+    await chooseFromMenu(page, "San Diego", "Remove");
     await page.getByRole("dialog").getByRole("button", { name: "Remove trip" }).click();
     await page.getByRole("button", { name: /Past & archive/ }).click();
     await expect(page.getByRole("heading", { name: "Recently deleted" })).toBeVisible();
@@ -61,16 +60,16 @@ test.describe("dashboard", () => {
 
   test("the remove confirmation", async ({ page }) => {
     await openDashboard(page);
-    await page.getByRole("button", { name: "Remove: San Diego" }).click();
+    await chooseFromMenu(page, "San Diego", "Remove");
     await expect(page.getByRole("dialog")).toBeVisible();
     await expectAccessible(page, "remove dialog");
   });
 });
 
-test.describe("create and copy", () => {
+test.describe("create and copy", DEVICE, () => {
   async function startTrip(page: Page) {
     await openDashboard(page);
-    await page.getByRole("link", { name: /New trip/ }).click();
+    await page.getByRole("link", { name: /Plan a trip/ }).click();
     await expect(page.getByRole("heading", { name: "Confirm the trip" })).toBeVisible();
   }
 
@@ -111,10 +110,10 @@ test.describe("create and copy", () => {
   });
 });
 
-test.describe("trip screen", () => {
+test.describe("trip screen", DEVICE, () => {
   async function openSanDiego(page: Page) {
     await openDashboard(page);
-    await page.getByRole("link", { name: "Keep packing: San Diego" }).click();
+    await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
     await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
   }
 
@@ -151,11 +150,8 @@ test.describe("trip screen", () => {
     await expectAccessible(page, "theme sheet");
   });
 
-  test("weather dialog and the toiletry bag prompt", async ({ page }) => {
+  test("the toiletry bag prompt", async ({ page }) => {
     await openSanDiego(page);
-    await page.getByRole("button", { name: "Review suggestion" }).click();
-    await expectAccessible(page, "weather dialog");
-    await page.getByRole("button", { name: "Skip" }).click();
     for (const id of [
       "nice-makeup",
       "last-toothbrush",
@@ -189,7 +185,7 @@ test.describe("trip screen", () => {
   });
 });
 
-test.describe("review, settings and staples", () => {
+test.describe("review, settings and staples", DEVICE, () => {
   async function openReview(page: Page, lisbon: boolean) {
     await openDashboard(page);
     if (lisbon) {
@@ -198,7 +194,7 @@ test.describe("review, settings and staples", () => {
       await expect(page.getByRole("heading", { name: "Lisbon", level: 1 })).toBeVisible();
       await page.getByRole("link", { name: "Review bag again" }).click();
     } else {
-      await page.getByRole("link", { name: "Keep packing: San Diego" }).click();
+      await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
       await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
       const id = new URL(page.url()).pathname.split("/").pop();
       await page.goto(`/trips/${id}/review`);
@@ -227,7 +223,7 @@ test.describe("review, settings and staples", () => {
   });
 });
 
-test.describe("error states and toasts", () => {
+test.describe("error states and toasts", DEVICE, () => {
   const isAction = (request: { method(): string; url(): string }) => request.method() === "POST";
 
   test("a failed save: the error chip, its sheet, and Settings in the error state", async ({
@@ -237,8 +233,8 @@ test.describe("error states and toasts", () => {
     await page.route("**/*", (route) =>
       isAction(route.request()) ? route.abort("failed") : route.continue(),
     );
-    await page.getByRole("button", { name: "Archive: San Diego" }).click();
-    const chip = page.getByRole("button", { name: "Couldn't save, retry" });
+    await chooseFromMenu(page, "San Diego", "Archive");
+    const chip = page.getByRole("button", { name: "Not saved, retry" });
     await expect(chip).toBeVisible();
     await expectAccessible(page, "dashboard with the error chip");
     await chip.click();
@@ -255,7 +251,7 @@ test.describe("error states and toasts", () => {
 
   test("a trip row that did not save, and the toast after a removal", async ({ page }) => {
     await openDashboard(page);
-    await page.getByRole("link", { name: "Keep packing: San Diego" }).click();
+    await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
     await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
     await page.route("**/trips/**", (route) =>
       isAction(route.request()) ? route.abort("failed") : route.continue(),
@@ -270,7 +266,7 @@ test.describe("error states and toasts", () => {
 
   test("the Undo toast after removing a trip", async ({ page }) => {
     await openDashboard(page);
-    await page.getByRole("button", { name: "Remove: San Diego" }).click();
+    await chooseFromMenu(page, "San Diego", "Remove");
     await page.getByRole("dialog").getByRole("button", { name: "Remove trip" }).click();
     await expect(page.getByRole("button", { name: /Undo/ })).toBeVisible();
     await expectAccessible(page, "undo toast");
@@ -295,7 +291,7 @@ test.describe("keyboard and focus", () => {
     page,
   }) => {
     await openDashboard(page);
-    await page.getByRole("link", { name: "Keep packing: San Diego" }).click();
+    await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
     await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
     const opener = page.getByRole("button", { name: "Edit preferences" });
     await opener.focus();
@@ -330,7 +326,7 @@ test.describe("keyboard and focus", () => {
   });
 });
 
-test.describe("narrow screens and large text", () => {
+test.describe("narrow screens and large text", DEVICE, () => {
   test.use({ viewport: { width: 320, height: 700 } });
 
   test("nothing needs sideways scrolling at 320px on the main screens", async ({ page }) => {
@@ -340,11 +336,11 @@ test.describe("narrow screens and large text", () => {
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
       );
     expect(await overflow(), "dashboard").toBeLessThanOrEqual(0);
-    await page.getByRole("link", { name: "Keep packing: San Diego" }).click();
+    await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
     await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
     expect(await overflow(), "trip screen").toBeLessThanOrEqual(0);
     await expectAccessible(page, "trip screen at 320px");
-    await page.getByRole("link", { name: "Back to trips" }).click();
+    await page.getByRole("link", { name: "All trips" }).click();
     await page
       .getByRole("navigation", { name: "Primary navigation" })
       .getByRole("link", { name: "Settings" })
@@ -357,7 +353,7 @@ test.describe("narrow screens and large text", () => {
     await openDashboard(page);
     await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
     await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
-    await expect(page.getByRole("link", { name: /New trip/ })).toBeVisible();
+    await expect(page.getByRole("link", { name: /Plan a trip/ })).toBeVisible();
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -367,7 +363,7 @@ test.describe("narrow screens and large text", () => {
   });
 });
 
-test.describe("more states", () => {
+test.describe("more states", DEVICE, () => {
   const isAction = (request: { method(): string }) => request.method() === "POST";
 
   test("the dashboard while it loads, and when it cannot load", async ({ page }) => {
@@ -429,7 +425,7 @@ async function expectBadgeClear(row: Locator): Promise<{ sameLine: boolean }> {
   return { sameLine };
 }
 
-test.describe("design's known items", () => {
+test.describe("design's known items", DEVICE, () => {
   test("the error chip stays on one line, and the Pack last badge keeps its distance", async ({
     page,
   }) => {
@@ -437,14 +433,14 @@ test.describe("design's known items", () => {
     await page.route("**/*", (route) =>
       route.request().method() === "POST" ? route.abort("failed") : route.continue(),
     );
-    await page.getByRole("button", { name: "Archive: San Diego" }).click();
-    const chip = page.getByRole("button", { name: "Couldn't save, retry" });
+    await chooseFromMenu(page, "San Diego", "Archive");
+    const chip = page.getByRole("button", { name: "Not saved, retry" });
     await expect(chip).toBeVisible();
     await page.unroute("**/*");
     // One line of 12px text plus padding: well under two lines.
     expect((await chip.boundingBox())!.height).toBeLessThan(60);
     await page.reload();
-    await page.getByRole("link", { name: "Keep packing: San Diego" }).click();
+    await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
     const row = page.locator('[data-item-id="last-toothbrush"]');
     await expect(row).toBeVisible();
     await expectBadgeClear(row);
@@ -455,7 +451,7 @@ test.describe("design's known items", () => {
   }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
     await openDashboard(page);
-    await page.getByRole("link", { name: "Keep packing: San Diego" }).click();
+    await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
     const row = page.locator('[data-item-id="last-toothbrush"]');
     await expect(row).toBeVisible();
     expect((await expectBadgeClear(row)).sameLine).toBe(true);
@@ -463,7 +459,7 @@ test.describe("design's known items", () => {
 
   test("group labels are the same size as field labels", async ({ page }) => {
     await openDashboard(page);
-    await page.getByRole("link", { name: "Keep packing: San Diego" }).click();
+    await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
     await page
       .locator('[data-item-id="sunglasses"]')
       .getByRole("button", { name: /^Sunglasses / })
@@ -492,7 +488,7 @@ test.describe("design's known items", () => {
 
   test("date inputs are tied to their hint and notice", async ({ page }) => {
     await openDashboard(page);
-    await page.getByRole("link", { name: /New trip/ }).click();
+    await page.getByRole("link", { name: /Plan a trip/ }).click();
     for (const label of ["Leave", "Return"]) {
       const input = page.getByLabel(label, { exact: true });
       await expect(input).toHaveAttribute("aria-describedby", "date-hint date-notice");
@@ -511,7 +507,7 @@ test.describe("design's known items", () => {
   });
 });
 
-test("screenshots of the visual fixes (after)", async ({ page }, testInfo) => {
+test("screenshots of the visual fixes (after)", DEVICE, async ({ page }, testInfo) => {
   const shot = (name: string, options: { fullPage?: boolean } = {}) =>
     page.screenshot({
       path: `test-results/screenshots/${testInfo.project.name}-a11y-${name}.png`,
@@ -519,7 +515,7 @@ test("screenshots of the visual fixes (after)", async ({ page }, testInfo) => {
     });
   await page.emulateMedia({ reducedMotion: "reduce" });
   await openDashboard(page);
-  await page.getByRole("link", { name: "Keep packing: San Diego" }).click();
+  await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
   await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
   // Rows with the Pack last badge, and the packed count.
   await page.locator('[data-item-id="last-toothbrush"]').scrollIntoViewIfNeeded();
@@ -557,12 +553,12 @@ test("screenshots of the visual fixes (after)", async ({ page }, testInfo) => {
     .locator('[data-item-id="socks"]')
     .getByRole("button", { name: "Increase packed Socks" })
     .click();
-  await expect(page.getByRole("button", { name: "Couldn't save, retry" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Not saved, retry" })).toBeVisible();
   await page.evaluate(() => window.scrollTo(0, 0));
   await shot("error-chip");
 });
 
-test.describe("staples", () => {
+test.describe("staples", DEVICE, () => {
   async function openStaples(page: Page) {
     await openDashboard(page);
     await page.goto("/staples");

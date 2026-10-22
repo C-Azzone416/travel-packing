@@ -1,8 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterAll, describe, expect, it } from "vitest";
 import {
   checkDeployEnv,
   checkMigrationTarget,
   hostOf,
+  parseBuildEnvFile,
   parseEnvFile,
   productionHost,
   PRODUCTION_HOST_FORMAT,
@@ -228,7 +233,202 @@ describe("hostOf", () => {
   });
 });
 
-describe("parseEnvFile", () => {
+describe("checkDeployEnv: values that vercel pull could not read", () => {
+  const MARKER = "[SENSITIVE]";
+
+  it.each(REQUIRED)(
+    "rejects Vercel's redaction marker for %s, naming only the variable",
+    (name) => {
+      for (const marker of [MARKER, `  ${MARKER} `, MARKER.toLowerCase()]) {
+        const problems = checkDeployEnv("preview", { ...good, [name]: marker }, PROD_HOST);
+        expect(problems).toEqual([
+          `${name} is Vercel's redaction marker (a Secret that vercel pull cannot read); the real value must be injected first`,
+        ]);
+      }
+    },
+  );
+
+  it("reports every redacted variable at once", () => {
+    const all = Object.fromEntries(REQUIRED.map((name) => [name, MARKER]));
+    const problems = checkDeployEnv("preview", { ...good, ...all }, PROD_HOST);
+    expect(problems).toHaveLength(REQUIRED.length);
+  });
+
+  it("does not also complain that the marker is too short or not a URL", () => {
+    const problems = checkDeployEnv(
+      "preview",
+      { ...good, NEON_AUTH_COOKIE_SECRET: MARKER },
+      PROD_HOST,
+    );
+    expect(problems.join("\n")).not.toMatch(/shorter/);
+  });
+
+  it.each(["DATABASE_URL", "DATABASE_URL_UNPOOLED"] as const)(
+    "requires %s to be a Postgres connection URL",
+    (name) => {
+      for (const value of [
+        "not a url",
+        "ep-prev-1.us-east-2.aws.neon.tech/db",
+        "https://ep-prev-1.us-east-2.aws.neon.tech/db",
+        "mysql://u:p@ep-prev-1.us-east-2.aws.neon.tech/db",
+        "postgres:///db",
+      ]) {
+        expect(checkDeployEnv("preview", { ...good, [name]: value }, PROD_HOST)).toEqual([
+          `${name} is not a Postgres connection URL`,
+        ]);
+      }
+      expect(
+        checkDeployEnv(
+          "preview",
+          { ...good, [name]: "postgresql://u:p@ep-prev-1.x.test/db" },
+          PROD_HOST,
+        ),
+      ).toEqual([]);
+    },
+  );
+
+  it("never prints the value of an unparseable URL", () => {
+    const problems = checkDeployEnv(
+      "preview",
+      { ...good, DATABASE_URL: "secret-garbage-value" },
+      PROD_HOST,
+    );
+    expect(problems.join("\n")).not.toContain("secret-garbage-value");
+  });
+
+  it("still catches a preview database on the production host", () => {
+    const onProd = { ...good, DATABASE_URL_UNPOOLED: `postgres://u:p@${PROD_HOST}/db` };
+    expect(checkDeployEnv("preview", onProd, PROD_HOST)).toEqual([
+      "DATABASE_URL_UNPOOLED points at the production database host; previews must use their own",
+    ]);
+  });
+
+  it.each([
+    ["a single well-formed email", "a@example.test", true],
+    ["several emails with spaces around the commas", "a@example.test , b@example.test", true],
+    ["an empty list", "", false],
+    ["only commas", ",", false],
+    ["a trailing comma", "a@example.test,", false],
+    ["a doubled comma", "a@example.test,,b@example.test", false],
+    ["an entry with no @", "a.example.test", false],
+    ["an entry with no domain dot", "a@localhost", false],
+    ["whitespace instead of commas", "a@example.test b@example.test", false],
+    ["semicolons instead of commas", "a@example.test;b@example.test", false],
+    ["a display-name style entry", "Name <a@example.test>", false],
+    ["an entry wrapped in double quotes", '"a@example.test"', false],
+    ["an entry wrapped in single quotes", "'a@example.test'", false],
+    ["an entry wrapped in angle brackets", "<a@example.test>", false],
+    ["an entry with a mailto: prefix", "mailto:a@example.test", false],
+    ["one good and one quoted entry", 'a@example.test,"b@example.test"', false],
+    ["plus-addressing and a subdomain", "first.last+tag@mail.example.co", true],
+  ])("validates OWNER_EMAIL_ALLOWLIST: %s", (_name, value, ok) => {
+    const problems = checkDeployEnv(
+      "preview",
+      { ...good, OWNER_EMAIL_ALLOWLIST: value },
+      PROD_HOST,
+    );
+    if (ok) expect(problems).toEqual([]);
+    else if (value.trim() === "") expect(problems).toEqual(["OWNER_EMAIL_ALLOWLIST is not set"]);
+    else if (/,\s*(,|$)|^\s*,/.test(value)) {
+      expect(problems).toEqual(["OWNER_EMAIL_ALLOWLIST has an empty entry (check the commas)"]);
+    } else {
+      expect(problems).toEqual([
+        "OWNER_EMAIL_ALLOWLIST has an entry that is not a well-formed email address",
+      ]);
+    }
+  });
+
+  it("never prints an email address from the allowlist", () => {
+    const problems = checkDeployEnv(
+      "preview",
+      { ...good, OWNER_EMAIL_ALLOWLIST: "secret.person@example.test," },
+      PROD_HOST,
+    );
+    expect(problems.join("\n")).not.toMatch(/secret\.person|example\.test/);
+  });
+
+  it("requires NEON_AUTH_COOKIE_SECRET to be at least 32 characters", () => {
+    expect(
+      checkDeployEnv("preview", { ...good, NEON_AUTH_COOKIE_SECRET: "s".repeat(31) }, PROD_HOST),
+    ).toEqual(["NEON_AUTH_COOKIE_SECRET is shorter than 32 characters, so sign-in would not work"]);
+    expect(
+      checkDeployEnv("preview", { ...good, NEON_AUTH_COOKIE_SECRET: "s".repeat(32) }, PROD_HOST),
+    ).toEqual([]);
+  });
+});
+
+describe("checkDeployEnv: Production receives the same strict secret validation", () => {
+  const M = "[SENSITIVE]";
+  const prodBase = {
+    DATABASE_URL: "postgres://u:p@ep-prod-1-pooler.us-east-2.aws.neon.tech/db",
+    DATABASE_URL_UNPOOLED: `postgres://u:p@${PROD_HOST}/db`,
+    NEON_AUTH_BASE_URL: "https://auth.example.test",
+    NEON_AUTH_COOKIE_SECRET: "s".repeat(32),
+    OWNER_EMAIL_ALLOWLIST: "a@example.test",
+  };
+  const onProductionHost =
+    "does not point at PRODUCTION_DB_HOST; production must use its own database";
+  const tooShort =
+    "NEON_AUTH_COOKIE_SECRET is shorter than 32 characters, so sign-in would not work";
+  const marker = (name: string) =>
+    `${name} is Vercel's redaction marker (a Secret that vercel pull cannot read); the real value must be injected first`;
+
+  it.each([
+    ["a good environment", prodBase, []],
+    [
+      "every variable the marker",
+      Object.fromEntries(Object.keys(prodBase).map((name) => [name, M])),
+      Object.keys(prodBase).map(marker),
+    ],
+    [
+      "the database URLs the marker",
+      { ...prodBase, DATABASE_URL: M, DATABASE_URL_UNPOOLED: M },
+      [marker("DATABASE_URL"), marker("DATABASE_URL_UNPOOLED")],
+    ],
+    [
+      "the cookie secret the marker",
+      { ...prodBase, NEON_AUTH_COOKIE_SECRET: M },
+      [marker("NEON_AUTH_COOKIE_SECRET")],
+    ],
+    [
+      "the allowlist the marker",
+      { ...prodBase, OWNER_EMAIL_ALLOWLIST: M },
+      [marker("OWNER_EMAIL_ALLOWLIST")],
+    ],
+    [
+      "unparseable database URLs",
+      { ...prodBase, DATABASE_URL: "garbage", DATABASE_URL_UNPOOLED: "https://x.test/db" },
+      [
+        "DATABASE_URL is not a Postgres connection URL",
+        "DATABASE_URL_UNPOOLED is not a Postgres connection URL",
+      ],
+    ],
+    [
+      "a malformed allowlist",
+      { ...prodBase, OWNER_EMAIL_ALLOWLIST: "not-an-email,,;" },
+      ["OWNER_EMAIL_ALLOWLIST has an empty entry (check the commas)"],
+    ],
+    ["a short cookie secret", { ...prodBase, NEON_AUTH_COOKIE_SECRET: "short" }, [tooShort]],
+    [
+      "a database URL on another host",
+      { ...prodBase, DATABASE_URL: "postgres://u:p@ep-other-9.x.test/db" },
+      [`DATABASE_URL ${onProductionHost}`],
+    ],
+  ])("%s", (_name, env, expected) => {
+    expect(checkDeployEnv("production", env, PROD_HOST)).toEqual(expected);
+  });
+
+  it("rejects redacted Secrets for both targets", () => {
+    expect(
+      checkDeployEnv("production", { ...production, OWNER_EMAIL_ALLOWLIST: M }, PROD_HOST),
+    ).toEqual([marker("OWNER_EMAIL_ALLOWLIST")]);
+    expect(checkDeployEnv("preview", { ...good, OWNER_EMAIL_ALLOWLIST: M }, PROD_HOST)).toEqual([
+      marker("OWNER_EMAIL_ALLOWLIST"),
+    ]);
+  });
+});
+
+describe("parseEnvFile (production's reader, unchanged)", () => {
   it("reads quoted and bare values, skips comments and junk, strips export", () => {
     const text = [
       "# comment",
@@ -247,6 +447,42 @@ describe("parseEnvFile", () => {
       D: "four",
       E: "",
       F: '"',
+    });
+  });
+});
+
+describe("parseBuildEnvFile (reads the file the way vercel build's dotenv 4 reader does)", () => {
+  it("reads quoted and bare values, skips comments and junk, and does not treat `export` as an assignment", () => {
+    const text = [
+      "# comment",
+      'A="one"',
+      "B='two'",
+      "C=three",
+      "export D=four",
+      "not a line",
+      'E=""',
+      'F="',
+      "G = spaced  ",
+    ].join("\r\n");
+    expect(parseBuildEnvFile(text)).toEqual({
+      A: "one",
+      B: "two",
+      C: "three",
+      E: "",
+      F: "",
+      G: "spaced",
+    });
+  });
+
+  it("turns \\n into a newline inside double quotes only, and strips one quote from each end", () => {
+    expect(
+      parseBuildEnvFile('A="x\\ny"\nB=x\\ny\nC=\'x\\ny\'\nD=""q""\nE="$HOME #not-a-comment"'),
+    ).toEqual({
+      A: "x\ny",
+      B: "x\\ny",
+      C: "x\\ny",
+      D: '"q"',
+      E: "$HOME #not-a-comment",
     });
   });
 });
@@ -312,4 +548,57 @@ describe("checkMigrationTarget", () => {
     expect(lines).not.toContain(PROD_HOST);
     expect(lines).not.toContain("u:p");
   });
+});
+
+describe("scripts/check-deploy-env.ts reads both targets exactly as vercel build does", () => {
+  const dir = mkdtempSync(join(tmpdir(), "check-env-"));
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+  const tsx = join(process.cwd(), "node_modules", ".bin", "tsx");
+  const script = join(process.cwd(), "scripts", "check-deploy-env.ts");
+
+  const envFile = (prefix: string, url: string, unpooled: string) =>
+    [
+      `${prefix}DATABASE_URL="${url}"`,
+      `${prefix}DATABASE_URL_UNPOOLED="${unpooled}"`,
+      `${prefix}NEON_AUTH_BASE_URL="https://auth.example.test"`,
+      `${prefix}NEON_AUTH_COOKIE_SECRET="${"s".repeat(32)}"`,
+      `${prefix}OWNER_EMAIL_ALLOWLIST="a@example.test"`,
+      `${prefix}LOCATION_PROVIDER="open-meteo"`,
+    ].join("\n");
+
+  function run(target: string, text: string, host: string) {
+    const file = join(dir, `${target}.env`);
+    writeFileSync(file, text);
+    return spawnSync(tsx, [script, target, file], {
+      env: { PATH: process.env.PATH, PRODUCTION_DB_HOST: host } as unknown as NodeJS.ProcessEnv,
+      encoding: "utf8",
+    });
+  }
+
+  it.each([
+    ["production", PROD_HOST],
+    ["preview", "ep-prev-1.x.test"],
+  ])("%s accepts ordinary assignments", (target, host) => {
+    const result = run(
+      target,
+      envFile("", `postgres://u:p@${host}/db`, `postgres://u:p@${host}/db`),
+      PROD_HOST,
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe(`deploy env: ok for ${target}\n`);
+  });
+
+  it.each(["preview", "production"])(
+    "%s rejects export lines because vercel build does not read them as assignments",
+    (target) => {
+      const host = target === "production" ? PROD_HOST : "ep-prev-1.x.test";
+      const result = run(
+        target,
+        envFile("export ", `postgres://u:p@${host}/db`, `postgres://u:p@${host}/db`),
+        PROD_HOST,
+      );
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("DATABASE_URL is not set");
+    },
+  );
 });

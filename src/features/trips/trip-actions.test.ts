@@ -21,6 +21,8 @@ vi.mock("next/navigation", () => ({
 
 import {
   acceptWeatherAction,
+  addItemAction,
+  applyWeatherReviewAction,
   addToiletryItemAction,
   confirmBagPlacementAction,
   decrementPackedAction,
@@ -28,12 +30,15 @@ import {
   getTripAction,
   incrementPackedAction,
   listStaplesAction,
+  listWeatherSuggestionsAction,
   upsertStapleAction,
   markNotReadyAction,
   markReadyAction,
   removeItemAction,
+  saveAsListAction,
   reviewWeatherAgainAction,
   setPackedAction,
+  setStampLabelsAction,
   setThemeAction,
   skipWeatherAction,
   togglePackedAction,
@@ -177,6 +182,73 @@ describe("bag, Ready and weather", () => {
     const accepted = changed(await acceptWeatherAction(trip.id));
     expect(accepted.trip.ready).toBe(false);
     expect(accepted.trip.items.filter((entry) => entry.id === "weather-umbrella")).toHaveLength(1);
+  });
+
+  it("applies checked weather review rows and persists checked/skipped signatures", async () => {
+    const trip = await packedTrip();
+    await confirmBagPlacementAction(trip.id);
+    await markReadyAction(trip.id);
+    const result = changed(
+      await applyWeatherReviewAction(
+        trip.id,
+        [
+          {
+            kind: "add",
+            semanticId: "weather-sunscreen",
+            ruleSignature: "sun-v1",
+            item: {
+              semanticId: "weather-sunscreen",
+              name: "Sunscreen",
+              category: "Bathroom",
+              qty: 1,
+              optional: false,
+              groupId: "toiletry-bag",
+            },
+          },
+        ],
+        [{ semanticId: "weather-swimsuit", ruleSignature: "heat-v1" }],
+      ),
+    );
+    expect(result.trip.items.find((entry) => entry.id === "weather-sunscreen")).toMatchObject({
+      name: "Sunscreen",
+      groupId: "toiletry-bag",
+    });
+    expect(result.trip.ready).toBe(false);
+    expect(result.trip.toiletryBagPacked).toBe(false);
+    const states = await listWeatherSuggestionsAction(trip.id);
+    if (!states.ok) throw new Error("expected ok");
+    expect(states.suggestions).toEqual(
+      expect.arrayContaining([
+        { semanticId: "weather-sunscreen", status: "accepted", ruleSignature: "sun-v1" },
+        { semanticId: "weather-swimsuit", status: "skipped", ruleSignature: "heat-v1" },
+      ]),
+    );
+  });
+
+  it("validates weather review payloads and owner-scopes suggestion reads", async () => {
+    const trip = await seedTrip(db(), OWNER.userId);
+    expect(
+      await applyWeatherReviewAction(
+        trip.id,
+        [
+          {
+            kind: "add",
+            semanticId: "weather-umbrella",
+            ruleSignature: "rain",
+            item: {
+              semanticId: "weather-umbrella",
+              name: "Compact umbrella",
+              category: "not-a-category",
+              qty: 1,
+              optional: false,
+            },
+          } as never,
+        ],
+        [],
+      ),
+    ).toEqual({ ok: false, code: "INVALID_INPUT" });
+    as(OTHER_OWNER);
+    expect(await listWeatherSuggestionsAction(trip.id)).toEqual({ ok: false, code: "NOT_FOUND" });
   });
 
   it("refuses Ready before everything is packed, with a REJECTED code and no change", async () => {
@@ -338,6 +410,32 @@ describe("themes", () => {
   });
 });
 
+describe("stamp labels (#151)", () => {
+  it("setStampLabelsAction stores the typed label upper-cased, clears it, and is validated", async () => {
+    const trip = await seedTrip(db(), OWNER.userId);
+    const set = changed(await setStampLabelsAction(trip.id, " abc ", null));
+    expect(set.trip.stampLabels).toEqual(["ABC", null]);
+    const read = await getTripAction(trip.id);
+    if (!read.ok) throw new Error("expected ok");
+    expect(read.trip.stampLabels).toEqual(["ABC", null]);
+    const cleared = changed(await setStampLabelsAction(trip.id, "", null));
+    expect(cleared.trip.stampLabels).toEqual([null, null]);
+    for (const bad of ["AB", "ABCD", "A C", "ÀBC"])
+      expect(await setStampLabelsAction(trip.id, bad, null), bad).toEqual({
+        ok: false,
+        code: "INVALID_INPUT",
+      });
+    expect(await setStampLabelsAction("not-a-uuid", "ABC", null)).toEqual({
+      ok: false,
+      code: "INVALID_INPUT",
+    });
+    expect(await setStampLabelsAction(MISSING, "ABC", null)).toEqual({
+      ok: false,
+      code: "NOT_FOUND",
+    });
+  });
+});
+
 describe("owner gate", () => {
   it("another owner's trip id is NOT_FOUND for every command, and nothing changes", async () => {
     const trip = await seedTrip(db(), OWNER.userId);
@@ -377,6 +475,7 @@ describe("owner gate", () => {
       ["reviewWeather", () => reviewWeatherAgainAction(trip.id)],
       ["preferences", () => updatePreferencesAction(trip.id, trip.config)],
       ["theme", () => setThemeAction(trip.id, "city")],
+      ["stamp labels", () => setStampLabelsAction(trip.id, "ABC", null)],
     ];
     for (const [name, attempt] of attempts)
       expect(await attempt(), name).toEqual({ ok: false, code: "NOT_FOUND" });
@@ -407,6 +506,7 @@ describe("owner gate", () => {
       () => markReadyAction(trip.id),
       () => updatePreferencesAction(trip.id, trip.config),
       () => setThemeAction(trip.id, "city"),
+      () => setStampLabelsAction(trip.id, "ABC", null),
     ];
     as(null);
     for (const call of calls) await expect(call()).rejects.toThrow("NEXT_REDIRECT:/sign-in");
@@ -428,5 +528,101 @@ describe("owner gate", () => {
     const read = await getTripAction(trip.id);
     if (!read.ok) throw new Error("expected ok");
     for (const id of ids) expect(read.trip.items.find((entry) => entry.id === id)!.packed).toBe(1);
+  });
+});
+
+describe("addItemAction (#147)", () => {
+  it("adds the item and returns the trip in the screen's shape", async () => {
+    const trip = await seedTrip(db(), OWNER.userId, { ready: true });
+    const result = await addItemAction(trip.id, { name: "Camera", category: "Tech", neededQty: 2 });
+    if (!result.ok) throw new Error(`expected ok, got ${result.code}`);
+    expect(result.trip.items.find((entry) => entry.name === "Camera")).toMatchObject({
+      category: "Tech",
+      qty: 2,
+      packed: 0,
+    });
+    expect(result.trip.ready).toBe(false);
+    expect(result.signals).toEqual({ promptBagPlacement: false, reviewPrompt: false });
+  });
+
+  it("says EXISTS, with nothing added, for an item that is already there", async () => {
+    const trip = await seedTrip(db(), OWNER.userId);
+    const item = { name: "Camera", category: "Tech", neededQty: 1 };
+    await addItemAction(trip.id, item);
+    expect(await addItemAction(trip.id, { ...item, name: " camera " })).toEqual({
+      ok: false,
+      code: "REJECTED",
+      reason: "EXISTS",
+    });
+  });
+
+  it("names the bad fields, and a missing or another owner's trip is NOT_FOUND, not an error page", async () => {
+    const trip = await seedTrip(db(), OWNER.userId);
+    expect(await addItemAction(trip.id, { name: "", category: "Nope", neededQty: 0 })).toEqual({
+      ok: false,
+      code: "INVALID_INPUT",
+      fields: expect.arrayContaining(["name", "category", "neededQty"]),
+    });
+    const ok = { name: "Camera", category: "Tech", neededQty: 1 };
+    expect(await addItemAction(MISSING, ok)).toEqual({ ok: false, code: "NOT_FOUND" });
+    as(OTHER_OWNER);
+    expect(await addItemAction(trip.id, ok)).toEqual({ ok: false, code: "NOT_FOUND" });
+  });
+
+  it("sends a signed-out caller to sign-in", async () => {
+    as(null);
+    await expect(
+      addItemAction(MISSING, { name: "Camera", category: "Tech", neededQty: 1 }),
+    ).rejects.toThrow("NEXT_REDIRECT:/sign-in");
+  });
+
+  it("fails without a data context", async () => {
+    current = null;
+    expect(
+      await addItemAction(MISSING, { name: "Camera", category: "Tech", neededQty: 1 }),
+    ).toEqual({
+      ok: false,
+      code: "INTERNAL",
+    });
+  });
+});
+
+describe("saveAsListAction (#169)", () => {
+  it("saves the chosen items as a list and says how many", async () => {
+    const trip = await seedTrip(db(), OWNER.userId, { destination: "Beach week" });
+    const ids = trip.items.slice(0, 2).map((item) => item.id);
+    expect(await saveAsListAction(trip.id, "Beach week", ids)).toEqual({
+      ok: true,
+      list: { id: expect.any(String), name: "Beach week", itemCount: 2 },
+    });
+  });
+
+  it("hands NAME_TAKEN and the invalid fields back as data, and NOT_FOUND for another owner's trip", async () => {
+    const trip = await seedTrip(db(), OWNER.userId);
+    const ids = [trip.items[0].id];
+    await saveAsListAction(trip.id, "Taken", ids);
+    expect(await saveAsListAction(trip.id, "taken", ids)).toEqual({
+      ok: false,
+      code: "REJECTED",
+      reason: "NAME_TAKEN",
+    });
+    expect(await saveAsListAction(trip.id, "Ok", [])).toEqual({
+      ok: false,
+      code: "INVALID_INPUT",
+      fields: ["itemIds"],
+    });
+    as(OTHER_OWNER);
+    expect(await saveAsListAction(trip.id, "Mine", ids)).toEqual({ ok: false, code: "NOT_FOUND" });
+  });
+
+  it("redirects a signed-out caller and fails without a data context", async () => {
+    as(null);
+    await expect(saveAsListAction(MISSING, "x", ["a"])).rejects.toThrow("NEXT_REDIRECT:/sign-in");
+    as({ userId: "intruder", email: "intruder@example.test" });
+    await expect(saveAsListAction(MISSING, "x", ["a"])).rejects.toThrow(
+      "NEXT_REDIRECT:/access-denied",
+    );
+    current = null;
+    expect(await saveAsListAction(MISSING, "x", ["a"])).toEqual({ ok: false, code: "INTERNAL" });
   });
 });

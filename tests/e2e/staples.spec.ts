@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
+import { DEVICE } from "./helpers/device";
 
 // The Staples screen against a REAL Postgres (#18): what it shows after a reload is what was stored. Each test starts
 // from this project's freshly seeded owner (the default staples, San Diego partly packed, Lisbon Ready).
@@ -27,25 +28,27 @@ async function newTrip(
   expectedCount: number,
 ) {
   await page.goto("/");
-  await page.getByRole("link", { name: /New trip/ }).click();
+  await page.getByRole("link", { name: /Plan a trip/ }).click();
   await page.getByRole("combobox", { name: "Destination search" }).fill("paris");
   await page.getByRole("option", { name: destination }).click();
   await page.getByLabel("Leave", { exact: true }).fill(start);
   await page.getByLabel("Return", { exact: true }).fill(end);
   await page.getByRole("button", { name: "Continue to packing preferences" }).click();
   await page.getByRole("button", { name: "Save trip" }).click();
-  await expect(page.getByRole("heading", { name: "Paris", level: 2 })).toHaveCount(expectedCount);
+  await expect(page.getByRole("heading", { name: "Paris" })).toHaveCount(expectedCount);
 }
 
 async function underwearQty(page: Page, tripName: string): Promise<number> {
-  await page.getByRole("link", { name: new RegExp(`Keep packing: ${tripName}`) }).click();
+  await page
+    .getByRole("link", { name: new RegExp(`(Continue|Keep) packing: ${tripName}`) })
+    .click();
   await expect(page.getByRole("heading", { name: tripName, level: 1 })).toBeVisible();
   const text = await page
     .locator('[data-item-id="underwear"] .qty-stepper span')
     .first()
     .innerText();
   await page.goBack();
-  return Number(text.split("/")[1]);
+  return Number(/of (\d+) packed/.exec(text)?.[1]);
 }
 
 test("edit a staple: existing trips are unchanged, and the next new trip uses the new value", async ({
@@ -83,7 +86,8 @@ test("edit a staple: existing trips are unchanged, and the next new trip uses th
     .locator('[data-item-id="underwear"] .qty-stepper span')
     .first()
     .innerText();
-  expect(Number(text.split("/")[1])).toBeGreaterThan(parisBefore);
+  // "N of M packed": M is the needed count for the trip.
+  expect(Number(/of (\d+) packed/.exec(text)?.[1])).toBeGreaterThan(parisBefore);
 });
 
 test("add a staple: it is stored, and Pack last starts off", async ({ page }) => {
@@ -152,29 +156,31 @@ test("one owner's staples are not another's", async ({ page, browser }) => {
   }
 });
 
-test("controls are 44px targets on phone and nothing scrolls sideways", async ({
-  page,
-}, testInfo) => {
-  await openStaples(page);
-  if (testInfo.project.name === "phone") {
-    for (const control of [
-      page.getByRole("button", { name: "All" }),
-      page.getByRole("button", { name: "Pack last" }),
-      staple(page, "underwear").getByRole("button", { name: "Edit Underwear" }),
-      page.getByRole("button", { name: /Add/ }),
-    ]) {
-      await expect(control).toBeVisible();
-      // Layout can land a hair under 44 (43.99997); a target is 44px for every practical purpose.
-      expect(Math.round((await control.boundingBox())!.height)).toBeGreaterThanOrEqual(44);
+test(
+  "controls are 44px targets on phone and nothing scrolls sideways",
+  DEVICE,
+  async ({ page }, testInfo) => {
+    await openStaples(page);
+    if (testInfo.project.name === "phone") {
+      for (const control of [
+        page.getByRole("button", { name: "All" }),
+        page.getByRole("button", { name: "Pack last" }),
+        staple(page, "underwear").getByRole("button", { name: "Edit Underwear" }),
+        page.getByRole("button", { name: /Add/ }),
+      ]) {
+        await expect(control).toBeVisible();
+        // Layout can land a hair under 44 (43.99997); a target is 44px for every practical purpose.
+        expect(Math.round((await control.boundingBox())!.height)).toBeGreaterThanOrEqual(44);
+      }
     }
-  }
-  const overflow = await page.evaluate(
-    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-  );
-  expect(overflow).toBeLessThanOrEqual(0);
-});
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+  },
+);
 
-test("screenshots of the staples screen", async ({ page }, testInfo) => {
+test("screenshots of the staples screen", DEVICE, async ({ page }, testInfo) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   const shot = (name: string, fullPage = true) =>
     page.screenshot({
