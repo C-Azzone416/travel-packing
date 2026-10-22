@@ -31,8 +31,8 @@ describe("selectAirports", () => {
       ),
     );
     expect(kept).toEqual([
-      { iata: "LIS", latitude: 38.781, longitude: -9.136, country: "PT" },
-      { iata: "OPO", latitude: 41.248, longitude: -8.681, country: "PT" },
+      { iata: "LIS", latitude: 38.781, longitude: -9.136, country: "PT", large: true },
+      { iata: "OPO", latitude: 41.248, longitude: -8.681, country: "PT", large: false },
     ]);
   });
 
@@ -72,7 +72,9 @@ describe("selectAirports", () => {
         row("large_airport", "20", "20", "ES", "yes", "DUP"),
       ),
     );
-    expect(kept).toEqual([{ iata: "DUP", latitude: 10, longitude: 10, country: "PT" }]);
+    expect(kept).toEqual([
+      { iata: "DUP", latitude: 10, longitude: 10, country: "PT", large: true },
+    ]);
   });
 
   it("returns nothing for an empty file or one missing a needed column", () => {
@@ -89,10 +91,10 @@ describe("selectAirports", () => {
 describe("encodeAirports / decodeAirports", () => {
   it("round-trips, and an empty dataset decodes to nothing", () => {
     const rows = [
-      { iata: "LIS", latitude: 38.781, longitude: -9.136, country: "PT" },
-      { iata: "SYD", latitude: -33.946, longitude: 151.177, country: "AU" },
+      { iata: "LIS", latitude: 38.781, longitude: -9.136, country: "PT", large: true },
+      { iata: "SYD", latitude: -33.946, longitude: 151.177, country: "AU", large: false },
     ];
-    expect(encodeAirports(rows)).toBe("LIS 38.781 -9.136 PT|SYD -33.946 151.177 AU");
+    expect(encodeAirports(rows)).toBe("LIS 38.781 -9.136 PT L|SYD -33.946 151.177 AU M");
     expect(decodeAirports(encodeAirports(rows))).toEqual(rows);
     expect(decodeAirports("")).toEqual([]);
   });

@@ -1,14 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { AIRPORT_DATA } from "./airports-data";
-import { AIRPORT_RADIUS_KM, airportCodeFor, distanceKm } from "./airport-code";
+import { AIRPORT_RADIUS_KM, AMBIGUITY_RADIUS_KM, airportCodeFor, distanceKm } from "./airport-code";
 import { decodeAirports } from "./build-dataset";
 
-const airport = (iata: string, latitude: number, longitude: number, country: string) => ({
-  iata,
-  latitude,
-  longitude,
-  country,
-});
+const airport = (
+  iata: string,
+  latitude: number,
+  longitude: number,
+  country: string,
+  large = true,
+) => ({ iata, latitude, longitude, country, large });
 
 describe("distanceKm", () => {
   it("is zero for the same point and about right for a known pair", () => {
@@ -79,6 +80,38 @@ describe("airportCodeFor (injected airports)", () => {
   });
 });
 
+describe("the wider ambiguity ring (injected airports)", () => {
+  const query = { latitude: 38.72, longitude: -9.14, countryCode: "PT" };
+  const home = airport("HOM", 38.75, -9.14, "PT");
+  const northKm = (km: number) => 38.72 + km / 111.195;
+  const farLarge = (km: number) => airport("BIG", northKm(km), -9.14, "PT", true);
+  const farMedium = (km: number) => airport("MED", northKm(km), -9.14, "PT", false);
+
+  it("another LARGE airport inside the ring makes the stop ambiguous", () => {
+    expect(airportCodeFor(query, [home, farLarge(AMBIGUITY_RADIUS_KM - 1)])).toBeNull();
+  });
+
+  it("a MEDIUM airport inside the ring does not", () => {
+    expect(airportCodeFor(query, [home, farMedium(AMBIGUITY_RADIUS_KM - 1)])).toBe("HOM");
+  });
+
+  it("a large airport just past the ring does not", () => {
+    expect(airportCodeFor(query, [home, farLarge(AMBIGUITY_RADIUS_KM + 2)])).toBe("HOM");
+  });
+
+  it("a large airport across the border does not, however close", () => {
+    expect(airportCodeFor(query, [home, { ...farLarge(50), country: "ES" }])).toBe("HOM");
+  });
+
+  it("a medium airport inside 30 km still makes the stop ambiguous, even beside a large one", () => {
+    expect(airportCodeFor(query, [home, farMedium(AIRPORT_RADIUS_KM - 5)])).toBeNull();
+  });
+
+  it("the one airport in range is never counted as its own neighbour", () => {
+    expect(airportCodeFor(query, [home])).toBe("HOM");
+  });
+});
+
 describe("airportCodeFor (the bundled dataset)", () => {
   it("is a real, sorted dataset of well-formed rows", () => {
     const rows = decodeAirports(AIRPORT_DATA);
@@ -91,36 +124,41 @@ describe("airportCodeFor (the bundled dataset)", () => {
     expect(new Set(rows.map((entry) => entry.iata)).size).toBe(rows.length);
   });
 
-  it("matches a city with one airport in range: Porto, Madrid and San Diego", () => {
-    expect(airportCodeFor({ latitude: 41.15, longitude: -8.61, countryCode: "PT" })).toBe("OPO");
-    expect(airportCodeFor({ latitude: 40.42, longitude: -3.7, countryCode: "ES" })).toBe("MAD");
-    expect(airportCodeFor({ latitude: 32.72, longitude: -117.16, countryCode: "US" })).toBe("SAN");
+  // City-centre coordinates, the real dataset. PM-approved rule: exactly one airport within 30 km and no other LARGE
+  // airport within 80 km ("never assume a city maps uniquely to one airport").
+  const CITIES: [string, number, number, string, string | null][] = [
+    ["Porto", 41.15, -8.61, "PT", "OPO"],
+    ["Madrid", 40.42, -3.7, "ES", "MAD"],
+    ["San Diego", 32.72, -117.16, "US", "SAN"],
+    ["Frankfurt", 50.11, 8.68, "DE", "FRA"],
+    ["Berlin", 52.52, 13.4, "DE", "BER"],
+    ["Austin", 30.27, -97.74, "US", "AUS"],
+    ["Tokyo", 35.68, 139.69, "JP", null], // HND, and Narita 64 km out
+    ["Milan", 45.46, 9.19, "IT", null], // LIN, and Malpensa 41 km out
+    ["Lisbon", 38.72, -9.14, "PT", null], // LIS and the medium field at Cascais (CAT, 19 km)
+    ["London", 51.51, -0.13, "GB", null],
+    ["Paris", 48.86, 2.35, "FR", null],
+    ["New York", 40.71, -74.01, "US", null],
+    ["Rome", 41.9, 12.5, "IT", null],
+    ["Seoul", 37.57, 126.98, "KR", null], // GMP, and Incheon farther out
+    ["Osaka", 34.69, 135.5, "JP", null], // ITM, and Kansai farther out
+    ["Washington", 38.91, -77.04, "US", null], // DCA, and Dulles / Baltimore farther out
+  ];
+
+  it.each(CITIES)("%s", (_city, latitude, longitude, countryCode, expected) => {
+    expect(airportCodeFor({ latitude, longitude, countryCode })).toBe(expected);
   });
 
-  it("keeps the city name for Lisbon: the medium airport at Cascais (CAT) counts toward ambiguity, so LIS is not 'exactly one'", () => {
-    // PM decision: the strict rule stands ("never assume a city maps uniquely to one airport"), so no large-wins tweak.
-    const lisbon = { latitude: 38.72, longitude: -9.14 };
+  it("Lisbon's in-range set is exactly CAT and LIS (the medium field counts inside 30 km)", () => {
     const inRange = decodeAirports(AIRPORT_DATA)
       .filter(
         (entry) =>
           entry.country === "PT" &&
-          distanceKm(lisbon.latitude, lisbon.longitude, entry.latitude, entry.longitude) <=
-            AIRPORT_RADIUS_KM,
+          distanceKm(38.72, -9.14, entry.latitude, entry.longitude) <= AIRPORT_RADIUS_KM,
       )
       .map((entry) => entry.iata)
       .sort();
     expect(inRange).toEqual(["CAT", "LIS"]);
-    expect(airportCodeFor({ ...lisbon, countryCode: "PT" })).toBeNull();
-  });
-
-  it("keeps the city name for Paris and London, which have several airports in range", () => {
-    expect(airportCodeFor({ latitude: 48.86, longitude: 2.35, countryCode: "FR" })).toBeNull();
-    expect(airportCodeFor({ latitude: 51.51, longitude: -0.13, countryCode: "GB" })).toBeNull();
-  });
-
-  it("matches nothing for multi-airport cities: London and New York", () => {
-    expect(airportCodeFor({ latitude: 51.51, longitude: -0.13, countryCode: "GB" })).toBeNull();
-    expect(airportCodeFor({ latitude: 40.71, longitude: -74.01, countryCode: "US" })).toBeNull();
   });
 
   it("matches nothing for a small town far from any scheduled service", () => {

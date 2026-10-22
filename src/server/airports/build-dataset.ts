@@ -6,6 +6,8 @@ export interface AirportRow {
   latitude: number;
   longitude: number;
   country: string;
+  /** A large airport (not just medium): the only kind that makes a stop ambiguous across the wider ring (#152). */
+  large: boolean;
 }
 
 const KEPT_TYPES: ReadonlySet<string> = new Set(["large_airport", "medium_airport"]);
@@ -66,6 +68,7 @@ export function selectAirports(csv: string): AirportRow[] {
     if (Math.abs(latitude) > 90 || Math.abs(longitude) > 180) continue;
     if (rows.has(code)) continue;
     rows.set(code, {
+      large: fields[type] === "large_airport",
       iata: code,
       latitude: Math.round(latitude * 1000) / 1000,
       longitude: Math.round(longitude * 1000) / 1000,
@@ -75,15 +78,26 @@ export function selectAirports(csv: string): AirportRow[] {
   return [...rows.values()].sort((a, b) => a.iata.localeCompare(b.iata));
 }
 
-/** One record per airport, "LIS 38.781 -9.136 PT", joined by "|". */
+/** One record per airport, "LIS 38.781 -9.136 PT L" (L large, M medium), joined by "|". */
 export function encodeAirports(rows: readonly AirportRow[]): string {
-  return rows.map((row) => `${row.iata} ${row.latitude} ${row.longitude} ${row.country}`).join("|");
+  return rows
+    .map(
+      (row) =>
+        `${row.iata} ${row.latitude} ${row.longitude} ${row.country} ${row.large ? "L" : "M"}`,
+    )
+    .join("|");
 }
 
 export function decodeAirports(encoded: string): AirportRow[] {
   if (!encoded) return [];
   return encoded.split("|").map((record) => {
-    const [iata, latitude, longitude, country] = record.split(" ");
-    return { iata, latitude: Number(latitude), longitude: Number(longitude), country };
+    const [iata, latitude, longitude, country, size] = record.split(" ");
+    return {
+      iata,
+      latitude: Number(latitude),
+      longitude: Number(longitude),
+      country,
+      large: size === "L",
+    };
   });
 }
