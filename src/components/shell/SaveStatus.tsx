@@ -1,0 +1,198 @@
+"use client";
+
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { Button } from "@/components/ui/Button";
+import { ModalSheet } from "@/components/ui/ModalSheet";
+import { SaveChip, type SaveStatus } from "./SaveChip";
+
+// "Saving…" appears only if a write takes longer than this, to avoid flicker (#31).
+export const SAVING_DELAY_MS = 400;
+
+interface PendingWrite {
+  write: () => Promise<unknown>;
+  onSuccess?: (result: never) => void;
+  read: boolean;
+}
+
+export interface TrackOptions {
+  /**
+   * A read (a load) never shows "Saving…" and never announces it, because nothing is being saved. A
+   * failed read still shows the Error state with Retry, and a successful retry clears it.
+   */
+  read?: boolean;
+}
+
+interface SaveStatusApi {
+  status: SaveStatus;
+  /**
+   * Run a write, reflecting it in the chip. Rejects with the write's own error. `onSuccess` receives
+   * the result, and is kept with the write so a Retry delivers the result to the screen too.
+   */
+  track: <T>(
+    write: () => Promise<T>,
+    onSuccess?: (result: T) => void,
+    options?: TrackOptions,
+  ) => Promise<T>;
+  /** When the last write succeeded (a read never counts), or null if nothing has been saved yet this visit. */
+  lastSavedAt: Date | null;
+  /** Re-run the last FAILED write only. A newer successful write clears it, so stale writes never replay. */
+  retry: () => void;
+}
+
+const SaveStatusContext = createContext<SaveStatusApi | null>(null);
+
+export function useSaveStatus(): SaveStatusApi {
+  const api = useContext(SaveStatusContext);
+  if (!api) throw new Error("useSaveStatus must be used inside <SaveStatusProvider>");
+  return api;
+}
+
+const ANNOUNCE: Record<SaveStatus, string> = {
+  saved: "Saved",
+  saving: "Saving",
+  error: "Couldn't save your last change. Retry is available.",
+};
+
+export function SaveStatusProvider({ children }: { children: ReactNode }) {
+  const [status, setStatus] = useState<SaveStatus>("saved");
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const pending = useRef(0);
+  const lastFailed = useRef<PendingWrite | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const failed = useRef(false);
+
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
+
+  const track = useCallback(
+    async <T,>(
+      write: () => Promise<T>,
+      onSuccess?: (result: T) => void,
+      options?: TrackOptions,
+    ): Promise<T> => {
+      const read = options?.read ?? false;
+      if (!read) {
+        pending.current += 1;
+        if (!timer.current && !failed.current) {
+          timer.current = setTimeout(() => {
+            timer.current = null;
+            setStatus((current) => (current === "error" ? current : "saving"));
+          }, SAVING_DELAY_MS);
+        }
+      }
+      const settle = () => {
+        if (read) return;
+        pending.current -= 1;
+        if (pending.current === 0 && timer.current) {
+          clearTimeout(timer.current);
+          timer.current = null;
+        }
+      };
+      try {
+        const result = await write();
+        settle();
+        // A newer successful write makes any earlier failure stale: clear it, and the Error state with
+        // it. A successful read only clears a failed READ (a failed save stays until a save succeeds).
+        if (!read || lastFailed.current?.read) {
+          lastFailed.current = null;
+          failed.current = false;
+          if (pending.current === 0) setStatus("saved");
+        }
+        if (!read) setLastSavedAt(new Date());
+        onSuccess?.(result);
+        return result;
+      } catch (error) {
+        settle();
+        lastFailed.current = { write, onSuccess: onSuccess as PendingWrite["onSuccess"], read };
+        failed.current = true;
+        setStatus("error");
+        throw error;
+      }
+    },
+    [],
+  );
+
+  const retry = useCallback(() => {
+    const failedWrite = lastFailed.current;
+    if (failedWrite)
+      void track(failedWrite.write, failedWrite.onSuccess as (result: unknown) => void, {
+        read: failedWrite.read,
+      }).catch(() => {});
+  }, [track]);
+
+  const api = useMemo<SaveStatusApi>(
+    () => ({ status, lastSavedAt, track, retry }),
+    [status, lastSavedAt, track, retry],
+  );
+
+  // While a change is unsaved, leaving the page asks first (design's #31).
+  useEffect(() => {
+    if (status !== "error") return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [status]);
+
+  return (
+    <SaveStatusContext.Provider value={api}>
+      {children}
+      <span className="sr-only" role="status" aria-label="Save status">
+        {status === "error" ? "" : ANNOUNCE[status]}
+      </span>
+      <span className="sr-only" role="alert" aria-label="Save error">
+        {status === "error" ? ANNOUNCE.error : ""}
+      </span>
+    </SaveStatusContext.Provider>
+  );
+}
+
+// The top-bar chip, driven by whatever writes are in flight.
+export function ConnectedSaveChip() {
+  const { status, retry } = useSaveStatus();
+  const [open, setOpen] = useState(false);
+  const close = () => setOpen(false);
+  return (
+    <>
+      <SaveChip status={status} onOpenError={() => setOpen(true)} />
+      <ModalSheet
+        open={open && status === "error"}
+        title="Couldn’t save"
+        description="Your last change hasn’t been saved. We’ll keep it on screen while you retry."
+        onClose={close}
+        actions={
+          <>
+            <Button variant="secondary" onClick={close}>
+              Dismiss
+            </Button>
+            <Button
+              onClick={() => {
+                close();
+                retry();
+              }}
+            >
+              Retry
+            </Button>
+          </>
+        }
+      >
+        {null}
+      </ModalSheet>
+    </>
+  );
+}

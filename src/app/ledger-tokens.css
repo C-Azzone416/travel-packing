@@ -1,0 +1,170 @@
+/* Field Ledger role tokens (#139 spec §1-§2, #142). Components bind to roles, never to hues or hexes; a theme swaps
+   values only. The server sets data-appearance on <html> from the `appearance` cookie. With no attribute (or an
+   unknown one) the :root block below applies, which is Base. [data-theme-preview] scopes a theme to a swatch so the
+   Settings picker can draw each theme's colours without a hex in a component. Values marked ◆ differ from the mockup
+   so every contrast row passes (spec §6). This file and the semantic block are the only places colours are written. */
+
+:root,
+:root[data-appearance="base"],
+[data-theme-preview="base"] {
+  --bg: #e9e3d6;
+  --surface: #f8f3e8;
+  --ink: #24352f;
+  --muted: #56645c; /* ◆ */
+  --line: #c9c0ae;
+  --line-strong: #7d857c;
+  --accent: #a64a39;
+  --link: #9c4434; /* ◆ */
+  --accent-2: #856421;
+  --header: #24352f;
+  --header-ink: #fff9eb;
+  --header-muted: #cdd5cd;
+  --focus-on-header: #fff9eb;
+  --action: #a64a39;
+  --action-ink: #fff9eb;
+  --action-border: #87382b;
+  --progress: #856421;
+  --track: #d3ccbe;
+  --notice: #d8bd78;
+  --notice-ink: #24352f;
+  --weather-pill: #e3c77c;
+  --weather-pill-ink: #3a3a2b;
+  --complete: #355e52;
+  --complete-ink: #fff9eb;
+  --control-bg: #fffaf0;
+  --popover: #fffaf0;
+  --selection-surface: rgb(166 74 57 / 0.12);
+  --status-surface: rgb(53 94 82 / 0.12);
+  --detail-surface: rgb(227 199 124 / 0.36);
+  --weather-surface: rgb(255 250 240 / 0.78);
+  --ledger-rule: rgb(80 91 76 / 0.09);
+  --ledger-shadow: rgb(70 55 31 / 0.1);
+}
+
+:root[data-appearance="ocean"],
+[data-theme-preview="ocean"] {
+  --bg: #dce5e5;
+  --surface: #f7f1e5;
+  --ink: #162b3d;
+  --muted: #4c6372; /* ◆ */
+  --line: #b7c5c5;
+  --line-strong: #718a91;
+  --accent: #2d6674;
+  --link: #2d6674;
+  --accent-2: #b66c4d;
+  --header: #142b3b;
+  --header-ink: #fff8eb;
+  --header-muted: #c6d5d8;
+  --focus-on-header: #fff8eb;
+  --action: #2d6674;
+  --action-ink: #fff8eb;
+  --action-border: #214d59;
+  --progress: #a65b3c; /* ◆ */
+  --track: #c8d1ce;
+  --notice: #c9ad74;
+  --notice-ink: #1b3442;
+  --weather-pill: #d7c095;
+  --weather-pill-ink: #243744;
+  --complete: #2d6674;
+  --complete-ink: #fff8eb;
+  --control-bg: #fffaf0;
+  --popover: #fffaf0;
+  --selection-surface: rgb(45 102 116 / 0.13);
+  --status-surface: rgb(45 102 116 / 0.13);
+  --detail-surface: rgb(201 173 116 / 0.28);
+  --weather-surface: rgb(255 250 240 / 0.8);
+  --ledger-rule: rgb(45 102 116 / 0.09);
+  --ledger-shadow: rgb(22 43 61 / 0.12);
+}
+
+:root[data-appearance="terracotta"],
+[data-theme-preview="terracotta"] {
+  --bg: #e7e0d8;
+  --surface: #fbf7ef;
+  --ink: #303941;
+  --muted: #5b646c; /* ◆ */
+  --line: #cec4b8;
+  --line-strong: #7e8991;
+  --accent: #ad513b;
+  --link: #9d4630; /* ◆ */
+  --accent-2: #536f7c;
+  --header: #344652;
+  --header-ink: #fff9f1;
+  --header-muted: #d3dade;
+  --focus-on-header: #fff9f1;
+  --action: #ad513b;
+  --action-ink: #fff9f1;
+  --action-border: #843925;
+  --progress: #536f7c;
+  --track: #d7cfc4;
+  --notice: #d9b78f;
+  --notice-ink: #303941;
+  --weather-pill: #dec4a0;
+  --weather-pill-ink: #38434b;
+  --complete: #536f7c;
+  --complete-ink: #fff9f1;
+  --control-bg: #fffaf3;
+  --popover: #fffaf3;
+  --selection-surface: rgb(173 81 59 / 0.12);
+  --status-surface: rgb(173 81 59 / 0.12);
+  --detail-surface: rgb(83 111 124 / 0.16);
+  --weather-surface: rgb(255 250 243 / 0.82);
+  --ledger-rule: rgb(173 81 59 / 0.09);
+  --ledger-shadow: rgb(48 57 65 / 0.12);
+}
+
+:root[data-appearance="violet"],
+[data-theme-preview="violet"] {
+  --bg: #e3e0e8;
+  --surface: #f8f4f5;
+  --ink: #48414f;
+  --muted: #615b6b; /* ◆ */
+  --line: #cac5cf;
+  --line-strong: #817a8b;
+  --accent: #66546f;
+  --link: #66546f;
+  --accent-2: #5b6f8a;
+  --header: #48414f;
+  --header-ink: #fff9f4;
+  --header-muted: #d4cedb;
+  --focus-on-header: #fff9f4;
+  --action: #66546f;
+  --action-ink: #fff9f4;
+  --action-border: #4f3f56;
+  --progress: #5b6f8a;
+  --track: #d3ced8;
+  --notice: #d0bfae;
+  --notice-ink: #37313f;
+  --weather-pill: #ccd3df;
+  --weather-pill-ink: #36404e;
+  --complete: #5b766c;
+  --complete-ink: #fff9f4;
+  --control-bg: #fffaf7;
+  --popover: #fffaf7;
+  --selection-surface: rgb(102 84 111 / 0.12);
+  --status-surface: rgb(91 118 108 / 0.14);
+  --detail-surface: rgb(91 111 138 / 0.16);
+  --weather-surface: rgb(255 250 247 / 0.82);
+  --ledger-rule: rgb(102 84 111 / 0.09);
+  --ledger-shadow: rgb(72 65 79 / 0.12);
+}
+
+/* Semantic colours: the same in all four themes, never an accent value. These are the app's existing error, warning
+   and success colours (the ready/remaining status pair plus the error banner). */
+:root {
+  --danger: #9b3d46;
+  --danger-surface: #f8e9eb;
+  --danger-border: #e4b8bd;
+  --warn: #b4774f;
+  --success: #185b56;
+  --status-ready-bg: #d4eadf;
+  --status-ready-text: #185b56;
+  --status-ready-border: #aed2c0;
+  --status-remaining-bg: #f6decb;
+  --status-remaining-text: #704322;
+  --status-remaining-border: #e8c4a8;
+
+  --button-radius: 4px;
+  --control-radius: 4px;
+  --state-radius: 50%;
+}

@@ -1,0 +1,360 @@
+name: CI
+
+# #3, #91, #98 — quality gates for every PR to develop/main, and the preview deploy after a green push to develop.
+# The repository is public, so standard runners are free: the goal is wall-clock time, and the work runs as parallel jobs
+# (checks, unit, the production builds, and phone and desktop e2e on SEPARATE runners). The job named `ci` at the bottom is
+# the one required check: it needs every job above it, always runs, and passes only if the mode's jobs all succeeded
+# (docs/ci.md). Nothing here reads a secret except GITHUB_TOKEN, and the deploy runs only on a push to develop.
+#
+# A draft pull request runs the cheap checks only, and its `ci` ends red on purpose, so a draft can never be mistaken for
+# validated; a ready pull request, and a push to develop or main, run everything. A push to develop whose files are
+# byte-identical to a pull request head that already passed the full run reuses that result.
+on:
+  pull_request:
+    branches:
+      - develop
+      - main
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches:
+      - develop
+      - main
+
+permissions:
+  contents: read
+
+# A newer push to a pull request cancels its older run. A push to develop must never cancel a run that is deploying.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # quick (draft pull request), full, or reused (identical files already fully validated). Fails safe to full. Every
+  # heavy job waits for this one, so they can never disagree about the mode.
+  mode:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read # lists the pull requests of a commit
+      actions: read # reads earlier `ci` runs
+    outputs:
+      mode: ${{ steps.mode.outputs.mode }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Decide how much to run
+        id: mode
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }} # the draft flag is read live: the event payload can be stale
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: npx tsx scripts/ci-mode.ts
+
+  # Fast static checks. They run in every mode and start at once (they do not wait for the mode).
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read # gitleaks lists a pull request's commits
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # gitleaks scans history
+
+      # Secret scanning, first so a leaked secret fails the run before anything else spends time.
+      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # Fails on any committed file over 1 MiB or any local database, build, test, dependency, or env file.
+      - name: Repository hygiene
+        run: npm run check:repo-hygiene
+
+      # Workflow syntax and expressions (actionlint, a pinned release verified by its published SHA-256, run from a
+      # temp directory), then our own contract: every action pinned to a full SHA, the deploy workflow's safety rules
+      # (#20) and this workflow's shape. Neither prints a secret or environment value.
+      - name: Lint workflows (actionlint, pinned)
+        env:
+          ACTIONLINT_VERSION: 1.7.12
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        run: |
+          archive="$RUNNER_TEMP/actionlint.tar.gz"
+          curl -sSfL -o "$archive" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "${ACTIONLINT_SHA256}  ${archive}" | sha256sum -c -
+          tar -xzf "$archive" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" -color
+
+      - name: Workflow contract (pinned actions, deploy safety rules, ci shape)
+        run: npm run check:workflows
+
+      # Known-vulnerable runtime dependencies fail the build (#22). Dev-only tooling is Dependabot's job.
+      - name: Dependency audit (production dependencies)
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+  # Unit and integration tests with the 90% coverage gate.
+  unit:
+    needs: mode
+    if: needs.mode.outputs.mode == 'full'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # vitest exits non-zero when any coverage threshold (90%) is missed.
+      # An explicit `shell: bash` enables pipefail (the default shell does
+      # not), so piping through tee cannot mask that failure.
+      - name: Test with coverage
+        shell: bash
+        run: npm run test:coverage 2>&1 | tee coverage-summary.txt
+
+      - name: Coverage summary
+        if: always()
+        run: |
+          {
+            echo '## Coverage'
+            echo '```'
+            cat coverage-summary.txt 2>/dev/null || echo 'no coverage output'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage
+          path: |
+            coverage/
+            coverage-summary.txt
+          if-no-files-found: ignore
+
+  # The deployable builds, exactly as production makes them (no NEXT_PUBLIC_E2E_BUILD), and the scans that prove they carry
+  # no test-only code and no secrets. Both bundlers.
+  build:
+    needs: mode
+    if: needs.mode.outputs.mode == 'full'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      # The e2e-only fake sign-in must not be in a deployable build. This build is made without NEXT_PUBLIC_E2E_BUILD,
+      # exactly like production; the e2e-build job makes its own build with it.
+      - name: Verify the e2e-only sign-in is not in the build
+        run: npm run check:no-e2e-in-build
+
+      # Nothing the browser can download may name a server secret, hold a secret-shaped value, or contain server-only
+      # code (#22). The scan's own tests inject a fake secret and require it to fail.
+      - name: Scan the client bundle for secrets and server-only code
+        run: npm run check:client-bundle
+
+      # The same guarantee must hold for the webpack bundler (`next build --webpack`), not only Turbopack.
+      - name: Build with webpack
+        run: npm run build:webpack
+
+      - name: Verify the e2e-only sign-in is not in the webpack build
+        run: npm run check:no-e2e-in-build
+
+      - name: Scan the webpack client bundle
+        run: npm run check:client-bundle
+
+  # The one build the browser tests run against: the app compiled WITH the e2e-only sign-in and database driver, which is why
+  # it cannot be the production build above. Made once and handed to both e2e jobs as an artifact, so neither rebuilds. It is
+  # never deployed and lives for a day, only in this workflow run.
+  e2e-build:
+    needs: mode
+    if: needs.mode.outputs.mode == 'full'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build for e2e
+        run: npm run build:e2e
+
+      # Hidden folder, so it must be asked for by name; the build cache is not needed to start the app.
+      - name: Upload the e2e build
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-build
+          path: |
+            .next
+            !.next/cache
+          include-hidden-files: true
+          retention-days: 1
+          if-no-files-found: error
+
+  # Phone and desktop at the same time, each on its OWN runner with its own in-memory database (started per run), so they
+  # share nothing. (Running both on one 2-core runner was tried in #91 and broke the app server.)
+  e2e:
+    name: e2e (${{ matrix.project }})
+    needs: [mode, e2e-build]
+    if: needs.mode.outputs.mode == 'full'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # A real phone: Playwright's iPhone profile runs in WebKit, the engine of every iPhone browser, on the @device specs.
+          - project: phone
+            browser: webkit
+          # Every spec, in Chromium at a desktop size.
+          - project: desktop
+            browser: chromium
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Download the e2e build
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: e2e-build
+          path: .next
+
+      - name: Check the build arrived
+        run: test -f .next/BUILD_ID
+
+      # The browser download is cached by Playwright version. The system libraries it needs are installed every run
+      # (`--with-deps`); only the download is skipped on a cache hit.
+      - name: Playwright version
+        id: playwright
+        run: echo "version=$(npx playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ matrix.browser }}-${{ steps.playwright.outputs.version }}
+
+      - name: Install Playwright browser
+        env:
+          BROWSER: ${{ matrix.browser }}
+        run: npx playwright install --with-deps "$BROWSER"
+
+      # E2E_PREBUILT makes Playwright start the downloaded build instead of building again (playwright.config.ts).
+      - name: E2E (${{ matrix.project }})
+        env:
+          E2E_PREBUILT: "1"
+          E2E_PROJECT: ${{ matrix.project }}
+        run: npm run test:e2e -- --project="$E2E_PROJECT"
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-report-${{ matrix.project }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+
+  # THE required check. It stays named `ci` (the review gate, the production release check and the deploy all read it by
+  # name), runs even when something above failed or was cancelled, and decides from the mode:
+  #   full   - every job above succeeded (a skipped or cancelled job is a failure);
+  #   reused - the checks succeeded and the heavy jobs were skipped on purpose (or succeeded);
+  #   quick  - always red: this is a draft, the full validation did not run.
+  ci:
+    needs: [mode, checks, unit, build, e2e-build, e2e]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every job must have succeeded
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          MODE: ${{ needs.mode.outputs.mode }}
+        run: |
+          result() { echo "$NEEDS" | jq -r --arg job "$1" '.[$job].result // "missing"'; }
+          for job in mode checks unit build e2e-build e2e; do echo "$job: $(result "$job")"; done
+          echo "mode: ${MODE:-unknown}"
+          fail() { echo "::error::$1"; exit 1; }
+          [ "$(result mode)" = success ] || fail "the mode job did not succeed"
+          [ "$(result checks)" = success ] || fail "the checks job did not succeed"
+          case "$MODE" in
+            full)
+              for job in unit build e2e-build e2e; do
+                [ "$(result "$job")" = success ] || fail "the $job job did not succeed"
+              done ;;
+            reused)
+              for job in unit build e2e-build e2e; do
+                case "$(result "$job")" in success|skipped) ;; *) fail "the $job job did not succeed" ;; esac
+              done ;;
+            quick) fail "Cheap checks passed, but the full validation did not run on this draft. Mark the pull request ready for review to run it." ;;
+            *) fail "unknown mode" ;;
+          esac
+
+  # The preview deploy runs after, and only after, a green full-or-reused `ci` on a push to develop. Native `needs:` means
+  # no job sits polling for CI. The deploy workflow is the same file the manual production run uses; it decides its own
+  # target from this event (a push to develop can only mean preview) and never deploys production here.
+  deploy:
+    needs: ci
+    # Not just `needs: ci`: a job with no status function in its `if` gets an implicit success() that is false when ANY ancestor was
+    # skipped, and a reused push skips the heavy jobs behind `ci`. So gate on ci's own result (it already means "everything passed, or
+    # the identical files already did") and name the status function explicitly. Without it no reused push would ever deploy (#105).
+    if: ${{ !cancelled() && needs.ci.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/develop' }}
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/deploy-vercel.yml
+    secrets: inherit
