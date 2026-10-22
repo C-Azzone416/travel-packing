@@ -1991,13 +1991,30 @@ input:disabled {
   padding: 16px 0 4px;
   border: 0;
 }
+/* Title and count share the first row on one baseline; the lede sits under the title. */
 .staple-category-head {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "title count"
+    "lede lede";
   align-items: baseline;
-  justify-content: space-between;
-  gap: 14px;
+  column-gap: 14px;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--line-strong);
+}
+.staple-category-head > div {
+  display: contents;
+}
+.staple-category-head h2 {
+  grid-area: title;
+}
+.staple-category-head p {
+  grid-area: lede;
+}
+.staple-category-head .category-count {
+  grid-area: count;
+  white-space: nowrap;
 }
 .staple-category-head h2 {
   margin: 0 0 3px;
@@ -2077,7 +2094,7 @@ input:disabled {
     margin: 0 0 8px;
   }
   .staple-category {
-    padding: 15px 14px 4px;
+    padding: 15px 0 4px;
   }
   .staple-row {
     gap: 7px;
@@ -3424,4 +3441,22 @@ a.back {
 }
 .back-link span {
   margin-right: 6px;
+}
+
+/* Polish (#160): below 480px the lede takes the full width and + Add sits on its own row beneath it. */
+@media (max-width: 479px) {
+  .staples-page-head {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+  .staples-page-head .head-copy {
+    flex: 1 1 100%;
+  }
+}
+
+/* The empty, untouched Destination search stays neutral; it only turns to the warning style once there is text that is
+   not yet a confirmed place. */
+.location-picker input[role="combobox"][data-empty][aria-invalid="true"] {
+  border: 1px solid var(--line-strong);
+  box-shadow: none;
 }
