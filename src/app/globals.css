@@ -3534,7 +3534,9 @@ a.back {
   gap: 4px 8px;
   margin-top: 12px;
 }
-.danger-text {
+/* Delete and Remove read as dangerous: the --danger text (a plain class would lose to .button.ghost's link colour). */
+.danger-text,
+.button.danger-text {
   color: var(--danger);
 }
 .saved-list-toolbar {
