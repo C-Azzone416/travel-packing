@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
+import { chooseFromMenu } from "./helpers/menu";
 import { DEVICE } from "./helpers/device";
 
 // Trip themes (#48) against the real e2e database: what a trip saves with is what its card shows after a reload.
@@ -115,7 +116,7 @@ test("a copy starts on the source trip's theme, and changing it does not touch t
   page,
 }) => {
   await openDashboard(page);
-  await card(page, "San Diego").getByRole("link", { name: "Copy trip: San Diego" }).click();
+  await chooseFromMenu(page, "San Diego", "Copy trip");
   await page.getByRole("combobox", { name: "Destination search" }).fill("lon");
   await page.getByRole("option", { name: /England/ }).click();
   await page.getByLabel("Leave", { exact: true }).fill("2026-11-12");

@@ -172,7 +172,7 @@ test("when the network fails the row says 'Not saved · Retry', keeps the user's
   expect(retryBox.height).toBeGreaterThanOrEqual(43.9);
   expect(retryBox.width).toBeGreaterThanOrEqual(43.9);
   await expect(socks).toContainText("3/4");
-  await expect(page.getByRole("button", { name: "Couldn't save, retry" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Not saved, retry" })).toBeVisible();
   await page.screenshot({
     path: `test-results/screenshots/${testInfo.project.name}-trip-not-saved.png`,
   });
@@ -289,7 +289,7 @@ test(
     await page.getByRole("button", { name: "Save theme" }).click();
     const sheet = page.getByRole("dialog", { name: "Change theme" });
     await expect(sheet.getByRole("alert")).toContainText("Couldn’t save the theme");
-    await expect(page.getByRole("button", { name: "Couldn't save, retry" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Not saved, retry" })).toBeVisible();
     expect(await headerArt(page)).toBe("beach");
     await page.unroute("**/trips/**");
     await sheet.getByRole("button", { name: "Save theme" }).click();

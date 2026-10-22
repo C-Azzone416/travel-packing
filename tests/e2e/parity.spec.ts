@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
+import { chooseFromMenu } from "./helpers/menu";
 import { DEVICE } from "./helpers/device";
 
 // Parity with the approved prototype's browser test (reference/prototype/tests/browser.test.mjs), on the production app
@@ -163,7 +164,7 @@ test("copy: a remembered Bathroom item travels to the copy, with nothing checked
   const source = page.getByRole("article", { name: "San Diego" });
   const before = await source.innerText();
 
-  await source.getByRole("link", { name: "Copy trip: San Diego" }).click();
+  await chooseFromMenu(page, "San Diego", "Copy trip");
   await page.getByRole("combobox", { name: "Destination search" }).fill("paris");
   await page.getByRole("option", { name: /Paris/ }).click();
   await page.getByLabel("Leave", { exact: true }).fill("2026-12-04");

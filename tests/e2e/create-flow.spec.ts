@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { ownerEmailFor, signIn, signInAsOwner } from "./helpers/auth";
+import { chooseFromMenu } from "./helpers/menu";
 import { DEVICE } from "./helpers/device";
 
 // Fixed clock: San Diego is upcoming, Lisbon is past. Trips are stored in the e2e database, so what a test saves
@@ -166,7 +167,7 @@ test("copy: a new trip with clear progress, and the source trip unchanged", asyn
   await openDashboard(page);
   const source = card(page, "San Diego");
   const before = await source.innerText();
-  await source.getByRole("link", { name: "Copy trip: San Diego" }).click();
+  await chooseFromMenu(page, "San Diego", "Copy trip");
 
   await expect(page.getByText("Copy of San Diego")).toBeVisible();
   await expect(page.getByRole("combobox", { name: "Destination search" })).toHaveValue("");

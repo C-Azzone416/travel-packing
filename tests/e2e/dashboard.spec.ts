@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
+import { chooseFromMenu } from "./helpers/menu";
 import { DEVICE } from "./helpers/device";
 
 // A fixed clock keeps the seeded sample trips stable: San Diego upcoming, Lisbon past. (Trip ids are the real
@@ -20,7 +21,7 @@ const tab = (page: Page, name: RegExp) => page.getByRole("button", { name });
 
 test("archive -> appears in Past & archive -> restore -> back in Upcoming", async ({ page }) => {
   await openDashboard(page);
-  await card(page, "San Diego").getByRole("button", { name: "Archive: San Diego" }).click();
+  await chooseFromMenu(page, "San Diego", "Archive");
   await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toHaveCount(0);
   await expect(page.getByText("No upcoming trips.")).toBeVisible();
 
@@ -38,7 +39,7 @@ test("remove -> confirm -> undo leaves the trip identical", async ({ page }) => 
   await openDashboard(page);
   const before = await card(page, "San Diego").innerText();
 
-  await card(page, "San Diego").getByRole("button", { name: "Remove: San Diego" }).click();
+  await chooseFromMenu(page, "San Diego", "Remove");
   const dialog = page.getByRole("dialog", { name: "Remove San Diego?" });
   await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();
   await dialog.getByRole("button", { name: "Remove trip" }).click();
@@ -51,7 +52,7 @@ test("remove -> confirm -> undo leaves the trip identical", async ({ page }) => 
 
 test("Recently deleted offers Undo remove, with no retention period shown", async ({ page }) => {
   await openDashboard(page);
-  await card(page, "San Diego").getByRole("button", { name: "Remove: San Diego" }).click();
+  await chooseFromMenu(page, "San Diego", "Remove");
   await page.getByRole("dialog").getByRole("button", { name: "Remove trip" }).click();
   await tab(page, /Past & archive/).click();
   await expect(page.getByText(/30 days|retention/i)).toHaveCount(0);
@@ -71,7 +72,7 @@ test("quick view filters without changing progress or touching the network", asy
   const progress = await san.getByText(/of \d+ packed/).innerText();
   const chip = page.getByRole("link", { name: "Saved" });
 
-  await san.getByRole("button", { name: /Quick view/ }).click();
+  await chooseFromMenu(page, "San Diego", "Quick view");
   const quick = san.locator('[id^="quick-view-"]');
   await expect(quick.getByRole("button", { name: "Still to pack" })).toHaveAttribute(
     "aria-pressed",
@@ -124,9 +125,7 @@ test("a failed theme image swaps to the neutral surface at the same size (deferr
 test("no horizontal scroll at 320px with a quick view open", DEVICE, async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 700 });
   await openDashboard(page);
-  await card(page, "San Diego")
-    .getByRole("button", { name: /Quick view/ })
-    .click();
+  await chooseFromMenu(page, "San Diego", "Quick view");
   await expect(card(page, "San Diego").locator('[id^="quick-view-"]')).toBeVisible();
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -145,16 +144,18 @@ test("dashboard controls are keyboard operable with 44px targets", DEVICE, async
   for (const control of [
     tab(page, /Upcoming/),
     tab(page, /Past & archive/),
-    card(page, "San Diego").getByRole("button", { name: /Quick view/ }),
-    card(page, "San Diego").getByRole("button", { name: "Archive: San Diego" }),
-    card(page, "San Diego").getByRole("button", { name: "Remove: San Diego" }),
+    card(page, "San Diego").getByRole("button", { name: "More actions for San Diego" }),
   ]) {
     const box = await control.boundingBox();
     expect(box!.height).toBeGreaterThanOrEqual(43.9);
   }
-  await card(page, "San Diego")
-    .getByRole("button", { name: /Quick view/ })
-    .focus();
+  // The ⋯ menu is keyboard operable: Enter opens it on the first item (Quick view), Enter chooses it.
+  await card(page, "San Diego").getByRole("button", { name: "More actions for San Diego" }).focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("menuitem", { name: "Quick view" })).toBeFocused();
+  for (const item of await page.getByRole("menuitem").all()) {
+    expect((await item.boundingBox())!.height).toBeGreaterThanOrEqual(43.9);
+  }
   await page.keyboard.press("Enter");
   const quick = card(page, "San Diego").locator('[id^="quick-view-"]');
   await expect(quick).toBeVisible();
@@ -166,9 +167,7 @@ test("dashboard controls are keyboard operable with 44px targets", DEVICE, async
 test("screenshots of the dashboard", DEVICE, async ({ page }, testInfo) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await openDashboard(page);
-  await card(page, "San Diego")
-    .getByRole("button", { name: /Quick view/ })
-    .click();
+  await chooseFromMenu(page, "San Diego", "Quick view");
   await page.screenshot({
     path: `test-results/screenshots/${testInfo.project.name}-dashboard.png`,
     fullPage: true,

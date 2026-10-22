@@ -11,6 +11,12 @@ import { createMemoryTripsSource, type TripsSource } from "./trips-source";
 vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
 
 const TODAY = () => "2026-10-16";
+
+/** Open a trip's ⋯ menu and choose one item. */
+async function choose(user: ReturnType<typeof userEvent.setup>, trip: string, item: string) {
+  await user.click(screen.getByRole("button", { name: `More actions for ${trip}` }));
+  await user.click(screen.getByRole("menuitem", { name: item }));
+}
 const memory = (initial: LifecycleState) => createMemoryTripsSource(initial, { now: () => 5_000 });
 
 function withLater(): LifecycleState {
@@ -105,12 +111,13 @@ describe("the hero and Later journeys", () => {
     const { user, base } = setup(withLater());
     await screen.findByRole("article", { name: "San Diego" });
     const later = screen.getByRole("complementary", { name: "Later journeys" });
-    await user.click(within(later).getByRole("button", { name: "Quick view" }));
+    await choose(user, "Denver", "Quick view");
     expect(within(later).getByText("Packing quick view")).toBeTruthy();
-    expect(
-      within(later).getByRole("link", { name: "Copy trip: Denver" }).getAttribute("href"),
-    ).toBe("/trips/new?copy=later");
-    await user.click(within(later).getByRole("button", { name: "Archive: Denver" }));
+    await user.click(screen.getByRole("button", { name: "More actions for Denver" }));
+    expect(screen.getByRole("menuitem", { name: "Copy trip" }).getAttribute("href")).toBe(
+      "/trips/new?copy=later",
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Archive" }));
     await waitFor(() => expect(within(later).getByText("Nothing else planned yet.")).toBeTruthy());
     expect(base.snapshot().trips.find((trip) => trip.id === "later")?.archived).toBe(true);
   });
@@ -150,7 +157,7 @@ describe("Remove on Later journeys and Past & archive cards", () => {
   it("removes a Later journey after confirming, and offers Undo", async () => {
     const { user, base } = setup(withLater());
     const later = await screen.findByRole("complementary", { name: "Later journeys" });
-    await user.click(within(later).getByRole("button", { name: "Remove: Denver" }));
+    await choose(user, "Denver", "Remove");
     await user.click(
       within(screen.getByRole("dialog", { name: "Remove Denver?" })).getByRole("button", {
         name: "Remove trip",
@@ -178,7 +185,7 @@ describe("Remove on Later journeys and Past & archive cards", () => {
   it("archives from the hero through the one shared handler", async () => {
     const { user, base } = setup();
     const hero = await screen.findByRole("article", { name: "San Diego" });
-    await user.click(within(hero).getByRole("button", { name: "Archive: San Diego" }));
+    await choose(user, "San Diego", "Archive");
     await waitFor(() => expect(base.snapshot().trips[0].archived).toBe(true));
   });
 });

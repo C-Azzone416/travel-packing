@@ -106,7 +106,7 @@ describe("SaveStatusProvider", () => {
     await act(async () => {
       await expect(api.track(() => Promise.reject(new Error("boom")))).rejects.toThrow("boom");
     });
-    expect(chipText()).toContain("Couldn't save · Retry");
+    expect(chipText()).toContain("Not saved · Retry");
     expect(document.querySelector("button.sync-chip")).not.toBeNull();
     expect(alertText()).toContain("Couldn't save your last change");
     expect(status()).toBe("");
@@ -122,7 +122,7 @@ describe("SaveStatusProvider", () => {
       void api.track(() => write.promise);
     });
     await advance(SAVING_DELAY_MS * 2);
-    expect(chipText()).toContain("Couldn't save");
+    expect(chipText()).toContain("Not saved");
     await act(async () => {
       write.resolve("ok");
     });
@@ -177,7 +177,7 @@ describe("SaveStatusProvider", () => {
     await act(async () => {
       api.retry();
     });
-    expect(chipText()).toContain("Couldn't save");
+    expect(chipText()).toContain("Not saved");
     write.mockResolvedValue("ok");
     await act(async () => {
       api.retry();
@@ -203,7 +203,7 @@ describe("SaveStatusProvider", () => {
       within(dialog).getByRole("button", { name: "Dismiss" }).click();
     });
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(chipText()).toContain("Couldn't save");
+    expect(chipText()).toContain("Not saved");
     expect(write).toHaveBeenCalledTimes(1);
     await act(async () => {
       (document.querySelector("button.sync-chip") as HTMLButtonElement).click();
@@ -293,9 +293,9 @@ describe("SaveStatusProvider", () => {
     await act(async () => {
       await api.track(() => Promise.reject(new Error("x"))).catch(() => {});
     });
-    expect(chipText()).toContain("Couldn't save");
+    expect(chipText()).toContain("Not saved");
     await advance(SAVING_DELAY_MS * 2);
-    expect(chipText()).toContain("Couldn't save");
+    expect(chipText()).toContain("Not saved");
     expect(chipText()).not.toContain("Saving…");
   });
 
@@ -349,7 +349,7 @@ describe("SaveStatusProvider", () => {
       await act(async () => {
         await api.track(read, onSuccess, { read: true }).catch(() => {});
       });
-      expect(chipText()).toContain("Couldn't save · Retry");
+      expect(chipText()).toContain("Not saved · Retry");
       expect(onSuccess).not.toHaveBeenCalled();
       await act(async () => {
         api.retry();
@@ -370,7 +370,7 @@ describe("SaveStatusProvider", () => {
       await act(async () => {
         await api.track(read, onSuccess, { read: true }).catch(() => {});
       });
-      expect(chipText()).toContain("Couldn't save");
+      expect(chipText()).toContain("Not saved");
       act(() => api.retry());
       await advance(SAVING_DELAY_MS * 5);
       expect(chipText()).not.toContain("Saving");
@@ -397,7 +397,7 @@ describe("SaveStatusProvider", () => {
       await act(async () => {
         await api.track(() => Promise.resolve("read"), undefined, { read: true });
       });
-      expect(chipText()).toContain("Couldn't save");
+      expect(chipText()).toContain("Not saved");
       await act(async () => {
         await api.track(() => Promise.resolve("saved"));
       });
@@ -414,7 +414,7 @@ describe("SaveStatusProvider", () => {
         void api.track(() => load.promise, undefined, { read: true });
       });
       await advance(SAVING_DELAY_MS * 3);
-      expect(chipText()).toContain("Couldn't save");
+      expect(chipText()).toContain("Not saved");
       await act(async () => {
         load.resolve("x");
       });

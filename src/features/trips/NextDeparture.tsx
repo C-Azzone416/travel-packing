@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Button, buttonClassName } from "@/components/ui/Button";
 import { Stamps } from "@/components/stamp/Stamp";
 import { selectStamps } from "@/domain/stamps";
+import { MoreMenu } from "@/components/ui/MoreMenu";
 import type { LifecycleTrip } from "@/domain/trip-lifecycle";
 import { QuickView } from "./QuickView";
 import { RouteText } from "./RouteText";
@@ -138,50 +139,26 @@ export function NextDeparture({
           >
             ＋ Add item
           </Link>
+          <MoreMenu
+            variant="secondary"
+            subject={view.destination}
+            disabled={busy}
+            items={[
+              {
+                key: "quick",
+                label: quickOpen ? "Hide quick view" : "Quick view",
+                onSelect: () => setQuickOpen((open) => !open),
+              },
+              { key: "copy", label: "Copy trip", href: `/trips/new?copy=${trip.id}` },
+              ...(view.canArchive
+                ? [{ key: "archive", label: "Archive", onSelect: () => onArchive(trip.id) }]
+                : []),
+              { key: "remove", label: "Remove", danger: true, onSelect: () => onRemove(trip.id) },
+            ]}
+          />
         </div>
       </div>
 
-      <div className="ledger-tools">
-        <button
-          className="quick-view-toggle"
-          type="button"
-          aria-expanded={quickOpen}
-          aria-controls={quickId}
-          onClick={() => setQuickOpen((open) => !open)}
-        >
-          <span>Quick view</span>
-          <span className="chevron" aria-hidden="true">
-            {quickOpen ? "⌃" : "⌄"}
-          </span>
-        </button>
-        <Link
-          className={buttonClassName({ variant: "ghost", small: true })}
-          href={`/trips/new?copy=${trip.id}`}
-          aria-label={`Copy trip: ${view.destination}`}
-        >
-          Copy trip
-        </Link>
-        {view.canArchive ? (
-          <Button
-            variant="ghost"
-            small
-            disabled={busy}
-            aria-label={`Archive: ${view.destination}`}
-            onClick={() => onArchive(trip.id)}
-          >
-            Archive
-          </Button>
-        ) : null}
-        <Button
-          variant="ghost"
-          small
-          disabled={busy}
-          aria-label={`Remove: ${view.destination}`}
-          onClick={() => onRemove(trip.id)}
-        >
-          Remove
-        </Button>
-      </div>
       {quickOpen ? <QuickView trip={trip} id={quickId} /> : null}
     </article>
   );

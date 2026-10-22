@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { ownerEmailFor, SECOND_EMAIL, signIn, signInAsOwner } from "./helpers/auth";
+import { chooseFromMenu } from "./helpers/menu";
 
 // These run against a REAL Postgres (the e2e database server), so what the dashboard shows after a reload or in a new
 // session is what was actually stored. Each project signs in as its own seeded owner, and every test leaves that owner's
@@ -27,7 +28,7 @@ test.beforeEach(async ({ page }) => {
 test("an archived trip is still archived after a reload, and restoring it persists too", async ({
   page,
 }) => {
-  await card(page, "San Diego").getByRole("button", { name: "Archive: San Diego" }).click();
+  await chooseFromMenu(page, "San Diego", "Archive");
   await expect(sanDiegoHeading(page)).toHaveCount(0);
 
   await page.reload();
@@ -44,7 +45,7 @@ test("a removed trip stays removed after a reload, and Undo brings back the iden
   page,
 }) => {
   const before = await card(page, "San Diego").innerText();
-  await card(page, "San Diego").getByRole("button", { name: "Remove: San Diego" }).click();
+  await chooseFromMenu(page, "San Diego", "Remove");
   await page.getByRole("dialog").getByRole("button", { name: "Remove trip" }).click();
   await expect(sanDiegoHeading(page)).toHaveCount(0);
 
@@ -62,7 +63,7 @@ test("a removed trip stays removed after a reload, and Undo brings back the iden
 });
 
 test("changes are there in a brand-new session (another device)", async ({ page, browser }) => {
-  await card(page, "San Diego").getByRole("button", { name: "Archive: San Diego" }).click();
+  await chooseFromMenu(page, "San Diego", "Archive");
   await expect(sanDiegoHeading(page)).toHaveCount(0);
 
   const other = await browser.newContext({ viewport: page.viewportSize() ?? undefined });
@@ -98,7 +99,7 @@ test("a second user sees none of the owner's trips, before or after the owner ch
     await expect(sanDiegoHeading(second)).toHaveCount(0);
 
     // The owner removes a trip; the second user's view is unaffected and shows nothing of it.
-    await card(page, "San Diego").getByRole("button", { name: "Remove: San Diego" }).click();
+    await chooseFromMenu(page, "San Diego", "Remove");
     await page.getByRole("dialog").getByRole("button", { name: "Remove trip" }).click();
     await expect(sanDiegoHeading(page)).toHaveCount(0);
 

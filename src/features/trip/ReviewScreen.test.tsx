@@ -235,7 +235,7 @@ describe("marking Ready and not ready", () => {
     );
     await title();
     await user.click(readyButton());
-    expect(await screen.findByRole("button", { name: /couldn.t save/i })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /not saved/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: "I’m ready to go" })).toBeTruthy();
     expect(screen.getByText("Packing", { selector: ".status-pill" })).toBeTruthy();
     expect(tripOf(source).ready).toBe(false);
@@ -326,7 +326,7 @@ describe("corrections on the review", () => {
     await user.click(
       within(rowOf("tops")).getByRole("button", { name: "Mark packed Everyday tops" }),
     );
-    expect(await screen.findByRole("button", { name: /couldn.t save/i })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /not saved/i })).toBeTruthy();
     expect(togglePacked).toHaveBeenCalledTimes(1);
     expect(
       within(rowOf("tops")).getByText(

@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { expectAccessible } from "./helpers/a11y";
+import { chooseFromMenu } from "./helpers/menu";
 import { signInAsOwner } from "./helpers/auth";
 import { DEVICE } from "./helpers/device";
 
@@ -92,9 +93,7 @@ test("edit the route down to 2 stops, then copy the trip to new dates", async ({
   await expect(page.locator(".route-chip")).toHaveCount(0);
 
   await page.goto("/");
-  await trip(page, "Lisbon → Rome")
-    .getByRole("link", { name: /Copy trip/ })
-    .click();
+  await chooseFromMenu(page, "Lisbon → Rome", "Copy trip");
   await expect(page.getByRole("group", { name: "Stop 2" })).toBeVisible();
   await expect(page.getByText("Choose a new start date for the copy.").first()).toBeVisible();
   await page.getByLabel("Arrive", { exact: true }).fill("2027-02-01");

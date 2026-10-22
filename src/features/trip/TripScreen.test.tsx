@@ -206,7 +206,7 @@ describe("loading and states", () => {
       </TripsSourceProvider>,
     );
     expect(await screen.findByText("Couldn’t load this trip.")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Couldn't save, retry" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Not saved, retry" })).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Try again" }));
     expect(await ready()).toBeTruthy();
     expect(getTrip).toHaveBeenCalledTimes(2);
@@ -226,7 +226,7 @@ describe("loading and states", () => {
       </TripsSourceProvider>,
     );
     await screen.findByText("Couldn’t load this trip.");
-    await user.click(screen.getByRole("button", { name: "Couldn't save, retry" }));
+    await user.click(screen.getByRole("button", { name: "Not saved, retry" }));
     await user.click(
       within(screen.getByRole("dialog", { name: "Couldn’t save" })).getByRole("button", {
         name: "Retry",
@@ -415,7 +415,7 @@ describe("packing", () => {
     expect(
       await within(row("tops")).findByRole("button", { name: "Not saved · Retry" }),
     ).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Couldn't save, retry" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Not saved, retry" })).toBeTruthy();
     // The row keeps showing what the user did, and nothing was stored.
     expect(itemOf(source, "tops").packed).toBe(1);
     expect(within(row("tops")).getByText("2/2")).toBeTruthy();
@@ -462,7 +462,7 @@ describe("packing", () => {
       await within(row("socks")).findByRole("button", { name: "Not saved · Retry" }),
     ).toBeTruthy();
     fail = false;
-    await user.click(screen.getByRole("button", { name: "Couldn't save, retry" }));
+    await user.click(screen.getByRole("button", { name: "Not saved, retry" }));
     await user.click(
       within(screen.getByRole("dialog", { name: "Couldn’t save" })).getByRole("button", {
         name: "Retry",
@@ -1310,7 +1310,7 @@ describe("changing the theme", () => {
     await user.click(changeButton());
     await user.click(screen.getByRole("radio", { name: "City" }));
     await user.click(screen.getByRole("button", { name: "Save theme" }));
-    expect(await screen.findByRole("button", { name: "Couldn't save, retry" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Not saved, retry" })).toBeTruthy();
     const sheet = screen.getByRole("dialog", { name: "Change theme" });
     // The chip is behind the sheet, so the sheet says so itself.
     expect(within(sheet).getByRole("alert").textContent).toMatch(/Couldn’t save the theme/);
@@ -1516,7 +1516,7 @@ describe("edges", () => {
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", { name: "Update this trip" }),
     );
-    expect(await screen.findByRole("button", { name: "Couldn't save, retry" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Not saved, retry" })).toBeTruthy();
     expect(screen.getByRole("dialog", { name: "Edit packing preferences" })).toBeTruthy();
     expect(tripOf(source).config.laundry).toBe(false);
     expect(
