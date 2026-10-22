@@ -288,6 +288,20 @@ test("the hero's ＋ Add item adds an item inline, never doubles it, and hands B
   await expect(hero.getByText(/Camera is already on your list \(needed: 2\)/)).toBeVisible();
   await hero.getByRole("button", { name: "Edit quantity" }).click();
   await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
+  // It opens that item's own editor on the trip screen, and the URL is the plain trip again.
+  const editor = page.getByRole("dialog", { name: "Edit item" });
+  await expect(editor).toBeVisible();
+  await expect(editor.getByLabel("Item name")).toHaveValue("Camera");
+  await expect(page).toHaveURL(/\/trips\/[^?]+$/);
+  // Closing it puts focus on that item's row, since there is no button that opened it.
+  await page.keyboard.press("Escape");
+  await expect(editor).toHaveCount(0);
+  await expect(
+    page
+      .locator("[data-item-id]")
+      .filter({ hasText: "Camera" })
+      .getByRole("button", { name: /^Edit target for Camera/ }),
+  ).toBeFocused();
   await page.getByRole("link", { name: "All trips" }).click();
 
   // Bathroom hands off to the Bathroom form, filled in, right on the dashboard.

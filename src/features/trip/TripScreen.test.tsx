@@ -36,13 +36,17 @@ function memory() {
   });
 }
 
-function setup(tripId = "san-diego", wrap?: (base: ReturnType<typeof memory>) => TripsSource) {
+function setup(
+  tripId = "san-diego",
+  wrap?: (base: ReturnType<typeof memory>) => TripsSource,
+  openItemId?: string,
+) {
   const base = memory();
   const source = wrap ? wrap(base) : base;
   const user = userEvent.setup();
   const view = renderInApp(
     <TripsSourceProvider source={source}>
-      <TripScreen tripId={tripId} />
+      <TripScreen tripId={tripId} openItemId={openItemId} />
     </TripsSourceProvider>,
   );
   return { user, source: base, view };
@@ -1778,5 +1782,78 @@ describe("Save as a list (#169)", () => {
     const sheet = await open(user);
     await user.click(within(sheet).getByRole("button", { name: "Save list" }));
     expect(await within(sheet).findByText("Couldn’t save. Nothing was changed.")).toBeTruthy();
+  });
+});
+
+describe("opening an item's editor from the dashboard (?edit=, #166)", () => {
+  it("opens that item's editor once the trip has loaded, and puts the URL back to the plain trip", async () => {
+    const replaceState = vi.spyOn(window.history, "replaceState");
+    try {
+      setup("san-diego", undefined, "sunglasses");
+      const dialog = await screen.findByRole("dialog", { name: "Edit item" });
+      expect((within(dialog).getByLabelText("Item name") as HTMLInputElement).value).toBe(
+        "Sunglasses",
+      );
+      expect(replaceState).toHaveBeenCalledExactlyOnceWith(null, "", "/trips/san-diego");
+    } finally {
+      replaceState.mockRestore();
+    }
+  });
+
+  it("opens it only once: closing the editor does not bring it back", async () => {
+    const { user } = setup("san-diego", undefined, "sunglasses");
+    await screen.findByRole("dialog", { name: "Edit item" });
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit item" })).toBeNull());
+    await user.click(screen.getByRole("button", { name: "Still to pack" }));
+    await user.click(screen.getByRole("button", { name: "All items" }));
+    expect(screen.queryByRole("dialog", { name: "Edit item" })).toBeNull();
+  });
+
+  it("puts focus on that item's Edit target button when the editor closes (it has no opener to return to)", async () => {
+    const { user } = setup("san-diego", undefined, "sunglasses");
+    await screen.findByRole("dialog", { name: "Edit item" });
+    await user.keyboard("{Escape}");
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        within(row("sunglasses")).getByRole("button", { name: /^Edit target for Sunglasses/ }),
+      ),
+    );
+  });
+
+  it("also lands focus on the row after a save", async () => {
+    const { user } = setup("san-diego", undefined, "sunglasses");
+    const dialog = await screen.findByRole("dialog", { name: "Edit item" });
+    await user.click(within(dialog).getByRole("button", { name: /^Save/ }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit item" })).toBeNull());
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        within(row("sunglasses")).getByRole("button", { name: /^Edit target for Sunglasses/ }),
+      ),
+    );
+  });
+
+  it("opens nothing for an item that is not on the trip, but still cleans the URL", async () => {
+    const replaceState = vi.spyOn(window.history, "replaceState");
+    try {
+      setup("san-diego", undefined, "no-such-item");
+      await ready();
+      expect(screen.queryByRole("dialog", { name: "Edit item" })).toBeNull();
+      expect(replaceState).toHaveBeenCalledExactlyOnceWith(null, "", "/trips/san-diego");
+    } finally {
+      replaceState.mockRestore();
+    }
+  });
+
+  it("leaves the URL and focus alone when no item was asked for", async () => {
+    const replaceState = vi.spyOn(window.history, "replaceState");
+    try {
+      setup();
+      await ready();
+      expect(screen.queryByRole("dialog", { name: "Edit item" })).toBeNull();
+      expect(replaceState).not.toHaveBeenCalled();
+    } finally {
+      replaceState.mockRestore();
+    }
   });
 });

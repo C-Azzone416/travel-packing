@@ -130,7 +130,7 @@ function ListSection({
   );
 }
 
-export function TripScreen({ tripId }: { tripId: string }) {
+export function TripScreen({ tripId, openItemId }: { tripId: string; openItemId?: string }) {
   const source = useTripsSource();
   const router = useRouter();
   const { track } = useSaveStatus();
@@ -371,7 +371,35 @@ export function TripScreen({ tripId }: { tripId: string }) {
     return outcome;
   };
 
-  const close = () => setDialog(null);
+  // "Edit quantity" on the dashboard arrives with ?edit=<item id>: once the trip has loaded, that item's editor opens
+  // (once), the URL goes back to the plain trip, and closing the editor puts focus on that item's row.
+  const urlItem = useRef(openItemId);
+  const returnFocusTo = useRef<string | null>(null);
+  useEffect(() => {
+    if (load.phase !== "ready" || !urlItem.current) return;
+    const itemId = urlItem.current;
+    urlItem.current = undefined;
+    window.history.replaceState(null, "", `/trips/${tripId}`);
+    if (load.trip.items.some((entry) => entry.id === itemId)) {
+      returnFocusTo.current = itemId;
+      setDialog({ kind: "edit", itemId });
+    }
+  }, [load, tripId]);
+
+  const close = () => {
+    setDialog(null);
+    const itemId = returnFocusTo.current;
+    returnFocusTo.current = null;
+    if (!itemId) return;
+    // The sheet has no opener to give focus back to, so it goes to the row's own button once the sheet is gone.
+    requestAnimationFrame(() =>
+      document
+        .querySelector<HTMLElement>(
+          `[data-item-id="${itemId.replaceAll('"', '\\"')}"] .edit-target`,
+        )
+        ?.focus(),
+    );
+  };
 
   if (load.phase === "loading") {
     return (
