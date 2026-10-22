@@ -389,25 +389,25 @@ export function TripScreen({ tripId, openItemId }: { tripId: string; openItemId?
   // After the editor opened from ?edit= closes (Escape, ×, Save or Remove), focus goes to that item's Edit target, or to
   // the list heading when the item is gone. It waits for the commit that removes the sheet and updates the row (a save
   // re-renders the row after the write finishes), so it is an effect, not a timer.
-  const [focusAfterClose, setFocusAfterClose] = useState<string | null>(null);
+  const focusAfterClose = useRef<string | null>(null);
   useEffect(() => {
-    if (!focusAfterClose || dialog || load.phase !== "ready") return;
+    const itemId = focusAfterClose.current;
+    if (!itemId || dialog || load.phase !== "ready") return;
+    focusAfterClose.current = null;
     const row = document.querySelector<HTMLElement>(
-      `[data-item-id="${focusAfterClose.replaceAll('"', '\\"')}"]`,
+      `[data-item-id="${itemId.replaceAll('"', '\\"')}"]`,
     );
     (
       row?.querySelector<HTMLElement>(".edit-target") ??
       document.getElementById("packing-list-heading")
     )?.focus();
-    setFocusAfterClose(null);
-  }, [focusAfterClose, dialog, load]);
+  }, [dialog, load]);
 
   const close = () => {
     setDialog(null);
-    const itemId = returnFocusTo.current;
+    // The sheet has no opener to give focus back to, so the screen puts it somewhere sensible itself (above).
+    focusAfterClose.current = returnFocusTo.current;
     returnFocusTo.current = null;
-    // The sheet has no opener to give focus back to, so the screen puts it somewhere sensible itself.
-    if (itemId) setFocusAfterClose(itemId);
   };
 
   if (load.phase === "loading") {
