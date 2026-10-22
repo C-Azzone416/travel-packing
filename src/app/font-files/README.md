@@ -21,4 +21,15 @@ fonts (including in a bundled app) provided the copyright notice and the licence
 clause does not come into play. `src/app/fonts.test.ts` fails if a font file is added without a licence or a Google
 import comes back.
 
+**Known differences from the Google loader (#182).**
+
+- Only the `latin` subset is bundled. `next/font/google` with `subsets: ["latin"]` preloaded only that subset too, but it also
+  emitted lazy `@font-face` rules for `latin-ext` and `vietnamese`. Characters outside Latin-1 and basic punctuation
+  (for example the Polish ł and ń, the Czech č and ř, the Turkish ş, and Vietnamese letters) now render in the system
+  fallback font instead of Barlow or Bricolage. `next/font/local` cannot declare a `unicode-range` per face, so
+  matching that would need extra families composed into the font stack; it is left out until a destination needs it.
+- The metric-adjusted fallback font (`size-adjust`, `ascent-override`) is computed by Next from the bundled file
+  instead of from its built-in table for Google fonts, so symbol glyphs that come from the fallback (the ← arrow,
+  the ⌂ tab icon) can sit about 1px differently. Text set in Barlow, Bricolage Grotesque or Literata is unchanged.
+
 To refresh a font, fetch the new file from Google Fonts the same way, replace it here, and re-check the licence.
