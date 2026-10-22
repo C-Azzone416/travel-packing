@@ -2,7 +2,10 @@
 // Runs the checks the full-mode `ci` job runs (src/tooling/verify.ts), stops at the first failure and prints a summary
 // that can be pasted into a pull request. In addition to CI, never instead of it.
 import { spawnSync } from "node:child_process";
+import { mkdirSync, readFileSync, rmSync } from "node:fs";
 import {
+  VERIFY_STEPS,
+  failedTestSummary,
   formatSummary,
   runSteps,
   stepEnvironment,
@@ -21,6 +24,11 @@ const runner: Runner = {
   run(command, env) {
     const [file, ...args] = command;
     console.log(`\n> ${command.join(" ")}`);
+    // A stale report from an earlier run must never be read as this run's failure.
+    mkdirSync(".verify-logs", { recursive: true });
+    for (const step of VERIFY_STEPS)
+      if (step.failureReport && step.command.join(" ") === command.join(" "))
+        rmSync(step.failureReport, { force: true });
     return (
       spawnSync(file, args, { stdio: "inherit", env: stepEnvironment(env, process.env) }).status ??
       1
@@ -37,5 +45,17 @@ const head = `${git(["rev-parse", "--short=8", "HEAD"]) || "unknown"}${dirty}`;
 
 const steps = stepsFor(mode);
 const results = runSteps(steps, runner);
+const failedStep = results.find((result) => result.status === "failed")?.step;
+if (failedStep?.failureReport) {
+  try {
+    const failures = failedTestSummary(readFileSync(failedStep.failureReport, "utf8"));
+    if (failures.length)
+      console.log(
+        `\nFailed tests (report kept at ${failedStep.failureReport}):\n${failures.join("\n")}`,
+      );
+  } catch {
+    console.log(`\n(no test report at ${failedStep.failureReport})`);
+  }
+}
 console.log(`\n${"=".repeat(60)}\n${formatSummary(mode, results, head, steps.length)}`);
 process.exit(results.some((result) => result.status === "failed") ? 1 : 0);
