@@ -100,6 +100,17 @@ describe("MoreMenu", () => {
     expect(screen.queryByRole("menu")).toBeNull();
   });
 
+  it("Escape from a focused menu item closes the menu and returns focus to the button", async () => {
+    const { user } = setup();
+    await user.click(button());
+    await vi.waitFor(() => expect(document.activeElement).toBe(items()[0]));
+    await user.keyboard("{ArrowDown}");
+    expect(document.activeElement).toBe(items()[1]);
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(button());
+  });
+
   it("a click outside closes it", async () => {
     const { user } = setup();
     await user.click(button());
