@@ -10,8 +10,9 @@ export interface StampSpec {
    * airport: the largest airport serving the first stop; its code can equal a country's (FRA, AUS), so it is marked
    * apart in the rendering and the accessible label.
    * place: the first stop has no airport, so its country's alpha-3 stands in; it renders like a country stamp.
+   * custom: the owner typed the label (#151). It no longer claims to be an airport or a country, so it renders like a country stamp.
    */
-  kind: "country" | "airport" | "place";
+  kind: "country" | "airport" | "place" | "custom";
   /** Exactly three characters. */
   label: string;
   /** The first stop's city as entered, for "LIS airport, Lisbon, departure stamp" (airport and place stamps). */
@@ -39,7 +40,45 @@ const fallback = (stop: TripStop | undefined): StampSpec[] => {
 
 const cityKey = (stop: TripStop) => stop.location.city.trim().toLowerCase();
 
-export function selectStamps(stops: readonly TripStop[]): StampSpec[] {
+/** The owner's label for each stamp slot in route order (#151); null = automatic. Only the override is ever stored. */
+export type StampLabels = readonly [string | null, string | null];
+export const NO_STAMP_LABELS: StampLabels = [null, null];
+
+export const STAMP_LABEL_MESSAGE = "Use exactly 3 letters or numbers (A–Z, 0–9).";
+
+/**
+ * A typed stamp label made ready to store: trimmed and upper-cased. Empty or blank means no override (null). Anything that
+ * is not exactly three of A-Z and 0-9 afterwards is invalid and never transliterated.
+ */
+export function normaliseStampLabel(
+  raw: string,
+): { ok: true; label: string | null } | { ok: false } {
+  const label = raw.trim().toUpperCase();
+  if (label === "") return { ok: true, label: null };
+  return /^[A-Z0-9]{3}$/.test(label) ? { ok: true, label } : { ok: false };
+}
+
+/** The stamps a trip shows: the automatic ones, each slot's label replaced by the owner's override when there is one. */
+export function selectStamps(stops: readonly TripStop[], overrides?: StampLabels): StampSpec[] {
+  const automatic = automaticStamps(stops);
+  const [one, two] = overrides ?? NO_STAMP_LABELS;
+  if (automatic.length === 0) {
+    // No automatic label (the stop has no country): an override on slot 1 still makes a single stamp.
+    return one ? [customStamp(one, stops[0])] : [];
+  }
+  return automatic.map((stamp, index) => {
+    const label = index === 0 ? one : two;
+    return label ? customStamp(label, stops[0]) : stamp;
+  });
+}
+
+function customStamp(label: string, first: TripStop | undefined): StampSpec {
+  const cityName = first?.location.city.trim();
+  return { kind: "custom", label, ...(cityName ? { cityName } : {}) };
+}
+
+/** What each slot's stamp would say with no override: the numbering the overrides use (1 = first stamp in route order). */
+export function automaticStamps(stops: readonly TripStop[]): StampSpec[] {
   const first = stops[0];
   if (stops.length < 2 || stops.every((stop) => cityKey(stop) === cityKey(first))) {
     return fallback(first);
@@ -57,7 +96,8 @@ export function selectStamps(stops: readonly TripStop[]): StampSpec[] {
 export function stampsAriaLabel(stamps: readonly StampSpec[]): string {
   const first = stamps[0];
   if (!first) return "";
-  if (first.kind === "country") return `${stamps.map((s) => s.label).join(", ")} route stamps`;
+  if (stamps.length > 1 || first.kind === "country")
+    return `${stamps.map((s) => s.label).join(", ")} route stamps`;
   const place = first.cityName ? `, ${first.cityName}` : "";
   if (first.kind === "airport") return `${first.label} airport${place}, departure stamp`;
   return `${first.label}${place}, departure stamp`;

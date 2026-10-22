@@ -59,6 +59,7 @@ const actions = vi.hoisted(() => {
         "reviewWeatherAgainAction",
         "updatePreferencesAction",
         "setThemeAction",
+        "setStampLabelsAction",
         "setStopsAction",
       ].map(command),
     ),
@@ -273,6 +274,12 @@ describe("TripsSourceProvider", () => {
         (s) => s.setTheme("t", "city"),
         () => actions.commands.setThemeAction,
         ["t", "city"],
+      ],
+      [
+        "setStampLabels",
+        (s) => s.setStampLabels("t", "ABC", null),
+        () => actions.commands.setStampLabelsAction,
+        ["t", "ABC", null],
       ],
       ["setStops", (s) => s.setStops("t", []), () => actions.commands.setStopsAction, ["t", []]],
     ];

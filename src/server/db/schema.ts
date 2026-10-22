@@ -195,6 +195,12 @@ export const trips = pgTable(
     copiedFrom: uuid("copied_from"),
     /** The picture shown on the trip card and header (#48). Not sensitive: one of six fixed names. */
     theme: tripTheme("theme").notNull().default("travel"),
+    /**
+     * The owner's override of the route stamps' labels (#151), one per stamp slot in route order. Null = automatic. Only the
+     * override is stored: automatic labels are derived from the stops. Exactly three letters or numbers.
+     */
+    stampLabel1: text("stamp_label_1"),
+    stampLabel2: text("stamp_label_2"),
     /** Recoverable delete: set = "recently deleted". Null = live. */
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: createdAt(),
@@ -215,6 +221,14 @@ export const trips = pgTable(
       sql`${table.dailyDays} >= 0 and ${table.dailyDays} <= ${table.days}`,
     ),
     check("trips_destination_not_blank", sql`btrim(${table.destination}) <> ''`),
+    check(
+      "trips_stamp_label_1_format",
+      sql`${table.stampLabel1} is null or ${table.stampLabel1} ~ '^[A-Z0-9]{3}$'`,
+    ),
+    check(
+      "trips_stamp_label_2_format",
+      sql`${table.stampLabel2} is null or ${table.stampLabel2} ~ '^[A-Z0-9]{3}$'`,
+    ),
     check("trips_latitude_range", sql`${table.latitude} between -90 and 90`),
     check("trips_longitude_range", sql`${table.longitude} between -180 and 180`),
     // Coordinates come as a pair, and only with a provider place: a curated trip has none.

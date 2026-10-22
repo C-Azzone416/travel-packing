@@ -27,7 +27,7 @@ import { formatDays, formatRange, routeCities, routeIsTitle } from "@/features/t
 import { AddToiletryForm } from "./AddToiletryForm";
 import { Stamps } from "@/components/stamp/Stamp";
 import { themeFor } from "@/domain/themes";
-import { selectStamps } from "@/domain/stamps";
+import { automaticStamps, selectStamps } from "@/domain/stamps";
 import { daysBetween } from "@/domain/trip-stops";
 import { localToday } from "@/lib/today";
 import { AddItemInline } from "./AddItemInline";
@@ -36,6 +36,7 @@ import { EditRouteSheet } from "./EditRouteSheet";
 import { ItemEditor } from "./ItemEditor";
 import { PackRow } from "./PackRow";
 import { PreferencesForm } from "./PreferencesForm";
+import { EditStampSheet } from "./EditStampSheet";
 import { ThemeSheet } from "./ThemeSheet";
 import { ToiletrySection } from "./ToiletrySection";
 import {
@@ -73,6 +74,7 @@ type Dialog =
   | { kind: "bag" }
   | { kind: "preferences" }
   | { kind: "theme" }
+  | { kind: "stamp" }
   | { kind: "route" };
 
 interface WeatherExperience {
@@ -144,6 +146,7 @@ export function TripScreen({ tripId, openItemId }: { tripId: string; openItemId?
   const [failedRows, setFailedRows] = useState<ReadonlySet<string>>(new Set());
   const [announcement, setAnnouncement] = useState("");
   const [themeFailed, setThemeFailed] = useState(false);
+  const [stampFailed, setStampFailed] = useState(false);
   const [routeFailed, setRouteFailed] = useState(false);
   const [weather, setWeather] = useState<WeatherExperience | null>(null);
   const [weatherReviewOpen, setWeatherReviewOpen] = useState(false);
@@ -645,10 +648,19 @@ export function TripScreen({ tripId, openItemId }: { tripId: string; openItemId?
           </div>
           <div className="hero-stamps">
             <Stamps
-              stamps={selectStamps(trip.stops)}
+              stamps={selectStamps(trip.stops, trip.stampLabels)}
               departure={trip.start}
               onPicture={SHOW_TRIP_PICTURE}
             />
+            {trip.stops.length > 0 ? (
+              <button
+                type="button"
+                className="link-button edit-stamp"
+                onClick={() => setDialog({ kind: "stamp" })}
+              >
+                Edit stamp
+              </button>
+            ) : null}
           </div>
         </div>
         {trip.ready ? <StatusBadge status="ready">Ready</StatusBadge> : null}
@@ -921,6 +933,39 @@ export function TripScreen({ tripId, openItemId }: { tripId: string; openItemId?
           onSave={(config) =>
             void act(() => source.updatePreferences(tripId, config), { modal: true, after: close })
           }
+        />
+      ) : null}
+      {dialog?.kind === "stamp" ? (
+        <EditStampSheet
+          automatic={automaticStamps(trip.stops)}
+          stops={trip.stops}
+          saved={trip.stampLabels}
+          departure={trip.start}
+          saving={submitting}
+          failed={stampFailed}
+          onClose={() => {
+            setStampFailed(false);
+            close();
+          }}
+          onSave={(slot1, slot2) => {
+            setStampFailed(false);
+            const before = trip.stampLabels ?? [null, null];
+            void act(() => source.setStampLabels(tripId, slot1, slot2), {
+              modal: true,
+              onFail: () => setStampFailed(true),
+              after: (change) => {
+                const now = change.trip.stampLabels ?? [null, null];
+                // Only slots that changed count: a change that only cleared overrides is a reset.
+                const changed = [0, 1].filter((slot) => now[slot] !== before[slot]);
+                toast.show(
+                  changed.length > 0 && changed.every((slot) => now[slot] === null)
+                    ? "Stamp reset to automatic."
+                    : "Stamp updated.",
+                );
+                close();
+              },
+            });
+          }}
         />
       ) : null}
       {dialog?.kind === "theme" ? (

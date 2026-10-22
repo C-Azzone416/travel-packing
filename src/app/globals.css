@@ -3303,7 +3303,10 @@ a.back {
   font-weight: 700;
 }
 .hero-stamps {
+  display: flex;
   flex: none;
+  flex-direction: column;
+  align-items: center;
   color: var(--accent);
 }
 .trip-hero > .status-pill {
@@ -3955,4 +3958,88 @@ a.back {
 }
 .list-review > section:first-child h3 {
   margin-top: 12px;
+}
+
+/* ---- Edit stamp (#151, design). Role tokens only. */
+.edit-stamp {
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.edit-stamp:hover,
+.edit-stamp:focus-visible {
+  text-decoration: underline;
+}
+@media (max-width: 720px) {
+  .hero-stamps {
+    flex-direction: row;
+    gap: 12px;
+  }
+  .edit-stamp {
+    margin-top: 0;
+  }
+}
+.stamp-form {
+  display: grid;
+  gap: 20px;
+}
+.stamp-block {
+  display: grid;
+  grid-template-columns: 86px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.stamp-preview {
+  display: grid;
+  min-height: 86px;
+  place-items: center;
+}
+.stamp-controls {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+.stamp-controls > * {
+  margin: 0;
+}
+.stamp-controls .temperature-unit-options,
+.stamp-controls .field {
+  width: 100%;
+}
+.stamp-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.stamp-heading h3 {
+  margin: 0;
+  font-size: 16px;
+}
+.stamp-tag {
+  padding: 2px 6px;
+  border-radius: var(--control-radius);
+  background: var(--detail-surface);
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.stamp-tag[data-mode="custom"] {
+  background: var(--status-surface);
+}
+.stamp-input {
+  font-family: var(--font-display, inherit);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+@media (max-width: 720px) {
+  .stamp-block {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .stamp-preview {
+    justify-items: start;
+  }
 }

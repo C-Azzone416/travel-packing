@@ -1,3 +1,4 @@
+import { selectStamps } from "@/domain/stamps";
 import { describe, expect, it } from "vitest";
 import { LOCATIONS } from "@/domain/locations";
 import { classifyTrip, startCopyDraft, startDraft } from "@/domain/trip-lifecycle";
@@ -241,6 +242,37 @@ describe("per-trip commands", () => {
     for (const theme of ["volcano", "", "Beach", null, undefined, 3])
       await expect(source.setTheme("lisbon", theme as never)).rejects.toThrow("INVALID_INPUT");
     await expect(source.setTheme("nope", "city")).rejects.toThrow("NOT_FOUND");
+    expect(source.snapshot()).toBe(before);
+  });
+
+  it("setStampLabels stores the typed label, clears it, and leaves the rest of the trip alone (#151)", async () => {
+    const { source } = setup();
+    const before = (await source.getTrip("lisbon"))!;
+    const set = await source.setStampLabels("lisbon", " abc ", null);
+    expect(set.trip).toEqual({ ...before, stampLabels: ["ABC", null] });
+    expect((await source.getTrip("lisbon")).stampLabels).toEqual(["ABC", null]);
+    // Another trip is untouched.
+    expect((await source.getTrip("san-diego")).stampLabels ?? [null, null]).toEqual([null, null]);
+    const cleared = await source.setStampLabels("lisbon", "  ", null);
+    expect(cleared.trip.stampLabels).toEqual([null, null]);
+  });
+
+  it("setStampLabels stores nothing for the label the stamp already shows", async () => {
+    const { source } = setup();
+    const automatic = selectStamps((await source.getTrip("lisbon")).stops)[0].label;
+    const change = await source.setStampLabels("lisbon", automatic.toLowerCase(), null);
+    expect(change.trip.stampLabels).toEqual([null, null]);
+  });
+
+  it("setStampLabels refuses a bad label or a second stamp that is not there (INVALID_INPUT), and an unknown trip (NOT_FOUND)", async () => {
+    const { source } = setup();
+    const before = source.snapshot();
+    for (const bad of ["AB", "ABCD", "A C", "A-C", "ÀBC", "AB😀"])
+      await expect(source.setStampLabels("lisbon", bad, null), bad).rejects.toThrow(
+        "INVALID_INPUT",
+      );
+    await expect(source.setStampLabels("lisbon", null, "XYZ")).rejects.toThrow("INVALID_INPUT");
+    await expect(source.setStampLabels("nope", "ABC", null)).rejects.toThrow("NOT_FOUND");
     expect(source.snapshot()).toBe(before);
   });
 

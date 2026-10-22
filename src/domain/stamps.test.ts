@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { selectStamps, stampsAriaLabel } from "./stamps";
+import { automaticStamps, normaliseStampLabel, selectStamps, stampsAriaLabel } from "./stamps";
 import type { TripStop } from "./trip-stops";
 
 function stop(city: string, countryCode: string | undefined, airportCode?: string): TripStop {
@@ -133,5 +133,76 @@ describe("stampsAriaLabel", () => {
       "LIS airport, departure stamp",
     );
     expect(stampsAriaLabel([{ kind: "place", label: "CHE" }])).toBe("CHE, departure stamp");
+  });
+});
+
+describe("normaliseStampLabel (#151)", () => {
+  it.each([
+    ["abc", "ABC"],
+    ["  ab1 ", "AB1"],
+    ["7X9", "7X9"],
+    ["", null],
+    ["   ", null],
+  ])("accepts %j as %j", (raw, label) => {
+    expect(normaliseStampLabel(raw)).toEqual({ ok: true, label });
+  });
+
+  it.each(["AB", "ABCD", "A C", "A-C", "ÀBC", "ABÇ", "AB😀", "A\nB", "ab cd"])(
+    "refuses %j",
+    (raw) => {
+      expect(normaliseStampLabel(raw)).toEqual({ ok: false });
+    },
+  );
+});
+
+describe("selectStamps with the owner's overrides (#151)", () => {
+  const lisbonMadrid = [stop("Lisbon", "PT"), stop("Madrid", "ES")];
+
+  it("is the automatic result with no override, or with only nulls", () => {
+    expect(selectStamps(lisbonMadrid)).toEqual(automaticStamps(lisbonMadrid));
+    expect(selectStamps(lisbonMadrid, [null, null])).toEqual(automaticStamps(lisbonMadrid));
+  });
+
+  it("replaces slot 1, slot 2, or both, in route order, as custom stamps", () => {
+    const first = selectStamps(lisbonMadrid, ["AAA", null]);
+    expect(first.map((s) => [s.kind, s.label])).toEqual([
+      ["custom", "AAA"],
+      ["country", "ESP"],
+    ]);
+    expect(selectStamps(lisbonMadrid, [null, "BBB"]).map((s) => [s.kind, s.label])).toEqual([
+      ["country", "PRT"],
+      ["custom", "BBB"],
+    ]);
+    expect(selectStamps(lisbonMadrid, ["AAA", "BBB"]).map((s) => s.label)).toEqual(["AAA", "BBB"]);
+  });
+
+  it("overrides a single airport stamp, which then no longer claims to be an airport", () => {
+    const stamps = selectStamps([stop("Lisbon", "PT", "LIS")], ["ABC", null]);
+    expect(stamps).toEqual([{ kind: "custom", label: "ABC", cityName: "Lisbon" }]);
+    expect(stampsAriaLabel(stamps)).toBe("ABC, Lisbon, departure stamp");
+  });
+
+  it("ignores slot 2 when the automatic result has one stamp", () => {
+    expect(selectStamps([stop("Lisbon", "PT", "LIS")], [null, "ZZZ"])).toEqual(
+      automaticStamps([stop("Lisbon", "PT", "LIS")]),
+    );
+  });
+
+  it("makes one custom stamp when there is no automatic stamp but slot 1 has an override", () => {
+    const noCountry = [stop("Nowhere", undefined)];
+    expect(selectStamps(noCountry)).toEqual([]);
+    expect(selectStamps(noCountry, [null, "ZZZ"])).toEqual([]);
+    expect(selectStamps(noCountry, ["ABC", "ZZZ"])).toEqual([
+      { kind: "custom", label: "ABC", cityName: "Nowhere" },
+    ]);
+  });
+
+  it("names the full effective text for two stamps, custom or not", () => {
+    expect(stampsAriaLabel(selectStamps(lisbonMadrid, ["AAA", null]))).toBe(
+      "AAA, ESP route stamps",
+    );
+    expect(stampsAriaLabel(selectStamps(lisbonMadrid, ["AAA", "BBB"]))).toBe(
+      "AAA, BBB route stamps",
+    );
   });
 });
