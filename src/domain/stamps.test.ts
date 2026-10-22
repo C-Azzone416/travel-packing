@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { automaticStamps, normaliseStampLabel, selectStamps, stampsAriaLabel } from "./stamps";
+import {
+  automaticStamps,
+  normaliseStampLabel,
+  selectStamps,
+  stampsAriaLabel,
+  upperCaseAscii,
+} from "./stamps";
 import type { TripStop } from "./trip-stops";
 
 function stop(city: string, countryCode: string | undefined, airportCode?: string): TripStop {
@@ -147,6 +153,31 @@ describe("normaliseStampLabel (#151)", () => {
     expect(normaliseStampLabel(raw)).toEqual({ ok: true, label });
   });
 
+  it("accepts mixed case and digits and upper-cases them: Ab1 is stored as AB1", () => {
+    expect(normaliseStampLabel("Ab1")).toEqual({ ok: true, label: "AB1" });
+    expect(normaliseStampLabel("aB9")).toEqual({ ok: true, label: "AB9" });
+  });
+
+  // Upper-casing would turn these into plain ASCII (ſ→S, ı→I, ﬁ→FI, ß→SS, ǆ→Ǆ); the check happens BEFORE that, so
+  // they are refused rather than transliterated.
+  it.each([
+    "ſab",
+    "ıab",
+    "ﬁx",
+    "ﬁ",
+    "xﬁ",
+    "ßab",
+    "abß",
+    "ǆab",
+    "ＡＢＣ",
+    "ⅷab",
+    "ｓab",
+    "AB\u0131",
+    "\u017Fab",
+  ])("refuses %j instead of transliterating it", (raw) => {
+    expect(normaliseStampLabel(raw)).toEqual({ ok: false });
+  });
+
   it.each(["AB", "ABCD", "A C", "A-C", "ÀBC", "ABÇ", "AB😀", "A\nB", "ab cd"])(
     "refuses %j",
     (raw) => {
@@ -204,5 +235,22 @@ describe("selectStamps with the owner's overrides (#151)", () => {
     expect(stampsAriaLabel(selectStamps(lisbonMadrid, ["AAA", "BBB"]))).toBe(
       "AAA, BBB route stamps",
     );
+  });
+});
+
+describe("upperCaseAscii (#187)", () => {
+  it("upper-cases ASCII letters only and leaves everything else exactly as typed", () => {
+    expect(upperCaseAscii("abc1")).toBe("ABC1");
+    expect(upperCaseAscii("ſab")).toBe("ſAB");
+    expect(upperCaseAscii("ıab")).toBe("ıAB");
+    expect(upperCaseAscii("ﬁx")).toBe("ﬁX");
+    expect(upperCaseAscii("àbc")).toBe("àBC");
+    expect(upperCaseAscii("")).toBe("");
+  });
+
+  it("never changes what normaliseStampLabel would refuse into something it would accept", () => {
+    for (const typed of ["ſab", "ıab", "ﬁx", "ßab"]) {
+      expect(normaliseStampLabel(upperCaseAscii(typed))).toEqual({ ok: false });
+    }
   });
 });

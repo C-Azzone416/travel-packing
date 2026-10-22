@@ -164,6 +164,37 @@ describe("EditStampSheet", () => {
     expect(fieldError()?.textContent).toContain("Use exactly 3");
   });
 
+  it.each(["ſab", "ıab", "ﬁx"])(
+    "does not transliterate %j as you type: the field keeps it, shows the error, and Save refuses (#187)",
+    async (typed) => {
+      const { user, onSave } = setup();
+      await user.click(within(block(1, "automatic")).getByRole("radio", { name: "Custom" }));
+      const field = screen.getByLabelText("Label") as HTMLInputElement;
+      await user.clear(field);
+      await user.type(field, typed);
+      // Only the ASCII letters are upper-cased; ſ ı ﬁ stay as typed, so they cannot become S, I or FI.
+      expect(field.value.includes("S") && typed.startsWith("ſ")).toBe(false);
+      expect(field.value).toBe(typed.replace(/[a-z]/g, (letter) => letter.toUpperCase()));
+      await user.tab();
+      expect(field.getAttribute("aria-invalid")).toBe("true");
+      expect(fieldError()?.textContent).toContain("Use exactly 3");
+      expect((save() as HTMLButtonElement).disabled).toBe(true);
+      await user.click(save());
+      expect(onSave).not.toHaveBeenCalled();
+    },
+  );
+
+  it("still accepts Ab1 and saves it as AB1", async () => {
+    const { user, onSave } = setup();
+    await user.click(within(block(1, "automatic")).getByRole("radio", { name: "Custom" }));
+    const field = screen.getByLabelText("Label") as HTMLInputElement;
+    await user.clear(field);
+    await user.type(field, "Ab1");
+    expect(field.value).toBe("AB1");
+    await user.click(save());
+    expect(onSave).toHaveBeenCalledWith("AB1", null);
+  });
+
   it("a blank custom label is refused rather than saved as nothing", async () => {
     const { user, onSave } = setup({ saved: ["ABC", null] });
     await user.clear(screen.getByLabelText("Label"));
