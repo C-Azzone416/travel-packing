@@ -356,8 +356,6 @@ export function checkDeployWorkflow(workflow: string): string[] {
   // The e2e build exists only inside a CI run; a deploy builds its own, exactly as production does.
   if (/download-artifact|upload-artifact|e2e-build|NEXT_PUBLIC_E2E_BUILD\s*[:=]/.test(workflow))
     problems.push("the deploy must never use an artifact or an e2e build");
-  if (!/vars\.PRODUCTION_DB_HOST/.test(workflow))
-    problems.push("PRODUCTION_DB_HOST must be passed to the host checks");
   if (!/secrets\.PRODUCTION_DB_HOST/.test(workflow)) {
     problems.push("PRODUCTION_DB_HOST must be passed to the host checks, from the secret store");
   }
