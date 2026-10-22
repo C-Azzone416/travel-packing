@@ -100,6 +100,17 @@ describe("LocationPicker", () => {
     expect(ALLOW_CUSTOM_DESTINATION).toBe(false);
   });
 
+  it("marks the search box empty until there is text, so the untouched box can stay neutral while still invalid (#160)", async () => {
+    render(<Harness />);
+    expect(box().getAttribute("data-empty")).toBe("true");
+    expect(box().getAttribute("aria-invalid")).toBe("true");
+    await userEvent.type(box(), "Lis");
+    expect(box().hasAttribute("data-empty")).toBe(false);
+    expect(box().getAttribute("aria-invalid")).toBe("true");
+    await userEvent.clear(box());
+    expect(box().getAttribute("data-empty")).toBe("true");
+  });
+
   it("lists matches with city, region and country, so the two Londons are told apart", async () => {
     render(<Harness />);
     await userEvent.type(box(), "london");

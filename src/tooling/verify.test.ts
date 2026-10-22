@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  failedTestSummary,
   ciChecks,
   ciE2eProjects,
   e2eProjectParityProblems,
@@ -10,6 +11,7 @@ import {
   runSteps,
   stepEnvironment,
   stepsFor,
+  UNIT_REPORT,
   VERIFY_STEPS,
   verifyParityProblems,
   type Runner,
@@ -300,5 +302,82 @@ describe("e2e project parity", () => {
     expect(e2eProjectParityProblems("export default {};", ci).join("\n")).toMatch(
       /no Playwright projects/,
     );
+  });
+});
+
+describe("failedTestSummary (#150)", () => {
+  const report = (testResults: unknown[]) => JSON.stringify({ testResults });
+
+  it("names the file, the full test name and the first lines of the message for each failure", () => {
+    const lines = failedTestSummary(
+      report([
+        {
+          name: "/repo/src/a.test.ts",
+          status: "failed",
+          assertionResults: [
+            { fullName: "a > passes", status: "passed", failureMessages: [] },
+            {
+              fullName: "a > times out",
+              status: "failed",
+              failureMessages: ["Error: timed out\n  at one\n  at two"],
+            },
+          ],
+        },
+      ]),
+    );
+    expect(lines).toEqual([
+      "FAILED /repo/src/a.test.ts > a > times out",
+      "    Error: timed out",
+      "      at one",
+      "      at two",
+    ]);
+  });
+
+  it("lists a file that failed before any test ran", () => {
+    expect(
+      failedTestSummary(
+        report([
+          {
+            name: "/repo/src/b.test.ts",
+            status: "failed",
+            message: "Hook timed out",
+            assertionResults: [],
+          },
+        ]),
+      ),
+    ).toEqual(["FAILED FILE /repo/src/b.test.ts", "    Hook timed out"]);
+  });
+
+  it("is empty for a clean report, garbage and a missing field", () => {
+    expect(
+      failedTestSummary(
+        report([{ name: "c", status: "passed", assertionResults: [{ status: "passed" }] }]),
+      ),
+    ).toEqual([]);
+    expect(failedTestSummary("not json")).toEqual([]);
+    expect(failedTestSummary("{}")).toEqual([]);
+  });
+
+  it("caps a long list and says how many more there were", () => {
+    const many = Array.from({ length: 25 }, (_, at) => ({
+      fullName: `t${at}`,
+      status: "failed",
+      failureMessages: ["boom"],
+    }));
+    const lines = failedTestSummary(
+      report([{ name: "d", status: "failed", assertionResults: many }]),
+    );
+    expect(lines.filter((line) => line.startsWith("FAILED"))).toHaveLength(20);
+    expect(lines.at(-1)).toBe("... and 5 more");
+  });
+});
+
+describe("the unit step keeps a report", () => {
+  it("writes a JSON report that scripts/verify.ts reads back when the step fails", () => {
+    const step = VERIFY_STEPS.find((entry) => entry.id === "test:coverage");
+    expect(step?.failureReport).toBe(UNIT_REPORT);
+    expect(step?.command).toContain(`--outputFile.json=${UNIT_REPORT}`);
+    expect(step?.command).toContain("--reporter=json");
+    expect(step?.command).toContain("--reporter=default");
   });
 });

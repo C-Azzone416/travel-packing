@@ -12,7 +12,11 @@ export interface VerifyStep {
   /** Run only when this program is installed; otherwise the step is reported as skipped, never as passed. */
   needs?: string;
   env?: Record<string, string>;
+  /** A JSON test report this step writes; when the step fails, the failed tests in it are printed (#150). */
+  failureReport?: string;
 }
+
+export const UNIT_REPORT = ".verify-logs/unit.json";
 
 const npm = (script: string): string[] => ["npm", "run", script, "--silent"];
 
@@ -54,8 +58,16 @@ export const VERIFY_STEPS: readonly VerifyStep[] = [
   {
     id: "test:coverage",
     label: "Unit tests with the 90% coverage gate",
-    command: npm("test:coverage"),
+    // The JSON report is kept so a one-off failure under load names its test instead of scrolling away (#150).
+    command: [
+      ...npm("test:coverage"),
+      "--",
+      "--reporter=default",
+      "--reporter=json",
+      `--outputFile.json=${UNIT_REPORT}`,
+    ],
     quick: true,
+    failureReport: UNIT_REPORT,
   },
   { id: "build", label: "Production build", command: npm("build"), quick: false },
   {
@@ -267,4 +279,58 @@ export function e2eProjectParityProblems(config: string, ci: string): string[] {
       problems.push(`CI runs the project "${name}", which playwright.config.ts does not declare`);
   if (inConfig.length === 0) problems.push("no Playwright projects found in playwright.config.ts");
   return problems;
+}
+
+interface VitestJsonReport {
+  testResults?: {
+    name?: string;
+    status?: string;
+    message?: string;
+    assertionResults?: { fullName?: string; status?: string; failureMessages?: string[] }[];
+  }[];
+}
+
+const FIRST_LINES = 6;
+const MAX_FAILURES = 20;
+
+/**
+ * The failed tests in a vitest JSON report: file, full test name and the first lines of the message. A file that
+ * failed before any test ran (an import error, a hook timeout) is listed as such. Empty for a clean or unreadable report.
+ */
+export function failedTestSummary(reportText: string): string[] {
+  let report: VitestJsonReport;
+  try {
+    report = JSON.parse(reportText) as VitestJsonReport;
+  } catch {
+    return [];
+  }
+  const lines: string[] = [];
+  let count = 0;
+  for (const file of report.testResults ?? []) {
+    const failed = (file.assertionResults ?? []).filter((test) => test.status === "failed");
+    if (failed.length === 0 && file.status === "failed") {
+      count++;
+      if (count <= MAX_FAILURES)
+        lines.push(
+          `FAILED FILE ${file.name ?? "(unknown)"}`,
+          ...(file.message ?? "")
+            .split("\n")
+            .slice(0, FIRST_LINES)
+            .map((line) => `    ${line}`),
+        );
+    }
+    for (const test of failed) {
+      count++;
+      if (count > MAX_FAILURES) continue;
+      lines.push(
+        `FAILED ${file.name ?? "(unknown)"} > ${test.fullName ?? "(unnamed test)"}`,
+        ...(test.failureMessages?.[0] ?? "")
+          .split("\n")
+          .slice(0, FIRST_LINES)
+          .map((line) => `    ${line}`),
+      );
+    }
+  }
+  if (count > MAX_FAILURES) lines.push(`... and ${count - MAX_FAILURES} more`);
+  return lines;
 }
