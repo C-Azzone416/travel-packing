@@ -552,7 +552,7 @@ describe("the trip store", () => {
     ]);
   });
 
-  it("derives an airport code for a provider stop with one airport nearby, and none for a curated or ambiguous stop (#152)", async () => {
+  it("derives the largest nearby airport for a provider stop, and none for a curated stop or a mountain town (#152, #157)", async () => {
     await seedOwner(db(), OWNER.userId);
     const porto = makeStoredTrip({
       stops: [],
@@ -584,9 +584,25 @@ describe("the trip store", () => {
       },
     });
     await insertTrip(db(), OWNER.userId, paris);
-    expect(await loadTrip(db(), OWNER.userId, paris.id)).toMatchObject({
-      stops: [expect.not.objectContaining({ airportCode: expect.anything() })],
+    // Orly is nearer, Charles de Gaulle is the larger: the largest wins.
+    expect((await loadTrip(db(), OWNER.userId, paris.id))?.stops[0].airportCode).toBe("CDG");
+
+    const zermatt = makeStoredTrip({
+      stops: [],
+      place: {
+        provider: "open-meteo",
+        placeId: "11",
+        region: "Valais",
+        country: "Switzerland",
+        countryCode: "CH",
+        latitude: 46.02,
+        longitude: 7.75,
+        timezone: "Europe/Zurich",
+      },
     });
+    await insertTrip(db(), OWNER.userId, zermatt);
+    const mountain = (await loadTrip(db(), OWNER.userId, zermatt.id))?.stops[0];
+    expect(mountain && "airportCode" in mountain).toBe(false);
 
     const curated = makeStoredTrip({ stops: [], place: null });
     await insertTrip(db(), OWNER.userId, curated);

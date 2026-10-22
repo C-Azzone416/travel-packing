@@ -6,8 +6,10 @@ export interface AirportRow {
   latitude: number;
   longitude: number;
   country: string;
-  /** A large airport (not just medium): the only kind that makes a stop ambiguous across the wider ring (#152). */
+  /** A large airport (not just medium): large outranks medium when a stop has several airports in range (#157). */
   large: boolean;
+  /** Length of the airport's longest open runway in feet; 0 when OurAirports lists none. The tie-break after size. */
+  runwayFt: number;
 }
 
 const KEPT_TYPES: ReadonlySet<string> = new Set(["large_airport", "medium_airport"]);
@@ -35,24 +37,48 @@ export function parseCsvLine(line: string): string[] {
   return fields;
 }
 
+/** Longest open runway per airport ident, in feet, from OurAirports runways.csv. Blank, zero and closed runways are ignored. */
+export function longestRunways(runwaysCsv: string): Map<string, number> {
+  const [header, ...lines] = runwaysCsv.split(/\r?\n/).filter((line) => line.length > 0);
+  const longest = new Map<string, number>();
+  if (!header) return longest;
+  const columns = parseCsvLine(header);
+  const [ident, length, closed] = ["airport_ident", "length_ft", "closed"].map((name) =>
+    columns.indexOf(name),
+  );
+  if ([ident, length, closed].some((at) => at < 0)) return longest;
+  for (const line of lines) {
+    const fields = parseCsvLine(line);
+    if (fields[closed] === "1" || fields[length].trim() === "") continue;
+    const feet = Number(fields[length]);
+    if (!Number.isFinite(feet) || feet <= 0) continue;
+    longest.set(fields[ident], Math.max(longest.get(fields[ident]) ?? 0, Math.round(feet)));
+  }
+  return longest;
+}
+
 /**
  * Keeps airports that have an IATA code and scheduled service and are large or medium. Rows with a malformed code,
  * country or coordinates are dropped, never repaired. Sorted by code so the output is stable.
  */
-export function selectAirports(csv: string): AirportRow[] {
+export function selectAirports(
+  csv: string,
+  runways: ReadonlyMap<string, number> = new Map(),
+): AirportRow[] {
   const [header, ...lines] = csv.split(/\r?\n/).filter((line) => line.length > 0);
   if (!header) return [];
   const columns = parseCsvLine(header);
   const index = (name: string) => columns.indexOf(name);
-  const [type, lat, lon, country, service, iata] = [
+  const [type, lat, lon, country, service, iata, ident] = [
     "type",
     "latitude_deg",
     "longitude_deg",
     "iso_country",
     "scheduled_service",
     "iata_code",
+    "ident",
   ].map(index);
-  if ([type, lat, lon, country, service, iata].some((at) => at < 0)) return [];
+  if ([type, lat, lon, country, service, iata, ident].some((at) => at < 0)) return [];
   const rows = new Map<string, AirportRow>();
   for (const line of lines) {
     const fields = parseCsvLine(line);
@@ -69,6 +95,7 @@ export function selectAirports(csv: string): AirportRow[] {
     if (rows.has(code)) continue;
     rows.set(code, {
       large: fields[type] === "large_airport",
+      runwayFt: runways.get(fields[ident]) ?? 0,
       iata: code,
       latitude: Math.round(latitude * 1000) / 1000,
       longitude: Math.round(longitude * 1000) / 1000,
@@ -78,12 +105,12 @@ export function selectAirports(csv: string): AirportRow[] {
   return [...rows.values()].sort((a, b) => a.iata.localeCompare(b.iata));
 }
 
-/** One record per airport, "LIS 38.781 -9.136 PT L" (L large, M medium), joined by "|". */
+/** One record per airport, "LIS 38.781 -9.136 PT L 12467" (L large, M medium, longest runway in feet), joined by "|". */
 export function encodeAirports(rows: readonly AirportRow[]): string {
   return rows
     .map(
       (row) =>
-        `${row.iata} ${row.latitude} ${row.longitude} ${row.country} ${row.large ? "L" : "M"}`,
+        `${row.iata} ${row.latitude} ${row.longitude} ${row.country} ${row.large ? "L" : "M"} ${row.runwayFt}`,
     )
     .join("|");
 }
@@ -91,13 +118,14 @@ export function encodeAirports(rows: readonly AirportRow[]): string {
 export function decodeAirports(encoded: string): AirportRow[] {
   if (!encoded) return [];
   return encoded.split("|").map((record) => {
-    const [iata, latitude, longitude, country, size] = record.split(" ");
+    const [iata, latitude, longitude, country, size, runway] = record.split(" ");
     return {
       iata,
       latitude: Number(latitude),
       longitude: Number(longitude),
       country,
       large: size === "L",
+      runwayFt: Number(runway) || 0,
     };
   });
 }

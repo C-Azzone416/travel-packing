@@ -124,7 +124,24 @@ describe("the hero and Later journeys", () => {
     const hero = await screen.findByRole("article", { name: "San Diego" });
     expect(within(hero).getByRole("link", { name: "Review bag: San Diego" })).toBeTruthy();
     const slot = container.querySelector("[data-stamp-slot]") as HTMLElement;
-    expect(within(slot).getByRole("img", { name: "SAN DIEGO departure stamp" })).toBeTruthy();
+    // The sample stop carries no airport, so its country's alpha-3 stands in.
+    expect(within(slot).getByRole("img", { name: "USA, San Diego, departure stamp" })).toBeTruthy();
+  });
+
+  it("shows the stop's airport code, with a plane, when the server attached one", async () => {
+    const state = sampleLifecycleState();
+    state.trips = [
+      {
+        ...state.trips[0],
+        stops: state.trips[0].stops.map((stop) => ({ ...stop, airportCode: "SAN" })),
+      },
+    ];
+    setup(state);
+    const hero = await screen.findByRole("article", { name: "San Diego" });
+    expect(
+      within(hero).getByRole("img", { name: "SAN airport, San Diego, departure stamp" }),
+    ).toBeTruthy();
+    expect(hero.textContent).toContain("✈");
   });
 
   it("shows the same stamps as the packing screen: two countries give two route stamps", async () => {
