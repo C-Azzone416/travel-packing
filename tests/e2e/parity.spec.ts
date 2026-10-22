@@ -47,6 +47,19 @@ test("home: the headline, three navigation items, one upcoming trip with a 'left
   await expect(page.getByText("Past trip").first()).toBeVisible();
   await expect(page.locator(".status-pill.ready")).toBeVisible();
   await expect(page.getByText("Nothing recently deleted.")).toBeVisible();
+  // Status badges stay compact and as wide as their text (prototype 90-97). The prototype's limit was 105px for its shorter
+  // "Ready" text; the pill now reads "✓ Ready to go" (106px), so the limit is for a pill that is not stretched.
+  const badges = await page.locator(".status-pill").evaluateAll((nodes) =>
+    nodes.map((node) => ({
+      height: node.getBoundingClientRect().height,
+      width: node.getBoundingClientRect().width,
+    })),
+  );
+  expect(badges.length).toBeGreaterThan(0);
+  for (const badge of badges) {
+    expect(badge.height).toBeLessThanOrEqual(24);
+    expect(badge.width).toBeLessThan(130);
+  }
 });
 
 test("dates: a later departure pulls the return forward and becomes its minimum", async ({
@@ -99,6 +112,21 @@ test("staples: four sections in order, the Bathroom note, Pack last as a badge o
     "Tech",
     "Other essentials",
   ]);
+});
+
+test("packing screen: the return travel outfit, Laptop under Pack last, no umbrella before the weather review, and a Pack last Bathroom item only in Toiletries", async ({
+  page,
+}) => {
+  await openSanDiego(page);
+  await expect(page.getByRole("heading", { name: /Return travel outfit/ })).toBeVisible();
+  const packLast = page.locator("#block-packlast");
+  await expect(packLast.getByText("Laptop", { exact: true })).toBeVisible();
+  await expect(page.getByText("Compact umbrella")).toHaveCount(0);
+  // Deliberate difference from the prototype (which showed the toothbrush in both views): one canonical row, in Toiletries,
+  // carrying the Pack last badge (the screen says so: "Bathroom items flagged Pack last stay in Toiletries").
+  await expect(row(page, "last-toothbrush")).toHaveCount(1);
+  await expect(row(page, "last-toothbrush")).toContainText("Pack last");
+  await expect(packLast.locator('[data-item-id="last-toothbrush"]')).toHaveCount(0);
 });
 
 test("Nice outfits: switching off hides the Nice items, switching back on restores their edits and progress, with one of each", async ({
