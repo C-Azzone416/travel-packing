@@ -86,8 +86,7 @@ export function checkDeployWorkflow(workflow: string): string[] {
   const problems: string[] = [];
   const count = (pattern: RegExp) => (workflow.match(pattern) ?? []).length;
   const injection =
-    /^( *)- name: Inject the Preview secrets[^\n]*\n((?:\1 {2}.*\n|\n)*)/m.exec(workflow)?.[0] ??
-    "";
+    /^( *)- name: Inject deployment secrets[^\n]*\n((?:\1 {2}.*\n|\n)*)/m.exec(workflow)?.[0] ?? "";
 
   // Triggers: the preview deploy is called by ci.yml (never a trigger of its own); production is a manual run.
   const on = workflow.slice(workflow.search(/^on:/m), workflow.search(/^concurrency:/m));
@@ -249,31 +248,31 @@ export function checkDeployWorkflow(workflow: string): string[] {
   if (!/secrets\.DATABASE_URL_UNPOOLED/.test(workflow))
     problems.push("the direct database URL secret is not used");
 
-  // The Preview secret injection (vercel pull cannot read Vercel Secrets): after the pull, before the check and the build,
-  // preview only, and the values come from secrets.* alone.
+  // Secret injection (vercel pull cannot read Vercel Secrets): after the pull, before the check and build, for either
+  // target through its selected GitHub environment, and the values come from secrets.* alone.
   const stepStart = (needle: string) => workflow.indexOf(needle);
   const pull = stepStart("vercel pull --yes");
-  const inject = stepStart("scripts/inject-preview-secrets.ts");
+  const inject = stepStart("scripts/inject-deploy-secrets.ts");
   const checkEnv = stepStart("scripts/check-deploy-env.ts");
   const build = stepStart("vercel build");
-  if (inject < 0) problems.push("the Preview secret injection step is missing");
+  if (inject < 0) problems.push("the deployment secret injection step is missing");
   else {
     if (!(pull >= 0 && pull < inject && inject < checkEnv && checkEnv < build)) {
       problems.push(
         "the secret injection must run after vercel pull and before the env check and the build",
       );
     }
-    if (!/^\s+if:\s*env\.TARGET == 'preview'\s*$/m.test(injection)) {
-      problems.push("the secret injection must run only when TARGET is preview");
+    if (/^\s+if:/m.test(injection)) {
+      problems.push("the secret injection must run for both Preview and Production");
     }
     // The step does one thing: run the script on the pulled file. Nothing else may sit beside it that could echo a value.
     const runLines = [...injection.matchAll(/^\s+run:\s*(.*)$/gm)].map((match) => match[1].trim());
     if (
       runLines.length !== 1 ||
-      runLines[0] !== 'npx tsx scripts/inject-preview-secrets.ts ".vercel/.env.${TARGET}.local"'
+      runLines[0] !== 'npx tsx scripts/inject-deploy-secrets.ts ".vercel/.env.${TARGET}.local"'
     ) {
       problems.push(
-        "the secret injection step must run exactly the injection script on the pulled preview file",
+        "the secret injection step must run exactly the injection script on the pulled target file",
       );
     }
     for (const name of [

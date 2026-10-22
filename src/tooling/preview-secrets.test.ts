@@ -221,7 +221,7 @@ describe("the script", () => {
   const dir = mkdtempSync(join(tmpdir(), "inject-"));
   afterAll(() => rmSync(dir, { recursive: true, force: true }));
   const tsx = join(process.cwd(), "node_modules", ".bin", "tsx");
-  const script = join(process.cwd(), "scripts", "inject-preview-secrets.ts");
+  const script = join(process.cwd(), "scripts", "inject-deploy-secrets.ts");
 
   function run(file: string, env: Record<string, string | undefined>) {
     // A clean environment: only what the test passes (PATH for node).
@@ -231,37 +231,38 @@ describe("the script", () => {
     });
   }
 
-  it("injects for a preview run, prints names only, and writes the file readable by its owner alone", () => {
-    const file = join(dir, "ok.env");
-    writeFileSync(file, PULLED);
-    const result = run(file, { TARGET: "preview", ...SECRETS });
-    expect(result.status).toBe(0);
-    const expectedPrint = describeAllowlist(
-      SECRETS.OWNER_EMAIL_ALLOWLIST,
-      SECRETS.NEON_AUTH_COOKIE_SECRET,
-    );
-    expect(result.stdout).toBe(
-      "preview secrets: injected DATABASE_URL, DATABASE_URL_UNPOOLED, OWNER_EMAIL_ALLOWLIST, NEON_AUTH_COOKIE_SECRET (values not shown)\n" +
-        `preview secrets: allowlist ${expectedPrint.entries} entries (${expectedPrint.malformed} malformed), fingerprint ${expectedPrint.fingerprint}\n`,
-    );
-    expect(result.stdout).toMatch(
-      /allowlist 2 entries \(0 malformed\), fingerprint [0-9a-f]{12}\n$/,
-    );
-    expect(`${result.stdout}${result.stderr}`).not.toMatch(/postgres|example\.test|kkkk/);
-    expect(dotenv4Parse(readFileSync(file, "utf8"))).toMatchObject(SECRETS);
-    expect(statSync(file).mode & 0o077).toBe(0);
-  });
+  it.each(["preview", "production"] as const)(
+    "injects for a %s run, prints names only, and writes the file readable by its owner alone",
+    (target) => {
+      const file = join(dir, `ok-${target}.env`);
+      writeFileSync(file, PULLED.replace('VERCEL_ENV="preview"', `VERCEL_ENV="${target}"`));
+      const result = run(file, { TARGET: target, ...SECRETS });
+      expect(result.status).toBe(0);
+      const expectedPrint = describeAllowlist(
+        SECRETS.OWNER_EMAIL_ALLOWLIST,
+        SECRETS.NEON_AUTH_COOKIE_SECRET,
+      );
+      expect(result.stdout).toBe(
+        `${target} secrets: injected DATABASE_URL, DATABASE_URL_UNPOOLED, OWNER_EMAIL_ALLOWLIST, NEON_AUTH_COOKIE_SECRET (values not shown)\n` +
+          `${target} secrets: allowlist ${expectedPrint.entries} entries (${expectedPrint.malformed} malformed), fingerprint ${expectedPrint.fingerprint}\n`,
+      );
+      expect(result.stdout).toMatch(
+        /allowlist 2 entries \(0 malformed\), fingerprint [0-9a-f]{12}\n$/,
+      );
+      expect(`${result.stdout}${result.stderr}`).not.toMatch(/postgres|example\.test|kkkk/);
+      expect(dotenv4Parse(readFileSync(file, "utf8"))).toMatchObject(SECRETS);
+      expect(statSync(file).mode & 0o077).toBe(0);
+    },
+  );
 
-  it.each([["production"], [undefined], [""], ["Preview"]])(
+  it.each([[undefined], [""], ["Preview"], ["prod"]])(
     "refuses when TARGET is %j and leaves the file alone",
     (target) => {
       const file = join(dir, `refused-${String(target)}.env`);
       writeFileSync(file, PULLED);
       const result = run(file, { TARGET: target, ...SECRETS });
       expect(result.status).toBe(1);
-      expect(result.stderr).toBe(
-        "preview secrets: refused: this is not a preview run (TARGET must be preview)\n",
-      );
+      expect(result.stderr).toBe("deploy secrets: refused: TARGET must be preview or production\n");
       expect(readFileSync(file, "utf8")).toBe(PULLED);
     },
   );
