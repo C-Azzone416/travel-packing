@@ -280,28 +280,46 @@ test("the hero's ＋ Add item adds an item inline, never doubles it, and hands B
   await expect(page.locator("[data-item-id]").filter({ hasText: "Camera" })).toHaveCount(1);
   await page.getByRole("link", { name: "All trips" }).click();
 
-  // The same item again is not added: the form says so and Edit quantity opens the trip screen.
-  await toggle.click();
-  await hero.getByRole("textbox", { name: "Item name" }).fill(" camera ");
-  await hero.getByRole("combobox", { name: "Category" }).selectOption("Tech");
-  await hero.getByRole("button", { name: "Add to list" }).click();
-  await expect(hero.getByText(/Camera is already on your list \(needed: 2\)/)).toBeVisible();
-  await hero.getByRole("button", { name: "Edit quantity" }).click();
-  await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
-  // It opens that item's own editor on the trip screen, and the URL is the plain trip again.
+  // The same item again is not added: the form says so and Edit quantity opens that item's editor on the trip screen.
+  const editQuantity = async (needed: number) => {
+    await toggle.click();
+    await hero.getByRole("textbox", { name: "Item name" }).fill(" camera ");
+    await hero.getByRole("combobox", { name: "Category" }).selectOption("Tech");
+    await hero.getByRole("button", { name: "Add to list" }).click();
+    await expect(
+      hero.getByText(new RegExp(`Camera is already on your list \\(needed: ${needed}\\)`)),
+    ).toBeVisible();
+    await hero.getByRole("button", { name: "Edit quantity" }).click();
+    await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
+  };
   const editor = page.getByRole("dialog", { name: "Edit item" });
+  const camera = page
+    .locator("[data-item-id]")
+    .filter({ hasText: "Camera" })
+    .getByRole("button", { name: /^Edit target for Camera/ });
+
+  await editQuantity(2);
+  // It opens that item's own editor, and the URL is the plain trip again.
   await expect(editor).toBeVisible();
   await expect(editor.getByLabel("Item name")).toHaveValue("Camera");
   await expect(page).toHaveURL(/\/trips\/[^?]+$/);
-  // Closing it puts focus on that item's row, since there is no button that opened it.
+  // Saving puts focus on that item's row once the updated row is on screen: there is no button that opened the editor,
+  // and the row re-renders after the write finishes.
+  await editor.getByRole("spinbutton", { name: "Quantity" }).fill("3");
+  await editor.getByRole("button", { name: "Save item" }).click();
+  await expect(editor).toHaveCount(0);
+  await expect(page.locator("[data-item-id]").filter({ hasText: "Camera" })).toContainText(
+    "0 of 3 packed",
+  );
+  await expect(camera).toBeFocused();
+  await page.getByRole("link", { name: "All trips" }).click();
+
+  // Closing without saving (Escape) lands there too.
+  await editQuantity(3);
+  await expect(editor).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(editor).toHaveCount(0);
-  await expect(
-    page
-      .locator("[data-item-id]")
-      .filter({ hasText: "Camera" })
-      .getByRole("button", { name: /^Edit target for Camera/ }),
-  ).toBeFocused();
+  await expect(camera).toBeFocused();
   await page.getByRole("link", { name: "All trips" }).click();
 
   // Bathroom hands off to the Bathroom form, filled in, right on the dashboard.

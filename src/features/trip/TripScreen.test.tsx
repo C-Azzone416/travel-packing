@@ -1833,6 +1833,46 @@ describe("opening an item's editor from the dashboard (?edit=, #166)", () => {
     );
   });
 
+  it("after a SAVE that finishes later, focus still lands on the item's Edit target once the updated row is mounted", async () => {
+    const gate = deferred<void>();
+    const { user } = setup(
+      "san-diego",
+      (base) => ({
+        ...base,
+        editItem: async (id, itemId, edit) => {
+          await gate.promise;
+          return base.editItem(id, itemId, edit);
+        },
+      }),
+      "sunglasses",
+    );
+    const dialog = await screen.findByRole("dialog", { name: "Edit item" });
+    await user.click(within(dialog).getByRole("button", { name: /^Save/ }));
+    // Still saving: the sheet stays open, nothing is focused on the row yet.
+    expect(screen.getByRole("dialog", { name: "Edit item" })).toBeTruthy();
+    await act(async () => gate.resolve());
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit item" })).toBeNull());
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        within(row("sunglasses")).getByRole("button", { name: /^Edit target for Sunglasses/ }),
+      ),
+    );
+  });
+
+  it("falls back to the list heading when the item is gone after the editor closes (a Remove)", async () => {
+    const { user } = setup("san-diego", undefined, "nice-shoes");
+    const dialog = await screen.findByRole("dialog", { name: "Edit item" });
+    await user.click(within(dialog).getByRole("button", { name: "Remove item" }));
+    const confirm = await screen.findByRole("dialog", { name: "Remove Dress shoes?" });
+    await user.click(within(confirm).getByRole("button", { name: "Remove item" }));
+    await waitFor(() => expect(row("nice-shoes")).toBeNull());
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByRole("heading", { name: "Packing list", level: 2 }),
+      ),
+    );
+  });
+
   it("opens nothing for an item that is not on the trip, but still cleans the URL", async () => {
     const replaceState = vi.spyOn(window.history, "replaceState");
     try {

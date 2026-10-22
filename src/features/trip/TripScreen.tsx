@@ -386,19 +386,28 @@ export function TripScreen({ tripId, openItemId }: { tripId: string; openItemId?
     }
   }, [load, tripId]);
 
+  // After the editor opened from ?edit= closes (Escape, ×, Save or Remove), focus goes to that item's Edit target, or to
+  // the list heading when the item is gone. It waits for the commit that removes the sheet and updates the row (a save
+  // re-renders the row after the write finishes), so it is an effect, not a timer.
+  const [focusAfterClose, setFocusAfterClose] = useState<string | null>(null);
+  useEffect(() => {
+    if (!focusAfterClose || dialog || load.phase !== "ready") return;
+    const row = document.querySelector<HTMLElement>(
+      `[data-item-id="${focusAfterClose.replaceAll('"', '\\"')}"]`,
+    );
+    (
+      row?.querySelector<HTMLElement>(".edit-target") ??
+      document.getElementById("packing-list-heading")
+    )?.focus();
+    setFocusAfterClose(null);
+  }, [focusAfterClose, dialog, load]);
+
   const close = () => {
     setDialog(null);
     const itemId = returnFocusTo.current;
     returnFocusTo.current = null;
-    if (!itemId) return;
-    // The sheet has no opener to give focus back to, so it goes to the row's own button once the sheet is gone.
-    requestAnimationFrame(() =>
-      document
-        .querySelector<HTMLElement>(
-          `[data-item-id="${itemId.replaceAll('"', '\\"')}"] .edit-target`,
-        )
-        ?.focus(),
-    );
+    // The sheet has no opener to give focus back to, so the screen puts it somewhere sensible itself.
+    if (itemId) setFocusAfterClose(itemId);
   };
 
   if (load.phase === "loading") {
@@ -694,7 +703,9 @@ export function TripScreen({ tripId, openItemId }: { tripId: string; openItemId?
 
       <div className="packing-top">
         <div className="packing-progress">
-          <h2 className="sr-only">Packing list</h2>
+          <h2 id="packing-list-heading" className="sr-only" tabIndex={-1}>
+            Packing list
+          </h2>
           <p className="progress-line">
             {totals.packed} of {totals.total} packed
             {totals.total - totals.packed > 0 ? ` / ${totals.total - totals.packed} left` : ""}
