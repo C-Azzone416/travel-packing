@@ -9,6 +9,7 @@ import {
   NO_STAMP_LABELS,
   STAMP_LABEL_MESSAGE,
   normaliseStampLabel,
+  upperCaseAscii,
   type StampLabels,
   type StampSpec,
 } from "@/domain/stamps";
@@ -201,7 +202,7 @@ export function EditStampSheet({
                           setTexts((current) =>
                             current.map((entry, at) =>
                               at === index
-                                ? event.target.value.toUpperCase().replace(/\s/g, "")
+                                ? upperCaseAscii(event.target.value).replace(/\s/g, "")
                                 : entry,
                             ),
                           )

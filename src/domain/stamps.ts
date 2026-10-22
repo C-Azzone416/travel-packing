@@ -47,16 +47,24 @@ export const NO_STAMP_LABELS: StampLabels = [null, null];
 export const STAMP_LABEL_MESSAGE = "Use exactly 3 letters or numbers (A–Z, 0–9).";
 
 /**
- * A typed stamp label made ready to store: trimmed and upper-cased. Empty or blank means no override (null). Anything that
- * is not exactly three of A-Z and 0-9 afterwards is invalid and never transliterated.
+ * A typed stamp label made ready to store: trimmed, checked, then upper-cased. The check comes FIRST and is ASCII only
+ * (exactly three of A-Z, a-z and 0-9), so a character that upper-casing would turn into something else is refused instead
+ * of transliterated: "ſab" would become SAB, "ıab" IAB and "ﬁx" FIX. Empty or blank means no override (null).
  */
 export function normaliseStampLabel(
   raw: string,
 ): { ok: true; label: string | null } | { ok: false } {
-  const label = raw.trim().toUpperCase();
-  if (label === "") return { ok: true, label: null };
-  return /^[A-Z0-9]{3}$/.test(label) ? { ok: true, label } : { ok: false };
+  const typed = raw.trim();
+  if (typed === "") return { ok: true, label: null };
+  return /^[A-Za-z0-9]{3}$/.test(typed) ? { ok: true, label: typed.toUpperCase() } : { ok: false };
 }
+
+/**
+ * Upper-case only the ASCII letters of what is being typed into the label field. `toUpperCase()` on the whole text would
+ * quietly turn ſ into S and ı into I as you type; this leaves them as typed so validation can refuse them.
+ */
+export const upperCaseAscii = (text: string): string =>
+  text.replace(/[a-z]/g, (letter) => letter.toUpperCase());
 
 /** The stamps a trip shows: the automatic ones, each slot's label replaced by the owner's override when there is one. */
 export function selectStamps(stops: readonly TripStop[], overrides?: StampLabels): StampSpec[] {

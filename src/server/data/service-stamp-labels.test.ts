@@ -104,7 +104,19 @@ describe("setTripStampLabels", () => {
   it("refuses anything that is not exactly 3 of A-Z and 0-9, naming the slot, and saves nothing", async () => {
     const trip = data(await create(TWO_COUNTRIES));
     await setLabels(trip.id, "KEP", null);
-    for (const bad of ["AB", "ABCD", "A C", "A-C", "ÀBC", "AB😀", "a\nb"]) {
+    for (const bad of [
+      "AB",
+      "ABCD",
+      "A C",
+      "A-C",
+      "ÀBC",
+      "AB😀",
+      "a\nb",
+      "ſab",
+      "ıab",
+      "ﬁx",
+      "ßab",
+    ]) {
       const first = errorOf(await setLabels(trip.id, bad, null));
       expect(first, JSON.stringify(bad)).toMatchObject({
         code: "INVALID_INPUT",
@@ -118,6 +130,23 @@ describe("setTripStampLabels", () => {
     }
     expect(errorOf(await setLabels(trip.id, "no", "x"))?.fields).toEqual(["slot1", "slot2"]);
     expect(await stored()).toEqual([{ a: "KEP", b: null }]);
+  });
+
+  it("stores Ab1 as AB1, and never transliterates ſ, ı or ﬁ into a valid label (#187)", async () => {
+    const trip = data(await create(TWO_COUNTRIES));
+    expect(data(await setLabels(trip.id, "Ab1", null)).trip.stampLabels).toEqual(["AB1", null]);
+    for (const raw of ["ſab", "ıab", "ﬁx"]) {
+      // Each would upper-case to SAB / IAB / FIX; none may be saved, and the saved AB1 must stay.
+      expect(errorOf(await setLabels(trip.id, raw, null)), raw).toMatchObject({
+        code: "INVALID_INPUT",
+        fields: ["slot1"],
+      });
+      expect(errorOf(await setLabels(trip.id, null, raw)), raw).toMatchObject({
+        code: "INVALID_INPUT",
+        fields: ["slot2"],
+      });
+    }
+    expect(await stored()).toEqual([{ a: "AB1", b: null }]);
   });
 
   it("refuses a label for a second stamp when the route has only one", async () => {
