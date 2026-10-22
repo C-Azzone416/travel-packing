@@ -17,6 +17,26 @@ async function openSettings(page: import("@playwright/test").Page) {
   await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
 }
 
+test("on a wide screen the heading and lede share the cards' column; a phone keeps its margins (#178)", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await openSettings(page);
+  const left = async (locator: import("@playwright/test").Locator) =>
+    Math.round((await locator.boundingBox())!.x);
+  const card = page.locator(".settings-grid > *").first();
+  const heading = page.getByRole("heading", { name: "Settings", level: 1 });
+  expect(await left(heading)).toBe(await left(card));
+  expect(await left(page.getByText("Your account and how saving is going."))).toBe(
+    await left(card),
+  );
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.locator(".settings-head").evaluate((el) => getComputedStyle(el).marginLeft),
+  ).toBe("2px");
+});
+
 test("Account shows who is signed in, and Sign out goes straight through to sign-in", async ({
   page,
 }, testInfo) => {
