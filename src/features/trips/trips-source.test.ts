@@ -257,6 +257,14 @@ describe("per-trip commands", () => {
     expect(cleared.trip.stampLabels).toEqual([null, null]);
   });
 
+  it("setStampLabels stores Ab1 as AB1 (#187)", async () => {
+    const { source } = setup();
+    expect((await source.setStampLabels("lisbon", "Ab1", null)).trip.stampLabels).toEqual([
+      "AB1",
+      null,
+    ]);
+  });
+
   it("setStampLabels stores nothing for the label the stamp already shows", async () => {
     const { source } = setup();
     const automatic = selectStamps((await source.getTrip("lisbon")).stops)[0].label;
@@ -267,7 +275,7 @@ describe("per-trip commands", () => {
   it("setStampLabels refuses a bad label or a second stamp that is not there (INVALID_INPUT), and an unknown trip (NOT_FOUND)", async () => {
     const { source } = setup();
     const before = source.snapshot();
-    for (const bad of ["AB", "ABCD", "A C", "A-C", "ÀBC", "AB😀"])
+    for (const bad of ["AB", "ABCD", "A C", "A-C", "ÀBC", "AB😀", "ſab", "ıab", "ﬁx"])
       await expect(source.setStampLabels("lisbon", bad, null), bad).rejects.toThrow(
         "INVALID_INPUT",
       );
