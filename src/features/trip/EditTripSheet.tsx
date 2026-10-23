@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Button } from "@/components/ui/Button";
 import { ModalSheet } from "@/components/ui/ModalSheet";
 import { Switch } from "@/components/ui/Switch";
@@ -93,6 +93,7 @@ export function EditTripSheet({
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<null | "route-failed" | "failed" | "stale">(null);
   const reviewHeading = useRef<HTMLHeadingElement>(null);
+  const failureRef = useRef<HTMLDivElement>(null);
   const tabRefs = useRef<Partial<Record<EditTripTab, HTMLButtonElement | null>>>({});
   const niceHintId = `${ids}-nice-hint`;
 
@@ -237,6 +238,18 @@ export function EditTripSheet({
     </>
   );
 
+  const failureMessage =
+    notice === "route-failed"
+      ? "Couldn’t save the route. Nothing changed. Press Save route to try again."
+      : notice === "failed"
+        ? "Couldn’t apply the changes. Nothing changed. Your selections are kept."
+        : null;
+
+  // The failure sits outside the scrolling body, just above the pinned footer; make sure it is in view when it appears.
+  useEffect(() => {
+    if (failureMessage) failureRef.current?.scrollIntoView?.({ block: "nearest" });
+  }, [failureMessage]);
+
   return (
     <ModalSheet
       open
@@ -246,154 +259,158 @@ export function EditTripSheet({
       onClose={requestClose}
       actions={footer}
     >
-      <div className="edit-tabs" role="tablist" aria-label="What to edit">
-        {TABS.map((entry, index) => {
-          const changed = entry.id === "route" ? routeDirty : prefsDirty;
-          return (
-            <button
-              key={entry.id}
-              ref={(node) => {
-                tabRefs.current[entry.id] = node;
-              }}
-              type="button"
-              role="tab"
-              id={`${ids}-tab-${entry.id}`}
-              aria-selected={tab === entry.id}
-              aria-controls={`${ids}-panel-${entry.id}`}
-              tabIndex={tab === entry.id ? 0 : -1}
-              disabled={busy}
-              onClick={() => selectTab(entry.id)}
-              onKeyDown={(event) => onTabKey(event, index)}
-            >
-              {entry.label}
-              {changed ? <span className="edit-tab-dot" aria-label=" (unsaved changes)" /> : null}
-            </button>
-          );
-        })}
-      </div>
+      <div className="edit-body">
+        <div className="edit-tabs" role="tablist" aria-label="What to edit">
+          {TABS.map((entry, index) => {
+            const changed = entry.id === "route" ? routeDirty : prefsDirty;
+            return (
+              <button
+                key={entry.id}
+                ref={(node) => {
+                  tabRefs.current[entry.id] = node;
+                }}
+                type="button"
+                role="tab"
+                id={`${ids}-tab-${entry.id}`}
+                aria-selected={tab === entry.id}
+                aria-controls={`${ids}-panel-${entry.id}`}
+                tabIndex={tab === entry.id ? 0 : -1}
+                disabled={busy}
+                onClick={() => selectTab(entry.id)}
+                onKeyDown={(event) => onTabKey(event, index)}
+              >
+                {entry.label}
+                {changed ? (
+                  <span className="edit-tab-dot" role="img" aria-label="unsaved changes" />
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
 
-      <div
-        role="tabpanel"
-        id={`${ids}-panel-route`}
-        aria-labelledby={`${ids}-tab-route`}
-        hidden={tab !== "route"}
-      >
-        <StopList
-          stops={routeDraft}
-          onChange={setRouteDraft}
-          provider={provider}
-          fallbackProvider={
-            provider === curatedLocationProvider ? undefined : curatedLocationProvider
-          }
-          allowCustom={allowCustom}
-          attempted={attempted}
-          headingLevel={3}
-        />
-        <p className="tiny muted">Your list is recalculated for the new dates.</p>
-        {attempted && problems.length ? (
-          <p className="tiny field-error">{fixSummary(problems.length)}</p>
-        ) : null}
-        {notice === "route-failed" ? (
-          <p className="field-error" role="alert">
-            Couldn’t save the route. Nothing changed. Press Save route to try again.
-          </p>
-        ) : null}
-      </div>
-
-      <div
-        role="tabpanel"
-        id={`${ids}-panel-preferences`}
-        aria-labelledby={`${ids}-tab-preferences`}
-        hidden={tab !== "preferences"}
-      >
-        {step === "edit" ? (
-          <div className="edit-prefs">
-            {notice === "stale" ? (
-              <p className="field-error" role="alert">
-                Your list changed while you were reviewing. Review again.
-              </p>
-            ) : null}
-            <fieldset className="pref-group">
-              <legend>Clothing counts</legend>
-              <Switch
-                label="Laundry access"
-                description="Reduce repeatable everyday clothing."
-                checked={prefs.laundry}
-                onChange={(laundry) => patch({ laundry })}
-              />
-              <Switch
-                label="One spare underwear + socks"
-                description="Added to the bag count, not the return outfit."
-                checked={prefs.spare}
-                onChange={(spare) => patch({ spare })}
-              />
-              <Switch
-                label="Dedicated return travel outfit"
-                description={returnOutfitHelp(prefs.returnOutfit)}
-                checked={prefs.returnOutfit}
-                onChange={(returnOutfit) => patch({ returnOutfit })}
-              />
-            </fieldset>
-            <fieldset className="pref-group">
-              <legend>Nice outfits</legend>
-              <Switch
-                label="Nice outfits"
-                description={NICE_OUTFITS_DESCRIPTION}
-                checked={prefs.niceAttire}
-                onChange={(niceAttire) => patch({ niceAttire })}
-              />
-              {prefs.niceAttire ? null : (
-                <p id={niceHintId} className="tiny muted nice-hint">
-                  {NICE_OFF_HINT}
-                </p>
-              )}
-              <div className="two-col occasion-row">
-                <label className="field">
-                  Occasions
-                  <input
-                    type="number"
-                    min={MIN_OCCASIONS}
-                    max={MAX_OCCASIONS}
-                    value={prefs.occasionCount}
-                    disabled={!prefs.niceAttire}
-                    aria-describedby={prefs.niceAttire ? undefined : niceHintId}
-                    onChange={(event) =>
-                      patch({ occasionCount: clampOccasions(event.target.valueAsNumber) })
-                    }
-                  />
-                </label>
-                <Switch
-                  label="Reuse one nice look"
-                  description="Repeat the same pieces."
-                  checked={prefs.reuseNice}
-                  disabled={!prefs.niceAttire}
-                  describedBy={prefs.niceAttire ? undefined : niceHintId}
-                  onChange={(reuseNice) => patch({ reuseNice })}
-                />
-              </div>
-            </fieldset>
-            <p className="tiny muted" aria-live="polite">
-              <strong>How we count:</strong>{" "}
-              {tripMathLine(mathDays.days, mathDays.dailyDays, prefs.returnOutfit)}
-            </p>
-            {notice === "failed" ? (
-              <p className="field-error" role="alert">
-                Couldn’t apply the changes. Nothing changed. Your selections are kept.
-              </p>
-            ) : null}
-          </div>
-        ) : preview ? (
-          <ReviewChanges
-            preview={preview}
-            headingRef={reviewHeading}
-            acknowledged={acknowledged}
-            onAcknowledge={setAcknowledged}
-            failed={notice === "failed"}
-            onRetry={() => void apply()}
-            busy={busy}
+        <div
+          role="tabpanel"
+          id={`${ids}-panel-route`}
+          aria-labelledby={`${ids}-tab-route`}
+          hidden={tab !== "route"}
+        >
+          <StopList
+            stops={routeDraft}
+            onChange={setRouteDraft}
+            provider={provider}
+            fallbackProvider={
+              provider === curatedLocationProvider ? undefined : curatedLocationProvider
+            }
+            allowCustom={allowCustom}
+            attempted={attempted}
+            headingLevel={3}
           />
-        ) : null}
+          <p className="tiny muted">Your list is recalculated for the new dates.</p>
+          {attempted && problems.length ? (
+            <p className="tiny field-error">{fixSummary(problems.length)}</p>
+          ) : null}
+        </div>
+
+        <div
+          role="tabpanel"
+          id={`${ids}-panel-preferences`}
+          aria-labelledby={`${ids}-tab-preferences`}
+          hidden={tab !== "preferences"}
+        >
+          {step === "edit" ? (
+            <div className="edit-prefs">
+              {notice === "stale" ? (
+                <p className="field-error" role="alert">
+                  Your list changed while you were reviewing. Review again.
+                </p>
+              ) : null}
+              <fieldset className="pref-group">
+                <legend>Clothing counts</legend>
+                <Switch
+                  label="Laundry access"
+                  description="Reduce repeatable everyday clothing."
+                  checked={prefs.laundry}
+                  onChange={(laundry) => patch({ laundry })}
+                />
+                <Switch
+                  label="One spare underwear + socks"
+                  description="Added to the bag count, not the return outfit."
+                  checked={prefs.spare}
+                  onChange={(spare) => patch({ spare })}
+                />
+                <Switch
+                  label="Dedicated return travel outfit"
+                  description={returnOutfitHelp(prefs.returnOutfit)}
+                  checked={prefs.returnOutfit}
+                  onChange={(returnOutfit) => patch({ returnOutfit })}
+                />
+              </fieldset>
+              <fieldset className="pref-group">
+                <legend>Nice outfits</legend>
+                <Switch
+                  label="Nice outfits"
+                  description={NICE_OUTFITS_DESCRIPTION}
+                  checked={prefs.niceAttire}
+                  onChange={(niceAttire) => patch({ niceAttire })}
+                />
+                {prefs.niceAttire ? null : (
+                  <p id={niceHintId} className="tiny muted nice-hint">
+                    {NICE_OFF_HINT}
+                  </p>
+                )}
+                <div className="two-col occasion-row">
+                  <label className="field">
+                    Occasions
+                    <input
+                      type="number"
+                      min={MIN_OCCASIONS}
+                      max={MAX_OCCASIONS}
+                      value={prefs.occasionCount}
+                      disabled={!prefs.niceAttire}
+                      aria-describedby={prefs.niceAttire ? undefined : niceHintId}
+                      onChange={(event) =>
+                        patch({ occasionCount: clampOccasions(event.target.valueAsNumber) })
+                      }
+                    />
+                  </label>
+                  <Switch
+                    label="Reuse one nice look"
+                    description="Repeat the same pieces."
+                    checked={prefs.reuseNice}
+                    disabled={!prefs.niceAttire}
+                    describedBy={prefs.niceAttire ? undefined : niceHintId}
+                    onChange={(reuseNice) => patch({ reuseNice })}
+                  />
+                </div>
+              </fieldset>
+              <p className="tiny muted" aria-live="polite">
+                <strong>How we count:</strong>{" "}
+                {tripMathLine(mathDays.days, mathDays.dailyDays, prefs.returnOutfit)}
+              </p>
+            </div>
+          ) : preview ? (
+            <ReviewChanges
+              preview={preview}
+              headingRef={reviewHeading}
+              acknowledged={acknowledged}
+              onAcknowledge={setAcknowledged}
+            />
+          ) : null}
+        </div>
       </div>
+      {failureMessage ? (
+        <div ref={failureRef} className="field-error edit-failure" role="alert">
+          {failureMessage}
+          {step === "review" && notice === "failed" ? (
+            <>
+              {" "}
+              <Button variant="secondary" small disabled={busy} onClick={() => void apply()}>
+                Try again
+              </Button>
+            </>
+          ) : null}
+        </div>
+      ) : null}
     </ModalSheet>
   );
 }
@@ -403,21 +420,10 @@ interface ReviewProps {
   headingRef: React.RefObject<HTMLHeadingElement | null>;
   acknowledged: boolean;
   onAcknowledge: (value: boolean) => void;
-  failed: boolean;
-  busy: boolean;
-  onRetry: () => void;
 }
 
 /** "Review changes to your list": what applying will do, in plain words, grouped. Every line comes from the preview. */
-function ReviewChanges({
-  preview,
-  headingRef,
-  acknowledged,
-  onAcknowledge,
-  failed,
-  busy,
-  onRetry,
-}: ReviewProps) {
+function ReviewChanges({ preview, headingRef, acknowledged, onAcknowledge }: ReviewProps) {
   const ackId = useId();
   const { updated, removed, added, stays, suppressed, packedReduced } = preview;
   const chips = [
@@ -567,15 +573,6 @@ function ReviewChanges({
             {packedReduced.length === 0 ? " and packed or edited items will be removed" : ""}.
           </span>
         </label>
-      ) : null}
-
-      {failed ? (
-        <div className="field-error" role="alert">
-          Couldn’t apply the changes. Nothing changed. Your selections are kept.{" "}
-          <Button variant="secondary" small disabled={busy} onClick={onRetry}>
-            Try again
-          </Button>
-        </div>
       ) : null}
     </div>
   );

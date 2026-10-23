@@ -4199,6 +4199,38 @@ a.back {
   flex: 1 1 100%;
   text-align: right;
 }
+/* The dialog keeps its head and footer in view; only the body scrolls, so Apply, Back, Cancel, the discard prompt and errors never scroll away. */
+.modal:has(.edit-tabs) {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.modal:has(.edit-tabs) .modal-head {
+  flex: none;
+}
+.edit-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0 -21px;
+  padding: 0 21px;
+}
+.edit-failure {
+  flex: none;
+  margin: 12px 0 0;
+}
+.modal:has(.edit-tabs) .modal-actions {
+  flex: none;
+  margin: 12px -21px -21px;
+  padding: 12px 21px;
+  border-top: 1px solid var(--line);
+  background: var(--paper);
+}
+.occasion-row input:disabled {
+  background: var(--detail-surface);
+  color: var(--muted-text);
+  cursor: not-allowed;
+}
 @media (max-width: 720px) {
   .modal:has(.edit-tabs) {
     max-height: calc(100vh - 18px);
@@ -4206,13 +4238,5 @@ a.back {
   .edit-tabs button {
     flex: 1 1 0;
     justify-content: center;
-  }
-  .modal:has(.edit-tabs) .modal-actions {
-    position: sticky;
-    bottom: -21px;
-    margin: 18px -21px -21px;
-    padding: 12px 21px;
-    border-top: 1px solid var(--line);
-    background: var(--paper);
   }
 }

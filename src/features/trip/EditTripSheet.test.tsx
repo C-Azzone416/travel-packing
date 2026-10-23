@@ -88,6 +88,7 @@ describe("EditTripSheet: tabs", () => {
         /unsaved changes/,
       ),
     ).toBeTruthy();
+    expect(screen.getByRole("img", { name: "unsaved changes" })).toBeTruthy();
     await user.click(screen.getByRole("tab", { name: "Route & dates" }));
     await user.click(screen.getByRole("tab", { name: /Packing preferences/ }));
     expect(toggle(dialog(), "Laundry access").checked).toBe(true);
@@ -365,7 +366,10 @@ describe("EditTripSheet: errors keep the selections", () => {
     await user.click(toggle(dialog(), "One spare underwear + socks"));
     await user.click(within(dialog()).getByRole("button", { name: "Review changes" }));
     await user.click(within(dialog()).getByRole("button", { name: "Apply changes" }));
-    expect(await within(dialog()).findByText(/Couldn’t apply the changes/)).toBeTruthy();
+    const alert = await within(dialog()).findByRole("alert");
+    expect(alert.textContent).toMatch(/Couldn’t apply the changes/);
+    // In flow outside the scrolling body, so the pinned footer cannot cover it.
+    expect(alert.closest(".edit-body")).toBeNull();
     expect(onClose).not.toHaveBeenCalled();
     await user.click(within(dialog()).getByRole("button", { name: "Try again" }));
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
