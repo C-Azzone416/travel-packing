@@ -149,6 +149,8 @@ export const copyTripInput = z
   .object({
     sourceId: tripId,
     ...routeFields,
+    /** The preferences chosen on the copy's Shape step. The source trip's own when left out. */
+    config: tripConfig.optional(),
     /** The source trip's theme when left out. */
     theme: theme.optional(),
   })
