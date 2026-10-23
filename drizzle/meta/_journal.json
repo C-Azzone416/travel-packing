@@ -71,6 +71,13 @@
       "when": 1792791969463,
       "tag": "0009_staple_quantity_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792793856569,
+      "tag": "0010_staples_setup",
+      "breakpoints": true
     }
   ]
 }

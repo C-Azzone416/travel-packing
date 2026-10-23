@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { resetOwnerData } from "./database";
+import { ensureExistingOwner, resetOwnerData } from "./database";
 
 // Synthetic values for the e2e-only fake sign-in (never available on Vercel; see src/server/auth/e2e-provider.ts).
 export const E2E_PASSWORD = "synthetic-e2e-only";
@@ -15,6 +15,8 @@ export const PROJECT_NAMES = ["phone", "desktop"] as const;
  * against one database) never change each other's trips.
  */
 export const ownerEmailFor = (project: string) => `owner-${project}@example.test`;
+/** A project-isolated, password-ready account with no seed data, reserved for first-run Staples setup. */
+export const setupEmailFor = (project: string) => `setup-${project}@example.test`;
 
 /**
  * One person per project who signs UP during the test (#27). Allowlisted so the code can succeed, never seeded, and
@@ -31,6 +33,7 @@ export const STRANGER_EMAIL = "stranger@example.test";
 export const ALLOWLISTED_EMAILS = [
   OWNER_EMAIL,
   ...PROJECT_NAMES.map(ownerEmailFor),
+  ...PROJECT_NAMES.map(setupEmailFor),
   SECOND_EMAIL,
   ...PROJECT_NAMES.flatMap((project) =>
     Array.from({ length: NEWCOMER_POOL }, (_, slot) => newcomerEmailFor(project, slot)),
@@ -43,6 +46,7 @@ export const SEEDED_OWNER_IDS = [OWNER_EMAIL, ...PROJECT_NAMES.map(ownerEmailFor
 );
 
 export async function signIn(page: Page, email: string, password = E2E_PASSWORD) {
+  if (email === SECOND_EMAIL) await ensureExistingOwner(`e2e-${email}`);
   await page.goto("/sign-in");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password", { exact: true }).fill(password);
@@ -62,5 +66,6 @@ export async function signInAsOwner(page: Page, email = ownerEmailFor(test.info(
 export const SETUP_COMPLETE_EMAILS = [
   OWNER_EMAIL,
   ...PROJECT_NAMES.map(ownerEmailFor),
+  ...PROJECT_NAMES.map(setupEmailFor),
   SECOND_EMAIL,
 ];

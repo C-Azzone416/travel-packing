@@ -10,6 +10,8 @@
 
 import { sql } from "drizzle-orm";
 import { THEME_IDS } from "../../domain/themes";
+import { STAPLES_SETUP_STATES } from "../../domain/staples-setup";
+export { STAPLES_SETUP_STATES } from "../../domain/staples-setup";
 import {
   boolean,
   check,
@@ -52,6 +54,7 @@ export const itemSection = pgEnum("item_section", ITEM_SECTIONS);
 export const stapleCadence = pgEnum("staple_cadence", STAPLE_CADENCES);
 export const weatherStatus = pgEnum("weather_status", WEATHER_STATUSES);
 export const itemCategory = pgEnum("item_category", ITEM_CATEGORIES);
+export const staplesSetupState = pgEnum("staples_setup_state", STAPLES_SETUP_STATES);
 /** The six built-in trip theme images (#48), shared with the domain so the two can never drift apart. */
 export const tripTheme = pgEnum("trip_theme", THEME_IDS);
 
@@ -68,6 +71,9 @@ export const users = pgTable(
     temperatureUnit: text("temperature_unit", { enum: TEMPERATURE_UNITS }).notNull().default("F"),
     /** The colour theme the person chose (#139). Null until they choose one, which means Base; unknown values read as Base. */
     appearance: text("appearance"),
+    /** Independent of item count: an intentionally empty skipped/completed list is still initialized. */
+    staplesSetupState: staplesSetupState("staples_setup_state").notNull().default("incomplete"),
+    staplesReminderDismissed: boolean("staples_reminder_dismissed").notNull().default(false),
     createdAt: createdAt(),
   },
   (table) => [check("users_temperature_unit_known", sql`${table.temperatureUnit} in ('F', 'C')`)],

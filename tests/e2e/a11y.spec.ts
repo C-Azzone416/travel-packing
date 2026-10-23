@@ -370,8 +370,8 @@ test.describe("more states", DEVICE, () => {
       await route.continue().catch(() => undefined);
     });
     await page.reload();
-    await expect(page.getByRole("region", { name: "Loading trips" })).toBeVisible();
-    await expectAccessible(page, "dashboard loading");
+    await expect(page.getByRole("region", { name: "Loading Staples setup" })).toBeVisible();
+    await expectAccessible(page, "authenticated setup loading");
     release();
     await page.unroute("**/*");
     // No answer at all: the load error card.
@@ -379,8 +379,8 @@ test.describe("more states", DEVICE, () => {
       isAction(route.request()) ? route.abort("failed") : route.continue(),
     );
     await page.reload();
-    await expect(page.getByText("Couldn’t load your trips.")).toBeVisible();
-    await expectAccessible(page, "dashboard load error");
+    await expect(page.getByText("Couldn’t load your Staples setup.")).toBeVisible();
+    await expectAccessible(page, "authenticated setup load error");
   });
 
   test("review after a change took the trip out of Ready", async ({ page }) => {

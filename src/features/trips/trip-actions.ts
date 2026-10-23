@@ -10,6 +10,7 @@ import type { ItemEdit } from "@/domain/item-ops";
 import type { Signals } from "@/domain/readiness";
 import type { ThemeId } from "@/domain/themes";
 import type { Staple, TripConfig, Scope } from "@/domain/trip";
+import type { StaplesSetup } from "@/domain/staples-setup";
 import type { LifecycleTrip } from "@/domain/trip-lifecycle";
 import type { TripStop } from "@/domain/trip-stops";
 import type { WeatherAppliedChange } from "@/domain/weather/apply";
@@ -24,6 +25,7 @@ import type { WeatherSuggestionState } from "@/server/data/weather-store";
 
 export type TripReadResult = { ok: true; trip: LifecycleTrip } | { ok: false; code: ErrorCode };
 export type StaplesReadResult = { ok: true; staples: Staple[] } | { ok: false; code: ErrorCode };
+export type StaplesSetupResult = ({ ok: true } & StaplesSetup) | { ok: false; code: ErrorCode };
 export type TripCommandResult =
   { ok: true; trip: LifecycleTrip; signals: Signals } | { ok: false; code: ErrorCode };
 export type WeatherSuggestionsResult =
@@ -90,6 +92,44 @@ export async function upsertStapleAction(staple: Staple): Promise<StaplesReadRes
       }),
     (staples) => ({ ok: true as const, staples }),
   ) as Promise<StaplesReadResult>;
+}
+
+export async function removeStapleAction(semanticId: string): Promise<StaplesReadResult> {
+  return withContext(
+    (context) => service.removeStaple(context, { semanticId }),
+    (staples) => ({ ok: true as const, staples }),
+  ) as Promise<StaplesReadResult>;
+}
+
+const setupResult = (work: (context: DataContext) => Promise<Result<StaplesSetup>>) =>
+  withContext(work, (setup) => ({ ok: true as const, ...setup })) as Promise<StaplesSetupResult>;
+
+export async function getStaplesSetupAction(): Promise<StaplesSetupResult> {
+  return setupResult((context) => service.getStaplesSetup(context));
+}
+
+export async function saveStaplesSetupAction(staples: Staple[]): Promise<StaplesSetupResult> {
+  return setupResult((context) =>
+    service.saveStaplesSetup(context, {
+      staples: staples.map((staple) => ({
+        semanticId: staple.id,
+        name: staple.name,
+        category: staple.category,
+        qty: staple.qty,
+        cadence: staple.cadence,
+        packLast: staple.packLast,
+        ...(staple.groupId ? { groupId: staple.groupId } : {}),
+      })),
+    }),
+  );
+}
+
+export async function skipStaplesSetupAction(): Promise<StaplesSetupResult> {
+  return setupResult((context) => service.skipStaplesSetup(context));
+}
+
+export async function dismissStaplesReminderAction(): Promise<StaplesSetupResult> {
+  return setupResult((context) => service.dismissStaplesReminder(context));
 }
 
 export async function setPackedAction(

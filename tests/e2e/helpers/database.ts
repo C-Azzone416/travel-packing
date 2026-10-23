@@ -24,9 +24,50 @@ export async function resetOwnerData(ownerId: string): Promise<void> {
     // Weather starts opted out, in Fahrenheit, and the theme unchosen (Base), for every test (both live on the user).
     await db
       .update(schema.users)
-      .set({ weatherOptIn: false, temperatureUnit: "F", appearance: null })
+      .set({
+        weatherOptIn: false,
+        temperatureUnit: "F",
+        appearance: null,
+        staplesSetupState: "completed",
+        staplesReminderDismissed: false,
+      })
       .where(eq(schema.users.id, ownerId));
     await seedSyntheticData(db, ownerId, SAMPLE_TODAY);
+  } finally {
+    await pool.end();
+  }
+}
+
+/** Reset a project-isolated account to a genuine first-use Staples state, with no implicit items. */
+export async function resetStaplesSetup(ownerId: string): Promise<void> {
+  const pool = new Pool({ connectionString: E2E_DATABASE_URL, max: 1 });
+  try {
+    const db = drizzle(pool, { schema }) as unknown as Db;
+    await db
+      .insert(schema.users)
+      .values({ id: ownerId })
+      .onConflictDoUpdate({
+        target: schema.users.id,
+        set: { staplesSetupState: "incomplete", staplesReminderDismissed: false },
+      });
+    await db.delete(schema.staples).where(eq(schema.staples.ownerId, ownerId));
+  } finally {
+    await pool.end();
+  }
+}
+
+/** Make an otherwise empty synthetic owner behave like a migrated account instead of triggering first-use setup. */
+export async function ensureExistingOwner(ownerId: string): Promise<void> {
+  const pool = new Pool({ connectionString: E2E_DATABASE_URL, max: 1 });
+  try {
+    const db = drizzle(pool, { schema }) as unknown as Db;
+    await db
+      .insert(schema.users)
+      .values({ id: ownerId, staplesSetupState: "skipped", staplesReminderDismissed: true })
+      .onConflictDoUpdate({
+        target: schema.users.id,
+        set: { staplesSetupState: "skipped", staplesReminderDismissed: true },
+      });
   } finally {
     await pool.end();
   }
