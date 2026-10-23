@@ -16,7 +16,12 @@ export function SignUpForm({
   const heading = useHeadingFocus(0);
   const form = useFocusInvalid(state, Object.keys(state.fieldErrors).length > 0);
   return (
-    <AuthCard titleId="sign-up-title" title="Create your account" headingRef={heading}>
+    <AuthCard
+      titleId="sign-up-title"
+      eyebrow="Create account"
+      title="Create your account"
+      headingRef={heading}
+    >
       <p className="auth-helper">
         We&rsquo;ll email you a {CODE_LENGTH}-digit code to confirm your address, then a link to
         choose your password.

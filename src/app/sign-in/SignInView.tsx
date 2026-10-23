@@ -7,6 +7,8 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { AuthShell } from "@/features/auth/AuthShell";
+import { PasswordToggle } from "@/features/auth/AuthParts";
 import { SIGN_IN_HINT_BEFORE } from "@/features/auth/copy";
 import { INVALID_CREDENTIALS_MESSAGE } from "./state";
 
@@ -32,10 +34,9 @@ export function SignInView({
   notice,
 }: SignInViewProps) {
   return (
-    <main className="auth-screen">
-      {banner}
+    <AuthShell banner={banner}>
       <Card as="section" padded className="auth-card" aria-labelledby="sign-in-title">
-        <p className="eyebrow">Carrywell</p>
+        <p className="eyebrow">Sign in</p>
         <h1 id="sign-in-title">Welcome back</h1>
         {notice ? (
           <p className="auth-notice" role="status">
@@ -66,16 +67,7 @@ export function SignInView({
                 required
                 readOnly={pending}
               />
-              {/* One fixed label with aria-pressed: a label that also flips would read as contradictory. */}
-              <Button
-                variant="secondary"
-                small
-                className="password-toggle"
-                onClick={onTogglePassword}
-                aria-pressed={showPassword}
-              >
-                Show password
-              </Button>
+              <PasswordToggle shown={showPassword} onToggle={onTogglePassword} />
             </div>
             <Link className="auth-link forgot-link" href="/forgot-password">
               Forgot password?
@@ -117,6 +109,6 @@ export function SignInView({
           </Link>
         </p>
       </Card>
-    </main>
+    </AuthShell>
   );
 }

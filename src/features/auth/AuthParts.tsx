@@ -4,17 +4,21 @@ import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { AuthShell } from "./AuthShell";
 import { useHeadingFocus } from "./hooks";
 
-/** The centered card every account screen sits in: eyebrow, focusable heading, then the content. */
+/** The card every account screen sits in, under the brand bar: a screen-name eyebrow, the focusable heading, then the content. */
 export function AuthCard({
   titleId,
+  eyebrow,
   title,
   headingRef,
   children,
   banner,
 }: {
   titleId: string;
+  /** What this screen is for ("Sign in", "Create account", ...), in place of the app name, which the brand bar carries. */
+  eyebrow: string;
   title: string;
   headingRef?: React.Ref<HTMLHeadingElement>;
   children: ReactNode;
@@ -23,16 +27,15 @@ export function AuthCard({
   // A screen that does not manage focus itself still puts it on the heading when it appears.
   const ownRef = useHeadingFocus(0);
   return (
-    <main className="auth-screen">
-      {banner}
+    <AuthShell banner={banner}>
       <Card as="section" padded className="auth-card" aria-labelledby={titleId}>
-        <p className="eyebrow">Carrywell</p>
+        <p className="eyebrow">{eyebrow}</p>
         <h1 id={titleId} ref={headingRef ?? ownRef} tabIndex={-1}>
           {title}
         </h1>
         {children}
       </Card>
-    </main>
+    </AuthShell>
   );
 }
 
@@ -90,6 +93,18 @@ export function TextField({
   );
 }
 
+/**
+ * "Show password" as a text toggle inside the field's right edge (link colour, a 44px target, aria-pressed). One fixed label:
+ * a label that also flipped would read as contradictory next to aria-pressed.
+ */
+export function PasswordToggle({ shown, onToggle }: { shown: boolean; onToggle: () => void }) {
+  return (
+    <button type="button" className="password-toggle" onClick={onToggle} aria-pressed={shown}>
+      Show password
+    </button>
+  );
+}
+
 /** Password input with the same show/hide toggle as sign-in (one fixed label, aria-pressed carries the state). */
 export function PasswordField({
   id,
@@ -123,15 +138,7 @@ export function PasswordField({
           aria-describedby={describedBy || undefined}
           required
         />
-        <Button
-          variant="secondary"
-          small
-          className="password-toggle"
-          onClick={() => setShown((current) => !current)}
-          aria-pressed={shown}
-        >
-          Show password
-        </Button>
+        <PasswordToggle shown={shown} onToggle={() => setShown((current) => !current)} />
       </div>
       {hint ? (
         <p id={`${id}-hint`} className="field-hint">

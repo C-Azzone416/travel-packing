@@ -25,6 +25,7 @@ export function ResetForm({
   const form = useFocusInvalid(state, Object.keys(state.fieldErrors).length > 0);
   return (
     <AuthCard
+      eyebrow={variant === "setup" ? "Finish setup" : "Reset password"}
       titleId="reset-title"
       title={variant === "setup" ? "Set your password" : "Choose a new password"}
       headingRef={heading}
