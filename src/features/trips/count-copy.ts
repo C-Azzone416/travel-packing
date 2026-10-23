@@ -22,11 +22,12 @@ export function countTiles(
 ): { value: number; label: string }[] {
   // Days held back for the way home: whatever is left after the worn day and the everyday days (never below 0).
   const home = Math.max(0, days - 1 - everydayDays);
-  const homeLabel = returnOutfit
-    ? "Set for the trip home"
-    : policy === "exclude-return-day"
+  // "Set aside for the trip home": 1 with the return outfit on, 0 with it off (the return day is then an everyday day).
+  // "Return day, not counted" belongs to the unused exclude-return-day variant only.
+  const homeLabel =
+    !returnOutfit && policy === "exclude-return-day"
       ? "Return day, not counted"
-      : "Return day, packed as usual";
+      : "Set aside for the trip home";
   return [
     { value: days, label: "Days away" },
     { value: 1, label: "Worn on the way there" },

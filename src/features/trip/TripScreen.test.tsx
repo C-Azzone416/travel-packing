@@ -898,14 +898,21 @@ describe("preferences and Ready", () => {
     await user.clear(occasions);
     await user.type(occasions, "12");
     expect(occasions.value).toBe("8");
+    expect(within(dialog).queryByText("Turn on Nice outfits to set occasions.")).toBeNull();
     await user.click(within(dialog).getByRole("switch", { name: "Nice outfits" }));
     expect(occasions.disabled).toBe(true);
+    const reuse = within(dialog).getByRole("switch", {
+      name: "Reuse one nice look",
+    }) as HTMLInputElement;
+    expect(reuse.disabled).toBe(true);
+    // With Nice outfits off, the helper line says why, and both disabled controls point at it.
+    const hint = within(dialog).getByText("Turn on Nice outfits to set occasions.");
+    expect(occasions.getAttribute("aria-describedby")).toBe(hint.id);
+    expect(reuse.getAttribute("aria-describedby")).toBe(hint.id);
     expect(
-      (within(dialog).getByRole("switch", { name: "Reuse one nice look" }) as HTMLInputElement)
-        .disabled,
-    ).toBe(true);
-    expect(
-      within(dialog).getByText("A fresh top, bottoms, underwear and socks for the trip home."),
+      within(dialog).getByText(
+        "A fresh top, bottoms, underwear and socks for the trip home. It replaces one everyday outfit, for your return day.",
+      ),
     ).toBeTruthy();
     await user.click(
       within(dialog).getByRole("switch", { name: "Dedicated return travel outfit" }),

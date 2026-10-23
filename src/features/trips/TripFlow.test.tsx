@@ -309,6 +309,11 @@ describe("step 2: shape the list", () => {
     expect(screen.queryByText("Dress shoes", { selector: "strong" })).toBeNull();
     await user.click(screen.getByRole("switch", { name: "Nice outfits" }));
     expect(screen.getByText("Dress shoes", { selector: "strong" })).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Adds planned occasion looks on top of your everyday outfits, plus optional Dress shoes, Makeup and Dress-specific undergarments.",
+      ),
+    ).toBeTruthy();
     expect(row("Everyday tops").textContent).toContain("3");
     await user.click(screen.getByRole("switch", { name: "Laundry access" }));
     expect(screen.getByRole("status", { name: "List changes" }).textContent).toBe(
@@ -326,7 +331,13 @@ describe("step 2: shape the list", () => {
     // Occasions and reuse stay inert until Nice outfits is turned on (it is off for a new trip, #205).
     expect(occasions.disabled).toBe(true);
     expect(reuse.disabled).toBe(true);
+    // Why they are disabled: the helper line under the switch, which both controls are described by.
+    const hint = screen.getByText("Turn on Nice outfits to set occasions.");
+    expect(occasions.getAttribute("aria-describedby")).toBe(hint.id);
+    expect(reuse.getAttribute("aria-describedby")?.split(" ")).toContain(hint.id);
     await user.click(screen.getByRole("switch", { name: "Nice outfits" }));
+    expect(screen.queryByText("Turn on Nice outfits to set occasions.")).toBeNull();
+    expect(occasions.getAttribute("aria-describedby")).toBeNull();
     expect(occasions.disabled).toBe(false);
     fireEvent.change(occasions, { target: { value: "12" } });
     expect(occasions.value).toBe("8");
@@ -340,18 +351,20 @@ describe("step 2: shape the list", () => {
     expect(reuse.checked).toBe(false);
   });
 
-  it("return outfit off: the checkout day needs an everyday look, and the third tile says the return day is packed as usual", async () => {
+  it("return outfit off: the checkout day needs an everyday look, and the third tile drops to 0 set aside for the trip home", async () => {
     const { user } = setup();
     await toShapeStep(user);
     expect(
-      screen.getByText("A fresh top, bottoms, underwear and socks for the trip home."),
+      screen.getByText(
+        "A fresh top, bottoms, underwear and socks for the trip home. It replaces one everyday outfit, for your return day.",
+      ),
     ).toBeTruthy();
     await user.click(screen.getByRole("switch", { name: "Dedicated return travel outfit" }));
     expect(screen.getByText("Your return day is packed like any other day.")).toBeTruthy();
-    const returnDay = screen.getByText("Return day, packed as usual")
+    // The third tile keeps its label and drops to 0: nothing is set aside, the return day is an everyday day.
+    const setAside = screen.getByText("Set aside for the trip home")
       .previousElementSibling as HTMLElement;
-    expect(returnDay.textContent).toBe("0");
-    expect(screen.queryByText("Set for the trip home")).toBeNull();
+    expect(setAside.textContent).toBe("0");
     expect(screen.getByText(/5 days away − 1 worn = 4 days of everyday clothes\./)).toBeTruthy();
     expect(screen.getByRole("heading", { name: "4 days of everyday clothes" })).toBeTruthy();
   });

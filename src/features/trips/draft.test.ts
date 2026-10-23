@@ -167,10 +167,10 @@ describe("describeChanges", () => {
 describe("returnOutfitHelp", () => {
   it("describes the dedicated outfit when on", () => {
     expect(returnOutfitHelp(true)).toBe(
-      "A fresh top, bottoms, underwear and socks for the trip home.",
+      "A fresh top, bottoms, underwear and socks for the trip home. It replaces one everyday outfit, for your return day.",
     );
     expect(returnOutfitHelp(true, "add-return-day-back")).toBe(
-      "A fresh top, bottoms, underwear and socks for the trip home.",
+      "A fresh top, bottoms, underwear and socks for the trip home. It replaces one everyday outfit, for your return day.",
     );
   });
 

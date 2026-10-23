@@ -28,7 +28,11 @@ describe("the tiles", () => {
 
   it("return outfit ON: days away, worn on the way there, set for the trip home", () => {
     const tiles = countTiles(7, n(7, true), true);
-    expect(labels(tiles)).toEqual(["Days away", "Worn on the way there", "Set for the trip home"]);
+    expect(labels(tiles)).toEqual([
+      "Days away",
+      "Worn on the way there",
+      "Set aside for the trip home",
+    ]);
     expect(values(tiles)).toEqual([7, 1, 1]);
   });
 
@@ -40,9 +44,9 @@ describe("the tiles", () => {
     expect(7 - 1 - tiles[2].value).toBe(n(7, false));
   });
 
-  it("return outfit OFF, if the return day is added back: packed as usual, 0 held back", () => {
+  it("return outfit OFF, the return day added back (the decided policy): the same label, 0 set aside", () => {
     const tiles = countTiles(7, n(7, false, ADD_BACK), false, ADD_BACK);
-    expect(labels(tiles)[2]).toBe("Return day, packed as usual");
+    expect(labels(tiles)[2]).toBe("Set aside for the trip home");
     expect(values(tiles)).toEqual([7, 1, 0]);
   });
 

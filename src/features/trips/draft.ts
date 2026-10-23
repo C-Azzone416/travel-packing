@@ -106,7 +106,9 @@ export function describeChanges(before: Suggestions, after: Suggestions): string
 
 /** Helper text under the return-outfit switch. The "off" wording must match what the calculator does (#25). */
 export function returnOutfitHelp(on: boolean, policy: ReturnOffPolicy = RETURN_OFF_POLICY): string {
-  if (on) return "A fresh top, bottoms, underwear and socks for the trip home.";
+  if (on) {
+    return "A fresh top, bottoms, underwear and socks for the trip home. It replaces one everyday outfit, for your return day.";
+  }
   return policy === "add-return-day-back"
     ? "Your return day is packed like any other day."
     : "No separate return outfit. Your return day is not added to the everyday count.";
