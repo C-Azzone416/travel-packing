@@ -77,8 +77,8 @@ test("edit the route down to 2 stops, then copy the trip to new dates", async ({
     .getByRole("link", { name: /(Continue|Keep) packing/ })
     .click();
 
-  await page.getByRole("button", { name: "Edit route" }).click();
-  const sheet = page.getByRole("dialog", { name: "Edit route" });
+  await page.getByRole("button", { name: "Edit trip" }).click();
+  const sheet = page.getByRole("dialog", { name: "Edit trip" });
   await expect(sheet.getByRole("group", { name: /^Stop \d$/ })).toHaveCount(3);
   await sheet.getByRole("button", { name: "Remove Paris" }).click();
   await sheet.getByRole("button", { name: "Remove", exact: true }).click();
@@ -130,7 +130,7 @@ test(
       .getByRole("link", { name: /(Continue|Keep) packing/ })
       .click();
     await expectAccessible(page, "trip with route chip");
-    await page.getByRole("button", { name: "Edit route" }).click();
+    await page.getByRole("button", { name: "Edit trip" }).click();
     await expectAccessible(page, "edit route sheet");
   },
 );

@@ -135,8 +135,8 @@ test("a changed forecast offers itemized changes; accepting some revokes Ready, 
   await createWeatherTrip(page);
   // The same trip, a day later, with a dry forecast: a new request and a different answer.
   await fake("/__weather-set?variant=dry");
-  await page.getByRole("button", { name: "Edit route" }).click();
-  const sheet = page.getByRole("dialog", { name: "Edit route" });
+  await page.getByRole("button", { name: "Edit trip" }).click();
+  const sheet = page.getByRole("dialog", { name: "Edit trip" });
   await sheet.getByLabel("Arrive", { exact: true }).fill(inDays(4));
   await sheet.getByRole("button", { name: "Save route" }).click();
   await expect(sheet).toHaveCount(0);
@@ -212,8 +212,8 @@ test("a provider failure shows Unavailable and leaves the list as it was", async
   const before = await page.locator("[data-item-id]").count();
   await fake("/__weather-set?fail=1");
   // A different range, so the server cannot answer from its memory of the last one.
-  await page.getByRole("button", { name: "Edit route" }).click();
-  const sheet = page.getByRole("dialog", { name: "Edit route" });
+  await page.getByRole("button", { name: "Edit trip" }).click();
+  const sheet = page.getByRole("dialog", { name: "Edit trip" });
   await sheet.getByLabel("Arrive", { exact: true }).fill(inDays(5));
   await sheet.getByRole("button", { name: "Save route" }).click();
   await expect(
@@ -243,8 +243,8 @@ test(
     await expect(page.locator(".weather-row")).toHaveCount(2);
     await expectAccessible(page, "trip with the weather panel");
     await fake("/__weather-set?variant=dry");
-    await page.getByRole("button", { name: "Edit route" }).click();
-    const sheet = page.getByRole("dialog", { name: "Edit route" });
+    await page.getByRole("button", { name: "Edit trip" }).click();
+    const sheet = page.getByRole("dialog", { name: "Edit trip" });
     await sheet.getByLabel("Arrive", { exact: true }).fill(inDays(4));
     await sheet.getByRole("button", { name: "Save route" }).click();
     // Wait for the banner itself (the weather is fetched again after the route edit), so a failure says what was missing.

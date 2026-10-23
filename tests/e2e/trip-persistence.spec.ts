@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { SECOND_EMAIL, signIn, signInAsOwner } from "./helpers/auth";
 import { DEVICE } from "./helpers/device";
+import { reviewAndApply } from "./helpers/preferences";
 
 // The trip screen against a REAL Postgres: what it shows after a reload is what was stored. Each test starts from the
 // freshly seeded state of this project's owner (San Diego partly packed, Lisbon past, Ready, weather accepted).
@@ -115,11 +116,9 @@ test("Mark as not ready is stored, and keeps every packed count", async ({ page 
 test("changing a Ready trip revokes Ready, and that is stored too", async ({ page }) => {
   await openLisbon(page);
   await page.getByRole("button", { name: "Edit preferences" }).click();
-  await page
-    .getByRole("dialog", { name: "Edit packing preferences" })
-    .getByRole("switch", { name: "Laundry access" })
-    .uncheck();
-  await page.getByRole("button", { name: "Update this trip" }).click();
+  const dialog = page.getByRole("dialog", { name: "Edit trip" });
+  await dialog.getByRole("switch", { name: "Laundry access" }).uncheck();
+  await reviewAndApply(page, dialog);
   await expect(page.getByText("You’re ready to go.")).toHaveCount(0);
   await page.reload();
   await expect(page.getByRole("heading", { name: "Lisbon", level: 1 })).toBeVisible();
@@ -213,14 +212,14 @@ test(
     await page.emulateMedia({ reducedMotion: "reduce" });
     await openSanDiego(page);
     expect(await headerArt(page)).toBe("beach");
-    // Placement (#155): Edit route and Change theme sit side by side in the hero card, under the title.
+    // Placement (#155): Edit trip and Change theme sit side by side in the hero card, under the title.
     const button = page.getByRole("button", { name: "Change theme" });
     const hero = (await page.locator(".trip-hero").boundingBox())!;
     const at = (await button.boundingBox())!;
     expect(at.height).toBeGreaterThanOrEqual(43.9);
     expect(at.x).toBeGreaterThanOrEqual(hero.x);
     expect(at.x + at.width).toBeLessThanOrEqual(hero.x + hero.width);
-    const edit = (await page.getByRole("button", { name: "Edit route" }).boundingBox())!;
+    const edit = (await page.getByRole("button", { name: "Edit trip" }).boundingBox())!;
     expect(Math.abs(edit.y - at.y)).toBeLessThan(2);
     // The theme picture is an optional layer that is off for now: the saved theme is still on the page, just hidden.
     await expect(page.locator(".trip-hero .hero-picture")).toBeHidden();

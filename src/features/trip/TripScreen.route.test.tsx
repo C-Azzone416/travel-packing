@@ -71,19 +71,19 @@ describe("the route on the trip header", () => {
   });
 });
 
-describe("Edit route", () => {
+describe("Edit trip: Route & dates", () => {
   it("opens the stop cards on the trip's stops and saves a changed route", async () => {
     const { user, source } = setup("tour");
     await screen.findByRole("heading", { name: "San Diego → Lisbon", level: 1 });
-    await user.click(screen.getByRole("button", { name: "Edit route" }));
-    const dialog = screen.getByRole("dialog", { name: "Edit route" });
+    await user.click(screen.getByRole("button", { name: "Edit trip" }));
+    const dialog = screen.getByRole("dialog", { name: "Edit trip" });
     expect(within(dialog).getAllByRole("group", { name: /^Stop \d$/ })).toHaveLength(2);
 
     fireEvent.change(within(dialog).getByLabelText("Leave, Stop 2"), {
       target: { value: "2026-10-31" },
     });
     await user.click(within(dialog).getByRole("button", { name: "Save route" }));
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit route" })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit trip" })).toBeNull());
     const saved = (await source.getTrip("tour"))!;
     expect(saved).toMatchObject({ end: "2026-10-31", days: 9 });
     expect(screen.getByRole("status", { name: "Packing updates" }).textContent).toBe(
@@ -94,8 +94,8 @@ describe("Edit route", () => {
   it("opens a single-destination trip as one plain destination and can add a stop", async () => {
     const { user, source } = setup("san-diego");
     await screen.findByRole("heading", { name: "San Diego", level: 1 });
-    await user.click(screen.getByRole("button", { name: "Edit route" }));
-    const dialog = screen.getByRole("dialog", { name: "Edit route" });
+    await user.click(screen.getByRole("button", { name: "Edit trip" }));
+    const dialog = screen.getByRole("dialog", { name: "Edit trip" });
     await user.click(within(dialog).getByRole("button", { name: "+ Add another stop" }));
     await user.type(
       within(dialog).getByRole("combobox", { name: "Destination search, Stop 2" }),
@@ -103,7 +103,7 @@ describe("Edit route", () => {
     );
     await user.click(within(screen.getByRole("listbox")).getAllByRole("option")[0]);
     await user.click(within(dialog).getByRole("button", { name: "Save route" }));
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit route" })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit trip" })).toBeNull());
     expect((await source.getTrip("san-diego")).stops.map((s) => s.location.city)).toEqual([
       "San Diego",
       "Paris",
@@ -113,8 +113,8 @@ describe("Edit route", () => {
   it("does not save while the route has problems, and says what to fix", async () => {
     const { user, source } = setup("san-diego");
     await screen.findByRole("heading", { name: "San Diego", level: 1 });
-    await user.click(screen.getByRole("button", { name: "Edit route" }));
-    const dialog = screen.getByRole("dialog", { name: "Edit route" });
+    await user.click(screen.getByRole("button", { name: "Edit trip" }));
+    const dialog = screen.getByRole("dialog", { name: "Edit trip" });
     await user.click(within(dialog).getByRole("button", { name: "+ Add another stop" }));
     await user.click(within(dialog).getByRole("button", { name: "Save route" }));
     expect(within(dialog).getByText("Pick a place for Stop 2, or choose Custom.")).toBeTruthy();
@@ -125,24 +125,27 @@ describe("Edit route", () => {
   it("Cancel discards the edit", async () => {
     const { user, source } = setup("tour");
     await screen.findByRole("heading", { name: "San Diego → Lisbon", level: 1 });
-    await user.click(screen.getByRole("button", { name: "Edit route" }));
-    const dialog = screen.getByRole("dialog", { name: "Edit route" });
+    await user.click(screen.getByRole("button", { name: "Edit trip" }));
+    const dialog = screen.getByRole("dialog", { name: "Edit trip" });
     await user.click(within(dialog).getByRole("button", { name: "Remove Lisbon" }));
     await user.click(within(dialog).getByRole("button", { name: "Remove" }));
+    // There is something to lose, so Cancel asks first, in the footer.
     await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
-    expect(screen.queryByRole("dialog", { name: "Edit route" })).toBeNull();
+    expect(within(dialog).getByText("Discard your changes?")).toBeTruthy();
+    await user.click(within(dialog).getByRole("button", { name: "Discard" }));
+    expect(screen.queryByRole("dialog", { name: "Edit trip" })).toBeNull();
     expect((await source.getTrip("tour")).stops).toHaveLength(2);
   });
 
   it("keeps the sheet open with a message when the save does not go through, and clears it on close", async () => {
     const { user } = setup("tour", true);
     await screen.findByRole("heading", { name: "San Diego → Lisbon", level: 1 });
-    await user.click(screen.getByRole("button", { name: "Edit route" }));
-    const dialog = screen.getByRole("dialog", { name: "Edit route" });
+    await user.click(screen.getByRole("button", { name: "Edit trip" }));
+    const dialog = screen.getByRole("dialog", { name: "Edit trip" });
     await user.click(within(dialog).getByRole("button", { name: "Save route" }));
     expect(await within(dialog).findByText(/Couldn’t save the route/)).toBeTruthy();
     await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
-    await user.click(screen.getByRole("button", { name: "Edit route" }));
+    await user.click(screen.getByRole("button", { name: "Edit trip" }));
     expect(screen.queryByText(/Couldn’t save the route/)).toBeNull();
   });
 });

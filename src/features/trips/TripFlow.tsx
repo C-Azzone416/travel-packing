@@ -40,6 +40,8 @@ import {
   MAX_OCCASIONS,
   MIN_OCCASIONS,
   newDraft,
+  NICE_OFF_HINT,
+  NICE_OUTFITS_DESCRIPTION,
   returnOutfitHelp,
   withDates,
 } from "./draft";
@@ -776,13 +778,13 @@ function ShapeStep({
           />
           <Switch
             label="Nice outfits"
-            description="Adds planned occasion looks on top of your everyday outfits, plus optional Dress shoes, Makeup and Dress-specific undergarments."
+            description={NICE_OUTFITS_DESCRIPTION}
             checked={config.niceAttire}
             onChange={(niceAttire) => onChange({ niceAttire })}
           />
           {config.niceAttire ? null : (
             <p id={niceHintId} className="tiny muted nice-hint">
-              Turn on Nice outfits to set occasions.
+              {NICE_OFF_HINT}
             </p>
           )}
           <div className="two-col occasion-row">

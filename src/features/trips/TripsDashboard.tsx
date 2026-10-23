@@ -16,7 +16,7 @@ import {
 } from "@/domain/trip-lifecycle";
 import { localToday } from "@/lib/today";
 import { AddToiletryForm } from "@/features/trip/AddToiletryForm";
-import { EditRouteSheet } from "@/features/trip/EditRouteSheet";
+import { EditTripSheet, type ApplyOutcome } from "@/features/trip/EditTripSheet";
 import { editItemHref } from "@/features/trip/edit-link";
 import { LaterJourneys } from "./LaterJourneys";
 import { NextDeparture, type HeroWeather } from "./NextDeparture";
@@ -63,8 +63,6 @@ export function TripsDashboard({ source, getToday = localToday }: TripsDashboard
   );
   const [bathroomSaving, setBathroomSaving] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
-  const [editFailed, setEditFailed] = useState(false);
-  const [saving, setSaving] = useState(false);
   // The last weather answer and which hero route it was for; a stale one is never shown for another route.
   const [fetched, setFetched] = useState<{ key: string; value: HeroWeather } | null>(null);
 
@@ -258,21 +256,57 @@ export function TripsDashboard({ source, getToday = localToday }: TripsDashboard
       .finally(() => setBathroomSaving(false));
   }
 
-  function saveRoute(id: string, stops: Parameters<typeof source.setStops>[1]) {
-    setEditFailed(false);
-    setSaving(true);
-    track(
+  /** Save the route from the Edit trip sheet; true once saved. The sheet shows its own failure message. */
+  function saveRoute(id: string, stops: Parameters<typeof source.setStops>[1]): Promise<boolean> {
+    return track(
       async () => {
         await source.setStops(id, stops);
         return source.load();
       },
+      (next) => setLoad({ phase: "ready", state: next, today: getToday() }),
+    )
+      .then(() => true)
+      .catch(() => false);
+  }
+
+  /** Apply reviewed packing preferences from the Edit trip sheet (#203). STALE means the trip changed since the review. */
+  function applyPreferences(
+    id: string,
+    config: Parameters<typeof source.updatePreferences>[1],
+    basedOn: string | undefined,
+  ): Promise<ApplyOutcome> {
+    const before = state.trips.find((trip) => trip.id === id);
+    return track(
+      async () => {
+        await source.updatePreferences(id, config, basedOn);
+        return source.load();
+      },
       (next) => {
         setLoad({ phase: "ready", state: next, today: getToday() });
-        setEditing(null);
+        const after = next.trips.find((trip) => trip.id === id);
+        toast.show(
+          [
+            "Preferences updated.",
+            before?.ready ? "Ready turned off." : null,
+            before?.toiletryBagPacked && after && !after.toiletryBagPacked
+              ? "Toiletry bag placement reset."
+              : null,
+          ]
+            .filter(Boolean)
+            .join(" "),
+        );
       },
     )
-      .catch(() => setEditFailed(true))
-      .finally(() => setSaving(false));
+      .then((): ApplyOutcome => "ok")
+      .catch(async (error: unknown): Promise<ApplyOutcome> => {
+        if (!(error instanceof Error && error.message === "STALE")) return "failed";
+        // The list moved on while it was being reviewed: show the current one, so reviewing again is about it.
+        await source
+          .load()
+          .then((next) => setLoad({ phase: "ready", state: next, today: getToday() }))
+          .catch(() => undefined);
+        return "stale";
+      });
   }
 
   const archive = (id: string) => void run(id, () => source.archive(id));
@@ -369,10 +403,7 @@ export function TripsDashboard({ source, getToday = localToday }: TripsDashboard
                 departure={departureView(hero, today)}
                 weather={weather}
                 busy={busy.has(hero.id)}
-                onEdit={(id) => {
-                  setEditFailed(false);
-                  setEditing(id);
-                }}
+                onEdit={(id) => setEditing(id)}
                 onAddItem={(item) => addItem(hero.id, item)}
                 onBathroom={(name, qty) => setBathroom({ tripId: hero.id, name, qty })}
                 onEditExisting={(itemId) => router.push(editItemHref(hero.id, itemId))}
@@ -446,15 +477,12 @@ export function TripsDashboard({ source, getToday = localToday }: TripsDashboard
       ) : null}
 
       {editTarget ? (
-        <EditRouteSheet
-          stops={editTarget.stops}
-          saving={saving}
-          failed={editFailed}
-          onClose={() => {
-            setEditFailed(false);
-            setEditing(null);
-          }}
-          onSave={(stops) => saveRoute(editTarget.id, stops)}
+        <EditTripSheet
+          trip={editTarget}
+          initialTab="route"
+          onClose={() => setEditing(null)}
+          onSaveRoute={(stops) => saveRoute(editTarget.id, stops)}
+          onApplyPreferences={(config, basedOn) => applyPreferences(editTarget.id, config, basedOn)}
         />
       ) : null}
 

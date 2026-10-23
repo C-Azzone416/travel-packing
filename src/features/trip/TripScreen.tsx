@@ -32,10 +32,9 @@ import { daysBetween } from "@/domain/trip-stops";
 import { localToday } from "@/lib/today";
 import { AddItemInline } from "./AddItemInline";
 import { SaveAsListSheet, type SaveOutcome } from "./SaveAsListSheet";
-import { EditRouteSheet } from "./EditRouteSheet";
+import { EditTripSheet, type ApplyOutcome, type EditTripTab } from "./EditTripSheet";
 import { ItemEditor } from "./ItemEditor";
 import { PackRow } from "./PackRow";
-import { PreferencesForm } from "./PreferencesForm";
 import { EditStampSheet } from "./EditStampSheet";
 import { ThemeSheet } from "./ThemeSheet";
 import { ToiletrySection } from "./ToiletrySection";
@@ -72,10 +71,9 @@ type Dialog =
   | { kind: "add-toiletry"; name?: string; qty?: number }
   | { kind: "save-list" }
   | { kind: "bag" }
-  | { kind: "preferences" }
   | { kind: "theme" }
   | { kind: "stamp" }
-  | { kind: "route" };
+  | { kind: "trip"; tab: EditTripTab };
 
 interface WeatherExperience {
   settings: WeatherSettings;
@@ -93,7 +91,7 @@ interface ActOptions {
   announce?: (change: TripChange) => string;
   after?: (change: TripChange) => void;
   /** The write failed: a dialog can say so itself, since the top-bar chip is out of reach behind it. */
-  onFail?: () => void;
+  onFail?: (error: unknown) => void;
 }
 
 function ListSection({
@@ -147,7 +145,6 @@ export function TripScreen({ tripId, openItemId }: { tripId: string; openItemId?
   const [announcement, setAnnouncement] = useState("");
   const [themeFailed, setThemeFailed] = useState(false);
   const [stampFailed, setStampFailed] = useState(false);
-  const [routeFailed, setRouteFailed] = useState(false);
   const [weather, setWeather] = useState<WeatherExperience | null>(null);
   const [weatherReviewOpen, setWeatherReviewOpen] = useState(false);
   const [weatherReviewError, setWeatherReviewError] = useState(false);
@@ -265,8 +262,8 @@ export function TripScreen({ tripId, openItemId }: { tripId: string; openItemId?
         options.after?.(change);
       })
         .then(() => undefined)
-        .catch(() => {
-          options.onFail?.();
+        .catch((error: unknown) => {
+          options.onFail?.(error);
           if (!options.row) return;
           const row = options.row;
           retries.current.set(row, { write, options });
@@ -624,9 +621,9 @@ export function TripScreen({ tripId, openItemId }: { tripId: string; openItemId?
                 variant="secondary"
                 small
                 className="edit-route"
-                onClick={() => setDialog({ kind: "route" })}
+                onClick={() => setDialog({ kind: "trip", tab: "route" })}
               >
-                Edit route
+                Edit trip
               </Button>
               <Button
                 variant="secondary"
@@ -869,7 +866,11 @@ export function TripScreen({ tripId, openItemId }: { tripId: string; openItemId?
             <p className="tiny muted">
               {tripMathLine(trip.days, trip.dailyDays, trip.config.returnOutfit)}
             </p>
-            <Button variant="ghost" small onClick={() => setDialog({ kind: "preferences" })}>
+            <Button
+              variant="ghost"
+              small
+              onClick={() => setDialog({ kind: "trip", tab: "preferences" })}
+            >
               Edit preferences
             </Button>
           </Card>
@@ -922,16 +923,6 @@ export function TripScreen({ tripId, openItemId }: { tripId: string; openItemId?
               staples: item.scope === "remember",
               after: close,
             })
-          }
-        />
-      ) : null}
-      {dialog?.kind === "preferences" ? (
-        <PreferencesForm
-          config={trip.config}
-          saving={submitting}
-          onClose={close}
-          onSave={(config) =>
-            void act(() => source.updatePreferences(tripId, config), { modal: true, after: close })
           }
         />
       ) : null}
@@ -988,28 +979,61 @@ export function TripScreen({ tripId, openItemId }: { tripId: string; openItemId?
           }}
         />
       ) : null}
-      {dialog?.kind === "route" ? (
-        <EditRouteSheet
-          stops={trip.stops}
-          saving={submitting}
-          failed={routeFailed}
-          onClose={() => {
-            setRouteFailed(false);
-            close();
-          }}
-          onSave={(stops) => {
-            setRouteFailed(false);
-            void act(() => source.setStops(tripId, stops), {
-              modal: true,
-              onFail: () => setRouteFailed(true),
-              announce: () => "Route updated.",
-              after: (change) => {
-                close();
-                // New stops and dates are a new question for the weather service.
-                void loadWeather(change.trip, weather?.settings);
-              },
-            });
-          }}
+      {dialog?.kind === "trip" ? (
+        <EditTripSheet
+          trip={trip}
+          initialTab={dialog.tab}
+          onClose={close}
+          onSaveRoute={(stops) =>
+            new Promise<boolean>((resolve) => {
+              void act(() => source.setStops(tripId, stops), {
+                modal: true,
+                onFail: () => resolve(false),
+                announce: () => "Route updated.",
+                after: (change) => {
+                  // New stops and dates are a new question for the weather service.
+                  void loadWeather(change.trip, weather?.settings);
+                  resolve(true);
+                },
+              });
+            })
+          }
+          onApplyPreferences={(config, basedOn) =>
+            new Promise<ApplyOutcome>((resolve) => {
+              const wasReady = trip.ready;
+              const hadBagPlaced = trip.toiletryBagPacked;
+              void act(() => source.updatePreferences(tripId, config, basedOn), {
+                modal: true,
+                onFail: (error) => {
+                  if (!(error instanceof Error && error.message === "STALE"))
+                    return resolve("failed");
+                  // The list moved on while it was being reviewed: show the current one, so reviewing again is about it.
+                  void source
+                    .getTrip(tripId)
+                    .then((current) => {
+                      confirmed.current = current;
+                      setLoad({ phase: "ready", trip: current });
+                    })
+                    .catch(() => undefined)
+                    .finally(() => resolve("stale"));
+                },
+                after: (change) => {
+                  toast.show(
+                    [
+                      "Preferences updated.",
+                      wasReady ? "Ready turned off." : null,
+                      hadBagPlaced && !change.trip.toiletryBagPacked
+                        ? "Toiletry bag placement reset."
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" "),
+                  );
+                  resolve("ok");
+                },
+              });
+            })
+          }
         />
       ) : null}
       <ReviewSheet

@@ -221,9 +221,9 @@ test("the hero leads with the next departure; Edit trip opens the route sheet", 
   expect(headerBackground).toBe(headerToken);
 
   await hero.getByRole("button", { name: "Edit trip: San Diego" }).click();
-  await expect(page.getByRole("dialog", { name: "Edit route" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Edit trip" })).toBeVisible();
   await page.getByRole("button", { name: "Cancel" }).click();
-  await expect(page.getByRole("dialog", { name: "Edit route" })).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "Edit trip" })).toHaveCount(0);
 });
 
 test("no horizontal scroll at 390 and 1280, and the sidebar sits beside the hero only on wide screens", async ({

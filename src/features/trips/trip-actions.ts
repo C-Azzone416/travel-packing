@@ -256,8 +256,11 @@ export async function setStampLabelsAction(
 export async function updatePreferencesAction(
   tripId: string,
   config: TripConfig,
+  basedOn?: string,
 ): Promise<TripCommandResult> {
-  return command((context) => service.updateTripPreferences(context, { tripId, config }));
+  return command((context) =>
+    service.updateTripPreferences(context, { tripId, config, ...(basedOn ? { basedOn } : {}) }),
+  );
 }
 
 /** Replace the trip's route. Only each stop's place id and its dates are sent; the server resolves the places. */
