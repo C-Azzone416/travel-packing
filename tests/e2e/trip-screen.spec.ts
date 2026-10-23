@@ -50,7 +50,7 @@ test("shows the trip with progress, and the All / Still to pack filter", async (
   await openSanDiego(page);
   await expect(page.getByRole("progressbar", { name: "Packing progress" })).toHaveAttribute(
     "aria-valuenow",
-    "20",
+    "19", // 6 of 32 (#205: Nice occasions no longer take everyday looks away)
   );
   await expect(page.locator(".trip-hero > .status-pill")).toHaveCount(0);
   await expect(row(page, "sleepwear")).toBeVisible();
