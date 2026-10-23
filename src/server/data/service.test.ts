@@ -1771,7 +1771,8 @@ describe("concurrent edits to one trip are serialized (no lost updates)", () => 
     expect(item((await loadTrip(db(), OWNER.userId, trip.id))!, "tops")?.packed).toBe(2);
 
     await Promise.all([tap(), tap(), tap()]);
-    expect(item((await loadTrip(db(), OWNER.userId, trip.id))!, "tops")?.packed).toBe(4);
+    // The fixture trip has 5 everyday tops now that Nice occasions no longer take everyday days away (#205); it was 4.
+    expect(item((await loadTrip(db(), OWNER.userId, trip.id))!, "tops")?.packed).toBe(5);
   });
 
   it("mixed concurrent edits to different items on one trip all land", async () => {

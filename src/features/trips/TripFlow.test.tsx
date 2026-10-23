@@ -299,18 +299,17 @@ describe("step 2: shape the list", () => {
     expect(screen.queryByText(/Simulated/)).toBeNull();
     const row = (name: string) =>
       screen.getByText(name, { selector: "strong" }).closest(".review-row") as HTMLElement;
-    expect(row("Everyday tops").textContent).toContain("2");
+    expect(row("Everyday tops").textContent).toContain("3");
     expect(screen.getByRole("switch", { name: "Dedicated return travel outfit" })).toHaveProperty(
       "checked",
       true,
     );
-
-    await user.click(screen.getByRole("switch", { name: "Nice outfits" }));
+    // New trips start with Nice outfits off (#205); turning them on adds the nice items and leaves the everyday ones alone.
+    expect(screen.getByRole("switch", { name: "Nice outfits" })).toHaveProperty("checked", false);
     expect(screen.queryByText("Dress shoes", { selector: "strong" })).toBeNull();
+    await user.click(screen.getByRole("switch", { name: "Nice outfits" }));
+    expect(screen.getByText("Dress shoes", { selector: "strong" })).toBeTruthy();
     expect(row("Everyday tops").textContent).toContain("3");
-    expect(screen.getByRole("status", { name: "List changes" }).textContent).toContain(
-      "Everyday tops: 3",
-    );
     await user.click(screen.getByRole("switch", { name: "Laundry access" }));
     expect(screen.getByRole("status", { name: "List changes" }).textContent).toBe(
       "Everyday tops: 2, Everyday bottoms: 1",
@@ -324,6 +323,10 @@ describe("step 2: shape the list", () => {
     await toShapeStep(user);
     const occasions = screen.getByLabelText("Occasions") as HTMLInputElement;
     const reuse = screen.getByRole("switch", { name: "Reuse one nice look" }) as HTMLInputElement;
+    // Occasions and reuse stay inert until Nice outfits is turned on (it is off for a new trip, #205).
+    expect(occasions.disabled).toBe(true);
+    expect(reuse.disabled).toBe(true);
+    await user.click(screen.getByRole("switch", { name: "Nice outfits" }));
     expect(occasions.disabled).toBe(false);
     fireEvent.change(occasions, { target: { value: "12" } });
     expect(occasions.value).toBe("8");
@@ -337,26 +340,20 @@ describe("step 2: shape the list", () => {
     expect(reuse.checked).toBe(false);
   });
 
-  it("return outfit off: shows what the calculator does, and the third tile becomes the return day that is not counted", async () => {
+  it("return outfit off: the checkout day needs an everyday look, and the third tile says the return day is packed as usual", async () => {
     const { user } = setup();
     await toShapeStep(user);
     expect(
       screen.getByText("A fresh top, bottoms, underwear and socks for the trip home."),
     ).toBeTruthy();
     await user.click(screen.getByRole("switch", { name: "Dedicated return travel outfit" }));
-    expect(
-      screen.getByText(
-        "No separate return outfit. Your return day is not added to the everyday count.",
-      ),
-    ).toBeTruthy();
-    const returnDay = screen.getByText("Return day, not counted")
+    expect(screen.getByText("Your return day is packed like any other day.")).toBeTruthy();
+    const returnDay = screen.getByText("Return day, packed as usual")
       .previousElementSibling as HTMLElement;
-    expect(returnDay.textContent).toBe("1");
+    expect(returnDay.textContent).toBe("0");
     expect(screen.queryByText("Set for the trip home")).toBeNull();
-    expect(
-      screen.getByText(/5 days away − 1 worn − 1 return day = 3 days of everyday clothes\./),
-    ).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "3 days of everyday clothes" })).toBeTruthy();
+    expect(screen.getByText(/5 days away − 1 worn = 4 days of everyday clothes\./)).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "4 days of everyday clothes" })).toBeTruthy();
   });
 
   it("Edit trip details goes back with everything kept", async () => {

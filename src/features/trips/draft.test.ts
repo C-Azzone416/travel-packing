@@ -20,7 +20,7 @@ import {
 const london = LOCATIONS.find((entry) => entry.id === "gb-eng-london")!;
 
 describe("drafts", () => {
-  it("a new draft has no destination, no dates and the prototype's defaults (return outfit on)", () => {
+  it("a new draft has no destination, no dates and the defaults: return outfit on, Nice outfits off (#205)", () => {
     const draft = newDraft();
     expect(draft).toMatchObject({
       mode: "create",
@@ -31,6 +31,7 @@ describe("drafts", () => {
     });
     expect(draft.config).toEqual(DEFAULT_TRIP_CONFIG);
     expect(draft.config.returnOutfit).toBe(true);
+    expect(draft.config.niceAttire).toBe(false);
   });
 
   it("a copy keeps the source's preferences but not its destination or dates", () => {
@@ -183,6 +184,6 @@ describe("returnOutfitHelp", () => {
   });
 
   it("defaults to the policy currently in force", () => {
-    expect(returnOutfitHelp(false)).toBe(returnOutfitHelp(false, "exclude-return-day"));
+    expect(returnOutfitHelp(false)).toBe(returnOutfitHelp(false, "add-return-day-back"));
   });
 });

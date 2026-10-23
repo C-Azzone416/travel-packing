@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "clubhouse": {
+      "command": "node",
+      "args": [
+        "/Applications/Clubhouse.app/Contents/Resources/app.asar.unpacked/.webpack/main/bridge/clubhouse-mcp-bridge.js"
+      ],
+      "env": {
+        "CLUBHOUSE_MCP_FALLBACK_PORT": "56269",
+        "CLUBHOUSE_MCP_FALLBACK_AGENT_ID": "durable_1792257138168_te2dw2"
+      },
+      "env_vars": [
+        "CLUBHOUSE_AGENT_ID",
+        "CLUBHOUSE_HOOK_NONCE",
+        "CLUBHOUSE_MCP_PORT"
+      ]
+    }
+  }
+}

@@ -17,11 +17,11 @@ import {
 import type { TripConfig } from "@/domain/trip";
 import { fixSummary, stopProblems } from "./stops-draft";
 
-// The prototype's defaults for a brand-new trip (return outfit on).
+// The defaults for a brand-new trip (#205): return outfit on, Nice outfits OFF (occasions and reuse stay inert until it is turned on).
 export const DEFAULT_TRIP_CONFIG: TripConfig = {
   laundry: false,
   spare: true,
-  niceAttire: true,
+  niceAttire: false,
   occasionCount: 1,
   reuseNice: true,
   returnOutfit: true,

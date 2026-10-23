@@ -108,7 +108,10 @@ describe("the callout", () => {
 
 describe("the trip screen's Trip math line", () => {
   it("is the sum without the lead-in, or the short-trip sentence", () => {
-    expect(tripMathLine(7, n(7, false), false)).toBe(
+    expect(tripMathLine(7, n(7, false, ADD_BACK), false)).toBe(
+      "7 days away − 1 worn = 6 days of everyday clothes.",
+    );
+    expect(tripMathLine(7, n(7, false), false, EXCLUDE)).toBe(
       "7 days away − 1 worn − 1 return day = 5 days of everyday clothes.",
     );
     expect(tripMathLine(7, n(7, true), true)).toBe(
