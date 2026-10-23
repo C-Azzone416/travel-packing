@@ -14,7 +14,8 @@ import { nextNewcomerSlot, resetAccount } from "./helpers/inbox";
 const THEMES = ["base", "ocean", "terracotta", "violet"] as const;
 const SHOTS = process.env.AUTH_SHOTS;
 const BAR_HEIGHT = { 1280: 68, 390: 60 } as const;
-const TOKEN = "abcdefghijklmnop0123456789";
+// Only the shape of a link token matters here (the page shows the form for any well-formed one); built like the other specs do.
+const TOKEN = "a".repeat(48);
 
 const CELLS = [
   ...THEMES.map((theme) => ({ theme, width: 1280 as const, axe: true })),
@@ -130,6 +131,14 @@ for (const { theme, width, axe } of CELLS) {
       await check("set-password");
       await page.goto("/reset-password");
       await check("invalid-link");
+      // The sentence and the button under it are 16px apart, as on verify and reset-password (not squeezed to 4px).
+      const sentence = (await page.locator(".auth-helper").boundingBox())!;
+      const button = (await page
+        .getByRole("link", { name: "Send a new reset link" })
+        .boundingBox())!;
+      expect(button.y - (sentence.y + sentence.height), "invalid-link: sentence to button").toBe(
+        16,
+      );
     });
     await test.step("finish setup", async () => {
       await page.goto("/finish-setup");

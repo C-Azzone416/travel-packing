@@ -1854,6 +1854,10 @@ input:disabled {
 .auth-card .button.block {
   margin-top: 4px;
 }
+/* A button straight under a sentence (the invalid-link screen) gets the same 16px a form gets, not the 4px above. */
+.auth-card .auth-helper + .button.block {
+  margin-top: 16px;
+}
 .auth-form {
   display: grid;
   gap: 16px;
