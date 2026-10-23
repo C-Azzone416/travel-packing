@@ -61,10 +61,37 @@ async function enterCode(page: Page, code: string) {
 
 const WRONG = /That code isn't right or has expired/;
 
+/**
+ * #210: nothing in the emailed link can be read back as the address. Every path segment and every query value is split on dots
+ * and read as text, base64url, base64 and hex, and none of those readings contains the address, its halves or its words.
+ */
+function expectOpaqueLink(link: string, address: string) {
+  const url = new URL(link, "http://localhost");
+  const pieces = [address, ...address.split("@"), ...address.split(/[^a-z]+/)]
+    .map((piece) => piece.toLowerCase())
+    .filter((piece) => piece.length >= 4);
+  const values = [...url.pathname.split("/"), ...[...url.searchParams.values()]];
+  expect(url.searchParams.get("for"), "the link carries the sealed value").toBeTruthy();
+  for (const value of values.flatMap((entry) => [entry, ...entry.split(".")])) {
+    const readings = [value, decodeURIComponent(value)];
+    for (const encoding of ["base64url", "base64", "hex"] as const) {
+      readings.push(
+        Buffer.from(value, encoding).toString("utf8"),
+        Buffer.from(value, encoding).toString("latin1"),
+      );
+    }
+    for (const reading of readings.map((text) => text.toLowerCase())) {
+      for (const piece of pieces)
+        expect(reading, `${value} read as ${reading}`).not.toContain(piece);
+    }
+  }
+}
+
 /** Opens the link emailed to this address and chooses a password with it (the "Set your password" screen). */
 async function finishSetup(page: Page, address = email, password = SET_PASSWORD) {
   const link = resetLinkPath(address);
   expect(link, "a setup link was emailed").not.toBeNull();
+  expectOpaqueLink(link ?? "", address);
   await page.goto(link ?? "/");
   await expect(heading(page, "Set your password")).toBeFocused();
   await page.getByLabel("New password", { exact: true }).fill(password);
@@ -315,6 +342,7 @@ test.describe("forgot and reset password", () => {
     await ownAccount();
     await forgot(page, email);
     const link = resetLinkPath(email) ?? "";
+    expectOpaqueLink(link, email);
     const token = resetToken(email) ?? "";
     await page.goto(link);
     await expect(heading(page, "Choose a new password")).toBeFocused();

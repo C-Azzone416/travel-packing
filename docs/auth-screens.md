@@ -148,9 +148,12 @@ set **through a link that only the inbox owner receives**:
   or one that does not say when it was made. Without this, an attacker who signed in at the provider with the pre-registered password
   and kept the cookie would get the owner's session the moment the owner used the link (QA's finding on #84). `pre-registration.test.ts`
   covers it. It does not rely on the provider revoking sessions on reset (nor on that being configured).
-- The link carries `?for=<seal>`: the address, signed with a server secret and expiring with the link, so using the link records
-  **which** account was set up (the provider's reset call does not say). Only the app can make a seal and it is only ever emailed to the
-  address it names. A missing or altered seal still changes the password but records nothing.
+- The link carries `?for=<seal>`: `<expiry>.<digest>`, a keyed digest (HMAC with a server secret) over the address and the expiry. **No address is in
+  the URL, not even encoded** (#210), so a copied link, browser history or an access log reveals no account. To read it, the app recomputes the
+  digest for each allowlisted address and takes the match (constant-time compare), so using the link records **which** account was set up (the
+  provider's reset call does not say) and can never name an address outside the allowlist. Only the app can make a seal and it is only ever emailed to the
+  address it names. A missing, altered, expired or old-format seal still changes the password but records nothing; links emailed before #210
+  (`<address>.<expiry>.<mac>`) stopped opening as set-up links: the person signs in and is sent a fresh one.
 - An address that is not allowlisted is untouched by all of this: it never reaches the provider, and the existing access-denied
   behaviour for a valid-but-not-allowed account is unchanged.
 

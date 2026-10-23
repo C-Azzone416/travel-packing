@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createFakeAuth, type FakeAuth } from "./__fixtures__/fake-auth";
 import {
@@ -28,7 +29,8 @@ let fake: FakeAuth;
 let limits: FlowLimits;
 let logged: string[];
 let setup: ReturnType<typeof createMemorySetupStore>;
-const seals = createSetupSeals("s".repeat(40));
+const SEAL_SECRET = "s".repeat(40);
+const seals = createSetupSeals(SEAL_SECRET);
 let auth: {
   provider: FakeAuth;
   allowlist: ReturnType<typeof parseAllowlist>;
@@ -313,7 +315,7 @@ describe("verifyOwnerEmail", () => {
     const redirectTo = (email: string) => `${REDIRECT}?for=${seals.seal(email)}`;
     await verifyOwnerEmail(auth, limits, "1.1.1.1", OWNER_EMAIL, "123456", redirectTo);
     const args = fake.flows.calls[1].args as string[];
-    expect(seals.open(new URL(args[1]).searchParams.get("for"))).toBe(OWNER_EMAIL);
+    expect(seals.open(new URL(args[1]).searchParams.get("for"), [OWNER_EMAIL])).toBe(OWNER_EMAIL);
   });
 
   it("does not record the account as set up: only using the link does that", async () => {
@@ -421,6 +423,17 @@ describe("resetOwnerPassword", () => {
     ["a seal made with another secret", createSetupSeals("t".repeat(40)).seal(OWNER_EMAIL)],
     ["a tampered seal", `${seals.seal(OWNER_EMAIL)}x`],
     ["a seal that is not text", { not: "text" }],
+    [
+      "a link in the shape used before #210 (address.expiry.mac), even one correctly signed",
+      (() => {
+        const payload = `${Buffer.from(OWNER_EMAIL).toString("base64url")}.${Date.now() + 60_000}`;
+        return `${payload}.${createHmac("sha256", SEAL_SECRET).update(payload).digest("base64url")}`;
+      })(),
+    ],
+    [
+      "an expired seal",
+      createSetupSeals(SEAL_SECRET, () => Date.now() - 3 * 60 * 60 * 1000).seal(OWNER_EMAIL),
+    ],
   ])("changes the password but records nothing for %s", async (_name, sealed) => {
     expect(await reset("fake-token-one", "new-password-1", sealed)).toEqual({ status: "ok" });
     expect(setup.digests.size).toBe(0);
