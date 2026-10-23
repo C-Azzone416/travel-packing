@@ -140,6 +140,16 @@ export function niceAccessoryKey(entry: { name?: string | null }): NiceAccessory
   return "";
 }
 
+/**
+ * The calculator's nice-attire lines (top, bottom, dress shoes, dress-specific undergarments), by id or name. Makeup is
+ * the exception (#202): people use it daily, so a Makeup staple still applies with Nice outfits off.
+ */
+function isNiceAttireStaple(staple: Staple): boolean {
+  const key = niceAccessoryKey(staple);
+  if (key === "makeup" || staple.id === "nice-makeup") return false;
+  return staple.id.startsWith("nice-") || key === "dress-shoes" || key === "dress-undergarments";
+}
+
 function newItem(
   id: string,
   name: string,
@@ -184,6 +194,8 @@ export function buildTripItems(
   }
 
   for (const staple of staples) {
+    // Nice outfits off means no nice attire (#202): a remembered nice item must not come back on its own.
+    if (!config.niceAttire && isNiceAttireStaple(staple)) continue;
     let qty = staple.cadence === "per day" ? computed.dailyDays * staple.qty : staple.qty;
     if ((staple.id === "underwear" || staple.id === "socks") && config.spare) qty += 1;
     const key = niceAccessoryKey(staple);

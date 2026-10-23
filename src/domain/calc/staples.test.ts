@@ -101,7 +101,7 @@ describe("buildTripItems with no staples", () => {
     expect(new Set(items.map((item) => item.id)).size).toBe(items.length);
   });
 
-  it("omits the return outfit only when returnOutfit is false, with everyday quantities unchanged", () => {
+  it("omits the return outfit only when returnOutfit is false, and the checkout day then needs an everyday look (#205)", () => {
     const withReturn = buildTripItems(config, []);
     const without = buildTripItems({ ...config, returnOutfit: false }, []);
     expect(without.items.some((item) => item.section === "return")).toBe(false);
@@ -110,8 +110,8 @@ describe("buildTripItems with no staples", () => {
         (item) => item.section === "return",
       ),
     ).toHaveLength(4);
-    expect(without.dailyDays).toBe(withReturn.dailyDays);
-    expect(byId(without.items, "tops")?.qty).toBe(byId(withReturn.items, "tops")?.qty);
+    expect(without.dailyDays).toBe(withReturn.dailyDays + 1);
+    expect(byId(without.items, "tops")?.qty).toBe((byId(withReturn.items, "tops")?.qty ?? 0) + 1);
   });
 
   it("puts calculated Makeup in the toiletry bag and flags nice companions optional", () => {
@@ -276,6 +276,39 @@ describe("staple dedupe against nice suggestions", () => {
     const { items } = buildTripItems(nice, [staple({ id: "scarf", name: "Scarf" })]);
     expect(byId(items, "nice-shoes")).toBeDefined();
     expect(byId(items, "scarf")).toBeDefined();
+  });
+});
+
+describe("remembered nice items with Nice outfits off (#202)", () => {
+  const remembered = [
+    staple({ id: "nice-top", name: "Nice-attire top", qty: 1, category: "Nice attire" }),
+    staple({ id: "nice-shoes", name: "Dress shoes", qty: 1, category: "Nice attire" }),
+    staple({ id: "nice-makeup", name: "Makeup", qty: 1, category: "Bathroom" }),
+    staple({ id: "my-shoes", name: "Dress shoes", qty: 2, category: "Shoes" }),
+    staple({ id: "my-undies", name: "Dress-specific undergarments", qty: 1 }),
+  ];
+
+  it("do not come back when Nice outfits is off, except Makeup, which people use every day", () => {
+    const { items } = buildTripItems({ ...config, niceAttire: false }, remembered);
+    for (const id of ["nice-top", "nice-shoes", "my-shoes", "my-undies"]) {
+      expect(byId(items, id)).toBeUndefined();
+    }
+    expect(items.some((item) => item.category === "Nice attire")).toBe(false);
+    expect(byId(items, "nice-makeup")).toMatchObject({ name: "Makeup", qty: 1 });
+  });
+
+  it("still apply when Nice outfits is on", () => {
+    const { items } = buildTripItems({ ...config, niceAttire: true }, remembered);
+    expect(byId(items, "nice-top")).toBeDefined();
+    expect(byId(items, "nice-makeup")).toBeDefined();
+    expect(byId(items, "my-shoes")).toMatchObject({ qty: 2 });
+  });
+
+  it("leave a plain Makeup staple alone too", () => {
+    const { items } = buildTripItems({ ...config, niceAttire: false }, [
+      staple({ id: "my-makeup", name: "Makeup", category: "Bathroom" }),
+    ]);
+    expect(byId(items, "my-makeup")).toMatchObject({ qty: 1 });
   });
 });
 

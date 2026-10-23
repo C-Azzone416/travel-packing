@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useId, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/Button";
 import { ModalSheet } from "@/components/ui/ModalSheet";
 import { Switch } from "@/components/ui/Switch";
@@ -23,6 +23,7 @@ export interface PreferencesFormProps {
 // survive), always revokes Ready, and revokes bag placement if the Bathroom contents change.
 export function PreferencesForm({ config, saving, onClose, onSave }: PreferencesFormProps) {
   const [draft, setDraft] = useState(config);
+  const niceHintId = useId();
   const patch = (next: Partial<TripConfig>) => setDraft((current) => ({ ...current, ...next }));
 
   function submit(event: FormEvent) {
@@ -57,6 +58,11 @@ export function PreferencesForm({ config, saving, onClose, onSave }: Preferences
           checked={draft.niceAttire}
           onChange={(niceAttire) => patch({ niceAttire })}
         />
+        {draft.niceAttire ? null : (
+          <p id={niceHintId} className="tiny muted nice-hint">
+            Turn on Nice outfits to set occasions.
+          </p>
+        )}
         <div className="two-col occasion-row">
           <label className="field">
             Occasions
@@ -66,6 +72,7 @@ export function PreferencesForm({ config, saving, onClose, onSave }: Preferences
               max={MAX_OCCASIONS}
               value={draft.occasionCount}
               disabled={!draft.niceAttire}
+              aria-describedby={draft.niceAttire ? undefined : niceHintId}
               onChange={(event) =>
                 patch({ occasionCount: clampOccasions(event.target.valueAsNumber) })
               }
@@ -75,6 +82,7 @@ export function PreferencesForm({ config, saving, onClose, onSave }: Preferences
             label="Reuse one nice look"
             checked={draft.reuseNice}
             disabled={!draft.niceAttire}
+            describedBy={draft.niceAttire ? undefined : niceHintId}
             onChange={(reuseNice) => patch({ reuseNice })}
           />
         </div>

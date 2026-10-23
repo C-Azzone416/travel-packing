@@ -931,6 +931,56 @@ describe("trip lifecycle", () => {
       expect(data(await service.listTrips(context())).map((entry) => entry.id)).toEqual([trip.id]);
     });
 
+    it("persists the preferences it was given and builds the list from them (#202: Nice outfits off means no nice attire)", async () => {
+      const config = {
+        ...CONFIG,
+        laundry: false,
+        niceAttire: false,
+        occasionCount: 2,
+        reuseNice: true,
+      };
+      const trip = data(
+        await service.createTrip(context(), {
+          ...input,
+          start: "2030-03-15",
+          end: "2030-03-18",
+          config,
+        }),
+      );
+      expect(trip.days).toBe(4);
+      expect(trip.config).toMatchObject({ laundry: false, niceAttire: false });
+      expect(item(trip, "nice-top")).toBeUndefined();
+      expect(item(trip, "nice-shoes")).toBeUndefined();
+      expect(item(trip, "tops")?.qty).toBe(2);
+      const reloaded = data(await service.getTrip(context(), { tripId: trip.id }));
+      expect(reloaded.config).toMatchObject({ laundry: false, niceAttire: false });
+      expect(item(reloaded, "nice-top")).toBeUndefined();
+      expect(item(reloaded, "tops")?.qty).toBe(2);
+    });
+
+    it("an owner who remembered nice items still gets no nice attire with Nice outfits off, but keeps Makeup (#202)", async () => {
+      const own = data(await service.listStaplesForOwner(context()));
+      const remembered = [
+        { id: "nice-top", name: "Nice-attire top", category: "Nice attire", qty: 1 },
+        { id: "nice-shoes", name: "Dress shoes", category: "Nice attire", qty: 1 },
+        { id: "nice-makeup", name: "Makeup", category: "Bathroom", qty: 1 },
+      ].map((entry) => ({ ...entry, cadence: "per trip" as const, packLast: false }));
+      await stapleStore.saveStaples(db(), OWNER.userId, [...own, ...remembered]);
+
+      const off = data(
+        await service.createTrip(context(), { ...input, config: { ...CONFIG, niceAttire: false } }),
+      );
+      expect(item(off, "nice-top")).toBeUndefined();
+      expect(item(off, "nice-shoes")).toBeUndefined();
+      expect(item(off, "nice-makeup")).toMatchObject({ name: "Makeup", qty: 1 });
+
+      const on = data(
+        await service.createTrip(context(), { ...input, config: { ...CONFIG, niceAttire: true } }),
+      );
+      for (const id of ["nice-top", "nice-shoes", "nice-makeup"])
+        expect(item(on, id)).toBeDefined();
+    });
+
     it("uses a seasonal label for a trip further out", async () => {
       const trip = data(
         await service.createTrip(context(), { ...input, start: "2030-09-01", end: "2030-09-04" }),
@@ -991,6 +1041,32 @@ describe("trip lifecycle", () => {
         expect(await countTrips()).toBe(0);
       },
     );
+
+    it("a copy keeps the source's preferences unless the draft sends its own, and then stores those (#202)", async () => {
+      const source = await packedTrip();
+      expect(source.config.niceAttire).toBe(true);
+      const base = {
+        sourceId: source.id,
+        location: LOCATION,
+        start: "2030-07-01",
+        end: "2030-07-04",
+      };
+      const kept = data(await service.copyTrip(context(), base));
+      expect(kept.config.niceAttire).toBe(true);
+      expect(item(kept, "nice-top")).toBeDefined();
+
+      const off = data(
+        await service.copyTrip(context(), {
+          ...base,
+          config: { ...source.config, niceAttire: false },
+        }),
+      );
+      expect(off.config.niceAttire).toBe(false);
+      expect(item(off, "nice-top")).toBeUndefined();
+      const reloaded = data(await service.getTrip(context(), { tripId: off.id }));
+      expect(reloaded.config.niceAttire).toBe(false);
+      expect(item(reloaded, "nice-top")).toBeUndefined();
+    });
 
     it("a copy starts from the source's theme, unless the draft chose another", async () => {
       const source = await packedTrip({ theme: "outdoors" });
@@ -1771,7 +1847,8 @@ describe("concurrent edits to one trip are serialized (no lost updates)", () => 
     expect(item((await loadTrip(db(), OWNER.userId, trip.id))!, "tops")?.packed).toBe(2);
 
     await Promise.all([tap(), tap(), tap()]);
-    expect(item((await loadTrip(db(), OWNER.userId, trip.id))!, "tops")?.packed).toBe(4);
+    // The fixture trip has 5 everyday tops now that Nice occasions no longer take everyday days away (#205); it was 4.
+    expect(item((await loadTrip(db(), OWNER.userId, trip.id))!, "tops")?.packed).toBe(5);
   });
 
   it("mixed concurrent edits to different items on one trip all land", async () => {

@@ -17,11 +17,11 @@ import {
 import type { TripConfig } from "@/domain/trip";
 import { fixSummary, stopProblems } from "./stops-draft";
 
-// The prototype's defaults for a brand-new trip (return outfit on).
+// The defaults for a brand-new trip (#205): return outfit on, Nice outfits OFF (occasions and reuse stay inert until it is turned on).
 export const DEFAULT_TRIP_CONFIG: TripConfig = {
   laundry: false,
   spare: true,
-  niceAttire: true,
+  niceAttire: false,
   occasionCount: 1,
   reuseNice: true,
   returnOutfit: true,
@@ -106,7 +106,9 @@ export function describeChanges(before: Suggestions, after: Suggestions): string
 
 /** Helper text under the return-outfit switch. The "off" wording must match what the calculator does (#25). */
 export function returnOutfitHelp(on: boolean, policy: ReturnOffPolicy = RETURN_OFF_POLICY): string {
-  if (on) return "A fresh top, bottoms, underwear and socks for the trip home.";
+  if (on) {
+    return "A fresh top, bottoms, underwear and socks for the trip home. It replaces one everyday outfit, for your return day.";
+  }
   return policy === "add-return-day-back"
     ? "Your return day is packed like any other day."
     : "No separate return outfit. Your return day is not added to the everyday count.";

@@ -19,6 +19,31 @@ export interface SmokeOptions {
 export interface SmokeResult {
   ok: boolean;
   lines: string[];
+  /** True when any answer was Vercel Authentication (deployment protection), not the app. Never a pass. */
+  vercelAuthentication: boolean;
+}
+
+const REDIRECTS = new Set([301, 302, 303, 307, 308]);
+
+/**
+ * Is this Vercel Authentication (deployment protection) answering instead of the app? It answers a protected address with a 401
+ * page or a redirect to vercel.com's single-sign-on, and sets its nonce cookie. Whatever the status, that is not application
+ * behaviour: a generated deployment URL of a protected project says nothing about the app behind it.
+ */
+export function isVercelAuthentication(response: Response): boolean {
+  if (response.status === 401) return true;
+  if ((response.headers.get("set-cookie") ?? "").includes("_vercel_sso_nonce")) return true;
+  if (REDIRECTS.has(response.status)) {
+    const location = response.headers.get("location") ?? "";
+    try {
+      const target = new URL(location, "https://app.invalid");
+      if (target.hostname === "vercel.com" || target.hostname.endsWith(".vercel.com")) return true;
+      if (target.pathname.startsWith("/sso-api")) return true;
+    } catch {
+      return false;
+    }
+  }
+  return false;
 }
 
 const BODY_PREVIEW_CHARS = 200;
@@ -61,12 +86,21 @@ export async function smokeTest(
     : {};
   const lines: string[] = [];
   let ok = true;
+  let vercelAuthentication = false;
 
   async function check(path: string, expectation: string, passes: (response: Response) => boolean) {
     try {
       const response = await fetchImpl(`${base}${path}`, { redirect: "manual", headers });
-      const pass = passes(response);
+      // Checked first and whatever the check expected: Vercel Authentication is never a pass, not even for a redirect check.
+      const blocked = isVercelAuthentication(response);
+      const pass = !blocked && passes(response);
       lines.push(`${pass ? "ok  " : "FAIL"} ${path}: ${response.status} (${expectation})`);
+      if (blocked) {
+        vercelAuthentication = true;
+        lines.push(
+          "     Vercel Authentication answered, not the app: this address is behind deployment protection",
+        );
+      }
       if (!pass) {
         ok = false;
         lines.push(...(await diagnostics(response, bypassSecret)));
@@ -81,14 +115,16 @@ export async function smokeTest(
   for (const path of PUBLIC_PATHS) {
     await check(path, "expected 200", (response) => response.status === 200);
   }
+  // A signed-out visitor to / is redirected to /sign-in ON THIS SITE: a redirect elsewhere that happens to end in /sign-in is not it.
   await check("/", "expected a redirect to /sign-in when signed out", (response) => {
-    if (response.status < 300 || response.status > 399) return false;
+    if (!REDIRECTS.has(response.status)) return false;
     const location = response.headers.get("location") ?? "";
     try {
-      return new URL(location, base).pathname === "/sign-in";
+      const target = new URL(location, base);
+      return target.host === new URL(base).host && target.pathname === "/sign-in";
     } catch {
       return false;
     }
   });
-  return { ok, lines };
+  return { ok, lines, vercelAuthentication };
 }
