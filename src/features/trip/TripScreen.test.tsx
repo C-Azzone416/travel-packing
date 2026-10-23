@@ -1898,7 +1898,10 @@ describe("opening an item's editor from the dashboard (?edit=, #166)", () => {
       expect((within(dialog).getByLabelText("Item name") as HTMLInputElement).value).toBe(
         "Sunglasses",
       );
-      expect(replaceState).toHaveBeenCalledExactlyOnceWith(null, "", "/trips/san-diego");
+      // The clean-up runs in an effect: wait for it rather than assuming it has run (#220).
+      await waitFor(() =>
+        expect(replaceState).toHaveBeenCalledExactlyOnceWith(null, "", "/trips/san-diego"),
+      );
     } finally {
       replaceState.mockRestore();
     }
@@ -1982,8 +1985,11 @@ describe("opening an item's editor from the dashboard (?edit=, #166)", () => {
     try {
       setup("san-diego", undefined, "no-such-item");
       await ready();
+      // The heading shows when the trip has loaded; the URL clean-up is an effect that runs after that render (#220).
+      await waitFor(() =>
+        expect(replaceState).toHaveBeenCalledExactlyOnceWith(null, "", "/trips/san-diego"),
+      );
       expect(screen.queryByRole("dialog", { name: "Edit item" })).toBeNull();
-      expect(replaceState).toHaveBeenCalledExactlyOnceWith(null, "", "/trips/san-diego");
     } finally {
       replaceState.mockRestore();
     }
@@ -1994,6 +2000,8 @@ describe("opening an item's editor from the dashboard (?edit=, #166)", () => {
     try {
       setup();
       await ready();
+      // Let any pending effect run first, so "not called" cannot pass just because the clean-up has not run yet (#220).
+      await act(async () => {});
       expect(screen.queryByRole("dialog", { name: "Edit item" })).toBeNull();
       expect(replaceState).not.toHaveBeenCalled();
     } finally {
