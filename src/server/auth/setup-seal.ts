@@ -26,7 +26,8 @@ export interface SetupSeals {
   open(value: unknown, candidates: Iterable<string>): string | null;
 }
 
-const DIGEST_LENGTH = 43; // base64url of a 32-byte SHA-256
+/** Exactly what `digest()` makes: base64url of a 32-byte SHA-256, ASCII only, so characters and bytes are the same count. */
+const DIGEST_SHAPE = /^[A-Za-z0-9_-]{43}$/;
 
 export function createSetupSeals(secret: string, now: () => number = Date.now): SetupSeals {
   const digest = (email: string, expires: string) =>
@@ -42,7 +43,9 @@ export function createSetupSeals(secret: string, now: () => number = Date.now): 
       if (parts.length !== 2) return null;
       const [expires, given] = parts;
       if (!/^\d{1,16}$/.test(expires) || Number(expires) < now()) return null;
-      if (given.length !== DIGEST_LENGTH) return null;
+      // Checked by shape, not length: timingSafeEqual throws unless both buffers have the same BYTE length, and a 43-character
+      // value with a multi-byte character is longer than that in bytes.
+      if (!DIGEST_SHAPE.test(given)) return null;
       const wanted = Buffer.from(given);
       // Every candidate is checked, in constant time each, so how long this takes does not say which one matched.
       let found: string | null = null;

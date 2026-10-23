@@ -431,6 +431,14 @@ describe("resetOwnerPassword", () => {
       })(),
     ],
     [
+      "a 43-character digest with a multi-byte character (characters are not bytes)",
+      `${Date.now() + 60_000}.${"é".repeat(43)}`,
+    ],
+    [
+      "a 43-character digest with a space and padding",
+      `${Date.now() + 60_000}.${"A".repeat(40)} ==`,
+    ],
+    [
       "an expired seal",
       createSetupSeals(SEAL_SECRET, () => Date.now() - 3 * 60 * 60 * 1000).seal(OWNER_EMAIL),
     ],

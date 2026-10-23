@@ -115,6 +115,26 @@ describe("setup seals", () => {
     expect(seals.open(old, ALLOWED)).toBeNull();
   });
 
+  it("refuses a digest of the right length that is not base64url, without throwing (characters are not bytes)", () => {
+    const seals = createSetupSeals(SECRET);
+    const [expires, digest] = seals.seal(OWNER).split(".");
+    const pad = (text: string) => text.padEnd(43, "A").slice(0, 43);
+    for (const given of [
+      pad("é"), // 43 characters, 44 bytes
+      "é".repeat(43), // 43 characters, 86 bytes
+      "😀".repeat(20) + "AAA", // astral characters (2 UTF-16 units each)
+      pad("ab cd"), // a space
+      `${digest.slice(0, 42)}=`, // base64 padding
+      `${digest.slice(0, 42)}+`, // base64, not base64url
+      `${digest.slice(0, 42)}/`,
+      `${digest.slice(0, 42)}\n`, // a newline
+    ]) {
+      expect(given).toHaveLength(43);
+      expect(() => seals.open(`${expires}.${given}`, ALLOWED), given).not.toThrow();
+      expect(seals.open(`${expires}.${given}`, ALLOWED), given).toBeNull();
+    }
+  });
+
   it("refuses anything that is not a seal", () => {
     const seals = createSetupSeals(SECRET);
     for (const value of [undefined, null, 5, "", "a.b", "a.b.c", "1.x", "x".repeat(101), {}, []]) {
