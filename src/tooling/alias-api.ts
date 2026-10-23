@@ -6,9 +6,9 @@
 // The token goes only into the Authorization header and is never part of a message this module produces.
 
 const API = "https://api.vercel.com";
-const VERCEL_HOST = /^[a-z0-9][a-z0-9-]*\.vercel\.app$/;
-const TEAM_ID = /^team_[A-Za-z0-9]+$/;
-const DEPLOYMENT_ID = /^dpl_[A-Za-z0-9]+$/;
+export const VERCEL_HOST = /^[a-z0-9][a-z0-9-]*\.vercel\.app$/;
+export const TEAM_ID = /^team_[A-Za-z0-9]+$/;
+export const DEPLOYMENT_ID = /^dpl_[A-Za-z0-9]+$/;
 
 export type AliasRequest = {
   deployUrl: string;
@@ -39,7 +39,7 @@ function reason(body: unknown, token: string): string {
   return parts.length ? parts.join(": ") : "no error detail";
 }
 
-async function call(
+export async function call(
   fetcher: typeof fetch,
   step: string,
   url: string,

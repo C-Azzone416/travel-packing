@@ -72,6 +72,29 @@ export const ALIAS_SMOKE_STEP = [
   "VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
   'run: npx tsx scripts/smoke-test.ts "https://${PREVIEW_ALIAS}"',
 ];
+/** The Production steps (#207), exactly as reviewed: the alias is proven to be THIS deployment before it is smoke-tested, and the smoke test never gets the bypass secret. */
+export const PROD_ALIAS_STEP = [
+  "- name: Prove the Production alias belongs to this deployment",
+  "if: env.TARGET == 'production'",
+  "env:",
+  "VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}",
+  "DEPLOY_URL: ${{ steps.deploy.outputs.url }}",
+  'run: npx tsx scripts/verify-production-alias.ts "$DEPLOY_URL" "$PRODUCTION_ALIAS"',
+];
+export const PROD_SMOKE_STEP = [
+  "- name: Production alias smoke test",
+  "if: env.TARGET == 'production'",
+  'run: npx tsx scripts/smoke-test.ts "https://${PRODUCTION_ALIAS}"',
+];
+/** The deployment-URL smoke test is for Previews only: a production deployment's generated address is behind Vercel Authentication. */
+export const DEPLOY_SMOKE_STEP = [
+  "- name: Smoke test",
+  "if: env.TARGET == 'preview'",
+  "env:",
+  "DEPLOY_URL: ${{ steps.deploy.outputs.url }}",
+  "VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
+  'run: npx tsx scripts/smoke-test.ts "$DEPLOY_URL"',
+];
 export const CLEANUP_STEP = [
   "- name: Delete superseded Preview deployments",
   "if: env.TARGET == 'preview' && steps.alias_head.outputs.assign == 'true'",
@@ -144,11 +167,11 @@ export function checkDeployWorkflow(workflow: string): string[] {
     }
   }
 
-  // Secrets: the Vercel token only in the four steps that talk to Vercel (pull, deploy, assigning the Preview alias and tidying up old Previews);
-  // the database secret only in the deploy job.
-  if (count(/secrets\.VERCEL_TOKEN/g) !== 4)
+  // Secrets: the Vercel token only in the five steps that talk to Vercel (pull, deploy, assigning the Preview alias, tidying up old
+  // Previews, and the read-only proof of the Production alias); the database secret only in the deploy job.
+  if (count(/secrets\.VERCEL_TOKEN/g) !== 5)
     problems.push(
-      "VERCEL_TOKEN must be read by exactly four steps (pull, deploy, the Preview alias and the Preview cleanup)",
+      "VERCEL_TOKEN must be read by exactly five steps (pull, deploy, the Preview alias, the Preview cleanup and the Production alias proof)",
     );
 
   // The stable Preview alias (#96): assigned only after a green deploy and smoke test, only for the develop head, only for a
@@ -190,6 +213,9 @@ export function checkDeployWorkflow(workflow: string): string[] {
     ["Is this run still the develop head?", ALIAS_HEAD_STEP, "develop head check"],
     ["Assign the stable Preview alias", ALIAS_SET_STEP, "alias assignment"],
     ["Smoke test the alias", ALIAS_SMOKE_STEP, "alias smoke test"],
+    ["Prove the Production alias", PROD_ALIAS_STEP, "Production alias proof"],
+    ["Production alias smoke test", PROD_SMOKE_STEP, "Production alias smoke test"],
+    ["Smoke test", DEPLOY_SMOKE_STEP, "deployment smoke test"],
     ["Delete superseded Preview deployments", CLEANUP_STEP, "Preview cleanup"],
   ] as const) {
     const actual = stepLines(workflow, prefix);
@@ -214,7 +240,8 @@ export function checkDeployWorkflow(workflow: string): string[] {
   }
   const headAt = workflow.indexOf("scripts/check-alias-head.ts");
   const aliasAt = workflow.indexOf("scripts/assign-alias.ts");
-  const firstSmokeAt = workflow.indexOf("scripts/smoke-test.ts");
+  // The deployment-URL smoke test (Preview), not the Production alias one, comes before the Preview alias section.
+  const firstSmokeAt = workflow.indexOf('scripts/smoke-test.ts "$DEPLOY_URL"');
   const lastSmokeAt = workflow.lastIndexOf("scripts/smoke-test.ts");
   if (!(firstSmokeAt >= 0 && firstSmokeAt < headAt && headAt < aliasAt && aliasAt < lastSmokeAt)) {
     problems.push(
@@ -236,6 +263,32 @@ export function checkDeployWorkflow(workflow: string): string[] {
   }
   if (!/^ {2}PREVIEW_ALIAS: travel-packing-preview\.vercel\.app\b/m.test(workflow)) {
     problems.push("PREVIEW_ALIAS must be travel-packing-preview.vercel.app");
+  }
+  // Production (#207): the public alias is the smoke target, only after it is proven to serve this deployment and this commit.
+  if (!/^ {2}PRODUCTION_ALIAS: packed-smart\.vercel\.app\b/m.test(workflow)) {
+    problems.push("PRODUCTION_ALIAS must be packed-smart.vercel.app");
+  }
+  if (count(/--meta releaseSha="\$GITHUB_SHA"/g) !== 2) {
+    problems.push(
+      'both deploys must label the deployment with the release commit (--meta releaseSha="$GITHUB_SHA"), which the alias proof matches',
+    );
+  }
+  const targetCheckStep = workflow.indexOf("scripts/check-deploy-target.ts");
+  const proofAt = workflow.indexOf("scripts/verify-production-alias.ts");
+  const prodSmokeAt = workflow.indexOf('scripts/smoke-test.ts "https://${PRODUCTION_ALIAS}"');
+  if (count(/verify-production-alias\.ts/g) !== 1 || count(/PRODUCTION_ALIAS\}"/g) !== 1) {
+    problems.push("the Production alias is proven by one step and smoke-tested by one step");
+  } else if (!(targetCheckStep < proofAt && proofAt < prodSmokeAt)) {
+    problems.push(
+      "the order must be: deploy target check, Production alias proof, Production alias smoke test",
+    );
+  }
+  // Never smoke-test a production deployment's generated address (Vercel Authentication answers there, not the app).
+  if (
+    /scripts\/smoke-test\.ts "\$DEPLOY_URL"/.test(workflow) &&
+    !/if:\s*env\.TARGET == 'preview'\s*\n\s*env:\s*\n\s*DEPLOY_URL/.test(workflow)
+  ) {
+    problems.push("the deployment-URL smoke test must run for previews only");
   }
   const firstSecretLine = workflow.split("\n").findIndex((line) => /secrets\./.test(line));
   const deployLine = workflow.split("\n").findIndex((line) => /^ {2}deploy:\s*$/.test(line));
