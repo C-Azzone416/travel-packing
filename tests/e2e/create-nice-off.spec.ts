@@ -36,7 +36,10 @@ test("Nice outfits off on a new trip: no nice-attire items after save and reload
   await page.clock.setFixedTime(NOW);
   await signInAsOwner(page);
   await toShape(page);
-  await expect(niceSwitch(page)).toBeChecked(); // the form starts with it on
+  await expect(niceSwitch(page)).not.toBeChecked(); // a new trip starts with it off (#205)
+  // Turn it on and off again, the way a person who changes their mind does: the final choice is what is saved.
+  await niceSwitch(page).click();
+  await expect(niceSwitch(page)).toBeChecked();
   await niceSwitch(page).click();
   await expect(niceSwitch(page)).not.toBeChecked();
   await expect(page.locator("strong", { hasText: "Dress shoes" })).toHaveCount(0);
@@ -56,13 +59,15 @@ test("Nice outfits off on a new trip: no nice-attire items after save and reload
   await expectNoNiceAttire(page);
 });
 
-test("Nice outfits left on keeps the nice-attire items (the control for the test above)", async ({
+test("Nice outfits turned on keeps the nice-attire items (the control for the test above)", async ({
   page,
 }) => {
   test.setTimeout(60_000);
   await page.clock.setFixedTime(NOW);
   await signInAsOwner(page);
   await toShape(page);
+  await niceSwitch(page).click(); // it starts off (#205), so the person turns it on
+  await expect(niceSwitch(page)).toBeChecked();
   await page.getByRole("button", { name: "Save trip" }).click();
   await expect(page.locator(".toast-region")).toContainText("Trip saved");
   await page

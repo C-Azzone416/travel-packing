@@ -49,6 +49,8 @@ test("weather on, Nice outfits turned off AFTER Get weather: no nice-attire item
 }) => {
   test.setTimeout(60_000);
   await toShape(page);
+  await niceSwitch(page).click(); // a new trip starts with Nice outfits off (#205): turn it on first
+  await expect(niceSwitch(page)).toBeChecked();
   await page.getByRole("button", { name: "Get weather" }).click();
   await expect(page.getByText(/Your list uses the weather for/)).toBeVisible();
   await niceSwitch(page).click();
@@ -64,7 +66,10 @@ test("weather on, Nice outfits turned off BEFORE Get weather: no nice-attire ite
 }) => {
   test.setTimeout(60_000);
   await toShape(page);
-  await niceSwitch(page).click();
+  await niceSwitch(page).click(); // on (it starts off, #205)...
+  await expect(niceSwitch(page)).toBeChecked();
+  await niceSwitch(page).click(); // ...and off again, before Get weather
+  await expect(niceSwitch(page)).not.toBeChecked();
   await page.getByRole("button", { name: "Get weather" }).click();
   await expect(page.getByText(/Your list uses the weather for/)).toBeVisible();
   await expect(niceSwitch(page)).not.toBeChecked();
