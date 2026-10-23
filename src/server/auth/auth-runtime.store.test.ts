@@ -92,7 +92,7 @@ describe("the runtime's setup store (Neon provider)", () => {
     createNeonAuth.mockReturnValue({});
     const auth = await getAuth(env);
     const sealed = auth.seals.seal(OWNER);
-    expect(auth.seals.open(sealed)).toBe(OWNER);
+    expect(auth.seals.open(sealed, [OWNER])).toBe(OWNER);
     expect(sealed).not.toContain(setupDigestKey(SECRET));
   });
 });
