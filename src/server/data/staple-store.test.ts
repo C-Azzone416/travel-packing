@@ -1,11 +1,10 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { DEFAULT_STAPLES } from "../../domain/calc";
 import type { Staple } from "../../domain/trip";
 import { createMigratedDb, resetData } from "../db/__fixtures__/db";
 import type { Db } from "../db/retention";
 import { OTHER_OWNER, OWNER, seedOwner } from "./__fixtures__/seed";
 import { Refusal } from "./run";
-import { ensureDefaultStaples, listStaples, saveStaples } from "./staple-store";
+import { listStaples, saveStaples } from "./staple-store";
 
 let ctx: Awaited<ReturnType<typeof createMigratedDb>>;
 const db = () => ctx.db as unknown as Db;
@@ -29,53 +28,11 @@ const versions = async () =>
     )
   ).rows;
 
-describe("ensureDefaultStaples", () => {
-  it("seeds the prototype defaults once and never overwrites", async () => {
-    await ensureDefaultStaples(db(), OWNER.userId);
-    const first = await listStaples(db(), OWNER.userId);
-    expect(first.map((staple) => staple.id).sort()).toEqual(
-      DEFAULT_STAPLES.map((staple) => staple.id).sort(),
-    );
-
-    const edited = first.map((staple) => (staple.id === "socks" ? { ...staple, qty: 3 } : staple));
-    await saveStaples(db(), OWNER.userId, edited);
-    await ensureDefaultStaples(db(), OWNER.userId);
-    expect(
-      (await listStaples(db(), OWNER.userId)).find((staple) => staple.id === "socks")?.qty,
-    ).toBe(3);
-  });
-
-  it("does not re-add a default the owner removed", async () => {
-    await ensureDefaultStaples(db(), OWNER.userId);
-    const without = (await listStaples(db(), OWNER.userId)).filter(
-      (staple) => staple.id !== "sunglasses",
-    );
-    await saveStaples(db(), OWNER.userId, without);
-    await ensureDefaultStaples(db(), OWNER.userId);
-    expect(
-      (await listStaples(db(), OWNER.userId)).some((staple) => staple.id === "sunglasses"),
-    ).toBe(false);
-  });
-
-  it("keeps each owner's staples separate", async () => {
-    await ensureDefaultStaples(db(), OWNER.userId);
+describe("an uninitialized owner's Staples", () => {
+  it("starts empty and stays empty across repeated reads", async () => {
+    expect(await listStaples(db(), OWNER.userId)).toEqual([]);
+    expect(await listStaples(db(), OWNER.userId)).toEqual([]);
     expect(await listStaples(db(), OTHER_OWNER.userId)).toEqual([]);
-  });
-
-  it("preserves the Bathroom group and Pack last flags", async () => {
-    await ensureDefaultStaples(db(), OWNER.userId);
-    const toothbrush = (await listStaples(db(), OWNER.userId)).find(
-      (staple) => staple.id === "last-toothbrush",
-    );
-    expect(toothbrush).toMatchObject({
-      packLast: true,
-      groupId: "toiletry-bag",
-      cadence: "per trip",
-    });
-    const underwear = (await listStaples(db(), OWNER.userId)).find(
-      (staple) => staple.id === "underwear",
-    );
-    expect(underwear).not.toHaveProperty("groupId");
   });
 });
 
@@ -137,6 +94,28 @@ describe("saveStaples", () => {
   it("rejects a category outside the enum before writing", async () => {
     await expect(
       saveStaples(db(), OWNER.userId, [{ ...base, category: "Gadgets" }]),
+    ).rejects.toBeInstanceOf(Refusal);
+    expect(await listStaples(db(), OWNER.userId)).toEqual([]);
+  });
+
+  it("accepts Smart only for documented clothing identities", async () => {
+    await saveStaples(db(), OWNER.userId, [
+      { ...base, id: "tops", name: "My shirts", category: "Clothing", cadence: "smart" },
+    ]);
+    expect(await listStaples(db(), OWNER.userId)).toEqual([
+      { ...base, id: "tops", name: "My shirts", category: "Clothing", cadence: "smart" },
+    ]);
+    await expect(
+      saveStaples(db(), OWNER.userId, [{ ...base, cadence: "smart" }]),
+    ).rejects.toBeInstanceOf(Refusal);
+  });
+
+  it("rejects two raw ids that resolve to one canonical identity", async () => {
+    await expect(
+      saveStaples(db(), OWNER.userId, [
+        { ...base, id: "sunscreen", name: "My SPF" },
+        { ...base, id: "weather-sunscreen", name: "Sun cream" },
+      ]),
     ).rejects.toBeInstanceOf(Refusal);
     expect(await listStaples(db(), OWNER.userId)).toEqual([]);
   });

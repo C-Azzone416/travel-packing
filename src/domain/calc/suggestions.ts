@@ -83,20 +83,6 @@ export function calculateSuggestions(config: CalcConfig, weather?: WeatherInput)
       qty: niceCount ? 1 : 0,
       optional: true,
     },
-    {
-      id: "nice-makeup",
-      name: "Makeup",
-      category: "Bathroom",
-      qty: niceCount ? 1 : 0,
-      optional: true,
-    },
-    {
-      id: "nice-undergarments",
-      name: "Dress-specific undergarments",
-      category: "Nice attire",
-      qty: niceCount ? 1 : 0,
-      optional: true,
-    },
   ];
 
   if (weather && hasUsableWeather(weather.days, config)) {

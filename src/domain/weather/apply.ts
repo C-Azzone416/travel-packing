@@ -1,4 +1,5 @@
 import { TOILETRY_GROUP_ID } from "../toiletry-bag";
+import { canonicalItemId } from "../item-identity";
 import type { Trip, TripItem } from "../trip";
 import type { Suggestion } from "../calc";
 import type { WeatherSuggestion } from "./recommend";
@@ -33,26 +34,40 @@ export function applyWeatherChanges<T extends Trip>(
 
   for (const change of changes) {
     if (change.kind === "remove") {
-      items = items.filter((item) => item.id !== change.semanticId);
-      continue;
-    }
-    if (change.kind === "split") {
-      items = items.filter((item) => !CLOTHING_IDS.has(item.id));
-      items.push(
-        ...change.clothing.map<TripItem>((line) => ({
-          id: line.semanticId ?? line.id,
-          name: line.name,
-          category: line.category,
-          qty: line.qty,
-          packed: 0,
-          section: "main",
-          optional: Boolean(line.optional),
-          ...(line.groupId ? { groupId: line.groupId } : {}),
-        })),
+      items = items.filter(
+        (item) =>
+          item.stapleCadence !== undefined ||
+          canonicalItemId(item.id) !== canonicalItemId(change.semanticId),
       );
       continue;
     }
-    if (items.some((item) => item.id === change.semanticId)) continue;
+    if (change.kind === "split") {
+      items = items.filter(
+        (item) => item.stapleCadence !== undefined || !CLOTHING_IDS.has(canonicalItemId(item.id)),
+      );
+      items.push(
+        ...change.clothing
+          .filter(
+            (line) =>
+              !items.some(
+                (item) => canonicalItemId(item.id) === canonicalItemId(line.semanticId ?? line.id),
+              ),
+          )
+          .map<TripItem>((line) => ({
+            id: line.semanticId ?? line.id,
+            name: line.name,
+            category: line.category,
+            qty: line.qty,
+            packed: 0,
+            section: "main",
+            ...(line.optional ? { optional: true } : {}),
+            ...(line.groupId ? { groupId: line.groupId } : {}),
+          })),
+      );
+      continue;
+    }
+    if (items.some((item) => canonicalItemId(item.id) === canonicalItemId(change.semanticId)))
+      continue;
     const extra = change.item;
     items.push({
       id: extra.semanticId,

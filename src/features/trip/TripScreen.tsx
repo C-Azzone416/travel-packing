@@ -882,7 +882,7 @@ export function TripScreen({ tripId, openItemId }: { tripId: string; openItemId?
           key={editing.id}
           item={editing}
           destination={trip.destination}
-          dailyDays={trip.dailyDays}
+          tripDays={trip.days}
           staples={staples}
           saving={submitting}
           onClose={close}

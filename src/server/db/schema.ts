@@ -29,7 +29,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 export const ITEM_SECTIONS = ["main", "return", "packlast"] as const;
-export const STAPLE_CADENCES = ["per day", "per trip"] as const;
+export const STAPLE_CADENCES = ["per day", "per trip", "smart"] as const;
 export const TEMPERATURE_UNITS = ["F", "C"] as const;
 export const WEATHER_STATUSES = ["pending", "accepted", "skipped"] as const;
 /** Category strings the domain uses. "Clothing" is the single semantic name (the prototype's "Clothes" was normalized to it). */
@@ -365,6 +365,8 @@ export const tripItems = pgTable(
     groupId: text("group_id"),
     optional: boolean("optional").notNull().default(false),
     userEdited: boolean("user_edited").notNull().default(false),
+    /** A copied rule snapshot for Staple-derived rows. Null means a generic or manual trip item. */
+    stapleCadence: stapleCadence("staple_cadence"),
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: createdAt(),
   },

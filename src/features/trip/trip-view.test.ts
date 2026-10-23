@@ -38,7 +38,6 @@ describe("tripSections", () => {
     const trip = sanDiego();
     const sections = tripSections(trip);
     expect(sections.toiletries.map((item) => item.name)).toEqual([
-      "Makeup",
       "Toothbrush",
       "Toothpaste",
       "Deodorant",
@@ -86,18 +85,18 @@ describe("visibleItems", () => {
 
 describe("bagGate", () => {
   it("is waiting while Bathroom contents are unchecked, with counts", () => {
-    expect(bagGate(sanDiego())).toEqual({ state: "waiting", checked: 0, total: 5 });
+    expect(bagGate(sanDiego())).toEqual({ state: "waiting", checked: 0, total: 4 });
   });
 
   it("is pending once contents are all checked but the bag is outside the suitcase", () => {
     const trip = withItems(sanDiego(), (item) =>
       item.groupId === "toiletry-bag" ? { packed: item.qty } : {},
     );
-    expect(bagGate(trip)).toEqual({ state: "pending", checked: 5, total: 5 });
+    expect(bagGate(trip)).toEqual({ state: "pending", checked: 4, total: 4 });
   });
 
   it("is complete when the bag is in the suitcase", () => {
-    expect(bagGate(lisbon())).toEqual({ state: "complete", checked: 5, total: 5 });
+    expect(bagGate(lisbon())).toEqual({ state: "complete", checked: 4, total: 4 });
   });
 
   it("has no gate without Bathroom items", () => {

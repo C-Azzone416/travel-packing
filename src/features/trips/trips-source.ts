@@ -2,7 +2,7 @@
 // source without touching any screen. Per-trip commands mirror the data layer's entry points one for one
 // (togglePackedItem, editTripItem, ...), and each returns the changed trip plus the domain's signals.
 
-import { calculateSuggestions, DEFAULT_STAPLES, tripDays } from "@/domain/calc";
+import { calculateSuggestions, SYNTHETIC_STAPLES, tripDays } from "@/domain/calc";
 import {
   acceptWeather,
   addCustomItem,
@@ -194,7 +194,7 @@ export function createMemoryTripsSource(
     now,
     newId = () => crypto.randomUUID(),
     today = localToday,
-    staples = DEFAULT_STAPLES,
+    staples = SYNTHETIC_STAPLES,
     savedLists,
   }: MemorySourceOptions,
 ): TripsSource & { snapshot(): LifecycleState; staplesSnapshot(): Staple[] } {

@@ -154,7 +154,7 @@ test("the Theme radiogroup and a packing row work from the keyboard", async ({ p
   const underwear = page.locator('[data-item-id="underwear"]');
   await underwear.getByRole("button", { name: "Increase packed Underwear" }).focus();
   await page.keyboard.press("Enter");
-  await expect(underwear).toContainText("3 of 4 packed");
+  await expect(underwear).toContainText("3 of 5 packed");
   await underwear.getByRole("button", { name: /^Underwear / }).focus();
   await page.keyboard.press("Enter");
   const dialog = page.getByRole("dialog", { name: "Edit item" });

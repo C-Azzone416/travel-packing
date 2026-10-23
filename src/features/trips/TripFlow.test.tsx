@@ -311,7 +311,7 @@ describe("step 2: shape the list", () => {
     expect(screen.getByText("Dress shoes", { selector: "strong" })).toBeTruthy();
     expect(
       screen.getByText(
-        "Adds planned occasion looks on top of your everyday outfits, plus optional Dress shoes, Makeup and Dress-specific undergarments.",
+        "Adds planned occasion looks on top of your everyday outfits, plus optional Dress shoes.",
       ),
     ).toBeTruthy();
     expect(row("Everyday tops").textContent).toContain("3");

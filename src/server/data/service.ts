@@ -58,7 +58,7 @@ import { todayOf, type DataContext } from "./context";
 import { fail, type Result } from "./result";
 import { run, refuse, type OwnerScope } from "./run";
 import * as inputs from "./schemas";
-import { ensureDefaultStaples, listStaples, saveStaples } from "./staple-store";
+import { listStaples, saveStaples } from "./staple-store";
 import { curatedResolver } from "../locations/resolver";
 import { round2 } from "../locations/open-meteo";
 import type { Appearance } from "../../domain/appearance";
@@ -176,10 +176,7 @@ export function getTrip(context: DataContext, input: unknown): Promise<Result<St
 }
 
 export function listStaplesForOwner(context: DataContext): Promise<Result<Staple[]>> {
-  return run(context, inputs.none, {}, async (scope) => {
-    await ensureDefaultStaples(scope.db, scope.ownerId);
-    return listStaples(scope.db, scope.ownerId);
-  });
+  return run(context, inputs.none, {}, (scope) => listStaples(scope.db, scope.ownerId));
 }
 
 // ---------------------------------------------------------------- packing progress
@@ -329,7 +326,6 @@ export function upsertStaple(context: DataContext, input: unknown): Promise<Resu
     // the list is deleted), so two concurrent upserts of different staples must not both start from the same snapshot.
     scope.db.transaction(async (tx) => {
       const db = tx as OwnerScope["db"];
-      await ensureDefaultStaples(db, scope.ownerId);
       const current = await listStaples(db, scope.ownerId, { lock: true });
       const staple: Staple = {
         id: request.semanticId,
@@ -436,7 +432,6 @@ async function buildNewTrip(
   context: DataContext,
   draft: TripDraft,
 ): Promise<StoredTrip> {
-  await ensureDefaultStaples(scope.db, scope.ownerId);
   const staples = await listStaples(scope.db, scope.ownerId);
   // A saved list replaces staples and recommendations (#170). It is looked up by this owner: another owner's list, or
   // one that is gone, is NOT_FOUND exactly like a missing one, and an empty list has nothing to start a trip from.
