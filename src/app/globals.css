@@ -1063,6 +1063,9 @@ input:disabled {
   color: var(--muted-text);
   font-size: 12px;
 }
+.nice-hint {
+  margin: 0 0 4px;
+}
 .occasion-row {
   margin-top: 14px;
 }

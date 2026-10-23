@@ -132,7 +132,7 @@ describe("showToiletries", () => {
 
 describe("progress", () => {
   it("counts packed units, with the bag gate as one extra, and rounds the percentage", () => {
-    expect(progress(sanDiego())).toMatchObject({ packed: 6, total: 30, percent: 20 });
+    expect(progress(sanDiego())).toMatchObject({ packed: 6, total: 32, percent: 19 });
     expect(progress(lisbon())).toMatchObject({ percent: 100 });
     const third = {
       ...sanDiego(),

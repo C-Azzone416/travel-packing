@@ -55,7 +55,8 @@ export function calculateSuggestions(config: CalcConfig, weather?: WeatherInput)
   const spare = config.spare ? 1 : 0;
   const niceCount = config.niceAttire ? Math.max(1, Number(config.occasionCount) || 1) : 0;
   const niceLooks = config.reuseNice ? Math.min(niceCount, 1) : niceCount;
-  const everydayLooks = Math.max(0, dailyDays - niceCount);
+  // Nice occasions are IN ADDITION to everyday outfits, never a replacement (#205): every everyday day keeps its own look.
+  const everydayLooks = dailyDays;
 
   const items: Suggestion[] = [
     {

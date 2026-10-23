@@ -2,7 +2,7 @@
 // source without touching any screen. Per-trip commands mirror the data layer's entry points one for one
 // (togglePackedItem, editTripItem, ...), and each returns the changed trip plus the domain's signals.
 
-import { calculateSuggestions, DEFAULT_STAPLES, packingDays, tripDays } from "@/domain/calc";
+import { calculateSuggestions, DEFAULT_STAPLES, tripDays } from "@/domain/calc";
 import {
   acceptWeather,
   addCustomItem,
@@ -355,7 +355,6 @@ export function createMemoryTripsSource(
         return {
           ...moved,
           days: tripDays(start, end),
-          dailyDays: packingDays(start, end),
           // A title the person edited is theirs; one that is still the old route follows the new route.
           destination:
             trip.destination === routeLabel(trip.stops) ? routeLabel(stops) : trip.destination,
