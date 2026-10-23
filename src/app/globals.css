@@ -214,6 +214,25 @@ p {
   background: var(--action);
 }
 
+/* The signed-out screens' bar (#204): the same dark Field Ledger bar at the same height, brand circle and wordmark only (no
+   navigation, no status chip). Its own classes, so it is never mistaken for the app's navigation header. */
+.auth-brandbar {
+  background: var(--header);
+  color: var(--header-ink);
+}
+.auth-brandbar-inner {
+  height: 60px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+}
+@media (min-width: 721px) {
+  .auth-brandbar-inner {
+    height: 68px;
+    padding-inline: 30px;
+  }
+}
+
 /* The status chip: quiet text in the bar (design's #155 ruling). Still a persistent live region and a link to
    Settings, 44px tall like every target. */
 .sync-chip {
@@ -1804,18 +1823,26 @@ input:disabled {
 /* Sign-in and access-denied (design spec #31). Shown without the app chrome: the proxy marks these screens and
    the root layout renders them bare. Tokens only; targets are at least 44px. */
 .auth-screen {
-  min-height: 100vh;
+  /* Under the 60px brand bar (68px on desktop), top-aligned: ~64px of air on a phone, ~96px on desktop. */
+  min-height: calc(100vh - 60px);
   display: grid;
   /* A fixed column (max 400px, else the full width inside the 16px gutter) so the card never shrinks to its content. */
   grid-template-columns: min(100%, 400px);
   justify-content: center;
-  align-content: center;
+  align-content: start;
   gap: 16px;
-  padding: 24px 16px;
+  padding: 64px 16px 24px;
 }
+@media (min-width: 721px) {
+  .auth-screen {
+    min-height: calc(100vh - 68px);
+    padding-top: 96px;
+  }
+}
+/* A flat Ledger card: the hairline from .card plus the 4px accent rule, like Settings and the hero (no blurred shadow). */
 .auth-card {
   width: 100%;
-  box-shadow: var(--shadow);
+  border-top: 4px solid var(--accent);
 }
 .auth-card h1 {
   font-size: clamp(26px, 6vw, 32px);
@@ -1855,17 +1882,31 @@ input:disabled {
   background: var(--seafoam-soft);
   color: var(--muted-text);
 }
-/* The toggle sits on its own line so Email and Password are the same width on a phone. */
+/* "Show password" is a text toggle inside the field's right edge (#204): link colour, a 44px target, aria-pressed. */
 .password-row {
-  display: grid;
-  gap: 8px;
-  justify-items: start;
+  position: relative;
 }
 .password-row input {
   width: 100%;
+  padding-right: 136px;
 }
-.password-row .button {
-  white-space: nowrap;
+.password-toggle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--control-radius);
+  background: none;
+  color: var(--link);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
 }
 .auth-error {
   margin: 0;
@@ -1874,7 +1915,8 @@ input:disabled {
   padding: 10px 12px;
   background: var(--danger-surface);
   color: var(--danger);
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 600;
 }
 /* Account screens (#27): helper text, links, field problems, the status notice, the code input and the resend row.
    Targets are at least 44px; helper and problem text is at least 14px; problems carry an icon, never colour alone. */
@@ -1946,9 +1988,10 @@ input:disabled {
   letter-spacing: 0.3em;
   text-align: center;
 }
+/* The links under a form (resend, "Didn't get it?", the way back) are an even 12px apart. */
 .resend-row {
   display: grid;
-  margin-top: 8px;
+  margin-top: 12px;
 }
 .resend-wait,
 .resend-note {
@@ -2520,7 +2563,7 @@ a.back {
 
 /* "Didn't get it?" under the resend control (#119): a link-style summary, 44px, in the same place on all three screens. */
 .didnt-get-it {
-  margin-top: 4px;
+  margin-top: 12px;
 }
 .didnt-get-it summary {
   display: flex;

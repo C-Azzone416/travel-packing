@@ -25,7 +25,12 @@ export function ForgotForm({
 
   if (state.sent) {
     return (
-      <AuthCard titleId="forgot-title" title="Check your email" headingRef={heading}>
+      <AuthCard
+        titleId="forgot-title"
+        eyebrow="Reset password"
+        title="Check your email"
+        headingRef={heading}
+      >
         <p className="auth-helper">{forgotSentHelper(state.sent.email)}</p>
         <ResendControl
           kind="reset"
@@ -41,7 +46,12 @@ export function ForgotForm({
     );
   }
   return (
-    <AuthCard titleId="forgot-title" title="Reset your password" headingRef={heading}>
+    <AuthCard
+      titleId="forgot-title"
+      eyebrow="Reset password"
+      title="Reset your password"
+      headingRef={heading}
+    >
       <p className="auth-helper">
         Enter your email and we&rsquo;ll send a reset link if there&rsquo;s an account for it.
       </p>

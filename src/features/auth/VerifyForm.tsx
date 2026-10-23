@@ -36,6 +36,7 @@ export function VerifyForm({
   const known = email ?? (state.email || null);
   return (
     <AuthCard
+      eyebrow="Verify email"
       titleId="verify-title"
       title={known ? "Check your email" : "Confirm your email"}
       headingRef={heading}
