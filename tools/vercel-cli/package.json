@@ -1,0 +1,9 @@
+{
+  "name": "vercel-cli-locked",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The Vercel CLI the deploy workflow runs, with its whole dependency graph locked and integrity-hashed (#208). Not part of the app.",
+  "dependencies": {
+    "vercel": "64.5.0"
+  }
+}

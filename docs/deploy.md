@@ -58,7 +58,7 @@ by a manual run) builds with a pinned Vercel CLI and deploys the prebuilt output
    reported as "Vercel Authentication answered, not the app". When a check fails it also prints the response's
    `x-vercel-error` and `x-vercel-id` headers and the first 200 characters of its body (never the request headers, the `Location` header or the bypass secret), which tells a Vercel platform error from the app's own answer.
 
-The Vercel CLI version is pinned in the workflow (`VERCEL_CLI_VERSION`); `@neondatabase/auth` is pinned to an exact
+The Vercel CLI is installed from its own lockfile, `tools/vercel-cli` (the exact version, every transitive and its integrity hash; `npm ci --prefix tools/vercel-cli --ignore-scripts`, then on the PATH; never a global install or `npx`), and `VERCEL_CLI_VERSION` in the workflow must equal the locked version: see [tools/vercel-cli/README.md](../tools/vercel-cli/README.md) for how to upgrade it. `@neondatabase/auth` is pinned to an exact
 version in `package.json`. Bump either in a PR.
 
 ## Things to know
