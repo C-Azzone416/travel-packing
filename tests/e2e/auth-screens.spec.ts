@@ -581,6 +581,49 @@ test.describe("accessibility and screenshots", DEVICE, () => {
   });
 });
 
+// #209: the address remembered for the code and setup screens is not left behind for the next person at a shared browser.
+test.describe("a shared browser forgets the address", () => {
+  const remembered = async (page: Page) =>
+    (await page.context().cookies()).some((cookie) => cookie.name === "cw-pending-email");
+
+  test("finishing setup removes it: the next signed-out visitor to /verify and /finish-setup sees no address", async ({
+    page,
+  }) => {
+    await signUp(page);
+    await expect(page.getByText(email)).toBeVisible();
+    await enterCode(page, verificationCode(email) ?? "");
+    await expect(page).toHaveURL(/\/finish-setup$/);
+    // Still needed here to resend the link, so a failed or unfinished setup keeps it.
+    await expect(page.getByText(`We've sent a link to ${email}.`)).toBeVisible();
+    expect(await remembered(page)).toBe(true);
+
+    await finishSetup(page);
+    expect(await remembered(page)).toBe(false);
+    for (const path of ["/verify", "/finish-setup"]) {
+      await page.goto(path);
+      await expect(page.getByText(email)).toHaveCount(0);
+    }
+  });
+
+  test("a sign-in then a sign-out leaves nothing: the address typed at sign-up is gone for the next visitor", async ({
+    page,
+  }) => {
+    await signUp(page);
+    expect(await remembered(page)).toBe(true);
+    await signIn(page, "owner@example.test", E2E_PASSWORD);
+    await expect(page).toHaveURL(/\/$/);
+    expect(await remembered(page)).toBe(false);
+
+    await page
+      .getByRole("navigation", { name: "Primary navigation" })
+      .getByRole("button", { name: "Sign out" })
+      .click();
+    await expect(page).toHaveURL(/\/sign-in$/);
+    await page.goto("/verify");
+    await expect(page.getByText(email)).toHaveCount(0);
+  });
+});
+
 test("the shared synthetic password still signs the seeded owners in", async ({ page }) => {
   await signIn(page, "owner@example.test", E2E_PASSWORD);
   await expect(page).toHaveURL(/\/$/);
