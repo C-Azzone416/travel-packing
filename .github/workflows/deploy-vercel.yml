@@ -32,6 +32,7 @@ permissions:
 env:
   VERCEL_CLI_VERSION: 64.5.0 # pinned (never a moving tag)
   PREVIEW_ALIAS: travel-packing-preview.vercel.app # the one stable Preview address (also PREVIEW_ORIGIN in request-origin.ts)
+  PRODUCTION_ALIAS: packed-smart.vercel.app # the public Production address: smoke-tested only after it is proven to serve THIS deployment (#207)
   VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
   VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
 
@@ -174,19 +175,36 @@ jobs:
           log="$RUNNER_TEMP/deploy.log"
           status=0
           if [ "$TARGET" = production ]; then
-            url=$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN" 2>"$log") || status=$?
+            url=$(vercel deploy --prebuilt --prod --meta releaseSha="$GITHUB_SHA" --token="$VERCEL_TOKEN" 2>"$log") || status=$?
           else
-            url=$(vercel deploy --prebuilt --target=preview --token="$VERCEL_TOKEN" 2>"$log") || status=$?
+            url=$(vercel deploy --prebuilt --target=preview --meta releaseSha="$GITHUB_SHA" --token="$VERCEL_TOKEN" 2>"$log") || status=$?
           fi
           cat "$log" >&2
           if [ "$status" -ne 0 ]; then exit "$status"; fi
           echo "url=$url" >> "$GITHUB_OUTPUT"
-          echo "Deployed ($TARGET): $url" >> "$GITHUB_STEP_SUMMARY"
+          echo "Deployment: SUCCEEDED ($TARGET): $url. The checks after it (alias proof, smoke test) are reported on their own lines." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Check the deployment landed in the right environment
         run: npx tsx scripts/check-deploy-target.ts "$TARGET" "$RUNNER_TEMP/deploy.log"
 
+      # ---- Production (#207) --------------------------------------------------------------------------------------------
+      # A production deployment's generated address is behind Vercel Authentication, so it is never smoke-tested: the public alias
+      # is. But a stale alias still answers 200 from the PREVIOUS release, so first prove it serves THIS deployment, from THIS
+      # commit (read-only Vercel REST calls; fails closed, and says so on its own summary line). The alias is smoke-tested without
+      # the bypass secret: production has none, and a Vercel Authentication answer is a failure there, never a pass.
+      - name: Prove the Production alias belongs to this deployment
+        if: env.TARGET == 'production'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          DEPLOY_URL: ${{ steps.deploy.outputs.url }}
+        run: npx tsx scripts/verify-production-alias.ts "$DEPLOY_URL" "$PRODUCTION_ALIAS"
+
+      - name: Production alias smoke test
+        if: env.TARGET == 'production'
+        run: npx tsx scripts/smoke-test.ts "https://${PRODUCTION_ALIAS}"
+
       - name: Smoke test
+        if: env.TARGET == 'preview'
         env:
           DEPLOY_URL: ${{ steps.deploy.outputs.url }}
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}

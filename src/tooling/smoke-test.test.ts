@@ -199,3 +199,101 @@ describe("smokeTest: what a failing response reveals", () => {
     expect(result.lines[3]).toBe("     body: (empty)");
   });
 });
+
+describe("smokeTest: Vercel Authentication is never a pass (#207)", () => {
+  // What a PROTECTED generated deployment URL answers: a 302 to Vercel's single sign-on for the pages the smoke test asks for.
+  const protectedRoutes = (): Routes => ({
+    ...Object.fromEntries(
+      PUBLIC_PATHS.map((path) => [
+        path,
+        redirect("https://vercel.com/sso-api?url=https%3A%2F%2Fx.test&nonce=zzz", 302),
+      ]),
+    ),
+    "/": redirect("https://vercel.com/sso-api?url=https%3A%2F%2Fx.test&nonce=zzz", 302),
+  });
+
+  it("fails every check of a protected generated URL, and says it was Vercel, not the app", async () => {
+    const result = await smokeTest("https://x.test", fakeFetch(protectedRoutes()));
+    expect(result.ok).toBe(false);
+    expect(result.vercelAuthentication).toBe(true);
+    const fails = result.lines.filter((line) => line.startsWith("FAIL "));
+    expect(fails).toHaveLength(PUBLIC_PATHS.length + 1);
+    expect(result.lines.filter((line) => /Vercel Authentication answered/.test(line))).toHaveLength(
+      PUBLIC_PATHS.length + 1,
+    );
+    expect(result.lines.join("\n")).not.toMatch(/nonce|sso-api|zzz/);
+  });
+
+  it("does not take the redirect to /sign-in as a pass when it goes to Vercel's own login", async () => {
+    // Its path ends in /sign-in, as the app's does, but it is not this site.
+    const routes = {
+      ...healthy(),
+      "/": redirect("https://vercel.com/login/sign-in", 307),
+    };
+    const result = await smokeTest("https://x.test", fakeFetch(routes));
+    expect(result.ok).toBe(false);
+    expect(result.vercelAuthentication).toBe(true);
+    expect(result.lines.find((line) => line.startsWith("FAIL /:"))).toBeTruthy();
+  });
+
+  it.each([
+    ["a 401 authentication page", new Response("Authentication Required", { status: 401 })],
+    [
+      "a 200 that sets Vercel's single sign-on cookie",
+      new Response("ok", {
+        status: 200,
+        headers: { "set-cookie": "_vercel_sso_nonce=abc; Path=/" },
+      }),
+    ],
+  ])("fails a public page that answers with %s", async (_name, response) => {
+    const result = await smokeTest(
+      "https://x.test",
+      fakeFetch({ ...healthy(), "/sign-in": response }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.vercelAuthentication).toBe(true);
+    expect(result.lines[0]).toMatch(/^FAIL \/sign-in:/);
+    expect(result.lines[1]).toMatch(/Vercel Authentication answered, not the app/);
+  });
+
+  it("a healthy site is not flagged", async () => {
+    const result = await smokeTest("https://x.test", fakeFetch(healthy()));
+    expect(result.ok).toBe(true);
+    expect(result.vercelAuthentication).toBe(false);
+  });
+
+  it("a protected Preview still passes with its bypass header: the header is what the platform accepts, and it is sent unchanged", async () => {
+    const seen: { url: string; headers: Record<string, string> }[] = [];
+    const result = await smokeTest("https://x.test", fakeFetch(healthy(), seen), {
+      bypassSecret: "s3cret",
+    });
+    expect(result.ok).toBe(true);
+    expect(seen.every((s) => s.headers["x-vercel-protection-bypass"] === "s3cret")).toBe(true);
+  });
+});
+
+describe("smokeTest: / goes to /sign-in ON THIS SITE, specifically (#207)", () => {
+  const check = (response: Response, base = "https://app.example") =>
+    smokeTest(base, fakeFetch({ ...healthy(), "/": response }));
+
+  it.each([301, 302, 303, 307, 308])("accepts a %i to /sign-in", async (status) => {
+    expect((await check(redirect("/sign-in", status))).ok).toBe(true);
+  });
+
+  it("accepts an absolute redirect to the same host, with a query", async () => {
+    expect((await check(redirect("https://app.example/sign-in?next=%2F", 307))).ok).toBe(true);
+  });
+
+  it.each([
+    ["a different host", redirect("https://other.example/sign-in", 307)],
+    ["the sign-in page of another path", redirect("/sign-in/extra", 307)],
+    ["the dashboard", redirect("/", 307)],
+    ["a 300 (not a redirect the app sends)", redirect("/sign-in", 300)],
+    ["a 304", redirect("/sign-in", 304)],
+    ["a 200 sign-in page served at /", new Response("sign in", { status: 200 })],
+  ])("fails %s", async (_name, response) => {
+    const result = await check(response);
+    expect(result.ok).toBe(false);
+    expect(result.lines.find((line) => line.startsWith("FAIL /:"))).toBeTruthy();
+  });
+});
