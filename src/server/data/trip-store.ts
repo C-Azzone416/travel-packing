@@ -311,6 +311,7 @@ function toStoredTrip(
     copiedFrom: row.copiedFrom,
     archived: row.archived,
     theme: row.theme,
+    updatedAt: row.updatedAt.toISOString(),
     stampLabels: [row.stampLabel1, row.stampLabel2],
     deletedAt: row.deletedAt,
   };
@@ -363,9 +364,19 @@ export async function insertTrip(db: Db, ownerId: string, given: StoredTrip): Pr
 
 /** Replace a trip aggregate's mutable state. Returns false if the trip is not this owner's live trip. */
 export async function saveTrip(db: Db, ownerId: string, given: StoredTrip): Promise<boolean> {
+  return (await saveTripAt(db, ownerId, given)) !== null;
+}
+
+/** As saveTrip, and says WHEN it saved (the new `updatedAt`, ISO), or null if the trip is not this owner's live trip. */
+export async function saveTripAt(
+  db: Db,
+  ownerId: string,
+  given: StoredTrip,
+): Promise<string | null> {
   const trip = withStopDates(given);
   assertWritable(trip);
   return db.transaction(async (tx) => {
+    const savedAt = new Date();
     const updated = await tx
       .update(schema.trips)
       .set({
@@ -385,7 +396,7 @@ export async function saveTrip(db: Db, ownerId: string, given: StoredTrip): Prom
         ...(trip.stampLabels
           ? { stampLabel1: trip.stampLabels[0], stampLabel2: trip.stampLabels[1] }
           : {}),
-        updatedAt: new Date(),
+        updatedAt: savedAt,
       })
       .where(
         and(
@@ -395,9 +406,9 @@ export async function saveTrip(db: Db, ownerId: string, given: StoredTrip): Prom
         ),
       )
       .returning({ id: schema.trips.id });
-    if (updated.length === 0) return false;
+    if (updated.length === 0) return null;
     await writeChildren(tx as Db, ownerId, trip);
-    return true;
+    return savedAt.toISOString();
   });
 }
 

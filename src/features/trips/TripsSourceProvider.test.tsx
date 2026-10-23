@@ -265,9 +265,9 @@ describe("TripsSourceProvider", () => {
       ],
       [
         "updatePreferences",
-        (s) => s.updatePreferences("t", config),
+        (s) => s.updatePreferences("t", config, "2030-01-01T00:00:00.000Z"),
         () => actions.commands.updatePreferencesAction,
-        ["t", config],
+        ["t", config, "2030-01-01T00:00:00.000Z"],
       ],
       [
         "setTheme",

@@ -90,7 +90,12 @@ export const saveTripAsListInput = z.object({
   name: savedListName,
   itemIds: z.array(z.string().min(1).max(100)).min(1).max(500),
 });
-export const updatePreferencesInput = z.object({ tripId, config: tripConfig });
+export const updatePreferencesInput = z.object({
+  tripId,
+  config: tripConfig,
+  /** The trip's `updatedAt` the recalculation preview was computed from (#203). */
+  basedOn: z.string().max(40).optional(),
+});
 
 /**
  * The browser's claim about a place is only its id. Anything else it sends (city, region, coordinates) is

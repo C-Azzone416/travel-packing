@@ -34,8 +34,8 @@ afterAll(async () => {
 
 /** What a trip looks like once stored: absent flags and null groups are omitted rather than false/null. */
 function canonical<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value), (_key, entry) =>
-    entry === false || entry === null ? undefined : entry,
+  return JSON.parse(JSON.stringify(value), (key, entry) =>
+    entry === false || entry === null || key === "updatedAt" ? undefined : entry,
   );
 }
 

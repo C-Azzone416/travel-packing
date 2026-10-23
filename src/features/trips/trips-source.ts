@@ -120,7 +120,11 @@ export interface TripsSource {
   acceptWeather(tripId: string): Promise<TripChange>;
   skipWeather(tripId: string): Promise<TripChange>;
   reviewWeatherAgain(tripId: string): Promise<TripChange>;
-  updatePreferences(tripId: string, config: TripConfig): Promise<TripChange>;
+  /**
+   * Apply new planning preferences and recalculate (the merge rules keep manual items, edits, packed counts and suppressed
+   * suggestions). `basedOn` is the trip's `updatedAt` the person reviewed; if it changed since, this rejects with STALE.
+   */
+  updatePreferences(tripId: string, config: TripConfig, basedOn?: string): Promise<TripChange>;
   /** Change the trip's picture (#48). Only the six built-in themes are accepted; nothing else about the trip changes. */
   setTheme(tripId: string, theme: ThemeId): Promise<TripChange>;
   /**
@@ -341,8 +345,13 @@ export function createMemoryTripsSource(
     acceptWeather: (id) => direct(id, acceptWeather),
     skipWeather: (id) => direct(id, skipWeather),
     reviewWeatherAgain: (id) => direct(id, reviewWeatherAgain),
-    updatePreferences: (id, config) =>
-      direct(id, (trip) => recalculateSuggestions(trip, config, calculateSuggestions)),
+    updatePreferences: (id, config, basedOn) =>
+      direct(id, (trip) => {
+        // A trip that carries a save time (the server's) must still be the one the person reviewed.
+        if (basedOn !== undefined && trip.updatedAt !== undefined && basedOn !== trip.updatedAt)
+          throw new TripsSourceError("STALE");
+        return recalculateSuggestions(trip, config, calculateSuggestions);
+      }),
     setStops: (id, stops) =>
       direct(id, (trip) => {
         if (!validateStops(stops).ok) throw new TripsSourceError("INVALID_INPUT");

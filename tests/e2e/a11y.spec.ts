@@ -296,7 +296,7 @@ test.describe("keyboard and focus", () => {
     const opener = page.getByRole("button", { name: "Edit preferences" });
     await opener.focus();
     await page.keyboard.press("Enter");
-    const dialog = page.getByRole("dialog", { name: "Edit packing preferences" });
+    const dialog = page.getByRole("dialog", { name: "Edit trip" });
     await expect(dialog).toBeVisible();
     // The page behind the dialog is inert: no control outside it can be reached with Tab.
     const outside = await page.evaluate(() => {

@@ -56,6 +56,8 @@ vi.mock("./trip-store", async (importOriginal) => {
     ...original,
     saveTrip: async (...args: Parameters<typeof original.saveTrip>) =>
       faults.saveTripFalse ? false : original.saveTrip(...args),
+    saveTripAt: async (...args: Parameters<typeof original.saveTripAt>) =>
+      faults.saveTripFalse ? null : original.saveTripAt(...args),
     loadTrip: async (...args: Parameters<typeof original.loadTrip>) => {
       return faults.loadTripNull ? null : original.loadTrip(...args);
     },
@@ -1254,7 +1256,10 @@ describe("trip lifecycle", () => {
   describe("remove and undo", () => {
     it("removes to Recently deleted with the clock's time, hides the trip everywhere else, and undo restores it exactly", async () => {
       const trip = await seedTrip(db(), OWNER.userId);
-      const before = JSON.stringify(await loadTrip(db(), OWNER.userId, trip.id));
+      // Removing and restoring is a save, so it moves updatedAt; everything else must come back exactly.
+      const comparable = (value: unknown) =>
+        JSON.stringify({ ...(value as object), deletedAt: null, updatedAt: null });
+      const before = comparable(await loadTrip(db(), OWNER.userId, trip.id));
 
       expect(data(await service.removeTrip(context(), { tripId: trip.id }))).toEqual({
         tripId: trip.id,
@@ -1276,9 +1281,7 @@ describe("trip lifecycle", () => {
       );
 
       const restored = data(await service.undoRemoveTrip(context(), { tripId: trip.id }));
-      expect(JSON.stringify({ ...restored, deletedAt: null })).toBe(
-        before.replace(/"deletedAt":[^,}]*/, '"deletedAt":null'),
-      );
+      expect(comparable(restored)).toBe(before);
       expect(restored.deletedAt).toBeNull();
       expect(data(await service.listRecentlyDeletedTrips(context()))).toEqual([]);
       expect(errorOf(await service.undoRemoveTrip(context(), { tripId: trip.id }))?.code).toBe(
