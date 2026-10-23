@@ -39,6 +39,20 @@ describe("setStops (memory source)", () => {
     expect((await memory.getTrip("san-diego")).stops).toHaveLength(2);
   });
 
+  it("keeps dailyDays in step with the return outfit after a route edit (#205)", async () => {
+    const route = [
+      stop("us-ca-san-diego", "2026-10-23", "2026-10-26"),
+      stop("pt-lisbon", "2026-10-26", "2026-11-01"),
+    ];
+    const on = source();
+    expect((await on.setStops("san-diego", route)).trip).toMatchObject({ days: 10, dailyDays: 8 });
+    const off = source();
+    const trip = await off.getTrip("san-diego");
+    await off.updatePreferences("san-diego", { ...trip.config, returnOutfit: false });
+    // The checkout day needs an everyday look when there is no return outfit.
+    expect((await off.setStops("san-diego", route)).trip).toMatchObject({ days: 10, dailyDays: 9 });
+  });
+
   it("keeps a title the person edited, and leaves other trips alone", async () => {
     const memory = source();
     const lisbonBefore = await memory.getTrip("lisbon");

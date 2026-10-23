@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { useSaveStatus } from "@/components/shell/SaveStatus";
 import { Button, buttonClassName } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -728,6 +728,7 @@ function ShapeStep({
   onCancel,
 }: ShapeStepProps) {
   const { config } = draft;
+  const niceHintId = useId();
   const calculated = calculateSuggestions({ ...config, start: draft.start, end: draft.end });
   // Step 2 is only reachable once a destination is confirmed (Continue is blocked without one).
   const location = draft.location as SampleLocation;
@@ -775,10 +776,15 @@ function ShapeStep({
           />
           <Switch
             label="Nice outfits"
-            description="Add planned occasion looks plus one editable Dress shoes, Makeup, and Dress-specific undergarments suggestion."
+            description="Adds planned occasion looks on top of your everyday outfits, plus optional Dress shoes, Makeup and Dress-specific undergarments."
             checked={config.niceAttire}
             onChange={(niceAttire) => onChange({ niceAttire })}
           />
+          {config.niceAttire ? null : (
+            <p id={niceHintId} className="tiny muted nice-hint">
+              Turn on Nice outfits to set occasions.
+            </p>
+          )}
           <div className="two-col occasion-row">
             <label className="field">
               Occasions
@@ -788,6 +794,7 @@ function ShapeStep({
                 max={MAX_OCCASIONS}
                 value={config.occasionCount}
                 disabled={!config.niceAttire}
+                aria-describedby={config.niceAttire ? undefined : niceHintId}
                 onChange={(event) =>
                   onChange({ occasionCount: clampOccasions(event.target.valueAsNumber) })
                 }
@@ -798,6 +805,7 @@ function ShapeStep({
               description="Repeat the same pieces."
               checked={config.reuseNice}
               disabled={!config.niceAttire}
+              describedBy={config.niceAttire ? undefined : niceHintId}
               onChange={(reuseNice) => onChange({ reuseNice })}
             />
           </div>

@@ -138,28 +138,30 @@ describe("clothing breakdown", () => {
       expect(tops).toBe(legacy);
     }
   });
-  it("return outfit off still excludes the return day under the current policy", () => {
-    // Day 8 is cold; excluded under exclude-return-day, so the cold tops never appear.
+  it("return outfit off counts the return day (the decided policy, #25)", () => {
+    // Day 8 is cold: with no return outfit it needs an everyday look, so the cold tops and pants appear.
     const days = dates(8).map((d) => day(d, { highC: d === "2026-10-08" ? 0 : 30 }));
     expect(qty(recommend(days, { returnOutfit: false }))).toEqual({
-      "tops-short": 6,
-      "bottoms-shorts": 3,
-    });
-  });
-  it("add-return-day-back counts the return day when the outfit is off", () => {
-    const days = dates(8).map((d) => day(d, { highC: d === "2026-10-08" ? 0 : 30 }));
-    const r = recommendPacking({
-      days,
-      dayStopNames: [],
-      config: { ...base, returnOutfit: false },
-      returnPolicy: "add-return-day-back",
-    });
-    expect(qty(r)).toEqual({
       "tops-short": 6,
       "tops-long": 1,
       "bottoms-shorts": 3,
       "bottoms-pants": 1,
     });
+  });
+  it("Nice occasions never take everyday looks away (#205)", () => {
+    const days = dates(8).map((d) => day(d, { highC: 30 }));
+    const plain = qty(recommend(days));
+    expect(qty(recommend(days, { niceAttire: true, occasionCount: 3 }))).toEqual(plain);
+  });
+  it("the exclude-return-day policy, still selectable, leaves the return day out", () => {
+    const days = dates(8).map((d) => day(d, { highC: d === "2026-10-08" ? 0 : 30 }));
+    const r = recommendPacking({
+      days,
+      dayStopNames: [],
+      config: { ...base, returnOutfit: false },
+      returnPolicy: "exclude-return-day",
+    });
+    expect(qty(r)).toEqual({ "tops-short": 6, "bottoms-shorts": 3 });
   });
   it("departure day never counts", () => {
     const days = dates(8).map((d) => day(d, { highC: d === "2026-10-01" ? 0 : 30 }));

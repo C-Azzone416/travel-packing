@@ -39,10 +39,24 @@ by a manual run) builds with a pinned Vercel CLI and deploys the prebuilt output
    [First preview bootstrap](#first-preview-bootstrap). A set-but-invalid id fails the run with a message that does not
    repeat it. Production runs never reach this step, and the script refuses anything but `TARGET=preview` as well.
 6. `vercel deploy --prebuilt` (a preview names its target with `--target=preview`: Vercel assigns a project's **first** deployment to
-   production when none is given), then `scripts/check-deploy-target.ts` reads the CLI's own output and **fails the run if a preview run
-   created a Production deployment** (or a production run a Preview one), then the smoke test (`scripts/smoke-test.ts`), which needs no account or session: every
-   public auth page answers 200 (`/sign-in`, `/access-denied`, and any page added to the public list in
-   `src/server/auth/public-paths.ts`, such as sign-up in #27) and `/` redirects a signed-out visitor to `/sign-in`. When a check fails it also prints the response's `x-vercel-error` and `x-vercel-id` headers and the first 200 characters of its body (never the request headers, the `Location` header or the bypass secret), which tells a Vercel platform error from the app's own answer.
+   production when none is given; both deploys label the deployment with the release commit, `--meta releaseSha=$GITHUB_SHA`),
+   then `scripts/check-deploy-target.ts` reads the CLI's own output and **fails the run if a preview run created a Production
+   deployment** (or a production run a Preview one). The run summary then says **"Deployment: SUCCEEDED"**: the deployment is
+   live whatever the checks below say, and each check reports on its own line.
+7. **Preview:** the smoke test (`scripts/smoke-test.ts`) on the deployment's address, with the protection-bypass secret for the
+   protected Preview. **Production:** a production deployment's generated address is behind Vercel Authentication, so it is never
+   smoke-tested. Instead `scripts/verify-production-alias.ts` first proves the public Production alias (`PRODUCTION_ALIAS`,
+   `packed-smart.vercel.app`) is **this** deployment (two read-only Vercel REST calls): the deployment found by its address is
+   READY, a production deployment, and carries `meta.releaseSha` equal to the commit being released, and the alias's
+   `deploymentId` is that deployment. Vercel moves the alias a few seconds after READY, so the alias check is retried for about
+   two minutes; after that a stale alias fails the run ("still points to dpl_OLD, not this run's dpl_NEW") and **nothing is
+   smoke-tested through it**. Only then the smoke test runs against the alias, with no bypass secret. Its summary lines are
+   **"Production alias check: PASSED/FAILED"** and **"Smoke test: PASSED/FAILED"**, so a live deployment with a failed check
+   reads that way. The smoke test needs no account or session: every public auth page answers 200 (`/sign-in`, `/access-denied`, and any page added to the public list in
+   `src/server/auth/public-paths.ts`, such as sign-up in #27) and `/` redirects a signed-out visitor to `/sign-in` **on the same
+   host**. **A Vercel Authentication answer (a 401, a redirect to vercel.com's sign-on, its nonce cookie) is never a pass**; it is
+   reported as "Vercel Authentication answered, not the app". When a check fails it also prints the response's
+   `x-vercel-error` and `x-vercel-id` headers and the first 200 characters of its body (never the request headers, the `Location` header or the bypass secret), which tells a Vercel platform error from the app's own answer.
 
 The Vercel CLI version is pinned in the workflow (`VERCEL_CLI_VERSION`); `@neondatabase/auth` is pinned to an exact
 version in `package.json`. Bump either in a PR.

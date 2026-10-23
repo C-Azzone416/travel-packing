@@ -286,6 +286,22 @@ describe("setTripStops", () => {
     expect(data(await service.getTrip(context(), { tripId: trip.id }))).toEqual(next);
   });
 
+  it("keeps dailyDays in step with the return outfit after a route edit (#205): days - 1 when it is off, days - 2 when on", async () => {
+    const stops = [
+      { location: { id: "beta" }, arrive: "2030-05-02", leave: "2030-05-04" },
+      { location: { id: "alpha" }, arrive: "2030-05-04", leave: "2030-05-07" },
+    ];
+    for (const [returnOutfit, dailyDays] of [
+      [false, 5],
+      [true, 4],
+    ] as const) {
+      const trip = data(await create({ config: { ...CONFIG, returnOutfit } }));
+      const next = data(await service.setTripStops(context(), { tripId: trip.id, stops }));
+      expect(next).toMatchObject({ days: 6, dailyDays });
+      expect(data(await service.getTrip(context(), { tripId: trip.id })).dailyDays).toBe(dailyDays);
+    }
+  });
+
   it("leaves a title the person edited alone", async () => {
     const trip = data(await create());
     await ctx.client.query(`UPDATE trips SET destination = 'Spring trip'`);

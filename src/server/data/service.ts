@@ -3,7 +3,7 @@
 // The owner id never comes from the caller.
 
 import type { ZodType } from "zod";
-import { calculateSuggestions, normalizeTripDates, packingDays, tripDays } from "../../domain/calc";
+import { calculateSuggestions, normalizeTripDates, tripDays } from "../../domain/calc";
 import {
   acceptWeather,
   addCustomItem,
@@ -513,7 +513,12 @@ export function copyTrip(context: DataContext, input: unknown): Promise<Result<S
           await resolveStops(context, request.stops),
         )
       : await singleStopDraft(context, request, begin);
-    return saveNewTrip(scope, context, request.theme ? setDraftTheme(draft, request.theme) : draft);
+    const configured = request.config ? setDraftConfig(draft, request.config) : draft;
+    return saveNewTrip(
+      scope,
+      context,
+      request.theme ? setDraftTheme(configured, request.theme) : configured,
+    );
   });
 }
 
@@ -574,8 +579,8 @@ export function setTripStops(context: DataContext, input: unknown) {
       );
       const next: StoredTrip = {
         ...moved,
+        // days and dailyDays come from the recalculation (dailyDays follows the return outfit, #205).
         days: tripDays(start, end),
-        dailyDays: packingDays(start, end),
         destination:
           current.destination === routeLabel(current.stops)
             ? routeLabel(stops)

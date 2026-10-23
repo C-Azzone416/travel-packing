@@ -281,6 +281,70 @@ describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
       ),
       /alias smoke test step must be exactly as reviewed/,
     ],
+    // ---- Production smoke target (#207) ----
+    [
+      "the Production alias proof removed",
+      mutate(
+        /      - name: Prove the Production alias belongs to this deployment[\s\S]*?\n\n(?=      - name: Production alias smoke test)/,
+        "",
+      ),
+      /exactly five steps|Production alias is proven by one step/,
+    ],
+    [
+      "the Production alias smoke test that may fail without stopping the run",
+      mutate(
+        'smoke-test.ts "https://${PRODUCTION_ALIAS}"',
+        'smoke-test.ts "https://${PRODUCTION_ALIAS}" || true',
+      ),
+      /Production alias smoke test step must be exactly as reviewed/,
+    ],
+    [
+      "the Production alias smoke test given the bypass secret",
+      mutate(
+        '        run: npx tsx scripts/smoke-test.ts "https://${PRODUCTION_ALIAS}"',
+        '        env:\n          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}\n        run: npx tsx scripts/smoke-test.ts "https://${PRODUCTION_ALIAS}"',
+      ),
+      /Production alias smoke test step must be exactly as reviewed/,
+    ],
+    [
+      "the Production alias proof that ignores the deployment",
+      mutate(
+        'verify-production-alias.ts "$DEPLOY_URL" "$PRODUCTION_ALIAS"',
+        'verify-production-alias.ts "$PRODUCTION_ALIAS" "$PRODUCTION_ALIAS"',
+      ),
+      /Production alias proof step must be exactly as reviewed/,
+    ],
+    [
+      "the Production alias proof with a different condition",
+      mutate(
+        "- name: Prove the Production alias belongs to this deployment\n        if: env.TARGET == 'production'",
+        "- name: Prove the Production alias belongs to this deployment\n        if: env.TARGET != 'preview'",
+      ),
+      /Production alias proof step must be exactly as reviewed/,
+    ],
+    [
+      "the deployment-URL smoke test running for Production (a protected generated address)",
+      mutate(
+        "      - name: Smoke test\n        if: env.TARGET == 'preview'",
+        "      - name: Smoke test",
+      ),
+      /deployment smoke test step must be exactly as reviewed/,
+    ],
+    [
+      "the Production smoke target pointing at the generated address",
+      mutate('smoke-test.ts "https://${PRODUCTION_ALIAS}"', 'smoke-test.ts "$DEPLOY_URL"'),
+      /Production alias smoke test step must be exactly as reviewed|Production alias is proven by one step/,
+    ],
+    [
+      "another Production alias",
+      mutate("PRODUCTION_ALIAS: packed-smart.vercel.app", "PRODUCTION_ALIAS: other.vercel.app"),
+      /PRODUCTION_ALIAS must be packed-smart\.vercel\.app/,
+    ],
+    [
+      "a production deploy that does not label the commit",
+      mutate('--prod --meta releaseSha="$GITHUB_SHA"', "--prod"),
+      /label the deployment with the release commit/,
+    ],
     [
       "a second step that moves the alias",
       `${deploy.trimEnd()}\n      - name: Move it again\n        run: npx tsx scripts/assign-alias.ts "$DEPLOY_URL" "$PREVIEW_ALIAS"\n`,
@@ -395,9 +459,9 @@ describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
       /PREVIEW_ALIAS must be travel-packing-preview.vercel.app/,
     ],
     [
-      "a fifth Vercel token use",
+      "a sixth Vercel token use",
       `${deploy.trimEnd()}\n        X: \${{ secrets.VERCEL_TOKEN }}\n`,
-      /exactly four steps/,
+      /exactly five steps/,
     ],
     [
       "a preview deploy that leaves its target to Vercel",
@@ -448,7 +512,7 @@ describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
       `${deploy.trimEnd()}\n        X: \${{ secrets.DATABASE_URL }}\n`,
       /secrets\.DATABASE_URL must be read only by the secret injection step/,
     ],
-    ["a fifth Vercel token use", `${deploy}\n# ${"secrets"}.VERCEL_TOKEN\n`, /exactly four steps/],
+    ["a sixth Vercel token use", `${deploy}\n# ${"secrets"}.VERCEL_TOKEN\n`, /exactly five steps/],
     ["the pooled URL", `${deploy}\n          DATABASE_URL: x\n`, /never the pooled/],
     [
       "no direct URL secret",
