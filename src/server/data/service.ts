@@ -513,7 +513,12 @@ export function copyTrip(context: DataContext, input: unknown): Promise<Result<S
           await resolveStops(context, request.stops),
         )
       : await singleStopDraft(context, request, begin);
-    return saveNewTrip(scope, context, request.theme ? setDraftTheme(draft, request.theme) : draft);
+    const configured = request.config ? setDraftConfig(draft, request.config) : draft;
+    return saveNewTrip(
+      scope,
+      context,
+      request.theme ? setDraftTheme(configured, request.theme) : configured,
+    );
   });
 }
 

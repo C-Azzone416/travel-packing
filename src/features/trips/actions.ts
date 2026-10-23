@@ -94,6 +94,7 @@ export async function createTripAction(draft: TripDraft): Promise<CreateTripActi
         ? await service.copyTrip(context, {
             sourceId: draft.sourceId,
             ...where,
+            config: draft.config,
             theme: draft.theme,
           })
         : await service.createTrip(context, {
