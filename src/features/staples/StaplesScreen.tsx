@@ -5,7 +5,9 @@ import { useSaveStatus } from "@/components/shell/SaveStatus";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import type { Staple } from "@/domain/trip";
+import { TOILETRY_GROUP_ID } from "@/domain/toiletry-bag";
 import { useTripsSource } from "@/features/trips/TripsSourceProvider";
+import { removeStapleAction } from "@/features/trips/trip-actions";
 import { StapleEditor } from "./StapleEditor";
 import { StaplesTabs } from "./StaplesTabs";
 import {
@@ -19,7 +21,15 @@ import {
 type Load = { phase: "loading" } | { phase: "error" } | { phase: "ready"; staples: Staple[] };
 type Editing = null | { staple: Staple | null };
 
-export function StaplesScreen() {
+export function StaplesScreen({
+  removeStaple = async (id: string) => {
+    const result = await removeStapleAction(id);
+    if (!result.ok) throw new Error(result.code);
+    return result.staples;
+  },
+}: {
+  removeStaple?: (id: string) => Promise<Staple[]>;
+} = {}) {
   const source = useTripsSource();
   const { track } = useSaveStatus();
   const toast = useToast();
@@ -63,6 +73,23 @@ export function StaplesScreen() {
         .finally(() => setSaving(false));
     },
     [source, toast, track],
+  );
+
+  const remove = useCallback(
+    (staple: Staple) => {
+      setSaving(true);
+      void track(
+        () => removeStaple(staple.id),
+        (staples) => {
+          setLoad({ phase: "ready", staples });
+          setEditing(null);
+          toast.show(`${staple.name} removed from future trips.`);
+        },
+      )
+        .catch(() => undefined)
+        .finally(() => setSaving(false));
+    },
+    [removeStaple, toast, track],
   );
 
   const choose = (next: StapleFilter) => {
@@ -175,6 +202,9 @@ export function StaplesScreen() {
                         <div className="staple-name">
                           <strong>{staple.name}</strong>
                           {staple.packLast ? <span className="timing-tag">Pack last</span> : null}
+                          {staple.groupId === TOILETRY_GROUP_ID ? (
+                            <span className="placement-tag">Toiletry bag</span>
+                          ) : null}
                         </div>
                         <span className="unit-badge">{unitLabel(staple)}</span>
                         <button
@@ -210,6 +240,7 @@ export function StaplesScreen() {
           saving={saving}
           onClose={() => setEditing(null)}
           onSave={save}
+          onRemove={target ? () => remove(target) : undefined}
           onEditOther={(id) =>
             setEditing({ staple: load.staples.find((staple) => staple.id === id) ?? null })
           }

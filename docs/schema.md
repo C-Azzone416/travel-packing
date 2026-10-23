@@ -53,6 +53,9 @@ database refusing to store a cross-owner link.
 - `trip_items.id` is a per-trip immutable uuid. `(trip_id, semantic_id)` is unique, so two items with similar
   names (everyday vs return underwear) never merge: they have different semantic ids.
 - `staples` is unique on `(owner_id, semantic_id)` and carries `version`, bumped by the data layer on each edit.
+- `users.staples_setup_state` distinguishes a new, uninitialized account from an intentionally empty completed or
+  skipped list. `users.staples_reminder_dismissed` is independent, so hiding the reminder never changes setup or items.
+  Migration `0010` marks existing owners `skipped`; owners created afterward default to `incomplete`.
 
 ### Packed never exceeds qty
 
@@ -63,21 +66,21 @@ so quantity edits succeed instead of failing the cascade.
 
 ## Constraints
 
-| Rule                                   | Where                                                                                     |
-| -------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `qty >= 1`                             | `staples_qty_positive`, `saved_list_items_qty_positive`, `trip_items_qty_positive`        |
-| `0 <= packed <= qty`                   | `trip_item_progress_packed_range`                                                         |
-| `occasion_count` 1..8                  | `trip_preferences_occasion_count_range`                                                   |
-| `end_date >= start_date`               | `trips_dates_ordered`                                                                     |
-| Stamp label overrides (#151)           | `trips_stamp_label_1_format`, `trips_stamp_label_2_format`: null or exactly 3 of `A-Z0-9` |
-| `days >= 1`, `0 <= daily_days <= days` | `trips_days_positive`, `trips_daily_days_range`                                           |
-| Non-blank names / destination          | `*_not_blank`                                                                             |
-| `group_id` is null or `toiletry-bag`   | `staples_group_known`, `trip_items_group_known`                                           |
-| Stop `leave_date >= arrive_date`       | `trip_stops_dates_ordered` (a night per stop on multi-stop trips: `validateStops`)        |
-| Stop place rules                       | `trip_stops_*` mirror the `trips_*` location checks                                       |
-| Temperature unit `F` or `C`            | `users_temperature_unit_known`                                                            |
-| Enums                                  | `item_section`, `staple_cadence`, `weather_status`, `item_category`                       |
-| Non-null owner on every row            | `owner_id NOT NULL` + FK to `users`                                                       |
+| Rule                                   | Where                                                                                      |
+| -------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `qty >= 1`                             | `staples_qty_positive`, `saved_list_items_qty_positive`, `trip_items_qty_positive`         |
+| `0 <= packed <= qty`                   | `trip_item_progress_packed_range`                                                          |
+| `occasion_count` 1..8                  | `trip_preferences_occasion_count_range`                                                    |
+| `end_date >= start_date`               | `trips_dates_ordered`                                                                      |
+| Stamp label overrides (#151)           | `trips_stamp_label_1_format`, `trips_stamp_label_2_format`: null or exactly 3 of `A-Z0-9`  |
+| `days >= 1`, `0 <= daily_days <= days` | `trips_days_positive`, `trips_daily_days_range`                                            |
+| Non-blank names / destination          | `*_not_blank`                                                                              |
+| `group_id` is null or `toiletry-bag`   | `staples_group_known`, `trip_items_group_known`                                            |
+| Stop `leave_date >= arrive_date`       | `trip_stops_dates_ordered` (a night per stop on multi-stop trips: `validateStops`)         |
+| Stop place rules                       | `trip_stops_*` mirror the `trips_*` location checks                                        |
+| Temperature unit `F` or `C`            | `users_temperature_unit_known`                                                             |
+| Enums                                  | `item_section`, `staple_cadence`, `staples_setup_state`, `weather_status`, `item_category` |
+| Non-null owner on every row            | `owner_id NOT NULL` + FK to `users`                                                        |
 
 `item_category` lists the strings the domain uses. The semantic category for everyday clothing is the single value
 `Clothing` (the plan's name); the prototype's calculator label `Clothes` was normalized to it (PM decision), and a
@@ -154,8 +157,8 @@ Every entry point is `run(context, zodSchema, input, handler)`:
 
 Trips are loaded and saved as one aggregate (trip + preferences + weather + items with progress). Another owner's
 trip is indistinguishable from a missing one (`NOT_FOUND`), including as the source of a copy, so `copied_from` can
-only ever reference the caller's own trip. A new owner starts with an initialized, empty Staples list; the app never
-inserts personal defaults automatically.
+only ever reference the caller's own trip. A new owner starts with an uninitialized, empty Staples list and can
+complete or skip setup; the app never inserts personal defaults automatically.
 
 ## Synthetic seed data (`npm run db:seed`)
 

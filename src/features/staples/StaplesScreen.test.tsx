@@ -314,7 +314,10 @@ describe("editing a staple", () => {
     await user.click(screen.getByRole("button", { name: "Edit Laptop" }));
     const dialog = screen.getByRole("dialog", { name: "Edit staple" });
     expect(within(dialog).getByLabelText("Item name")).toHaveProperty("value", "Laptop");
-    expect(within(dialog).getByRole("radio", { name: /Per trip/ })).toHaveProperty("checked", true);
+    expect(within(dialog).getByRole("radio", { name: /Fixed per trip/ })).toHaveProperty(
+      "checked",
+      true,
+    );
     expect(within(dialog).getByLabelText("Category")).toHaveProperty("value", "Tech");
     expect(within(dialog).getByRole("switch", { name: "Pack last" })).toHaveProperty(
       "checked",
@@ -337,16 +340,24 @@ describe("editing a staple", () => {
     expect(within(screen.getByRole("dialog")).queryByRole("alert")).toBeNull();
   });
 
-  it("keeps a Bathroom staple in the Toiletries group and says so", async () => {
+  it("edits toiletry placement independently from category", async () => {
     const { user, source } = setup();
     await title();
     await user.click(screen.getByRole("button", { name: "Edit Toothbrush" }));
     const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByText(/keeps it in the Toiletries group/)).toBeTruthy();
+    expect(within(dialog).getByRole("radio", { name: /Toiletry bag/ })).toHaveProperty(
+      "checked",
+      true,
+    );
+    expect(within(dialog).getByLabelText("Category")).toHaveProperty("value", "Bathroom");
+    await user.click(within(dialog).getByRole("radio", { name: /Main list/ }));
     await user.click(within(dialog).getByRole("button", { name: "Save staple" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(source.staplesSnapshot().find((s) => s.id === "last-toothbrush")!.groupId).toBe(
-      "toiletry-bag",
+    expect(
+      source.staplesSnapshot().find((s) => s.id === "last-toothbrush")!.groupId,
+    ).toBeUndefined();
+    expect(source.staplesSnapshot().find((s) => s.id === "last-toothbrush")!.category).toBe(
+      "Bathroom",
     );
   });
 

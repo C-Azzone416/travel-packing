@@ -8,12 +8,25 @@ import { signOutAction } from "@/app/sign-in/actions";
 import { getAuth } from "@/server/auth/auth-runtime";
 import { AUTH_SCREEN_HEADER } from "@/server/auth/proxy-handler";
 import { fontClassNames } from "./fonts";
+import {
+  dismissStaplesReminderAction,
+  getStaplesSetupAction,
+  saveStaplesSetupAction,
+  skipStaplesSetupAction,
+} from "@/features/trips/trip-actions";
 import "./ledger-tokens.css";
 import "./globals.css";
 
 // Screens set their own title; the template yields "Trips · Carrywell".
 export const metadata: Metadata = { title: { default: "Carrywell", template: "%s · Carrywell" } };
 export const viewport: Viewport = { themeColor: "#e9e3d6" };
+
+const setupActions = {
+  get: getStaplesSetupAction,
+  save: saveStaplesSetupAction,
+  skip: skipStaplesSetupAction,
+  dismiss: dismissStaplesReminderAction,
+};
 
 /** Whose account the shell is for (shown only as the Sign out button's tooltip), or null if nobody is signed in. */
 async function signedInEmail(): Promise<string | null> {
@@ -40,7 +53,11 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         {authScreen ? (
           children
         ) : (
-          <AppShell signOut={signOutAction} email={email}>
+          <AppShell
+            signOut={signOutAction}
+            email={email}
+            setupActions={email ? setupActions : undefined}
+          >
             {children}
           </AppShell>
         )}
