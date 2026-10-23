@@ -149,8 +149,8 @@ describe("loading and states", () => {
     expect(screen.queryByText("Ready", { selector: ".status-pill" })).toBeNull();
     expect(screen.getByRole("link", { name: "All trips" }).getAttribute("href")).toBe("/");
     const bar = screen.getByRole("progressbar", { name: "Packing progress" });
-    expect(bar.getAttribute("aria-valuenow")).toBe("20");
-    expect(bar.getAttribute("aria-valuetext")).toBe("20% packed");
+    expect(bar.getAttribute("aria-valuenow")).toBe("19"); // 6 of 32 (#205: San Diego has one more everyday top and bottom)
+    expect(bar.getAttribute("aria-valuetext")).toBe("19% packed");
     expect(screen.queryByText(/sample/i)).toBeNull();
   });
 
@@ -321,7 +321,7 @@ describe("packing", () => {
         .getByRole("button", { name: "Packed, mark Everyday tops unpacked" })
         .hasAttribute("aria-pressed"),
     ).toBe(false);
-    expect(live().textContent).toBe("Everyday tops 2 of 2 packed");
+    expect(live().textContent).toBe("Everyday tops 3 of 3 packed");
     await user.click(
       within(row("tops")).getByRole("button", { name: "Packed, mark Everyday tops unpacked" }),
     );
@@ -430,10 +430,10 @@ describe("packing", () => {
     expect(screen.getByRole("button", { name: "Not saved, retry" })).toBeTruthy();
     // The row keeps showing what the user did, and nothing was stored.
     expect(itemOf(source, "tops").packed).toBe(1);
-    expect(within(row("tops")).getByText("2 of 2 packed")).toBeTruthy();
+    expect(within(row("tops")).getByText("3 of 3 packed")).toBeTruthy();
     fail = false;
     await user.click(within(row("tops")).getByRole("button", { name: "Not saved · Retry" }));
-    await waitFor(() => expect(itemOf(source, "tops").packed).toBe(2));
+    await waitFor(() => expect(itemOf(source, "tops").packed).toBe(3));
     expect(within(row("tops")).queryByRole("button", { name: "Not saved · Retry" })).toBeNull();
     expect(screen.getByRole("link", { name: "Saved" })).toBeTruthy();
   });
@@ -898,19 +898,26 @@ describe("preferences and Ready", () => {
     await user.clear(occasions);
     await user.type(occasions, "12");
     expect(occasions.value).toBe("8");
+    expect(within(dialog).queryByText("Turn on Nice outfits to set occasions.")).toBeNull();
     await user.click(within(dialog).getByRole("switch", { name: "Nice outfits" }));
     expect(occasions.disabled).toBe(true);
+    const reuse = within(dialog).getByRole("switch", {
+      name: "Reuse one nice look",
+    }) as HTMLInputElement;
+    expect(reuse.disabled).toBe(true);
+    // With Nice outfits off, the helper line says why, and both disabled controls point at it.
+    const hint = within(dialog).getByText("Turn on Nice outfits to set occasions.");
+    expect(occasions.getAttribute("aria-describedby")).toBe(hint.id);
+    expect(reuse.getAttribute("aria-describedby")).toBe(hint.id);
     expect(
-      (within(dialog).getByRole("switch", { name: "Reuse one nice look" }) as HTMLInputElement)
-        .disabled,
-    ).toBe(true);
-    expect(
-      within(dialog).getByText("A fresh top, bottoms, underwear and socks for the trip home."),
+      within(dialog).getByText(
+        "A fresh top, bottoms, underwear and socks for the trip home. It replaces one everyday outfit, for your return day.",
+      ),
     ).toBeTruthy();
     await user.click(
       within(dialog).getByRole("switch", { name: "Dedicated return travel outfit" }),
     );
-    expect(within(dialog).getByText(/No separate return outfit/)).toBeTruthy();
+    expect(within(dialog).getByText("Your return day is packed like any other day.")).toBeTruthy();
   });
 
   it("Mark as not ready keeps every packed count and says so", async () => {
@@ -1007,7 +1014,7 @@ describe("how long things take", () => {
     fireEvent.click(within(row("tops")).getByRole("button", { name: "Pack all Everyday tops" }));
     await flush();
     expect(setPacked).toHaveBeenCalledTimes(1);
-    expect(setPacked).toHaveBeenCalledWith("tops", 2);
+    expect(setPacked).toHaveBeenCalledWith("tops", 3);
     fireEvent.click(
       within(row("tops")).getByRole("button", { name: "Packed, mark Everyday tops unpacked" }),
     );
@@ -1534,11 +1541,11 @@ describe("accessible names of a packing row", () => {
     expect(toothbrush.getAttribute("aria-label")).toBeNull();
   });
 
-  it("the packed count is readable, not hidden: '1 of 2 packed'", async () => {
+  it("the packed count is readable, not hidden: '1 of 3 packed'", async () => {
     setup();
     await ready();
-    expect(within(row("tops")).getByRole("img", { name: "1 of 2 packed" }).textContent).toBe(
-      "1 of 2 packed",
+    expect(within(row("tops")).getByRole("img", { name: "1 of 3 packed" }).textContent).toBe(
+      "1 of 3 packed",
     );
   });
 });
@@ -1701,7 +1708,7 @@ describe("Ready is never revoked silently", () => {
     const { user } = setup("san-diego");
     await ready();
     await user.click(within(row("tops")).getByRole("button", { name: "Pack all Everyday tops" }));
-    await waitFor(() => expect(screen.getByText("Everyday tops 2 of 2 packed")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Everyday tops 3 of 3 packed")).toBeTruthy());
     expect(screen.queryByText(/No longer ready/)).toBeNull();
   });
 });

@@ -260,8 +260,8 @@ export function recommendPacking(input: RecommendInput): WeatherRecommendation {
 
   const returnOutfit = config.returnOutfit !== false;
   const dailyDays = dailyDaysFor(dates.length, returnOutfit, policy);
-  const niceCount = config.niceAttire ? Math.max(1, Number(config.occasionCount) || 1) : 0;
-  const everydayLooks = Math.max(0, dailyDays - niceCount);
+  // Nice occasions are in addition to everyday outfits (#205), so they do not reduce the everyday looks.
+  const everydayLooks = dailyDays;
 
   if (weather.length === 0) return { clothing: legacyClothing(everydayLooks, laundry), extras: [] };
 

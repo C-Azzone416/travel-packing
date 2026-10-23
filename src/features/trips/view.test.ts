@@ -42,9 +42,9 @@ describe("tripCardView", () => {
       eyebrow: null,
       ready: false,
       packed: 6,
-      total: 30,
-      remaining: 24,
-      percent: 20,
+      total: 32,
+      remaining: 26,
+      percent: 19,
       range: "Oct 23 – Oct 27",
       days: 5,
       canArchive: true,
@@ -158,7 +158,7 @@ describe("quickViewModel", () => {
     ]);
     const clothing = model.categories[0].rows;
     expect(clothing.find((row) => row.name === "Underwear")?.detail).toBe("2 left");
-    expect(clothing.find((row) => row.name === "Everyday tops")?.detail).toBe("1 left");
+    expect(clothing.find((row) => row.name === "Everyday tops")?.detail).toBe("2 left");
     expect(clothing.some((row) => row.name === "Sleepwear")).toBe(false);
   });
 

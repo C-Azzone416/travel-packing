@@ -587,10 +587,49 @@ describe("recalculateSuggestions", () => {
     );
     trip = setPacked(trip, "tops", 3).trip;
     const next = checked(recalculateSuggestions(trip, { ...CONFIG, laundry: true }, suggest));
-    expect(byId(next, "tops")).toMatchObject({ qty: 2, packed: 2 });
+    // (#205: the 2 occasions no longer take everyday days away, so 6 everyday days with laundry on is 3 tops, not 2.)
+    expect(byId(next, "tops")).toMatchObject({ qty: 3, packed: 3 });
     expect(byId(next, "sleepwear")).toMatchObject({ name: "Pajamas", qty: 2, userEdited: true });
     expect(next.config.laundry).toBe(true);
     expect(trip.config.laundry).toBe(false);
+  });
+
+  it("turning the return outfit off adds the checkout day to unedited everyday counts, and leaves edits, progress, manual items and removed suggestions alone (#205)", () => {
+    // 8 days (2030-03-01..08), return outfit on: 6 everyday days. Edit the tops, pack some underwear, add a manual item, and
+    // remove the optional dress shoes.
+    let trip = okTrip(
+      editItem(makeTrip(), STAPLES, "tops", {
+        name: "Everyday tops",
+        qty: 9,
+        timing: "main",
+        scope: "this-trip",
+      }),
+    );
+    trip = setPacked(trip, "underwear", 4).trip;
+    trip = removeTripItem(trip, STAPLES, "nice-shoes", "this-trip").trip;
+    const added = addCustomItem(trip, {
+      id: "custom-camera",
+      name: "Camera",
+      category: "Tech",
+      neededQty: 1,
+    });
+    if (!added.ok) throw new Error(added.reason);
+    trip = added.trip;
+    const next = checked(
+      recalculateSuggestions(trip, { ...trip.config, returnOutfit: false }, suggest),
+    );
+    expect(next.dailyDays).toBe(7);
+    // Unedited everyday counts gain the checkout day; the packed 4 survive.
+    expect(byId(next, "underwear")).toMatchObject({ qty: 7, packed: 4 });
+    expect(byId(next, "socks")?.qty).toBe(7);
+    // The edited tops keep the person's 9, flagged as theirs.
+    expect(byId(next, "tops")).toMatchObject({ qty: 9, userEdited: true });
+    // The manual item, the return-outfit rows' presence rules and the suppressed shoes are untouched.
+    expect(
+      byId(next, "camera") ?? next.items.find((entry) => entry.name === "Camera"),
+    ).toBeDefined();
+    expect(byId(next, "nice-shoes")).toBeUndefined();
+    expect(next.suppressedSuggestions).toEqual({ "nice-shoes": true });
   });
 
   it("updates days and dailyDays and keeps non-calculated items", () => {

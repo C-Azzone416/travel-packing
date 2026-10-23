@@ -6,11 +6,20 @@ export interface SwitchProps {
   checked: boolean;
   onChange: (checked: boolean) => void;
   disabled?: boolean;
+  /** Another element's id that also describes this switch (for example why it is disabled). */
+  describedBy?: string;
 }
 
 // A labelled on/off preference row. A real checkbox with role="switch", so it is
 // keyboard and screen-reader operable; the whole switch is a 44px-high target.
-export function Switch({ label, description, checked, onChange, disabled = false }: SwitchProps) {
+export function Switch({
+  label,
+  description,
+  checked,
+  onChange,
+  disabled = false,
+  describedBy,
+}: SwitchProps) {
   const labelId = useId();
   const descriptionId = useId();
   return (
@@ -26,7 +35,9 @@ export function Switch({ label, description, checked, onChange, disabled = false
           checked={checked}
           disabled={disabled}
           aria-labelledby={labelId}
-          aria-describedby={description ? descriptionId : undefined}
+          aria-describedby={
+            [description ? descriptionId : null, describedBy].filter(Boolean).join(" ") || undefined
+          }
           onChange={(event) => onChange(event.target.checked)}
         />
         <span aria-hidden="true" />

@@ -101,7 +101,7 @@ describe("buildTripItems with no staples", () => {
     expect(new Set(items.map((item) => item.id)).size).toBe(items.length);
   });
 
-  it("omits the return outfit only when returnOutfit is false, with everyday quantities unchanged", () => {
+  it("omits the return outfit only when returnOutfit is false, and the checkout day then needs an everyday look (#205)", () => {
     const withReturn = buildTripItems(config, []);
     const without = buildTripItems({ ...config, returnOutfit: false }, []);
     expect(without.items.some((item) => item.section === "return")).toBe(false);
@@ -110,8 +110,8 @@ describe("buildTripItems with no staples", () => {
         (item) => item.section === "return",
       ),
     ).toHaveLength(4);
-    expect(without.dailyDays).toBe(withReturn.dailyDays);
-    expect(byId(without.items, "tops")?.qty).toBe(byId(withReturn.items, "tops")?.qty);
+    expect(without.dailyDays).toBe(withReturn.dailyDays + 1);
+    expect(byId(without.items, "tops")?.qty).toBe((byId(withReturn.items, "tops")?.qty ?? 0) + 1);
   });
 
   it("puts calculated Makeup in the toiletry bag and flags nice companions optional", () => {
