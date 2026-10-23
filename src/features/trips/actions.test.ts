@@ -208,6 +208,23 @@ describe("trips server actions", () => {
       expect(result.trip.id).not.toBe(source.id);
     });
 
+    it("a copy saves the preferences on the draft, not the source's (#202: Nice outfits turned off on the copy)", async () => {
+      const source = await seedTrip(db(), OWNER.userId);
+      expect(source.config.niceAttire).toBe(true);
+      const result = await createTripAction(
+        draft({
+          mode: "copy",
+          sourceId: source.id,
+          start: "2030-06-01",
+          end: "2030-06-04",
+          config: { ...CONFIG, niceAttire: false },
+        }),
+      );
+      if (!result.ok) throw new Error(`expected ok, got ${result.code}`);
+      expect(result.trip.config.niceAttire).toBe(false);
+      expect(result.trip.items.some((entry) => entry.id.startsWith("nice-"))).toBe(false);
+    });
+
     it("atomically saves the draft with its Shape-the-list weather rows", async () => {
       const result = await createTripWithWeatherAction(draft(), [
         {

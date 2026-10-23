@@ -279,6 +279,36 @@ describe("staple dedupe against nice suggestions", () => {
   });
 });
 
+describe("remembered nice items with Nice outfits off (#202)", () => {
+  const remembered = [
+    staple({ id: "nice-top", name: "Nice-attire top", qty: 1, category: "Nice attire" }),
+    staple({ id: "nice-shoes", name: "Dress shoes", qty: 1, category: "Nice attire" }),
+    staple({ id: "nice-makeup", name: "Makeup", qty: 1, category: "Bathroom" }),
+    staple({ id: "my-shoes", name: "Dress shoes", qty: 2, category: "Shoes" }),
+    staple({ id: "my-undies", name: "Dress-specific undergarments", qty: 1 }),
+  ];
+
+  it("do not come back when Nice outfits is off", () => {
+    const { items } = buildTripItems({ ...config, niceAttire: false }, remembered);
+    for (const staple of remembered) expect(byId(items, staple.id)).toBeUndefined();
+    expect(items.some((item) => item.category === "Nice attire")).toBe(false);
+  });
+
+  it("still apply when Nice outfits is on", () => {
+    const { items } = buildTripItems({ ...config, niceAttire: true }, remembered);
+    expect(byId(items, "nice-top")).toBeDefined();
+    expect(byId(items, "nice-makeup")).toBeDefined();
+    expect(byId(items, "my-shoes")).toMatchObject({ qty: 2 });
+  });
+
+  it("leave a plain Makeup staple alone: it is a Bathroom item the person chose", () => {
+    const { items } = buildTripItems({ ...config, niceAttire: false }, [
+      staple({ id: "my-makeup", name: "Makeup", category: "Bathroom" }),
+    ]);
+    expect(byId(items, "my-makeup")).toMatchObject({ qty: 1 });
+  });
+});
+
 describe("default staples", () => {
   it("merges into a trip with the 4 Bathroom staples in the toiletry bag", () => {
     const { items } = buildTripItems({ ...config, spare: true }, DEFAULT_STAPLES);
