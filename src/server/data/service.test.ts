@@ -958,6 +958,29 @@ describe("trip lifecycle", () => {
       expect(item(reloaded, "tops")?.qty).toBe(2);
     });
 
+    it("an owner who remembered nice items still gets no nice attire with Nice outfits off, but keeps Makeup (#202)", async () => {
+      const own = data(await service.listStaplesForOwner(context()));
+      const remembered = [
+        { id: "nice-top", name: "Nice-attire top", category: "Nice attire", qty: 1 },
+        { id: "nice-shoes", name: "Dress shoes", category: "Nice attire", qty: 1 },
+        { id: "nice-makeup", name: "Makeup", category: "Bathroom", qty: 1 },
+      ].map((entry) => ({ ...entry, cadence: "per trip" as const, packLast: false }));
+      await stapleStore.saveStaples(db(), OWNER.userId, [...own, ...remembered]);
+
+      const off = data(
+        await service.createTrip(context(), { ...input, config: { ...CONFIG, niceAttire: false } }),
+      );
+      expect(item(off, "nice-top")).toBeUndefined();
+      expect(item(off, "nice-shoes")).toBeUndefined();
+      expect(item(off, "nice-makeup")).toMatchObject({ name: "Makeup", qty: 1 });
+
+      const on = data(
+        await service.createTrip(context(), { ...input, config: { ...CONFIG, niceAttire: true } }),
+      );
+      for (const id of ["nice-top", "nice-shoes", "nice-makeup"])
+        expect(item(on, id)).toBeDefined();
+    });
+
     it("uses a seasonal label for a trip further out", async () => {
       const trip = data(
         await service.createTrip(context(), { ...input, start: "2030-09-01", end: "2030-09-04" }),

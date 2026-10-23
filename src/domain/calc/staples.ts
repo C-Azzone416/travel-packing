@@ -140,9 +140,13 @@ export function niceAccessoryKey(entry: { name?: string | null }): NiceAccessory
   return "";
 }
 
-/** The calculator's nice-attire lines (by id), or a dress-shoes / dress-undergarments item by name. Plain "Makeup" is not one. */
+/**
+ * The calculator's nice-attire lines (top, bottom, dress shoes, dress-specific undergarments), by id or name. Makeup is
+ * the exception (#202): people use it daily, so a Makeup staple still applies with Nice outfits off.
+ */
 function isNiceAttireStaple(staple: Staple): boolean {
   const key = niceAccessoryKey(staple);
+  if (key === "makeup" || staple.id === "nice-makeup") return false;
   return staple.id.startsWith("nice-") || key === "dress-shoes" || key === "dress-undergarments";
 }
 
