@@ -10,6 +10,7 @@ import {
   MIN_CI_TIMEOUT_MINUTES,
   stepScript,
   stepLines,
+  dependabotProblems,
   unpinnedActions,
 } from "./workflow-check";
 
@@ -1060,5 +1061,47 @@ describe("the ci summary script, run for real", () => {
   it("a failed mode job is red whatever the mode output says", () => {
     expect(run("full", { mode: "failure" })).not.toBe(0);
     expect(run("full", { mode: "cancelled" })).not.toBe(0);
+  });
+});
+
+describe("dependabotProblems (#225)", () => {
+  const config = readFileSync(join(process.cwd(), ".github", "dependabot.yml"), "utf8");
+
+  it("the real config opens every update against develop", () => {
+    expect(dependabotProblems(config)).toEqual([]);
+    expect(config.match(/^ {2}- package-ecosystem:/gm)).toHaveLength(2);
+  });
+
+  it.each([
+    ["target-branch removed (it would default to main)", /^ {4}target-branch: develop\n/m, ""],
+    ["pointed at main", /target-branch: develop/, "target-branch: main"],
+    ["set twice", /^( {4}target-branch: develop\n)/m, "$1$1"],
+  ])("flags an entry with %s", (_name, from, to) => {
+    const mutated = config.replace(from, to);
+    expect(mutated).not.toBe(config);
+    const problems = dependabotProblems(mutated);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toMatch(
+      /^entry 1 \(npm\): target-branch must be set exactly once, to develop$/,
+    );
+  });
+
+  it("flags the github-actions entry too, and an extra entry added without it", () => {
+    const noActions = config.replace(
+      /(github-actions\n {4}directory: \/\n) {4}target-branch: develop\n/,
+      "$1",
+    );
+    expect(noActions).not.toBe(config);
+    expect(dependabotProblems(noActions)).toEqual([
+      "entry 2 (github-actions): target-branch must be set exactly once, to develop",
+    ]);
+    const extra = `${config}  - package-ecosystem: npm\n    directory: /tools/vercel-cli\n    schedule:\n      interval: weekly\n`;
+    expect(dependabotProblems(extra)).toEqual([
+      "entry 3 (npm): target-branch must be set exactly once, to develop",
+    ]);
+  });
+
+  it("reports a file with no update entries", () => {
+    expect(dependabotProblems("version: 2\n")).toEqual(["no update entries found"]);
   });
 });
