@@ -112,150 +112,160 @@ export function StapleEditor({
       description="Set a fixed, per-day, or supported Smart default."
       onClose={onClose}
     >
-      <form className="form-grid editor-form" onSubmit={submit} noValidate>
-        <label className="field">
-          Item name
-          <input
-            name="name"
-            value={name}
-            maxLength={50}
-            aria-invalid={problem === "name" || duplicate !== undefined}
-            aria-describedby={
-              problem === "name" ? "staple-name-error" : duplicate ? "staple-duplicate" : undefined
-            }
-            onChange={(event) => {
-              setName(event.target.value);
-              setProblem(null);
-            }}
-          />
-        </label>
-        {problem === "name" ? (
-          <span id="staple-name-error" className="field-error" role="alert">
-            Enter a name.
-          </span>
-        ) : null}
-        {duplicate ? (
-          <span id="staple-duplicate" className="field-error" role="alert">
-            You already have {duplicate.name}.{" "}
-            <button type="button" className="link-button" onClick={() => onEditOther(duplicate.id)}>
-              Edit it instead
-            </button>
-            .
-          </span>
-        ) : null}
-        <label className="field">
-          Quantity
-          <input
-            name="qty"
-            type="number"
-            min={1}
-            max={MAX_STAPLE_QTY}
-            value={qty}
-            aria-invalid={problem === "qty"}
-            aria-describedby={problem === "qty" ? "staple-qty-error" : undefined}
-            onChange={(event) => {
-              setQty(event.target.value);
-              setProblem(null);
-            }}
-          />
-        </label>
-        {problem === "qty" ? (
-          <span id="staple-qty-error" className="field-error" role="alert">
-            Enter a quantity from 1 to {MAX_STAPLE_QTY}.
-          </span>
-        ) : null}
-        <fieldset className="scope-choice">
-          <legend>Frequency</legend>
-          <div className="choice-stack">
-            {(["per trip", "per day", "smart"] as const).map((value) => (
-              <label className="choice" key={value}>
+      <form className="staple-editor-form" onSubmit={submit} noValidate>
+        <div className="form-grid staple-editor-fields">
+          <label className="field">
+            Item name
+            <input
+              name="name"
+              value={name}
+              maxLength={50}
+              aria-invalid={problem === "name" || duplicate !== undefined}
+              aria-describedby={
+                problem === "name"
+                  ? "staple-name-error"
+                  : duplicate
+                    ? "staple-duplicate"
+                    : undefined
+              }
+              onChange={(event) => {
+                setName(event.target.value);
+                setProblem(null);
+              }}
+            />
+          </label>
+          {problem === "name" ? (
+            <span id="staple-name-error" className="field-error" role="alert">
+              Enter a name.
+            </span>
+          ) : null}
+          {duplicate ? (
+            <span id="staple-duplicate" className="field-error" role="alert">
+              You already have {duplicate.name}.{" "}
+              <button
+                type="button"
+                className="link-button"
+                onClick={() => onEditOther(duplicate.id)}
+              >
+                Edit it instead
+              </button>
+              {"."}
+            </span>
+          ) : null}
+          <label className="field">
+            Quantity
+            <input
+              name="qty"
+              type="number"
+              min={1}
+              max={MAX_STAPLE_QTY}
+              value={qty}
+              aria-invalid={problem === "qty"}
+              aria-describedby={problem === "qty" ? "staple-qty-error" : undefined}
+              onChange={(event) => {
+                setQty(event.target.value);
+                setProblem(null);
+              }}
+            />
+          </label>
+          {problem === "qty" ? (
+            <span id="staple-qty-error" className="field-error" role="alert">
+              Enter a quantity from 1 to {MAX_STAPLE_QTY}.
+            </span>
+          ) : null}
+          <fieldset className="scope-choice">
+            <legend>Frequency</legend>
+            <div className="choice-stack">
+              {(["per trip", "per day", "smart"] as const).map((value) => (
+                <label className="choice" key={value}>
+                  <input
+                    type="radio"
+                    name={radioName}
+                    value={value}
+                    checked={cadence === value}
+                    disabled={value === "smart" && !smartSupported}
+                    onChange={() => setCadence(value)}
+                  />
+                  <span>
+                    <strong>
+                      {value === "per day"
+                        ? "Per day"
+                        : value === "per trip"
+                          ? "Fixed per trip"
+                          : "Smart"}
+                    </strong>
+                    <small>
+                      {value === "per day"
+                        ? "Multiplies by every calendar day, including travel days. Laundry does not change it."
+                        : value === "per trip"
+                          ? "The same amount on every trip."
+                          : smartSupported
+                            ? "Uses the shared clothing rules, including trip preferences."
+                            : "Available only for supported clothing staples."}
+                    </small>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <label className="field">
+            Category
+            <select
+              name="category"
+              value={section}
+              onChange={(event) => {
+                const next = event.target.value as Section;
+                setSection(next);
+                if (cadence === "smart" && next !== "Clothing") setCadence("per trip");
+              }}
+            >
+              {SECTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
+          <fieldset className="scope-choice">
+            <legend>Placement</legend>
+            <div className="choice-stack">
+              <label className="choice">
                 <input
                   type="radio"
-                  name={radioName}
-                  value={value}
-                  checked={cadence === value}
-                  disabled={value === "smart" && !smartSupported}
-                  onChange={() => setCadence(value)}
+                  name={`${radioName}-placement`}
+                  checked={placement === "main"}
+                  onChange={() => setPlacement("main")}
                 />
                 <span>
-                  <strong>
-                    {value === "per day"
-                      ? "Per day"
-                      : value === "per trip"
-                        ? "Fixed per trip"
-                        : "Smart"}
-                  </strong>
-                  <small>
-                    {value === "per day"
-                      ? "Multiplies by every calendar day, including travel days. Laundry does not change it."
-                      : value === "per trip"
-                        ? "The same amount on every trip."
-                        : smartSupported
-                          ? "Uses the shared clothing rules, including trip preferences."
-                          : "Available only for supported clothing staples."}
-                  </small>
+                  <strong>Main list</strong>
+                  <small>Show as a regular packing-list item.</small>
                 </span>
               </label>
-            ))}
-          </div>
-        </fieldset>
-        <label className="field">
-          Category
-          <select
-            name="category"
-            value={section}
-            onChange={(event) => {
-              const next = event.target.value as Section;
-              setSection(next);
-              if (cadence === "smart" && next !== "Clothing") setCadence("per trip");
-            }}
-          >
-            {SECTIONS.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-        </label>
-        <fieldset className="scope-choice">
-          <legend>Placement</legend>
-          <div className="choice-stack">
-            <label className="choice">
-              <input
-                type="radio"
-                name={`${radioName}-placement`}
-                checked={placement === "main"}
-                onChange={() => setPlacement("main")}
-              />
-              <span>
-                <strong>Main list</strong>
-                <small>Show as a regular packing-list item.</small>
-              </span>
-            </label>
-            <label className="choice">
-              <input
-                type="radio"
-                name={`${radioName}-placement`}
-                checked={placement === "toiletry"}
-                onChange={() => setPlacement("toiletry")}
-              />
-              <span>
-                <strong>Toiletry bag</strong>
-                <small>Include in the separate bag-placement step.</small>
-              </span>
-            </label>
-          </div>
-        </fieldset>
-        <Switch
-          label="Pack last"
-          description="Optional timing flag. New staples start off."
-          checked={packLast}
-          onChange={setPackLast}
-        />
-        <p className="tiny muted">
-          Changes apply to future trips. Existing trips keep their lists.
-        </p>
-        <div className="actions">
+              <label className="choice">
+                <input
+                  type="radio"
+                  name={`${radioName}-placement`}
+                  checked={placement === "toiletry"}
+                  onChange={() => setPlacement("toiletry")}
+                />
+                <span>
+                  <strong>Toiletry bag</strong>
+                  <small>Include in the separate bag-placement step.</small>
+                </span>
+              </label>
+            </div>
+          </fieldset>
+          <Switch
+            label="Pack last"
+            description="Optional timing flag. New staples start off."
+            checked={packLast}
+            onChange={setPackLast}
+          />
+          <p className="tiny muted">
+            Changes apply to future trips. Existing trips keep their lists.
+          </p>
+        </div>
+        <div className="actions staple-editor-actions">
           {editing && onRemove ? (
             <Button
               type="button"

@@ -193,8 +193,15 @@ test("screenshots of the staples screen", DEVICE, async ({ page }, testInfo) => 
   await shot("pack-last");
   await page.getByRole("button", { name: "All" }).click();
   await staple(page, "last-toothbrush").getByRole("button", { name: "Edit Toothbrush" }).click();
+  const editor = page.getByRole("dialog", { name: "Edit staple" });
+  await editor.evaluate((node) =>
+    Promise.all(node.getAnimations().map((animation) => animation.finished)),
+  );
+  await expect(editor).toHaveCSS("opacity", "1");
+  await expect(editor).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await expect(editor.getByRole("button", { name: "Save staple" })).toBeInViewport();
   await shot("editor-bathroom", false);
-  await page.getByRole("dialog").getByRole("button", { name: /close/i }).click();
+  await editor.getByRole("button", { name: /close/i }).click();
   await page.getByRole("button", { name: /Add/ }).click();
   await page.getByRole("dialog").getByLabel("Item name").fill("socks");
   await shot("duplicate", false);

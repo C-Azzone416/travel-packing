@@ -1796,6 +1796,37 @@ input:disabled {
   margin-top: 4px;
 }
 
+/* Keep the editor controls in view at short desktop heights and on phones. The fields own the scroll area; the
+   dialog heading and action footer remain fixed, matching the Edit Trip sheet. */
+.modal:has(.staple-editor-form) {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.modal:has(.staple-editor-form) .modal-head {
+  flex: none;
+}
+.staple-editor-form {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+}
+.staple-editor-fields {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0 -21px;
+  padding: 0 21px 4px;
+}
+.staple-editor-actions {
+  flex: none;
+  margin: 12px -21px -21px;
+  padding: 12px 21px;
+  border-top: 1px solid var(--line);
+  background: var(--paper);
+}
+
 /* Wide enough for the name and the stepper side by side; below this the stepper sits under the name. */
 @media (min-width: 440px) {
   .pack-row {
