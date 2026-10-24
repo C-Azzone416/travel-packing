@@ -49,7 +49,7 @@ for (const { theme, width, axe } of CELLS) {
       // The brand-only bar: circle and wordmark, no link, no navigation, the app header's height.
       const bar = page.locator("header.auth-brandbar");
       await expect(bar).toBeVisible();
-      await expect(bar.getByText("Carrywell")).toBeVisible();
+      await expect(bar.getByText("Packed Smart")).toBeVisible();
       await expect(bar.getByRole("link")).toHaveCount(0);
       await expect(page.getByRole("navigation")).toHaveCount(0);
       expect(
