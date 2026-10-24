@@ -604,6 +604,8 @@ export function checkCiWorkflow(workflow: string): string[] {
     ['"$RUNNER_TEMP/actionlint"', "actionlint"],
     ["npm run check:workflows", "workflow contract"],
     ["npm audit --omit=dev --audit-level=high", "dependency audit (high severity)"],
+    ["npm ci --prefix tools/vercel-cli --ignore-scripts", "locked Vercel CLI install"],
+    ["tools/vercel-cli/node_modules/.bin/vercel --version", "locked Vercel CLI version"],
     ["npm run lint", "lint"],
     ["npm run typecheck", "typecheck"],
   ] as const) {

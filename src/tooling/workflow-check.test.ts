@@ -748,6 +748,16 @@ describe("checkCiWorkflow", () => {
       /dependency audit/,
     ],
     [
+      "the locked Vercel CLI install dropped from the checks job",
+      inJob("checks", "npm ci --prefix tools/vercel-cli --ignore-scripts", "true"),
+      /locked Vercel CLI install check is missing/,
+    ],
+    [
+      "the locked Vercel CLI never run",
+      inJob("checks", "tools/vercel-cli/node_modules/.bin/vercel --version", "true"),
+      /locked Vercel CLI version check is missing/,
+    ],
+    [
       "lint dropped",
       inJob("checks", "        run: npm run lint\n", "        run: true\n"),
       /lint check is missing/,

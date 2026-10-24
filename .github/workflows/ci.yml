@@ -112,6 +112,13 @@ jobs:
       - name: Dependency audit (production dependencies)
         run: npm audit --omit=dev --audit-level=high
 
+      # The deploy job installs the Vercel CLI from its own lockfile, and PR runs never reach the deploy job, so a lock this runner's npm
+      # cannot install (#218 broke the first Preview deploy that way) is found here, on the same Node and npm the deploy job uses.
+      - name: Locked Vercel CLI installs from its lockfile
+        run: |
+          npm ci --prefix tools/vercel-cli --ignore-scripts
+          tools/vercel-cli/node_modules/.bin/vercel --version
+
       - name: Lint
         run: npm run lint
 
