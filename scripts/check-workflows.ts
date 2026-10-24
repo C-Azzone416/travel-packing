@@ -6,6 +6,7 @@ import { join } from "node:path";
 import {
   checkCiWorkflow,
   checkDeployWorkflow,
+  dependabotProblems,
   unpinnedActions,
 } from "../src/tooling/workflow-check";
 import { e2eProjectParityProblems, verifyParityProblems } from "../src/tooling/verify";
@@ -29,4 +30,8 @@ for (const file of readdirSync(dir).filter((name) => /\.ya?ml$/.test(name))) {
   if (problems.length) failed = true;
   else console.log(`${file}: ok`);
 }
+const dependabot = dependabotProblems(readFileSync(join(".github", "dependabot.yml"), "utf8"));
+for (const problem of dependabot) console.error(`dependabot.yml: ${problem}`);
+if (dependabot.length) failed = true;
+else console.log("dependabot.yml: ok");
 process.exit(failed ? 1 : 0);

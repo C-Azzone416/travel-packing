@@ -158,8 +158,8 @@ describe("getAuth", () => {
     createNeonAuth.mockReturnValue({});
     const auth = await getAuth(env, { setupStore: createMemorySetupStore() });
     const sealed = auth.seals.seal("Owner@Example.test");
-    expect(auth.seals.open(sealed)).toBe("owner@example.test");
-    expect(unavailableAuth().seals.open(sealed)).toBeNull();
+    expect(auth.seals.open(sealed, ["owner@example.test"])).toBe("owner@example.test");
+    expect(unavailableAuth().seals.open(sealed, ["owner@example.test"])).toBeNull();
     expect(unavailableAuth().seals.seal("owner@example.test")).toBe("");
   });
 

@@ -85,6 +85,7 @@ import {
   loadTrips,
   lockTrip,
   saveTrip,
+  saveTripAt,
   type StoredPlace,
   type StoredTrip,
 } from "./trip-store";
@@ -150,7 +151,10 @@ function mutateTrip<Input extends { tripId: string }>(
       const current = await mustLoad(txScope, input.tripId);
       const staples = await listStaples(txScope.db, txScope.ownerId, { lock: true });
       const next = apply(current, input, staples);
-      if (!(await saveTrip(txScope.db, txScope.ownerId, next.trip))) refuse(fail("NOT_FOUND"));
+      const savedAt = await saveTripAt(txScope.db, txScope.ownerId, next.trip);
+      if (!savedAt) refuse(fail("NOT_FOUND"));
+      // The caller's copy carries the time it was just saved, so a later change can say what it was based on (#203).
+      next.trip = { ...next.trip, updatedAt: savedAt };
       if (next.staples && next.staples !== staples) {
         await saveStaples(txScope.db, txScope.ownerId, next.staples);
       }
@@ -263,10 +267,16 @@ export function addItemToTrip(context: DataContext, input: unknown) {
   });
 }
 
+/**
+ * Change a trip's planning preferences and recalculate its suggestions (merge rules in item-ops.ts). `basedOn` is the trip's
+ * `updatedAt` when the person reviewed the recalculation: if the trip was saved since, nothing is applied (STALE) and they review
+ * again, so what is applied is what they saw (#203).
+ */
 export function updateTripPreferences(context: DataContext, input: unknown) {
-  return mutateTrip(context, inputs.updatePreferencesInput, input, (trip, { config }) => ({
-    trip: recalculateSuggestions(trip, config, calculateSuggestions),
-  }));
+  return mutateTrip(context, inputs.updatePreferencesInput, input, (trip, { config, basedOn }) => {
+    if (basedOn !== undefined && basedOn !== trip.updatedAt) refuse(fail("STALE"));
+    return { trip: recalculateSuggestions(trip, config, calculateSuggestions) };
+  });
 }
 
 /** Change a trip's picture (#48). Only the six built-in names are accepted; nothing else about the trip changes. */

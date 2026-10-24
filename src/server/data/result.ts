@@ -9,6 +9,8 @@ export type ErrorCode =
   | "INVALID_INPUT"
   /** A domain rule refused the change (e.g. markReady before everything is packed). */
   | "REJECTED"
+  /** The trip changed since the caller looked at it (a recalculation preview is out of date). Nothing was saved. */
+  | "STALE"
   /** A lookup the change depends on (e.g. resolving a place) is unavailable right now. Nothing was saved. */
   | "UNAVAILABLE"
   | "INTERNAL";
@@ -30,6 +32,7 @@ const MESSAGES: Record<ErrorCode, string> = {
   NOT_FOUND: "Not found",
   INVALID_INPUT: "Invalid input",
   REJECTED: "That change isn't allowed right now",
+  STALE: "The list changed since you looked. Review it again.",
   UNAVAILABLE: "That isn't available right now. Try again.",
   INTERNAL: "Something went wrong",
 };

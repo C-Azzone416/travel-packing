@@ -837,8 +837,8 @@ describe("weather", () => {
     });
     await ready("Lisbon");
     await waitFor(() => expect(wired.getTripWeather).toHaveBeenCalledTimes(1));
-    await user.click(screen.getByRole("button", { name: "Edit route" }));
-    const sheet = screen.getByRole("dialog", { name: "Edit route" });
+    await user.click(screen.getByRole("button", { name: "Edit trip" }));
+    const sheet = screen.getByRole("dialog", { name: "Edit trip" });
     fireEvent.change(within(sheet).getByLabelText("Leave"), { target: { value: "2026-09-09" } });
     await user.click(within(sheet).getByRole("button", { name: "Save route" }));
     await waitFor(() => expect(wired.getTripWeather).toHaveBeenCalledTimes(2));
@@ -879,12 +879,21 @@ describe("preferences and Ready", () => {
     const { user, source } = setup("lisbon");
     await ready("Lisbon");
     await user.click(screen.getByRole("button", { name: "Edit preferences" }));
-    const dialog = screen.getByRole("dialog", { name: "Edit packing preferences" });
+    const dialog = screen.getByRole("dialog", { name: "Edit trip" });
     await user.click(within(dialog).getByRole("switch", { name: "Laundry access" }));
-    await user.click(within(dialog).getByRole("button", { name: "Update this trip" }));
+    await user.click(within(dialog).getByRole("button", { name: "Review changes" }));
+    // Nothing is applied yet: the review says what will happen, including that Ready turns off.
+    expect(tripOf(source, "lisbon").config.laundry).toBe(true);
+    expect(within(dialog).getByText("Ready turns off.")).toBeTruthy();
+    await user.click(within(dialog).getByRole("button", { name: "Apply changes" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(tripOf(source, "lisbon").config.laundry).toBe(false);
     expect(tripOf(source, "lisbon").ready).toBe(false);
+    expect(
+      within(document.querySelector(".toast-region") as HTMLElement).getByText(
+        "Preferences updated. Ready turned off.",
+      ),
+    ).toBeTruthy();
     expect(screen.queryByText("You’re ready to go.")).toBeNull();
   });
 
@@ -892,7 +901,7 @@ describe("preferences and Ready", () => {
     const { user } = setup();
     await ready();
     await user.click(screen.getByRole("button", { name: "Edit preferences" }));
-    const dialog = screen.getByRole("dialog", { name: "Edit packing preferences" });
+    const dialog = screen.getByRole("dialog", { name: "Edit trip" });
     const occasions = within(dialog).getByLabelText("Occasions") as HTMLInputElement;
     expect(occasions.disabled).toBe(false);
     await user.clear(occasions);
@@ -908,7 +917,7 @@ describe("preferences and Ready", () => {
     // With Nice outfits off, the helper line says why, and both disabled controls point at it.
     const hint = within(dialog).getByText("Turn on Nice outfits to set occasions.");
     expect(occasions.getAttribute("aria-describedby")).toBe(hint.id);
-    expect(reuse.getAttribute("aria-describedby")).toBe(hint.id);
+    expect(reuse.getAttribute("aria-describedby")?.split(" ")).toContain(hint.id);
     expect(
       within(dialog).getByText(
         "A fresh top, bottoms, underwear and socks for the trip home. It replaces one everyday outfit, for your return day.",
@@ -1373,9 +1382,20 @@ describe("a form submitted twice while saving saves once", () => {
     }));
     await ready();
     await user.click(screen.getByRole("button", { name: "Edit preferences" }));
-    submitTwice();
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("switch", { name: "Laundry access" }),
+    );
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Review changes" }),
+    );
+    // The review of a trip with packed progress may ask for an acknowledgement first.
+    const acknowledge = screen.queryByRole("checkbox", { name: /I understand/ });
+    if (acknowledge) await user.click(acknowledge);
+    const apply = within(screen.getByRole("dialog")).getByRole("button", { name: "Apply changes" });
+    fireEvent.click(apply);
+    fireEvent.click(apply);
     await waitFor(() => expect(calls).toHaveBeenCalledTimes(1));
-    submitTwice();
+    fireEvent.click(apply);
     expect(calls).toHaveBeenCalledTimes(1);
     await act(async () => gate.resolve());
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
@@ -1596,15 +1616,21 @@ describe("edges", () => {
       within(screen.getByRole("dialog")).getByRole("switch", { name: "Laundry access" }),
     );
     await user.click(
-      within(screen.getByRole("dialog")).getByRole("button", { name: "Update this trip" }),
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Review changes" }),
+    );
+    const acknowledge = screen.queryByRole("checkbox", { name: /I understand/ });
+    if (acknowledge) await user.click(acknowledge);
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Apply changes" }),
     );
     expect(await screen.findByRole("button", { name: "Not saved, retry" })).toBeTruthy();
-    expect(screen.getByRole("dialog", { name: "Edit packing preferences" })).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: "Edit trip" })).toBeTruthy();
+    expect(within(screen.getByRole("dialog")).getByText(/Couldn’t apply the changes/)).toBeTruthy();
     expect(tripOf(source).config.laundry).toBe(false);
     expect(
       (
         within(screen.getByRole("dialog")).getByRole("button", {
-          name: "Update this trip",
+          name: "Apply changes",
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(false);
@@ -1617,7 +1643,8 @@ describe("edges", () => {
     const dialog = screen.getByRole("dialog");
     await user.click(within(dialog).getByRole("switch", { name: "One spare underwear + socks" }));
     await user.click(within(dialog).getByRole("switch", { name: "Reuse one nice look" }));
-    await user.click(within(dialog).getByRole("button", { name: "Update this trip" }));
+    await user.click(within(dialog).getByRole("button", { name: "Review changes" }));
+    await user.click(within(dialog).getByRole("button", { name: "Apply changes" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(tripOf(source).config).toMatchObject({ spare: false, reuseNice: false });
   });
@@ -1829,11 +1856,11 @@ describe("Save as a list (#169)", () => {
     return screen.getByRole("dialog", { name: "Save as a list" });
   };
 
-  it("is a secondary action in the hero, next to Edit route and Change theme", async () => {
+  it("is a secondary action in the hero, next to Edit trip and Change theme", async () => {
     setup();
     await ready();
     const actions = screen.getByRole("button", { name: "Save as a list" }).closest(".head-actions");
-    expect(within(actions as HTMLElement).getByRole("button", { name: "Edit route" })).toBeTruthy();
+    expect(within(actions as HTMLElement).getByRole("button", { name: "Edit trip" })).toBeTruthy();
     expect(
       within(actions as HTMLElement).getByRole("button", { name: "Change theme" }),
     ).toBeTruthy();
@@ -1898,7 +1925,10 @@ describe("opening an item's editor from the dashboard (?edit=, #166)", () => {
       expect((within(dialog).getByLabelText("Item name") as HTMLInputElement).value).toBe(
         "Sunglasses",
       );
-      expect(replaceState).toHaveBeenCalledExactlyOnceWith(null, "", "/trips/san-diego");
+      // The clean-up runs in an effect: wait for it rather than assuming it has run (#220).
+      await waitFor(() =>
+        expect(replaceState).toHaveBeenCalledExactlyOnceWith(null, "", "/trips/san-diego"),
+      );
     } finally {
       replaceState.mockRestore();
     }
@@ -1982,8 +2012,11 @@ describe("opening an item's editor from the dashboard (?edit=, #166)", () => {
     try {
       setup("san-diego", undefined, "no-such-item");
       await ready();
+      // The heading shows when the trip has loaded; the URL clean-up is an effect that runs after that render (#220).
+      await waitFor(() =>
+        expect(replaceState).toHaveBeenCalledExactlyOnceWith(null, "", "/trips/san-diego"),
+      );
       expect(screen.queryByRole("dialog", { name: "Edit item" })).toBeNull();
-      expect(replaceState).toHaveBeenCalledExactlyOnceWith(null, "", "/trips/san-diego");
     } finally {
       replaceState.mockRestore();
     }
@@ -1994,6 +2027,8 @@ describe("opening an item's editor from the dashboard (?edit=, #166)", () => {
     try {
       setup();
       await ready();
+      // Let any pending effect run first, so "not called" cannot pass just because the clean-up has not run yet (#220).
+      await act(async () => {});
       expect(screen.queryByRole("dialog", { name: "Edit item" })).toBeNull();
       expect(replaceState).not.toHaveBeenCalled();
     } finally {

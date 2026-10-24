@@ -1,6 +1,6 @@
 {
   "name": "travel-packing",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "private": true,
   "engines": {
     "node": ">=22 <23"
@@ -72,6 +72,7 @@
   "overrides": {
     "@esbuild-kit/core-utils": {
       "esbuild": "^0.25.0"
-    }
+    },
+    "zod": "$zod"
   }
 }

@@ -19,6 +19,16 @@ refused before the database is touched) and sign-in. Nothing here weakens either
 never create a session on their own, and a verified address that is not allowlisted is signed straight back out.
 `src/server/auth/pre-registration.test.ts` does the same for the third control.
 
+## How they look (Field Ledger, #204)
+
+Every signed-out screen shares one frame (`src/features/auth/AuthShell.tsx`): a slim dark brand-only bar (the app header's height, 68px on
+desktop and 60px on a phone, with the circle and the "Carrywell" wordmark; no navigation, no link, no status chip, and not the app's
+`header.topbar`), then the card, **top-aligned** (about 96px under the bar on desktop, 64px on a phone). The card is flat: the hairline plus a
+4px accent rule, no shadow. The small line above each heading names the screen ("Sign in", "Create account", "Verify email", "Reset
+password", "Finish setup", "Link problem", "Private"), not the app. "Show password" is a text toggle inside the password field's right edge
+(link colour, a 44px target, `aria-pressed`, one fixed label). The sign-in error banner is 15px/600 in the semantic danger tokens, and the
+links under a form (resend, "Didn't get it?", the way back) are an even 12px apart. `auth-theme-matrix.spec.ts` checks all of this in every theme.
+
 ## Screens and routes (all public)
 
 | Route                           | What it does                                                                                                                                                                                             |
@@ -148,9 +158,12 @@ set **through a link that only the inbox owner receives**:
   or one that does not say when it was made. Without this, an attacker who signed in at the provider with the pre-registered password
   and kept the cookie would get the owner's session the moment the owner used the link (QA's finding on #84). `pre-registration.test.ts`
   covers it. It does not rely on the provider revoking sessions on reset (nor on that being configured).
-- The link carries `?for=<seal>`: the address, signed with a server secret and expiring with the link, so using the link records
-  **which** account was set up (the provider's reset call does not say). Only the app can make a seal and it is only ever emailed to the
-  address it names. A missing or altered seal still changes the password but records nothing.
+- The link carries `?for=<seal>`: `<expiry>.<digest>`, a keyed digest (HMAC with a server secret) over the address and the expiry. **No address is in
+  the URL, not even encoded** (#210), so a copied link, browser history or an access log reveals no account. To read it, the app recomputes the
+  digest for each allowlisted address and takes the match (constant-time compare), so using the link records **which** account was set up (the
+  provider's reset call does not say) and can never name an address outside the allowlist. Only the app can make a seal and it is only ever emailed to the
+  address it names. A missing, altered, expired or old-format seal still changes the password but records nothing; links emailed before #210
+  (`<address>.<expiry>.<mac>`) stopped opening as set-up links: the person signs in and is sent a fresh one.
 - An address that is not allowlisted is untouched by all of this: it never reaches the provider, and the existing access-denied
   behaviour for a valid-but-not-allowed account is unchanged.
 

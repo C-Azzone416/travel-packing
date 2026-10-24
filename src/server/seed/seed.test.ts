@@ -33,10 +33,12 @@ afterAll(async () => {
 });
 
 const OWNER = "seed-owner";
-const bySlug = async (ownerId: string, destination: string) =>
-  (await loadTrips(db(), ownerId, { filter: "live" })).find(
+const bySlug = async (ownerId: string, destination: string) => {
+  const found = (await loadTrips(db(), ownerId, { filter: "live" })).find(
     (trip) => trip.destination === destination,
   ) as StoredTrip;
+  return { ...found, updatedAt: undefined }; // a reseed saves the trip again: only the time differs
+};
 
 /** Everything about the seeded state except timestamps, in a stable order. */
 async function state(ownerId: string) {
@@ -55,7 +57,8 @@ async function state(ownerId: string) {
               (SELECT count(*) FROM trip_item_progress)::text AS progress, (SELECT count(*) FROM staples)::text AS staples`,
     )
   ).rows[0];
-  return JSON.stringify({ trips, staples, counts });
+  const withoutTimes = trips.map((trip) => ({ ...trip, updatedAt: undefined }));
+  return JSON.stringify({ trips: withoutTimes, staples, counts });
 }
 
 describe("the sample set (plan §6)", () => {

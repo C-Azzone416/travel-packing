@@ -24,7 +24,7 @@ export function FinishSetupView({
   resendAction: (previous: ResendState, formData: FormData) => Promise<ResendState>;
 }) {
   return (
-    <AuthCard titleId="finish-setup-title" title={FINISH_SETUP_TITLE}>
+    <AuthCard titleId="finish-setup-title" eyebrow="Finish setup" title={FINISH_SETUP_TITLE}>
       <p className="auth-helper">{finishSetupHelper(email)}</p>
       {email ? (
         <>

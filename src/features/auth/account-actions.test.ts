@@ -149,7 +149,7 @@ describe("verifyAction", () => {
     expect(calls()).toEqual(["verifyEmail", "requestPasswordReset"]);
     const [, link] = fake.flows.calls[1].args as string[];
     expect(link.startsWith("https://app.example.test/reset-password?for=")).toBe(true);
-    expect(seals.open(new URL(link).searchParams.get("for"))).toBe(OWNER);
+    expect(seals.open(new URL(link).searchParams.get("for"), [OWNER])).toBe(OWNER);
     expect(fake.current).toBeNull();
     expect(jar.get("cw-pending-email")).toBe(OWNER);
     expect(setup.digests.size).toBe(0);
@@ -282,7 +282,7 @@ describe("forgotAction", () => {
     // The link names the address it is for, with a seal only the app can make.
     const url = new URL(link);
     expect(`${url.origin}${url.pathname}`).toBe("https://app.example.test/reset-password");
-    expect(seals.open(url.searchParams.get("for"))).toBe(OWNER);
+    expect(seals.open(url.searchParams.get("for"), [OWNER])).toBe(OWNER);
   });
 
   it("answers a repeat inside the gap the same way, with the time left", async () => {

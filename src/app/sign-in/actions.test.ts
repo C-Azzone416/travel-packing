@@ -197,6 +197,32 @@ describe("signInAction with an unverified account", () => {
   });
 });
 
+describe("the remembered address after sign-in and sign-out (#209)", () => {
+  it("is forgotten by a successful sign-in, so the next visitor to the code screens does not see it", async () => {
+    jar.set("cw-pending-email", "previous@example.test");
+    await expect(
+      signInAction({ error: null }, form("owner@example.test", "pw-owner")),
+    ).rejects.toThrow("NEXT_REDIRECT:/");
+    expect(jar.has("cw-pending-email")).toBe(false);
+  });
+
+  it.each([
+    ["a wrong password", form("owner@example.test", "wrong")],
+    ["a non-allowlisted account", form("intruder@example.test", "pw-intruder")],
+  ])("is kept after %s: the minimum state a recovery needs", async (_name, data) => {
+    jar.set("cw-pending-email", "previous@example.test");
+    await signInAction({ error: null }, data).catch(() => undefined);
+    expect(jar.get("cw-pending-email")).toBe("previous@example.test");
+  });
+
+  it("is forgotten by sign-out", async () => {
+    jar.set("cw-pending-email", "previous@example.test");
+    fake.current = { userId: "u1", email: "owner@example.test" };
+    await expect(signOutAction()).rejects.toThrow("NEXT_REDIRECT:/sign-in");
+    expect(jar.has("cw-pending-email")).toBe(false);
+  });
+});
+
 describe("signInAction", () => {
   it("redirects an allowlisted owner to the app", async () => {
     await expect(

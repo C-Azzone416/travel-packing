@@ -6,6 +6,7 @@ import { TOO_MANY_REQUESTS, UNAVAILABLE, passwordError } from "@/features/auth/c
 import type { FormState } from "@/features/auth/state";
 import { resetOwnerPassword } from "@/server/auth/account-flows";
 import { withMinimumDuration } from "@/server/auth/min-duration";
+import { forgetPendingEmail } from "@/server/auth/pending-email";
 import { RESET_PASSWORD_PATH, SIGN_IN_PATH } from "@/server/auth/public-paths";
 
 /**
@@ -32,6 +33,8 @@ export async function resetAction(_previous: FormState, formData: FormData): Pro
   );
   switch (outcome.status) {
     case "ok":
+      // Setting up (or resetting) is over: the address remembered for the code and setup screens goes now (#209).
+      await forgetPendingEmail();
       // The wording of the notice follows the link's variant; nothing else about the reset depends on it.
       redirect(
         `${SIGN_IN_PATH}?notice=${field(formData, "variant") === "setup" ? "password-set" : "password-updated"}`,

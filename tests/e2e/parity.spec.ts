@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
 import { chooseFromMenu } from "./helpers/menu";
 import { DEVICE } from "./helpers/device";
+import { reviewAndApply } from "./helpers/preferences";
 
 // Parity with the approved prototype's browser test (reference/prototype/tests/browser.test.mjs), on the production app
 // and its real database. Most scenarios are covered by the feature specs; docs/parity.md maps EVERY prototype scenario to
@@ -26,12 +27,11 @@ const nav = (page: Page) => page.getByRole("navigation", { name: "Primary naviga
 
 async function setPreference(page: Page, name: string, on: boolean) {
   await page.getByRole("button", { name: "Edit preferences" }).click();
-  const dialog = page.getByRole("dialog", { name: "Edit packing preferences" });
+  const dialog = page.getByRole("dialog", { name: "Edit trip" });
   const toggle = dialog.getByRole("switch", { name });
   if (on) await toggle.check();
   else await toggle.uncheck();
-  await dialog.getByRole("button", { name: "Update this trip" }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await reviewAndApply(page, dialog);
 }
 
 test("home: the headline, three navigation items, one upcoming trip with a 'left to pack' badge, and history kept apart", async ({

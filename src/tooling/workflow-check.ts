@@ -17,6 +17,28 @@ export function unpinnedActions(workflow: string): string[] {
   return problems;
 }
 
+/**
+ * Every update entry in .github/dependabot.yml must open its PRs against develop (#225). Dependabot defaults to the repository's
+ * default branch, main, which would skip develop, the review gates and the Preview. A plain text scan of the entries.
+ */
+export function dependabotProblems(config: string): string[] {
+  const lines = config.split("\n");
+  const starts = lines.flatMap((line, index) =>
+    /^ {2}- package-ecosystem:/.test(line) ? [index] : [],
+  );
+  if (starts.length === 0) return ["no update entries found"];
+  return starts.flatMap((start, entry) => {
+    const end = starts[entry + 1] ?? lines.length;
+    const body = lines.slice(start, end);
+    const ecosystem = /package-ecosystem:\s*(\S+)/.exec(body[0])?.[1] ?? "?";
+    const targets = body.flatMap((line) => /^ {4}target-branch:\s*(\S+)\s*$/.exec(line)?.[1] ?? []);
+    if (targets.length === 1 && targets[0] === "develop") return [];
+    return [
+      `entry ${entry + 1} (${ecosystem}): target-branch must be set exactly once, to develop`,
+    ];
+  });
+}
+
 function jobBody(workflow: string, job: string): string | null {
   const start = workflow.search(new RegExp(`^  ${job}:\\s*$`, "m"));
   if (start < 0) return null;
