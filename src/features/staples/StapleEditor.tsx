@@ -174,7 +174,7 @@ export function StapleEditor({
             </span>
           ) : null}
           <fieldset className="scope-choice">
-            <legend>Frequency</legend>
+            <legend>How the quantity works</legend>
             <div className="choice-stack">
               {(["per trip", "per day", "smart"] as const).map((value) => (
                 <label className="choice" key={value}>

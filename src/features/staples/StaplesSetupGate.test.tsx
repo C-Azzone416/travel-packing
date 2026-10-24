@@ -3,6 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { StaplesSetupResult } from "@/features/trips/trip-actions";
+import { STAPLE_SUGGESTIONS } from "@/domain/staples-setup";
 import { StaplesSetupGate, type StaplesSetupActions } from "./StaplesSetupGate";
 
 const answer = (
@@ -77,5 +78,54 @@ describe("StaplesSetupGate", () => {
     expect(api.save).toHaveBeenCalledTimes(1);
     finish(answer("completed"));
     expect(await screen.findByText("Trips dashboard")).toBeTruthy();
+  });
+
+  it("keeps selections after a failed save and retries without showing the load failure", async () => {
+    const user = userEvent.setup();
+    const api = actions(answer("incomplete"));
+    api.save = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce(answer("completed"));
+    render(
+      <StaplesSetupGate actions={api}>
+        <div>Trips dashboard</div>
+      </StaplesSetupGate>,
+    );
+
+    const underwear = await screen.findByRole("checkbox", { name: "Underwear" });
+    await user.click(underwear);
+    await user.click(screen.getByRole("button", { name: "Save 1 Staples" }));
+
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "Couldn’t save your Staples.Your selections are still here.",
+    );
+    expect((underwear as HTMLInputElement).checked).toBe(true);
+    expect(screen.queryByText("Couldn’t load your Staples setup.")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Try save again" }));
+    expect(await screen.findByText("Trips dashboard")).toBeTruthy();
+    expect(api.save).toHaveBeenNthCalledWith(
+      2,
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: STAPLE_SUGGESTIONS.find(({ staple }) => staple.name === "Underwear")?.staple.id,
+        }),
+      ]),
+    );
+  });
+
+  it("labels migrated owners' reminder as a review invitation", async () => {
+    const existing = answer("skipped") as Extract<StaplesSetupResult, { ok: true }>;
+    existing.staples = [STAPLE_SUGGESTIONS[0].staple];
+    const api = actions(existing);
+    render(
+      <StaplesSetupGate actions={api}>
+        <div>Trips dashboard</div>
+      </StaplesSetupGate>,
+    );
+
+    expect(await screen.findByText("Review the Staples already in your account.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Review Staples" })).toBeTruthy();
   });
 });

@@ -184,6 +184,13 @@ export function StaplesScreen({
           </p>
         </div>
         <div className="staple-categories">
+          {load.staples.length === 0 && filter === "all" ? (
+            <div className="empty-state">
+              <strong>Your Staples list is intentionally empty.</strong>
+              <p className="muted">Add an item whenever you want it to appear on future trips.</p>
+              <Button onClick={() => setEditing({ staple: null })}>Add a staple</Button>
+            </div>
+          ) : null}
           {sections.length ? (
             sections.map(({ section, staples }) => {
               const id = `staples-${section.toLowerCase().replaceAll(" ", "-")}`;

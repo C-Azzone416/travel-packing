@@ -15,8 +15,29 @@ describe("StaplesSetupScreen", () => {
     expect(screen.getAllByRole("checkbox").every((box) => !(box as HTMLInputElement).checked)).toBe(
       true,
     );
+    expect(
+      screen.getByRole("checkbox", { name: "Underwear" }).nextElementSibling?.classList,
+    ).toContain("save-list-box");
     await user.click(screen.getByRole("button", { name: "Save empty Staples" }));
     expect(save).toHaveBeenCalledWith([]);
+  });
+
+  it("shows a retry action without clearing the local checklist after a save error", async () => {
+    const user = userEvent.setup();
+    const save = vi.fn();
+    const { rerender } = render(
+      <StaplesSetupScreen setup={setup} busy={false} onSave={save} onSkip={vi.fn()} />,
+    );
+    await user.click(screen.getByRole("checkbox", { name: "Underwear" }));
+    rerender(
+      <StaplesSetupScreen setup={setup} busy={false} saveError onSave={save} onSkip={vi.fn()} />,
+    );
+    expect((screen.getByRole("checkbox", { name: "Underwear" }) as HTMLInputElement).checked).toBe(
+      true,
+    );
+    expect(screen.getByRole("alert").textContent).toContain("Your selections are still here");
+    await user.click(screen.getByRole("button", { name: "Try save again" }));
+    expect(save).toHaveBeenCalledWith([expect.objectContaining({ id: "underwear" })]);
   });
 
   it("selects only chosen suggestions and edits cadence, placement, and Pack last independently", async () => {

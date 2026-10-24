@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import { SAMPLE_TODAY } from "../../../src/server/seed/sample-data";
@@ -51,6 +51,79 @@ export async function resetStaplesSetup(ownerId: string): Promise<void> {
         set: { staplesSetupState: "incomplete", staplesReminderDismissed: false },
       });
     await db.delete(schema.staples).where(eq(schema.staples.ownerId, ownerId));
+  } finally {
+    await pool.end();
+  }
+}
+
+/** Change only setup lifecycle metadata; useful for checking migrated-owner invitations without touching their list. */
+export async function setStaplesSetupLifecycle(
+  ownerId: string,
+  state: (typeof schema.STAPLES_SETUP_STATES)[number],
+  reminderDismissed = false,
+): Promise<void> {
+  const pool = new Pool({ connectionString: E2E_DATABASE_URL, max: 1 });
+  try {
+    const db = drizzle(pool, { schema }) as unknown as Db;
+    await db
+      .update(schema.users)
+      .set({ staplesSetupState: state, staplesReminderDismissed: reminderDismissed })
+      .where(eq(schema.users.id, ownerId));
+  } finally {
+    await pool.end();
+  }
+}
+
+/**
+ * Synthetic acceptance fixture: only one Main-list Staple and a fully packed San Diego trip with no toiletry rows.
+ * The trip is deliberately not Ready, so the review can prove that no bag-placement step blocks its Ready action.
+ */
+export async function prepareMainOnlyReadyPath(ownerId: string): Promise<string> {
+  const pool = new Pool({ connectionString: E2E_DATABASE_URL, max: 1 });
+  try {
+    const db = drizzle(pool, { schema }) as unknown as Db;
+    const [trip] = await db
+      .select({ id: schema.trips.id })
+      .from(schema.trips)
+      .where(and(eq(schema.trips.ownerId, ownerId), eq(schema.trips.destination, "San Diego")));
+    if (!trip) throw new Error("synthetic San Diego trip is missing");
+
+    await db.transaction(async (tx) => {
+      await tx.delete(schema.staples).where(eq(schema.staples.ownerId, ownerId));
+      await tx.insert(schema.staples).values({
+        ownerId,
+        semanticId: "notebook",
+        name: "Notebook",
+        category: "Other essentials",
+        qty: 1,
+        cadence: "per trip",
+        packLast: false,
+        groupId: null,
+      });
+      await tx
+        .delete(schema.tripItems)
+        .where(
+          and(
+            eq(schema.tripItems.ownerId, ownerId),
+            eq(schema.tripItems.tripId, trip.id),
+            eq(schema.tripItems.groupId, "toiletry-bag"),
+          ),
+        );
+      await tx
+        .update(schema.tripItemProgress)
+        .set({ packed: sql`${schema.tripItemProgress.qty}` })
+        .where(
+          and(
+            eq(schema.tripItemProgress.ownerId, ownerId),
+            eq(schema.tripItemProgress.tripId, trip.id),
+          ),
+        );
+      await tx
+        .update(schema.trips)
+        .set({ ready: false, toiletryBagPacked: false })
+        .where(and(eq(schema.trips.ownerId, ownerId), eq(schema.trips.id, trip.id)));
+    });
+    return trip.id;
   } finally {
     await pool.end();
   }

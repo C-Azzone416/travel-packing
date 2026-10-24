@@ -10,6 +10,7 @@ import { SECTIONS, sectionOf } from "./staples-view";
 export interface StaplesSetupScreenProps {
   setup: StaplesSetup;
   busy: boolean;
+  saveError?: boolean;
   onSave: (staples: Staple[]) => void;
   onSkip: () => void;
 }
@@ -17,7 +18,13 @@ export interface StaplesSetupScreenProps {
 type Editing = null | { staple: Staple | null };
 
 /** First-run setup is local until one atomic save; closing/reloading restores the last committed server state. */
-export function StaplesSetupScreen({ setup, busy, onSave, onSkip }: StaplesSetupScreenProps) {
+export function StaplesSetupScreen({
+  setup,
+  busy,
+  saveError = false,
+  onSave,
+  onSkip,
+}: StaplesSetupScreenProps) {
   const [staples, setStaples] = useState<Staple[]>(setup.staples);
   const [editing, setEditing] = useState<Editing>(null);
   const selected = useMemo(() => new Set(staples.map((staple) => staple.id)), [staples]);
@@ -75,13 +82,16 @@ export function StaplesSetupScreen({ setup, busy, onSave, onSkip }: StaplesSetup
                 const current = staples.find((entry) => entry.id === staple.id);
                 return (
                   <div className="staple-row" key={staple.id}>
-                    <label className="staple-name">
+                    <label className="staple-name staples-suggestion-check">
                       <input
                         type="checkbox"
                         checked={selected.has(staple.id)}
                         onChange={() => toggle(staple)}
                         disabled={busy}
                       />
+                      <span className="save-list-box" aria-hidden="true">
+                        ✓
+                      </span>
                       <strong>{current?.name ?? staple.name}</strong>
                     </label>
                     {current ? (
@@ -118,13 +128,25 @@ export function StaplesSetupScreen({ setup, busy, onSave, onSkip }: StaplesSetup
         </section>
       ) : null}
 
-      <div className="actions staples-setup-actions">
-        <Button variant="ghost" onClick={onSkip} disabled={busy}>
-          Skip for now
-        </Button>
-        <Button onClick={() => onSave(staples)} disabled={busy}>
-          {busy ? "Saving…" : `Save ${staples.length || "empty"} Staples`}
-        </Button>
+      <div className="staples-setup-actions-shell">
+        {saveError ? (
+          <div className="callout error staples-setup-error" role="alert">
+            <strong>Couldn’t save your Staples.</strong>
+            <p>Your selections are still here. Check your connection and try again.</p>
+          </div>
+        ) : null}
+        <div className="actions staples-setup-actions">
+          <Button variant="ghost" onClick={onSkip} disabled={busy}>
+            Skip for now
+          </Button>
+          <Button onClick={() => onSave(staples)} disabled={busy}>
+            {busy
+              ? "Saving…"
+              : saveError
+                ? "Try save again"
+                : `Save ${staples.length || "empty"} Staples`}
+          </Button>
+        </div>
       </div>
 
       {editing ? (

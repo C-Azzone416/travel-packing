@@ -4312,7 +4312,8 @@ a.back {
   cursor: not-allowed;
 }
 .staples-setup {
-  max-width: 840px;
+  max-width: 760px;
+  margin-inline: auto;
 }
 .staples-setup .staple-category + .staple-category {
   margin-top: 14px;
@@ -4322,24 +4323,58 @@ a.back {
   align-items: center;
   gap: 10px;
 }
-.staples-setup .staple-name input {
-  width: 22px;
-  height: 22px;
+.staples-suggestion-check {
+  position: relative;
+  min-height: 44px;
+  cursor: pointer;
 }
-.staples-setup-actions {
+.staples-suggestion-check input {
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: 1;
+  width: 44px;
+  height: 44px;
+  margin: auto 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.staples-suggestion-check input:checked + .save-list-box {
+  border-color: var(--complete);
+  background: var(--complete);
+  color: var(--complete-ink);
+}
+.staples-suggestion-check input:focus-visible + .save-list-box {
+  outline: 3px solid var(--accent-2);
+  outline-offset: 3px;
+}
+.staples-suggestion-check input:disabled {
+  cursor: not-allowed;
+}
+.staples-setup-error {
+  margin: 0 0 12px;
+  border: 1px solid var(--danger-border);
+  background: var(--danger-surface);
+}
+.staples-setup-error p {
+  margin: 4px 0 0;
+}
+.staples-setup-actions-shell {
   position: sticky;
   bottom: 12px;
-  justify-content: flex-end;
   margin-top: 20px;
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: var(--control-radius);
   background: var(--paper);
-  box-shadow: var(--shadow);
+  box-shadow: none;
+}
+.staples-setup-actions {
+  justify-content: flex-end;
 }
 .staples-reminder {
-  max-width: 980px;
-  margin: 18px auto 0;
+  width: 100%;
+  max-width: none;
+  margin: 8px 0 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -4357,13 +4392,16 @@ a.back {
     justify-content: center;
   }
   .staples-reminder {
-    margin: 12px 14px 0;
+    margin: 4px 0 16px;
     align-items: stretch;
     flex-direction: column;
   }
   .staples-reminder .actions,
   .staples-setup-actions {
     flex-direction: column-reverse;
+  }
+  .staples-setup-actions-shell {
+    bottom: calc(56px + env(safe-area-inset-bottom) + 8px);
   }
   .staples-reminder .button,
   .staples-setup-actions .button {

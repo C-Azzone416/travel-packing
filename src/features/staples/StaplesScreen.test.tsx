@@ -153,6 +153,18 @@ describe("the Pack last filter", () => {
   });
 });
 
+describe("an intentionally empty Staples list", () => {
+  it("stays distinct from uninitialized setup and offers an explicit way to add an item", async () => {
+    setup((base) => ({ ...base, listStaples: async () => [] }));
+    await title();
+    expect(screen.getByText("Your Staples list is intentionally empty.")).toBeTruthy();
+    expect(
+      screen.getByText("Add an item whenever you want it to appear on future trips."),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add a staple" })).toBeTruthy();
+  });
+});
+
 describe("adding a staple", () => {
   it("starts with Pack last off, saves after the server confirms, and applies to future trips only", async () => {
     const gate = deferred<void>();
