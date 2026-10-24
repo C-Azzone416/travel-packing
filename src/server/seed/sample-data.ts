@@ -3,7 +3,7 @@
 // Fixed ids keep the seed idempotent (re-running replaces these exact trips).
 
 import { createHash } from "node:crypto";
-import { buildTripItems, DEFAULT_STAPLES, forecastLabel } from "../../domain/calc";
+import { buildTripItems, SYNTHETIC_STAPLES, forecastLabel } from "../../domain/calc";
 import type { ThemeId } from "../../domain/themes";
 import type { TripConfig, TripItem } from "../../domain/trip";
 import type { StoredTrip } from "../data/trip-store";
@@ -82,7 +82,7 @@ function sampleTrip(
   today: string,
   theme: ThemeId,
 ): StoredTrip {
-  const built = buildTripItems({ ...config, start, end }, DEFAULT_STAPLES);
+  const built = buildTripItems({ ...config, start, end }, SYNTHETIC_STAPLES);
   return {
     id,
     destination: place.city,

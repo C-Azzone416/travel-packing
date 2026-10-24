@@ -96,8 +96,8 @@ describe("nice attire", () => {
     expect(result["nice-top"]).toBe(n);
     expect(result["nice-bottom"]).toBe(n);
     expect(result["nice-shoes"]).toBe(1);
-    expect(result["nice-makeup"]).toBe(1);
-    expect(result["nice-undergarments"]).toBe(1);
+    expect(result["nice-makeup"]).toBeUndefined();
+    expect(result["nice-undergarments"]).toBeUndefined();
   });
 
   it.each(occasions)(
@@ -136,14 +136,13 @@ describe("nice attire", () => {
     expect(ids.some((id) => id.startsWith("nice-"))).toBe(false);
   });
 
-  it("marks exactly the three companions optional, with the prototype categories", () => {
+  it("offers only the generic dress-shoes companion, with no personal assumptions", () => {
     const { items } = calculateSuggestions({ ...off, niceAttire: true });
     const optional = items.filter((item) => item.optional).map((item) => [item.id, item.category]);
-    expect(optional).toEqual([
-      ["nice-shoes", "Nice attire"],
-      ["nice-makeup", "Bathroom"],
-      ["nice-undergarments", "Nice attire"],
-    ]);
+    expect(optional).toEqual([["nice-shoes", "Nice attire"]]);
+    expect(items.some((item) => ["nice-makeup", "nice-undergarments"].includes(item.id))).toBe(
+      false,
+    );
     expect(items.find((item) => item.id === "tops")?.category).toBe("Clothing");
   });
 });

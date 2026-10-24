@@ -237,22 +237,16 @@ describe("saveDraft", () => {
 });
 
 describe("buildTrip", () => {
-  it("builds suggestions, a return outfit, default Pack last items, and sunglasses with no duplicates", () => {
+  it("builds only generic suggestions and a return outfit when the owner has no Staples", () => {
     const trip = savedTrip({}, []);
     expect(findIdentityViolations(trip)).toEqual([]);
     expect(
       trip.items.filter((entry) => entry.section === "return").map((entry) => entry.id),
     ).toEqual(["return-top", "return-bottoms", "return-underwear", "return-socks"]);
-    expect(
-      trip.items.filter((entry) => entry.section === "packlast").map((entry) => entry.id),
-    ).toEqual(["last-laptop", "last-chargers", "last-glasses"]);
-    expect(byId(trip, "sunglasses")).toMatchObject({
-      qty: 1,
-      category: "Accessories",
-      section: "main",
-    });
+    expect(trip.items.filter((entry) => entry.section === "packlast")).toEqual([]);
+    expect(byId(trip, "sunglasses")).toBeUndefined();
     expect(byId(trip, "underwear")?.qty).toBe(7);
-    expect(byId(trip, "nice-makeup")?.groupId).toBe(TOILETRY_GROUP_ID);
+    expect(byId(trip, "nice-makeup")).toBeUndefined();
     expect(trip.items.every((entry) => entry.packed === 0)).toBe(true);
     expect(trip.items.every((entry) => entry.qty >= 1)).toBe(true);
   });
@@ -268,9 +262,9 @@ describe("buildTrip", () => {
   it("merges staples: per-day and per-trip quantities, spare underwear, Pack last, Bathroom membership", () => {
     const trip = savedTrip({}, STAPLES);
     expect(findIdentityViolations(trip)).toEqual([]);
-    // per-day staple overrides the calculated row: 6 daily days x 1 + spare 1
+    // Per-day Staples use all eight calendar days, including both travel days; spare is irrelevant.
     expect(byId(trip, "underwear")).toMatchObject({
-      qty: 7,
+      qty: 8,
       category: "Clothing",
       section: "main",
     });
@@ -283,7 +277,7 @@ describe("buildTrip", () => {
     expect(byId(trip, "floss")).toMatchObject({ section: "main", groupId: TOILETRY_GROUP_ID });
   });
 
-  it("spare applies to socks staples only when enabled", () => {
+  it("spare does not change per-day Staples", () => {
     const socks: Staple[] = [
       {
         id: "socks",
@@ -294,11 +288,11 @@ describe("buildTrip", () => {
         packLast: false,
       },
     ];
-    expect(byId(savedTrip({}, socks), "socks")?.qty).toBe(7);
-    expect(byId(savedTrip({}, socks, { ...CONFIG, spare: false }), "socks")?.qty).toBe(6);
+    expect(byId(savedTrip({}, socks), "socks")?.qty).toBe(8);
+    expect(byId(savedTrip({}, socks, { ...CONFIG, spare: false }), "socks")?.qty).toBe(8);
   });
 
-  it("an equivalent Makeup / Dress shoes staple replaces the suggestion instead of duplicating it", () => {
+  it("does not infer identity or placement from display names", () => {
     const staples: Staple[] = [
       {
         id: "my-makeup",
@@ -320,14 +314,12 @@ describe("buildTrip", () => {
     const trip = savedTrip({}, staples);
     expect(findIdentityViolations(trip)).toEqual([]);
     expect(byId(trip, "nice-makeup")).toBeUndefined();
-    expect(byId(trip, "my-makeup")).toMatchObject({
-      name: "Make-up kit",
-      groupId: TOILETRY_GROUP_ID,
-    });
-    expect(byId(trip, "my-shoes")).toMatchObject({ name: "Dress shoes", optional: true });
+    expect(byId(trip, "my-makeup")).toMatchObject({ name: "Make-up kit", groupId: null });
+    expect(byId(trip, "nice-shoes")).toBeDefined();
+    expect(byId(trip, "my-shoes")).toMatchObject({ name: "Dress shoes", groupId: null });
   });
 
-  it("a staple matching by id keeps a Makeup row in the Bathroom group", () => {
+  it("keeps category, placement, and Pack last independent", () => {
     const staples: Staple[] = [
       {
         id: "nice-makeup",
@@ -343,11 +335,11 @@ describe("buildTrip", () => {
       qty: 2,
       category: "Other",
       section: "packlast",
-      groupId: TOILETRY_GROUP_ID,
+      groupId: null,
     });
   });
 
-  it("a staple that matches a return-outfit row keeps its return timing", () => {
+  it("does not let a colliding Staple replace a return-outfit row", () => {
     const staples: Staple[] = [
       {
         id: "return-top",
@@ -359,13 +351,13 @@ describe("buildTrip", () => {
       },
     ];
     expect(byId(savedTrip({}, staples), "return-top")).toMatchObject({
-      name: "Travel top",
-      qty: 2,
+      name: "Fresh top",
+      qty: 1,
       section: "return",
     });
   });
 
-  it("a staple resolving to zero quantity leaves no phantom row (zero means absent)", () => {
+  it("a fixed Staple with zero quantity leaves no phantom row", () => {
     const staples: Staple[] = [
       {
         id: "extra-socks",
@@ -386,7 +378,7 @@ describe("buildTrip", () => {
     ];
     const deps = makeDeps();
     const trip = buildTrip("Short stay", null, "2030-04-01", "2030-04-02", CONFIG, staples, deps);
-    expect(byId(trip, "extra-socks")).toBeUndefined();
+    expect(byId(trip, "extra-socks")?.qty).toBe(2);
     expect(byId(trip, "last-laptop")).toBeUndefined();
     expect(trip.items.every((entry) => entry.qty >= 1)).toBe(true);
     expect(trip.location).toBeNull();
@@ -605,8 +597,8 @@ describe("copy", () => {
       suggestion: "Compact umbrella",
     });
     expect(copy.id).not.toBe(source.id);
-    expect(byId(copy, "nice-makeup")).toBeDefined();
-    expect(byId(copy, "underwear")?.qty).toBe(2);
+    expect(byId(copy, "nice-makeup")).toBeUndefined();
+    expect(byId(copy, "underwear")?.qty).toBe(3);
     expect(result.state.trips[1]).toBe(source);
     expect(source).toEqual(snapshot);
   });

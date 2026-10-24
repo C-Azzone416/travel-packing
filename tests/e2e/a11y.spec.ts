@@ -152,13 +152,7 @@ test.describe("trip screen", DEVICE, () => {
 
   test("the toiletry bag prompt", async ({ page }) => {
     await openSanDiego(page);
-    for (const id of [
-      "nice-makeup",
-      "last-toothbrush",
-      "last-toothpaste",
-      "last-deodorant",
-      "last-contacts",
-    ])
+    for (const id of ["last-toothbrush", "last-toothpaste", "last-deodorant", "last-contacts"])
       await page
         .locator(`[data-item-id="${id}"]`)
         .getByRole("button", { name: /^Pack all / })
@@ -528,13 +522,7 @@ test("screenshots of the visual fixes (after)", DEVICE, async ({ page }, testInf
   await shot("editor-legend");
   await page.getByRole("button", { name: "Close dialog" }).click();
   // The green bag card, after placing the bag.
-  for (const id of [
-    "nice-makeup",
-    "last-toothbrush",
-    "last-toothpaste",
-    "last-deodorant",
-    "last-contacts",
-  ])
+  for (const id of ["last-toothbrush", "last-toothpaste", "last-deodorant", "last-contacts"])
     await page
       .locator(`[data-item-id="${id}"]`)
       .getByRole("button", { name: /^Pack all / })

@@ -48,6 +48,8 @@ database refusing to store a cross-owner link.
 
 - `trip_items` has **no foreign key to `staples`**. Editing or deleting a staple never touches a trip row
   (tested). The `semantic_id` ("underwear", "weather-umbrella", ...) is plain text copied at trip creation.
+  `staple_cadence` snapshots the rule (`per trip`, `per day`, or `smart`) only for rows generated from a Staple,
+  so later preference recalculation never imports current account defaults into an existing trip.
 - `trip_items.id` is a per-trip immutable uuid. `(trip_id, semantic_id)` is unique, so two items with similar
   names (everyday vs return underwear) never merge: they have different semantic ids.
 - `staples` is unique on `(owner_id, semantic_id)` and carries `version`, bumped by the data layer on each edit.
@@ -79,7 +81,7 @@ so quantity edits succeed instead of failing the cascade.
 
 `item_category` lists the strings the domain uses. The semantic category for everyday clothing is the single value
 `Clothing` (the plan's name); the prototype's calculator label `Clothes` was normalized to it (PM decision), and a
-test fails if any category the calculator or default staples produce is missing from the enum.
+test fails if any category the calculator or synthetic fixture Staples produce is missing from the enum.
 
 ## Privacy-sensitive columns
 
@@ -152,16 +154,17 @@ Every entry point is `run(context, zodSchema, input, handler)`:
 
 Trips are loaded and saved as one aggregate (trip + preferences + weather + items with progress). Another owner's
 trip is indistinguishable from a missing one (`NOT_FOUND`), including as the source of a copy, so `copied_from` can
-only ever reference the caller's own trip. First use seeds the default staples once (never re-adding removed ones).
+only ever reference the caller's own trip. A new owner starts with an initialized, empty Staples list; the app never
+inserts personal defaults automatically.
 
 ## Synthetic seed data (`npm run db:seed`)
 
 Loads the prototype's sample set (plan §6) for one owner: **San Diego** (upcoming, partially packed, Nice outfits on)
-and **Lisbon** (past, fully packed, bag confirmed, Ready, simulated umbrella accepted), plus the default staples. All of
-it is invented; nothing is real trip data.
+and **Lisbon** (past, fully packed, bag confirmed, Ready, simulated umbrella accepted), plus a synthetic fixture set of
+Staples. All of it is invented; nothing is real trip data.
 
 - **Idempotent.** The two sample trips have ids derived from the owner id, so re-running replaces exactly those trips
-  and sets the staples back to the defaults. Other trips the owner has, and other owners' data, are untouched.
+  and sets the staples back to the synthetic fixture set. Other trips the owner has, and other owners' data, are untouched.
 - **Relative dates.** The sample trips' dates are computed from the run date: San Diego starts 7 days out (so it is always
   upcoming, with a "Close forecast") and Lisbon started 43 days ago (always past); both are five days long. With the
   prototype's "today" (2026-10-16) they land on its exact dates, Oct 23-27 and Sep 3-7, 2026.
@@ -177,7 +180,7 @@ it is invented; nothing is real trip data.
   never a connection string, date, or place.
 - `--owner <id>` or `SEED_OWNER_ID` sets the owner (default `seed-owner` for a local database; a remote seed refuses to run without an explicit owner, and the preview deploy goes through `npm run db:seed:preview`, see `docs/deploy.md`). Tests can call `seedSyntheticData(db, ownerId)`
   directly as a fixture.
-  The seed **resets that owner's staples to the defaults**, so never point `--owner` / `SEED_OWNER_ID` at a real account
+  The seed **resets that owner's staples to the synthetic fixture set**, so never point `--owner` / `SEED_OWNER_ID` at a real account
   id. If `DATABASE_URL` is unset where you seed, `SEED_ALLOWED_HOSTS` is the only protection: list only disposable hosts.
 
 ## Places (#47)

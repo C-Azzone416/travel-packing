@@ -541,7 +541,7 @@ describe("quick view", () => {
     ).toBeTruthy();
     expect(within(quick).queryByText("Sleepwear")).toBeNull();
     expect(within(quick).getAllByText("Underwear")[0].parentElement?.textContent).toContain(
-      "2 left",
+      "3 left",
     );
 
     await user.click(within(quick).getByRole("button", { name: "All" }));

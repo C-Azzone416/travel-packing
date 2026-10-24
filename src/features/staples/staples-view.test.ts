@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_STAPLES } from "@/domain/calc";
+import { SYNTHETIC_STAPLES } from "@/domain/calc";
 import type { Staple } from "@/domain/trip";
 import {
   categoryFor,
@@ -52,7 +52,7 @@ describe("groupStaples", () => {
   });
 
   it("under Pack last keeps only Pack last staples and hides sections left empty", () => {
-    const views = groupStaples(DEFAULT_STAPLES, "packlast");
+    const views = groupStaples(SYNTHETIC_STAPLES, "packlast");
     expect(views.map((view) => view.section)).toEqual(["Bathroom", "Tech", "Other essentials"]);
     expect(views.flatMap((view) => view.staples).every((entry) => entry.packLast)).toBe(true);
     expect(
@@ -66,7 +66,7 @@ describe("groupStaples", () => {
 
   it("keeps the default set's counts per section", () => {
     const counts = Object.fromEntries(
-      groupStaples(DEFAULT_STAPLES, "all").map((view) => [view.section, view.staples.length]),
+      groupStaples(SYNTHETIC_STAPLES, "all").map((view) => [view.section, view.staples.length]),
     );
     expect(counts).toEqual({ Clothing: 3, Bathroom: 4, Tech: 2, "Other essentials": 2 });
   });

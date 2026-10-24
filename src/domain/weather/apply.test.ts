@@ -149,10 +149,8 @@ describe("applyWeatherChanges", () => {
         ],
       },
     ]);
-    expect(after.items.find((item) => item.id === "tops-long")).toMatchObject({
-      optional: false,
-      packed: 0,
-    });
+    expect(after.items.find((item) => item.id === "tops-long")).toMatchObject({ packed: 0 });
+    expect(after.items.find((item) => item.id === "tops-long")?.optional).toBeUndefined();
     expect(after.items.find((item) => item.id === "bottoms-shorts")).toMatchObject({
       optional: true,
       groupId: "toiletry-bag",
@@ -165,5 +163,52 @@ describe("applyWeatherChanges", () => {
     expect(after.items.find((item) => item.id === "weather-sunscreen")?.groupId).toBe(
       "toiletry-bag",
     );
+  });
+
+  it("deduplicates a weather extra against an equivalent renamed Staple", () => {
+    const before = trip();
+    before.items.push({
+      id: "sunscreen",
+      name: "My SPF",
+      category: "Bathroom",
+      qty: 2,
+      packed: 1,
+      section: "packlast",
+      groupId: "toiletry-bag",
+      stapleCadence: "per trip",
+    });
+    const after = applyWeatherChanges(before, [add("weather-sunscreen", "toiletry-bag")]);
+    expect(
+      after.items.filter((item) => ["sunscreen", "weather-sunscreen"].includes(item.id)),
+    ).toEqual([expect.objectContaining({ id: "sunscreen", name: "My SPF", qty: 2, packed: 1 })]);
+    expect(after.toiletryBagPacked).toBe(true);
+  });
+
+  it("never removes or replaces a Staple snapshot while applying weather changes", () => {
+    const before = trip();
+    before.items = before.items.map((item) =>
+      item.id === "tops"
+        ? { ...item, name: "My shirts", stapleCadence: "smart" as const }
+        : item.id === "weather-swimsuit"
+          ? { ...item, name: "My swimsuit", stapleCadence: "per trip" as const }
+          : item,
+    );
+    const split: WeatherChange = {
+      kind: "split",
+      semanticId: "clothing-split",
+      title: "Split clothing by weather",
+      reason: "test",
+      ruleSignature: "test-split",
+      userEdited: false,
+      clothing: [{ id: "tops-short", name: "Short-sleeve tops", category: "Clothing", qty: 3 }],
+    };
+    const after = applyWeatherChanges(before, [
+      { kind: "remove", semanticId: "weather-swimsuit" },
+      split,
+    ]);
+    expect(after.items.find((item) => item.id === "tops")).toMatchObject({ name: "My shirts" });
+    expect(after.items.find((item) => item.id === "weather-swimsuit")).toMatchObject({
+      name: "My swimsuit",
+    });
   });
 });

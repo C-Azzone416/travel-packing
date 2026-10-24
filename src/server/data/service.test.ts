@@ -24,6 +24,8 @@ import { setDataLogSink } from "./safe-log";
 import * as service from "./service";
 import * as stapleStore from "./staple-store";
 import { loadTrip, loadTrips } from "./trip-store";
+import { calculateSuggestions } from "../../domain/calc";
+import { previewRecalculation } from "../../domain/recalc-preview";
 
 const LOCATION = {
   id: "sample-b",
@@ -284,11 +286,30 @@ describe("cross-user: user B cannot touch user A's trips or staples", () => {
 
   it("lists and staples are per-owner", async () => {
     await seedTrip(db(), OWNER.userId);
-    data(await service.listStaplesForOwner(context()));
+    data(
+      await service.upsertStaple(context(), {
+        semanticId: "scarf",
+        name: "Scarf",
+        category: "Accessories",
+        qty: 1,
+        cadence: "per trip",
+        packLast: false,
+      }),
+    );
     as(OTHER_OWNER);
     expect(data(await service.listTrips(context()))).toEqual([]);
     const theirs = data(await service.listStaplesForOwner(context()));
-    expect(theirs.length).toBeGreaterThan(0);
+    expect(theirs).toEqual([]);
+    data(
+      await service.upsertStaple(context(), {
+        semanticId: "hat",
+        name: "Hat",
+        category: "Accessories",
+        qty: 1,
+        cadence: "per trip",
+        packLast: false,
+      }),
+    );
     const total = (
       await ctx.client.query<{ owner_id: string }>('SELECT DISTINCT owner_id FROM "staples"')
     ).rows;
@@ -315,7 +336,7 @@ describe("cross-user: user B cannot touch user A's trips or staples", () => {
     expect(
       data(await service.listStaplesForOwner(context())).find((staple) => staple.id === "socks")
         ?.qty,
-    ).toBe(1);
+    ).toBeUndefined();
   });
 });
 
@@ -438,6 +459,19 @@ describe("input validation", () => {
         }),
       ["groupId"],
     ],
+    [
+      "Smart quantity on an unsupported custom item",
+      () =>
+        service.upsertStaple(context(), {
+          semanticId: "custom-book",
+          name: "Book",
+          category: "Other essentials",
+          qty: 1,
+          cadence: "smart",
+          packLast: false,
+        }),
+      ["cadence"],
+    ],
     ["extra input to a no-input call", () => service.getTrip(context(), null), ["(root)"]],
   ])("%s -> INVALID_INPUT with field paths", async (_name, call, fields) => {
     const error = errorOf(await call());
@@ -456,10 +490,10 @@ describe("reading", () => {
     );
   });
 
-  it("seeds the default staples on first use, once", async () => {
+  it("keeps an uninitialized or deliberately empty Staples list empty", async () => {
     const first = data(await service.listStaplesForOwner(context()));
     const second = data(await service.listStaplesForOwner(context()));
-    expect(first.length).toBeGreaterThan(5);
+    expect(first).toEqual([]);
     expect(second).toEqual(first);
   });
 });
@@ -614,7 +648,7 @@ describe("item operations", () => {
         `SELECT name, pack_last, version FROM "staples" WHERE semantic_id = 'last-laptop'`,
       )
     ).rows[0];
-    expect(laptop).toEqual({ name: "Work laptop", pack_last: false, version: 2 });
+    expect(laptop).toEqual({ name: "Work laptop", pack_last: false, version: 1 });
     expect(JSON.stringify(await loadTrip(db(), OWNER.userId, history.id))).toBe(historyBefore);
     expect(item((await loadTrip(db(), OWNER.userId, history.id))!, "last-laptop")).toMatchObject({
       name: "Laptop",
@@ -744,6 +778,72 @@ describe("item operations", () => {
     expect(reloaded.config.niceAttire).toBe(false);
     expect(Object.keys(reloaded.suggestionMemory)).toContain("nice-top");
     expect(reloaded.ready).toBe(false);
+  });
+
+  it("persists exactly the previewed rows while preserving fixed snapshots and recalculating Smart Staples", async () => {
+    for (const staple of [
+      {
+        semanticId: "tops",
+        name: "My shirts",
+        category: "Clothing",
+        qty: 1,
+        cadence: "smart",
+        packLast: false,
+      },
+      {
+        semanticId: "medicine",
+        name: "Medicine",
+        category: "Other essentials",
+        qty: 2,
+        cadence: "per day",
+        packLast: true,
+      },
+    ] as const) {
+      data(await service.upsertStaple(context(), staple));
+    }
+    const created = data(
+      await service.createTrip(context(), {
+        location: LOCATION,
+        start: "2030-03-15",
+        end: "2030-03-20",
+        config: CONFIG,
+      }),
+    );
+    data(
+      await service.addItemToTrip(context(), {
+        tripId: created.id,
+        name: "Camera",
+        category: "Tech",
+        neededQty: 1,
+      }),
+    );
+    const before = (await loadTrip(db(), OWNER.userId, created.id))!;
+    const nextConfig = { ...CONFIG, laundry: true };
+    const preview = previewRecalculation(before, nextConfig, calculateSuggestions);
+
+    const applied = data(
+      await service.updateTripPreferences(context(), {
+        tripId: before.id,
+        config: nextConfig,
+        basedOn: before.updatedAt,
+      }),
+    );
+    const reloaded = (await loadTrip(db(), OWNER.userId, before.id))!;
+
+    expect(applied.trip.items).toEqual(preview.next.items);
+    expect(reloaded.items).toEqual(preview.next.items);
+    expect(item(reloaded, "tops")).toMatchObject({
+      name: "My shirts",
+      stapleCadence: "smart",
+    });
+    expect(item(reloaded, "medicine")).toMatchObject({
+      qty: 12,
+      section: "packlast",
+      stapleCadence: "per day",
+    });
+    expect(reloaded.items.find((entry) => entry.name === "Camera")).toEqual(
+      before.items.find((entry) => entry.name === "Camera"),
+    );
   });
 });
 
@@ -960,7 +1060,7 @@ describe("trip lifecycle", () => {
       expect(item(reloaded, "tops")?.qty).toBe(2);
     });
 
-    it("an owner who remembered nice items still gets no nice attire with Nice outfits off, but keeps Makeup (#202)", async () => {
+    it("explicit fixed Staples apply once even when the matching trip option is off", async () => {
       const own = data(await service.listStaplesForOwner(context()));
       const remembered = [
         { id: "nice-top", name: "Nice-attire top", category: "Nice attire", qty: 1 },
@@ -972,8 +1072,8 @@ describe("trip lifecycle", () => {
       const off = data(
         await service.createTrip(context(), { ...input, config: { ...CONFIG, niceAttire: false } }),
       );
-      expect(item(off, "nice-top")).toBeUndefined();
-      expect(item(off, "nice-shoes")).toBeUndefined();
+      expect(item(off, "nice-top")).toMatchObject({ qty: 1, stapleCadence: "per trip" });
+      expect(item(off, "nice-shoes")).toMatchObject({ qty: 1, stapleCadence: "per trip" });
       expect(item(off, "nice-makeup")).toMatchObject({ name: "Makeup", qty: 1 });
 
       const on = data(
@@ -1591,6 +1691,7 @@ describe("staples are per-owner even when owners share the same default ids", ()
       for (const user of order) {
         as(user);
         data(await service.listStaplesForOwner(context()));
+        data(await upsertSocks(1));
       }
       as(OWNER);
       data(await upsertSocks(3));
@@ -1626,10 +1727,7 @@ describe("staples are per-owner even when owners share the same default ids", ()
         "SELECT owner_id, name FROM staples WHERE semantic_id = 'last-laptop' ORDER BY owner_id",
       )
     ).rows;
-    expect(names).toEqual([
-      { owner_id: OWNER.userId, name: "Work laptop" },
-      { owner_id: OTHER_OWNER.userId, name: "Laptop" },
-    ]);
+    expect(names).toEqual([{ owner_id: OWNER.userId, name: "Work laptop" }]);
   });
 });
 
@@ -1796,7 +1894,7 @@ describe("concurrent staple upserts are serialized (no silently dropped staple)"
     expect(results.every((result) => result.ok)).toBe(true);
     const ids = await staplesOf(OWNER.userId);
     expect(ids).toEqual(expect.arrayContaining(["scarf", "hat"]));
-    expect(ids).toHaveLength(13); // 11 defaults + scarf + hat
+    expect(ids).toHaveLength(2);
   });
 
   it("concurrent upserts of the same staple end on one of the two values, with the rest intact", async () => {
@@ -1809,7 +1907,7 @@ describe("concurrent staple upserts are serialized (no silently dropped staple)"
     ).rows;
     expect(rows).toHaveLength(1);
     expect(["Wool scarf", "Silk scarf"]).toContain(rows[0].name);
-    expect(await staplesOf(OWNER.userId)).toHaveLength(12);
+    expect(await staplesOf(OWNER.userId)).toHaveLength(1);
   });
 
   it("reads the owner's staples FOR UPDATE inside the transaction, before it writes any", async () => {

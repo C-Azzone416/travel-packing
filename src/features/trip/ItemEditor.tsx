@@ -13,7 +13,7 @@ import { ScopeChoice } from "./ScopeChoice";
 export interface ItemEditorProps {
   item: TripItem;
   destination: string;
-  dailyDays: number;
+  tripDays: number;
   staples: Staple[];
   saving: boolean;
   onClose: () => void;
@@ -29,13 +29,13 @@ function previewText(preview: ReturnType<typeof rememberPreview>): string {
   if (preview === null) return "";
   return preview.kind === "per-day"
     ? `Saved as ${preview.perDay} per day for future trips.`
-    : "This trip has no packing days, so the saved quantity stays the same.";
+    : "This trip has no calendar days, so the saved quantity stays the same.";
 }
 
 export function ItemEditor({
   item,
   destination,
-  dailyDays,
+  tripDays,
   staples,
   saving,
   onClose,
@@ -52,7 +52,7 @@ export function ItemEditor({
   const isReturn = item.section === "return";
   const preview =
     scope === "remember"
-      ? rememberPreview(staples, item.id, normalizeQty(Number(qty)), dailyDays)
+      ? rememberPreview(staples, item.id, normalizeQty(Number(qty)), tripDays)
       : null;
 
   function submit(event: FormEvent) {

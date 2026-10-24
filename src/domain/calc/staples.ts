@@ -1,7 +1,8 @@
+import { canonicalItemId } from "../item-identity";
 import { TOILETRY_GROUP_ID } from "../toiletry-bag";
 import { calculateSuggestions, type CalcConfig, type WeatherInput } from "./suggestions";
 
-export type StapleCadence = "per day" | "per trip";
+export type StapleCadence = "per day" | "per trip" | "smart";
 export type ItemSection = "main" | "packlast" | "return";
 
 export interface Staple {
@@ -23,6 +24,8 @@ export interface TripItem {
   section: ItemSection;
   optional?: boolean;
   groupId?: string | null;
+  /** Saved with the trip so preference recalculation never reads later account defaults. */
+  stapleCadence?: StapleCadence;
 }
 
 export interface TripItems {
@@ -31,8 +34,8 @@ export interface TripItems {
   items: TripItem[];
 }
 
-// Future-trip defaults, from the prototype's initialStaples (app.js).
-export const DEFAULT_STAPLES: readonly Staple[] = [
+/** Synthetic preview/test data. The application never inserts this set for a real account. */
+export const SYNTHETIC_STAPLES: readonly Staple[] = [
   {
     id: "underwear",
     name: "Underwear",
@@ -120,34 +123,20 @@ export const DEFAULT_STAPLES: readonly Staple[] = [
   },
 ];
 
-// Seeded in every new trip's Pack last section (doc §6). Chargers is one
-// collective item; Everyday glasses is not Sunglasses.
-export const DEFAULT_PACK_LAST: readonly { id: string; name: string }[] = [
-  { id: "last-laptop", name: "Laptop" },
-  { id: "last-chargers", name: "Chargers" },
-  { id: "last-glasses", name: "Everyday glasses" },
-];
+/** Clothing identities whose Smart quantity is defined by the canonical trip calculator. */
+export const SMART_STAPLE_IDS: ReadonlySet<string> = new Set([
+  "tops",
+  "bottoms",
+  "underwear",
+  "socks",
+  "sleepwear",
+  "nice-top",
+  "nice-bottom",
+  "nice-shoes",
+]);
 
-export type NiceAccessoryKey = "makeup" | "dress-shoes" | "dress-undergarments" | "";
-
-// Items with equivalent semantics dedupe by name, so a "Makeup" staple replaces
-// the calculated "Makeup" suggestion instead of duplicating it.
-export function niceAccessoryKey(entry: { name?: string | null }): NiceAccessoryKey {
-  const name = String(entry.name ?? "").toLowerCase();
-  if (name.includes("makeup") || name.includes("make-up")) return "makeup";
-  if (name.includes("dress") && name.includes("shoe")) return "dress-shoes";
-  if (name.includes("dress") && name.includes("undergarment")) return "dress-undergarments";
-  return "";
-}
-
-/**
- * The calculator's nice-attire lines (top, bottom, dress shoes, dress-specific undergarments), by id or name. Makeup is
- * the exception (#202): people use it daily, so a Makeup staple still applies with Nice outfits off.
- */
-function isNiceAttireStaple(staple: Staple): boolean {
-  const key = niceAccessoryKey(staple);
-  if (key === "makeup" || staple.id === "nice-makeup") return false;
-  return staple.id.startsWith("nice-") || key === "dress-shoes" || key === "dress-undergarments";
+export function supportsSmartQuantity(semanticId: string): boolean {
+  return SMART_STAPLE_IDS.has(canonicalItemId(semanticId));
 }
 
 function newItem(
@@ -169,59 +158,76 @@ function returnOutfitItems(): TripItem[] {
   ];
 }
 
-// Builds a new trip's item list: calculated suggestions, default Sunglasses,
-// the four-item return outfit, default Pack last items, then the staples merged
-// over them. A matching staple REPLACES the calculated item's qty (never sums),
-// and spare adds +1 on top for the underwear and socks staples only.
+function smartQuantity(staple: Staple, config: CalcConfig): number {
+  const identity = canonicalItemId(staple.id);
+  if (!supportsSmartQuantity(identity)) {
+    throw new RangeError(`Smart quantity is not supported for ${identity}`);
+  }
+  return (
+    calculateSuggestions(config).items.find((entry) => canonicalItemId(entry.id) === identity)
+      ?.qty ?? 0
+  );
+}
+
+/** Weather-aware clothing rows are alternate presentations of the same Smart clothing families. */
+const WEATHER_VARIANTS: Readonly<Record<string, readonly string[]>> = {
+  tops: ["tops-short", "tops-long"],
+  bottoms: ["bottoms-shorts", "bottoms-pants"],
+};
+
+/**
+ * Build a new trip from generic outfit recommendations and the owner's selected Staples.
+ * Staples have deterministic precedence over a recommendation with the same semantic identity;
+ * quantities are never summed and every new row starts unpacked.
+ */
 export function buildTripItems(
   config: CalcConfig,
   staples: readonly Staple[],
   weather?: WeatherInput,
 ): TripItems {
   const computed = calculateSuggestions(config, weather);
-
-  const items: TripItem[] = computed.items.map((entry) => {
-    const suggested = newItem(entry.id, entry.name, entry.category, entry.qty, "main");
-    suggested.optional = Boolean(entry.optional);
-    if (entry.id === "nice-makeup") suggested.groupId = TOILETRY_GROUP_ID;
-    if (entry.groupId) suggested.groupId = entry.groupId;
-    return suggested;
-  });
-  items.push(newItem("sunglasses", "Sunglasses", "Accessories", 1, "main"));
+  const items: TripItem[] = computed.items.map((entry) => ({
+    ...newItem(entry.id, entry.name, entry.category, entry.qty, "main"),
+    ...(entry.optional ? { optional: true } : {}),
+    ...(entry.groupId ? { groupId: entry.groupId } : {}),
+  }));
   if (config.returnOutfit !== false) items.push(...returnOutfitItems());
-  for (const entry of DEFAULT_PACK_LAST) {
-    items.push(newItem(entry.id, entry.name, "Pack last", 1, "packlast"));
-  }
 
   for (const staple of staples) {
-    // Nice outfits off means no nice attire (#202): a remembered nice item must not come back on its own.
-    if (!config.niceAttire && isNiceAttireStaple(staple)) continue;
-    let qty = staple.cadence === "per day" ? computed.dailyDays * staple.qty : staple.qty;
-    if ((staple.id === "underwear" || staple.id === "socks") && config.spare) qty += 1;
-    const key = niceAccessoryKey(staple);
+    const identity = canonicalItemId(staple.id);
+    // Return-outfit rows are a separate trip feature, not personal Staples. A corrupt/legacy collision must not
+    // create duplicate ids or turn the return row into an ordinary packing row.
+    if (items.some((entry) => entry.section === "return" && entry.id === staple.id)) continue;
+
+    const qty =
+      staple.cadence === "per day"
+        ? computed.days * staple.qty
+        : staple.cadence === "smart"
+          ? smartQuantity(staple, config)
+          : staple.qty;
+
+    const weatherVariants = WEATHER_VARIANTS[identity];
+    if (weatherVariants) {
+      for (let index = items.length - 1; index >= 0; index -= 1) {
+        if (weatherVariants.includes(items[index].id)) items.splice(index, 1);
+      }
+    }
     const existing = items.find(
-      (entry) => entry.id === staple.id || (key !== "" && niceAccessoryKey(entry) === key),
+      (entry) => entry.section !== "return" && canonicalItemId(entry.id) === identity,
     );
     if (qty <= 0 && !existing) continue;
-    const groupId = key === "makeup" ? TOILETRY_GROUP_ID : staple.groupId || null;
-    if (existing) {
-      if (existing.id !== staple.id && key !== "") existing.id = staple.id;
-      existing.name = staple.name;
-      existing.category = staple.category;
-      existing.qty = qty;
-      if (existing.section !== "return") existing.section = staple.packLast ? "packlast" : "main";
-      existing.groupId = groupId;
-    } else {
-      const added = newItem(
-        staple.id,
-        staple.name,
-        staple.category,
-        qty,
-        staple.packLast ? "packlast" : "main",
-      );
-      added.groupId = groupId;
-      items.push(added);
-    }
+
+    const values = {
+      id: staple.id,
+      name: staple.name,
+      category: staple.category,
+      qty,
+      section: staple.packLast ? ("packlast" as const) : ("main" as const),
+      groupId: staple.groupId ?? null,
+      stapleCadence: staple.cadence,
+    };
+    if (existing) Object.assign(existing, values);
+    else items.push({ ...values, packed: 0 });
   }
 
   return { days: computed.days, dailyDays: computed.dailyDays, items };
