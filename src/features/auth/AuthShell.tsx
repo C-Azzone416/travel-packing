@@ -12,7 +12,7 @@ export function AuthShell({ children, banner }: { children: ReactNode; banner?: 
         <div className="auth-brandbar-inner">
           <span className="brand-button">
             <span className="brand-mark" aria-hidden="true" />
-            <strong>Carrywell</strong>
+            <strong>Packed Smart</strong>
           </span>
         </div>
       </header>

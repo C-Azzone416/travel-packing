@@ -58,7 +58,7 @@ describe("RootLayout", () => {
     expect(html).toContain("page body");
     expect(html).not.toContain("Skip to main content");
     expect(html).not.toContain("Primary navigation");
-    expect(html).not.toContain("Carrywell");
+    expect(html).not.toContain("Packed Smart");
   });
 
   it.each(["0", "true", "yes"])(
