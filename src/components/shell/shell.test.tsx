@@ -199,7 +199,7 @@ describe("AppShell", () => {
     expect(banner.contains(nav)).toBe(true);
     // Brand, then the navigation, then the status chip, all before main in reading order.
     const inBar = [...banner.querySelectorAll<HTMLElement>("a, button")];
-    expect(inBar[0].getAttribute("aria-label")).toBe("Carrywell: go to trips");
+    expect(inBar[0].getAttribute("aria-label")).toBe("Packed Smart: go to trips");
     expect(inBar.slice(1, 4).map((node) => node.textContent?.trim())).toEqual([
       expect.stringContaining("Trips"),
       expect.stringContaining("Staples"),

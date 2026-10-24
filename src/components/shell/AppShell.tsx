@@ -29,9 +29,9 @@ export function AppShell({ children, signOut, email }: AppShellProps) {
             <div className="app-shell">
               <header className="topbar">
                 <div className="topbar-inner">
-                  <Link className="brand-button" href="/" aria-label="Carrywell: go to trips">
+                  <Link className="brand-button" href="/" aria-label="Packed Smart: go to trips">
                     <span className="brand-mark" aria-hidden="true" />
-                    <strong>Carrywell</strong>
+                    <strong>Packed Smart</strong>
                   </Link>
                   <Nav signOut={signOut} email={email} />
                   <ConnectedSaveChip />

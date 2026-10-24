@@ -22,7 +22,7 @@ never create a session on their own, and a verified address that is not allowlis
 ## How they look (Field Ledger, #204)
 
 Every signed-out screen shares one frame (`src/features/auth/AuthShell.tsx`): a slim dark brand-only bar (the app header's height, 68px on
-desktop and 60px on a phone, with the circle and the "Carrywell" wordmark; no navigation, no link, no status chip, and not the app's
+desktop and 60px on a phone, with the circle and the "Packed Smart" wordmark; no navigation, no link, no status chip, and not the app's
 `header.topbar`), then the card, **top-aligned** (about 96px under the bar on desktop, 64px on a phone). The card is flat: the hairline plus a
 4px accent rule, no shadow. The small line above each heading names the screen ("Sign in", "Create account", "Verify email", "Reset
 password", "Finish setup", "Link problem", "Private"), not the app. "Show password" is a text toggle inside the password field's right edge

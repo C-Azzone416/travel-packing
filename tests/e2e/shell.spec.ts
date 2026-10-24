@@ -8,9 +8,9 @@ test.beforeEach(async ({ page }) => {
 });
 
 const SCREENS = [
-  { label: "Trips", path: "/", title: "Trips · Carrywell" },
-  { label: "Staples", path: "/staples", title: "Staples · Carrywell" },
-  { label: "Settings", path: "/settings", title: "Settings · Carrywell" },
+  { label: "Trips", path: "/", title: "Trips · Packed Smart" },
+  { label: "Staples", path: "/staples", title: "Staples · Packed Smart" },
+  { label: "Settings", path: "/settings", title: "Settings · Packed Smart" },
 ];
 
 test(
