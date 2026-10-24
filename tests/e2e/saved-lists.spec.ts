@@ -229,7 +229,7 @@ test("Save as a list: name it, untick an item, save, follow the link, and the li
   await expect(page.getByRole("heading", { name: "Beach week", level: 1 })).toBeVisible();
   await expect(page.getByText("Sunglasses", { exact: true })).toHaveCount(0);
   await expect(page.getByText(/Needed \d+/).first()).toBeVisible();
-  await expect(page.getByText(/packed/i)).toHaveCount(0);
+  await expect(page.getByRole("main").getByText(/packed/i)).toHaveCount(0);
   // The trip is exactly as it was.
   await page.goto(trip);
   await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();

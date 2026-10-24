@@ -79,16 +79,19 @@ describe("screens", () => {
     expect(html).toContain('aria-label="Loading trips"');
   });
 
-  it("titles each screen '<Screen> · Carrywell'", () => {
-    expect(tripsMetadata.title).toEqual({ absolute: "Trips · Carrywell" });
+  it("titles each screen '<Screen> · Packed Smart'", () => {
+    expect(tripsMetadata.title).toEqual({ absolute: "Trips · Packed Smart" });
     expect(staplesMetadata.title).toBe("Staples");
     expect(settingsMetadata.title).toBe("Settings");
   });
 });
 
 describe("root layout metadata", () => {
-  it("titles screens '<Screen> · Carrywell'", () => {
-    expect(rootMetadata.title).toEqual({ default: "Carrywell", template: "%s · Carrywell" });
+  it("titles screens '<Screen> · Packed Smart'", () => {
+    expect(rootMetadata.title).toEqual({
+      default: "Packed Smart",
+      template: "%s · Packed Smart",
+    });
   });
 
   it("sets the brand theme color", () => {
