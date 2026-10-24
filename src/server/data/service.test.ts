@@ -999,6 +999,135 @@ describe("staples", () => {
     ).rows[0];
     expect(row.version).toBe(2);
   });
+
+  it("starts uninitialized and atomically completes an intentionally empty setup", async () => {
+    const initial = data(await service.getStaplesSetup(context()));
+    expect(initial).toEqual({ state: "incomplete", reminderDismissed: false, staples: [] });
+
+    const completed = data(await service.saveStaplesSetup(context(), { staples: [] }));
+    expect(completed).toEqual({ state: "completed", reminderDismissed: false, staples: [] });
+    expect(data(await service.getStaplesSetup(context()))).toEqual(completed);
+  });
+
+  it("saves a chosen setup idempotently and never creates unselected suggestions", async () => {
+    const request = {
+      staples: [
+        {
+          semanticId: "underwear",
+          name: "Underwear",
+          category: "Clothing",
+          qty: 1,
+          cadence: "smart",
+          packLast: false,
+        },
+      ],
+    };
+    const first = data(await service.saveStaplesSetup(context(), request));
+    const second = data(await service.saveStaplesSetup(context(), request));
+    expect(first).toEqual(second);
+    expect(second.staples.map((entry) => entry.id)).toEqual(["underwear"]);
+    const versions = await ctx.client.query<{ version: number }>(
+      `SELECT version FROM staples WHERE owner_id = 'owner-a'`,
+    );
+    expect(versions.rows).toEqual([{ version: 1 }]);
+  });
+
+  it("rolls setup state and list back together when the list write fails", async () => {
+    data(
+      await service.upsertStaple(context(), {
+        semanticId: "scarf",
+        name: "Scarf",
+        category: "Accessories",
+        qty: 1,
+        cadence: "per trip",
+        packLast: false,
+      }),
+    );
+    failStaples = true;
+    expect(errorOf(await service.saveStaplesSetup(context(), { staples: [] }))).toMatchObject({
+      code: "INTERNAL",
+    });
+    failStaples = false;
+    expect(data(await service.getStaplesSetup(context()))).toMatchObject({
+      state: "incomplete",
+      staples: [expect.objectContaining({ id: "scarf" })],
+    });
+  });
+
+  it("skip and reminder dismissal are independent and do not change an existing list", async () => {
+    data(
+      await service.upsertStaple(context(), {
+        semanticId: "scarf",
+        name: "Scarf",
+        category: "Accessories",
+        qty: 1,
+        cadence: "per trip",
+        packLast: false,
+      }),
+    );
+    expect(data(await service.skipStaplesSetup(context()))).toMatchObject({
+      state: "skipped",
+      reminderDismissed: false,
+      staples: [expect.objectContaining({ id: "scarf" })],
+    });
+    expect(data(await service.dismissStaplesReminder(context()))).toMatchObject({
+      state: "skipped",
+      reminderDismissed: true,
+      staples: [expect.objectContaining({ id: "scarf" })],
+    });
+  });
+
+  it("keeps setup state and selected staples owner-scoped", async () => {
+    data(
+      await service.saveStaplesSetup(context(), {
+        staples: [
+          {
+            semanticId: "underwear",
+            name: "Underwear",
+            category: "Clothing",
+            qty: 1,
+            cadence: "per day",
+            packLast: false,
+          },
+        ],
+      }),
+    );
+    as(OTHER_OWNER);
+    expect(data(await service.getStaplesSetup(context()))).toEqual({
+      state: "incomplete",
+      reminderDismissed: false,
+      staples: [],
+    });
+    data(await service.skipStaplesSetup(context()));
+    as(OWNER);
+    expect(data(await service.getStaplesSetup(context()))).toMatchObject({
+      state: "completed",
+      staples: [expect.objectContaining({ id: "underwear" })],
+    });
+  });
+
+  it("removes a future staple idempotently without changing an existing trip snapshot", async () => {
+    data(
+      await service.upsertStaple(context(), {
+        semanticId: "scarf",
+        name: "Scarf",
+        category: "Accessories",
+        qty: 1,
+        cadence: "per trip",
+        packLast: false,
+      }),
+    );
+    const trip = await seedTrip(db(), OWNER.userId, {
+      items: [
+        { id: "scarf", name: "Scarf", category: "Accessories", qty: 1, packed: 1, section: "main" },
+      ],
+    });
+    expect(data(await service.removeStaple(context(), { semanticId: "scarf" }))).toEqual([]);
+    expect(data(await service.removeStaple(context(), { semanticId: "scarf" }))).toEqual([]);
+    expect(await loadTrip(db(), OWNER.userId, trip.id)).toMatchObject({
+      items: [expect.objectContaining({ id: "scarf", packed: 1 })],
+    });
+  });
 });
 
 describe("trip lifecycle", () => {
