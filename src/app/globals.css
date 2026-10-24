@@ -4383,6 +4383,13 @@ a.back {
 .staples-reminder p {
   margin: 4px 0 0;
 }
+.staples-reminder-copy {
+  min-width: 0;
+}
+.staples-reminder-error {
+  color: var(--danger);
+  font-weight: 700;
+}
 @media (max-width: 720px) {
   .modal:has(.edit-tabs) {
     max-height: calc(100vh - 18px);

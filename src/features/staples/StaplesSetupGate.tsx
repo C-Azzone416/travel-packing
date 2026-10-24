@@ -92,7 +92,11 @@ export function StaplesSetupGate({
     if (pathname !== "/staples") {
       return (
         <>
-          <aside className="callout" role="alert" aria-label="Staples setup unavailable">
+          <aside
+            className="callout staples-reminder staples-setup-notice"
+            role="status"
+            aria-label="Staples setup unavailable"
+          >
             <div>
               <strong>Couldn’t check your Staples setup.</strong>
               <p>You can keep using your trips. Nothing was changed.</p>
@@ -142,7 +146,7 @@ export function StaplesSetupGate({
     <>
       {setup.state === "skipped" && !setup.reminderDismissed ? (
         <aside className="callout staples-reminder" aria-label="Staples setup reminder">
-          <div>
+          <div className="staples-reminder-copy">
             <strong>
               {setup.staples.length > 0
                 ? "Review the Staples already in your account."
@@ -153,6 +157,11 @@ export function StaplesSetupGate({
                 ? "Check your recurring list before your next trip."
                 : "Start future trips from your own recurring list."}
             </p>
+            {mutationError ? (
+              <p className="staples-reminder-error" role="alert">
+                Couldn’t update your reminder. Try again.
+              </p>
+            ) : null}
           </div>
           <div className="actions">
             <Button small onClick={() => setOpen(true)}>
@@ -167,7 +176,6 @@ export function StaplesSetupGate({
               Don’t remind me
             </Button>
           </div>
-          {mutationError ? <p role="alert">Couldn’t update your reminder. Try again.</p> : null}
         </aside>
       ) : null}
       {children}

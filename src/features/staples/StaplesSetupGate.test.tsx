@@ -47,9 +47,9 @@ describe("StaplesSetupGate", () => {
     );
 
     expect(await screen.findByText("Trips dashboard")).toBeTruthy();
-    expect(screen.getByRole("alert").textContent).toContain("Couldn’t check your Staples setup.");
+    expect(screen.getByRole("status").textContent).toContain("Couldn’t check your Staples setup.");
     await user.click(screen.getByRole("button", { name: "Try again" }));
-    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
     expect(api.get).toHaveBeenCalledTimes(2);
   });
 
@@ -192,6 +192,28 @@ describe("StaplesSetupGate", () => {
     expect((await screen.findByRole("alert")).textContent).toContain(
       "Couldn’t update your reminder.",
     );
+  });
+
+  it("sends one dismissal while the first request is pending", async () => {
+    const user = userEvent.setup();
+    let finish!: (value: StaplesSetupResult) => void;
+    const pending = new Promise<StaplesSetupResult>((resolve) => {
+      finish = resolve;
+    });
+    const api = actions(answer("skipped"));
+    api.dismiss = vi.fn(() => pending);
+    render(
+      <StaplesSetupGate actions={api}>
+        <div>Trips dashboard</div>
+      </StaplesSetupGate>,
+    );
+
+    const dismiss = await screen.findByRole("button", { name: "Don’t remind me" });
+    await user.dblClick(dismiss);
+    expect(api.dismiss).toHaveBeenCalledTimes(1);
+    expect((dismiss as HTMLButtonElement).disabled).toBe(true);
+    finish(answer("skipped", true));
+    await waitFor(() => expect(screen.queryByRole("complementary")).toBeNull());
   });
 
   it("labels migrated owners' reminder as a review invitation", async () => {
