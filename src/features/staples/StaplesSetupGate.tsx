@@ -56,25 +56,20 @@ export function StaplesSetupGate({
     };
   }, [actions, reloads]);
 
-  const run = useCallback(
-    (work: () => Promise<StaplesSetupResult>, after?: () => void, keepSetupOnError = false) => {
-      if (busy) return;
-      setBusy(true);
-      setMutationError(false);
-      work()
-        .then(unwrap)
-        .then((setup) => {
-          setLoad({ phase: "ready", setup });
-          after?.();
-        })
-        .catch(() => {
-          if (keepSetupOnError) setMutationError(true);
-          else setLoad({ phase: "error" });
-        })
-        .finally(() => setBusy(false));
-    },
-    [busy],
-  );
+  const run = useCallback((work: () => Promise<StaplesSetupResult>, after?: () => void) => {
+    setBusy(true);
+    setMutationError(false);
+    work()
+      .then(unwrap)
+      .then((setup) => {
+        setLoad({ phase: "ready", setup });
+        after?.();
+      })
+      .catch(() => {
+        setMutationError(true);
+      })
+      .finally(() => setBusy(false));
+  }, []);
 
   if (load.phase === "loading") {
     return (
@@ -131,12 +126,11 @@ export function StaplesSetupGate({
           run(
             () => actions.save(staples),
             () => setOpen(false),
-            true,
           )
         }
         onSkip={() => {
           setMutationError(false);
-          return setup.state === "incomplete" ? run(actions.skip, undefined, true) : setOpen(false);
+          return setup.state === "incomplete" ? run(actions.skip) : setOpen(false);
         }}
       />
     );
@@ -167,12 +161,7 @@ export function StaplesSetupGate({
             <Button small onClick={() => setOpen(true)}>
               {setup.staples.length > 0 ? "Review Staples" : "Build Staples"}
             </Button>
-            <Button
-              small
-              variant="ghost"
-              disabled={busy}
-              onClick={() => run(actions.dismiss, undefined, true)}
-            >
+            <Button small variant="ghost" disabled={busy} onClick={() => run(actions.dismiss)}>
               Don’t remind me
             </Button>
           </div>

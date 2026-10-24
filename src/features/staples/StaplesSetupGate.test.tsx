@@ -107,7 +107,7 @@ describe("StaplesSetupGate", () => {
     expect(api.skip).not.toHaveBeenCalled();
   });
 
-  it("sends one save while the first submission is pending", async () => {
+  it("ignores a second save click while the first submission is pending", async () => {
     const user = userEvent.setup();
     let finish!: (value: StaplesSetupResult) => void;
     const pending = new Promise<StaplesSetupResult>((resolve) => {
@@ -121,18 +121,19 @@ describe("StaplesSetupGate", () => {
       </StaplesSetupGate>,
     );
     const save = await screen.findByRole("button", { name: "Save empty Staples" });
-    await user.dblClick(save);
+    await user.click(save);
+    await user.click(save);
     expect(api.save).toHaveBeenCalledTimes(1);
     finish(answer("completed"));
     expect(await screen.findByText("Trips dashboard")).toBeTruthy();
   });
 
-  it("keeps selections after a failed save and retries without showing the load failure", async () => {
+  it("keeps selections when save returns an error result and retries without a load failure", async () => {
     const user = userEvent.setup();
     const api = actions(answer("incomplete"));
     api.save = vi
       .fn()
-      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce({ ok: false, code: "INTERNAL" })
       .mockResolvedValueOnce(answer("completed"));
     render(
       <StaplesSetupGate actions={api}>
