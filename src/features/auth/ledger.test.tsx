@@ -82,7 +82,7 @@ describe.each(SCREENS)("the %s screen", (_name, markup, eyebrow) => {
     const html = await markup();
     const bar = /<header class="auth-brandbar">(.*?)<\/header>/.exec(html)?.[1] ?? "";
     expect(bar).toContain('class="brand-mark"');
-    expect(bar).toContain("<strong>Carrywell</strong>");
+    expect(bar).toContain("<strong>Packed Smart</strong>");
     expect(bar).not.toMatch(/<a[\s>]|<nav|<button|sync-chip/);
     expect(html.match(/<header/g)).toHaveLength(1);
     expect(html.indexOf("auth-brandbar")).toBeLessThan(html.indexOf('class="auth-screen"'));
@@ -93,7 +93,7 @@ describe.each(SCREENS)("the %s screen", (_name, markup, eyebrow) => {
   it(`names itself in the eyebrow ("${eyebrow}"), not the app, and the card is the flat Ledger card`, async () => {
     const html = await markup();
     expect(html).toContain(`<p class="eyebrow">${eyebrow}</p>`);
-    expect(html).not.toContain('<p class="eyebrow">Carrywell</p>');
+    expect(html).not.toContain('<p class="eyebrow">Packed Smart</p>');
     expect(html).toContain('class="card padded auth-card"');
   });
 });
