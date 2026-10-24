@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
 import { DEVICE } from "./helpers/device";
+import { reviewAndApply } from "./helpers/preferences";
 
 // Fixed clock: San Diego is upcoming and partly packed, Lisbon is past, fully packed and Ready. In-memory data
 // survives client-side navigation (links), not a reload, so every step navigates by clicking.
@@ -305,9 +306,9 @@ test("editing preferences recalculates the list and revokes Ready", async ({ pag
   await openLisbon(page);
   await expect(page.getByText("You’re ready to go.")).toBeVisible();
   await page.getByRole("button", { name: "Edit preferences" }).click();
-  const dialog = page.getByRole("dialog", { name: "Edit packing preferences" });
+  const dialog = page.getByRole("dialog", { name: "Edit trip" });
   await dialog.getByRole("switch", { name: "Laundry access" }).uncheck();
-  await dialog.getByRole("button", { name: "Update this trip" }).click();
+  await reviewAndApply(page, dialog);
   await expect(page.getByText("You’re ready to go.")).toHaveCount(0);
   await expect(page.locator(".trip-hero > .status-pill")).toHaveCount(0);
 });

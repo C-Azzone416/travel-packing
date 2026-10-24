@@ -45,6 +45,8 @@ export interface Trip extends ReadinessTrip<TripItem> {
   suggestionMemory: Record<string, TripItem>;
   suppressedSuggestions: Record<string, boolean>;
   weather: WeatherState;
+  /** When the trip was last saved (ISO). Set by the data layer; a recalculation preview is based on it (#203). */
+  updatedAt?: string;
 }
 
 /** The calculator, injected so item operations do not depend on how it is packaged. */

@@ -319,8 +319,9 @@ export async function resetOwnerPassword(
   }
   // Using a link proves the inbox, so this is the moment the account counts as set up (#83). Only the app can make the seal,
   // it is only ever emailed to the address it names, and only allowlisted addresses are ever recorded. Without a good seal
-  // (an old link) the password still changes, but the account stays "not set up" until a new link is used.
-  const address = auth.seals.open(sealedAddress);
+  // (an old link, including one in the shape used before #210) the password still changes, but the account stays "not set up"
+  // until a new link is used.
+  const address = auth.seals.open(sealedAddress, auth.allowlist);
   if (address && isAllowed(auth.allowlist, address)) {
     try {
       await auth.setup.markComplete(address);

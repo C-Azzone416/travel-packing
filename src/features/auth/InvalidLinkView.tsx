@@ -5,7 +5,7 @@ import { AuthCard, AuthLink } from "./AuthParts";
 /** A reset link that is missing, wrong, expired or already used: one screen for all of them, no form. */
 export function InvalidLinkView() {
   return (
-    <AuthCard titleId="invalid-link-title" title="This link isn’t valid">
+    <AuthCard titleId="invalid-link-title" eyebrow="Link problem" title="This link isn’t valid">
       <p className="auth-helper">It may have expired or already been used. Request a new one.</p>
       <Link className={buttonClassName({ block: true })} href="/forgot-password">
         Send a new reset link

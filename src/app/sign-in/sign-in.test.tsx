@@ -65,7 +65,9 @@ describe("SignInView (design spec #31)", () => {
   it("shows the error inline, above the submit button, as an alert", () => {
     const html = view({ error: "Email or password is incorrect." });
     expect(html).toContain('role="alert"');
-    expect(html.indexOf("Email or password is incorrect.")).toBeLessThan(html.indexOf(">Sign in<"));
+    expect(html.indexOf("Email or password is incorrect.")).toBeLessThan(
+      html.indexOf('type="submit"'),
+    );
   });
 
   it("adds one neutral sentence under the generic error, the same for every address, with a way to reset", () => {

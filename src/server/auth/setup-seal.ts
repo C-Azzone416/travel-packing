@@ -1,7 +1,12 @@
 // A signed "this link is for <address>" value carried on the reset link (`/reset-password?for=…&token=…`), so that using the
 // link can record WHICH account was set up. The provider's reset call takes only the token and says nothing about whose it
-// is. Only the app can make a seal (HMAC with a server secret) and it is only ever emailed to the address it names, so a
-// stranger cannot mark someone else's account as set up. It expires with the link.
+// is. Only the app can make a seal (a keyed digest with a server secret) and it is only ever emailed to the address it names,
+// so a stranger cannot mark someone else's account as set up. It expires with the link.
+//
+// The seal carries NO address, not even encoded (#210): it is `<expiry>.<digest>`, where the digest covers the address and the
+// expiry. To read it, the app recomputes the digest for each address it could mean (the allowlist, a handful) and takes the
+// one that matches. A copied link, browser history or an access log therefore shows a timestamp and a digest that cannot be
+// turned back into an address without the server secret. Links in the older `<address>.<expiry>.<mac>` shape fail closed.
 
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { normalizeEmail } from "./allowlist";
@@ -14,32 +19,41 @@ export const sealKey = (secret: string) =>
 
 export interface SetupSeals {
   seal(email: string): string;
-  /** The address a seal names, or null for a missing, altered or expired one. */
-  open(value: unknown): string | null;
+  /**
+   * The address a seal names, chosen from `candidates` (the allowed addresses), or null for a missing, altered, expired or
+   * old-format one, or one that names none of them. The work is one digest per candidate.
+   */
+  open(value: unknown, candidates: Iterable<string>): string | null;
 }
 
-const b64 = (text: string) => Buffer.from(text, "utf8").toString("base64url");
-const fromB64 = (text: string) => Buffer.from(text, "base64url").toString("utf8");
+/** Exactly what `digest()` makes: base64url of a 32-byte SHA-256, ASCII only, so characters and bytes are the same count. */
+const DIGEST_SHAPE = /^[A-Za-z0-9_-]{43}$/;
 
 export function createSetupSeals(secret: string, now: () => number = Date.now): SetupSeals {
-  const mac = (payload: string) => createHmac("sha256", secret).update(payload).digest("base64url");
+  const digest = (email: string, expires: string) =>
+    createHmac("sha256", secret).update(`setup-seal-v2|${email}|${expires}`).digest("base64url");
   return {
     seal(email) {
-      const payload = `${b64(normalizeEmail(email))}.${now() + SEAL_LIFETIME_MS}`;
-      return `${payload}.${mac(payload)}`;
+      const expires = String(now() + SEAL_LIFETIME_MS);
+      return `${expires}.${digest(normalizeEmail(email), expires)}`;
     },
-    open(value) {
-      if (typeof value !== "string" || value.length > 600) return null;
+    open(value, candidates) {
+      if (typeof value !== "string" || value.length > 100) return null;
       const parts = value.split(".");
-      if (parts.length !== 3) return null;
-      const [name, expires, given] = parts;
-      const expected = mac(`${name}.${expires}`);
-      const a = Buffer.from(given);
-      const b = Buffer.from(expected);
-      if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
-      if (!/^\d+$/.test(expires) || Number(expires) < now()) return null;
-      const email = fromB64(name);
-      return email.includes("@") ? email : null;
+      if (parts.length !== 2) return null;
+      const [expires, given] = parts;
+      if (!/^\d{1,16}$/.test(expires) || Number(expires) < now()) return null;
+      // Checked by shape, not length: timingSafeEqual throws unless both buffers have the same BYTE length, and a 43-character
+      // value with a multi-byte character is longer than that in bytes.
+      if (!DIGEST_SHAPE.test(given)) return null;
+      const wanted = Buffer.from(given);
+      // Every candidate is checked, in constant time each, so how long this takes does not say which one matched.
+      let found: string | null = null;
+      for (const candidate of candidates) {
+        const email = normalizeEmail(candidate);
+        if (timingSafeEqual(wanted, Buffer.from(digest(email, expires)))) found = email;
+      }
+      return found;
     },
   };
 }

@@ -61,10 +61,37 @@ async function enterCode(page: Page, code: string) {
 
 const WRONG = /That code isn't right or has expired/;
 
+/**
+ * #210: nothing in the emailed link can be read back as the address. Every path segment and every query value is split on dots
+ * and read as text, base64url, base64 and hex, and none of those readings contains the address, its halves or its words.
+ */
+function expectOpaqueLink(link: string, address: string) {
+  const url = new URL(link, "http://localhost");
+  const pieces = [address, ...address.split("@"), ...address.split(/[^a-z]+/)]
+    .map((piece) => piece.toLowerCase())
+    .filter((piece) => piece.length >= 4);
+  const values = [...url.pathname.split("/"), ...[...url.searchParams.values()]];
+  expect(url.searchParams.get("for"), "the link carries the sealed value").toBeTruthy();
+  for (const value of values.flatMap((entry) => [entry, ...entry.split(".")])) {
+    const readings = [value, decodeURIComponent(value)];
+    for (const encoding of ["base64url", "base64", "hex"] as const) {
+      readings.push(
+        Buffer.from(value, encoding).toString("utf8"),
+        Buffer.from(value, encoding).toString("latin1"),
+      );
+    }
+    for (const reading of readings.map((text) => text.toLowerCase())) {
+      for (const piece of pieces)
+        expect(reading, `${value} read as ${reading}`).not.toContain(piece);
+    }
+  }
+}
+
 /** Opens the link emailed to this address and chooses a password with it (the "Set your password" screen). */
 async function finishSetup(page: Page, address = email, password = SET_PASSWORD) {
   const link = resetLinkPath(address);
   expect(link, "a setup link was emailed").not.toBeNull();
+  expectOpaqueLink(link ?? "", address);
   await page.goto(link ?? "/");
   await expect(heading(page, "Set your password")).toBeFocused();
   await page.getByLabel("New password", { exact: true }).fill(password);
@@ -315,6 +342,7 @@ test.describe("forgot and reset password", () => {
     await ownAccount();
     await forgot(page, email);
     const link = resetLinkPath(email) ?? "";
+    expectOpaqueLink(link, email);
     const token = resetToken(email) ?? "";
     await page.goto(link);
     await expect(heading(page, "Choose a new password")).toBeFocused();
@@ -578,6 +606,49 @@ test.describe("accessibility and screenshots", DEVICE, () => {
       path: `test-results/screenshots/${testInfo.project.name}-auth-verify-error-locked.png`,
       fullPage: true,
     });
+  });
+});
+
+// #209: the address remembered for the code and setup screens is not left behind for the next person at a shared browser.
+test.describe("a shared browser forgets the address", () => {
+  const remembered = async (page: Page) =>
+    (await page.context().cookies()).some((cookie) => cookie.name === "cw-pending-email");
+
+  test("finishing setup removes it: the next signed-out visitor to /verify and /finish-setup sees no address", async ({
+    page,
+  }) => {
+    await signUp(page);
+    await expect(page.getByText(email)).toBeVisible();
+    await enterCode(page, verificationCode(email) ?? "");
+    await expect(page).toHaveURL(/\/finish-setup$/);
+    // Still needed here to resend the link, so a failed or unfinished setup keeps it.
+    await expect(page.getByText(`We've sent a link to ${email}.`)).toBeVisible();
+    expect(await remembered(page)).toBe(true);
+
+    await finishSetup(page);
+    expect(await remembered(page)).toBe(false);
+    for (const path of ["/verify", "/finish-setup"]) {
+      await page.goto(path);
+      await expect(page.getByText(email)).toHaveCount(0);
+    }
+  });
+
+  test("a sign-in then a sign-out leaves nothing: the address typed at sign-up is gone for the next visitor", async ({
+    page,
+  }) => {
+    await signUp(page);
+    expect(await remembered(page)).toBe(true);
+    await signIn(page, "owner@example.test", E2E_PASSWORD);
+    await expect(page).toHaveURL(/\/$/);
+    expect(await remembered(page)).toBe(false);
+
+    await page
+      .getByRole("navigation", { name: "Primary navigation" })
+      .getByRole("button", { name: "Sign out" })
+      .click();
+    await expect(page).toHaveURL(/\/sign-in$/);
+    await page.goto("/verify");
+    await expect(page.getByText(email)).toHaveCount(0);
   });
 });
 

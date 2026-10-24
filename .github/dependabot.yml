@@ -4,6 +4,8 @@ version: 2
 updates:
   - package-ecosystem: npm
     directory: /
+    # Our flow is feature PR -> develop -> promotion PR to main (#225): updates open against develop, never main.
+    target-branch: develop
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
@@ -12,5 +14,6 @@ updates:
         update-types: [minor, patch]
   - package-ecosystem: github-actions
     directory: /
+    target-branch: develop
     schedule:
       interval: weekly
