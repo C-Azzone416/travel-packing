@@ -1,10 +1,17 @@
 // @vitest-environment jsdom
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { StaplesSetupResult } from "@/features/trips/trip-actions";
 import { STAPLE_SUGGESTIONS } from "@/domain/staples-setup";
 import { StaplesSetupGate, type StaplesSetupActions } from "./StaplesSetupGate";
+
+let pathname = "/";
+vi.mock("next/navigation", () => ({ usePathname: () => pathname }));
+
+beforeEach(() => {
+  pathname = "/";
+});
 
 const answer = (
   state: "incomplete" | "skipped" | "completed",
@@ -26,6 +33,46 @@ function actions(initial: StaplesSetupResult): StaplesSetupActions {
 }
 
 describe("StaplesSetupGate", () => {
+  it("fails open outside Staples and retries the setup read", async () => {
+    const user = userEvent.setup();
+    const api = actions(answer("completed"));
+    api.get = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce(answer("completed"));
+    render(
+      <StaplesSetupGate actions={api}>
+        <div>Trips dashboard</div>
+      </StaplesSetupGate>,
+    );
+
+    expect(await screen.findByText("Trips dashboard")).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain("Couldn’t check your Staples setup.");
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+    expect(api.get).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the load error blocking on the Staples screen until retry succeeds", async () => {
+    pathname = "/staples";
+    const user = userEvent.setup();
+    const api = actions(answer("completed"));
+    api.get = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce(answer("completed"));
+    render(
+      <StaplesSetupGate actions={api}>
+        <div>Staples page</div>
+      </StaplesSetupGate>,
+    );
+
+    expect(await screen.findByText("Couldn’t load your Staples setup.")).toBeTruthy();
+    expect(screen.queryByText("Staples page")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("Staples page")).toBeTruthy();
+  });
+
   it("shows first-run setup, persists skip, then shows a dismissible reminder", async () => {
     const user = userEvent.setup();
     const api = actions(answer("incomplete"));
@@ -112,6 +159,38 @@ describe("StaplesSetupGate", () => {
           id: STAPLE_SUGGESTIONS.find(({ staple }) => staple.name === "Underwear")?.staple.id,
         }),
       ]),
+    );
+  });
+
+  it("keeps setup open when Skip fails", async () => {
+    const user = userEvent.setup();
+    const api = actions(answer("incomplete"));
+    api.skip = vi.fn().mockRejectedValueOnce(new Error("offline"));
+    render(
+      <StaplesSetupGate actions={api}>
+        <div>Trips dashboard</div>
+      </StaplesSetupGate>,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "Skip for now" }));
+    expect(await screen.findByRole("heading", { name: "Build your Staples" })).toBeTruthy();
+    expect(screen.queryByText("Trips dashboard")).toBeNull();
+  });
+
+  it("keeps the reminder visible when dismissal fails", async () => {
+    const user = userEvent.setup();
+    const api = actions(answer("skipped"));
+    api.dismiss = vi.fn().mockRejectedValueOnce(new Error("offline"));
+    render(
+      <StaplesSetupGate actions={api}>
+        <div>Trips dashboard</div>
+      </StaplesSetupGate>,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "Don’t remind me" }));
+    expect(screen.getByRole("complementary", { name: "Staples setup reminder" })).toBeTruthy();
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "Couldn’t update your reminder.",
     );
   });
 

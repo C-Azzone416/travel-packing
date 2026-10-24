@@ -421,16 +421,33 @@ export function saveStaplesSetup(
 /** Skip records the lifecycle decision without inventing defaults or changing an existing list. */
 export function skipStaplesSetup(context: DataContext): Promise<Result<StaplesSetup>> {
   return run(context, inputs.none, {}, async (scope) => {
-    await scope.db
+    const [updated] = await scope.db
       .update(schema.users)
       .set({
         staplesSetupState: "skipped",
         staplesReminderDismissed: false,
       })
-      .where(eq(schema.users.id, scope.ownerId));
+      .where(
+        and(eq(schema.users.id, scope.ownerId), eq(schema.users.staplesSetupState, "incomplete")),
+      )
+      .returning({
+        state: schema.users.staplesSetupState,
+        reminderDismissed: schema.users.staplesReminderDismissed,
+      });
+    const [owner] = updated
+      ? [updated]
+      : await scope.db
+          .select({
+            state: schema.users.staplesSetupState,
+            reminderDismissed: schema.users.staplesReminderDismissed,
+          })
+          .from(schema.users)
+          .where(eq(schema.users.id, scope.ownerId))
+          .limit(1);
+    if (!owner) refuse(fail("NOT_FOUND"));
     return {
-      state: "skipped" as const,
-      reminderDismissed: false,
+      state: owner.state,
+      reminderDismissed: owner.reminderDismissed,
       staples: await listStaples(scope.db, scope.ownerId),
     };
   });

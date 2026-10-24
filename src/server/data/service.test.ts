@@ -1077,6 +1077,33 @@ describe("staples", () => {
     });
   });
 
+  it("does not regress a completed setup when a stale Skip request arrives", async () => {
+    data(
+      await service.saveStaplesSetup(context(), {
+        staples: [
+          {
+            semanticId: "scarf",
+            name: "Scarf",
+            category: "Accessories",
+            qty: 1,
+            cadence: "per trip",
+            packLast: false,
+          },
+        ],
+      }),
+    );
+
+    expect(data(await service.skipStaplesSetup(context()))).toMatchObject({
+      state: "completed",
+      reminderDismissed: false,
+      staples: [expect.objectContaining({ id: "scarf" })],
+    });
+    expect(data(await service.getStaplesSetup(context()))).toMatchObject({
+      state: "completed",
+      staples: [expect.objectContaining({ id: "scarf" })],
+    });
+  });
+
   it("keeps setup state and selected staples owner-scoped", async () => {
     data(
       await service.saveStaplesSetup(context(), {

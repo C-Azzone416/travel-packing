@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import type { Staple } from "@/domain/trip";
 import type { StaplesSetup } from "@/domain/staples-setup";
@@ -32,6 +33,7 @@ export function StaplesSetupGate({
   actions: StaplesSetupActions;
   children: ReactNode;
 }) {
+  const pathname = usePathname();
   const [load, setLoad] = useState<Load>({ phase: "loading" });
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -83,19 +85,32 @@ export function StaplesSetupGate({
     );
   }
   if (load.phase === "error") {
+    const retry = () => {
+      setLoad({ phase: "loading" });
+      setReloads((value) => value + 1);
+    };
+    if (pathname !== "/staples") {
+      return (
+        <>
+          <aside className="callout" role="alert" aria-label="Staples setup unavailable">
+            <div>
+              <strong>Couldn’t check your Staples setup.</strong>
+              <p>You can keep using your trips. Nothing was changed.</p>
+            </div>
+            <Button small variant="ghost" onClick={retry}>
+              Try again
+            </Button>
+          </aside>
+          {children}
+        </>
+      );
+    }
     return (
       <section className="screen">
         <div className="empty-state">
           <h1>Couldn’t load your Staples setup.</h1>
           <p className="muted">Nothing was changed.</p>
-          <Button
-            onClick={() => {
-              setLoad({ phase: "loading" });
-              setReloads((value) => value + 1);
-            }}
-          >
-            Try again
-          </Button>
+          <Button onClick={retry}>Try again</Button>
         </div>
       </section>
     );
@@ -117,7 +132,7 @@ export function StaplesSetupGate({
         }
         onSkip={() => {
           setMutationError(false);
-          return setup.state === "incomplete" ? run(actions.skip) : setOpen(false);
+          return setup.state === "incomplete" ? run(actions.skip, undefined, true) : setOpen(false);
         }}
       />
     );
@@ -143,10 +158,16 @@ export function StaplesSetupGate({
             <Button small onClick={() => setOpen(true)}>
               {setup.staples.length > 0 ? "Review Staples" : "Build Staples"}
             </Button>
-            <Button small variant="ghost" disabled={busy} onClick={() => run(actions.dismiss)}>
+            <Button
+              small
+              variant="ghost"
+              disabled={busy}
+              onClick={() => run(actions.dismiss, undefined, true)}
+            >
               Don’t remind me
             </Button>
           </div>
+          {mutationError ? <p role="alert">Couldn’t update your reminder. Try again.</p> : null}
         </aside>
       ) : null}
       {children}
