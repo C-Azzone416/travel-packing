@@ -13,6 +13,13 @@ if any locked package has no integrity hash or comes from outside the npm regist
 1. Change the version here and `VERCEL_CLI_VERSION` in `.github/workflows/deploy-vercel.yml` together.
 2. `cd tools/vercel-cli && npm install --package-lock-only --ignore-scripts`
 3. Read the lockfile diff and `npm audit` for the new graph before merging (this directory is outside the app's `npm audit --omit=dev`
-   gate). At 64.5.0 the graph carries known advisories in transitive packages of the CLI itself (for example `tar`, `smol-toml`,
-   `js-yaml`, `minimatch`); `npm audit fix` suggests an older major, which is not a fix. Newer releases are not clean either, so the
-   advisories are tracked as a finding, not blocked on.
+   gate).
+
+## Overrides
+
+The 64.5.0 graph shipped with known advisories in transitive packages (`tar`, `js-yaml`, `minimatch`, `path-to-regexp`, `smol-toml`,
+`ajv`, `undici`, `zod`). `package.json` `overrides` pins each to a fixed release without changing the CLI version: same-major for
+the first six, `undici` 5.x to 6.29.1 and `zod` to 4.6.6 (a major jump), which brought `npm audit` to 0 findings. `@fastify/busboy`
+drops out of the graph with `undici` 6. After any change here, prove it from the lock: `npm ci --ignore-scripts`, `vercel --version`,
+`vercel build --help`, `vercel deploy --help`, and an offline `vercel build` of the app. Re-check the overrides on every CLI upgrade;
+drop any the new release no longer needs.
