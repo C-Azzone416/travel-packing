@@ -10,7 +10,7 @@ import { forgetPendingEmail, rememberPendingEmail } from "@/server/auth/pending-
 import { ACCESS_DENIED_PATH, SIGN_IN_PATH } from "@/server/auth/proxy-handler";
 import { FINISH_SETUP_PATH, VERIFY_PATH } from "@/server/auth/public-paths";
 import { resetPasswordUrl } from "@/server/auth/request-origin";
-import { logAuthEvent } from "@/server/auth/safe-log";
+import { createAuthReference, logAuthEvent } from "@/server/auth/safe-log";
 import { signInOwner, signOutOwner } from "@/server/auth/sign-in";
 import { clientAddress, signInLimits } from "@/server/auth/sign-in-limit";
 import {
@@ -25,18 +25,28 @@ export async function signInAction(
   _previous: SignInState,
   formData: FormData,
 ): Promise<SignInState> {
+  const reference = createAuthReference();
+  const failure = (error: string): SignInState => ({ error, reference });
   const auth = await getAuth();
-  if (!auth.available) return { error: UNAVAILABLE_MESSAGE };
+  if (!auth.available) {
+    logAuthEvent("sign-in-unavailable", { reference });
+    return failure(UNAVAILABLE_MESSAGE);
+  }
   // Ask first, before the credentials are looked at: once guessing is blocked, not even the right password gets in.
   // Only failures count, and the lockout is per (email, address), so nobody can lock the owner out from elsewhere.
   const email = typeof formData.get("email") === "string" ? (formData.get("email") as string) : "";
   const address = clientAddress(await headers());
   const limits = signInLimits();
   if (limits.blocked(email, address)) {
-    logAuthEvent("sign-in-rate-limited");
-    return { error: RATE_LIMITED_MESSAGE };
+    logAuthEvent("sign-in-rate-limited", { reference });
+    return failure(RATE_LIMITED_MESSAGE);
   }
-  const outcome = await signInOwner(auth, formData.get("email"), formData.get("password"));
+  const outcome = await signInOwner(
+    auth,
+    formData.get("email"),
+    formData.get("password"),
+    reference,
+  );
   if (outcome === "ok") {
     limits.recordSuccess(email, address);
     // The remembered address belongs to the sign-up or setup that is now over; the next visitor must not see it (#209).
@@ -66,7 +76,7 @@ export async function signInAction(
   }
   limits.recordFailure(email, address);
   if (outcome === "denied") redirect(ACCESS_DENIED_PATH);
-  return { error: INVALID_CREDENTIALS_MESSAGE };
+  return failure(INVALID_CREDENTIALS_MESSAGE);
 }
 
 /** Sign out goes straight through (no confirm), then back to sign-in. */

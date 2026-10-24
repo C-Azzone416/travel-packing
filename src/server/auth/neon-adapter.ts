@@ -81,6 +81,41 @@ function rejectionOf(error: NonNullable<NeonCallResult["error"]>): ProviderRejec
   };
 }
 
+/**
+ * Sign-in errors stay generic to the browser, but the provider's status and machine code let operations distinguish a
+ * refused credential from a service failure or a session-creation failure. Only facts actually present in the response
+ * are classified; unknown client errors remain provider-rejected.
+ */
+function signInFailure(error: NonNullable<NeonCallResult["error"]>): SignInResult {
+  const rejection = rejectionOf(error);
+  const code = rejection.code.toUpperCase();
+  if (code === "EMAIL_NOT_VERIFIED") {
+    return {
+      ok: false,
+      unverified: true,
+      diagnostic: { reason: "email-unverified", rejection },
+    };
+  }
+  if (code === "FAILED_TO_CREATE_SESSION") {
+    return { ok: false, diagnostic: { reason: "session-not-created", rejection } };
+  }
+  if (code === "INVALID_EMAIL_OR_PASSWORD" || rejection.status === 401) {
+    return { ok: false, diagnostic: { reason: "credentials-rejected", rejection } };
+  }
+  if (rejection.status === 429 || code.includes("TOO_MANY")) {
+    return { ok: false, diagnostic: { reason: "provider-rate-limited", rejection } };
+  }
+  if (
+    rejection.status === 0 ||
+    rejection.status >= 500 ||
+    code.startsWith("NETWORK") ||
+    code === "INTERNAL_ERROR"
+  ) {
+    return { ok: false, diagnostic: { reason: "provider-unavailable", rejection } };
+  }
+  return { ok: false, diagnostic: { reason: "provider-rejected", rejection } };
+}
+
 /** Runs one provider call and folds a thrown error into "unavailable"; only the code is logged. */
 async function flowCall<Reason extends FlowFailure>(
   call: () => Promise<NeonCallResult | null>,
@@ -135,16 +170,21 @@ export function createNeonAuthProvider(neon: NeonAuthLike): AuthProvider {
     async signInWithPassword(email, password): Promise<SignInResult> {
       try {
         const result = await neon.signIn.email({ email, password });
-        if (result?.error)
-          return isUnverifiedError(result.error) ? { ok: false, unverified: true } : { ok: false };
+        if (result?.error) return signInFailure(result.error);
         const session = toSession(result?.data?.user);
         if (session) return { ok: true, session };
         // The provider accepted the password but the address is not verified (or it says nothing): no session either way.
-        return result?.data?.user?.id ? { ok: false, unverified: true } : { ok: false };
+        if (result?.data?.user?.id && result.data.user.emailVerified !== true) {
+          return {
+            ok: false,
+            unverified: true,
+            diagnostic: { reason: "email-unverified" },
+          };
+        }
+        return { ok: false, diagnostic: { reason: "provider-response-invalid" } };
       } catch {
-        // Network and API failures look like a failed sign-in to the caller; nothing from the error is logged.
-        logAuthEvent("provider-error");
-        return { ok: false };
+        // Nothing from the thrown value is logged: it may contain an address, password or provider response body.
+        return { ok: false, diagnostic: { reason: "provider-unavailable" } };
       }
     },
     async signUp(email, password) {
@@ -205,10 +245,4 @@ function sendOnly(
       ? { ok: false, reason }
       : { ok: true, ...(rejection ? { rejected: rejection } : {}) },
   );
-}
-
-/** The provider's "right password, address not verified yet" answer (a 403 with EMAIL_NOT_VERIFIED). */
-function isUnverifiedError(error: unknown): boolean {
-  const code = (error as { code?: unknown } | null)?.code;
-  return typeof code === "string" && code.toUpperCase() === "EMAIL_NOT_VERIFIED";
 }

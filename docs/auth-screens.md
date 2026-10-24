@@ -85,6 +85,38 @@ and be sent back to `/verify` for a fresh code. They no longer know a password, 
 Pinned by `pre-registration.test.ts` ("retrying an abandoned sign-up") and `auth-screens.spec.ts`. The real provider's behaviour for a
 taken address is not testable in CI; confirm it on the preview.
 
+### Why setup currently arrives as a password-reset email
+
+Production uses `@neondatabase/auth` 0.6.0-beta (Better Auth 1.7.6). The installed server SDK exposes ordinary
+email/password sign-up, verification OTPs, password-reset links, passwordless email OTP and magic-link sign-in. It does not expose an
+atomic "verify this inbox and choose a password" operation.
+
+The app therefore uses the reset endpoint as a secure set-password primitive:
+
+1. `/sign-up` normalizes the address, creates a random throwaway password and calls `signUp.email`.
+2. The first email contains the provider's verification OTP. `/verify` submits it through `emailOtp.verifyEmail`.
+3. The app immediately signs out any session made by verification and calls `requestPasswordReset` with the sealed setup return URL.
+4. The second email is technically a provider password-reset email. Its link returns to the setup variant of `/reset-password`, which
+   calls `resetPassword`, records `account_setups`, signs out and sends the person to sign-in.
+
+The awkward wording is a consequence of the endpoint and hosted template, not an accidental forgot-password detour. The extra step closes
+the pre-registration attack described below: even if someone registered an allowlisted address first, verifying the inbox cannot activate
+the password that person chose. Only the password written through the inbox-only link can pass the app's setup gate.
+
+Feasible alternatives, as a separate product/security change:
+
+- **Ordinary password then verification code:** the simplest familiar UI and supported by the SDK, but it must not remove the
+  pre-registration defense. With the provider's separate `signUp.email` and `emailOtp.verifyEmail` calls, an address pre-registered through
+  the public provider endpoint could still be verified later with the attacker's password. Use this only if the provider supplies an
+  atomic/browser-bound verify-and-set-password guarantee, or the app adds an equally strong replacement.
+- **Passwordless email OTP or magic link:** removes the password/reset bootstrap and its pre-registration problem, but changes every login
+  and recovery flow and requires a fresh threat-model/session review.
+- **Custom setup email:** keep the current secure mechanics but use Neon's email webhook with an owned email provider so the second message
+  says “Finish setting up Packed Smart” rather than “Reset password.” This improves the wording but adds email infrastructure.
+
+Until one of those alternatives is designed and reviewed, keep the current semantics. Do not merely drop the second link or relabel an
+ordinary password-first flow as equivalent security.
+
 ## Why did no code arrive? (server-side events, #93)
 
 The browser answer is the same whether or not a code was sent (see above), so the **server log** says what happened. Each sign-up,
@@ -104,6 +136,32 @@ Once per server start the app also logs `allowlist-loaded` with the number of ad
 deploy job prints the fingerprint of the GitHub copy in the step "Inject deployment secrets" (`allowlist N entries, fingerprint …`):
 if the two match, Vercel and GitHub hold the same allowlist and cookie secret (see docs/deploy.md). No page or endpoint answers
 "is this address allowed?".
+
+## Safe sign-in troubleshooting
+
+Every sign-in attempt gets a random 12-hex `reference`. A failed sign-in shows the same reference beside the generic browser message, so a
+person can report it without sharing their email, password, cookies or request body. Search runtime logs for that exact reference. The log
+may contain only `scope`, a closed `event`, the reference, a three-digit provider status and an explicitly allowlisted provider machine code;
+unknown codes become `OTHER` and arbitrary messages are never logged.
+
+| Event                                                             | What it proves                                                                                                     |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `sign-in-input-invalid`                                           | Required input was missing or the address shape was invalid; the provider was not called.                          |
+| `sign-in-credentials-rejected`                                    | The provider returned its invalid-credentials class. It does not prove whether the address or password was wrong.  |
+| `sign-in-provider-rate-limited` / `sign-in-provider-unavailable`  | The provider response or thrown call was classified as throttled or unavailable.                                   |
+| `sign-in-provider-rejected` / `sign-in-provider-response-invalid` | A different bounded provider rejection occurred, or the response lacked the expected safe shape.                   |
+| `sign-in-session-not-created`                                     | The provider explicitly returned `FAILED_TO_CREATE_SESSION`; this is not inferred from a later signed-out request. |
+| `sign-in-unverified`                                              | The provider accepted the password but reported an unverified address.                                             |
+| `sign-in-setup-pending` / `sign-in-setup-unavailable`             | The password and verification passed; the setup record was absent or could not be read.                            |
+| `sign-in-denied`                                                  | Authentication succeeded, but the session address was not allowlisted; the app ended the session.                  |
+| `sign-in-session-cleanup-failed`                                  | The app tried to end a session it must not keep, but sign-out threw.                                               |
+| `sign-in-rate-limited` / `sign-in-unavailable`                    | The app's own guess limit blocked the attempt, or auth runtime configuration was unavailable.                      |
+| `sign-in-succeeded`                                               | The provider returned a verified session, setup passed and the address was allowlisted.                            |
+
+Do not infer more than the event says. In particular, `sign-in-credentials-rejected` is not proof of a mistyped password, and the SDK cannot
+verify cookie persistence within the same server action because session reads see the incoming request cookies. A later `unauthenticated`
+event has no attempt reference and must not be silently attributed to the earlier sign-in. Never ask for or copy credentials, OTPs, reset
+links, cookies, tokens, raw provider bodies or full request headers while troubleshooting.
 
 ## Verification, then what? (#83)
 

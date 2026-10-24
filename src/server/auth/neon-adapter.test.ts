@@ -188,19 +188,27 @@ describe("signInWithPassword", () => {
     async (_name, user) => {
       const { neon } = fakeNeon({ signIn: { data: { user } } as unknown as SignInResult });
       expect(await createNeonAuthProvider(neon).signInWithPassword("a@example.test", "pw")).toEqual(
-        { ok: false, unverified: true },
+        {
+          ok: false,
+          unverified: true,
+          diagnostic: { reason: "email-unverified" },
+        },
       );
     },
   );
 
-  it.each(failedCases)("fails generically on %s", async (_name, signIn) => {
-    const { neon } = fakeNeon({ signIn: signIn as unknown as SignInResult });
-    expect(await createNeonAuthProvider(neon).signInWithPassword("a@example.test", "pw")).toEqual({
-      ok: false,
-    });
-  });
+  it.each(failedCases)(
+    "fails generically on %s while retaining a bounded diagnostic",
+    async (_name, signIn) => {
+      const { neon } = fakeNeon({ signIn: signIn as unknown as SignInResult });
+      const result = await createNeonAuthProvider(neon).signInWithPassword("a@example.test", "pw");
+      expect(result).toMatchObject({ ok: false, diagnostic: { reason: expect.any(String) } });
+      expect(JSON.stringify(result)).not.toContain("Invalid credentials");
+      expect(JSON.stringify(result)).not.toContain("owner@example.test");
+    },
+  );
 
-  it("treats a thrown SDK error as a failed sign-in and logs nothing from it", async () => {
+  it("classifies a thrown SDK error as unavailable without logging its contents", async () => {
     const { neon } = fakeNeon({
       signIn: async () => {
         throw new Error("connect ECONNREFUSED for a@example.test with password hunter2");
@@ -210,8 +218,31 @@ describe("signInWithPassword", () => {
       await createNeonAuthProvider(neon).signInWithPassword("a@example.test", "hunter2"),
     ).toEqual({
       ok: false,
+      diagnostic: { reason: "provider-unavailable" },
     });
-    expect(logged).toEqual([JSON.stringify({ scope: "auth", event: "provider-error" })]);
+    expect(logged).toEqual([]);
+  });
+
+  it.each([
+    [
+      "rejected credentials",
+      { status: 401, code: "INVALID_EMAIL_OR_PASSWORD" },
+      "credentials-rejected",
+    ],
+    ["provider throttling", { status: 429, code: "TOO_MANY_ATTEMPTS" }, "provider-rate-limited"],
+    ["provider outage", { status: 503, code: "INTERNAL_ERROR" }, "provider-unavailable"],
+    [
+      "session creation failure",
+      { status: 401, code: "FAILED_TO_CREATE_SESSION" },
+      "session-not-created",
+    ],
+    ["other client rejection", { status: 403, code: "INVALID_ORIGIN" }, "provider-rejected"],
+  ])("classifies %s from safe response facts", async (_name, error, reason) => {
+    const { neon } = fakeNeon({ signIn: { data: null, error } });
+    expect(await createNeonAuthProvider(neon).signInWithPassword("a@example.test", "pw")).toEqual({
+      ok: false,
+      diagnostic: { reason, rejection: error },
+    });
   });
 });
 
@@ -411,22 +442,34 @@ describe("account flows", () => {
         ).toEqual({
           ok: false,
           unverified: true,
+          diagnostic: {
+            reason: "email-unverified",
+            ...(signIn.error ? { rejection: { status: 403, code: "EMAIL_NOT_VERIFIED" } } : {}),
+          },
         });
       }
     });
 
-    it("keeps a wrong password or an empty answer generic", async () => {
-      for (const signIn of [
-        { data: null, error: { status: 401, code: "INVALID_EMAIL_OR_PASSWORD" } },
-        { data: null },
-      ]) {
-        const { neon } = fakeNeon({ signIn });
-        expect(
-          await createNeonAuthProvider(neon).signInWithPassword("a@example.test", "pw"),
-        ).toEqual({
-          ok: false,
-        });
-      }
+    it("distinguishes rejected credentials from an invalid empty response", async () => {
+      const rejected = fakeNeon({
+        signIn: {
+          data: null,
+          error: { status: 401, code: "INVALID_EMAIL_OR_PASSWORD" },
+        },
+      });
+      expect(
+        await createNeonAuthProvider(rejected.neon).signInWithPassword("a@example.test", "pw"),
+      ).toEqual({
+        ok: false,
+        diagnostic: {
+          reason: "credentials-rejected",
+          rejection: { status: 401, code: "INVALID_EMAIL_OR_PASSWORD" },
+        },
+      });
+      const empty = fakeNeon({ signIn: { data: null } });
+      expect(
+        await createNeonAuthProvider(empty.neon).signInWithPassword("a@example.test", "pw"),
+      ).toEqual({ ok: false, diagnostic: { reason: "provider-response-invalid" } });
     });
   });
 });
