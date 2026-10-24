@@ -94,8 +94,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: npx tsx scripts/require-ci.ts "$GITHUB_SHA"
 
-      - name: Install Vercel CLI (pinned)
-        run: npm install --global "vercel@${VERCEL_CLI_VERSION}"
+      # The Vercel CLI comes from its own lockfile (tools/vercel-cli: the version below, every transitive and its integrity hash),
+      # installed reproducibly with scripts off, and put on the PATH from there. Nothing is resolved or downloaded after this step:
+      # no global install, no npx. The steps below that hold VERCEL_TOKEN run THIS binary (#208).
+      - name: Install the locked Vercel CLI
+        run: npm ci --prefix tools/vercel-cli --ignore-scripts
+
+      - name: Put the locked Vercel CLI on the PATH
+        run: echo "$GITHUB_WORKSPACE/tools/vercel-cli/node_modules/.bin" >> "$GITHUB_PATH"
 
       # VERCEL_TOKEN can deploy to production, so only the two Vercel steps that talk to Vercel (pull and deploy) get it (not `npm ci`, whose
       # install scripts run before this point, nor the build, migrate or seed steps).

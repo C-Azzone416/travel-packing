@@ -117,6 +117,15 @@ export const DEPLOY_SMOKE_STEP = [
   "VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
   'run: npx tsx scripts/smoke-test.ts "$DEPLOY_URL"',
 ];
+/** The locked Vercel CLI install (#208): reproducible from its own lockfile, scripts off, then put on the PATH. */
+export const CLI_INSTALL_STEP = [
+  "- name: Install the locked Vercel CLI",
+  "run: npm ci --prefix tools/vercel-cli --ignore-scripts",
+];
+export const CLI_PATH_STEP = [
+  "- name: Put the locked Vercel CLI on the PATH",
+  'run: echo "$GITHUB_WORKSPACE/tools/vercel-cli/node_modules/.bin" >> "$GITHUB_PATH"',
+];
 export const CLEANUP_STEP = [
   "- name: Delete superseded Preview deployments",
   "if: env.TARGET == 'preview' && steps.alias_head.outputs.assign == 'true'",
@@ -238,6 +247,8 @@ export function checkDeployWorkflow(workflow: string): string[] {
     ["Prove the Production alias", PROD_ALIAS_STEP, "Production alias proof"],
     ["Production alias smoke test", PROD_SMOKE_STEP, "Production alias smoke test"],
     ["Smoke test", DEPLOY_SMOKE_STEP, "deployment smoke test"],
+    ["Install the locked Vercel CLI", CLI_INSTALL_STEP, "locked Vercel CLI install"],
+    ["Put the locked Vercel CLI on the PATH", CLI_PATH_STEP, "Vercel CLI PATH"],
     ["Delete superseded Preview deployments", CLEANUP_STEP, "Preview cleanup"],
   ] as const) {
     const actual = stepLines(workflow, prefix);
@@ -428,6 +439,32 @@ export function checkDeployWorkflow(workflow: string): string[] {
   if (!/VERCEL_CLI_VERSION:\s*\d+\.\d+\.\d+\b/.test(workflow))
     problems.push("the Vercel CLI version must be pinned");
   if (/@latest\b/.test(workflow)) problems.push("nothing may be installed at @latest");
+  // The Vercel CLI is installed only from its own lockfile (#208). It holds a production-capable token in later steps, so its
+  // dependency graph must not be resolved at run time: no global or ad-hoc install of it, no npx that could download it.
+  const cliCode = workflow
+    .split("\n")
+    .filter((line) => !/^\s*#/.test(line))
+    .join("\n");
+  if (
+    /\bnpm\s+(install|i|add)\b[^\n]*\bvercel\b|\bnpm\s+(install|i)\b[^\n]*(--global|\s-g\b)/.test(
+      cliCode,
+    )
+  )
+    problems.push(
+      "the Vercel CLI must not be installed with npm install or globally; it comes from tools/vercel-cli/package-lock.json",
+    );
+  if (/\bnpx\b(?![^\n]*\btsx\b)[^\n]*\bvercel\b/.test(cliCode))
+    problems.push(
+      "the Vercel CLI must not be run with npx (it could resolve a new dependency graph)",
+    );
+  const cliInstallAt = workflow.indexOf("npm ci --prefix tools/vercel-cli");
+  const cliPathAt = workflow.indexOf("tools/vercel-cli/node_modules/.bin");
+  const firstCliUseAt = workflow.indexOf("vercel pull --yes");
+  if (!(cliInstallAt >= 0 && cliInstallAt < cliPathAt && cliPathAt < firstCliUseAt)) {
+    problems.push(
+      "the order must be: install the locked Vercel CLI, put it on the PATH, then the first vercel command",
+    );
+  }
   // The e2e build exists only inside a CI run; a deploy builds its own, exactly as production does.
   if (/download-artifact|upload-artifact|e2e-build|NEXT_PUBLIC_E2E_BUILD\s*[:=]/.test(workflow))
     problems.push("the deploy must never use an artifact or an e2e build");
@@ -731,4 +768,64 @@ function stepsOf(job: string, needle: string): string[] {
   return job
     .split(/^(?= {6}(?:- |#))/m)
     .filter((chunk) => /^ {6}- /.test(chunk) && chunk.includes(needle));
+}
+
+/**
+ * The locked Vercel CLI (#208): tools/vercel-cli/package.json names the exact version the workflow pins, the lockfile resolves
+ * that version, and every package in the lockfile has an integrity hash and comes from the npm registry. Returns the broken rules.
+ */
+export function checkVercelCliLock(
+  workflow: string,
+  packageJson: string,
+  lockJson: string,
+): string[] {
+  const problems: string[] = [];
+  const pinned = /VERCEL_CLI_VERSION:\s*(\d+\.\d+\.\d+)\b/.exec(workflow)?.[1];
+  let pkg: { dependencies?: Record<string, string> };
+  let lock: { lockfileVersion?: number; packages?: Record<string, Record<string, unknown>> };
+  try {
+    pkg = JSON.parse(packageJson);
+    lock = JSON.parse(lockJson);
+  } catch {
+    return ["tools/vercel-cli/package.json or package-lock.json is not valid JSON"];
+  }
+  if (!pinned) problems.push("the workflow does not pin VERCEL_CLI_VERSION");
+  const dependencies = Object.entries(pkg.dependencies ?? {});
+  if (
+    dependencies.length !== 1 ||
+    dependencies[0][0] !== "vercel" ||
+    dependencies[0][1] !== pinned
+  ) {
+    problems.push(
+      "tools/vercel-cli/package.json must depend on exactly vercel at the version the workflow pins",
+    );
+  }
+  const packages = lock.packages ?? {};
+  if (packages["node_modules/vercel"]?.version !== pinned) {
+    problems.push(
+      "tools/vercel-cli/package-lock.json must resolve vercel to the version the workflow pins",
+    );
+  }
+  if (Object.keys(packages).length < 2)
+    problems.push("tools/vercel-cli/package-lock.json has no locked dependency graph");
+  const entries = Object.entries(packages).filter(([name, entry]) => name !== "" && !entry.link);
+  const unhashed = entries.filter(
+    ([, entry]) => typeof entry.integrity !== "string" || entry.integrity === "",
+  );
+  if (unhashed.length > 0) {
+    problems.push(
+      `${unhashed.length} package(s) in the Vercel CLI lockfile have no integrity hash (first: ${unhashed[0][0]})`,
+    );
+  }
+  const elsewhere = entries.filter(
+    ([, entry]) =>
+      typeof entry.resolved !== "string" ||
+      !entry.resolved.startsWith("https://registry.npmjs.org/"),
+  );
+  if (elsewhere.length > 0) {
+    problems.push(
+      `${elsewhere.length} package(s) in the Vercel CLI lockfile do not come from the npm registry (first: ${elsewhere[0][0]})`,
+    );
+  }
+  return problems;
 }
