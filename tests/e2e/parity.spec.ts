@@ -129,13 +129,13 @@ test("packing screen: the return travel outfit, Laptop under Pack last, no umbre
   await expect(packLast.locator('[data-item-id="last-toothbrush"]')).toHaveCount(0);
 });
 
-test("Nice outfits: switching off hides the Nice items, switching back on restores their edits and progress, with one of each", async ({
+test("Nice outfits: switching off hides generic Nice clothing, switching back on restores edits and progress without personal assumptions", async ({
   page,
 }) => {
   await openSanDiego(page);
   await expect(row(page, "nice-shoes")).toHaveCount(1);
-  await expect(row(page, "nice-makeup")).toHaveCount(1);
-  await expect(row(page, "nice-undergarments")).toHaveCount(1);
+  await expect(row(page, "nice-makeup")).toHaveCount(0);
+  await expect(row(page, "nice-undergarments")).toHaveCount(0);
 
   await row(page, "nice-shoes").locator(".item-body").click();
   const dialog = page.getByRole("dialog", { name: "Edit item" });
@@ -154,30 +154,30 @@ test("Nice outfits: switching off hides the Nice items, switching back on restor
     await setPreference(page, "Nice outfits", true);
     await expect(row(page, "nice-shoes")).toHaveCount(1);
     await expect(row(page, "nice-shoes")).toContainText("1 of 2 packed");
-    await expect(row(page, "nice-makeup")).toHaveCount(1);
-    await expect(row(page, "nice-undergarments")).toHaveCount(1);
+    await expect(row(page, "nice-makeup")).toHaveCount(0);
+    await expect(row(page, "nice-undergarments")).toHaveCount(0);
   }
 });
 
 test("a removed optional item stays removed through later recalculations", async ({ page }) => {
   await openSanDiego(page);
-  await row(page, "nice-undergarments").locator(".item-body").click();
+  await row(page, "nice-shoes").locator(".item-body").click();
   await page
     .getByRole("dialog", { name: "Edit item" })
     .getByRole("button", { name: "Remove item" })
     .click();
   await page.getByRole("dialog").getByRole("button", { name: "Remove item" }).click();
-  await expect(row(page, "nice-undergarments")).toHaveCount(0);
+  await expect(row(page, "nice-shoes")).toHaveCount(0);
   await setPreference(page, "Laundry access", true);
-  await expect(row(page, "nice-undergarments")).toHaveCount(0);
+  await expect(row(page, "nice-shoes")).toHaveCount(0);
   await setPreference(page, "Nice outfits", false);
   await setPreference(page, "Nice outfits", true);
-  await expect(row(page, "nice-undergarments")).toHaveCount(0);
+  await expect(row(page, "nice-shoes")).toHaveCount(0);
   await page.reload();
-  await expect(row(page, "nice-undergarments")).toHaveCount(0);
+  await expect(row(page, "nice-shoes")).toHaveCount(0);
 });
 
-test("copy: a remembered Bathroom item travels to the copy, with nothing checked, one Makeup, and the source unchanged", async ({
+test("copy: a remembered Bathroom item travels to the copy, with nothing checked, no assumed Makeup, and the source unchanged", async ({
   page,
 }) => {
   await openSanDiego(page);
@@ -205,7 +205,7 @@ test("copy: a remembered Bathroom item travels to the copy, with nothing checked
   await page.getByRole("link", { name: /(Continue|Keep) packing: Paris/ }).click();
   await expect(page.getByRole("heading", { name: "Paris", level: 1 })).toBeVisible();
   await expect(page.getByText("Face wash", { exact: true })).toBeVisible();
-  await expect(row(page, "nice-makeup")).toHaveCount(1);
+  await expect(row(page, "nice-makeup")).toHaveCount(0);
   await expect(row(page, "nice-shoes")).toHaveCount(1);
   await expect(page.locator(".pack-row.complete")).toHaveCount(0);
   await expect(page.getByText("Toiletry bag is in the suitcase")).toHaveCount(0);

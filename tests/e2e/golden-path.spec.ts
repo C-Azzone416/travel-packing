@@ -7,13 +7,7 @@ import { DEVICE } from "./helpers/device";
 // The pieces are tested in depth elsewhere; this proves they connect on the device people use.
 const NOW = new Date("2026-10-16T12:00:00");
 // The Bathroom items of the default list (they gate the toiletry bag).
-const TOILETRIES = [
-  "nice-makeup",
-  "last-toothbrush",
-  "last-toothpaste",
-  "last-deodorant",
-  "last-contacts",
-];
+const TOILETRIES = ["last-toothbrush", "last-toothpaste", "last-deodorant", "last-contacts"];
 
 test(
   "golden path: sign in, create a trip, pack it, review the bag, mark it Ready",

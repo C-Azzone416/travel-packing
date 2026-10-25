@@ -64,6 +64,13 @@
       "when": 1792658712000,
       "tag": "0008_stamp_labels",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792791969463,
+      "tag": "0009_staple_quantity_rules",
+      "breakpoints": true
     }
   ]
 }

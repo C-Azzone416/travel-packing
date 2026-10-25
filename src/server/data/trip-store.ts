@@ -329,6 +329,7 @@ function toDomainItem(row: typeof schema.tripItems.$inferSelect, packed: number)
   if (row.optional) item.optional = true;
   if (row.userEdited) item.userEdited = true;
   if (row.groupId) item.groupId = row.groupId;
+  if (row.stapleCadence) item.stapleCadence = row.stapleCadence;
   return item;
 }
 
@@ -499,6 +500,7 @@ async function writeChildren(tx: Db, ownerId: string, trip: StoredTrip): Promise
       groupId: item.groupId ?? null,
       optional: Boolean(item.optional),
       userEdited: Boolean(item.userEdited),
+      stapleCadence: item.stapleCadence ?? null,
       sortOrder: index,
     };
     const [saved] = await tx
