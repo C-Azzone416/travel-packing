@@ -28,9 +28,14 @@ import {
   decrementPackedAction,
   editItemAction,
   getTripAction,
+  getStaplesSetupAction,
   incrementPackedAction,
   listStaplesAction,
   listWeatherSuggestionsAction,
+  dismissStaplesReminderAction,
+  removeStapleAction,
+  saveStaplesSetupAction,
+  skipStaplesSetupAction,
   upsertStapleAction,
   markNotReadyAction,
   markReadyAction,
@@ -95,6 +100,41 @@ describe("reads", () => {
     const result = await listStaplesAction();
     if (!result.ok) throw new Error("expected ok");
     expect(result.staples).toEqual([]);
+  });
+
+  it("maps the complete setup lifecycle through owner-gated actions", async () => {
+    expect(await getStaplesSetupAction()).toEqual({
+      ok: true,
+      state: "incomplete",
+      reminderDismissed: false,
+      staples: [],
+    });
+    const chosen = {
+      id: "underwear",
+      name: "Underwear",
+      category: "Clothing",
+      qty: 1,
+      cadence: "smart",
+      packLast: false,
+    } as const;
+    expect(await saveStaplesSetupAction([chosen])).toMatchObject({
+      ok: true,
+      state: "completed",
+      staples: [chosen],
+    });
+    expect(await removeStapleAction("underwear")).toEqual({ ok: true, staples: [] });
+
+    as(OTHER_OWNER);
+    expect(await skipStaplesSetupAction()).toMatchObject({
+      ok: true,
+      state: "skipped",
+      reminderDismissed: false,
+    });
+    expect(await dismissStaplesReminderAction()).toMatchObject({
+      ok: true,
+      state: "skipped",
+      reminderDismissed: true,
+    });
   });
 });
 

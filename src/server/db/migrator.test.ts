@@ -20,6 +20,7 @@ const EXPECTED_TAGS = [
   "0007_appearance",
   "0008_stamp_labels",
   "0009_staple_quantity_rules",
+  "0010_staples_setup",
 ];
 
 // One in-memory Postgres for the file; each test starts from an empty public schema.
@@ -94,6 +95,7 @@ describe("migrateUp", () => {
       "item_category",
       "item_section",
       "staple_cadence",
+      "staples_setup_state",
       "trip_theme",
       "weather_status",
     ]);

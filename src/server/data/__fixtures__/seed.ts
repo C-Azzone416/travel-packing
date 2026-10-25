@@ -76,7 +76,10 @@ export function makeStoredTrip(overrides: Partial<StoredTrip> = {}): StoredTrip 
 }
 
 export async function seedOwner(db: Db, ownerId: string): Promise<void> {
-  await db.insert(schema.users).values({ id: ownerId }).onConflictDoNothing();
+  await db
+    .insert(schema.users)
+    .values({ id: ownerId, staplesSetupState: "skipped" })
+    .onConflictDoNothing();
 }
 
 export async function seedTrip(

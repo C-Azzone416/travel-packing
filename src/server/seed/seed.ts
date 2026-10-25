@@ -24,7 +24,10 @@ export async function seedSyntheticData(
   ownerId: string,
   today: string,
 ): Promise<SeedSummary> {
-  await db.insert(schema.users).values({ id: ownerId }).onConflictDoNothing();
+  await db
+    .insert(schema.users)
+    .values({ id: ownerId, staplesSetupState: "completed" })
+    .onConflictDoNothing();
 
   const ids = SAMPLE_TRIP_SLUGS.map((slug) => sampleTripId(ownerId, slug));
   await db.transaction(async (tx) => {

@@ -188,10 +188,20 @@ export const stapleInput = z
     groupId: z.literal(TOILETRY_GROUP).optional(),
   })
   .superRefine((value, ctx) => {
-    if (value.cadence === "smart" && !supportsSmartQuantity(value.semanticId)) {
+    if (
+      value.cadence === "smart" &&
+      (!supportsSmartQuantity(value.semanticId) ||
+        !["Clothing", "Nice attire"].includes(value.category))
+    ) {
       ctx.addIssue({ code: "custom", path: ["cadence"], message: "Unsupported Smart item" });
     }
   });
+
+/** One all-or-nothing first-run save. An empty selection is a valid completed setup. */
+export const saveStaplesSetupInput = z.object({
+  staples: z.array(stapleInput).max(100),
+});
+export const stapleOnly = z.object({ semanticId: z.string().min(1).max(100) });
 
 export const none = z.object({}).strict();
 

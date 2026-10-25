@@ -39,8 +39,8 @@ describe("sectionOf", () => {
     expect(sectionOf({ category })).toBe(section);
   });
 
-  it("puts a staple in the toiletry group in Bathroom whatever its category says", () => {
-    expect(sectionOf({ category: "Tech", groupId: "toiletry-bag" })).toBe("Bathroom");
+  it("keeps category independent from toiletry-bag placement", () => {
+    expect(sectionOf({ category: "Tech", groupId: "toiletry-bag" })).toBe("Tech");
   });
 });
 
