@@ -60,7 +60,7 @@ Provisioning does not make any item in this list implemented. No application sou
 - **Delivery:** responsive web app, with a same-origin architecture such as Next.js as the current implementation candidate.
 - **Source:** private repository <https://github.com/C-Azzone416/travel-packing>.
 - **Hosting:** empty Vercel Hobby project <https://vercel.com/c-azzone416s-projects/travel-packing>, project ID `prj_QxQOEprSd7SWg3LOiG1i7nmgwC5S`.
-- **Database project:** [Caroline Travel Packing](https://console.neon.tech/app/projects/quiet-leaf-68107705/branches/br-frosty-recipe-arxh54js), project ID `quiet-leaf-68107705`, Free plan in Caroline / `owner@example.test`, AWS US West 2 (Oregon), default `production` branch.
+- **Database project:** [Caroline Travel Packing](https://console.neon.tech/app/projects/quiet-leaf-68107705/branches/br-frosty-recipe-arxh54js), project ID `quiet-leaf-68107705`, Free plan in Caroline's Neon account, AWS US West 2 (Oregon), default `production` branch.
 - **Deployment policy:** do not connect Vercel directly to GitHub. Reproduce `C-Azzone416/tabletop-sim`'s GitHub Actions + Vercel CLI pattern for `develop` previews and `main` production, without modifying `tabletop-sim`.
 - **Configured GitHub repository variables:** `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID`.
 - **Configured GitHub repository secret:** `VERCEL_TOKEN`, backed by a new Vercel token scoped only to `travel-packing`, expiring October 17, 2027.
