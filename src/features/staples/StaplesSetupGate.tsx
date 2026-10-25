@@ -87,7 +87,7 @@ export function StaplesSetupGate({
     if (pathname !== "/staples") {
       return (
         <>
-          <aside
+          <div
             className="callout staples-reminder staples-setup-notice"
             role="status"
             aria-label="Staples setup unavailable"
@@ -99,7 +99,7 @@ export function StaplesSetupGate({
             <Button small variant="ghost" onClick={retry}>
               Try again
             </Button>
-          </aside>
+          </div>
           {children}
         </>
       );

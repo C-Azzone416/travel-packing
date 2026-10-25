@@ -374,13 +374,22 @@ test.describe("more states", DEVICE, () => {
     await expectAccessible(page, "authenticated setup loading");
     release();
     await page.unroute("**/*");
-    // No answer at all: the load error card.
-    await page.route("**/*", (route) =>
-      isAction(route.request()) ? route.abort("failed") : route.continue(),
+    // Only the setup check fails: the non-blocking notice leaves the dashboard usable.
+    let aborted = false;
+    await page.route("**/*", (route) => {
+      const request = route.request();
+      if (!aborted && isAction(request) && new URL(request.url()).pathname === "/") {
+        aborted = true;
+        return route.abort("failed");
+      }
+      return route.continue();
+    });
+    await page.goto("/");
+    await expect(page.getByRole("status", { name: "Staples setup unavailable" })).toContainText(
+      "Couldn’t check your Staples setup.",
     );
-    await page.reload();
-    await expect(page.getByText("Couldn’t load your Staples setup.")).toBeVisible();
-    await expectAccessible(page, "authenticated setup load error");
+    await expect(page.getByRole("heading", { name: "Your travel ledger" })).toBeVisible();
+    await expectAccessible(page, "authenticated setup check error");
   });
 
   test("review after a change took the trip out of Ready", async ({ page }) => {

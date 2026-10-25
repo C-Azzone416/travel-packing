@@ -37,6 +37,11 @@ test(
     if (testInfo.project.name === "phone") {
       const reminderBox = (await reminder.boundingBox())!;
       expect(reminderBox.width).toBeGreaterThanOrEqual(350);
+      const build = (await reminder.getByRole("button", { name: "Build Staples" }).boundingBox())!;
+      const dismiss = (await reminder
+        .getByRole("button", { name: "Don’t remind me" })
+        .boundingBox())!;
+      expect(build.y + build.height).toBeLessThanOrEqual(dismiss.y);
     }
     await page.getByRole("link", { name: "Staples" }).click();
     await expect(page.getByText("Your Staples list is intentionally empty.")).toBeVisible();

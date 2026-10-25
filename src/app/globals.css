@@ -4403,7 +4403,9 @@ a.back {
     align-items: stretch;
     flex-direction: column;
   }
-  .staples-reminder .actions,
+  .staples-reminder .actions {
+    flex-direction: column;
+  }
   .staples-setup-actions {
     flex-direction: column-reverse;
   }
