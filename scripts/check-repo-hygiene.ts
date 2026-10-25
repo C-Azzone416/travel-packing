@@ -2,7 +2,11 @@
 
 import { execFileSync } from "node:child_process";
 import { readFileSync, statSync } from "node:fs";
-import { findHygieneProblems, type TrackedFile } from "../src/tooling/repo-hygiene";
+import {
+  findHygieneProblems,
+  textForEmailScan,
+  type TrackedFile,
+} from "../src/tooling/repo-hygiene";
 
 const listed = execFileSync("git", ["ls-files", "-z"], {
   encoding: "utf8",
@@ -18,8 +22,8 @@ const files: TrackedFile[] = listed
         {
           path,
           bytes: statSync(path).size,
-          // NUL bytes are a conservative binary marker. All other tracked files are scanned as UTF-8 text.
-          text: contents.includes(0) ? undefined : contents.toString("utf8"),
+          // Scan every readable file byte-for-byte. A NUL byte must not turn a text leak into a skipped binary.
+          text: textForEmailScan(contents),
         },
       ];
     } catch (error) {

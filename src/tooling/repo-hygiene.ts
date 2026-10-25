@@ -2,6 +2,8 @@
 // `git add -A` once swept a 38 MB local Postgres data directory (.data/seed-db) into a commit. Local databases, build
 // output, test output, dependencies, and real env files must never be committed, and no committed file is large.
 
+import { Buffer } from "node:buffer";
+
 export const MAX_FILE_BYTES = 1024 * 1024;
 
 /** Generated lockfiles are exempt from the size limit (they grow with the dependency tree); the path rules still apply. */
@@ -10,10 +12,15 @@ const SIZE_EXEMPT = new Set(["package-lock.json"]);
 export interface TrackedFile {
   path: string;
   bytes: number;
-  /** Present for text files only. Binary files are intentionally left undefined. */
+  /** Every readable file is decoded byte-for-byte so a NUL cannot hide an email literal. */
   text?: string;
   /** Set when a tracked file exists but cannot be inspected. */
   inspectionFailed?: boolean;
+}
+
+/** Latin-1 preserves every byte while leaving ASCII email syntax unchanged, including after a NUL byte. */
+export function textForEmailScan(contents: Uint8Array): string {
+  return Buffer.from(contents).toString("latin1");
 }
 
 const EMAIL_LITERAL = /[a-z0-9._%+-]+@(?:(?:[a-z0-9-]+\.)+[a-z]{2,}|localhost)\b/gi;

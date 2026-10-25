@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findHygieneProblems, MAX_FILE_BYTES } from "./repo-hygiene";
+import { findHygieneProblems, MAX_FILE_BYTES, textForEmailScan } from "./repo-hygiene";
 
 const file = (path: string, bytes = 100) => ({ path, bytes });
 
@@ -105,6 +105,29 @@ describe("findHygieneProblems", () => {
       ).toEqual([]);
     });
 
+    it.each([
+      ["a prefixed example domain", ["notexample", ".com"]],
+      ["a suffixed example domain", ["example.com", ".evil.net"]],
+      ["test outside the top-level position", ["test", ".evil.net"]],
+      ["a prefixed example.org domain", ["evilexample", ".org"]],
+    ])("rejects reserved-domain look-alikes: %s", (_name, domainParts) => {
+      const address = `x@${domainParts.join("")}`;
+      expect(
+        findHygieneProblems([{ ...file("src/auth.test.ts"), text: `const value = "${address}";` }]),
+      ).toEqual(["src/auth.test.ts: email address literals must use reserved example domains"]);
+    });
+
+    it("detects an address after a NUL byte without echoing it", () => {
+      const address = ["Owner@Private", ".INTERNAL"].join("");
+      const text = textForEmailScan(Buffer.from(`prefix\0${address}`));
+      const problems = findHygieneProblems([{ ...file("docs/nul.md"), text }]);
+
+      expect(problems).toEqual([
+        "docs/nul.md: email address literals must use reserved example domains",
+      ]);
+      expect(problems.join("\n")).not.toContain(address);
+    });
+
     it("passes ordinary prose without an address", () => {
       expect(
         findHygieneProblems([
@@ -127,10 +150,7 @@ describe("findHygieneProblems", () => {
 
     it("fails closed when a tracked file cannot be inspected", () => {
       expect(
-        findHygieneProblems([
-          { ...file("src/unreadable.ts"), inspectionFailed: true },
-          { ...file("public/image.png"), text: undefined },
-        ]),
+        findHygieneProblems([{ ...file("src/unreadable.ts"), inspectionFailed: true }]),
       ).toEqual(["src/unreadable.ts: tracked file could not be inspected"]);
     });
   });
