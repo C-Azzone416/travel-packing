@@ -1,0 +1,20 @@
+{
+  "name": "vercel-cli-locked",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The Vercel CLI the deploy workflow runs, with its whole dependency graph locked and integrity-hashed (#208). Not part of the app.",
+  "dependencies": {
+    "vercel": "64.5.0"
+  },
+  "overrides": {
+    "tar": "7.5.22",
+    "js-yaml": "^4.3.2",
+    "minimatch@^10": "10.2.6",
+    "path-to-regexp@^6": "6.3.0",
+    "path-to-regexp@^8": "8.4.2",
+    "smol-toml": "1.9.1",
+    "ajv": "^8.18.0",
+    "zod": "4.6.6",
+    "undici": "6.29.1"
+  }
+}

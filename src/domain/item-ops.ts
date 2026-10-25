@@ -11,7 +11,7 @@ import {
   type RejectionReason,
 } from "./readiness";
 import { TOILETRY_GROUP_ID, toiletryItems } from "./toiletry-bag";
-import { niceAccessoryKey } from "./calc";
+import { canonicalItemId } from "./item-identity";
 import { duplicateKey } from "./saved-lists";
 import type { ItemSection, Scope, Staple, SuggestFn, Trip, TripConfig, TripItem } from "./trip";
 
@@ -33,8 +33,6 @@ export const CALCULATED_ITEM_IDS: ReadonlySet<string> = new Set([
   "nice-top",
   "nice-bottom",
   "nice-shoes",
-  "nice-makeup",
-  "nice-undergarments",
 ]);
 
 /** Optional Nice-outfit suggestions; removing one suppresses it until the user restores it. */
@@ -70,11 +68,13 @@ function rejected<T>(trip: T, staples: Staple[], reason: ItemOpRejection): ItemO
 /**
  * What a trip quantity means for a staple. A per-trip staple stores the trip quantity as is. A per-day staple
  * must not store the trip total (it would multiply on the next trip): it stores the per-day amount, or keeps
- * its quantity when the trip has no packing days to divide by. (PM product call on #40.)
+ * its quantity when the trip has no calendar days to divide by. Travel days are deliberately included and
+ * laundry never changes this rule (#222).
  */
-function stapleQtyFor(existing: Staple, tripQty: number, dailyDays: number): number {
+function stapleQtyFor(existing: Staple, tripQty: number, tripDays: number): number {
   if (existing.cadence === "per trip") return tripQty;
-  return dailyDays > 0 ? Math.max(1, Math.round(tripQty / dailyDays)) : existing.qty;
+  if (existing.cadence === "smart") return existing.qty;
+  return tripDays > 0 ? Math.max(1, Math.round(tripQty / tripDays)) : existing.qty;
 }
 
 export type RememberPreview =
@@ -89,15 +89,15 @@ export function rememberPreview(
   staples: readonly Staple[],
   itemId: string,
   tripQty: number,
-  dailyDays: number,
+  tripDays: number,
 ): RememberPreview {
   const staple = staples.find((entry) => entry.id === itemId);
   if (!staple || staple.cadence !== "per day") return null;
-  if (dailyDays <= 0) return { kind: "no-packing-days" };
-  return { kind: "per-day", perDay: stapleQtyFor(staple, tripQty, dailyDays) };
+  if (tripDays <= 0) return { kind: "no-packing-days" };
+  return { kind: "per-day", perDay: stapleQtyFor(staple, tripQty, tripDays) };
 }
 
-function upsertStaple(staples: Staple[], item: TripItem, dailyDays: number): Staple[] {
+function upsertStaple(staples: Staple[], item: TripItem, tripDays: number): Staple[] {
   const packLast = item.section === "packlast";
   const groupId = item.groupId;
   const existing = staples.find((staple) => staple.id === item.id);
@@ -120,7 +120,7 @@ function upsertStaple(staples: Staple[], item: TripItem, dailyDays: number): Sta
       ? {
           ...rest,
           name: item.name,
-          qty: stapleQtyFor(existing, item.qty, dailyDays),
+          qty: stapleQtyFor(existing, item.qty, tripDays),
           packLast,
           ...(groupId ? { groupId } : {}),
         }
@@ -158,7 +158,7 @@ export function editItem<T extends Trip>(
   };
   return accepted(
     nextTrip,
-    edit.scope === "remember" ? upsertStaple(staples, updated, trip.dailyDays) : staples,
+    edit.scope === "remember" ? upsertStaple(staples, updated, trip.days) : staples,
   );
 }
 
@@ -215,12 +215,15 @@ export function recalculateSuggestions<T extends Trip>(
   const suppressed = trip.suppressedSuggestions;
 
   const memory: Record<string, TripItem> = { ...trip.suggestionMemory };
+  const isRecalculable = (entry: TripItem) =>
+    CALCULATED_ITEM_IDS.has(canonicalItemId(entry.id)) &&
+    (entry.stapleCadence === undefined || entry.stapleCadence === "smart");
   for (const entry of oldItems) {
-    if (CALCULATED_ITEM_IDS.has(entry.id) && !suppressed[entry.id]) memory[entry.id] = { ...entry };
+    if (isRecalculable(entry) && !suppressed[entry.id]) memory[entry.id] = { ...entry };
   }
 
   const calculated = suggest({ ...nextConfig, start: trip.start, end: trip.end });
-  const nonCalculated = oldItems.filter((entry) => !CALCULATED_ITEM_IDS.has(entry.id));
+  const nonCalculated = oldItems.filter((entry) => !isRecalculable(entry));
   // A list already split by weather keeps its split clothing: recalculating must not add Everyday tops and
   // bottoms beside it. The weather review offers new counts for the split lines instead (epic #107 §4).
   const weatherClothing = oldItems.some((entry) => WEATHER_CLOTHING_IDS.has(entry.id));
@@ -235,19 +238,21 @@ export function recalculateSuggestions<T extends Trip>(
         qty: suggestion.qty,
         packed: 0,
         section: "main",
-        optional: Boolean(suggestion.optional),
-        ...(suggestion.id === "nice-makeup" ? { groupId: TOILETRY_GROUP_ID } : {}),
+        ...(suggestion.optional ? { optional: true } : {}),
+        ...(suggestion.groupId ? { groupId: suggestion.groupId } : {}),
       };
       return template;
     })
     .filter((template) => {
       if (suppressed[template.id]) return false;
-      const key = niceAccessoryKey(template);
-      return !key || !nonCalculated.some((entry) => niceAccessoryKey(entry) === key);
+      const identity = canonicalItemId(template.id);
+      return !nonCalculated.some((entry) => canonicalItemId(entry.id) === identity);
     })
     .map((template): TripItem => {
-      const existing = oldItems.find((entry) => entry.id === template.id);
-      const source = existing ?? memory[template.id];
+      const identity = canonicalItemId(template.id);
+      const existing = oldItems.find((entry) => canonicalItemId(entry.id) === identity);
+      const source =
+        existing ?? Object.values(memory).find((entry) => canonicalItemId(entry.id) === identity);
       if (!source) return template;
       const merged: TripItem = { ...template };
       if (source.userEdited || !existing) {
@@ -256,10 +261,17 @@ export function recalculateSuggestions<T extends Trip>(
         merged.section = source.section;
         merged.userEdited = Boolean(source.userEdited);
       }
+      if (source.stapleCadence === "smart") {
+        merged.id = source.id;
+        merged.name = source.name;
+        merged.category = source.category;
+        merged.section = source.section;
+        merged.stapleCadence = "smart";
+      }
       merged.packed = Math.min(source.packed || 0, merged.qty);
-      merged.optional = Boolean(template.optional || source.optional);
-      const groupId =
-        template.id === "nice-makeup" ? TOILETRY_GROUP_ID : (source.groupId ?? template.groupId);
+      if (template.optional || source.optional) merged.optional = true;
+      else delete merged.optional;
+      const groupId = source.groupId ?? template.groupId;
       if (groupId) merged.groupId = groupId;
       else delete merged.groupId;
       return merged;
@@ -442,8 +454,8 @@ export function findIdentityViolations(trip: Pick<Trip, "items">): string[] {
     values.filter((value, index) => values.indexOf(value) !== index);
   const names = (items: TripItem[]) => items.map((entry) => entry.name.trim().toLowerCase());
 
-  for (const id of new Set(duplicates(trip.items.map((entry) => entry.id))))
-    violations.push(`duplicate id: ${id}`);
+  const duplicateIds = new Set(duplicates(trip.items.map((entry) => entry.id)));
+  for (const id of duplicateIds) violations.push(`duplicate id: ${id}`);
   for (const name of new Set(
     duplicates(names(trip.items.filter((entry) => entry.groupId === TOILETRY_GROUP_ID))),
   ))
@@ -452,9 +464,11 @@ export function findIdentityViolations(trip: Pick<Trip, "items">): string[] {
     duplicates(names(trip.items.filter((entry) => entry.section === "packlast"))),
   ))
     violations.push(`duplicate Pack last item: ${name}`);
-  const accessoryKeys = trip.items.map((entry) => niceAccessoryKey(entry)).filter(Boolean);
-  for (const key of new Set(duplicates(accessoryKeys)))
-    violations.push(`duplicate Nice accessory: ${key}`);
+  const semanticIds = trip.items.map((entry) => canonicalItemId(entry.id));
+  for (const id of new Set(duplicates(semanticIds))) {
+    if (duplicateIds.has(id)) continue;
+    violations.push(`duplicate semantic identity: ${id}`);
+  }
   if (trip.items.filter((entry) => /\bchargers?\b/i.test(entry.name)).length > 1)
     violations.push("split Chargers");
   return violations;

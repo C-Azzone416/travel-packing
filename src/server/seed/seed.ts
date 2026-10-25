@@ -1,7 +1,7 @@
 // Loads the synthetic sample set for one owner. Idempotent: re-running restores exactly this state.
 
 import { inArray, and, eq } from "drizzle-orm";
-import { DEFAULT_STAPLES } from "../../domain/calc";
+import { SYNTHETIC_STAPLES } from "../../domain/calc";
 import type { Staple } from "../../domain/trip";
 import type { Db } from "../db/retention";
 import * as schema from "../db/schema";
@@ -24,7 +24,10 @@ export async function seedSyntheticData(
   ownerId: string,
   today: string,
 ): Promise<SeedSummary> {
-  await db.insert(schema.users).values({ id: ownerId }).onConflictDoNothing();
+  await db
+    .insert(schema.users)
+    .values({ id: ownerId, staplesSetupState: "completed" })
+    .onConflictDoNothing();
 
   const ids = SAMPLE_TRIP_SLUGS.map((slug) => sampleTripId(ownerId, slug));
   await db.transaction(async (tx) => {
@@ -34,7 +37,7 @@ export async function seedSyntheticData(
     for (const trip of sampleTrips(ownerId, today)) await insertTrip(tx as Db, ownerId, trip);
   });
 
-  const staples: Staple[] = DEFAULT_STAPLES.map((staple) => ({ ...staple }));
+  const staples: Staple[] = SYNTHETIC_STAPLES.map((staple) => ({ ...staple }));
   await saveStaples(db, ownerId, staples);
   return { ownerId, trips: ids.length, staples: staples.length };
 }

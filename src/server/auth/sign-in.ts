@@ -1,8 +1,9 @@
 // Sign-in service used by the sign-in server action. Kept separate from Next.js so it can be tested directly.
 
+import { cleanEmail } from "./account-flows";
 import { isAllowed, type Allowlist } from "./allowlist";
-import { logAuthEvent } from "./safe-log";
-import type { AuthProvider } from "./types";
+import { logAuthEvent, type AuthEvent } from "./safe-log";
+import type { AuthProvider, ProviderRejection, SignInDiagnostic } from "./types";
 
 /**
  * - invalid: bad credentials or missing fields (the UI shows one generic message)
@@ -18,35 +19,65 @@ export async function signInOwner(
   auth: { provider: AuthProvider; allowlist: Allowlist },
   email: unknown,
   password: unknown,
+  reference?: string,
 ): Promise<SignInOutcome> {
-  if (typeof email !== "string" || typeof password !== "string" || !email.trim() || !password) {
-    logAuthEvent("sign-in-failed");
+  const log = (event: AuthEvent, rejection?: ProviderRejection) =>
+    logAuthEvent(event, { ...rejection, reference });
+  const normalizedEmail = cleanEmail(email);
+  if (!normalizedEmail || typeof password !== "string" || !password) {
+    log("sign-in-input-invalid");
     return "invalid";
   }
-  const result = await auth.provider.signInWithPassword(email.trim(), password);
+  const result = await auth.provider.signInWithPassword(normalizedEmail, password);
   if (!result.ok) {
     if (result.unfinished) {
-      logAuthEvent("sign-in-setup-pending");
+      log(
+        result.diagnostic?.reason === "setup-unavailable"
+          ? "sign-in-setup-unavailable"
+          : "sign-in-setup-pending",
+        result.diagnostic?.rejection,
+      );
+      if (result.diagnostic?.cleanupFailed) log("sign-in-session-cleanup-failed");
       return "unfinished";
     }
     if (result.unverified) {
-      logAuthEvent("sign-in-unverified");
+      log("sign-in-unverified", result.diagnostic?.rejection);
       return "unverified";
     }
-    logAuthEvent("sign-in-failed");
+    log(signInFailureEvent(result.diagnostic), result.diagnostic?.rejection);
     return "invalid";
   }
   if (!isAllowed(auth.allowlist, result.session.email)) {
-    logAuthEvent("sign-in-denied");
+    log("sign-in-denied");
     try {
       await auth.provider.signOut();
     } catch {
-      logAuthEvent("provider-error");
+      log("sign-in-session-cleanup-failed");
     }
     return "denied";
   }
-  logAuthEvent("sign-in-succeeded");
+  log("sign-in-succeeded");
   return "ok";
+}
+
+function signInFailureEvent(diagnostic: SignInDiagnostic | undefined): AuthEvent {
+  switch (diagnostic?.reason) {
+    case "credentials-rejected":
+      return "sign-in-credentials-rejected";
+    case "provider-rate-limited":
+      return "sign-in-provider-rate-limited";
+    case "provider-unavailable":
+      return "sign-in-provider-unavailable";
+    case "provider-response-invalid":
+      return "sign-in-provider-response-invalid";
+    case "session-not-created":
+      return "sign-in-session-not-created";
+    case "provider-rejected":
+      return "sign-in-provider-rejected";
+    default:
+      // Providers other than Neon may not yet supply diagnostics; retain a bounded fallback.
+      return "sign-in-failed";
+  }
 }
 
 export async function signOutOwner(provider: AuthProvider): Promise<void> {

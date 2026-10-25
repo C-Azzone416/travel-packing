@@ -13,12 +13,40 @@ export interface AuthSession {
 }
 
 /**
+ * A bounded explanation of a failed password sign-in. It is server-only diagnostic data: callers keep the public response
+ * generic, while safe logs may record the reason and a sanitized provider status/code.
+ */
+export type SignInFailureReason =
+  | "credentials-rejected"
+  | "email-unverified"
+  | "provider-rate-limited"
+  | "provider-unavailable"
+  | "provider-rejected"
+  | "provider-response-invalid"
+  | "session-not-created"
+  | "setup-pending"
+  | "setup-unavailable";
+
+export interface SignInDiagnostic {
+  reason: SignInFailureReason;
+  rejection?: ProviderRejection;
+  /** The app tried to end a session it must not keep, but the provider's sign-out call failed. */
+  cleanupFailed?: true;
+}
+
+/**
  * `unverified` means the password was RIGHT but the address is not verified yet. It is only ever reported after the
  * password matched, so it tells a caller nothing about accounts they cannot already sign in to.
  * `unfinished` is the same for a verified address whose password was never set through an emailed link (#83): no session.
  */
 export type SignInResult =
-  { ok: true; session: AuthSession } | { ok: false; unverified?: true; unfinished?: true };
+  | { ok: true; session: AuthSession }
+  | {
+      ok: false;
+      unverified?: true;
+      unfinished?: true;
+      diagnostic?: SignInDiagnostic;
+    };
 
 /**
  * Why a sign-up, code, or reset step failed, in terms the UI may show. Deliberately small: nothing here says whether an

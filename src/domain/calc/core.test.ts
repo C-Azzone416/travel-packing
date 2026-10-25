@@ -76,17 +76,11 @@ describe("prototype core assertions", () => {
       "dress shoes use one editable default rather than dinner count",
     ).toBe(1);
     expect(
-      find("nice-makeup")?.qty,
-      "makeup uses one editable default rather than dinner count",
-    ).toBe(1);
-    expect(
-      find("nice-undergarments")?.qty,
-      "dress-specific undergarments stay distinct from everyday underwear",
-    ).toBe(1);
-    expect(
       withSpareAndLaundry.items.filter((item) => item.optional).length,
-      "nice companions are marked optional",
-    ).toBe(3);
+      "the generic dress-shoes recommendation is optional",
+    ).toBe(1);
+    expect(find("nice-makeup"), "personal items are never assumed").toBeUndefined();
+    expect(find("nice-undergarments"), "personal items are never assumed").toBeUndefined();
     expect(find("tops")?.qty ?? Infinity, "laundry reduces everyday tops").toBeLessThan(5);
   });
 });

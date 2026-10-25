@@ -1,18 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { TOILETRY_GROUP_ID } from "../toiletry-bag";
-import {
-  buildTripItems,
-  DEFAULT_PACK_LAST,
-  DEFAULT_STAPLES,
-  niceAccessoryKey,
-  type Staple,
-  type TripItem,
-} from "./staples";
+import { canonicalItemId } from "../item-identity";
+import { buildTripItems, supportsSmartQuantity, type Staple, type TripItem } from "./staples";
 import type { CalcConfig } from "./suggestions";
 
-const config: CalcConfig = {
-  start: "2026-11-12",
-  end: "2026-11-16",
+const base: CalcConfig = {
+  start: "2030-04-01",
+  end: "2030-04-05",
   laundry: false,
   spare: false,
   niceAttire: false,
@@ -21,329 +14,149 @@ const config: CalcConfig = {
   returnOutfit: true,
 };
 
-const byId = (items: TripItem[], id: string) => items.find((item) => item.id === id);
 const staple = (overrides: Partial<Staple> & Pick<Staple, "id" | "name">): Staple => ({
   qty: 1,
   cadence: "per trip",
-  category: "Other",
+  category: "Other essentials",
   packLast: false,
   ...overrides,
 });
+const byId = (items: TripItem[], id: string) => items.find((item) => item.id === id);
 
-describe("niceAccessoryKey", () => {
-  it.each([
-    ["Makeup", "makeup"],
-    ["Travel make-up kit", "makeup"],
-    ["Dress shoes", "dress-shoes"],
-    ["Dress-specific undergarments", "dress-undergarments"],
-    ["Dress shirt", ""],
-    ["Sneakers", ""],
-    ["", ""],
-  ])("%j → %j", (name, expected) => {
-    expect(niceAccessoryKey({ name })).toBe(expected);
-  });
-
-  it("treats a missing name as no key", () => {
-    expect(niceAccessoryKey({})).toBe("");
-    expect(niceAccessoryKey({ name: null })).toBe("");
-  });
-});
-
-describe("buildTripItems with no staples", () => {
-  it("lists calculated items, Sunglasses, the return outfit and Pack last", () => {
-    const { days, dailyDays, items } = buildTripItems(config, []);
-    expect(days).toBe(5);
-    expect(dailyDays).toBe(3);
+describe("personalized trip generation", () => {
+  it("adds no personal essentials when the owner selected no Staples", () => {
+    const { items } = buildTripItems(base, []);
     expect(items.map((item) => item.id)).toEqual([
       "tops",
       "bottoms",
       "underwear",
       "socks",
       "sleepwear",
-      "sunglasses",
       "return-top",
       "return-bottoms",
       "return-underwear",
       "return-socks",
-      "last-laptop",
-      "last-chargers",
-      "last-glasses",
     ]);
+    expect(items).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "Laptop" }),
+        expect.objectContaining({ name: "Makeup" }),
+        expect.objectContaining({ name: "Everyday glasses" }),
+      ]),
+    );
     expect(items.every((item) => item.packed === 0)).toBe(true);
   });
 
-  it("seeds Pack last with Laptop, one collective Chargers and Everyday glasses", () => {
-    expect(DEFAULT_PACK_LAST.map((entry) => entry.name)).toEqual([
-      "Laptop",
-      "Chargers",
-      "Everyday glasses",
-    ]);
-    const { items } = buildTripItems(config, []);
-    const packLast = items.filter((item) => item.section === "packlast");
-    expect(packLast.map((item) => [item.name, item.qty, item.category])).toEqual([
-      ["Laptop", 1, "Pack last"],
-      ["Chargers", 1, "Pack last"],
-      ["Everyday glasses", 1, "Pack last"],
-    ]);
-    expect(byId(items, "sunglasses")?.name).toBe("Sunglasses");
-  });
-
-  it("adds exactly four distinct return items, qty 1, never merged with everyday items", () => {
-    const { items } = buildTripItems({ ...config, spare: true }, []);
-    const returns = items.filter((item) => item.section === "return");
-    expect(returns.map((item) => [item.id, item.name, item.qty])).toEqual([
-      ["return-top", "Fresh top", 1],
-      ["return-bottoms", "Bottoms", 1],
-      ["return-underwear", "Underwear", 1],
-      ["return-socks", "Socks", 1],
-    ]);
-    expect(byId(items, "underwear")?.qty).toBe(4);
-    expect(new Set(items.map((item) => item.id)).size).toBe(items.length);
-  });
-
-  it("omits the return outfit only when returnOutfit is false, and the checkout day then needs an everyday look (#205)", () => {
-    const withReturn = buildTripItems(config, []);
-    const without = buildTripItems({ ...config, returnOutfit: false }, []);
-    expect(without.items.some((item) => item.section === "return")).toBe(false);
+  it("keeps the dedicated return outfit separate and optional", () => {
+    expect(buildTripItems(base, []).items.filter((item) => item.section === "return")).toHaveLength(
+      4,
+    );
     expect(
-      buildTripItems({ ...config, returnOutfit: undefined }, []).items.filter(
+      buildTripItems({ ...base, returnOutfit: false }, []).items.some(
         (item) => item.section === "return",
       ),
-    ).toHaveLength(4);
-    expect(without.dailyDays).toBe(withReturn.dailyDays + 1);
-    expect(byId(without.items, "tops")?.qty).toBe((byId(withReturn.items, "tops")?.qty ?? 0) + 1);
-  });
-
-  it("puts calculated Makeup in the toiletry bag and flags nice companions optional", () => {
-    const { items } = buildTripItems({ ...config, niceAttire: true }, []);
-    expect(byId(items, "nice-makeup")?.groupId).toBe(TOILETRY_GROUP_ID);
-    expect(byId(items, "nice-makeup")?.optional).toBe(true);
-    expect(byId(items, "nice-shoes")?.groupId).toBeUndefined();
-    expect(byId(items, "tops")?.optional).toBe(false);
+    ).toBe(false);
   });
 });
 
-describe("staple merge", () => {
-  it("scales per-day staples by the packing days and keeps per-trip staples flat", () => {
-    const { items } = buildTripItems(config, [
-      staple({ id: "vitamins", name: "Vitamins", qty: 2, cadence: "per day" }),
-      staple({ id: "book", name: "Book", qty: 2 }),
+describe("shared Staple quantity rules", () => {
+  it.each([
+    ["same day", "2030-04-01", "2030-04-01", false, false, true, 2],
+    ["five days", "2030-04-01", "2030-04-05", false, false, true, 2],
+    ["laundry", "2030-04-01", "2030-04-05", true, false, true, 2],
+    ["nice and no return", "2030-04-01", "2030-04-05", true, true, false, 2],
+  ])("fixed per trip: %s", (_label, start, end, laundry, niceAttire, returnOutfit, expected) => {
+    const { items } = buildTripItems({ ...base, start, end, laundry, niceAttire, returnOutfit }, [
+      staple({ id: "medicine", name: "Medicine", qty: 2 }),
     ]);
-    expect(byId(items, "vitamins")?.qty).toBe(6);
-    expect(byId(items, "book")?.qty).toBe(2);
+    expect(byId(items, "medicine")?.qty).toBe(expected);
   });
 
-  it("skips a staple with zero quantity when nothing matches it", () => {
-    const { items } = buildTripItems({ ...config, end: "2026-11-13" }, [
-      staple({ id: "vitamins", name: "Vitamins", cadence: "per day" }),
+  it.each([
+    ["same day", "2030-04-01", "2030-04-01", false, false, true, 2],
+    ["five days", "2030-04-01", "2030-04-05", false, false, true, 10],
+    ["laundry", "2030-04-01", "2030-04-05", true, false, true, 10],
+    ["nice and no return", "2030-04-01", "2030-04-05", true, true, false, 10],
+  ])(
+    "per day uses every calendar day: %s",
+    (_label, start, end, laundry, niceAttire, returnOutfit, expected) => {
+      const { items } = buildTripItems({ ...base, start, end, laundry, niceAttire, returnOutfit }, [
+        staple({ id: "medicine", name: "Medicine", qty: 2, cadence: "per day" }),
+      ]);
+      expect(byId(items, "medicine")?.qty).toBe(expected);
+    },
+  );
+
+  it.each([
+    ["underwear", "per trip", 2],
+    ["underwear", "per day", 10],
+    ["socks", "per trip", 2],
+    ["socks", "per day", 10],
+  ] as const)(
+    "%s with %s cadence keeps its exact quantity when trip spares are enabled",
+    (id, cadence, expected) => {
+      const { items } = buildTripItems({ ...base, spare: true }, [
+        staple({ id, name: id, qty: 2, cadence, category: "Clothing" }),
+      ]);
+      expect(byId(items, id)?.qty).toBe(expected);
+    },
+  );
+
+  it.each([
+    ["same day", { start: "2030-04-01", end: "2030-04-01" }, 0],
+    ["five days", {}, 3],
+    ["laundry", { laundry: true }, 2],
+    ["return off", { returnOutfit: false }, 4],
+  ])("Smart tops use the canonical calculator: %s", (_label, change, expected) => {
+    const { items } = buildTripItems({ ...base, ...change }, [
+      staple({ id: "tops", name: "My shirts", cadence: "smart", category: "Clothing" }),
     ]);
-    expect(byId(items, "vitamins")).toBeUndefined();
+    const tops = byId(items, "tops");
+    if (expected === 0) expect(tops).toBeUndefined();
+    else expect(tops).toMatchObject({ name: "My shirts", qty: expected, stapleCadence: "smart" });
   });
 
-  it("replaces the calculated quantity instead of summing", () => {
-    const { items } = buildTripItems(config, [
-      staple({ id: "underwear", name: "Briefs", qty: 2, cadence: "per day", category: "Clothing" }),
-    ]);
-    const underwear = items.filter((item) => item.id === "underwear");
-    expect(underwear).toHaveLength(1);
-    expect(underwear[0]).toMatchObject({
-      name: "Briefs",
-      category: "Clothing",
-      qty: 6,
-      section: "main",
-    });
-  });
-
-  it("adds the spare +1 on top of the staple-derived quantity for underwear and socks only", () => {
-    const stapleSet = [
-      staple({ id: "underwear", name: "Underwear", qty: 2, cadence: "per day" }),
-      staple({ id: "socks", name: "Socks", cadence: "per day" }),
-      staple({ id: "sleepwear", name: "Sleepwear" }),
-    ];
-    const spare = buildTripItems({ ...config, spare: true }, stapleSet).items;
-    expect(byId(spare, "underwear")?.qty).toBe(7);
-    expect(byId(spare, "socks")?.qty).toBe(4);
-    expect(byId(spare, "sleepwear")?.qty).toBe(1);
-    const noSpare = buildTripItems(config, stapleSet).items;
-    expect(byId(noSpare, "underwear")?.qty).toBe(6);
-    expect(byId(noSpare, "socks")?.qty).toBe(3);
-  });
-
-  // Prototype quirk kept on purpose: only an UNMATCHED staple with qty <= 0 is
-  // skipped. A matched one still overwrites the existing item, down to qty 0.
-  it("zeroes an existing item matched by id when the staple quantity is 0", () => {
-    const { items } = buildTripItems(config, [
-      staple({ id: "sleepwear", name: "Sleepwear", qty: 0 }),
-    ]);
-    expect(items.filter((item) => item.id === "sleepwear")).toHaveLength(1);
-    expect(byId(items, "sleepwear")?.qty).toBe(0);
-  });
-
-  it("zeroes an existing item matched by nice-accessory key when the staple quantity is 0", () => {
-    const { items } = buildTripItems({ ...config, niceAttire: true }, [
-      staple({ id: "my-shoes", name: "Dress shoes", qty: 0 }),
-    ]);
-    expect(byId(items, "nice-shoes")).toBeUndefined();
-    expect(byId(items, "my-shoes")?.qty).toBe(0);
-  });
-
-  it("replaces a matched item's quantity with 0 for a per-day staple on a trip with no packing days", () => {
-    const twoDays = { ...config, end: "2026-11-13" };
-    expect(byId(buildTripItems(twoDays, []).items, "sleepwear")?.qty).toBe(1);
-    const { dailyDays, items } = buildTripItems(twoDays, [
-      staple({ id: "sleepwear", name: "Sleepwear", cadence: "per day" }),
-    ]);
-    expect(dailyDays).toBe(0);
-    expect(byId(items, "sleepwear")?.qty).toBe(0);
-  });
-
-  it("moves a matched item to Pack last or main by the staple's packLast flag", () => {
-    const toPackLast = buildTripItems(config, [
-      staple({ id: "sleepwear", name: "Sleepwear", packLast: true }),
-    ]).items;
-    expect(byId(toPackLast, "sleepwear")?.section).toBe("packlast");
-    const toMain = buildTripItems(config, [
-      staple({ id: "last-laptop", name: "Laptop", packLast: false }),
-    ]).items;
-    expect(byId(toMain, "last-laptop")?.section).toBe("main");
-  });
-
-  it("keeps return items in the return section when a staple matches their id", () => {
-    const { items } = buildTripItems(config, [
-      staple({ id: "return-top", name: "Spare top", qty: 2, packLast: true }),
-    ]);
-    expect(byId(items, "return-top")).toMatchObject({
-      name: "Spare top",
-      qty: 2,
-      section: "return",
-    });
-  });
-
-  it("takes the group from the staple and clears it when the staple has none", () => {
-    const { items } = buildTripItems({ ...config, niceAttire: true }, [
+  it.each([
+    [false, false, 0],
+    [true, false, 3],
+    [true, true, 1],
+  ])("Smart nice top follows nice=%s reuse=%s", (niceAttire, reuseNice, expected) => {
+    const { items } = buildTripItems({ ...base, niceAttire, occasionCount: 3, reuseNice }, [
       staple({
-        id: "last-toothbrush",
-        name: "Toothbrush",
-        category: "Bathroom",
-        packLast: true,
-        groupId: TOILETRY_GROUP_ID,
+        id: "nice-top",
+        name: "Dinner shirt",
+        cadence: "smart",
+        category: "Nice attire",
       }),
-      staple({ id: "nice-shoes", name: "Dress shoes", category: "Nice attire" }),
     ]);
-    expect(byId(items, "last-toothbrush")).toMatchObject({
-      section: "packlast",
-      groupId: TOILETRY_GROUP_ID,
-    });
-    expect(byId(items, "nice-shoes")?.groupId).toBeNull();
+    expect(byId(items, "nice-top")?.qty ?? 0).toBe(expected);
+  });
+
+  it("rejects Smart for an unsupported custom identity", () => {
+    expect(() =>
+      buildTripItems(base, [staple({ id: "custom-book", name: "Book", cadence: "smart" })]),
+    ).toThrow(/not supported/);
+    expect(supportsSmartQuantity("custom-book")).toBe(false);
   });
 });
 
-describe("staple dedupe against nice suggestions", () => {
-  const nice = { ...config, niceAttire: true };
-
-  it("replaces the calculated suggestion and adopts the staple id when the nice key matches", () => {
-    const { items } = buildTripItems(nice, [
-      staple({ id: "my-shoes", name: "Dress shoes", qty: 2, category: "Shoes" }),
+describe("semantic identity and precedence", () => {
+  it("lets a renamed Staple replace the recommendation without summing", () => {
+    const { items } = buildTripItems(base, [
+      staple({ id: "underwear", name: "Base layers", qty: 2, category: "Clothing" }),
     ]);
-    expect(byId(items, "nice-shoes")).toBeUndefined();
-    expect(items.filter((item) => niceAccessoryKey(item) === "dress-shoes")).toHaveLength(1);
-    expect(byId(items, "my-shoes")).toMatchObject({ qty: 2, category: "Shoes", optional: true });
-  });
-
-  it("does not rename the id when the staple id already matches", () => {
-    const { items } = buildTripItems(nice, [
-      staple({ id: "nice-undergarments", name: "Dress-specific undergarments" }),
+    expect(items.filter((item) => canonicalItemId(item.id) === "underwear")).toEqual([
+      expect.objectContaining({ name: "Base layers", qty: 2, stapleCadence: "per trip" }),
     ]);
-    expect(items.filter((item) => niceAccessoryKey(item) === "dress-undergarments")).toHaveLength(
-      1,
-    );
-    expect(byId(items, "nice-undergarments")).toBeDefined();
   });
 
-  it("forces Makeup into the toiletry bag whether it comes from a staple or a suggestion", () => {
-    const fromStaple = buildTripItems(nice, [
-      staple({ id: "makeup", name: "Makeup", groupId: "other-bag" }),
-    ]).items;
-    expect(byId(fromStaple, "makeup")?.groupId).toBe(TOILETRY_GROUP_ID);
-    expect(byId(fromStaple, "nice-makeup")).toBeUndefined();
-    const added = buildTripItems(config, [staple({ id: "makeup", name: "Makeup" })]).items;
-    expect(byId(added, "makeup")?.groupId).toBe(TOILETRY_GROUP_ID);
-    const fromSuggestion = buildTripItems(nice, []).items;
-    expect(byId(fromSuggestion, "nice-makeup")?.groupId).toBe(TOILETRY_GROUP_ID);
-  });
-
-  it("keeps the suggestion when no staple has matching semantics", () => {
-    const { items } = buildTripItems(nice, [staple({ id: "scarf", name: "Scarf" })]);
-    expect(byId(items, "nice-shoes")).toBeDefined();
-    expect(byId(items, "scarf")).toBeDefined();
-  });
-});
-
-describe("remembered nice items with Nice outfits off (#202)", () => {
-  const remembered = [
-    staple({ id: "nice-top", name: "Nice-attire top", qty: 1, category: "Nice attire" }),
-    staple({ id: "nice-shoes", name: "Dress shoes", qty: 1, category: "Nice attire" }),
-    staple({ id: "nice-makeup", name: "Makeup", qty: 1, category: "Bathroom" }),
-    staple({ id: "my-shoes", name: "Dress shoes", qty: 2, category: "Shoes" }),
-    staple({ id: "my-undies", name: "Dress-specific undergarments", qty: 1 }),
-  ];
-
-  it("do not come back when Nice outfits is off, except Makeup, which people use every day", () => {
-    const { items } = buildTripItems({ ...config, niceAttire: false }, remembered);
-    for (const id of ["nice-top", "nice-shoes", "my-shoes", "my-undies"]) {
-      expect(byId(items, id)).toBeUndefined();
-    }
-    expect(items.some((item) => item.category === "Nice attire")).toBe(false);
-    expect(byId(items, "nice-makeup")).toMatchObject({ name: "Makeup", qty: 1 });
-  });
-
-  it("still apply when Nice outfits is on", () => {
-    const { items } = buildTripItems({ ...config, niceAttire: true }, remembered);
-    expect(byId(items, "nice-top")).toBeDefined();
-    expect(byId(items, "nice-makeup")).toBeDefined();
-    expect(byId(items, "my-shoes")).toMatchObject({ qty: 2 });
-  });
-
-  it("leave a plain Makeup staple alone too", () => {
-    const { items } = buildTripItems({ ...config, niceAttire: false }, [
-      staple({ id: "my-makeup", name: "Makeup", category: "Bathroom" }),
-    ]);
-    expect(byId(items, "my-makeup")).toMatchObject({ qty: 1 });
-  });
-});
-
-describe("default staples", () => {
-  it("merges into a trip with the 4 Bathroom staples in the toiletry bag", () => {
-    const { items } = buildTripItems({ ...config, spare: true }, DEFAULT_STAPLES);
-    const bathroom = items.filter((item) => item.category === "Bathroom");
-    expect(bathroom.map((item) => item.name)).toEqual([
-      "Toothbrush",
-      "Toothpaste",
-      "Deodorant",
-      "Contacts",
-    ]);
-    expect(
-      bathroom.every((item) => item.groupId === TOILETRY_GROUP_ID && item.section === "packlast"),
-    ).toBe(true);
-    expect(byId(items, "underwear")).toMatchObject({ qty: 4, category: "Clothing" });
-    expect(byId(items, "sunglasses")).toMatchObject({
-      section: "main",
-      category: "Other essentials",
-    });
-    expect(items.filter((item) => item.name === "Everyday glasses")).toHaveLength(1);
-    expect(items.filter((item) => item.name === "Chargers")).toHaveLength(1);
-  });
-});
-
-describe("weather suggestions in buildTripItems", () => {
-  it("keeps a weather suggestion's toiletry group", () => {
-    const config = { start: "2026-10-01", end: "2026-10-08", returnOutfit: true };
-    const built = buildTripItems(config, [], {
+  it("deduplicates an alias without inspecting the display name", () => {
+    const weather = {
       days: [
         {
-          date: "2026-10-03",
+          date: "2030-04-03",
           stopIndex: 0,
-          source: "forecast",
+          source: "forecast" as const,
           highC: 28,
           lowC: 18,
           precipProbability: 0,
@@ -353,8 +166,62 @@ describe("weather suggestions in buildTripItems", () => {
           sunshineHours: 9,
         },
       ],
-    });
-    expect(built.items.find((i) => i.id === "weather-sunscreen")?.groupId).toBe("toiletry-bag");
-    expect(built.items.find((i) => i.id === "tops")).toBeUndefined();
+    };
+    const { items } = buildTripItems(base, [staple({ id: "sunscreen", name: "My SPF" })], weather);
+    expect(items.filter((item) => canonicalItemId(item.id) === "weather-sunscreen")).toEqual([
+      expect.objectContaining({ id: "sunscreen", name: "My SPF", qty: 1 }),
+    ]);
+  });
+
+  it("lets a clothing Staple replace weather-split rows from the same family", () => {
+    const weather = {
+      days: [
+        {
+          date: "2030-04-03",
+          stopIndex: 0,
+          source: "forecast" as const,
+          highC: 28,
+          lowC: 18,
+          precipProbability: 0,
+          precipMm: 0,
+          snowCm: 0,
+          uvIndexMax: 2,
+          sunshineHours: 4,
+        },
+      ],
+    };
+    const { items } = buildTripItems(
+      base,
+      [staple({ id: "tops", name: "My shirts", cadence: "smart", category: "Clothing" })],
+      weather,
+    );
+    expect(items.some((item) => item.id === "tops-short" || item.id === "tops-long")).toBe(false);
+    expect(byId(items, "tops")).toMatchObject({ name: "My shirts", stapleCadence: "smart" });
+  });
+
+  it("does not let a colliding Staple replace the separate return outfit", () => {
+    const { items } = buildTripItems(base, [
+      staple({ id: "return-top", name: "Personal top", qty: 2, packLast: true }),
+    ]);
+    expect(items.filter((item) => item.id === "return-top")).toEqual([
+      expect.objectContaining({ name: "Fresh top", qty: 1, section: "return" }),
+    ]);
+  });
+
+  it("keeps placement and Pack last independent from category", () => {
+    expect(
+      byId(
+        buildTripItems(base, [
+          staple({
+            id: "toothbrush",
+            name: "Brush",
+            category: "Tech",
+            groupId: "toiletry-bag",
+            packLast: true,
+          }),
+        ]).items,
+        "toothbrush",
+      ),
+    ).toMatchObject({ category: "Tech", groupId: "toiletry-bag", section: "packlast" });
   });
 });

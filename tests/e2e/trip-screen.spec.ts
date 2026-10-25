@@ -27,13 +27,7 @@ async function openLisbon(page: Page) {
 }
 
 const row = (page: Page, id: string) => page.locator(`[data-item-id="${id}"]`);
-const TOILETRIES = [
-  "nice-makeup",
-  "last-toothbrush",
-  "last-toothpaste",
-  "last-deodorant",
-  "last-contacts",
-];
+const TOILETRIES = ["last-toothbrush", "last-toothpaste", "last-deodorant", "last-contacts"];
 const status = (page: Page) => page.getByRole("status", { name: "Packing updates" });
 
 async function packEverythingExceptBag(page: Page) {
@@ -82,23 +76,24 @@ test("check and uncheck, and partial quantities with announcements and limits", 
   ).toBeVisible();
 
   const underwear = row(page, "underwear");
-  await expect(underwear).toContainText("2 of 4 packed");
+  await expect(underwear).toContainText("2 of 5 packed");
   await underwear.getByRole("button", { name: "Increase packed Underwear" }).click();
-  await expect(underwear).toContainText("3 of 4 packed");
-  await expect(status(page)).toHaveText("Underwear 3 of 4 packed");
+  await expect(underwear).toContainText("3 of 5 packed");
+  await expect(status(page)).toHaveText("Underwear 3 of 5 packed");
+  await underwear.getByRole("button", { name: "Increase packed Underwear" }).click();
   await underwear.getByRole("button", { name: "Increase packed Underwear" }).click();
   await expect(
     underwear.getByRole("button", { name: "Increase packed Underwear" }),
   ).toHaveAttribute("aria-disabled", "true");
   // At the limit the button stays focusable but a press does nothing (Playwright treats aria-disabled as not clickable).
   await underwear.getByRole("button", { name: "Increase packed Underwear" }).click({ force: true });
-  await expect(underwear).toContainText("4 of 4 packed");
-  for (let n = 0; n < 4; n++)
+  await expect(underwear).toContainText("5 of 5 packed");
+  for (let n = 0; n < 5; n++)
     await underwear.getByRole("button", { name: "Decrease packed Underwear" }).click();
   await expect(
     underwear.getByRole("button", { name: "Decrease packed Underwear" }),
   ).toHaveAttribute("aria-disabled", "true");
-  await expect(underwear).toContainText("0 of 4 packed");
+  await expect(underwear).toContainText("0 of 5 packed");
 });
 
 test("the toiletry bag walks every state: waiting, ready to place, in the suitcase, undo, and invalidation", async ({
@@ -106,14 +101,14 @@ test("the toiletry bag walks every state: waiting, ready to place, in the suitca
 }) => {
   await openSanDiego(page);
   await expect(page.getByText("Toiletry bag not ready to place")).toBeVisible();
-  await expect(page.getByText("0 of 5 contents checked")).toBeVisible();
+  await expect(page.getByText("0 of 4 contents checked")).toBeVisible();
 
-  for (const id of TOILETRIES.slice(0, 4))
+  for (const id of TOILETRIES.slice(0, 3))
     await row(page, id)
       .getByRole("button", { name: /^Pack all / })
       .click();
   await expect(page.getByText("Toiletry bag not ready to place")).toBeVisible();
-  await row(page, TOILETRIES[4])
+  await row(page, TOILETRIES[3])
     .getByRole("button", { name: /^Pack all / })
     .click();
 
@@ -159,7 +154,7 @@ test("adding a Bathroom item after placing the bag resets the placement", async 
   await dialog.getByRole("button", { name: "Add toiletry item" }).click();
   await expect(page.getByText("Face wash", { exact: true })).toBeVisible();
   await expect(page.getByText("Toiletry bag not ready to place")).toBeVisible();
-  await expect(page.getByText("5 of 6 contents checked")).toBeVisible();
+  await expect(page.getByText("4 of 5 contents checked")).toBeVisible();
 });
 
 test("completing the last item only reveals Review your bag; it never marks the trip Ready", async ({
@@ -362,7 +357,7 @@ test(
     }
     await underwear.getByRole("button", { name: "Increase packed Underwear" }).focus();
     await page.keyboard.press("Enter");
-    await expect(underwear).toContainText("3 of 4 packed");
+    await expect(underwear).toContainText("3 of 5 packed");
     await underwear.getByRole("button", { name: /^Underwear / }).focus();
     await page.keyboard.press("Enter");
     const dialog = page.getByRole("dialog", { name: "Edit item" });

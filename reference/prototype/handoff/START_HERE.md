@@ -27,7 +27,7 @@ This folder is the model-readable handoff for the approved **clickable wireframe
 
 - Private repository: <https://github.com/C-Azzone416/travel-packing>
 - Empty Vercel Hobby project: <https://vercel.com/c-azzone416s-projects/travel-packing> (`prj_QxQOEprSd7SWg3LOiG1i7nmgwC5S`)
-- Neon project: [Caroline Travel Packing](https://console.neon.tech/app/projects/quiet-leaf-68107705/branches/br-frosty-recipe-arxh54js) (`quiet-leaf-68107705`), Free plan, Caroline / `owner@example.test`, AWS US West 2 (Oregon), `production` branch
+- Neon project: [Caroline Travel Packing](https://console.neon.tech/app/projects/quiet-leaf-68107705/branches/br-frosty-recipe-arxh54js) (`quiet-leaf-68107705`), Free plan in Caroline's Neon account, AWS US West 2 (Oregon), `production` branch
 - GitHub Actions variables `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` are configured.
 - GitHub Actions secret `VERCEL_TOKEN` is configured with a new project-only Vercel token expiring October 17, 2027.
 - Vercel Production-only variables are configured: `DATABASE_URL` and `NEON_AUTH_COOKIE_SECRET` as Secret, and `NEON_AUTH_BASE_URL` as Config. Never copy secret values into source, docs, logs, or client bundles.

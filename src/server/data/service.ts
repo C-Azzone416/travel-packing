@@ -28,6 +28,7 @@ import {
   type Signals,
 } from "../../domain/readiness";
 import type { Staple } from "../../domain/trip";
+import type { StaplesSetup } from "../../domain/staples-setup";
 import { applyWeatherChanges } from "../../domain/weather/apply";
 import {
   beginDraft,
@@ -58,7 +59,7 @@ import { todayOf, type DataContext } from "./context";
 import { fail, type Result } from "./result";
 import { run, refuse, type OwnerScope } from "./run";
 import * as inputs from "./schemas";
-import { ensureDefaultStaples, listStaples, saveStaples } from "./staple-store";
+import { listStaples, saveStaples } from "./staple-store";
 import { curatedResolver } from "../locations/resolver";
 import { round2 } from "../locations/open-meteo";
 import type { Appearance } from "../../domain/appearance";
@@ -176,9 +177,22 @@ export function getTrip(context: DataContext, input: unknown): Promise<Result<St
 }
 
 export function listStaplesForOwner(context: DataContext): Promise<Result<Staple[]>> {
+  return run(context, inputs.none, {}, (scope) => listStaples(scope.db, scope.ownerId));
+}
+
+/** Setup state is independent from item count: completed/skipped may intentionally have no staples. */
+export function getStaplesSetup(context: DataContext): Promise<Result<StaplesSetup>> {
   return run(context, inputs.none, {}, async (scope) => {
-    await ensureDefaultStaples(scope.db, scope.ownerId);
-    return listStaples(scope.db, scope.ownerId);
+    const [owner] = await scope.db
+      .select({
+        state: schema.users.staplesSetupState,
+        reminderDismissed: schema.users.staplesReminderDismissed,
+      })
+      .from(schema.users)
+      .where(eq(schema.users.id, scope.ownerId))
+      .limit(1);
+    if (!owner) refuse(fail("NOT_FOUND"));
+    return { ...owner, staples: await listStaples(scope.db, scope.ownerId) };
   });
 }
 
@@ -329,7 +343,6 @@ export function upsertStaple(context: DataContext, input: unknown): Promise<Resu
     // the list is deleted), so two concurrent upserts of different staples must not both start from the same snapshot.
     scope.db.transaction(async (tx) => {
       const db = tx as OwnerScope["db"];
-      await ensureDefaultStaples(db, scope.ownerId);
       const current = await listStaples(db, scope.ownerId, { lock: true });
       const staple: Staple = {
         id: request.semanticId,
@@ -347,6 +360,130 @@ export function upsertStaple(context: DataContext, input: unknown): Promise<Resu
         exists
           ? current.map((entry) => (entry.id === staple.id ? staple : entry))
           : [...current, staple],
+      );
+      return listStaples(db, scope.ownerId);
+    }),
+  );
+}
+
+function fromSetupInput(request: {
+  staples: Array<{
+    semanticId: string;
+    name: string;
+    category: Staple["category"];
+    qty: number;
+    cadence: Staple["cadence"];
+    packLast: boolean;
+    groupId?: "toiletry-bag";
+  }>;
+}): Staple[] {
+  return request.staples.map((entry) => ({
+    id: entry.semanticId,
+    name: entry.name,
+    category: entry.category,
+    qty: entry.qty,
+    cadence: entry.cadence,
+    packLast: entry.packLast,
+    ...(entry.groupId ? { groupId: entry.groupId } : {}),
+  }));
+}
+
+/** Replace the intended list and commit setup state in one owner-locked transaction. */
+export function saveStaplesSetup(
+  context: DataContext,
+  input: unknown,
+): Promise<Result<StaplesSetup>> {
+  return run(context, inputs.saveStaplesSetupInput, input, (scope, request) =>
+    scope.db.transaction(async (tx) => {
+      const db = tx as OwnerScope["db"];
+      await db
+        .select({ id: schema.users.id })
+        .from(schema.users)
+        .where(eq(schema.users.id, scope.ownerId))
+        .for("update");
+      await saveStaples(db, scope.ownerId, fromSetupInput(request));
+      await db
+        .update(schema.users)
+        .set({
+          staplesSetupState: "completed",
+          staplesReminderDismissed: false,
+        })
+        .where(eq(schema.users.id, scope.ownerId));
+      return {
+        state: "completed" as const,
+        reminderDismissed: false,
+        staples: await listStaples(db, scope.ownerId),
+      };
+    }),
+  );
+}
+
+/** Skip records the lifecycle decision without inventing defaults or changing an existing list. */
+export function skipStaplesSetup(context: DataContext): Promise<Result<StaplesSetup>> {
+  return run(context, inputs.none, {}, async (scope) => {
+    const [updated] = await scope.db
+      .update(schema.users)
+      .set({
+        staplesSetupState: "skipped",
+        staplesReminderDismissed: false,
+      })
+      .where(
+        and(eq(schema.users.id, scope.ownerId), eq(schema.users.staplesSetupState, "incomplete")),
+      )
+      .returning({
+        state: schema.users.staplesSetupState,
+        reminderDismissed: schema.users.staplesReminderDismissed,
+      });
+    const [owner] = updated
+      ? [updated]
+      : await scope.db
+          .select({
+            state: schema.users.staplesSetupState,
+            reminderDismissed: schema.users.staplesReminderDismissed,
+          })
+          .from(schema.users)
+          .where(eq(schema.users.id, scope.ownerId))
+          .limit(1);
+    if (!owner) refuse(fail("NOT_FOUND"));
+    return {
+      state: owner.state,
+      reminderDismissed: owner.reminderDismissed,
+      staples: await listStaples(scope.db, scope.ownerId),
+    };
+  });
+}
+
+/** Dismiss only the dashboard reminder; setup state and staples remain unchanged. */
+export function dismissStaplesReminder(context: DataContext): Promise<Result<StaplesSetup>> {
+  return run(context, inputs.none, {}, async (scope) => {
+    await scope.db
+      .update(schema.users)
+      .set({ staplesReminderDismissed: true })
+      .where(eq(schema.users.id, scope.ownerId));
+    const [owner] = await scope.db
+      .select({ state: schema.users.staplesSetupState })
+      .from(schema.users)
+      .where(eq(schema.users.id, scope.ownerId))
+      .limit(1);
+    if (!owner) refuse(fail("NOT_FOUND"));
+    return {
+      state: owner.state,
+      reminderDismissed: true,
+      staples: await listStaples(scope.db, scope.ownerId),
+    };
+  });
+}
+
+/** Removing a template affects future trips only; a repeated removal is safely idempotent. */
+export function removeStaple(context: DataContext, input: unknown): Promise<Result<Staple[]>> {
+  return run(context, inputs.stapleOnly, input, (scope, { semanticId }) =>
+    scope.db.transaction(async (tx) => {
+      const db = tx as OwnerScope["db"];
+      const current = await listStaples(db, scope.ownerId, { lock: true });
+      await saveStaples(
+        db,
+        scope.ownerId,
+        current.filter((entry) => entry.id !== semanticId),
       );
       return listStaples(db, scope.ownerId);
     }),
@@ -436,7 +573,6 @@ async function buildNewTrip(
   context: DataContext,
   draft: TripDraft,
 ): Promise<StoredTrip> {
-  await ensureDefaultStaples(scope.db, scope.ownerId);
   const staples = await listStaples(scope.db, scope.ownerId);
   // A saved list replaces staples and recommendations (#170). It is looked up by this owner: another owner's list, or
   // one that is gone, is NOT_FOUND exactly like a missing one, and an empty list has nothing to start a trip from.

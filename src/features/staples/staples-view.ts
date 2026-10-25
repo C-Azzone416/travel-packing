@@ -1,6 +1,5 @@
 // Pure view logic for the Staples screen (#18). No React, no clock.
 
-import { TOILETRY_GROUP_ID } from "@/domain/toiletry-bag";
 import type { Staple } from "@/domain/trip";
 
 /** The four peer sections, in their fixed order (design's #18 gap 1). */
@@ -20,7 +19,6 @@ export const sectionDescription = (section: Section): string => DESCRIPTIONS[sec
 
 /** Which section a staple belongs in. Pack last is a timing flag, never a section of its own. */
 export function sectionOf(staple: Pick<Staple, "category" | "groupId">): Section {
-  if (staple.groupId === TOILETRY_GROUP_ID) return "Bathroom";
   switch (staple.category.trim().toLowerCase()) {
     case "clothing":
     case "clothes":

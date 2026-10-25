@@ -1,7 +1,8 @@
 // Staples persistence. Staples are independently versioned future-trip defaults; nothing here touches trip rows.
 
 import { and, eq, inArray } from "drizzle-orm";
-import { DEFAULT_STAPLES } from "../../domain/calc";
+import { canonicalItemId } from "../../domain/item-identity";
+import { supportsSmartQuantity } from "../../domain/calc";
 import type { Staple } from "../../domain/trip";
 import type { Db } from "../db/retention";
 import * as schema from "../db/schema";
@@ -59,6 +60,14 @@ function sameStaple(a: Staple, b: Staple): boolean {
 export async function saveStaples(db: Db, ownerId: string, next: Staple[]): Promise<void> {
   const badCategory = next.find((staple) => !CATEGORIES.has(staple.category));
   if (badCategory) refuse(fail("INVALID_INPUT", { fields: ["staples.category"] }));
+  const unsupportedSmart = next.find(
+    (staple) => staple.cadence === "smart" && !supportsSmartQuantity(staple.id),
+  );
+  if (unsupportedSmart) refuse(fail("INVALID_INPUT", { fields: ["staples.cadence"] }));
+  const identities = next.map((staple) => canonicalItemId(staple.id));
+  if (new Set(identities).size !== identities.length) {
+    refuse(fail("INVALID_INPUT", { fields: ["staples.semanticId"] }));
+  }
 
   await db.transaction(async (tx) => {
     const rows = await tx.select().from(schema.staples).where(eq(schema.staples.ownerId, ownerId));
@@ -93,32 +102,4 @@ export async function saveStaples(db: Db, ownerId: string, next: Staple[]): Prom
       }
     }
   });
-}
-
-/**
- * First use only: give an owner with no staples the prototype's defaults. Idempotent and never overwrites or
- * re-adds anything: once the owner has any staples (even after deleting some defaults), nothing is seeded.
- */
-export async function ensureDefaultStaples(db: Db, ownerId: string): Promise<void> {
-  const existing = await db
-    .select({ id: schema.staples.id })
-    .from(schema.staples)
-    .where(eq(schema.staples.ownerId, ownerId))
-    .limit(1);
-  if (existing.length > 0) return;
-  await db
-    .insert(schema.staples)
-    .values(
-      DEFAULT_STAPLES.map((staple) => ({
-        ownerId,
-        semanticId: staple.id,
-        name: staple.name,
-        category: staple.category as (typeof ITEM_CATEGORIES)[number],
-        qty: staple.qty,
-        cadence: staple.cadence,
-        packLast: staple.packLast,
-        groupId: staple.groupId ?? null,
-      })),
-    )
-    .onConflictDoNothing({ target: [schema.staples.ownerId, schema.staples.semanticId] });
 }

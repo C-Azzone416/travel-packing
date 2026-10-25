@@ -34,6 +34,10 @@ export const SECRET_VALUE_PATTERNS: readonly { name: string; pattern: RegExp }[]
   { name: "an AWS access key id", pattern: /\bAKIA[0-9A-Z]{16}\b/ },
   { name: "a GitHub token", pattern: /\bgh[pousr]_[A-Za-z0-9]{36,}\b/ },
   { name: "a Stripe-style secret key", pattern: /\bsk_(?:live|test)_[A-Za-z0-9]{16,}\b/ },
+  {
+    name: "an email address literal",
+    pattern: /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i,
+  },
 ];
 
 /** Strings unique to server-only modules (each must stay in src/server); a hit means server code reached the browser. */

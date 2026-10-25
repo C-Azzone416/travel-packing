@@ -5,7 +5,7 @@ import { drizzle } from "drizzle-orm/pglite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildTripItems, DEFAULT_STAPLES } from "../../../domain/calc";
+import { buildTripItems, SYNTHETIC_STAPLES } from "../../../domain/calc";
 import type { TripConfig } from "../../../domain/trip";
 import { createFakeAuth, type FakeAuth } from "../../auth/__fixtures__/fake-auth";
 import { parseAllowlist } from "../../auth/allowlist";
@@ -36,7 +36,7 @@ export function makeStoredTrip(overrides: Partial<StoredTrip> = {}): StoredTrip 
   const start = overrides.start ?? "2030-04-01";
   const end = overrides.end ?? "2030-04-08";
   const config = overrides.config ?? CONFIG;
-  const built = buildTripItems({ ...config, start, end }, DEFAULT_STAPLES);
+  const built = buildTripItems({ ...config, start, end }, SYNTHETIC_STAPLES);
   return {
     id: newUuid(),
     destination: "Sampleton",
@@ -76,7 +76,10 @@ export function makeStoredTrip(overrides: Partial<StoredTrip> = {}): StoredTrip 
 }
 
 export async function seedOwner(db: Db, ownerId: string): Promise<void> {
-  await db.insert(schema.users).values({ id: ownerId }).onConflictDoNothing();
+  await db
+    .insert(schema.users)
+    .values({ id: ownerId, staplesSetupState: "skipped" })
+    .onConflictDoNothing();
 }
 
 export async function seedTrip(

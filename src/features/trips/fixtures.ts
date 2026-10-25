@@ -2,7 +2,7 @@
 // fully packed). Temporary stand-in for real data until #10 wires the data layer. Never real
 // trip data.
 
-import { DEFAULT_STAPLES } from "@/domain/calc";
+import { SYNTHETIC_STAPLES } from "@/domain/calc";
 import {
   buildTrip,
   emptyLifecycleState,
@@ -47,7 +47,7 @@ export function sampleLifecycleState(): LifecycleState {
     "2026-10-23",
     "2026-10-27",
     BASE_CONFIG,
-    DEFAULT_STAPLES,
+    SYNTHETIC_STAPLES,
     deps("san-diego"),
   );
   sanDiego.theme = "beach";
@@ -63,7 +63,7 @@ export function sampleLifecycleState(): LifecycleState {
     "2026-09-03",
     "2026-09-07",
     { ...BASE_CONFIG, laundry: true, spare: false },
-    DEFAULT_STAPLES,
+    SYNTHETIC_STAPLES,
     deps("lisbon"),
   );
   lisbon.theme = "city";

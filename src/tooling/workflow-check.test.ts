@@ -6,6 +6,7 @@ import {
   ALIAS_HEAD_STEP,
   checkCiWorkflow,
   checkDeployWorkflow,
+  checkVercelCliLock,
   ciJob,
   MIN_CI_TIMEOUT_MINUTES,
   stepScript,
@@ -531,6 +532,59 @@ describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
       /must be pinned/,
     ],
     ["a moving tag install", `${deploy}\nrun: npm i vercel@latest\n`, /@latest/],
+    // ---- the Vercel CLI comes only from its lockfile (#208) ----
+    [
+      "the old global install back",
+      mutate(
+        "run: npm ci --prefix tools/vercel-cli --ignore-scripts",
+        'run: npm install --global "vercel@${VERCEL_CLI_VERSION}"',
+      ),
+      /must not be installed with npm install or globally|locked Vercel CLI install step must be exactly as reviewed/,
+    ],
+    [
+      "an ad-hoc install of vercel",
+      `${deploy}\n        run: npm install vercel@64.5.0\n`,
+      /must not be installed with npm install or globally/,
+    ],
+    [
+      "any global npm install",
+      `${deploy}\n        run: npm i -g something\n`,
+      /must not be installed with npm install or globally/,
+    ],
+    [
+      "vercel run through npx",
+      `${deploy}\n        run: npx vercel deploy\n`,
+      /must not be run with npx/,
+    ],
+    [
+      "the locked install without --ignore-scripts",
+      mutate(
+        "npm ci --prefix tools/vercel-cli --ignore-scripts",
+        "npm ci --prefix tools/vercel-cli",
+      ),
+      /locked Vercel CLI install step must be exactly as reviewed/,
+    ],
+    [
+      "the locked install replaced by npm install",
+      mutate(
+        "npm ci --prefix tools/vercel-cli --ignore-scripts",
+        "npm install --prefix tools/vercel-cli --ignore-scripts",
+      ),
+      /must not be installed with npm install or globally|exactly as reviewed/,
+    ],
+    [
+      "the PATH step pointing somewhere else",
+      mutate("tools/vercel-cli/node_modules/.bin", "node_modules/.bin"),
+      /Vercel CLI PATH step must be exactly as reviewed|order must be: install the locked Vercel CLI/,
+    ],
+    [
+      "the CLI used before it is installed",
+      mutate(
+        "      - name: Install the locked Vercel CLI",
+        '      - name: Pull early\n        run: vercel pull --yes --environment="$TARGET"\n\n      - name: Install the locked Vercel CLI',
+      ),
+      /order must be: install the locked Vercel CLI/,
+    ],
     [
       "the deploy downloading the e2e build",
       `${deploy}\n      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333\n        with:\n          name: e2e-build\n`,
@@ -692,6 +746,16 @@ describe("checkCiWorkflow", () => {
       "the audit weakened",
       inJob("checks", "--audit-level=high", "--audit-level=critical"),
       /dependency audit/,
+    ],
+    [
+      "the locked Vercel CLI install dropped from the checks job",
+      inJob("checks", "npm ci --prefix tools/vercel-cli --ignore-scripts", "true"),
+      /locked Vercel CLI install check is missing/,
+    ],
+    [
+      "the locked Vercel CLI never run",
+      inJob("checks", "tools/vercel-cli/node_modules/.bin/vercel --version", "true"),
+      /locked Vercel CLI version check is missing/,
     ],
     [
       "lint dropped",
@@ -1103,5 +1167,88 @@ describe("dependabotProblems (#225)", () => {
 
   it("reports a file with no update entries", () => {
     expect(dependabotProblems("version: 2\n")).toEqual(["no update entries found"]);
+  });
+});
+
+describe("checkVercelCliLock", () => {
+  const dirTools = join(process.cwd(), "tools", "vercel-cli");
+  const pkg = readFileSync(join(dirTools, "package.json"), "utf8");
+  const lock = readFileSync(join(dirTools, "package-lock.json"), "utf8");
+
+  it("the real lockfile pins exactly the workflow's version, with an integrity hash for every package, all from the npm registry", () => {
+    expect(checkVercelCliLock(deploy, pkg, lock)).toEqual([]);
+  });
+
+  const withLock = (
+    change: (lockfile: { packages: Record<string, Record<string, unknown>> }) => void,
+  ) => {
+    const copy = JSON.parse(lock);
+    change(copy);
+    return JSON.stringify(copy);
+  };
+  const firstTransitive = (lockfile: { packages: Record<string, Record<string, unknown>> }) =>
+    Object.keys(lockfile.packages).find(
+      (name) => name !== "" && name !== "node_modules/vercel",
+    ) as string;
+
+  it.each([
+    [
+      "a package without an integrity hash",
+      pkg,
+      withLock((l) => delete l.packages[firstTransitive(l)].integrity),
+      /have no integrity hash/,
+    ],
+    [
+      "a package from somewhere other than the npm registry",
+      pkg,
+      withLock((l) => (l.packages[firstTransitive(l)].resolved = "https://example.test/x.tgz")),
+      /do not come from the npm registry/,
+    ],
+    [
+      "a package with no resolved address",
+      pkg,
+      withLock((l) => delete l.packages[firstTransitive(l)].resolved),
+      /do not come from the npm registry/,
+    ],
+    [
+      "a lockfile that resolves another vercel",
+      pkg,
+      withLock((l) => (l.packages["node_modules/vercel"].version = "65.2.0")),
+      /must resolve vercel to the version the workflow pins/,
+    ],
+    [
+      "a package.json at another version",
+      pkg.replace("64.5.0", "65.2.0"),
+      lock,
+      /must depend on exactly vercel at the version the workflow pins/,
+    ],
+    [
+      "a package.json with a range",
+      pkg.replace('"64.5.0"', '"^64.5.0"'),
+      lock,
+      /must depend on exactly vercel/,
+    ],
+    [
+      "a package.json with another dependency",
+      pkg.replace('"vercel": "64.5.0"', '"vercel": "64.5.0", "left-pad": "1.3.0"'),
+      lock,
+      /must depend on exactly vercel/,
+    ],
+    [
+      "an empty lockfile",
+      pkg,
+      '{"lockfileVersion":3,"packages":{}}',
+      /no locked dependency graph|must resolve vercel/,
+    ],
+    ["a lockfile that is not JSON", pkg, "not json", /not valid JSON/],
+  ])("fails for %s", (_name, packageJson, lockJson, message) => {
+    expect(checkVercelCliLock(deploy, packageJson, lockJson).join("\n")).toMatch(message);
+  });
+
+  it("fails when the workflow does not pin a version", () => {
+    const unpinned = deploy.replace("VERCEL_CLI_VERSION: 64.5.0", "VERCEL_CLI_VERSION: latest");
+    expect(checkVercelCliLock(unpinned, pkg, lock).join("\n")).toMatch(
+      /does not pin VERCEL_CLI_VERSION/,
+    );
   });
 });

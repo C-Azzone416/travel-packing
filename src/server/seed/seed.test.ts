@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { DEFAULT_STAPLES } from "../../domain/calc";
+import { SYNTHETIC_STAPLES } from "../../domain/calc";
 import { allPacked } from "../../domain/readiness";
 import { findIdentityViolations } from "../../domain/item-ops";
 import { classifyTrip, type LifecycleTrip } from "../../domain/trip-lifecycle";
@@ -71,10 +71,10 @@ describe("the sample set (plan §6)", () => {
     expect(trips.map((trip) => trip.destination).sort()).toEqual(["Lisbon", "San Diego"]);
     const staples = await listStaples(db(), OWNER);
     expect(staples.map((staple) => staple.id).sort()).toEqual(
-      DEFAULT_STAPLES.map((staple) => staple.id).sort(),
+      SYNTHETIC_STAPLES.map((staple) => staple.id).sort(),
     );
     for (const staple of staples) {
-      const expected = DEFAULT_STAPLES.find((entry) => entry.id === staple.id);
+      const expected = SYNTHETIC_STAPLES.find((entry) => entry.id === staple.id);
       expect(staple).toMatchObject({
         name: expected?.name,
         category: expected?.category,

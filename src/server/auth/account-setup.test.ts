@@ -144,11 +144,13 @@ describe("withSetupGate", () => {
     expect(await gated.signInWithPassword(OWNER.email, OWNER.password)).toEqual({
       ok: false,
       unfinished: true,
+      diagnostic: { reason: "setup-pending" },
     });
     expect(fake.signOutCalls).toBe(1);
     expect(fake.current).toBeNull();
     expect(await gated.getSession()).toBeNull();
-    expect(events()).toEqual(["sign-in-setup-pending"]);
+    // The request-scoped sign-in service logs this outcome with its support reference.
+    expect(events()).toEqual([]);
   });
 
   it("denies a session that already exists (one minted by calling the auth service directly)", async () => {
@@ -197,8 +199,12 @@ describe("withSetupGate", () => {
     expect(await gated.signInWithPassword(OWNER.email, OWNER.password)).toEqual({
       ok: false,
       unverified: true,
+      diagnostic: { reason: "email-unverified" },
     });
-    expect(await gated.signInWithPassword("b@example.test", "wrong")).toEqual({ ok: false });
+    expect(await gated.signInWithPassword("b@example.test", "wrong")).toMatchObject({
+      ok: false,
+      diagnostic: { reason: "credentials-rejected" },
+    });
     expect(asked).toBe(0);
   });
 
@@ -224,8 +230,9 @@ describe("withSetupGate", () => {
     const gated = withSetupGate(fake, createMemorySetupStore(), allowlist);
     expect(await gated.signInWithPassword(OWNER.email, OWNER.password)).toMatchObject({
       unfinished: true,
+      diagnostic: { reason: "setup-pending", cleanupFailed: true },
     });
-    expect(events()).toEqual(["sign-in-setup-pending", "provider-error"]);
+    expect(events()).toEqual([]);
   });
 
   it("remembers a positive answer, so the store is asked once per address, not once per request", async () => {

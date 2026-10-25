@@ -21,17 +21,17 @@ describe("parseAllowlist", () => {
 });
 
 describe("isAllowed", () => {
-  const allowlist = parseAllowlist("owner@example.test");
+  const allowlist = parseAllowlist("allowed@example.test");
 
   it("admits a listed email regardless of case or padding", () => {
-    expect(isAllowed(allowlist, "owner@example.test")).toBe(true);
-    expect(isAllowed(allowlist, "  OWNER@Example.Test ")).toBe(true);
+    expect(isAllowed(allowlist, "allowed@example.test")).toBe(true);
+    expect(isAllowed(allowlist, "  Allowed@Example.TEST ")).toBe(true);
   });
 
   it.each([
-    ["an unlisted email", "someone@example.test"],
-    ["a superstring", "owner@example.test.evil.test"],
-    ["a substring", "wner@example.test"],
+    ["an unlisted email", "other@example.test"],
+    ["a superstring", "xallowed@example.test"],
+    ["a substring", "allowe@example.test"],
     ["an empty string", ""],
     ["null", null],
     ["undefined", undefined],
@@ -47,17 +47,17 @@ describe("isAllowed", () => {
 
 describe("normalizeEmail", () => {
   it("trims and lowercases", () => {
-    expect(normalizeEmail("  A@B.Test ")).toBe("a@b.test");
+    expect(normalizeEmail("  Owner@Example.TEST ")).toBe("owner@example.test");
   });
 });
 
 describe("isPlainEmail", () => {
   it.each([
     "owner@example.test",
-    "  Owner@Example.TEST ",
-    "first.last+tag@sub.example.co",
-    "o_w-n%er@exa-mple.org",
-    "owner@example.test",
+    "  owner@example.test ",
+    "o.w+tag@example.com",
+    "o_w-n%er@example.org",
+    "owner@sub.example.net",
   ])("accepts %s", (entry) => expect(isPlainEmail(entry)).toBe(true));
 
   it.each([
@@ -69,7 +69,7 @@ describe("isPlainEmail", () => {
     ["without a domain dot", "owner@localhost"],
     ["with a numeric top-level domain", "owner@example.123"],
     ["with no @", "owner.example.test"],
-    ["with two @", "a@b@example.test"],
+    ["with two @", "a@owner@example.test"],
     ["with a trailing dot", "owner@example.test."],
     ["empty", ""],
   ])("rejects an entry %s, which could never equal a real sign-up address", (_name, entry) => {

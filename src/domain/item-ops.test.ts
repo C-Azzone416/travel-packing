@@ -182,8 +182,8 @@ describe("editItem", () => {
         packLast: false,
       },
     ];
-    const remember = (tripQty: number, dailyDays: number) => {
-      const trip = { ...makeTrip(), dailyDays };
+    const remember = (tripQty: number, tripDays: number) => {
+      const trip = { ...makeTrip(), days: tripDays };
       const result = editItem(trip, perDay, "underwear", {
         name: "Underwear",
         qty: tripQty,
@@ -201,16 +201,16 @@ describe("editItem", () => {
       ["rounds down below .5", 8, 6, 1],
       ["never below 1", 1, 6, 1],
       ["a one-day trip", 3, 1, 3],
-    ])("%s", (_name, tripQty, dailyDays, expected) => {
-      expect(remember(tripQty, dailyDays)).toMatchObject({ qty: expected, cadence: "per day" });
+    ])("%s", (_name, tripQty, tripDays, expected) => {
+      expect(remember(tripQty, tripDays)).toMatchObject({ qty: expected, cadence: "per day" });
     });
 
-    it("leaves the staple quantity unchanged when the trip has no packing days", () => {
+    it("leaves the staple quantity unchanged when the trip has no calendar days", () => {
       expect(remember(5, 0)).toMatchObject({ qty: 1, cadence: "per day", name: "Underwear" });
     });
 
     it("still updates name and Pack last when the quantity is left alone", () => {
-      const trip = { ...makeTrip(), dailyDays: 0 };
+      const trip = { ...makeTrip(), days: 0 };
       const result = editItem(trip, perDay, "underwear", {
         name: "Briefs",
         qty: 5,
@@ -491,7 +491,7 @@ describe("recalculateSuggestions", () => {
     trip = setPacked(trip, "nice-shoes", 1).trip;
     trip = setPacked(trip, "nice-top", 1).trip;
     const before = nicePicks(trip);
-    expect(before).toHaveLength(5);
+    expect(before).toHaveLength(3);
 
     const off = checked(recalculateSuggestions(trip, { ...CONFIG, niceAttire: false }, suggest));
     expect(nicePicks(off)).toEqual([]);
@@ -516,7 +516,7 @@ describe("recalculateSuggestions", () => {
     const fresh = { ...plain, suggestionMemory: {} };
     const on = checked(recalculateSuggestions(fresh, CONFIG, suggest));
     expect(byId(on, "nice-top")).toMatchObject({ qty: 2, packed: 0, section: "main" });
-    expect(byId(on, "nice-makeup")?.groupId).toBe(TOILETRY_GROUP_ID);
+    expect(byId(on, "nice-makeup")).toBeUndefined();
   });
 
   it("a non-edited item restored from memory keeps its remembered qty and progress, not the new calculation", () => {
@@ -548,33 +548,23 @@ describe("recalculateSuggestions", () => {
     expect(trip.suggestionMemory).not.toHaveProperty("nice-shoes");
   });
 
-  it.each([
-    ["Makeup", "Make-up bag", "nice-makeup"],
-    ["Dress shoes", "Dress shoes (black)", "nice-shoes"],
-    ["Dress-specific undergarments", "Dress undergarments", "nice-undergarments"],
-  ])(
-    "an equivalent %s staple prevents a duplicate suggested row",
-    (_label, stapleName, suggestionId) => {
-      const base = makeTrip();
-      const withoutSuggestion = {
-        ...base,
-        items: base.items.filter((entry) => entry.id !== suggestionId),
-      };
-      const staple = {
-        ...item("staple-equivalent", stapleName, "Other", 1),
-        ...(suggestionId === "nice-makeup" ? { groupId: TOILETRY_GROUP_ID } : {}),
-      };
-      const trip = checked(
-        recalculateSuggestions(
-          { ...withoutSuggestion, items: [...withoutSuggestion.items, staple] },
-          CONFIG,
-          suggest,
-        ),
-      );
-      expect(byId(trip, suggestionId)).toBeUndefined();
-      expect(byId(trip, "staple-equivalent")).toBeDefined();
-    },
-  );
+  it("a fixed Staple with the same semantic identity prevents a duplicate suggested row", () => {
+    const base = makeTrip();
+    const fixed = {
+      ...item("nice-shoes", "Black dress shoes", "Nice attire", 2),
+      stapleCadence: "per trip" as const,
+    };
+    const trip = checked(
+      recalculateSuggestions(
+        { ...base, items: [...base.items.filter((entry) => entry.id !== "nice-shoes"), fixed] },
+        CONFIG,
+        suggest,
+      ),
+    );
+    expect(trip.items.filter((entry) => entry.id === "nice-shoes")).toEqual([
+      expect.objectContaining({ name: "Black dress shoes", qty: 2 }),
+    ]);
+  });
 
   it("merges unedited items with the new calculation and edited items with the user's values", () => {
     let trip = okTrip(
@@ -592,6 +582,60 @@ describe("recalculateSuggestions", () => {
     expect(byId(next, "sleepwear")).toMatchObject({ name: "Pajamas", qty: 2, userEdited: true });
     expect(next.config.laundry).toBe(true);
     expect(trip.config.laundry).toBe(false);
+  });
+
+  it("keeps fixed and per-day Staple snapshots unchanged during preference recalculation", () => {
+    const trip = makeTrip({
+      items: [
+        ...makeTrip().items.filter((entry) => !["underwear", "socks"].includes(entry.id)),
+        { ...item("underwear", "My underwear", "Clothing", 2), stapleCadence: "per trip" },
+        { ...item("socks", "My socks", "Clothing", 8), stapleCadence: "per day", packed: 3 },
+      ],
+    });
+    const next = checked(
+      recalculateSuggestions(
+        trip,
+        { ...CONFIG, laundry: true, spare: true, returnOutfit: false },
+        suggest,
+      ),
+    );
+    expect(byId(next, "underwear")).toMatchObject({
+      name: "My underwear",
+      qty: 2,
+      stapleCadence: "per trip",
+    });
+    expect(byId(next, "socks")).toMatchObject({
+      name: "My socks",
+      qty: 8,
+      packed: 3,
+      stapleCadence: "per day",
+    });
+  });
+
+  it("recalculates a Smart Staple from its saved trip rule while preserving its personal fields", () => {
+    const trip = makeTrip({
+      items: makeTrip().items.map((entry) =>
+        entry.id === "tops"
+          ? {
+              ...entry,
+              name: "My shirts",
+              category: "Other essentials",
+              section: "packlast" as const,
+              stapleCadence: "smart" as const,
+              packed: 3,
+            }
+          : entry,
+      ),
+    });
+    const next = checked(recalculateSuggestions(trip, { ...CONFIG, laundry: true }, suggest));
+    expect(byId(next, "tops")).toMatchObject({
+      name: "My shirts",
+      category: "Other essentials",
+      section: "packlast",
+      qty: 3,
+      packed: 3,
+      stapleCadence: "smart",
+    });
   });
 
   it("turning the return outfit off adds the checkout day to unedited everyday counts, and leaves edits, progress, manual items and removed suggestions alone (#205)", () => {
@@ -647,18 +691,19 @@ describe("recalculateSuggestions", () => {
     }
   });
 
-  it("keeps the Makeup row in the Bathroom group and preserves a source group on other items", () => {
+  it("preserves a legacy personal snapshot without regenerating it, and keeps source groups", () => {
     const base = makeTrip();
     const grouped = {
       ...base,
-      items: base.items.map((entry) =>
-        entry.id === "tops"
-          ? { ...entry, groupId: "custom-group" }
-          : { ...entry, groupId: entry.id === "nice-makeup" ? "other" : entry.groupId },
-      ),
+      items: [
+        ...base.items.map((entry) =>
+          entry.id === "tops" ? { ...entry, groupId: "custom-group" } : entry,
+        ),
+        { ...item("nice-makeup", "My existing item", "Bathroom", 1), groupId: "other" },
+      ],
     };
     const next = checked(recalculateSuggestions(grouped, CONFIG, suggest));
-    expect(byId(next, "nice-makeup")?.groupId).toBe(TOILETRY_GROUP_ID);
+    expect(byId(next, "nice-makeup")?.groupId).toBe("other");
     expect(byId(next, "tops")?.groupId).toBe("custom-group");
     expect(byId(next, "socks")).not.toHaveProperty("groupId");
   });
@@ -683,13 +728,27 @@ describe("recalculateSuggestions", () => {
     expect(next.toiletryBagPacked).toBe(true);
   });
 
-  it("invalidates bag placement when recalculation changes the Bathroom contents", () => {
+  it("does not remove legacy personal items or reset the bag during recalculation", () => {
+    const current = readyTrip();
     const off = checked(
-      recalculateSuggestions(readyTrip(), { ...CONFIG, niceAttire: false }, suggest),
+      recalculateSuggestions(
+        {
+          ...current,
+          items: [
+            ...current.items,
+            {
+              ...item("nice-makeup", "Existing makeup", "Bathroom", 1),
+              groupId: TOILETRY_GROUP_ID,
+            },
+          ],
+        },
+        { ...CONFIG, niceAttire: false },
+        suggest,
+      ),
     );
-    expect(off.toiletryBagPacked).toBe(false);
+    expect(off.toiletryBagPacked).toBe(true);
     expect(off.ready).toBe(false);
-    expect(byId(off, "nice-makeup")).toBeUndefined();
+    expect(byId(off, "nice-makeup")).toBeDefined();
   });
 
   it("does not mutate its input", () => {
@@ -769,9 +828,12 @@ describe("findIdentityViolations", () => {
       "duplicate Pack last item: laptop",
     ],
     [
-      "duplicate Nice accessory",
-      trip(item("m1", "Makeup", "Bathroom", 1), item("m2", "Make-up kit", "Bathroom", 1)),
-      "duplicate Nice accessory: makeup",
+      "duplicate semantic alias",
+      trip(
+        item("sunscreen", "My SPF", "Bathroom", 1),
+        item("weather-sunscreen", "Sun cream", "Weather suggestion", 1),
+      ),
+      "duplicate semantic identity: weather-sunscreen",
     ],
     [
       "split Chargers",
@@ -831,7 +893,7 @@ describe("rememberPreview", () => {
     });
   });
 
-  it("says the saved quantity stays the same when the trip has no packing days", () => {
+  it("says the saved quantity stays the same when the trip has no calendar days", () => {
     expect(rememberPreview([perDay("socks", 2)], "socks", 4, 0)).toEqual({
       kind: "no-packing-days",
     });
@@ -847,7 +909,7 @@ describe("rememberPreview", () => {
     const trip = makeTrip();
     const staples = [perDay(trip.items[0].id, 1)];
     for (const qty of [1, 3, 4, 7, 10]) {
-      const preview = rememberPreview(staples, trip.items[0].id, qty, trip.dailyDays);
+      const preview = rememberPreview(staples, trip.items[0].id, qty, trip.days);
       const edited = editItem(trip, staples, trip.items[0].id, {
         name: trip.items[0].name,
         qty,

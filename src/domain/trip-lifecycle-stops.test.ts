@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_STAPLES } from "./calc";
+import { SYNTHETIC_STAPLES } from "./calc";
 import type { TripConfig } from "./trip";
 import {
   beginDraft,
@@ -45,7 +45,7 @@ const ROUTE: DraftStop[] = [
 ];
 
 function save(draft: ReturnType<typeof startDraft>) {
-  return saveDraft(beginDraft(emptyLifecycleState(), draft), [...DEFAULT_STAPLES], deps);
+  return saveDraft(beginDraft(emptyLifecycleState(), draft), [...SYNTHETIC_STAPLES], deps);
 }
 
 describe("single-stop drafts behave as before", () => {

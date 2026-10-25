@@ -19,6 +19,8 @@ const EXPECTED_TAGS = [
   "0006_saved_lists",
   "0007_appearance",
   "0008_stamp_labels",
+  "0009_staple_quantity_rules",
+  "0010_staples_setup",
 ];
 
 // One in-memory Postgres for the file; each test starts from an empty public schema.
@@ -93,6 +95,7 @@ describe("migrateUp", () => {
       "item_category",
       "item_section",
       "staple_cadence",
+      "staples_setup_state",
       "trip_theme",
       "weather_status",
     ]);
@@ -219,6 +222,71 @@ describe("migrateDown", () => {
     expect(await userTables()).not.toContain("account_setups");
     expect(await migrateUp(client, upToAccountSetups)).toEqual([EXPECTED_TAGS[4]]);
     expect((await client.query(`SELECT * FROM "account_setups"`)).rows).toEqual([]);
+  });
+
+  it("preserves Staples across the quantity-rules migration and safely downgrades Smart", async () => {
+    const throughStampLabels = migrations.slice(0, 9);
+    const throughQuantityRules = migrations.slice(0, 10);
+    const tripItemColumns = async () =>
+      (
+        await client.query<{ column_name: string }>(
+          `SELECT column_name FROM information_schema.columns
+           WHERE table_schema = 'public' AND table_name = 'trip_items' ORDER BY ordinal_position`,
+        )
+      ).rows.map((row) => row.column_name);
+    const stapleCadences = async () =>
+      (
+        await client.query<{ semantic_id: string; cadence: string }>(
+          `SELECT semantic_id, cadence::text FROM staples ORDER BY semantic_id`,
+        )
+      ).rows;
+
+    await migrateUp(client, throughStampLabels);
+    await client.exec(
+      `INSERT INTO "users" ("id") VALUES ('u1');
+       INSERT INTO "staples" ("owner_id", "semantic_id", "name", "category", "qty", "cadence")
+       VALUES
+         ('u1', 'charger', 'Charger', 'Tech', 1, 'per trip'),
+         ('u1', 'socks', 'Socks', 'Clothing', 2, 'per day');
+       INSERT INTO "trips" ("id", "owner_id", "destination", "start_date", "end_date", "days", "daily_days")
+       VALUES ('00000000-0000-4000-8000-000000000001', 'u1', 'Anywhere', '2030-04-01', '2030-04-03', 3, 1);
+       INSERT INTO "trip_items" ("id", "trip_id", "owner_id", "semantic_id", "name", "category", "qty")
+       VALUES (
+         '00000000-0000-4000-8000-000000000002',
+         '00000000-0000-4000-8000-000000000001',
+         'u1',
+         'socks',
+         'Socks',
+         'Clothing',
+         6
+       )`,
+    );
+
+    expect(await migrateUp(client, throughQuantityRules)).toEqual([EXPECTED_TAGS[9]]);
+    expect(await stapleCadences()).toEqual([
+      { semantic_id: "charger", cadence: "per trip" },
+      { semantic_id: "socks", cadence: "per day" },
+    ]);
+    expect(await tripItemColumns()).toContain("staple_cadence");
+
+    await client.exec(
+      `UPDATE staples SET cadence = 'smart' WHERE semantic_id = 'socks';
+       UPDATE trip_items SET staple_cadence = 'smart' WHERE semantic_id = 'socks'`,
+    );
+
+    expect(await migrateDown(client, throughQuantityRules, 1)).toEqual([EXPECTED_TAGS[9]]);
+    expect(await stapleCadences()).toEqual([
+      { semantic_id: "charger", cadence: "per trip" },
+      { semantic_id: "socks", cadence: "per trip" },
+    ]);
+    expect(await tripItemColumns()).not.toContain("staple_cadence");
+
+    expect(await migrateUp(client, throughQuantityRules)).toEqual([EXPECTED_TAGS[9]]);
+    expect(await stapleCadences()).toEqual([
+      { semantic_id: "charger", cadence: "per trip" },
+      { semantic_id: "socks", cadence: "per trip" },
+    ]);
+    expect(await tripItemColumns()).toContain("staple_cadence");
   });
 
   it("does nothing on an empty database", async () => {

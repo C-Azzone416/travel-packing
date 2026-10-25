@@ -6,7 +6,14 @@ import { ADDABLE_CATEGORIES } from "../../domain/item-ops";
 import { APPEARANCES } from "../../domain/appearance";
 import { THEME_IDS } from "../../domain/themes";
 import { MAX_STOPS } from "../../domain/trip-stops";
-import { ITEM_CATEGORIES, TEMPERATURE_UNITS, TOILETRY_GROUP, WEATHER_STATUSES } from "../db/schema";
+import {
+  ITEM_CATEGORIES,
+  STAPLE_CADENCES,
+  TEMPERATURE_UNITS,
+  TOILETRY_GROUP,
+  WEATHER_STATUSES,
+} from "../db/schema";
+import { supportsSmartQuantity } from "../../domain/calc";
 
 export const tripId = z.uuid();
 /** The six built-in themes, and nothing else: an unknown value is INVALID_INPUT (#48). */
@@ -170,15 +177,31 @@ export const setStampLabelsInput = z.object({
   slot2: z.string().max(64).nullable(),
 });
 
-export const stapleInput = z.object({
-  semanticId: z.string().min(1).max(100),
-  name,
-  category: z.enum(ITEM_CATEGORIES),
-  qty,
-  cadence: z.enum(["per day", "per trip"]),
-  packLast: z.boolean(),
-  groupId: z.literal(TOILETRY_GROUP).optional(),
+export const stapleInput = z
+  .object({
+    semanticId: z.string().min(1).max(100),
+    name,
+    category: z.enum(ITEM_CATEGORIES),
+    qty,
+    cadence: z.enum(STAPLE_CADENCES),
+    packLast: z.boolean(),
+    groupId: z.literal(TOILETRY_GROUP).optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (
+      value.cadence === "smart" &&
+      (!supportsSmartQuantity(value.semanticId) ||
+        !["Clothing", "Nice attire"].includes(value.category))
+    ) {
+      ctx.addIssue({ code: "custom", path: ["cadence"], message: "Unsupported Smart item" });
+    }
+  });
+
+/** One all-or-nothing first-run save. An empty selection is a valid completed setup. */
+export const saveStaplesSetupInput = z.object({
+  staples: z.array(stapleInput).max(100),
 });
+export const stapleOnly = z.object({ semanticId: z.string().min(1).max(100) });
 
 export const none = z.object({}).strict();
 

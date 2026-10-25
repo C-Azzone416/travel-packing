@@ -4,6 +4,7 @@ import { ToastProvider } from "@/components/ui/Toast";
 import { AppLocationProvider } from "@/features/trips/AppLocationProvider";
 import { providerEnabled } from "@/server/locations/provider-config";
 import { TripsSourceProvider } from "@/features/trips/TripsSourceProvider";
+import { StaplesSetupGate, type StaplesSetupActions } from "@/features/staples/StaplesSetupGate";
 import { Nav } from "./Nav";
 import { PreviewBanner } from "./PreviewBanner";
 import { RouteFocus } from "./RouteFocus";
@@ -14,9 +15,11 @@ export interface AppShellProps {
   /** Both given: the nav gets a Sign out item (#117). */
   signOut?: () => Promise<void>;
   email?: string | null;
+  /** Present only for an authenticated shell; public/preview shells do not make setup data calls. */
+  setupActions?: StaplesSetupActions;
 }
 
-export function AppShell({ children, signOut, email }: AppShellProps) {
+export function AppShell({ children, signOut, email, setupActions }: AppShellProps) {
   return (
     <ToastProvider>
       <SaveStatusProvider>
@@ -38,7 +41,11 @@ export function AppShell({ children, signOut, email }: AppShellProps) {
                 </div>
               </header>
               <main id="main" tabIndex={-1}>
-                {children}
+                {setupActions ? (
+                  <StaplesSetupGate actions={setupActions}>{children}</StaplesSetupGate>
+                ) : (
+                  children
+                )}
               </main>
             </div>
             <RouteFocus />

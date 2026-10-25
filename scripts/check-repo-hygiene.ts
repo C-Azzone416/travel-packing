@@ -1,8 +1,12 @@
 // Fails if any tracked file breaks the repository hygiene rules (src/tooling/repo-hygiene.ts).
 
 import { execFileSync } from "node:child_process";
-import { statSync } from "node:fs";
-import { findHygieneProblems, type TrackedFile } from "../src/tooling/repo-hygiene";
+import { readFileSync, statSync } from "node:fs";
+import {
+  findHygieneProblems,
+  textForEmailScan,
+  type TrackedFile,
+} from "../src/tooling/repo-hygiene";
 
 const listed = execFileSync("git", ["ls-files", "-z"], {
   encoding: "utf8",
@@ -11,11 +15,22 @@ const listed = execFileSync("git", ["ls-files", "-z"], {
 const files: TrackedFile[] = listed
   .split("\0")
   .filter(Boolean)
-  .flatMap((path) => {
+  .flatMap((path): TrackedFile[] => {
     try {
-      return [{ path, bytes: statSync(path).size }];
-    } catch {
-      return []; // tracked but deleted in the working tree: nothing to measure
+      const contents = readFileSync(path);
+      return [
+        {
+          path,
+          bytes: statSync(path).size,
+          // Scan every readable file byte-for-byte. A NUL byte must not turn a text leak into a skipped binary.
+          text: textForEmailScan(contents),
+        },
+      ];
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return []; // tracked but deleted in the working tree: nothing to measure
+      }
+      return [{ path, bytes: 0, inspectionFailed: true }];
     }
   });
 

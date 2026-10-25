@@ -4,9 +4,11 @@ import { setAuthLogSink } from "./safe-log";
 
 type SignInResult = Awaited<ReturnType<NeonAuthLike["signIn"]["email"]>>;
 type SessionResult = Awaited<ReturnType<NeonAuthLike["getSession"]>>;
+type SignOutResult = Awaited<ReturnType<NeonAuthLike["signOut"]>>;
 
 type CallResult = Awaited<ReturnType<NeonAuthLike["signUp"]["email"]>>;
 type Answer = CallResult | (() => Promise<CallResult>);
+type SignOutAnswer = SignOutResult | (() => Promise<SignOutResult>);
 
 function fakeNeon(
   overrides: {
@@ -17,6 +19,7 @@ function fakeNeon(
     verify?: Answer;
     requestReset?: Answer;
     reset?: Answer;
+    signOut?: SignOutAnswer;
   } = {},
 ) {
   const calls = {
@@ -68,8 +71,12 @@ function fakeNeon(
       calls.reset.push(input);
       return answer(overrides.reset);
     },
-    async signOut() {
+    signOut() {
       calls.signOut += 1;
+      const value = overrides.signOut;
+      return typeof value === "function"
+        ? value()
+        : Promise.resolve(value === undefined ? { data: { success: true }, error: null } : value);
     },
   };
   return { neon, calls };
@@ -188,19 +195,27 @@ describe("signInWithPassword", () => {
     async (_name, user) => {
       const { neon } = fakeNeon({ signIn: { data: { user } } as unknown as SignInResult });
       expect(await createNeonAuthProvider(neon).signInWithPassword("a@example.test", "pw")).toEqual(
-        { ok: false, unverified: true },
+        {
+          ok: false,
+          unverified: true,
+          diagnostic: { reason: "email-unverified" },
+        },
       );
     },
   );
 
-  it.each(failedCases)("fails generically on %s", async (_name, signIn) => {
-    const { neon } = fakeNeon({ signIn: signIn as unknown as SignInResult });
-    expect(await createNeonAuthProvider(neon).signInWithPassword("a@example.test", "pw")).toEqual({
-      ok: false,
-    });
-  });
+  it.each(failedCases)(
+    "fails generically on %s while retaining a bounded diagnostic",
+    async (_name, signIn) => {
+      const { neon } = fakeNeon({ signIn: signIn as unknown as SignInResult });
+      const result = await createNeonAuthProvider(neon).signInWithPassword("a@example.test", "pw");
+      expect(result).toMatchObject({ ok: false, diagnostic: { reason: expect.any(String) } });
+      expect(JSON.stringify(result)).not.toContain("Invalid credentials");
+      expect(JSON.stringify(result)).not.toContain("owner@example.test");
+    },
+  );
 
-  it("treats a thrown SDK error as a failed sign-in and logs nothing from it", async () => {
+  it("classifies a thrown SDK error as unavailable without logging its contents", async () => {
     const { neon } = fakeNeon({
       signIn: async () => {
         throw new Error("connect ECONNREFUSED for a@example.test with password hunter2");
@@ -210,8 +225,72 @@ describe("signInWithPassword", () => {
       await createNeonAuthProvider(neon).signInWithPassword("a@example.test", "hunter2"),
     ).toEqual({
       ok: false,
+      diagnostic: { reason: "provider-unavailable" },
     });
-    expect(logged).toEqual([JSON.stringify({ scope: "auth", event: "provider-error" })]);
+    expect(logged).toEqual([]);
+  });
+
+  it.each([
+    [
+      "rejected credentials",
+      { status: 401, code: "INVALID_EMAIL_OR_PASSWORD" },
+      "credentials-rejected",
+    ],
+    ["provider throttling", { status: 429, code: "TOO_MANY_ATTEMPTS" }, "provider-rate-limited"],
+    ["provider outage", { status: 503, code: "INTERNAL_ERROR" }, "provider-unavailable"],
+    [
+      "session creation failure",
+      { status: 401, code: "FAILED_TO_CREATE_SESSION" },
+      "session-not-created",
+    ],
+    ["other client rejection", { status: 403, code: "INVALID_ORIGIN" }, "provider-rejected"],
+  ])("classifies %s from safe response facts", async (_name, error, reason) => {
+    const { neon } = fakeNeon({ signIn: { data: null, error } });
+    expect(await createNeonAuthProvider(neon).signInWithPassword("a@example.test", "pw")).toEqual({
+      ok: false,
+      diagnostic: { reason, rejection: error },
+    });
+  });
+
+  it.each([
+    ["an unknown code on a 401", { status: 401, code: "SOMETHING_ELSE" }, "provider-rejected"],
+    [
+      "a recognized internal error on a 401",
+      { status: 401, code: "INTERNAL_ERROR" },
+      "provider-unavailable",
+    ],
+    [
+      "a recognized credential rejection on a conflicting 503",
+      { status: 503, code: "INVALID_EMAIL_OR_PASSWORD" },
+      "credentials-rejected",
+    ],
+    [
+      "a recognized attempt limit on a conflicting 401",
+      { status: 401, code: "TOO_MANY_ATTEMPTS" },
+      "provider-rate-limited",
+    ],
+    [
+      "an unknown code on an unambiguous 503",
+      { status: 503, code: "SOMETHING_ELSE" },
+      "provider-unavailable",
+    ],
+  ])("uses bounded evidence for %s", async (_name, error, reason) => {
+    const { neon } = fakeNeon({ signIn: { data: null, error } });
+    expect(await createNeonAuthProvider(neon).signInWithPassword("a@example.test", "pw")).toEqual({
+      ok: false,
+      diagnostic: { reason, rejection: error },
+    });
+  });
+
+  it("keeps a status-only 401 generic", async () => {
+    const { neon } = fakeNeon({ signIn: { data: null, error: { status: 401 } } });
+    expect(await createNeonAuthProvider(neon).signInWithPassword("a@example.test", "pw")).toEqual({
+      ok: false,
+      diagnostic: {
+        reason: "provider-rejected",
+        rejection: { status: 401, code: "" },
+      },
+    });
   });
 });
 
@@ -220,6 +299,40 @@ describe("signOut", () => {
     const { neon, calls } = fakeNeon();
     await createNeonAuthProvider(neon).signOut();
     expect(calls.signOut).toBe(1);
+  });
+
+  it.each([
+    [
+      "a resolved SDK error",
+      {
+        data: null,
+        error: {
+          status: 503,
+          code: "INTERNAL_ERROR",
+          message: "provider response for owner@example.test",
+        },
+      },
+    ],
+    ["an empty SDK response", null],
+  ])("rejects %s with a fixed safe error", async (_name, signOut) => {
+    const { neon } = fakeNeon({ signOut: signOut as SignOutResult });
+    await expect(createNeonAuthProvider(neon).signOut()).rejects.toThrow(
+      "Auth provider sign-out failed",
+    );
+    expect(logged.join()).not.toContain("owner@example.test");
+    expect(logged).toEqual([]);
+  });
+
+  it("replaces a thrown SDK error with a fixed safe error", async () => {
+    const { neon } = fakeNeon({
+      signOut: async () => {
+        throw new Error("cookie for owner@example.test failed");
+      },
+    });
+    await expect(createNeonAuthProvider(neon).signOut()).rejects.toThrow(
+      "Auth provider sign-out failed",
+    );
+    expect(logged).toEqual([]);
   });
 });
 
@@ -411,22 +524,34 @@ describe("account flows", () => {
         ).toEqual({
           ok: false,
           unverified: true,
+          diagnostic: {
+            reason: "email-unverified",
+            ...(signIn.error ? { rejection: { status: 403, code: "EMAIL_NOT_VERIFIED" } } : {}),
+          },
         });
       }
     });
 
-    it("keeps a wrong password or an empty answer generic", async () => {
-      for (const signIn of [
-        { data: null, error: { status: 401, code: "INVALID_EMAIL_OR_PASSWORD" } },
-        { data: null },
-      ]) {
-        const { neon } = fakeNeon({ signIn });
-        expect(
-          await createNeonAuthProvider(neon).signInWithPassword("a@example.test", "pw"),
-        ).toEqual({
-          ok: false,
-        });
-      }
+    it("distinguishes rejected credentials from an invalid empty response", async () => {
+      const rejected = fakeNeon({
+        signIn: {
+          data: null,
+          error: { status: 401, code: "INVALID_EMAIL_OR_PASSWORD" },
+        },
+      });
+      expect(
+        await createNeonAuthProvider(rejected.neon).signInWithPassword("a@example.test", "pw"),
+      ).toEqual({
+        ok: false,
+        diagnostic: {
+          reason: "credentials-rejected",
+          rejection: { status: 401, code: "INVALID_EMAIL_OR_PASSWORD" },
+        },
+      });
+      const empty = fakeNeon({ signIn: { data: null } });
+      expect(
+        await createNeonAuthProvider(empty.neon).signInWithPassword("a@example.test", "pw"),
+      ).toEqual({ ok: false, diagnostic: { reason: "provider-response-invalid" } });
     });
   });
 });

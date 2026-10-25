@@ -15,6 +15,8 @@ import { INVALID_CREDENTIALS_MESSAGE } from "./state";
 export interface SignInViewProps {
   action: (formData: FormData) => void;
   error: string | null;
+  /** Random support reference matching the server log for this failed attempt. */
+  reference?: string | null;
   pending: boolean;
   showPassword: boolean;
   onTogglePassword: () => void;
@@ -27,6 +29,7 @@ export interface SignInViewProps {
 export function SignInView({
   action,
   error,
+  reference,
   pending,
   showPassword,
   onTogglePassword,
@@ -88,6 +91,7 @@ export function SignInView({
                   .
                 </>
               ) : null}
+              {reference ? ` Reference: ${reference}.` : null}
             </p>
           ) : null}
 

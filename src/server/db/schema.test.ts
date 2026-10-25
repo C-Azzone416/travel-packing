@@ -1,7 +1,7 @@
 import { getTableConfig, type PgTable } from "drizzle-orm/pg-core";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createMigratedDb, resetData } from "./__fixtures__/db";
-import { buildTripItems, calculateSuggestions, DEFAULT_STAPLES } from "../../domain/calc";
+import { buildTripItems, calculateSuggestions, SYNTHETIC_STAPLES } from "../../domain/calc";
 import { THEME_IDS } from "../../domain/themes";
 import * as schema from "./schema";
 
@@ -578,6 +578,7 @@ describe("drizzle schema matches the migrated database", () => {
       { typname: "item_category", labels: [...schema.ITEM_CATEGORIES] },
       { typname: "item_section", labels: [...schema.ITEM_SECTIONS] },
       { typname: "staple_cadence", labels: [...schema.STAPLE_CADENCES] },
+      { typname: "staples_setup_state", labels: [...schema.STAPLES_SETUP_STATES] },
       { typname: "trip_theme", labels: [...THEME_IDS] },
       { typname: "weather_status", labels: [...schema.WEATHER_STATUSES] },
     ]);
@@ -600,8 +601,8 @@ describe("domain categories fit the item_category enum", () => {
   it("every category the calculator and default staples produce is a valid enum value", () => {
     const produced = new Set<string>([
       ...calculateSuggestions(allOn).items.map((entry) => entry.category),
-      ...buildTripItems(allOn, DEFAULT_STAPLES).items.map((entry) => entry.category),
-      ...DEFAULT_STAPLES.map((staple) => staple.category),
+      ...buildTripItems(allOn, SYNTHETIC_STAPLES).items.map((entry) => entry.category),
+      ...SYNTHETIC_STAPLES.map((staple) => staple.category),
     ]);
     expect([...produced].filter((category) => !allowed.has(category))).toEqual([]);
   });
@@ -615,7 +616,7 @@ describe("domain categories fit the item_category enum", () => {
     const owner = await addUser("owner-a");
     const trip = await addTrip(owner);
     const categories = [
-      ...new Set(buildTripItems(allOn, DEFAULT_STAPLES).items.map((entry) => entry.category)),
+      ...new Set(buildTripItems(allOn, SYNTHETIC_STAPLES).items.map((entry) => entry.category)),
     ];
     for (const [index, category] of categories.entries()) {
       await addItem(trip, owner, { semantic_id: `item-${index}`, category });

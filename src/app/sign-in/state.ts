@@ -3,6 +3,8 @@
 
 export interface SignInState {
   error: string | null;
+  /** Random support reference for one failed attempt; never derived from the submitted address or password. */
+  reference?: string | null;
 }
 
 export const INVALID_CREDENTIALS_MESSAGE = "Email or password is incorrect.";
