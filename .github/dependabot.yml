@@ -8,7 +8,8 @@ updates:
     target-branch: develop
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+    # Temporary history-cleanup freeze. Restore this to 5 after rewritten refs are published.
+    open-pull-requests-limit: 0
     groups:
       minor-and-patch:
         update-types: [minor, patch]
@@ -17,3 +18,5 @@ updates:
     target-branch: develop
     schedule:
       interval: weekly
+    # Temporary history-cleanup freeze. Remove this line after rewritten refs are published.
+    open-pull-requests-limit: 0
