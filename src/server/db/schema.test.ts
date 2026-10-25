@@ -578,6 +578,7 @@ describe("drizzle schema matches the migrated database", () => {
       { typname: "item_category", labels: [...schema.ITEM_CATEGORIES] },
       { typname: "item_section", labels: [...schema.ITEM_SECTIONS] },
       { typname: "staple_cadence", labels: [...schema.STAPLE_CADENCES] },
+      { typname: "staples_setup_state", labels: [...schema.STAPLES_SETUP_STATES] },
       { typname: "trip_theme", labels: [...THEME_IDS] },
       { typname: "weather_status", labels: [...schema.WEATHER_STATUSES] },
     ]);
