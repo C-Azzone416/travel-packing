@@ -89,49 +89,65 @@ export function withSetupGate(
   allowlist: Allowlist,
 ): AuthProvider {
   const known = new Map<string, number>();
-  /** When the account was set up (0 = no requirement), or null if it is not set up. */
-  async function setUpAt(email: string): Promise<number | null> {
+  type SetupState =
+    { status: "complete"; at: number } | { status: "pending" } | { status: "unavailable" };
+  /** Whether the account was set up (0 = no requirement), still pending, or could not be checked. */
+  async function setupState(email: string): Promise<SetupState> {
     // An address that is not allowlisted never gets in whatever its setup says; leave it to the allowlist's own denial (the
     // access-denied screen and the signed-out session), exactly as before this gate existed.
-    if (!isAllowed(allowlist, email)) return 0;
+    if (!isAllowed(allowlist, email)) return { status: "complete", at: 0 };
     const key = normalizeEmail(email);
     const cached = known.get(key);
-    if (cached !== undefined) return cached;
+    if (cached !== undefined) return { status: "complete", at: cached };
     let at: number | null;
     try {
       at = await store.completedAt(email);
     } catch {
-      logAuthEvent("provider-error");
-      return null;
+      return { status: "unavailable" };
     }
     if (at !== null) known.set(key, at);
-    return at;
+    return at === null ? { status: "pending" } : { status: "complete", at };
   }
   return {
     ...provider,
     async getSession() {
       const session = await provider.getSession();
       if (!session) return null;
-      const at = await setUpAt(session.email);
-      if (at === null) return null;
+      const setup = await setupState(session.email);
+      if (setup.status === "unavailable") {
+        // There is no request-scoped sign-in reference on ordinary session reads; retain the closed legacy event here.
+        logAuthEvent("provider-error");
+        return null;
+      }
+      if (setup.status === "pending") return null;
       // A session made at or before the moment the password was set through the link may have been opened with a password
       // chosen by someone else (pre-registration): it stays refused after the link is used. One that does not say when it was
       // made is refused too.
-      if (at > 0 && !(session.issuedAt !== undefined && session.issuedAt > at)) return null;
+      if (setup.at > 0 && !(session.issuedAt !== undefined && session.issuedAt > setup.at))
+        return null;
       return session;
     },
     async signInWithPassword(email, password) {
       const result = await provider.signInWithPassword(email, password);
       // A session made by this very call is newer than any setup, so only "was it ever set up" matters here.
-      if (!result.ok || (await setUpAt(result.session.email)) !== null) return result;
+      if (!result.ok) return result;
+      const setup = await setupState(result.session.email);
+      if (setup.status === "complete") return result;
       // Right password, verified address, but never set up through a link: no session, and nothing says why beyond "finish".
-      logAuthEvent("sign-in-setup-pending");
+      let cleanupFailed = false;
       try {
         await provider.signOut();
       } catch {
-        logAuthEvent("provider-error");
+        cleanupFailed = true;
       }
-      return { ok: false, unfinished: true };
+      return {
+        ok: false,
+        unfinished: true,
+        diagnostic: {
+          reason: setup.status === "pending" ? "setup-pending" : "setup-unavailable",
+          ...(cleanupFailed ? { cleanupFailed: true } : {}),
+        },
+      };
     },
   };
 }

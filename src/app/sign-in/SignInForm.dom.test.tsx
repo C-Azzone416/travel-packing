@@ -30,7 +30,10 @@ describe("SignInForm", () => {
   });
 
   it("submits the credentials to the server action and shows its error inline", async () => {
-    signInAction.mockResolvedValue({ error: "Email or password is incorrect." });
+    signInAction.mockResolvedValue({
+      error: "Email or password is incorrect.",
+      reference: "012345abcdef",
+    });
     const user = userEvent.setup();
     render(<SignInForm />);
     await user.type(screen.getByLabelText("Email"), "owner@example.test");
@@ -40,6 +43,7 @@ describe("SignInForm", () => {
     expect((await screen.findByRole("alert")).textContent).toContain(
       "Email or password is incorrect.",
     );
+    expect(screen.getByRole("alert").textContent).toContain("Reference: 012345abcdef.");
     expect(signInAction).toHaveBeenCalledTimes(1);
     const form = signInAction.mock.calls[0][1] as FormData;
     expect(form.get("email")).toBe("owner@example.test");

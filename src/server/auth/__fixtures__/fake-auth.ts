@@ -59,9 +59,18 @@ export function createFakeAuth(users: FakeUser[] = []): FakeAuth {
     },
     async signInWithPassword(email, password): Promise<SignInResult> {
       const user = users.find((entry) => entry.email === email && entry.password === password);
-      if (!user) return { ok: false };
-      if (user.verified === false) return { ok: false, unverified: true };
-      if (user.unfinished) return { ok: false, unfinished: true };
+      if (!user)
+        return {
+          ok: false,
+          diagnostic: {
+            reason: "credentials-rejected",
+            rejection: { status: 401, code: "INVALID_EMAIL_OR_PASSWORD" },
+          },
+        };
+      if (user.verified === false)
+        return { ok: false, unverified: true, diagnostic: { reason: "email-unverified" } };
+      if (user.unfinished)
+        return { ok: false, unfinished: true, diagnostic: { reason: "setup-pending" } };
       fake.current = { userId: user.userId, email: user.email, issuedAt: Date.now() };
       return { ok: true, session: fake.current };
     },
