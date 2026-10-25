@@ -65,13 +65,7 @@ afterAll(async () => {
 });
 
 const MISSING = "00000000-0000-4000-8000-0000000000ff";
-const TOILETRIES = [
-  "nice-makeup",
-  "last-toothbrush",
-  "last-toothpaste",
-  "last-deodorant",
-  "last-contacts",
-];
+const TOILETRIES = ["last-toothbrush", "last-toothpaste", "last-deodorant", "last-contacts"];
 
 function changed(result: TripCommandResult) {
   if (!result.ok) throw new Error(`expected ok, got ${result.code}`);
@@ -97,13 +91,10 @@ describe("reads", () => {
     expect(await getTripAction("not-a-uuid")).toEqual({ ok: false, code: "INVALID_INPUT" });
   });
 
-  it("listStaplesAction returns the owner's staples, seeding the defaults on first use", async () => {
+  it("listStaplesAction returns an empty list for a new owner without seeding defaults", async () => {
     const result = await listStaplesAction();
     if (!result.ok) throw new Error("expected ok");
-    expect(result.staples.length).toBeGreaterThan(5);
-    expect(result.staples.some((staple) => staple.id === "tops" || staple.name.length > 0)).toBe(
-      true,
-    );
+    expect(result.staples).toEqual([]);
   });
 });
 

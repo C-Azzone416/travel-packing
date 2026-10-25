@@ -319,13 +319,12 @@ describe("EditTripSheet: the review", () => {
     expect(within(stay).getByText(/Not re-added: Dress shoes/)).toBeTruthy();
   });
 
-  it("'Also changes': Ready turns off only for a Ready trip, and the bag resets only when Bathroom items change", async () => {
+  it("'Also changes': Ready turns off, while clothing-only recalculation keeps bag placement", async () => {
     const readyAndPlaced: Trip = { ...base(), ready: true, toiletryBagPacked: true };
     const { user, dialog } = setup({ trip: readyAndPlaced });
     await review(user, async (d) => user.click(toggle(d, "Nice outfits")), dialog);
     expect(within(dialog()).getByText("Ready turns off.")).toBeTruthy();
-    expect(within(dialog()).getByText(/Toiletry bag placement resets/)).toBeTruthy();
-    expect(within(dialog()).getByText(/−Makeup/)).toBeTruthy();
+    expect(within(dialog()).queryByText(/Toiletry bag placement resets/)).toBeNull();
   });
 
   it("no 'Also changes' strip for a trip that is not Ready and whose Bathroom items stay", async () => {

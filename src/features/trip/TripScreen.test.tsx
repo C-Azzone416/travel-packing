@@ -19,13 +19,7 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push }),
 }));
 
-const TOILETRIES = [
-  "nice-makeup",
-  "last-toothbrush",
-  "last-toothpaste",
-  "last-deodorant",
-  "last-contacts",
-];
+const TOILETRIES = ["last-toothbrush", "last-toothpaste", "last-deodorant", "last-contacts"];
 
 function memory() {
   let counter = 0;
@@ -336,17 +330,18 @@ describe("packing", () => {
     const down = () => within(underwear).getByRole("button", { name: "Decrease packed Underwear" });
     await user.click(up());
     // The tapped count shows at once, before anything is sent.
-    expect(live().textContent).toBe("Underwear 3 of 4 packed");
-    expect(within(underwear).getByText("3 of 4 packed")).toBeTruthy();
+    expect(live().textContent).toBe("Underwear 3 of 5 packed");
+    expect(within(underwear).getByText("3 of 5 packed")).toBeTruthy();
+    await user.click(up());
     await user.click(up());
     expect(up().getAttribute("aria-disabled")).toBe("true");
     await user.click(up());
-    await waitFor(() => expect(itemOf(source, "underwear").packed).toBe(4));
-    for (let n = 0; n < 4; n++) await user.click(down());
+    await waitFor(() => expect(itemOf(source, "underwear").packed).toBe(5));
+    for (let n = 0; n < 5; n++) await user.click(down());
     expect(down().getAttribute("aria-disabled")).toBe("true");
     await user.click(down());
     await waitFor(() => expect(itemOf(source, "underwear").packed).toBe(0));
-    expect(within(underwear).getByText("0 of 4 packed")).toBeTruthy();
+    expect(within(underwear).getByText("0 of 5 packed")).toBeTruthy();
   });
 
   it("sends ONE write per item with the final count after the taps settle", async () => {
@@ -360,13 +355,13 @@ describe("packing", () => {
     }));
     await ready();
     const socks = row("socks");
-    for (let n = 0; n < 3; n++)
+    for (let n = 0; n < 4; n++)
       await user.click(within(socks).getByRole("button", { name: "Increase packed Socks" }));
     expect(setPacked).not.toHaveBeenCalled();
-    expect(within(socks).getByText("4 of 4 packed")).toBeTruthy();
-    await waitFor(() => expect(itemOf(source, "socks").packed).toBe(4));
+    expect(within(socks).getByText("5 of 5 packed")).toBeTruthy();
+    await waitFor(() => expect(itemOf(source, "socks").packed).toBe(5));
     expect(setPacked).toHaveBeenCalledTimes(1);
-    expect(setPacked).toHaveBeenCalledWith("socks", 4);
+    expect(setPacked).toHaveBeenCalledWith("socks", 5);
   });
 
   it("keeps the tapped count on screen while a write is in flight, and sends the next one only after it finishes", async () => {
@@ -387,13 +382,13 @@ describe("packing", () => {
     await waitFor(() => expect(calls).toEqual([2]));
     // A tap during the first write: shown at once, not sent in parallel.
     await user.click(up());
-    expect(within(socks).getByText("3 of 4 packed")).toBeTruthy();
+    expect(within(socks).getByText("3 of 5 packed")).toBeTruthy();
     await new Promise((resolve) => setTimeout(resolve, 450));
     expect(calls).toEqual([2]);
     await act(async () => gate.resolve());
     await waitFor(() => expect(calls).toEqual([2, 3]));
     await waitFor(() => expect(itemOf(source, "socks").packed).toBe(3));
-    expect(within(socks).getByText("3 of 4 packed")).toBeTruthy();
+    expect(within(socks).getByText("3 of 5 packed")).toBeTruthy();
   });
 
   it("a check or uncheck is sent at once, not after a pause", async () => {
@@ -511,7 +506,7 @@ describe("toiletry bag gate", () => {
     setup();
     await ready();
     expect(screen.getByText("Toiletry bag not ready to place")).toBeTruthy();
-    expect(screen.getByText("0 of 5 contents checked")).toBeTruthy();
+    expect(screen.getByText("0 of 4 contents checked")).toBeTruthy();
   });
 
   it("opens the placement prompt once when contents complete, never confirms by itself, and 'Not yet' dismisses it for the session", async () => {
@@ -647,19 +642,19 @@ describe("item editor", () => {
     expect(hint.textContent).toBe("Saved as 1 per day for future trips.");
     await user.clear(within(dialog).getByLabelText("Quantity"));
     await user.type(within(dialog).getByLabelText("Quantity"), "9");
-    expect(hint.textContent).toBe("Saved as 3 per day for future trips.");
+    expect(hint.textContent).toBe("Saved as 2 per day for future trips.");
     await user.click(within(dialog).getByRole("radio", { name: /This trip only/ }));
     expect(hint.textContent).toBe("");
     await user.click(within(dialog).getByRole("radio", { name: /Remember for future trips/ }));
     await user.click(within(dialog).getByRole("button", { name: "Save item" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(source.staplesSnapshot().find((staple) => staple.id === "underwear")?.qty).toBe(3);
+    expect(source.staplesSnapshot().find((staple) => staple.id === "underwear")?.qty).toBe(2);
     expect(itemOf(source, "underwear").qty).toBe(9);
   });
 
-  it("says the saved quantity stays the same when the trip has no packing days", async () => {
+  it("says the saved quantity stays the same when the trip has no calendar days", async () => {
     const state = sampleLifecycleState();
-    state.trips[0] = { ...state.trips[0], dailyDays: 0 };
+    state.trips[0] = { ...state.trips[0], days: 0 };
     const base = createMemoryTripsSource(state, { now: () => 1 });
     const user = userEvent.setup();
     renderInApp(
@@ -671,7 +666,7 @@ describe("item editor", () => {
     await user.click(within(row("underwear")).getByRole("button", { name: /^Underwear / }));
     await user.click(screen.getByRole("radio", { name: /Remember for future trips/ }));
     expect(screen.getByRole("status", { name: "Saved quantity" }).textContent).toBe(
-      "This trip has no packing days, so the saved quantity stays the same.",
+      "This trip has no calendar days, so the saved quantity stays the same.",
     );
   });
 

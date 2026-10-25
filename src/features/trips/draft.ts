@@ -106,7 +106,7 @@ export function describeChanges(before: Suggestions, after: Suggestions): string
 
 /** The description under the Nice outfits switch: the Shape step and the Edit trip preferences use this one text (#203, design on #213). */
 export const NICE_OUTFITS_DESCRIPTION =
-  "Adds planned occasion looks on top of your everyday outfits, plus optional Dress shoes, Makeup and Dress-specific undergarments.";
+  "Adds planned occasion looks on top of your everyday outfits, plus optional Dress shoes.";
 
 /** The line under the Nice outfits switch while it is off: why Occasions and Reuse are disabled. */
 export const NICE_OFF_HINT = "Turn on Nice outfits to set occasions.";

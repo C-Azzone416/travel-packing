@@ -8,13 +8,7 @@ import { reviewAndApply } from "./helpers/preferences";
 const NOW = new Date("2026-10-16T12:00:00");
 
 const row = (page: Page, id: string) => page.locator(`[data-item-id="${id}"]`);
-const TOILETRIES = [
-  "nice-makeup",
-  "last-toothbrush",
-  "last-toothpaste",
-  "last-deodorant",
-  "last-contacts",
-];
+const TOILETRIES = ["last-toothbrush", "last-toothpaste", "last-deodorant", "last-contacts"];
 
 async function openDashboard(page: Page) {
   await page.clock.setFixedTime(NOW);
@@ -62,18 +56,19 @@ test("fast taps on a stepper show at once and are stored as ONE write with the f
     if (isAction(request)) writes.push(request.url());
   });
   const up = row(page, "socks").getByRole("button", { name: "Increase packed Socks" });
-  await expect(row(page, "socks")).toContainText("1 of 4 packed");
+  await expect(row(page, "socks")).toContainText("1 of 5 packed");
+  await up.click();
   await up.click();
   await up.click();
   await up.click();
   // The tapped count is on screen before anything has been sent.
-  await expect(row(page, "socks")).toContainText("4 of 4 packed");
+  await expect(row(page, "socks")).toContainText("5 of 5 packed");
   expect(writes).toHaveLength(0);
   await expect.poll(() => writes.length).toBe(1);
   await page.waitForTimeout(600);
   expect(writes).toHaveLength(1);
   await page.reload();
-  await expect(row(page, "socks")).toContainText("4 of 4 packed");
+  await expect(row(page, "socks")).toContainText("5 of 5 packed");
 });
 
 test("the toiletry bag gate and its placement are stored", async ({ page }) => {
@@ -170,7 +165,7 @@ test("when the network fails the row says 'Not saved · Retry', keeps the user's
   const retryBox = (await retry.boundingBox())!;
   expect(retryBox.height).toBeGreaterThanOrEqual(43.9);
   expect(retryBox.width).toBeGreaterThanOrEqual(43.9);
-  await expect(socks).toContainText("3 of 4 packed");
+  await expect(socks).toContainText("3 of 5 packed");
   await expect(page.getByRole("button", { name: "Not saved, retry" })).toBeVisible();
   await page.screenshot({
     path: `test-results/screenshots/${testInfo.project.name}-trip-not-saved.png`,
@@ -181,7 +176,7 @@ test("when the network fails the row says 'Not saved · Retry', keeps the user's
   await expect(retry).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Saved" })).toBeVisible();
   await page.reload();
-  await expect(row(page, "socks")).toContainText("3 of 4 packed");
+  await expect(row(page, "socks")).toContainText("3 of 5 packed");
 });
 
 test("another signed-in owner cannot open this owner's trip, and sees the same page as for a missing one", async ({

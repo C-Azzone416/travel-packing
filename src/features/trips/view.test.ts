@@ -157,7 +157,7 @@ describe("quickViewModel", () => {
       "Pack last",
     ]);
     const clothing = model.categories[0].rows;
-    expect(clothing.find((row) => row.name === "Underwear")?.detail).toBe("2 left");
+    expect(clothing.find((row) => row.name === "Underwear")?.detail).toBe("3 left");
     expect(clothing.find((row) => row.name === "Everyday tops")?.detail).toBe("2 left");
     expect(clothing.some((row) => row.name === "Sleepwear")).toBe(false);
   });
@@ -178,7 +178,6 @@ describe("quickViewModel", () => {
     expect(packLast.rows.map((row) => row.name)).not.toContain("Toothbrush");
     const toiletries = model.categories.find((entry) => entry.title === "Toiletries")!;
     expect(toiletries.rows.map((row) => row.name)).toEqual([
-      "Makeup",
       "Toothbrush",
       "Toothpaste",
       "Deodorant",

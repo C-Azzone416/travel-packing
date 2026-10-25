@@ -3,7 +3,6 @@ import { calculateSuggestions as suggest } from "./calc";
 import { editItem, recalculateSuggestions, removeTripItem } from "./item-ops";
 import { configsEqual, previewRecalculation } from "./recalc-preview";
 import { setPacked } from "./readiness";
-import { TOILETRY_GROUP_ID } from "./toiletry-bag";
 import type { Staple, Trip, TripConfig, TripItem } from "./trip";
 
 const CONFIG: TripConfig = {
@@ -36,7 +35,6 @@ function makeTrip(over: Partial<Trip> = {}, config: TripConfig = CONFIG): Trip {
     packed: 0,
     section: "main",
     optional: Boolean(entry.optional),
-    ...(entry.id === "nice-makeup" ? { groupId: TOILETRY_GROUP_ID } : {}),
   }));
   return {
     id: "trip-a",
@@ -230,13 +228,7 @@ describe("previewRecalculation: the user's own work stays", () => {
     trip = pack(trip, "nice-top", 1);
     const off = previewRecalculation(trip, { ...CONFIG, niceAttire: false }, suggest);
     const gone = off.removed.map((line) => line.id).sort();
-    expect(gone).toEqual([
-      "nice-bottom",
-      "nice-makeup",
-      "nice-shoes",
-      "nice-top",
-      "nice-undergarments",
-    ]);
+    expect(gone).toEqual(["nice-bottom", "nice-shoes", "nice-top"]);
     expect(off.removed.find((line) => line.id === "nice-top")).toMatchObject({
       qty: 2,
       packed: 1,
@@ -253,6 +245,23 @@ describe("previewRecalculation: the user's own work stays", () => {
     const preview = previewRecalculation(makeTrip(), { ...CONFIG, niceAttire: false }, suggest);
     expect(preview.removed.length).toBeGreaterThan(0);
     expect(preview.needsAcknowledgement).toBe(false);
+  });
+
+  it("removing an edited but unpacked suggestion still needs acknowledgement", () => {
+    const edited = editItem(makeTrip(), NO_STAPLES, "nice-shoes", {
+      name: "My formal shoes",
+      qty: 1,
+      timing: "main",
+      scope: "this-trip",
+    });
+    if (!edited.ok) throw new Error(edited.reason);
+    const preview = previewRecalculation(edited.trip, { ...CONFIG, niceAttire: false }, suggest);
+    expect(preview.removed.find((line) => line.id === "nice-shoes")).toMatchObject({
+      name: "My formal shoes",
+      packed: 0,
+      edited: true,
+    });
+    expect(preview.needsAcknowledgement).toBe(true);
   });
 });
 
@@ -280,12 +289,12 @@ describe("previewRecalculation: Ready and the toiletry bag", () => {
     expect(preview.next.ready).toBe(false);
   });
 
-  it("resets the bag only when the Bathroom contents change, and names the change", () => {
+  it("does not reset the bag when preference recalculation changes only generated clothing", () => {
     const placed = makeTrip({ toiletryBagPacked: true });
     const off = previewRecalculation(placed, { ...CONFIG, niceAttire: false }, suggest);
-    expect(off.bagWillReset).toBe(true);
-    expect(off.bathroomChanges).toEqual(["−Makeup"]);
-    expect(off.next.toiletryBagPacked).toBe(false);
+    expect(off.bagWillReset).toBe(false);
+    expect(off.bathroomChanges).toEqual([]);
+    expect(off.next.toiletryBagPacked).toBe(true);
 
     const laundry = previewRecalculation(placed, { ...CONFIG, laundry: true }, suggest);
     expect(laundry.bagWillReset).toBe(false);
@@ -295,18 +304,18 @@ describe("previewRecalculation: Ready and the toiletry bag", () => {
 
   it("does not claim a reset when the bag was not placed", () => {
     const preview = previewRecalculation(makeTrip(), { ...CONFIG, niceAttire: false }, suggest);
-    expect(preview.bathroomChanges).toEqual(["−Makeup"]);
+    expect(preview.bathroomChanges).toEqual([]);
     expect(preview.bagWillReset).toBe(false);
   });
 
-  it("names a Bathroom line that is added", () => {
+  it("does not add a personal Bathroom line when Nice outfits are enabled", () => {
     const base = makeTrip({}, { ...CONFIG, niceAttire: false });
     const preview = previewRecalculation(
       { ...base, toiletryBagPacked: true },
       { ...CONFIG, niceAttire: true },
       suggest,
     );
-    expect(preview.bathroomChanges).toEqual(["+Makeup"]);
-    expect(preview.bagWillReset).toBe(true);
+    expect(preview.bathroomChanges).toEqual([]);
+    expect(preview.bagWillReset).toBe(false);
   });
 });
