@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { logAllowlistLoaded, logAuthEvent, setAuthLogSink } from "./safe-log";
+import { createAuthReference, logAllowlistLoaded, logAuthEvent, setAuthLogSink } from "./safe-log";
 
 afterEach(() => {
   setAuthLogSink();
@@ -38,12 +38,33 @@ describe("logAuthEvent with a provider detail", () => {
     ]);
   });
 
+  it("adds only a generated support reference", () => {
+    const lines = capture();
+    const reference = createAuthReference();
+    expect(reference).toMatch(/^[0-9a-f]{12}$/);
+    logAuthEvent("sign-in-credentials-rejected", { reference });
+    logAuthEvent("sign-in-credentials-rejected", { reference: "owner@example.test" });
+    expect(JSON.parse(lines[0])).toEqual({
+      scope: "auth",
+      event: "sign-in-credentials-rejected",
+      reference,
+    });
+    expect(JSON.parse(lines[1])).toEqual({
+      scope: "auth",
+      event: "sign-in-credentials-rejected",
+    });
+  });
+
+  it("generates a new support reference for each attempt", () => {
+    expect(createAuthReference()).not.toBe(createAuthReference());
+  });
+
   it.each([
     ["a message with an address", "Email owner@example.test is taken"],
     ["lower-case words with spaces", "something went wrong"],
     ["too long", "A".repeat(80)],
     ["too short", "AB"],
-    ["an empty code", ""],
+    ["a plausible but unapproved machine code", "SOME_CODE"],
     ["a code with a dot", "A.B.C"],
   ])("replaces %s with OTHER", (_name, code) => {
     const lines = capture();
@@ -52,6 +73,15 @@ describe("logAuthEvent with a provider detail", () => {
       scope: "auth",
       event: "sign-up-provider-rejected",
       code: "OTHER",
+    });
+  });
+
+  it("omits a missing machine code instead of inventing one", () => {
+    const lines = capture();
+    logAuthEvent("sign-in-provider-unavailable", { code: "" });
+    expect(JSON.parse(lines[0])).toEqual({
+      scope: "auth",
+      event: "sign-in-provider-unavailable",
     });
   });
 

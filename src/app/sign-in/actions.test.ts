@@ -47,7 +47,12 @@ import { signInAction, signOutAction } from "./actions";
 import { resetFlowLimits } from "@/server/auth/flow-limits";
 import { resetSignInLimits } from "@/server/auth/sign-in-limit";
 import { setAuthLogSink } from "@/server/auth/safe-log";
-import { INVALID_CREDENTIALS_MESSAGE, RATE_LIMITED_MESSAGE, UNAVAILABLE_MESSAGE } from "./state";
+import {
+  INVALID_CREDENTIALS_MESSAGE,
+  RATE_LIMITED_MESSAGE,
+  UNAVAILABLE_MESSAGE,
+  type SignInState,
+} from "./state";
 
 const form = (email: string, password: string) => {
   const data = new FormData();
@@ -55,6 +60,10 @@ const form = (email: string, password: string) => {
   data.set("password", password);
   return data;
 };
+const failure = (error: string) => ({
+  error,
+  reference: expect.stringMatching(/^[0-9a-f]{12}$/),
+});
 
 beforeEach(() => {
   jar.clear();
@@ -87,17 +96,17 @@ describe("signInAction before the password was set through a link (#83)", () => 
 
   it("is not counted as a failed attempt (the password was right)", async () => {
     for (let i = 0; i < 9; i += 1) {
-      expect(await signInAction({ error: null }, form("owner2@example.test", "wrong"))).toEqual({
-        error: INVALID_CREDENTIALS_MESSAGE,
-      });
+      expect(await signInAction({ error: null }, form("owner2@example.test", "wrong"))).toEqual(
+        failure(INVALID_CREDENTIALS_MESSAGE),
+      );
     }
     await expect(
       signInAction({ error: null }, form("owner2@example.test", "pw-owner2")),
     ).rejects.toThrow("NEXT_REDIRECT:/finish-setup");
     for (let i = 0; i < 9; i += 1) {
-      expect(await signInAction({ error: null }, form("owner2@example.test", "wrong"))).toEqual({
-        error: INVALID_CREDENTIALS_MESSAGE,
-      });
+      expect(await signInAction({ error: null }, form("owner2@example.test", "wrong"))).toEqual(
+        failure(INVALID_CREDENTIALS_MESSAGE),
+      );
     }
   });
 
@@ -155,18 +164,18 @@ describe("signInAction with an unverified account", () => {
 
   it("clears the failed-attempt count for the pair, because the password was right", async () => {
     for (let i = 0; i < 9; i += 1) {
-      expect(await signInAction({ error: null }, form("waiting@example.test", "wrong"))).toEqual({
-        error: INVALID_CREDENTIALS_MESSAGE,
-      });
+      expect(await signInAction({ error: null }, form("waiting@example.test", "wrong"))).toEqual(
+        failure(INVALID_CREDENTIALS_MESSAGE),
+      );
     }
     await expect(
       signInAction({ error: null }, form("waiting@example.test", "pw-waiting")),
     ).rejects.toThrow("NEXT_REDIRECT:/verify");
     // Nine more wrong passwords would have tripped the limit of ten had the count not been cleared.
     for (let i = 0; i < 9; i += 1) {
-      expect(await signInAction({ error: null }, form("waiting@example.test", "wrong"))).toEqual({
-        error: INVALID_CREDENTIALS_MESSAGE,
-      });
+      expect(await signInAction({ error: null }, form("waiting@example.test", "wrong"))).toEqual(
+        failure(INVALID_CREDENTIALS_MESSAGE),
+      );
     }
   });
 
@@ -190,9 +199,9 @@ describe("signInAction with an unverified account", () => {
   });
 
   it("still gives the generic error for a wrong password on the same account", async () => {
-    expect(await signInAction({ error: null }, form("pending@example.test", "wrong"))).toEqual({
-      error: INVALID_CREDENTIALS_MESSAGE,
-    });
+    expect(await signInAction({ error: null }, form("pending@example.test", "wrong"))).toEqual(
+      failure(INVALID_CREDENTIALS_MESSAGE),
+    );
     expect(jar.size).toBe(0);
   });
 });
@@ -243,17 +252,49 @@ describe("signInAction", () => {
     ["an unknown email", form("nobody@example.test", "pw-owner")],
     ["empty fields", new FormData()],
   ])("returns one generic error for %s", async (_name, data) => {
-    expect(await signInAction({ error: null }, data)).toEqual({
-      error: INVALID_CREDENTIALS_MESSAGE,
-    });
+    expect(await signInAction({ error: null }, data)).toEqual(failure(INVALID_CREDENTIALS_MESSAGE));
     expect(fake.current).toBeNull();
+  });
+
+  it.each([
+    ["provider unavailable", "provider-unavailable"],
+    ["provider rate limited", "provider-rate-limited"],
+    ["session not created", "session-not-created"],
+    ["invalid provider response", "provider-response-invalid"],
+  ] as const)("keeps %s details out of the action response", async (_name, reason) => {
+    vi.spyOn(fake, "signInWithPassword").mockResolvedValueOnce({
+      ok: false,
+      diagnostic: { reason },
+    });
+
+    const result = await signInAction(
+      { error: null },
+      form("owner@example.test", "not-the-password"),
+    );
+    expect(result).toEqual(failure(INVALID_CREDENTIALS_MESSAGE));
+    expect(Object.keys(result).sort()).toEqual(["error", "reference"]);
+  });
+
+  it("gives repeated failures for the same address different references", async () => {
+    const first = await signInAction(
+      { error: null },
+      form("owner@example.test", "not-the-password"),
+    );
+    const second = await signInAction(
+      { error: null },
+      form("owner@example.test", "not-the-password"),
+    );
+
+    expect(first).toEqual(failure(INVALID_CREDENTIALS_MESSAGE));
+    expect(second).toEqual(failure(INVALID_CREDENTIALS_MESSAGE));
+    expect(first.reference).not.toBe(second.reference);
   });
 
   it("says sign-in is unavailable when auth is not configured, without trying to sign in", async () => {
     available = false;
-    expect(await signInAction({ error: null }, form("owner@example.test", "pw-owner"))).toEqual({
-      error: UNAVAILABLE_MESSAGE,
-    });
+    expect(await signInAction({ error: null }, form("owner@example.test", "pw-owner"))).toEqual(
+      failure(UNAVAILABLE_MESSAGE),
+    );
     expect(fake.current).toBeNull();
   });
 });
@@ -280,18 +321,18 @@ describe("signInAction rate limit", () => {
 
   it("blocks guessing at one account from one address after 10 failures, before looking at the credentials", async () => {
     for (let attempt = 0; attempt < 10; attempt += 1) {
-      expect(await wrong()).toEqual({ error: INVALID_CREDENTIALS_MESSAGE });
+      expect(await wrong()).toEqual(failure(INVALID_CREDENTIALS_MESSAGE));
     }
-    expect(await wrong()).toEqual({ error: RATE_LIMITED_MESSAGE });
+    expect(await wrong()).toEqual(failure(RATE_LIMITED_MESSAGE));
     // Even the right password is refused while blocked, and it does not sign in.
-    expect(await right()).toEqual({ error: RATE_LIMITED_MESSAGE });
+    expect(await right()).toEqual(failure(RATE_LIMITED_MESSAGE));
     expect(fake.current).toBeNull();
   });
 
   it("someone elsewhere cannot lock the owner out: ten failures from another address leave the owner free", async () => {
     forwardedFor = "198.51.100.66";
     for (let attempt = 0; attempt < 10; attempt += 1) await wrong();
-    expect(await wrong()).toEqual({ error: RATE_LIMITED_MESSAGE });
+    expect(await wrong()).toEqual(failure(RATE_LIMITED_MESSAGE));
     forwardedFor = "203.0.113.7";
     await expect(right()).rejects.toThrow("NEXT_REDIRECT:/");
     expect(fake.current).toMatchObject({ email: "owner@example.test" });
@@ -317,30 +358,32 @@ describe("signInAction rate limit", () => {
     }
     expect(
       await signInAction({ error: null }, form("intruder@example.test", "pw-intruder")),
-    ).toEqual({ error: RATE_LIMITED_MESSAGE });
+    ).toEqual(failure(RATE_LIMITED_MESSAGE));
   });
 
   it("counts the email without regard to case or spaces", async () => {
     for (let attempt = 0; attempt < 10; attempt += 1)
       await wrong(attempt % 2 ? "OWNER@example.test " : "owner@example.test");
-    expect(await wrong(" Owner@Example.test")).toEqual({ error: RATE_LIMITED_MESSAGE });
+    expect(await wrong(" Owner@Example.test")).toEqual(failure(RATE_LIMITED_MESSAGE));
   });
 
   it("leaves other accounts alone until the address itself passes its larger allowance", async () => {
     for (let attempt = 0; attempt < 10; attempt += 1) await wrong();
-    expect(await wrong("nobody@example.test")).toEqual({ error: INVALID_CREDENTIALS_MESSAGE });
+    expect(await wrong("nobody@example.test")).toEqual(failure(INVALID_CREDENTIALS_MESSAGE));
     for (let attempt = 0; attempt < 40; attempt += 1) await wrong(`user${attempt}@example.test`);
-    expect(await wrong("fresh@example.test")).toEqual({ error: RATE_LIMITED_MESSAGE });
+    expect(await wrong("fresh@example.test")).toEqual(failure(RATE_LIMITED_MESSAGE));
     forwardedFor = "198.51.100.9";
-    expect(await wrong("fresh@example.test")).toEqual({ error: INVALID_CREDENTIALS_MESSAGE });
+    expect(await wrong("fresh@example.test")).toEqual(failure(INVALID_CREDENTIALS_MESSAGE));
   });
 
   it("logs only a closed event code when it blocks (no email, no address)", async () => {
     const lines: string[] = [];
     setAuthLogSink((line) => lines.push(line));
-    for (let attempt = 0; attempt < 11; attempt += 1) await wrong();
+    let response: SignInState = { error: null };
+    for (let attempt = 0; attempt < 11; attempt += 1) response = await wrong();
     const limited = lines.filter((line) => line.includes("sign-in-rate-limited"));
     expect(limited).toHaveLength(1);
+    expect(JSON.parse(limited[0]).reference).toBe(response.reference);
     expect(limited[0]).not.toContain("owner@");
     expect(limited[0]).not.toContain("203.0.113.7");
   });
@@ -348,6 +391,6 @@ describe("signInAction rate limit", () => {
   it("still limits a caller with no usable address header (one shared bucket)", async () => {
     forwardedFor = null;
     for (let attempt = 0; attempt < 40; attempt += 1) await wrong(`user${attempt}@example.test`);
-    expect(await wrong("fresh@example.test")).toEqual({ error: RATE_LIMITED_MESSAGE });
+    expect(await wrong("fresh@example.test")).toEqual(failure(RATE_LIMITED_MESSAGE));
   });
 });

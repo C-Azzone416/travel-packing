@@ -49,6 +49,7 @@ test.describe("signed out", () => {
     await expect(page.locator("form p[role='alert']")).toContainText(
       "Email or password is incorrect.",
     );
+    await expect(page.locator("form p[role='alert']")).toContainText(/Reference: [0-9a-f]{12}\./);
     await expect(page).toHaveURL(/\/sign-in$/);
   });
 });

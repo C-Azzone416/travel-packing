@@ -14,6 +14,7 @@ export function SignInForm({ notice }: { notice?: string | null }) {
     <SignInView
       action={action}
       error={state.error}
+      reference={state.reference}
       pending={pending}
       notice={notice}
       showPassword={showPassword}

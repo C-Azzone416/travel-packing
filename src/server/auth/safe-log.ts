@@ -5,6 +5,16 @@
 export type AuthEvent =
   | "sign-in-succeeded"
   | "sign-in-failed"
+  | "sign-in-input-invalid"
+  | "sign-in-credentials-rejected"
+  | "sign-in-provider-rate-limited"
+  | "sign-in-provider-unavailable"
+  | "sign-in-provider-rejected"
+  | "sign-in-provider-response-invalid"
+  | "sign-in-session-not-created"
+  | "sign-in-session-cleanup-failed"
+  | "sign-in-setup-unavailable"
+  | "sign-in-unavailable"
   | "sign-in-denied"
   | "sign-in-unverified"
   | "sign-in-setup-pending"
@@ -61,9 +71,42 @@ export function setAuthLogSink(next?: AuthLogSink): void {
 export interface ProviderDetail {
   status?: number;
   code?: string;
+  reference?: string;
 }
 
-const SAFE_CODE = /^[A-Z][A-Z0-9_]{2,47}$/;
+/** Provider codes that are useful for operations and known not to contain user input. Everything else is OTHER. */
+const SAFE_PROVIDER_CODES = new Set([
+  "EMAIL_NOT_VERIFIED",
+  "EMAIL_PASSWORD_DISABLED",
+  "FAILED_TO_CREATE_SESSION",
+  "INTERNAL_ERROR",
+  "INVALID_EMAIL",
+  "INVALID_EMAIL_OR_PASSWORD",
+  "INVALID_ORIGIN",
+  "INVALID_OTP",
+  "INVALID_REDIRECT_URL",
+  "INVALID_TOKEN",
+  "NETWORK_ABORT",
+  "NETWORK_DNS",
+  "NETWORK_ERROR",
+  "NETWORK_REFUSED",
+  "NETWORK_RESET",
+  "NETWORK_TIMEOUT",
+  "NETWORK_TLS",
+  "PASSWORD_TOO_LONG",
+  "PASSWORD_TOO_SHORT",
+  "TOO_MANY_ATTEMPTS",
+  "USER_ALREADY_EXISTS",
+  "USER_NOT_FOUND",
+]);
+const REFERENCE = /^[0-9a-f]{12}$/;
+
+/** A short random support reference. It identifies one attempt and is never derived from an address or credential. */
+export function createAuthReference(): string {
+  return Array.from(crypto.getRandomValues(new Uint8Array(6)), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
 
 function safeDetail(detail: ProviderDetail | undefined): ProviderDetail {
   if (!detail) return {};
@@ -75,10 +118,12 @@ function safeDetail(detail: ProviderDetail | undefined): ProviderDetail {
   ) {
     safe.status = detail.status;
   }
-  if (typeof detail.code === "string") {
+  if (typeof detail.code === "string" && detail.code.length > 0) {
     const upper = detail.code.toUpperCase();
-    safe.code = SAFE_CODE.test(upper) ? upper : "OTHER";
+    safe.code = SAFE_PROVIDER_CODES.has(upper) ? upper : "OTHER";
   }
+  if (typeof detail.reference === "string" && REFERENCE.test(detail.reference))
+    safe.reference = detail.reference;
   return safe;
 }
 
