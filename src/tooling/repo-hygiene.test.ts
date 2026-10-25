@@ -71,25 +71,67 @@ describe("findHygieneProblems", () => {
     });
   });
 
-  describe("public documentation", () => {
-    it("rejects email address literals without echoing the address", () => {
+  describe("email address literals", () => {
+    it("rejects mixed-case non-reserved addresses in any tracked text file without echoing it", () => {
+      // Assemble the unreserved domain at run time so this regression fixture does not trip the
+      // repository-wide check that it is testing.
+      const address = ["Owner@Private", ".INTERNAL"].join("");
       const problems = findHygieneProblems([
-        { ...file("docs/deploy.md"), text: "Contact owner@example.test for access." },
+        {
+          ...file("src/auth.test.ts"),
+          text: `const fixture = "safe@example.test"; const owner = "${address}";`,
+        },
       ]);
 
       expect(problems).toEqual([
-        "docs/deploy.md: email address literals must not be committed in public documentation",
+        "src/auth.test.ts: email address literals must use reserved example domains",
       ]);
-      expect(problems.join("\n")).not.toContain("owner@example.test");
+      expect(problems.join("\n")).not.toContain(address);
     });
 
-    it("does not scan source files or ordinary prose without an address", () => {
+    it.each([
+      "owner@example.com",
+      "owner@example.org",
+      "owner@example.net",
+      "owner@sub.example.com",
+      "owner@example.test",
+      "owner@sub.example.invalid",
+      "owner@localhost",
+    ])("allows synthetic addresses on reserved domains: %s", (address) => {
+      expect(
+        findHygieneProblems([
+          { ...file("src/auth.test.ts"), text: `const fixture = "${address}";` },
+        ]),
+      ).toEqual([]);
+    });
+
+    it("passes ordinary prose without an address", () => {
       expect(
         findHygieneProblems([
           { ...file("docs/deploy.md"), text: "Contact the owner for access." },
-          { ...file("src/example.ts"), text: 'const fixture = "owner@example.test";' },
+          { ...file("src/example.ts"), text: "export const fixture = true;" },
         ]),
       ).toEqual([]);
+    });
+
+    it("does not mistake URL credentials for an email address", () => {
+      expect(
+        findHygieneProblems([
+          {
+            ...file("src/db.test.ts"),
+            text: "postgres://user:password@db.internal/app",
+          },
+        ]),
+      ).toEqual([]);
+    });
+
+    it("fails closed when a tracked file cannot be inspected", () => {
+      expect(
+        findHygieneProblems([
+          { ...file("src/unreadable.ts"), inspectionFailed: true },
+          { ...file("public/image.png"), text: undefined },
+        ]),
+      ).toEqual(["src/unreadable.ts: tracked file could not be inspected"]);
     });
   });
 

@@ -11,17 +11,22 @@ const listed = execFileSync("git", ["ls-files", "-z"], {
 const files: TrackedFile[] = listed
   .split("\0")
   .filter(Boolean)
-  .flatMap((path) => {
+  .flatMap((path): TrackedFile[] => {
     try {
+      const contents = readFileSync(path);
       return [
         {
           path,
           bytes: statSync(path).size,
-          text: /\.mdx?$/i.test(path) ? readFileSync(path, "utf8") : undefined,
+          // NUL bytes are a conservative binary marker. All other tracked files are scanned as UTF-8 text.
+          text: contents.includes(0) ? undefined : contents.toString("utf8"),
         },
       ];
-    } catch {
-      return []; // tracked but deleted in the working tree: nothing to measure
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return []; // tracked but deleted in the working tree: nothing to measure
+      }
+      return [{ path, bytes: 0, inspectionFailed: true }];
     }
   });
 
