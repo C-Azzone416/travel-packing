@@ -8,8 +8,7 @@ updates:
     target-branch: develop
     schedule:
       interval: weekly
-    # Temporary history-cleanup pause; restore this value to 5 afterward.
-    open-pull-requests-limit: 0
+    open-pull-requests-limit: 5
     groups:
       minor-and-patch:
         update-types: [minor, patch]
@@ -18,5 +17,3 @@ updates:
     target-branch: develop
     schedule:
       interval: weekly
-    # Temporary history-cleanup pause; remove this line afterward.
-    open-pull-requests-limit: 0
