@@ -205,7 +205,7 @@ describe("checkDeployEnv", () => {
     "postgres://u:p@ep-prod-1.us-east-2.aws.neon.tech/neondb",
     "https://ep-prod-1.us-east-2.aws.neon.tech",
     "ep-prod-1.us-east-2.aws.neon.tech/db",
-    "user@ep-prod-1.us-east-2.aws.neon.tech",
+    "user@example.test",
     "ep-prod-1.us-east-2.aws.neon.tech:5432",
     "not a host",
     "-bad.example.test",
@@ -320,7 +320,7 @@ describe("checkDeployEnv: values that vercel pull could not read", () => {
     ["an entry wrapped in angle brackets", "<a@example.test>", false],
     ["an entry with a mailto: prefix", "mailto:a@example.test", false],
     ["one good and one quoted entry", 'a@example.test,"b@example.test"', false],
-    ["plus-addressing and a subdomain", "first.last+tag@mail.example.co", true],
+    ["plus-addressing and a subdomain", "first.last+tag@sub.example.test", true],
   ])("validates OWNER_EMAIL_ALLOWLIST: %s", (_name, value, ok) => {
     const problems = checkDeployEnv(
       "preview",

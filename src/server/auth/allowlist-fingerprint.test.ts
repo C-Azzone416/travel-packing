@@ -25,7 +25,7 @@ describe("allowlistFingerprint", () => {
 
   it("changes when an address is added, removed or different", () => {
     const base = allowlistFingerprint(parseAllowlist("a@example.test"), SECRET);
-    for (const other of ["a@example.test,b@example.test", "b@example.test", "a@example.tes", ""]) {
+    for (const other of ["a@example.test,b@example.test", "b@example.test", "c@example.test", ""]) {
       expect(allowlistFingerprint(parseAllowlist(other), SECRET)).not.toBe(base);
     }
   });

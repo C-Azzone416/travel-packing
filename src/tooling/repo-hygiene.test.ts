@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findHygieneProblems, MAX_FILE_BYTES } from "./repo-hygiene";
+import { findHygieneProblems, MAX_FILE_BYTES, textForEmailScan } from "./repo-hygiene";
 
 const file = (path: string, bytes = 100) => ({ path, bytes });
 
@@ -68,6 +68,90 @@ describe("findHygieneProblems", () => {
       expect(findHygieneProblems([file(".env.example"), file("apps/web/.env.example")])).toEqual(
         [],
       );
+    });
+  });
+
+  describe("email address literals", () => {
+    it("rejects mixed-case non-reserved addresses in any tracked text file without echoing it", () => {
+      // Assemble the unreserved domain at run time so this regression fixture does not trip the
+      // repository-wide check that it is testing.
+      const address = ["Owner@Private", ".INTERNAL"].join("");
+      const problems = findHygieneProblems([
+        {
+          ...file("src/auth.test.ts"),
+          text: `const fixture = "safe@example.test"; const owner = "${address}";`,
+        },
+      ]);
+
+      expect(problems).toEqual([
+        "src/auth.test.ts: email address literals must use reserved example domains",
+      ]);
+      expect(problems.join("\n")).not.toContain(address);
+    });
+
+    it.each([
+      "owner@example.com",
+      "owner@example.org",
+      "owner@example.net",
+      "owner@sub.example.com",
+      "owner@example.test",
+      "owner@sub.example.invalid",
+      "owner@localhost",
+    ])("allows synthetic addresses on reserved domains: %s", (address) => {
+      expect(
+        findHygieneProblems([
+          { ...file("src/auth.test.ts"), text: `const fixture = "${address}";` },
+        ]),
+      ).toEqual([]);
+    });
+
+    it.each([
+      ["a prefixed example domain", ["notexample", ".com"]],
+      ["a suffixed example domain", ["example.com", ".evil.net"]],
+      ["test outside the top-level position", ["test", ".evil.net"]],
+      ["a prefixed example.org domain", ["evilexample", ".org"]],
+    ])("rejects reserved-domain look-alikes: %s", (_name, domainParts) => {
+      const address = `x@${domainParts.join("")}`;
+      expect(
+        findHygieneProblems([{ ...file("src/auth.test.ts"), text: `const value = "${address}";` }]),
+      ).toEqual(["src/auth.test.ts: email address literals must use reserved example domains"]);
+    });
+
+    it("detects an address after a NUL byte without echoing it", () => {
+      const address = ["Owner@Private", ".INTERNAL"].join("");
+      const text = textForEmailScan(Buffer.from(`prefix\0${address}`));
+      const problems = findHygieneProblems([{ ...file("docs/nul.md"), text }]);
+
+      expect(problems).toEqual([
+        "docs/nul.md: email address literals must use reserved example domains",
+      ]);
+      expect(problems.join("\n")).not.toContain(address);
+    });
+
+    it("passes ordinary prose without an address", () => {
+      expect(
+        findHygieneProblems([
+          { ...file("docs/deploy.md"), text: "Contact the owner for access." },
+          { ...file("src/example.ts"), text: "export const fixture = true;" },
+        ]),
+      ).toEqual([]);
+    });
+
+    it("does not mistake URL credentials for an email address", () => {
+      expect(
+        findHygieneProblems([
+          {
+            ...file("src/db.test.ts"),
+            text: "postgres://user:password@db.internal/app",
+          },
+        ]),
+      ).toEqual([]);
+    });
+
+    it("fails closed when a tracked file cannot be inspected", () => {
+      expect(
+        findHygieneProblems([{ ...file("src/unreadable.ts"), inspectionFailed: true }]),
+      ).toEqual(["src/unreadable.ts: tracked file could not be inspected"]);
     });
   });
 
