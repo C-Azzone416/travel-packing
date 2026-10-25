@@ -17,8 +17,10 @@ import {
 import "./ledger-tokens.css";
 import "./globals.css";
 
-// Screens set their own title; the template yields "Trips · Carrywell".
-export const metadata: Metadata = { title: { default: "Carrywell", template: "%s · Carrywell" } };
+// Screens set their own title; the template yields "Trips · Packed Smart".
+export const metadata: Metadata = {
+  title: { default: "Packed Smart", template: "%s · Packed Smart" },
+};
 export const viewport: Viewport = { themeColor: "#e9e3d6" };
 
 const setupActions = {

@@ -88,6 +88,21 @@ describe("shared Staple quantity rules", () => {
   );
 
   it.each([
+    ["underwear", "per trip", 2],
+    ["underwear", "per day", 10],
+    ["socks", "per trip", 2],
+    ["socks", "per day", 10],
+  ] as const)(
+    "%s with %s cadence keeps its exact quantity when trip spares are enabled",
+    (id, cadence, expected) => {
+      const { items } = buildTripItems({ ...base, spare: true }, [
+        staple({ id, name: id, qty: 2, cadence, category: "Clothing" }),
+      ]);
+      expect(byId(items, id)?.qty).toBe(expected);
+    },
+  );
+
+  it.each([
     ["same day", { start: "2030-04-01", end: "2030-04-01" }, 0],
     ["five days", {}, 3],
     ["laundry", { laundry: true }, 2],
