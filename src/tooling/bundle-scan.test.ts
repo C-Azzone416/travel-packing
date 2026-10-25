@@ -42,7 +42,14 @@ describe("scanFiles", () => {
     ["a Stripe-style secret key", `sk_live_${"b".repeat(20)}`],
   ])("fails an injected secret value: %s", (problem, text) => {
     const findings = scanFiles([{ path: "leak.js", text: `var s="${text}";` }]);
-    expect(findings).toEqual([{ path: "leak.js", problem: `contains ${problem}` }]);
+    expect(findings).toContainEqual({ path: "leak.js", problem: `contains ${problem}` });
+  });
+
+  it("fails an email address literal without returning the address", () => {
+    const findings = scanFiles([{ path: "leak.js", text: 'const owner = "owner@example.test";' }]);
+
+    expect(findings).toEqual([{ path: "leak.js", problem: "contains an email address literal" }]);
+    expect(JSON.stringify(findings)).not.toContain("owner@example.test");
   });
 
   it("allows a database URL without a password (a host name in documentation)", () => {

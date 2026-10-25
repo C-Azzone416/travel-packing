@@ -1,7 +1,7 @@
 // Fails if any tracked file breaks the repository hygiene rules (src/tooling/repo-hygiene.ts).
 
 import { execFileSync } from "node:child_process";
-import { statSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { findHygieneProblems, type TrackedFile } from "../src/tooling/repo-hygiene";
 
 const listed = execFileSync("git", ["ls-files", "-z"], {
@@ -13,7 +13,13 @@ const files: TrackedFile[] = listed
   .filter(Boolean)
   .flatMap((path) => {
     try {
-      return [{ path, bytes: statSync(path).size }];
+      return [
+        {
+          path,
+          bytes: statSync(path).size,
+          text: /\.mdx?$/i.test(path) ? readFileSync(path, "utf8") : undefined,
+        },
+      ];
     } catch {
       return []; // tracked but deleted in the working tree: nothing to measure
     }

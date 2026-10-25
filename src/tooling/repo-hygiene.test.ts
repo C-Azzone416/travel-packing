@@ -71,6 +71,28 @@ describe("findHygieneProblems", () => {
     });
   });
 
+  describe("public documentation", () => {
+    it("rejects email address literals without echoing the address", () => {
+      const problems = findHygieneProblems([
+        { ...file("docs/deploy.md"), text: "Contact owner@example.test for access." },
+      ]);
+
+      expect(problems).toEqual([
+        "docs/deploy.md: email address literals must not be committed in public documentation",
+      ]);
+      expect(problems.join("\n")).not.toContain("owner@example.test");
+    });
+
+    it("does not scan source files or ordinary prose without an address", () => {
+      expect(
+        findHygieneProblems([
+          { ...file("docs/deploy.md"), text: "Contact the owner for access." },
+          { ...file("src/example.ts"), text: 'const fixture = "owner@example.test";' },
+        ]),
+      ).toEqual([]);
+    });
+  });
+
   describe("size limit", () => {
     it("accepts a file exactly at the limit and rejects one byte over", () => {
       expect(findHygieneProblems([file("a.bin", MAX_FILE_BYTES)])).toEqual([]);

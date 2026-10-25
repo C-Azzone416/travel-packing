@@ -10,7 +10,12 @@ const SIZE_EXEMPT = new Set(["package-lock.json"]);
 export interface TrackedFile {
   path: string;
   bytes: number;
+  /** Text is supplied only for public documentation, so email literals can be rejected without reading binary files. */
+  text?: string;
 }
+
+const MARKDOWN = /\.mdx?$/i;
+const EMAIL_LITERAL = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i;
 
 /** Path rules: each is `[pattern, why]`. Paths use forward slashes, relative to the repository root. */
 const FORBIDDEN_PATHS: readonly (readonly [RegExp, string])[] = [
@@ -27,12 +32,17 @@ const FORBIDDEN_PATHS: readonly (readonly [RegExp, string])[] = [
 /** Every problem found, as short human-readable lines. Empty means clean. */
 export function findHygieneProblems(files: readonly TrackedFile[]): string[] {
   const problems: string[] = [];
-  for (const { path, bytes } of files) {
+  for (const { path, bytes, text } of files) {
     for (const [pattern, why] of FORBIDDEN_PATHS) {
       if (pattern.test(path)) problems.push(`${path}: ${why} must not be committed`);
     }
     if (bytes > MAX_FILE_BYTES && !SIZE_EXEMPT.has(path)) {
       problems.push(`${path}: ${bytes} bytes exceeds the ${MAX_FILE_BYTES}-byte limit`);
+    }
+    if (MARKDOWN.test(path) && text !== undefined && EMAIL_LITERAL.test(text)) {
+      problems.push(
+        `${path}: email address literals must not be committed in public documentation`,
+      );
     }
   }
   return problems;
