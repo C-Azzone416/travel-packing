@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createFakeAuth, type FakeAuth } from "./__fixtures__/fake-auth";
+import { withSetupGate, type AccountSetupStore } from "./account-setup";
 import { parseAllowlist } from "./allowlist";
 import { authorizeOwner } from "./guard";
 import { setAuthLogSink } from "./safe-log";
@@ -121,19 +122,37 @@ describe("signInOwner", () => {
     });
   });
 
-  it("distinguishes a setup-store failure and correlates cleanup trouble", async () => {
-    fake.signInWithPassword = async () => ({
-      ok: false,
-      unfinished: true,
-      diagnostic: { reason: "setup-unavailable", cleanupFailed: true },
-    });
-    const reference = "123456abcdef";
-    expect(await signInOwner(auth(), OWNER.email, OWNER.password, reference)).toBe("unfinished");
-    expect(logged.map((line) => JSON.parse(line))).toEqual([
-      { scope: "auth", event: "sign-in-setup-unavailable", reference },
-      { scope: "auth", event: "sign-in-session-cleanup-failed", reference },
-    ]);
-  });
+  it.each([
+    ["cleanup succeeds", false, ["sign-in-setup-unavailable"]],
+    ["cleanup fails", true, ["sign-in-setup-unavailable", "sign-in-session-cleanup-failed"]],
+  ])(
+    "composes the real setup gate when the store throws and %s",
+    async (_name, cleanupFails, expectedEvents) => {
+      const store: AccountSetupStore = {
+        completedAt: async () => {
+          throw new Error("database secret for owner@example.test");
+        },
+        markComplete: async () => {},
+      };
+      fake.failNextSignOut = cleanupFails;
+      const allowlist = parseAllowlist(OWNER.email);
+      const provider = withSetupGate(fake, store, allowlist);
+      const password = "correct horse";
+      const reference = "123456abcdef";
+
+      expect(await signInOwner({ provider, allowlist }, OWNER.email, password, reference)).toBe(
+        "unfinished",
+      );
+      expect(logged.map((line) => JSON.parse(line))).toEqual(
+        expectedEvents.map((event) => ({ scope: "auth", event, reference })),
+      );
+
+      const output = logged.join("\n");
+      for (const sensitive of [OWNER.email, password, "database secret"]) {
+        expect(output).not.toContain(sensitive);
+      }
+    },
+  );
 });
 
 describe("signOutOwner", () => {

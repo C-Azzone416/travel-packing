@@ -256,6 +256,40 @@ describe("signInAction", () => {
     expect(fake.current).toBeNull();
   });
 
+  it.each([
+    ["provider unavailable", "provider-unavailable"],
+    ["provider rate limited", "provider-rate-limited"],
+    ["session not created", "session-not-created"],
+    ["invalid provider response", "provider-response-invalid"],
+  ] as const)("keeps %s details out of the action response", async (_name, reason) => {
+    vi.spyOn(fake, "signInWithPassword").mockResolvedValueOnce({
+      ok: false,
+      diagnostic: { reason },
+    });
+
+    const result = await signInAction(
+      { error: null },
+      form("owner@example.test", "not-the-password"),
+    );
+    expect(result).toEqual(failure(INVALID_CREDENTIALS_MESSAGE));
+    expect(Object.keys(result).sort()).toEqual(["error", "reference"]);
+  });
+
+  it("gives repeated failures for the same address different references", async () => {
+    const first = await signInAction(
+      { error: null },
+      form("owner@example.test", "not-the-password"),
+    );
+    const second = await signInAction(
+      { error: null },
+      form("owner@example.test", "not-the-password"),
+    );
+
+    expect(first).toEqual(failure(INVALID_CREDENTIALS_MESSAGE));
+    expect(second).toEqual(failure(INVALID_CREDENTIALS_MESSAGE));
+    expect(first.reference).not.toBe(second.reference);
+  });
+
   it("says sign-in is unavailable when auth is not configured, without trying to sign in", async () => {
     available = false;
     expect(await signInAction({ error: null }, form("owner@example.test", "pw-owner"))).toEqual(

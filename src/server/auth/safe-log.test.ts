@@ -55,6 +55,10 @@ describe("logAuthEvent with a provider detail", () => {
     });
   });
 
+  it("generates a new support reference for each attempt", () => {
+    expect(createAuthReference()).not.toBe(createAuthReference());
+  });
+
   it.each([
     ["a message with an address", "Email owner@example.test is taken"],
     ["lower-case words with spaces", "something went wrong"],

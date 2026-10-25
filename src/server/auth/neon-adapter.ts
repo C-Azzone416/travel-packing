@@ -54,7 +54,7 @@ export interface NeonAuthLike {
     }): Promise<NeonCallResult | null>;
     verifyEmail(input: { email: string; otp: string }): Promise<NeonCallResult | null>;
   };
-  signOut(): Promise<unknown>;
+  signOut(): Promise<NeonCallResult | null>;
 }
 
 /**
@@ -99,22 +99,33 @@ function signInFailure(error: NonNullable<NeonCallResult["error"]>): SignInResul
   if (code === "FAILED_TO_CREATE_SESSION") {
     return { ok: false, diagnostic: { reason: "session-not-created", rejection } };
   }
-  if (code === "INVALID_EMAIL_OR_PASSWORD" || rejection.status === 401) {
+  if (code === "INVALID_EMAIL_OR_PASSWORD") {
     return { ok: false, diagnostic: { reason: "credentials-rejected", rejection } };
   }
-  if (rejection.status === 429 || code.includes("TOO_MANY")) {
+  if (code === "TOO_MANY_ATTEMPTS") {
     return { ok: false, diagnostic: { reason: "provider-rate-limited", rejection } };
   }
-  if (
-    rejection.status === 0 ||
-    rejection.status >= 500 ||
-    code.startsWith("NETWORK") ||
-    code === "INTERNAL_ERROR"
-  ) {
+  if (code === "INTERNAL_ERROR" || NETWORK_FAILURE_CODES.has(code)) {
     return { ok: false, diagnostic: { reason: "provider-unavailable", rejection } };
   }
+  // HTTP classes are useful only where their meaning is unambiguous. A bare or unknown 401 does not prove bad
+  // credentials; hosted auth may use it for another rejection, so keep that outcome generic.
+  if (rejection.status === 429)
+    return { ok: false, diagnostic: { reason: "provider-rate-limited", rejection } };
+  if (rejection.status === 0 || rejection.status >= 500)
+    return { ok: false, diagnostic: { reason: "provider-unavailable", rejection } };
   return { ok: false, diagnostic: { reason: "provider-rejected", rejection } };
 }
+
+const NETWORK_FAILURE_CODES = new Set([
+  "NETWORK_ABORT",
+  "NETWORK_DNS",
+  "NETWORK_ERROR",
+  "NETWORK_REFUSED",
+  "NETWORK_RESET",
+  "NETWORK_TIMEOUT",
+  "NETWORK_TLS",
+]);
 
 /** Runs one provider call and folds a thrown error into "unavailable"; only the code is logged. */
 async function flowCall<Reason extends FlowFailure>(
@@ -231,7 +242,15 @@ export function createNeonAuthProvider(neon: NeonAuthLike): AuthProvider {
       );
     },
     async signOut() {
-      await neon.signOut();
+      try {
+        const result = await neon.signOut();
+        // The server SDK resolves HTTP/transport failures as { data: null, error }; throwing here lets callers observe that
+        // cleanup was not confirmed.
+        if (!result || result.error) throw new Error("unconfirmed");
+      } catch {
+        // Never surface the provider's thrown value or resolved error message; either may contain request details.
+        throw new Error("Auth provider sign-out failed");
+      }
     },
   };
 }

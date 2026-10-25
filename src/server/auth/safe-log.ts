@@ -2,8 +2,6 @@
 // token, session id, or error message cannot be passed in by construction (and cannot leak through a
 // careless `String(error)`).
 
-import { randomBytes } from "node:crypto";
-
 export type AuthEvent =
   | "sign-in-succeeded"
   | "sign-in-failed"
@@ -105,7 +103,9 @@ const REFERENCE = /^[0-9a-f]{12}$/;
 
 /** A short random support reference. It identifies one attempt and is never derived from an address or credential. */
 export function createAuthReference(): string {
-  return randomBytes(6).toString("hex");
+  return Array.from(crypto.getRandomValues(new Uint8Array(6)), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
 }
 
 function safeDetail(detail: ProviderDetail | undefined): ProviderDetail {

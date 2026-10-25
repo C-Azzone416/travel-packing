@@ -4,9 +4,11 @@ import { setAuthLogSink } from "./safe-log";
 
 type SignInResult = Awaited<ReturnType<NeonAuthLike["signIn"]["email"]>>;
 type SessionResult = Awaited<ReturnType<NeonAuthLike["getSession"]>>;
+type SignOutResult = Awaited<ReturnType<NeonAuthLike["signOut"]>>;
 
 type CallResult = Awaited<ReturnType<NeonAuthLike["signUp"]["email"]>>;
 type Answer = CallResult | (() => Promise<CallResult>);
+type SignOutAnswer = SignOutResult | (() => Promise<SignOutResult>);
 
 function fakeNeon(
   overrides: {
@@ -17,6 +19,7 @@ function fakeNeon(
     verify?: Answer;
     requestReset?: Answer;
     reset?: Answer;
+    signOut?: SignOutAnswer;
   } = {},
 ) {
   const calls = {
@@ -68,8 +71,12 @@ function fakeNeon(
       calls.reset.push(input);
       return answer(overrides.reset);
     },
-    async signOut() {
+    signOut() {
       calls.signOut += 1;
+      const value = overrides.signOut;
+      return typeof value === "function"
+        ? value()
+        : Promise.resolve(value === undefined ? { data: { success: true }, error: null } : value);
     },
   };
   return { neon, calls };
@@ -244,6 +251,47 @@ describe("signInWithPassword", () => {
       diagnostic: { reason, rejection: error },
     });
   });
+
+  it.each([
+    ["an unknown code on a 401", { status: 401, code: "SOMETHING_ELSE" }, "provider-rejected"],
+    [
+      "a recognized internal error on a 401",
+      { status: 401, code: "INTERNAL_ERROR" },
+      "provider-unavailable",
+    ],
+    [
+      "a recognized credential rejection on a conflicting 503",
+      { status: 503, code: "INVALID_EMAIL_OR_PASSWORD" },
+      "credentials-rejected",
+    ],
+    [
+      "a recognized attempt limit on a conflicting 401",
+      { status: 401, code: "TOO_MANY_ATTEMPTS" },
+      "provider-rate-limited",
+    ],
+    [
+      "an unknown code on an unambiguous 503",
+      { status: 503, code: "SOMETHING_ELSE" },
+      "provider-unavailable",
+    ],
+  ])("uses bounded evidence for %s", async (_name, error, reason) => {
+    const { neon } = fakeNeon({ signIn: { data: null, error } });
+    expect(await createNeonAuthProvider(neon).signInWithPassword("a@example.test", "pw")).toEqual({
+      ok: false,
+      diagnostic: { reason, rejection: error },
+    });
+  });
+
+  it("keeps a status-only 401 generic", async () => {
+    const { neon } = fakeNeon({ signIn: { data: null, error: { status: 401 } } });
+    expect(await createNeonAuthProvider(neon).signInWithPassword("a@example.test", "pw")).toEqual({
+      ok: false,
+      diagnostic: {
+        reason: "provider-rejected",
+        rejection: { status: 401, code: "" },
+      },
+    });
+  });
 });
 
 describe("signOut", () => {
@@ -251,6 +299,40 @@ describe("signOut", () => {
     const { neon, calls } = fakeNeon();
     await createNeonAuthProvider(neon).signOut();
     expect(calls.signOut).toBe(1);
+  });
+
+  it.each([
+    [
+      "a resolved SDK error",
+      {
+        data: null,
+        error: {
+          status: 503,
+          code: "INTERNAL_ERROR",
+          message: "provider response for owner@example.test",
+        },
+      },
+    ],
+    ["an empty SDK response", null],
+  ])("rejects %s with a fixed safe error", async (_name, signOut) => {
+    const { neon } = fakeNeon({ signOut: signOut as SignOutResult });
+    await expect(createNeonAuthProvider(neon).signOut()).rejects.toThrow(
+      "Auth provider sign-out failed",
+    );
+    expect(logged.join()).not.toContain("owner@example.test");
+    expect(logged).toEqual([]);
+  });
+
+  it("replaces a thrown SDK error with a fixed safe error", async () => {
+    const { neon } = fakeNeon({
+      signOut: async () => {
+        throw new Error("cookie for owner@example.test failed");
+      },
+    });
+    await expect(createNeonAuthProvider(neon).signOut()).rejects.toThrow(
+      "Auth provider sign-out failed",
+    );
+    expect(logged).toEqual([]);
   });
 });
 
