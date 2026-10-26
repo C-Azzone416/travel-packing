@@ -4,13 +4,11 @@ import { createAccountClosureSignals } from "./account-closure-signal";
 const mocks = vi.hoisted(() => ({
   value: undefined as string | undefined,
   set: vi.fn(),
+  cookies: vi.fn(),
 }));
 
 vi.mock("next/headers", () => ({
-  cookies: async () => ({
-    get: (name: string) => (mocks.value === undefined ? undefined : { name, value: mocks.value }),
-    set: mocks.set,
-  }),
+  cookies: mocks.cookies,
 }));
 
 import {
@@ -29,6 +27,10 @@ const signals = createAccountClosureSignals(
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.value = undefined;
+  mocks.cookies.mockImplementation(async () => ({
+    get: (name: string) => (mocks.value === undefined ? undefined : { name, value: mocks.value }),
+    set: mocks.set,
+  }));
   mocks.set.mockImplementation((_name: string, value: string, options: { maxAge?: number }) => {
     mocks.value = options.maxAge === 0 ? undefined : value;
   });
@@ -80,5 +82,27 @@ describe("account closure completion cookie", () => {
         open: () => false,
       }),
     ).resolves.toBe(false);
+    await expect(
+      issueAccountClosureCompletion({ issue: () => "", open: () => false }),
+    ).resolves.toBe(false);
+  });
+
+  it("marks the cookie secure in production", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    try {
+      expect(await issueAccountClosureCompletion(signals)).toBe(true);
+      expect(mocks.set).toHaveBeenCalledWith(
+        ACCOUNT_CLOSURE_COMPLETION_COOKIE,
+        expect.any(String),
+        expect.objectContaining({ secure: true }),
+      );
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("fails closed when the completion cookie cannot be consumed", async () => {
+    mocks.cookies.mockRejectedValueOnce(new Error("cookie store unavailable"));
+    await expect(consumeAccountClosureCompletion(signals)).resolves.toBe(false);
   });
 });

@@ -32,7 +32,7 @@ export function RetryCloseAccountForm() {
           name="password"
           label="Current password"
           autoComplete="current-password"
-          error={state.fieldErrors.password}
+          error={pending ? undefined : state.fieldErrors.password}
         />
         <TextField
           id="close-account-confirmation"
@@ -42,9 +42,9 @@ export function RetryCloseAccountForm() {
           autoCapitalize="characters"
           spellCheck={false}
           required
-          error={state.fieldErrors.confirmation}
+          error={pending ? undefined : state.fieldErrors.confirmation}
         />
-        <FormAlert message={state.error} />
+        <FormAlert message={pending ? null : state.error} />
         <SubmitButton label="Finish account closure" busy={pending} />
       </form>
     </AuthCard>

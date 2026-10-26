@@ -61,7 +61,7 @@ test(
     await opener.focus();
     await page.keyboard.press("Enter");
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByLabel("Type DELETE to confirm")).toBeFocused();
+    await expect(dialog.getByLabel("Current password")).toBeFocused();
     const focusIsInside = () => dialog.evaluate((node) => node.contains(document.activeElement));
     for (let press = 0; press < 10; press += 1) {
       await page.keyboard.press("Tab");

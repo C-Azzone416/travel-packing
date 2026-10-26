@@ -29,6 +29,7 @@ describe("hasSameRequestOrigin", () => {
       { origin: "https://name@app.example.test", host: "app.example.test" },
     ],
     ["a non-http scheme", { origin: "javascript:alert(1)", host: "app.example.test" }],
+    ["an unparseable origin", { origin: "://not-a-url", host: "app.example.test" }],
   ])("rejects %s", (_name, values) => {
     expect(hasSameRequestOrigin(requestHeaders(values))).toBe(false);
   });

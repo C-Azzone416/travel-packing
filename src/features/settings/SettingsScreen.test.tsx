@@ -87,6 +87,7 @@ describe("SettingsScreen", () => {
       "current-password",
     );
     expect(screen.getByLabelText("Type DELETE to confirm")).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByLabelText("Current password"));
 
     await userEvent.click(screen.getByTestId("modal-backdrop"));
     expect(screen.getByRole("dialog", { name: "Close your account?" })).toBeTruthy();
@@ -107,6 +108,31 @@ describe("SettingsScreen", () => {
       password: "synthetic-password",
       confirmation: "DELETE",
     });
+  });
+
+  it("hides a stale failure while a retry is pending", async () => {
+    let resolveRetry!: (state: CloseAccountState) => void;
+    const retry = new Promise<CloseAccountState>((resolve) => {
+      resolveRetry = resolve;
+    });
+    const closeAccount = vi
+      .fn<(previous: CloseAccountState, formData: FormData) => Promise<CloseAccountState>>()
+      .mockResolvedValueOnce({
+        error: "We couldn’t close your account. Nothing was deleted. Try again.",
+        fieldErrors: {},
+      })
+      .mockReturnValueOnce(retry);
+    setup(undefined, undefined, undefined, closeAccount);
+    await userEvent.click(screen.getByRole("button", { name: "Close account" }));
+    const submit = screen.getByRole("button", { name: "Close account permanently" });
+    await userEvent.click(submit);
+    expect(await screen.findByText(/Nothing was deleted/)).toBeTruthy();
+
+    await userEvent.click(submit);
+    expect(screen.getByRole("button", { name: "Closing…" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.queryByText(/Nothing was deleted/)).toBeNull();
+
+    await act(async () => resolveRetry({ error: null, fieldErrors: {} }));
   });
 
   it("is honest before anything was saved (one line, no 'saved' claim, no Last saved), then after a real write", async () => {

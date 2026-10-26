@@ -4,11 +4,12 @@
 //   3. run the handler, scoped to that owner
 //   4. map failures to a typed Result (no stack traces, no data, no database text)
 
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { ZodError, type ZodType } from "zod";
 import { authorizeOwner } from "../auth/guard";
 import { createRateLimiter, type RateLimiter } from "../locations/rate-limit";
 import type { DataContext } from "./context";
+import { lockAccountDeletion } from "../auth/account-deletion-lock";
 import { fail, ok, type Result } from "./result";
 import { logDataEvent } from "./safe-log";
 import * as schema from "../db/schema";
@@ -61,23 +62,26 @@ export function setDataRateLimiter(next?: RateLimiter): void {
 
 /** The app-side owner row every other row references. Safe to call repeatedly. */
 async function ensureUser(db: Db, ownerId: string): Promise<boolean> {
-  // The NOT EXISTS predicate and insert are one statement. Once a deletion fence commits, no stale or concurrent
-  // request can auto-provision the app-side owner again.
-  await db.execute(sql`
-    insert into ${schema.users} (id)
-    select ${ownerId}
-    where not exists (
-      select 1 from ${schema.accountDeletions}
-      where ${schema.accountDeletions.userId} = ${ownerId}
-    )
-    on conflict do nothing
-  `);
-  const rows = await db
-    .select({ id: schema.users.id })
-    .from(schema.users)
-    .where(eq(schema.users.id, ownerId))
-    .limit(1);
-  return rows.length === 1;
+  return db.transaction(async (transaction) => {
+    // Deletion takes the same lock before inserting its fence. If it started first, this transaction waits for the
+    // commit and then sees the fence; if provisioning started first, deletion runs after this transaction and removes
+    // the owner plus any writes that could have raced it.
+    await lockAccountDeletion(transaction, ownerId);
+    const fence = await transaction
+      .select({ userId: schema.accountDeletions.userId })
+      .from(schema.accountDeletions)
+      .where(eq(schema.accountDeletions.userId, ownerId))
+      .limit(1);
+    if (fence.length > 0) return false;
+
+    await transaction.insert(schema.users).values({ id: ownerId }).onConflictDoNothing();
+    const rows = await transaction
+      .select({ id: schema.users.id })
+      .from(schema.users)
+      .where(eq(schema.users.id, ownerId))
+      .limit(1);
+    return rows.length === 1;
+  });
 }
 
 export async function run<Input, Output>(

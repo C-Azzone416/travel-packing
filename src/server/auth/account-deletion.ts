@@ -3,6 +3,7 @@ import "server-only";
 import { eq } from "drizzle-orm";
 import type { Db } from "@/server/db/retention";
 import { accountDeletions, accountSetups, users } from "@/server/db/schema";
+import { lockAccountDeletion } from "./account-deletion-lock";
 
 /**
  * Start deletion atomically in the app database. The fence is inserted before the app owner is deleted and deliberately
@@ -15,6 +16,9 @@ export async function beginAccountDeletion(
   setupEmailDigest: string,
 ): Promise<void> {
   await db.transaction(async (transaction) => {
+    // Provisioning takes the same lock before checking the fence. Whichever transaction goes second therefore sees
+    // the first one's committed owner/fence state instead of acting on a stale READ COMMITTED snapshot.
+    await lockAccountDeletion(transaction, userId);
     await transaction
       .insert(accountDeletions)
       .values({ userId })

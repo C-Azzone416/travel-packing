@@ -64,4 +64,42 @@ describe("account closure completion signals", () => {
     expect(NO_ACCOUNT_CLOSURE_SIGNALS.issue()).toBe("");
     expect(NO_ACCOUNT_CLOSURE_SIGNALS.open("anything")).toBe(false);
   });
+
+  it("rejects invalid entropy before issuing a signal", () => {
+    const signals = createAccountClosureSignals(
+      SECRET,
+      () => 1_800_000_000_000,
+      () => "not-valid-base64url-entropy",
+    );
+    expect(() => signals.issue()).toThrow("invalid shape");
+  });
+
+  it("rejects every malformed signed-value component", () => {
+    const now = 1_800_000_000_000;
+    const signals = createAccountClosureSignals(
+      SECRET,
+      () => now,
+      () => NONCE,
+    );
+    const valid = signals.issue().split(".");
+    for (const value of [
+      "x".repeat(161),
+      `v2.${valid[1]}.${valid[2]}.${valid[3]}`,
+      `v1.${"1".repeat(17)}.${valid[2]}.${valid[3]}`,
+      "v1",
+      `v1.${valid[1]}`,
+      `v1.${valid[1]}.${valid[2]}`,
+      `v1.${valid[1]}.short.${valid[3]}`,
+      `v1.${valid[1]}.${valid[2]}.short`,
+    ]) {
+      expect(signals.open(value)).toBe(false);
+    }
+  });
+
+  it("uses secure default time and entropy sources", () => {
+    const signals = createAccountClosureSignals(SECRET);
+    const value = signals.issue();
+    expect(value).toMatch(/^v1\./);
+    expect(signals.open(value)).toBe(true);
+  });
 });

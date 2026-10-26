@@ -49,7 +49,8 @@ export function CloseAccountSheet({
           name="password"
           label="Current password"
           autoComplete="current-password"
-          error={state.fieldErrors.password}
+          modalAutoFocus
+          error={pending ? undefined : state.fieldErrors.password}
         />
         <TextField
           id="close-account-confirmation"
@@ -59,10 +60,9 @@ export function CloseAccountSheet({
           autoCapitalize="characters"
           spellCheck={false}
           required
-          data-modal-autofocus=""
-          error={state.fieldErrors.confirmation}
+          error={pending ? undefined : state.fieldErrors.confirmation}
         />
-        {state.error ? (
+        {!pending && state.error ? (
           <div className="auth-error" role="alert">
             <span aria-hidden="true">⚠ </span>
             {state.error}{" "}

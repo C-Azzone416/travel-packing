@@ -28,10 +28,11 @@ Deletion is intentionally ordered:
 Steps 2–4 cannot be a distributed transaction. If the database loses its commit acknowledgement, the action re-reads the durable
 fence and never claims that nothing was deleted unless the fence is confirmed absent; if that read also fails, the UI says the
 outcome is unknown. If either provider call fails or its outcome is ambiguous after step 2, the durable fence remains. Normal
-request guards deny the identity and the atomic user-provisioning statement cannot recreate its `users` row. A correct password
-sign-in for that fenced identity is routed only to the public `/close-account` recovery screen; the raw session is never accepted
-by the app/data guards. Retrying repeats the database transaction safely, then session revocation and identity deletion. A fence
-lookup failure also denies access.
+request guards deny the identity. Owner provisioning and deletion both acquire the same provider-id-scoped transaction advisory
+lock before checking or inserting the fence, so a provisioning request that began on a stale `READ COMMITTED` snapshot waits and
+then observes the committed fence instead of recreating `users`. A correct password sign-in for that fenced identity is routed
+only to the public `/close-account` recovery screen; the raw session is never accepted by the app/data guards. Retrying repeats
+the database transaction safely, then session revocation and identity deletion. A fence lookup failure also denies access.
 
 This ordering prefers privacy and containment over preserving app access during a provider outage: once the database transaction
 commits, app data stays deleted. The recovery screen is the escape hatch for completing provider cleanup after an interruption.

@@ -41,6 +41,15 @@ describe("closeAccount", () => {
     expect(await deletionSession(auth)).toEqual(SESSION);
   });
 
+  it("fails closed when the raw recovery session is unavailable or not allowlisted", async () => {
+    fake.current = { userId: "synthetic-other", email: "other@example.test" };
+    expect(await deletionSession(auth)).toBeNull();
+    fake.getSession = async () => {
+      throw new Error("synthetic provider outage");
+    };
+    expect(await deletionSession(auth)).toBeNull();
+  });
+
   it("reauthenticates, fences and purges app data, revokes other sessions, then deletes the identity", async () => {
     expect(await closeAccount(auth, context.db as unknown as Db, SESSION, PASSWORD)).toEqual({
       status: "ok",
@@ -67,6 +76,18 @@ describe("closeAccount", () => {
     expect((await context.client.query("SELECT * FROM account_deletions")).rows).toEqual([]);
   });
 
+  it("does nothing when fresh authentication is unavailable", async () => {
+    fake.signInWithPassword = async () => ({
+      ok: false,
+      diagnostic: { reason: "provider-unavailable" },
+    });
+    expect(await closeAccount(auth, context.db as unknown as Db, SESSION, PASSWORD)).toEqual({
+      status: "unavailable",
+      deletionStarted: false,
+    });
+    expect((await context.client.query("SELECT * FROM account_deletions")).rows).toEqual([]);
+  });
+
   it("fails closed and ends a mismatched session before any database deletion", async () => {
     const signIn = fake.signInWithPassword.bind(fake);
     fake.signInWithPassword = async (email, password) => {
@@ -83,6 +104,33 @@ describe("closeAccount", () => {
     expect((await context.client.query("SELECT id FROM users")).rows).toEqual([
       { id: SESSION.userId },
     ]);
+  });
+
+  it("fails closed on a mismatched email even if provider sign-out also fails", async () => {
+    const signIn = fake.signInWithPassword.bind(fake);
+    fake.signInWithPassword = async (email, password) => {
+      const result = await signIn(email, password);
+      return result.ok
+        ? { ...result, session: { ...result.session, email: "other@example.test" } }
+        : result;
+    };
+    fake.signOut = async () => {
+      throw new Error("synthetic sign-out failure");
+    };
+    expect(await closeAccount(auth, context.db as unknown as Db, SESSION, PASSWORD)).toEqual({
+      status: "unavailable",
+      deletionStarted: false,
+    });
+    expect((await context.client.query("SELECT * FROM account_deletions")).rows).toEqual([]);
+  });
+
+  it("does nothing when the setup digest needed for scoped cleanup is unavailable", async () => {
+    setup.removalDigest = undefined;
+    expect(await closeAccount(auth, context.db as unknown as Db, SESSION, PASSWORD)).toEqual({
+      status: "unavailable",
+      deletionStarted: false,
+    });
+    expect((await context.client.query("SELECT * FROM account_deletions")).rows).toEqual([]);
   });
 
   it("leaves a safe, retryable fence if session revocation fails after the app purge", async () => {
@@ -140,6 +188,31 @@ describe("closeAccount", () => {
     });
   });
 
+  it("reports a confirmed transaction rollback when the fence reread is false", async () => {
+    const broken = {
+      transaction: async () => {
+        throw new Error("synthetic rollback");
+      },
+    } as unknown as Db;
+    expect(await closeAccount(auth, broken, SESSION, PASSWORD)).toEqual({
+      status: "unavailable",
+      deletionStarted: false,
+    });
+  });
+
+  it("preserves uncertainty when the fence reread capability is unavailable", async () => {
+    setup.isAccountDeletionBlocked = undefined;
+    const broken = {
+      transaction: async () => {
+        throw new Error("synthetic unknown transaction result");
+      },
+    } as unknown as Db;
+    expect(await closeAccount(auth, broken, SESSION, PASSWORD)).toEqual({
+      status: "unavailable",
+      deletionStarted: "unknown",
+    });
+  });
+
   it("preserves uncertainty when both the transaction and fence re-read fail", async () => {
     setup.isAccountDeletionBlocked = async () => {
       throw new Error("synthetic fence read failure");
@@ -153,5 +226,16 @@ describe("closeAccount", () => {
       status: "unavailable",
       deletionStarted: "unknown",
     });
+  });
+
+  it("leaves the durable fence when provider identity deletion fails", async () => {
+    fake.flows.answers.deleteUser = { ok: false, reason: "unavailable" };
+    expect(await closeAccount(auth, context.db as unknown as Db, SESSION, PASSWORD)).toEqual({
+      status: "unavailable",
+      deletionStarted: true,
+    });
+    expect((await context.client.query("SELECT user_id FROM account_deletions")).rows).toEqual([
+      { user_id: SESSION.userId },
+    ]);
   });
 });

@@ -1,7 +1,10 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { z } from "zod";
+import { eq } from "drizzle-orm";
 import { createMigratedDb, resetData } from "../db/__fixtures__/db";
+import { accountDeletions, users } from "../db/schema";
 import type { Db } from "../db/retention";
+import { lockAccountDeletion } from "../auth/account-deletion-lock";
 import { createFakeAuth, makeContext, OTHER_OWNER, OWNER, signedInAs } from "./__fixtures__/seed";
 import { fail } from "./result";
 import { createRateLimiter } from "../locations/rate-limit";
@@ -94,6 +97,42 @@ describe("run", () => {
     expect(result).toEqual(fail("UNAUTHENTICATED"));
     expect(ran).toBe(false);
     expect((await ctx.client.query("SELECT id FROM users")).rows).toEqual([]);
+  });
+
+  it("waits behind an in-flight deletion and refuses provisioning after its fence commits", async () => {
+    await ctx.client.query("INSERT INTO users (id) VALUES ($1)", [OWNER.userId]);
+    let releaseDeletion!: () => void;
+    const release = new Promise<void>((resolve) => {
+      releaseDeletion = resolve;
+    });
+    let deletionLocked!: () => void;
+    const locked = new Promise<void>((resolve) => {
+      deletionLocked = resolve;
+    });
+    const deletion = ctx.db.transaction(async (transaction) => {
+      await lockAccountDeletion(transaction, OWNER.userId);
+      await transaction.insert(accountDeletions).values({ userId: OWNER.userId });
+      deletionLocked();
+      await release;
+      await transaction.delete(users).where(eq(users.id, OWNER.userId));
+    });
+    await locked;
+
+    let provisioningSettled = false;
+    const provisioning = run(context(), schema, { name: "x" }, async () => "ran").then((result) => {
+      provisioningSettled = true;
+      return result;
+    });
+    await new Promise<void>((resolve) => setTimeout(resolve, 10));
+    expect(provisioningSettled).toBe(false);
+
+    releaseDeletion();
+    await deletion;
+    expect(await provisioning).toEqual(fail("UNAUTHENTICATED"));
+    expect((await ctx.client.query("SELECT id FROM users")).rows).toEqual([]);
+    expect((await ctx.client.query("SELECT user_id FROM account_deletions")).rows).toEqual([
+      { user_id: OWNER.userId },
+    ]);
   });
 
   it("a signed-out request is UNAUTHENTICATED and never reaches the handler or the database", async () => {
