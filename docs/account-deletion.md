@@ -77,7 +77,10 @@ identity fenced rather than risk reopening deleted data.
 
 Automated tests use synthetic accounts, the in-memory/PGlite database, and mocked/provider-fake responses. They verify the full
 owned-row cascade, cross-owner isolation, the write fence, idempotent retries, wrong-password behavior, CSRF origin checking,
-provider failures, and the recovery sign-in path. They never call Neon or a deployed environment.
+provider failures, and the recovery sign-in path. Contract tests also require both deletion and provisioning to await the same
+owner lock before their first fence read/write. PGlite has one connection and serializes transactions even without the advisory
+lock, so its concurrency test verifies the durable outcome but cannot demonstrate real PostgreSQL lock contention. Automated
+tests never call Neon or a deployed environment.
 
 Before enabling this feature in a disposable non-production Neon Auth project, verify with a synthetic email that:
 
@@ -88,6 +91,9 @@ Before enabling this feature in a disposable non-production Neon Auth project, v
    session; a response such as `{ success: true, message: "Verification email sent" }` is not treated as deletion;
 4. the same email can register again and receives a different provider user id;
 5. deletion is enabled for the project and the SDK response shapes match the installed `@neondatabase/auth@0.6.0-beta` adapter.
+6. on two independent PostgreSQL connections, pause deletion after it takes the owner lock and starts its transaction, start
+   provisioning for the same provider id, then commit deletion; provisioning must wait, refuse the fenced identity, and leave
+   `users` empty with exactly one `account_deletions` row. Repeat with provisioning first and deletion second.
 
 Do not run that check against Production or with a real account. Provider-side retention, audit logs, backups, and deletion
 timelines remain hosted-service policy questions and are not asserted by this code.

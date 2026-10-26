@@ -100,6 +100,9 @@ describe("run", () => {
   });
 
   it("waits behind an in-flight deletion and refuses provisioning after its fence commits", async () => {
+    // PGlite serializes transactions on its single connection, so this verifies the durable outcome but cannot prove
+    // real PostgreSQL advisory-lock contention. The contract tests separately pin both lock calls and their ordering;
+    // the hosted gate in docs/account-deletion.md covers true multi-connection contention.
     await ctx.client.query("INSERT INTO users (id) VALUES ($1)", [OWNER.userId]);
     let releaseDeletion!: () => void;
     const release = new Promise<void>((resolve) => {
