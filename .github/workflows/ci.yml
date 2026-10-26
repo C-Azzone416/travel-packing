@@ -200,6 +200,9 @@ jobs:
       - name: Verify no screenshot capture is in the production build
         run: npm run check:no-capture-in-build
 
+      - name: Verify local-only feedback is not in the production build
+        run: npm run check:no-feedback-in-build
+
       # Nothing the browser can download may name a server secret, hold a secret-shaped value, or contain server-only
       # code (#22). The scan's own tests inject a fake secret and require it to fail.
       - name: Scan the client bundle for secrets and server-only code
@@ -214,6 +217,9 @@ jobs:
 
       - name: Verify no screenshot capture is in the webpack build
         run: npm run check:no-capture-in-build
+
+      - name: Verify local-only feedback is not in the webpack build
+        run: npm run check:no-feedback-in-build
 
       - name: Scan the webpack client bundle
         run: npm run check:client-bundle
@@ -302,10 +308,33 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ matrix.browser }}-${{ steps.playwright.outputs.version }}
 
-      - name: Install Playwright browser
+      # The browser archive is cached, but WebKit's Ubuntu dependencies still come from the runner's apt mirror. That
+      # mirror has repeatedly slowed to a few KiB/s until the 30-minute job limit (#252). Bound one retry here; the
+      # second apt run reuses packages the first attempt already downloaded instead of making a whole job rerun.
+      - name: Install Playwright system dependencies
+        timeout-minutes: 13
         env:
           BROWSER: ${{ matrix.browser }}
-        run: npx playwright install --with-deps "$BROWSER"
+        shell: bash
+        run: |
+          for attempt in 1 2; do
+            if timeout --kill-after=30s 5m npx playwright install-deps "$BROWSER"; then
+              exit 0
+            else
+              status=$?
+            fi
+            if [[ "$status" -ne 124 || "$attempt" -eq 2 ]]; then
+              exit "$status"
+            fi
+            echo "Playwright dependency install timed out; repairing dpkg before the one retry"
+            timeout --kill-after=30s 2m sudo dpkg --configure -a
+          done
+
+      - name: Install Playwright browser
+        timeout-minutes: 5
+        env:
+          BROWSER: ${{ matrix.browser }}
+        run: npx playwright install "$BROWSER"
 
       # E2E_PREBUILT makes Playwright start the downloaded build instead of building again (playwright.config.ts).
       - name: E2E (${{ matrix.project }})

@@ -116,7 +116,11 @@ function mount(
   const outbox = options.outbox ?? outboxStub();
   const view = render(
     <ToastProvider>
-      <FeedbackAccessProvider create={async () => access.access} createOutbox={outbox.create}>
+      <FeedbackAccessProvider
+        enabled
+        create={async () => access.access}
+        createOutbox={outbox.create}
+      >
         <FeedbackButton />
       </FeedbackAccessProvider>
     </ToastProvider>,
@@ -532,7 +536,7 @@ describe("when saving does not work", () => {
     const access = accessStub();
     render(
       <ToastProvider>
-        <FeedbackAccessProvider create={async () => access.access} createOutbox={create}>
+        <FeedbackAccessProvider enabled create={async () => access.access} createOutbox={create}>
           <FeedbackButton />
         </FeedbackAccessProvider>
       </ToastProvider>,
@@ -630,6 +634,7 @@ describe("the outbox inside the provider", () => {
     render(
       <ToastProvider>
         <FeedbackAccessProvider
+          enabled
           create={async () => access.access}
           createOutbox={outboxStub().create}
           preload={preload}
@@ -646,6 +651,7 @@ describe("the outbox inside the provider", () => {
     render(
       <ToastProvider>
         <FeedbackAccessProvider
+          enabled
           create={async () => access.access}
           createOutbox={outboxStub().create}
           preload={async () => Promise.reject(new Error("offline"))}
@@ -693,7 +699,7 @@ describe("the outbox inside the provider", () => {
     const access = accessStub();
     const second = render(
       <ToastProvider>
-        <FeedbackAccessProvider create={async () => access.access} createOutbox={slow}>
+        <FeedbackAccessProvider enabled create={async () => access.access} createOutbox={slow}>
           <FeedbackButton />
         </FeedbackAccessProvider>
       </ToastProvider>,
@@ -713,7 +719,7 @@ describe("the outbox inside the provider", () => {
     const access = accessStub();
     render(
       <ToastProvider>
-        <FeedbackAccessProvider create={async () => access.access} createOutbox={create}>
+        <FeedbackAccessProvider enabled create={async () => access.access} createOutbox={create}>
           <FeedbackButton />
         </FeedbackAccessProvider>
       </ToastProvider>,

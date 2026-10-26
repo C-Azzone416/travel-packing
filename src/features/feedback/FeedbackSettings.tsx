@@ -36,7 +36,7 @@ export function expiryText(expiresAt: string | null): string | null {
 // Settings > "Send feedback to the developer" (#131, design's #129 section 1). The invitation lives only in the field
 // until Connect is pressed (then it is cleared) and in the SDK call; nothing here stores or logs it.
 export function FeedbackSettings() {
-  const { status, outbox, connect, disconnect } = useFeedbackAccess();
+  const { available, status, outbox, connect, disconnect } = useFeedbackAccess();
   const toast = useToast();
   const fieldId = useId();
   const helpId = useId();
@@ -46,6 +46,8 @@ export function FeedbackSettings() {
   const [replacing, setReplacing] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [disconnected, setDisconnected] = useState<string | null>(null);
+
+  if (!available) return null;
 
   const connected = status?.connected === true;
   const showForm = !connected || replacing;

@@ -3,8 +3,9 @@
 //
 // The CSP allows inline scripts and styles because Next.js emits its own inline bootstrap script and the app uses inline
 // styles; a nonce-based policy needs per-request middleware and is a follow-up. Everything else is closed: no foreign
-// origins for scripts, styles, images, fonts or frames, and the one foreign connection is the feedback service, which
-// the browser SDK calls directly (#131; the geocoder and weather providers are only ever called by the server), no <object>, no framing at all, forms post only to this origin.
+// origins for scripts, styles, images, fonts or frames. Local development and synthetic e2e builds may connect to the
+// feedback service; hosted builds do not carry Framebriar and do not allow its origin. The geocoder and weather
+// providers are only ever called by the server. No <object>, no framing at all, forms post only to this origin.
 
 /** The feedback service's origin, pinned by the SDK (FEEDBACK_ENDPOINT); a unit test keeps the two in step. */
 export const FEEDBACK_ORIGIN = "https://framebriar-masra91-poc.azurewebsites.net";
@@ -14,7 +15,7 @@ export interface HeaderRule {
   value: string;
 }
 
-export function contentSecurityPolicy(development: boolean): string {
+export function contentSecurityPolicy(development: boolean, feedback = development): string {
   const directives: [string, string][] = [
     ["default-src", "'self'"],
     // Next's dev server needs eval for fast refresh; production never does.
@@ -24,7 +25,11 @@ export function contentSecurityPolicy(development: boolean): string {
     ["font-src", "'self'"],
     [
       "connect-src",
-      development ? `'self' ${FEEDBACK_ORIGIN} ws: wss:` : `'self' ${FEEDBACK_ORIGIN}`,
+      [
+        "'self'",
+        ...(feedback ? [FEEDBACK_ORIGIN] : []),
+        ...(development ? ["ws:", "wss:"] : []),
+      ].join(" "),
     ],
     ["frame-src", "'none'"],
     ["frame-ancestors", "'none'"],
@@ -35,9 +40,9 @@ export function contentSecurityPolicy(development: boolean): string {
   return directives.map(([name, value]) => `${name} ${value}`).join("; ");
 }
 
-export function securityHeaders(development: boolean): HeaderRule[] {
+export function securityHeaders(development: boolean, feedback = development): HeaderRule[] {
   return [
-    { key: "Content-Security-Policy", value: contentSecurityPolicy(development) },
+    { key: "Content-Security-Policy", value: contentSecurityPolicy(development, feedback) },
     // Two years, subdomains too. Browsers ignore it over plain http, so it is harmless on localhost.
     { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
     // frame-ancestors is the modern control; this covers older browsers.

@@ -88,6 +88,12 @@ export const VERIFY_STEPS: readonly VerifyStep[] = [
     quick: false,
   },
   {
+    id: "check:no-feedback-in-build",
+    label: "No local-only feedback in the production build",
+    command: npm("check:no-feedback-in-build"),
+    quick: false,
+  },
+  {
     id: "check:client-bundle",
     label: "Client bundle scan",
     command: npm("check:client-bundle"),
@@ -104,6 +110,12 @@ export const VERIFY_STEPS: readonly VerifyStep[] = [
     id: "check:no-capture-in-build",
     label: "No screenshot capture in the webpack build",
     command: npm("check:no-capture-in-build"),
+    quick: false,
+  },
+  {
+    id: "check:no-feedback-in-build",
+    label: "No local-only feedback in the webpack build",
+    command: npm("check:no-feedback-in-build"),
     quick: false,
   },
   {

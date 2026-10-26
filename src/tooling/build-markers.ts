@@ -41,6 +41,31 @@ export const CAPTURE_MARKERS: readonly BuildMarker[] = [
   },
 ];
 
+// Local-only Framebriar must not appear anywhere in a hosted build. These cover the app UI and each SDK chunk the app
+// can load (access, durable outbox and local report preparation), rather than relying on one tree-shaken symbol.
+export const FRAMEBRIAR_MARKERS: readonly BuildMarker[] = [
+  {
+    name: "the Framebriar settings UI",
+    text: "Send feedback to the developer",
+    source: "src/features/feedback/FeedbackSettings.tsx",
+  },
+  {
+    name: "the Framebriar access SDK",
+    text: "Playtest access unavailable",
+    source: "node_modules/@masra91/framebriar/adapters/browser/playtest-access.mjs",
+  },
+  {
+    name: "the Framebriar durable outbox SDK",
+    text: "outbox-v2-",
+    source: "node_modules/@masra91/framebriar/adapters/browser/durable-feedback.mjs",
+  },
+  {
+    name: "the Framebriar local report SDK",
+    text: "A reviewed PNG of at most 8 MiB is required",
+    source: "node_modules/@masra91/framebriar/adapters/browser/local-export.mjs",
+  },
+];
+
 /** Every build file that contains one of the markers' text: `{ marker name, file path }`. Reads text files under `dir`. */
 export function markerHits(
   dir: string,

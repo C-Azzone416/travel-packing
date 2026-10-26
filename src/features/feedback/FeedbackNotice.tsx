@@ -34,9 +34,9 @@ const BLOCKED = {
 // The strip under the app header when feedback needs attention (#131, design's #129 section 2). A notice from the
 // access controller wins over undeliverable reports; neither shows on Settings, where the same facts are the section itself.
 export function FeedbackNotice() {
-  const { status, outbox } = useFeedbackAccess();
+  const { available, status, outbox } = useFeedbackAccess();
   const pathname = usePathname();
-  if (pathname === "/settings" || pathname.startsWith("/settings/")) return null;
+  if (!available || pathname === "/settings" || pathname.startsWith("/settings/")) return null;
   const message = status?.notice ? NOTICES[status.notice] : outbox.blocked > 0 ? BLOCKED : null;
   if (!message) return null;
   return (

@@ -821,6 +821,11 @@ describe("checkCiWorkflow", () => {
       /build job is missing check:no-capture-in-build/,
     ],
     [
+      "the local-only feedback check dropped",
+      inJob("build", /npm run check:no-feedback-in-build\n/g, "true\n"),
+      /build job is missing check:no-feedback-in-build/,
+    ],
+    [
       "the production build uploading an artifact",
       inJob(
         "build",
@@ -875,12 +880,22 @@ describe("checkCiWorkflow", () => {
     ],
     [
       "an e2e job installing the wrong browser",
+      inJob("e2e", 'npx playwright install "$BROWSER"', "npx playwright install chromium"),
+      /install its own browser/,
+    ],
+    [
+      "the Playwright dependency retry dropped",
+      inJob("e2e", "for attempt in 1 2", "for attempt in 1"),
+      /dependency install needs one bounded timeout retry/,
+    ],
+    [
+      "the Playwright dependency timeout dropped",
       inJob(
         "e2e",
-        'npx playwright install --with-deps "$BROWSER"',
-        "npx playwright install --with-deps chromium",
+        "timeout --kill-after=30s 5m npx playwright install-deps",
+        "npx playwright install-deps",
       ),
-      /install its own browser/,
+      /dependency install needs one bounded timeout retry/,
     ],
     [
       "a cache shared by both browsers",

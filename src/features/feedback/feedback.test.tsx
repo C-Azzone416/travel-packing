@@ -92,7 +92,9 @@ function stub(initial: Partial<AccessStatus> = {}, over: Partial<PlaytestAccess>
 function mount(access: PlaytestAccess, ui: React.ReactNode = <FeedbackSettings />) {
   return render(
     <ToastProvider>
-      <FeedbackAccessProvider create={async () => access}>{ui}</FeedbackAccessProvider>
+      <FeedbackAccessProvider enabled create={async () => access}>
+        {ui}
+      </FeedbackAccessProvider>
     </ToastProvider>,
   );
 }
@@ -140,6 +142,25 @@ describe("expiryText", () => {
 });
 
 describe("the provider", () => {
+  it("starts no controller and exposes no UI when the local-only runtime gate is closed", async () => {
+    const { access } = stub();
+    const create = vi.fn(async () => access);
+    render(
+      <ToastProvider>
+        <FeedbackAccessProvider enabled={false} create={create}>
+          <FeedbackSettings />
+          <FeedbackButton />
+          <FeedbackNotice />
+        </FeedbackAccessProvider>
+      </ToastProvider>,
+    );
+    await Promise.resolve();
+    expect(create).not.toHaveBeenCalled();
+    expect(screen.queryByRole("heading", { name: "Send feedback to the developer" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Send feedback" })).toBeNull();
+    expect(document.querySelector(".feedback-notice")).toBeNull();
+  });
+
   it("starts on load, stops on pagehide, starts again on pageshow and disposes on unmount", async () => {
     const { access } = stub();
     const view = mount(access);
@@ -157,7 +178,7 @@ describe("the provider", () => {
     let release: (a: PlaytestAccess) => void = () => undefined;
     const late = new Promise<PlaytestAccess>((r) => (release = r));
     const view = render(
-      <FeedbackAccessProvider create={() => late}>
+      <FeedbackAccessProvider enabled create={() => late}>
         <p>x</p>
       </FeedbackAccessProvider>,
     );
@@ -166,7 +187,7 @@ describe("the provider", () => {
     await waitFor(() => expect(access.dispose).toHaveBeenCalled());
     expect(access.start).not.toHaveBeenCalled();
     render(
-      <FeedbackAccessProvider create={() => Promise.reject(new Error("no"))}>
+      <FeedbackAccessProvider enabled create={() => Promise.reject(new Error("no"))}>
         <p>fine</p>
       </FeedbackAccessProvider>,
     );
@@ -176,7 +197,7 @@ describe("the provider", () => {
   it("before the controller is ready, Connect and Disconnect do nothing harmful", async () => {
     render(
       <ToastProvider>
-        <FeedbackAccessProvider create={() => new Promise<PlaytestAccess>(() => undefined)}>
+        <FeedbackAccessProvider enabled create={() => new Promise<PlaytestAccess>(() => undefined)}>
           <FeedbackSettings />
         </FeedbackAccessProvider>
       </ToastProvider>,
@@ -369,7 +390,7 @@ describe("the Feedback button", () => {
     pathname = "/settings";
     view.rerender(
       <ToastProvider>
-        <FeedbackAccessProvider create={async () => access}>
+        <FeedbackAccessProvider enabled create={async () => access}>
           <FeedbackButton />
         </FeedbackAccessProvider>
       </ToastProvider>,
@@ -395,7 +416,7 @@ describe("against the real SDK and the fake service", () => {
     const user = userEvent.setup();
     const first = render(
       <ToastProvider>
-        <FeedbackAccessProvider create={create}>
+        <FeedbackAccessProvider enabled create={create}>
           <FeedbackSettings />
         </FeedbackAccessProvider>
       </ToastProvider>,
@@ -407,7 +428,7 @@ describe("against the real SDK and the fake service", () => {
 
     render(
       <ToastProvider>
-        <FeedbackAccessProvider create={create}>
+        <FeedbackAccessProvider enabled create={create}>
           <FeedbackSettings />
         </FeedbackAccessProvider>
       </ToastProvider>,
@@ -437,7 +458,7 @@ describe("against the real SDK and the fake service", () => {
     const user = userEvent.setup();
     render(
       <ToastProvider>
-        <FeedbackAccessProvider create={create}>
+        <FeedbackAccessProvider enabled create={create}>
           <FeedbackSettings />
         </FeedbackAccessProvider>
       </ToastProvider>,

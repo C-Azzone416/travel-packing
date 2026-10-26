@@ -633,6 +633,7 @@ export function checkCiWorkflow(workflow: string): string[] {
     "npm run build:production\n",
     "check:no-e2e-in-build",
     "check:no-capture-in-build",
+    "check:no-feedback-in-build",
     "check:client-bundle",
   ]) {
     requireStep("build", needle, `the build job is missing ${needle.trim()}`);
@@ -670,9 +671,16 @@ export function checkCiWorkflow(workflow: string): string[] {
     );
   if (
     !/BROWSER:\s*\$\{\{\s*matrix\.browser\s*\}\}/.test(e2e) ||
-    !/npx playwright install --with-deps "\$BROWSER"/.test(e2e)
+    !/npx playwright install-deps "\$BROWSER"/.test(e2e) ||
+    !/npx playwright install "\$BROWSER"/.test(e2e)
   )
     problems.push("each e2e job must install its own browser (matrix.browser)");
+  if (
+    !/for attempt in 1 2/.test(e2e) ||
+    !/timeout --kill-after=30s 5m npx playwright install-deps/.test(e2e) ||
+    !/Playwright dependency install timed out/.test(e2e)
+  )
+    problems.push("the Playwright dependency install needs one bounded timeout retry");
   if (!/key:\s*playwright-[^\n]*matrix\.browser/.test(e2e))
     problems.push("the Playwright cache key must include the browser");
   if (!/fail-fast:\s*false/.test(e2e))

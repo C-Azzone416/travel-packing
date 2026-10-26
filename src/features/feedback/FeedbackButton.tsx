@@ -15,7 +15,7 @@ import { COPY, FeedbackSheet, type TakenScreenshot } from "./FeedbackSheet";
 // screen where nothing may be captured (Settings and the sign-in and account screens), and disabled until the person is
 // connected. When this build offers screenshots the screen is captured BEFORE the sheet opens, so the sheet is not in it.
 export function FeedbackButton() {
-  const { status, subscribeReceipts } = useFeedbackAccess();
+  const { available, status, subscribeReceipts } = useFeedbackAccess();
   const pathname = usePathname();
   const toast = useToast();
   const [opening, setOpening] = useState(false);
@@ -39,7 +39,7 @@ export function FeedbackButton() {
     [subscribeReceipts, toast],
   );
 
-  if (captureBlocked(pathname)) return null;
+  if (!available || captureBlocked(pathname)) return null;
 
   async function openSheet() {
     if (opening || open) return;

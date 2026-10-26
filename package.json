@@ -25,6 +25,7 @@
     "db:migrate": "tsx scripts/db-migrate.ts",
     "check:no-e2e-in-build": "tsx scripts/check-no-e2e-in-build.ts",
     "check:no-capture-in-build": "tsx scripts/check-no-capture-in-build.ts",
+    "check:no-feedback-in-build": "tsx scripts/check-no-feedback-in-build.ts",
     "build:webpack": "VERCEL_ENV=production next build --webpack",
     "build:e2e": "NEXT_PUBLIC_E2E_BUILD=1 next build",
     "db:migrate:remote": "tsx scripts/db-migrate-remote.ts",

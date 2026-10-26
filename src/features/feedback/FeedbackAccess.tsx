@@ -8,11 +8,13 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import type { DurableFeedback, OutboxStatus } from "@masra91/framebriar/browser/durable-feedback";
 import type { PreparedFeedback } from "@masra91/framebriar/browser/local-export";
 import type { AccessStatus, PlaytestAccess } from "@masra91/framebriar/browser/playtest-access";
+import { feedbackE2eBuild, feedbackRuntimeEnabled } from "./availability";
 import { feedbackBuildSha } from "./build-sha";
 import type { reportContext } from "./capture-policy";
 
@@ -36,6 +38,8 @@ export type SaveOutcome =
 export type ReportContext = ReturnType<typeof reportContext>;
 
 export interface FeedbackAccessValue {
+  /** False outside the one approved local origin (and outside the synthetic e2e build). */
+  available: boolean;
   /** Null until the first answer from the access controller (it restores any saved connection first). */
   status: AccessStatus | null;
   outbox: OutboxView;
@@ -56,6 +60,7 @@ export interface FeedbackAccessValue {
 const NO_OUTBOX: OutboxView = { waiting: 0, blocked: 0, state: "checking" };
 
 const NOT_READY: FeedbackAccessValue = {
+  available: false,
   status: null,
   outbox: NO_OUTBOX,
   connect: async () => "uncertain",
@@ -68,6 +73,8 @@ const NOT_READY: FeedbackAccessValue = {
 };
 
 const FeedbackAccessContext = createContext<FeedbackAccessValue>(NOT_READY);
+const subscribeToFixedOrigin = () => () => undefined;
+const serverFeedbackEnabled = () => feedbackE2eBuild;
 
 export function useFeedbackAccess(): FeedbackAccessValue {
   return useContext(FeedbackAccessContext);
@@ -130,18 +137,34 @@ export function resultAfterFailedConnect(status: AccessStatus, online: boolean):
 
 // One access controller for the whole signed-in visit (#131). It restores a saved connection on load, stands down while
 // the page is hidden or frozen (pagehide) and picks up again when it returns (pageshow). It never redeems anything by itself.
-export function FeedbackAccessProvider({
-  children,
-  create = loadAccess,
-  createOutbox = loadOutbox,
-  preload = loadLocalExport,
-}: {
+interface FeedbackAccessProviderProps {
   children: ReactNode;
   create?: () => Promise<PlaytestAccess>;
   createOutbox?: CreateOutbox;
   /** Fetches the code that prepares a report, ahead of Send. Injectable so a test can see that it happens. */
   preload?: () => Promise<unknown>;
-}) {
+  /** Explicit only for unit tests. The app always uses the compile-time build gate plus the exact runtime origin. */
+  enabled?: boolean;
+}
+
+export function FeedbackAccessProvider({ enabled, ...props }: FeedbackAccessProviderProps) {
+  // useSyncExternalStore gives local development a disabled server snapshot for hydration, then reads the browser's exact
+  // origin. The origin cannot change during a document's lifetime, so there is nothing to subscribe to.
+  const runtimeEnabled = useSyncExternalStore(
+    subscribeToFixedOrigin,
+    feedbackRuntimeEnabled,
+    serverFeedbackEnabled,
+  );
+  if (!(enabled ?? runtimeEnabled)) return props.children;
+  return <EnabledFeedbackAccessProvider {...props} />;
+}
+
+function EnabledFeedbackAccessProvider({
+  children,
+  create = loadAccess,
+  createOutbox = loadOutbox,
+  preload = loadLocalExport,
+}: Omit<FeedbackAccessProviderProps, "enabled">) {
   const [status, setStatus] = useState<AccessStatus | null>(null);
   const [outbox, setOutbox] = useState<OutboxView>(NO_OUTBOX);
   const accessRef = useRef<PlaytestAccess | null>(null);
@@ -248,6 +271,7 @@ export function FeedbackAccessProvider({
 
   const value = useMemo<FeedbackAccessValue>(
     () => ({
+      available: true,
       status,
       outbox,
       connect,

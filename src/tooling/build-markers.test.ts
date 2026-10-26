@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { BUILD_MARKERS, CAPTURE_MARKERS, markerHits } from "./build-markers";
+import { BUILD_MARKERS, CAPTURE_MARKERS, FRAMEBRIAR_MARKERS, markerHits } from "./build-markers";
 
 describe("BUILD_MARKERS", () => {
   it.each(BUILD_MARKERS.map((marker) => [marker.name, marker] as const))(
@@ -35,6 +35,23 @@ describe("CAPTURE_MARKERS (the production build must not contain screenshot capt
   it("are not also e2e markers, because Preview and e2e builds legitimately contain them", () => {
     const e2e = new Set(BUILD_MARKERS.map((marker) => marker.text));
     for (const marker of CAPTURE_MARKERS) expect(e2e.has(marker.text)).toBe(false);
+  });
+});
+
+describe("FRAMEBRIAR_MARKERS (hosted builds must contain no local-only feedback code)", () => {
+  it.each(FRAMEBRIAR_MARKERS.map((marker) => [marker.name, marker] as const))(
+    "%s: its text is still in its source and not in the hosted stub",
+    (_name, marker) => {
+      expect(readFileSync(join(process.cwd(), marker.source), "utf8")).toContain(marker.text);
+      expect(
+        readFileSync(join(process.cwd(), "src/features/feedback/feedback.disabled.tsx"), "utf8"),
+      ).not.toContain(marker.text);
+    },
+  );
+
+  it("has distinct marker texts", () => {
+    const texts = FRAMEBRIAR_MARKERS.map((marker) => marker.text);
+    expect(new Set(texts).size).toBe(texts.length);
   });
 });
 
