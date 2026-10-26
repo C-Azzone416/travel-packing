@@ -30,6 +30,7 @@ beforeEach(async () => {
     available: true,
     setup,
     seals: { seal: () => "", open: () => null },
+    completionSignals: { issue: () => "", open: () => false },
   };
 });
 afterAll(async () => context.client.close());

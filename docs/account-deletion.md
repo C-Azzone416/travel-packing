@@ -39,17 +39,21 @@ commits, app data stays deleted. The recovery screen is the escape hatch for com
 ## Client integration seam
 
 The only confirmed-success boundary is `closeAccount()` returning `{ status: "ok" }`, after the provider has confirmed the
-terminal `User deleted` response. The server action currently clears app cookies and redirects from that branch. Partial,
-unknown, wrong-password, CSRF, and provider-error branches must never run client-side account cleanup.
+terminal `User deleted` response. Only that branch issues a five-minute, identity-free signed value in an HttpOnly,
+`SameSite=Strict` cookie scoped to `/close-account/complete`, then redirects to that public route. Partial, unknown,
+wrong-password, CSRF, and provider-error branches never issue the cookie and cannot run client-side account cleanup.
 
-If Framebriar is integrated, keep it out of the destructive server transaction and add a post-confirmation completion handoff:
+The completion route calls a same-origin server action that validates and expires the exact-path cookie before returning success
+to the browser. Only then does the client invoke the feature-independent cleanup seam. Direct visits, refreshes, altered or
+expired signals, and a second sequential use skip cleanup. The signal contains only a version, expiry, random nonce, and keyed
+digest—no user id, email, credential, or provider token—and it never appears in the URL. Navigation to sign-in runs in `finally`,
+including when signal consumption or local cleanup fails or exceeds its bounded wait, so an already-deleted user cannot be
+stranded.
 
-1. only the confirmed-success branch creates a short-lived, same-site completion signal and navigates to a public completion
-   route;
-2. that route stops the Framebriar outbox, best-effort clears its browser-profile-local outbox, then disconnects access;
-3. navigation to sign-in runs in `finally`, so local cleanup failure cannot strand a user whose server account is already gone;
-4. consume the completion signal once, so directly visiting or refreshing the route cannot clear local state; and
-5. do not request deletion of separately retained delivered reports without a separate product/privacy design and verified
+When Framebriar is integrated, keep it out of the destructive server transaction and implement the existing client cleanup seam:
+
+1. stop the Framebriar outbox, best-effort clear its browser-profile-local outbox, then disconnect access; and
+2. do not request deletion of separately retained delivered reports without a separate product/privacy design and verified
    hosted retention behavior.
 
 Framebriar currently has no app-account identifier in the clean baseline used by this branch. Do not add a Framebriar dependency

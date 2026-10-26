@@ -5,6 +5,10 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { APPEARANCE_COOKIE } from "@/domain/appearance";
 import { getAuth } from "@/server/auth/auth-runtime";
+import {
+  ACCOUNT_CLOSURE_COMPLETE_PATH,
+  issueAccountClosureCompletion,
+} from "@/server/auth/account-closure-completion";
 import { closeAccount, deletionSession } from "@/server/auth/close-account";
 import { hasSameRequestOrigin } from "@/server/auth/csrf";
 import { forgetPendingEmail } from "@/server/auth/pending-email";
@@ -22,6 +26,22 @@ const PARTIAL =
   "Your Packed Smart data is removed and access is blocked, but account closure wasn’t confirmed. Try again to finish.";
 const UNKNOWN =
   "We couldn’t confirm whether account closure started. Try again; if access is blocked, sign in to finish closing the account.";
+
+/** The provider identity is already gone. Local-cookie cleanup is best effort; redirect must always complete. */
+async function finishConfirmedClosure(auth: Awaited<ReturnType<typeof getAuth>>): Promise<never> {
+  const completionIssued = await issueAccountClosureCompletion(auth.completionSignals);
+  try {
+    (await cookies()).delete(APPEARANCE_COOKIE);
+  } catch {
+    // Do not strand a user whose provider identity was already deleted.
+  }
+  try {
+    await forgetPendingEmail();
+  } catch {
+    // Do not strand a user whose provider identity was already deleted.
+  }
+  redirect(completionIssued ? ACCOUNT_CLOSURE_COMPLETE_PATH : "/sign-in?notice=account-closed");
+}
 
 export async function closeAccountAction(
   _previous: CloseAccountState,
@@ -77,9 +97,7 @@ export async function closeAccountAction(
   }
 
   limits.recordSuccess(session.email, address);
-  (await cookies()).delete(APPEARANCE_COOKIE);
-  await forgetPendingEmail();
-  redirect("/sign-in?notice=account-closed");
+  return finishConfirmedClosure(auth);
 }
 
 /** Retry only an already-fenced deletion. It cannot be used as an alternate entry point for an active account. */
@@ -147,7 +165,5 @@ export async function retryCloseAccountAction(
   }
 
   limits.recordSuccess(session.email, address);
-  (await cookies()).delete(APPEARANCE_COOKIE);
-  await forgetPendingEmail();
-  redirect("/sign-in?notice=account-closed");
+  return finishConfirmedClosure(auth);
 }

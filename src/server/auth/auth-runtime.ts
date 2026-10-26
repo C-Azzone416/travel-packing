@@ -17,6 +17,12 @@ import { createNeonAuthProvider } from "./neon-adapter";
 import { NO_SEALS, createSetupSeals, sealKey, type SetupSeals } from "./setup-seal";
 import { allowlistFingerprint, malformedEntries } from "./allowlist-fingerprint";
 import { logAllowlistLoaded, logAuthEvent } from "./safe-log";
+import {
+  NO_ACCOUNT_CLOSURE_SIGNALS,
+  accountClosureSignalKey,
+  createAccountClosureSignals,
+  type AccountClosureSignals,
+} from "./account-closure-signal";
 import type { AuthProvider } from "./types";
 
 export interface RuntimeAuth {
@@ -31,6 +37,8 @@ export interface RuntimeAuth {
   setup: AccountSetupStore;
   /** Signs and opens the "this link is for <address>" value on reset links. */
   seals: SetupSeals;
+  /** Issues identity-free, short-lived proofs only for the confirmed account-deletion completion screen. */
+  completionSignals: AccountClosureSignals;
 }
 
 const unavailableProvider: AuthProvider = {
@@ -75,6 +83,7 @@ export function unavailableAuth(): RuntimeAuth {
     available: false,
     setup: NOTHING_SET_UP,
     seals: NO_SEALS,
+    completionSignals: NO_ACCOUNT_CLOSURE_SIGNALS,
   };
 }
 
@@ -104,6 +113,9 @@ async function buildE2eAuth(
         setup,
         // Any non-empty secret signs the e2e links; the fake password is already required to be set.
         seals: createSetupSeals(sealKey(env.AUTH_E2E_PASSWORD ?? "")),
+        completionSignals: createAccountClosureSignals(
+          accountClosureSignalKey(env.AUTH_E2E_PASSWORD ?? ""),
+        ),
       };
     }
   }
@@ -171,6 +183,7 @@ async function buildAuth(
       available: true,
       setup,
       seals: createSetupSeals(sealKey(cookieSecret)),
+      completionSignals: createAccountClosureSignals(accountClosureSignalKey(cookieSecret)),
     };
   } catch {
     logAuthEvent("provider-error");

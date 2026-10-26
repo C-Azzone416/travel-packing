@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   deletionSession: vi.fn(),
   getAuth: vi.fn(),
   getAppDb: vi.fn(),
+  issueCompletion: vi.fn(),
   cookieDelete: vi.fn(),
   requestHeaders: new Headers({
     host: "app.example.test",
@@ -16,6 +17,10 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/server/auth/auth-runtime", () => ({ getAuth: mocks.getAuth }));
 vi.mock("@/server/db/app-db", () => ({ getAppDb: mocks.getAppDb }));
+vi.mock("@/server/auth/account-closure-completion", () => ({
+  ACCOUNT_CLOSURE_COMPLETE_PATH: "/close-account/complete",
+  issueAccountClosureCompletion: mocks.issueCompletion,
+}));
 vi.mock("@/server/auth/close-account", () => ({
   closeAccount: mocks.closeAccount,
   deletionSession: mocks.deletionSession,
@@ -40,6 +45,7 @@ const blocked = vi.fn(async () => true);
 const auth = {
   available: true,
   setup: { isAccountDeletionBlocked: blocked },
+  completionSignals: { kind: "synthetic-completion-signals" },
 };
 
 function form(password = "synthetic-password", confirmation = "DELETE") {
@@ -61,6 +67,7 @@ beforeEach(() => {
   mocks.getAuth.mockResolvedValue(auth);
   mocks.getAppDb.mockResolvedValue(db);
   mocks.deletionSession.mockResolvedValue(SESSION);
+  mocks.issueCompletion.mockResolvedValue(true);
   blocked.mockResolvedValue(true);
 });
 
@@ -90,10 +97,19 @@ describe("closeAccountAction", () => {
   it("uses only the server session identity and reports success only after the core confirms it", async () => {
     mocks.closeAccount.mockResolvedValue({ status: "ok" });
     await expect(closeAccountAction(INITIAL_CLOSE_ACCOUNT_STATE, form())).rejects.toThrow(
-      "REDIRECT:/sign-in?notice=account-closed",
+      "REDIRECT:/close-account/complete",
     );
     expect(mocks.closeAccount).toHaveBeenCalledWith(auth, db, SESSION, "synthetic-password");
+    expect(mocks.issueCompletion).toHaveBeenCalledWith(auth.completionSignals);
     expect(mocks.cookieDelete).toHaveBeenCalledWith("appearance");
+  });
+
+  it("falls back to sign-in safely if the post-deletion completion signal cannot be issued", async () => {
+    mocks.closeAccount.mockResolvedValue({ status: "ok" });
+    mocks.issueCompletion.mockResolvedValue(false);
+    await expect(closeAccountAction(INITIAL_CLOSE_ACCOUNT_STATE, form())).rejects.toThrow(
+      "REDIRECT:/sign-in?notice=account-closed",
+    );
   });
 
   it("makes a post-purge provider failure explicit and links to recovery", async () => {
@@ -102,6 +118,7 @@ describe("closeAccountAction", () => {
       error: expect.stringContaining("data is removed"),
       recovery: true,
     });
+    expect(mocks.issueCompletion).not.toHaveBeenCalled();
   });
 
   it("does not claim nothing was deleted when the transaction result is ambiguous", async () => {
@@ -112,6 +129,7 @@ describe("closeAccountAction", () => {
       recovery: true,
     });
     expect(result.error).not.toContain("Nothing was deleted");
+    expect(mocks.issueCompletion).not.toHaveBeenCalled();
   });
 });
 
@@ -133,5 +151,14 @@ describe("retryCloseAccountAction", () => {
     });
     expect(blocked).toHaveBeenCalledWith(SESSION.userId);
     expect(mocks.closeAccount).toHaveBeenCalledWith(auth, db, SESSION, "synthetic-password");
+    expect(mocks.issueCompletion).not.toHaveBeenCalled();
+  });
+
+  it("issues the completion signal after a retry reaches confirmed terminal deletion", async () => {
+    mocks.closeAccount.mockResolvedValue({ status: "ok" });
+    await expect(retryCloseAccountAction(INITIAL_CLOSE_ACCOUNT_STATE, form())).rejects.toThrow(
+      "REDIRECT:/close-account/complete",
+    );
+    expect(mocks.issueCompletion).toHaveBeenCalledWith(auth.completionSignals);
   });
 });
