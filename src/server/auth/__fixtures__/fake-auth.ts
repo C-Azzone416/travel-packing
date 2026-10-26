@@ -6,6 +6,7 @@ export interface FakeUser {
   email: string;
   password: string;
   userId: string;
+  identityCreatedAt?: number;
   /** False = right password but the address is not verified yet (sign-in reports `unverified`). Default true. */
   verified?: boolean;
   /** True = verified, right password, but the password was never set through an emailed link (#83): `unfinished`. */
@@ -73,7 +74,12 @@ export function createFakeAuth(users: FakeUser[] = []): FakeAuth {
         return { ok: false, unverified: true, diagnostic: { reason: "email-unverified" } };
       if (user.unfinished)
         return { ok: false, unfinished: true, diagnostic: { reason: "setup-pending" } };
-      fake.current = { userId: user.userId, email: user.email, issuedAt: Date.now() };
+      fake.current = {
+        userId: user.userId,
+        email: user.email,
+        identityCreatedAt: user.identityCreatedAt ?? 1,
+        issuedAt: Date.now(),
+      };
       return { ok: true, session: fake.current };
     },
     async signOut() {

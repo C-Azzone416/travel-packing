@@ -83,6 +83,10 @@ describe("SettingsScreen", () => {
     const { closeAccount } = setup();
     await userEvent.click(screen.getByRole("button", { name: "Close account" }));
     expect(screen.getByRole("dialog", { name: "Close your account?" })).toBeTruthy();
+    expect(
+      screen.getByText(/Confirmed closure leaves no live Packed Smart account record/),
+    ).toBeTruthy();
+    expect(screen.getByText(/It can’t be undone/)).toBeTruthy();
     expect(screen.getByLabelText("Current password").getAttribute("autocomplete")).toBe(
       "current-password",
     );

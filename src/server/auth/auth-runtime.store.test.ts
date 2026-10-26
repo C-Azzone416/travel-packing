@@ -72,7 +72,7 @@ describe("the runtime's setup store (Neon provider)", () => {
     createNeonAuth.mockReturnValue({
       getSession: async () => ({
         data: {
-          user: { id: "u1", email: OWNER, emailVerified: true },
+          user: { id: "u1", email: OWNER, emailVerified: true, createdAt: new Date(1) },
           session: { createdAt },
         },
       }),
@@ -88,18 +88,21 @@ describe("the runtime's setup store (Neon provider)", () => {
     expect(await auth.provider.getSession()).toMatchObject({ email: OWNER });
   });
 
-  it("keeps a durable deletion fence after a runtime rebuild while raw auth remains available only for recovery", async () => {
+  it("keeps a transient deletion fence after a runtime rebuild while raw auth remains available only for recovery", async () => {
     createNeonAuth.mockReturnValue({
       getSession: async () => ({
         data: {
-          user: { id: "u1", email: OWNER, emailVerified: true },
+          user: { id: "u1", email: OWNER, emailVerified: true, createdAt: new Date(1) },
           session: { createdAt: new Date(Date.now() + 60_000).toISOString() },
         },
       }),
     });
     const auth = await getAuth(env);
     await auth.setup.markComplete(OWNER);
-    await ctx.client.query("INSERT INTO account_deletions (user_id) VALUES ($1)", ["u1"]);
+    await ctx.client.query(
+      "INSERT INTO account_deletions (user_id, identity_created_at, setup_email_digest) VALUES ($1, $2, $3)",
+      ["u1", new Date(1), "a".repeat(64)],
+    );
     expect(await auth.provider.getSession()).toBeNull();
     expect(await auth.deletionProvider.getSession()).toMatchObject({ userId: "u1", email: OWNER });
 

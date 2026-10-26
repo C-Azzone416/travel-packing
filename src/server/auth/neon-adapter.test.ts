@@ -25,6 +25,7 @@ function fakeNeon(
   } = {},
 ) {
   const calls = {
+    getSession: [] as unknown[],
     signOut: 0,
     signIn: [] as { email: string; password: string }[],
     signUp: [] as unknown[],
@@ -38,7 +39,8 @@ function fakeNeon(
   const answer = (value: Answer | undefined): Promise<CallResult> =>
     typeof value === "function" ? value() : Promise.resolve(value ?? { data: {} });
   const neon: NeonAuthLike = {
-    async getSession() {
+    async getSession(input) {
+      calls.getSession.push(input);
       const value = overrides.session;
       return typeof value === "function" ? value() : (value ?? { data: null });
     },
@@ -94,7 +96,12 @@ function fakeNeon(
   return { neon, calls };
 }
 
-const VERIFIED_USER = { id: "u1", email: "owner@example.test", emailVerified: true };
+const VERIFIED_USER = {
+  id: "u1",
+  email: "owner@example.test",
+  emailVerified: true,
+  createdAt: new Date(1_600_000_000_000),
+};
 
 let logged: string[];
 beforeEach(() => {
@@ -187,6 +194,7 @@ describe("getSession: when the session was made", () => {
     expect(await createNeonAuthProvider(neon).getSession()).toEqual({
       userId: "u1",
       email: "owner@example.test",
+      identityCreatedAt: 1_600_000_000_000,
       issuedAt: expected,
     });
   });
@@ -203,17 +211,25 @@ describe("getSession: when the session was made", () => {
       expect(await createNeonAuthProvider(neon).getSession()).toEqual({
         userId: "u1",
         email: "owner@example.test",
+        identityCreatedAt: 1_600_000_000_000,
       });
     },
   );
 });
 
 describe("getSession", () => {
+  it("forces an authoritative upstream read instead of accepting the signed session-data cache", async () => {
+    const { neon, calls } = fakeNeon({ session: { data: { user: VERIFIED_USER } } });
+    await createNeonAuthProvider(neon).getSession();
+    expect(calls.getSession).toEqual([{ query: { disableCookieCache: "true" } }]);
+  });
+
   it("maps a verified SDK user to a session", async () => {
     const { neon } = fakeNeon({ session: { data: { user: VERIFIED_USER } } });
     expect(await createNeonAuthProvider(neon).getSession()).toEqual({
       userId: "u1",
       email: "owner@example.test",
+      identityCreatedAt: 1_600_000_000_000,
     });
   });
 
@@ -249,7 +265,14 @@ describe("signInWithPassword", () => {
       "owner@example.test",
       "pw",
     );
-    expect(result).toEqual({ ok: true, session: { userId: "u1", email: "owner@example.test" } });
+    expect(result).toEqual({
+      ok: true,
+      session: {
+        userId: "u1",
+        email: "owner@example.test",
+        identityCreatedAt: 1_600_000_000_000,
+      },
+    });
     expect(calls.signIn).toEqual([{ email: "owner@example.test", password: "pw" }]);
   });
 

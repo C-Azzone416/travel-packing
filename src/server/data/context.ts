@@ -6,7 +6,13 @@ import type { Db } from "../db/retention";
 /** Everything an entry point needs: the database and the auth runtime. Owner identity comes only from auth. */
 export interface DataContext {
   db: Db;
-  auth: { provider: AuthProvider; allowlist: Allowlist };
+  auth: {
+    /** App provider with setup/deletion gates. */
+    provider: AuthProvider;
+    /** Raw provider for an authoritative second session read under the owner lock. */
+    deletionProvider?: AuthProvider;
+    allowlist: Allowlist;
+  };
   /** The clock, injected so no data-layer code reads time itself. The date/timezone policy is pending #26. */
   now: () => Date;
   /**

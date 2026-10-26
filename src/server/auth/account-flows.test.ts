@@ -460,15 +460,16 @@ describe("resetOwnerPassword", () => {
     expect(setup.digests.size).toBe(0);
   });
 
-  it("still succeeds when recording fails, logging only a code (a new link will fix it)", async () => {
+  it("fails closed when the serialized setup write cannot be confirmed", async () => {
     auth.setup = {
       completedAt: async () => null,
-      markComplete: async () => {
+      markComplete: async () => {},
+      resetPasswordAndMarkComplete: async () => {
         throw new Error("db down for owner@example.test");
       },
     };
-    expect(await reset()).toEqual({ status: "ok" });
-    expect(events()).toEqual(["provider-error", "password-reset-succeeded"]);
+    expect(await reset()).toEqual({ status: "unavailable" });
+    expect(events()).toEqual(["provider-error"]);
     expect(logged.join()).not.toContain("owner@example.test");
   });
 

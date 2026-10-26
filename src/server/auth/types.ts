@@ -5,6 +5,8 @@
 export interface AuthSession {
   userId: string;
   email: string;
+  /** When the provider identity was created (ms since epoch). Binds destructive recovery to one identity incarnation. */
+  identityCreatedAt?: number;
   /**
    * When the provider created this session (ms since the epoch), if it says. The setup gate (#83) refuses a session made
    * before the account's password was set through a link, so one minted with a pre-registered password stays dead.

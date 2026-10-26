@@ -20,6 +20,7 @@ interface NeonUser {
   id?: string | null;
   email?: string | null;
   emailVerified?: boolean | null;
+  createdAt?: unknown;
 }
 
 interface NeonCallResult {
@@ -29,7 +30,7 @@ interface NeonCallResult {
 
 /** The subset of the SDK this adapter uses. */
 export interface NeonAuthLike {
-  getSession(): Promise<{
+  getSession(input?: { query?: { disableCookieCache?: "true" } }): Promise<{
     data?: { user?: NeonUser | null; session?: { createdAt?: unknown } | null } | null;
     error?: unknown;
   } | null>;
@@ -171,9 +172,16 @@ function toSession(user: NeonUser | null | undefined, created?: unknown): AuthSe
     created instanceof Date || typeof created === "string" || typeof created === "number"
       ? new Date(created).getTime()
       : Number.NaN;
+  const identityCreatedAt =
+    user.createdAt instanceof Date ||
+    typeof user.createdAt === "string" ||
+    typeof user.createdAt === "number"
+      ? new Date(user.createdAt).getTime()
+      : Number.NaN;
   return {
     userId: user.id,
     email: user.email,
+    ...(Number.isFinite(identityCreatedAt) ? { identityCreatedAt } : {}),
     ...(Number.isFinite(issuedAt) ? { issuedAt } : {}),
   };
 }
@@ -181,7 +189,10 @@ function toSession(user: NeonUser | null | undefined, created?: unknown): AuthSe
 export function createNeonAuthProvider(neon: NeonAuthLike): AuthProvider {
   return {
     async getSession() {
-      const result = await neon.getSession();
+      // Neon Auth caches signed session data in a browser cookie for five minutes by default. A revoked session can
+      // otherwise continue authorizing requests until that cache expires. The installed server wrapper checks the
+      // pre-serialization query value as the string "true", then forwards it to Better Auth's authoritative session read.
+      const result = await neon.getSession({ query: { disableCookieCache: "true" } });
       return result?.error ? null : toSession(result?.data?.user, result?.data?.session?.createdAt);
     },
     async signInWithPassword(email, password): Promise<SignInResult> {

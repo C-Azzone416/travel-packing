@@ -23,9 +23,11 @@ const inputSchema = z.object({
 
 const TRY_AGAIN = "We couldn’t close your account. Nothing was deleted. Try again.";
 const PARTIAL =
-  "Your Packed Smart data is removed and access is blocked, but account closure wasn’t confirmed. Try again to finish.";
+  "Your Packed Smart content is removed and protected by a temporary closure marker, but identity deletion wasn’t confirmed. Try again to finish.";
 const UNKNOWN =
   "We couldn’t confirm whether account closure started. Try again; if access is blocked, sign in to finish closing the account.";
+const FINAL_CLEANUP =
+  "Your identity and Packed Smart content were deleted, but removal of a temporary closure marker couldn’t be confirmed. Do not create a new account yet.";
 
 /** The provider identity is already gone. Local-cookie cleanup is best effort; redirect must always complete. */
 async function finishConfirmedClosure(auth: Awaited<ReturnType<typeof getAuth>>): Promise<never> {
@@ -90,9 +92,15 @@ export async function closeAccountAction(
   if (outcome.status === "unavailable") {
     const deletionStarted = outcome.deletionStarted;
     return {
-      error: deletionStarted === true ? PARTIAL : deletionStarted === false ? TRY_AGAIN : UNKNOWN,
+      error: outcome.providerDeleted
+        ? FINAL_CLEANUP
+        : deletionStarted === true
+          ? PARTIAL
+          : deletionStarted === false
+            ? TRY_AGAIN
+            : UNKNOWN,
       fieldErrors: {},
-      ...(deletionStarted === false ? {} : { recovery: true as const }),
+      ...(deletionStarted === false || outcome.providerDeleted ? {} : { recovery: true as const }),
     };
   }
 
@@ -161,7 +169,9 @@ export async function retryCloseAccountAction(
   }
   if (outcome.status === "unauthenticated") redirect("/sign-in");
   if (outcome.status === "unavailable") {
-    return { error: PARTIAL, fieldErrors: {}, recovery: true };
+    return outcome.providerDeleted
+      ? { error: FINAL_CLEANUP, fieldErrors: {} }
+      : { error: PARTIAL, fieldErrors: {}, recovery: true };
   }
 
   limits.recordSuccess(session.email, address);

@@ -1,5 +1,5 @@
 {
-  "id": "3b0ba798-4161-4280-bbb8-d4c4954c8018",
+  "id": "97058fea-5ed3-4c2f-81c6-5213220fda33",
   "prevId": "538b28db-51c5-4653-8d7f-77c5f9bbc0f0",
   "version": "7",
   "dialect": "postgresql",
@@ -14,12 +14,17 @@
           "primaryKey": true,
           "notNull": true
         },
-        "started_at": {
-          "name": "started_at",
+        "identity_created_at": {
+          "name": "identity_created_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
+          "notNull": true
+        },
+        "setup_email_digest": {
+          "name": "setup_email_digest",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
         }
       },
       "indexes": {},

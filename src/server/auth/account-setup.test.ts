@@ -82,7 +82,7 @@ describe("stores", () => {
       store = createDbSetupStore(ctx.db as unknown as Db, DB_KEY);
     });
     beforeEach(async () => {
-      await ctx.client.exec('TRUNCATE TABLE "account_setups"');
+      await ctx.client.exec('TRUNCATE TABLE "account_deletions", "account_setups"');
     });
     afterAll(async () => {
       await ctx.client.close();
@@ -117,11 +117,21 @@ describe("stores", () => {
       await store.markComplete(OWNER.email);
       const at = (await store.completedAt(OWNER.email)) ?? 0;
       const gated = withSetupGate(fake, store, allowlist);
-      fake.current = { userId: "u1", email: OWNER.email, issuedAt: at - 1_000 };
+      fake.current = {
+        userId: "u1",
+        email: OWNER.email,
+        issuedAt: at - 1_000,
+        identityCreatedAt: 1,
+      };
       expect(await gated.getSession()).toBeNull();
-      fake.current = { userId: "u1", email: OWNER.email, issuedAt: at };
+      fake.current = { userId: "u1", email: OWNER.email, issuedAt: at, identityCreatedAt: 1 };
       expect(await gated.getSession()).toBeNull();
-      fake.current = { userId: "u1", email: OWNER.email, issuedAt: at + 1_000 };
+      fake.current = {
+        userId: "u1",
+        email: OWNER.email,
+        issuedAt: at + 1_000,
+        identityCreatedAt: 1,
+      };
       expect(await gated.getSession()).toMatchObject({ email: OWNER.email });
     });
 
@@ -133,6 +143,25 @@ describe("stores", () => {
       );
       expect(rows.rows).toEqual([{ email_digest: emailDigest("owner@example.test", DB_KEY) }]);
       expect(JSON.stringify(rows.rows)).not.toContain("example.test");
+    });
+
+    it("removes a stale fence and old setup proof when a provider id is reused", async () => {
+      await store.markComplete(OWNER.email);
+      await ctx.client.query(
+        "INSERT INTO account_deletions (user_id, identity_created_at, setup_email_digest) VALUES ($1, $2, $3)",
+        [OWNER.userId, new Date(1), emailDigest(OWNER.email, DB_KEY)],
+      );
+      const at = (await store.completedAt(OWNER.email)) ?? 0;
+      fake.current = {
+        userId: OWNER.userId,
+        email: OWNER.email,
+        identityCreatedAt: 2,
+        issuedAt: at + 1,
+      };
+
+      await expect(withSetupGate(fake, store, allowlist).getSession()).resolves.toBeNull();
+      expect((await ctx.client.query("SELECT * FROM account_deletions")).rows).toEqual([]);
+      expect((await ctx.client.query("SELECT * FROM account_setups")).rows).toEqual([]);
     });
   });
 });
@@ -185,7 +214,7 @@ describe("withSetupGate", () => {
 
   it("fails closed and cleans up a new session if the deletion fence cannot be checked", async () => {
     const store = createMemorySetupStore([OWNER.email]);
-    store.isAccountDeletionBlocked = async () => {
+    store.deletionState = async () => {
       throw new Error("synthetic database outage for owner@example.test");
     };
     const gated = withSetupGate(fake, store, allowlist);
@@ -222,6 +251,7 @@ describe("withSetupGate", () => {
           return 0;
         },
         markComplete: async () => {},
+        resetPasswordAndMarkComplete: async (_email, reset) => reset(),
       },
       allowlist,
     );
@@ -243,6 +273,7 @@ describe("withSetupGate", () => {
         throw new Error("connection to db for owner@example.test refused");
       },
       markComplete: async () => {},
+      resetPasswordAndMarkComplete: async (_email, reset) => reset(),
     };
     const gated = withSetupGate(fake, broken, allowlist);
     expect(await gated.signInWithPassword(OWNER.email, OWNER.password)).toMatchObject({
@@ -264,7 +295,7 @@ describe("withSetupGate", () => {
     expect(events()).toEqual([]);
   });
 
-  it("remembers a positive answer once per provider identity, not once per request", async () => {
+  it("rechecks a positive answer so account closure takes effect without retaining a provider-id tombstone", async () => {
     let asked = 0;
     const store: AccountSetupStore = {
       completedAt: async () => {
@@ -272,20 +303,21 @@ describe("withSetupGate", () => {
         return 0;
       },
       markComplete: async () => {},
+      resetPasswordAndMarkComplete: async (_email, reset) => reset(),
     };
     const gated = withSetupGate(fake, store, allowlist);
     fake.current = { userId: "u1", email: OWNER.email };
     for (let i = 0; i < 5; i += 1) await gated.getSession();
-    expect(asked).toBe(1);
+    expect(asked).toBe(5);
   });
 
-  it("does not let a newly registered provider identity inherit the deleted identity's cached setup", async () => {
+  it("does not let a newly registered or reused provider identity inherit the deleted setup", async () => {
     const store = createMemorySetupStore([OWNER.email]);
     const gated = withSetupGate(fake, store, allowlist);
     fake.current = { userId: "old-provider-id", email: OWNER.email };
     expect(await gated.getSession()).not.toBeNull();
     store.digests.clear();
-    fake.current = { userId: "new-provider-id", email: OWNER.email };
+    fake.current = { userId: "old-provider-id", email: OWNER.email };
     expect(await gated.getSession()).toBeNull();
   });
 

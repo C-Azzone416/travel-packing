@@ -185,8 +185,22 @@ describe("closeAccountAction", () => {
   it("makes a post-purge provider failure explicit and links to recovery", async () => {
     mocks.closeAccount.mockResolvedValue({ status: "unavailable", deletionStarted: true });
     await expect(closeAccountAction(INITIAL_CLOSE_ACCOUNT_STATE, form())).resolves.toMatchObject({
-      error: expect.stringContaining("data is removed"),
+      error: expect.stringContaining("content is removed"),
       recovery: true,
+    });
+    expect(mocks.issueCompletion).not.toHaveBeenCalled();
+  });
+
+  it("does not claim completion or offer provider recovery when only final fence cleanup is pending", async () => {
+    mocks.closeAccount.mockResolvedValue({
+      status: "unavailable",
+      deletionStarted: true,
+      providerDeleted: true,
+    });
+    await expect(closeAccountAction(INITIAL_CLOSE_ACCOUNT_STATE, form())).resolves.toEqual({
+      error:
+        "Your identity and Packed Smart content were deleted, but removal of a temporary closure marker couldn’t be confirmed. Do not create a new account yet.",
+      fieldErrors: {},
     });
     expect(mocks.issueCompletion).not.toHaveBeenCalled();
   });
@@ -267,7 +281,7 @@ describe("retryCloseAccountAction", () => {
       await expect(
         retryCloseAccountAction(INITIAL_CLOSE_ACCOUNT_STATE, form()),
       ).resolves.toMatchObject({
-        error: expect.stringContaining("data is removed"),
+        error: expect.stringContaining("content is removed"),
         recovery: true,
       });
     },
@@ -285,13 +299,13 @@ describe("retryCloseAccountAction", () => {
     await expect(
       retryCloseAccountAction(INITIAL_CLOSE_ACCOUNT_STATE, form()),
     ).resolves.toMatchObject({
-      error: expect.stringContaining("data is removed"),
+      error: expect.stringContaining("content is removed"),
       recovery: true,
     });
     expect(mocks.closeAccount).not.toHaveBeenCalled();
   });
 
-  it("cannot be used for an active account without a durable deletion fence", async () => {
+  it("cannot be used for an active account without a transient deletion fence", async () => {
     blocked.mockResolvedValue(false);
     await expect(retryCloseAccountAction(INITIAL_CLOSE_ACCOUNT_STATE, form())).rejects.toThrow(
       "REDIRECT:/settings",
@@ -354,5 +368,19 @@ describe("retryCloseAccountAction", () => {
       "REDIRECT:/close-account/complete",
     );
     expect(mocks.issueCompletion).toHaveBeenCalledWith(auth.completionSignals);
+  });
+
+  it("does not offer another provider retry after identity deletion if final fence cleanup is pending", async () => {
+    mocks.closeAccount.mockResolvedValue({
+      status: "unavailable",
+      deletionStarted: true,
+      providerDeleted: true,
+    });
+    await expect(retryCloseAccountAction(INITIAL_CLOSE_ACCOUNT_STATE, form())).resolves.toEqual({
+      error:
+        "Your identity and Packed Smart content were deleted, but removal of a temporary closure marker couldn’t be confirmed. Do not create a new account yet.",
+      fieldErrors: {},
+    });
+    expect(mocks.issueCompletion).not.toHaveBeenCalled();
   });
 });

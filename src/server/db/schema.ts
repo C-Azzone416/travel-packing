@@ -92,13 +92,18 @@ export const accountSetups = pgTable("account_setups", {
 });
 
 /**
- * Durable fence for an account whose irreversible deletion has begun. It deliberately has no foreign key to `users`:
- * the row must outlive the app-side user so a cached provider session cannot recreate that user or write orphaned data.
- * The provider user id is opaque; no email, trip detail, or credential is retained here.
+ * Transient fence for an account whose irreversible deletion is in progress. It deliberately has no foreign key to `users`
+ * so it survives the app-data purge while provider deletion is retried. Confirmed closure removes this row; only the opaque
+ * provider user id and creation time bind recovery to that exact identity incarnation. The setup digest lets terminal
+ * cleanup repeat its sweep after provider confirmation, and the nullable retry time fairly paces recovery. Every value
+ * disappears with the fence.
  */
 export const accountDeletions = pgTable("account_deletions", {
   userId: text("user_id").primaryKey(),
-  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  identityCreatedAt: timestamp("identity_created_at", { withTimezone: true }).notNull(),
+  setupEmailDigest: text("setup_email_digest").notNull(),
+  /** Pending-only retry bookkeeping. Terminal cleanup deletes this with the rest of the fence. */
+  lastReconcileAttemptAt: timestamp("last_reconcile_attempt_at", { withTimezone: true }),
 });
 
 const ownerId = () =>

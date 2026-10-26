@@ -66,7 +66,12 @@ describe("createE2eAuthProvider", () => {
   it("signs in with the synthetic password and keeps an unguessable token, not the email, in the cookie", async () => {
     expect(await provider.signInWithPassword(OWNER, env.AUTH_E2E_PASSWORD)).toEqual({
       ok: true,
-      session: { userId: `e2e-${OWNER}`, email: OWNER, issuedAt: expect.any(Number) },
+      session: {
+        userId: `e2e-${OWNER}`,
+        email: OWNER,
+        issuedAt: expect.any(Number),
+        identityCreatedAt: 1,
+      },
     });
     const token = jar.get(E2E_COOKIE) ?? "";
     expect(token).toMatch(/^[0-9a-f]{64}$/);

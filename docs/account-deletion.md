@@ -3,9 +3,9 @@
 ## User flow
 
 Settings opens a non-backdrop-dismissable confirmation sheet. The owner must enter the current password and type `DELETE`
-exactly. The server action accepts only a same-origin request, obtains identity and ownership from the provider session (never
-from form input), applies the existing per-email/address sign-in limit, and reauthenticates the password immediately before
-deletion.
+exactly. The copy says closure permanently deletes the account and cannot be undone. The server action accepts only a
+same-origin request, obtains identity and ownership from the provider session (never from form input), applies the existing
+per-email/address sign-in limit, and reauthenticates the password immediately before deletion.
 
 The application currently configures only verified email/password accounts. There is no OAuth/social or passwordless sign-in
 configuration or UI in this repository. The deletion flow therefore requires that current password. If another sign-in method
@@ -18,29 +18,65 @@ Deletion is intentionally ordered:
 
 1. Reauthenticate with the raw auth provider and require the returned user id and normalized email to match the session that
    opened the flow.
-2. In one database transaction, insert `account_deletions(user_id)` idempotently, remove the matching `account_setups` digest,
+2. In one database transaction, insert the transient `account_deletions(user_id, identity_created_at, setup_email_digest)`
+   fence idempotently, remove the matching `account_setups` digest,
    and delete `users`. Foreign-key cascades hard-delete all owned trips (including Recently deleted), stops, items/progress,
    preferences, weather suggestions, Staples, saved lists/items, and account preferences.
 3. Revoke every provider session except the fresh current session.
 4. Ask the provider to delete the identity; provider deletion removes the final session and cookie.
-5. Report success only after the provider confirms deletion.
+5. After the provider confirms deletion, acquire the owner lock again, perform a final owner-row cascade sweep, and delete the
+   transient fence last. Report success only after that transaction is confirmed.
 
-Steps 2–4 cannot be a distributed transaction. If the database loses its commit acknowledgement, the action re-reads the durable
-fence and never claims that nothing was deleted unless the fence is confirmed absent; if that read also fails, the UI says the
-outcome is unknown. If either provider call fails or its outcome is ambiguous after step 2, the durable fence remains. Normal
+Steps 2–5 cannot be a distributed transaction. If the database loses its initial commit acknowledgement, the action re-reads
+the fence and never claims that nothing was deleted unless the fence is confirmed absent; if that read also fails, the UI says
+the outcome is unknown. If either provider call fails or its outcome is ambiguous after step 2, the transient recovery fence remains. Normal
 request guards deny the identity. Owner provisioning and deletion both acquire the same provider-id-scoped transaction advisory
 lock before checking or inserting the fence, so a provisioning request that began on a stale `READ COMMITTED` snapshot waits and
 then observes the committed fence instead of recreating `users`. A correct password sign-in for that fenced identity is routed
 only to the public `/close-account` recovery screen; the raw session is never accepted by the app/data guards. Retrying repeats
 the database transaction safely, then session revocation and identity deletion. A fence lookup failure also denies access.
 
-This ordering prefers privacy and containment over preserving app access during a provider outage: once the database transaction
-commits, app data stays deleted. The recovery screen is the escape hatch for completing provider cleanup after an interruption.
+Owner provisioning, deletion, and terminal cleanup use the same provider-id-scoped transaction advisory lock. The installed
+Neon server SDK otherwise trusts a signed session-data cookie for 300 seconds, so every app session read explicitly bypasses
+that cache and revalidates upstream. The data layer revalidates the raw provider session again after acquiring the owner lock
+and before provisioning; it must still resolve to the same owner. A request authorized before provider deletion therefore
+cannot recreate `users` after terminal cleanup removes the fence.
+
+The provider's immutable user `createdAt` is carried on authoritative sessions and password sign-in responses. The transient
+fence records it so a provider id reused by a later identity cannot enter the old recovery flow or be deleted by an old terminal
+cleanup. A mismatched authoritative session removes only the obsolete fence under the owner lock; it does not sweep the new
+identity's owner data. Under-lock data revalidation compares both provider id and identity creation time.
+
+Password-reset setup completion takes an opaque-email advisory lock before consuming the provider token and holds it through
+the `account_setups` write. Both deletion sweeps take the same lock after the owner lock, and terminal cleanup repeats the
+setup-row deletion. A reset can therefore complete before the first sweep, between the two sweeps, or fail after identity
+deletion, but cannot recreate a setup row after confirmed closure.
+
+This ordering prefers privacy and containment over preserving app access during a provider outage: once the initial database
+transaction commits, app data stays deleted. Provider-first deletion is deliberately rejected because a later database failure
+would strand owned content after the identity needed to authorize a retry was gone.
+
+If the provider confirms identity deletion but the final fence-removal transaction cannot be confirmed, the app does not claim
+closure completed. A temporary opaque fence may remain for operational recovery; owned content and the identity are already
+gone, and the UI says not to create a new account yet. A lost commit acknowledgement is re-read, so a fence confirmed absent
+still counts as success.
+
+Managed Neon Auth documents `neon_auth.user` in the same branch database as its immediate source of truth. After a
+transport-ambiguous delete, the server queries only for existence of the exact fenced `(id, createdAt)` pair. A present row
+keeps the fence; an absent row permits the same generation-bound terminal cleanup; a permission, connection, timestamp, or
+result-shape error keeps the fence. The signed-out sign-in page runs the same bounded server-side reconciler so an identity
+that is already gone does not need to authenticate again after a database outage. It selects only exact identities already
+absent from the auth table, marks each attempted fence before cleanup, and waits five minutes before retrying that fence. New
+or older candidates therefore progress past a failing batch while repeated public requests cannot hot-loop the same cleanup.
+The attempt timestamp is pending-only state and is deleted with the fence. Browser input supplies none of the identity or
+cleanup keys. This design remains release-blocked until the disposable non-production branch verifies that the deployed
+app database role can select this existence result from `neon_auth.user` and that the documented column names/timestamp
+precision match the installed service.
 
 ## Client integration seam
 
-The only confirmed-success boundary is `closeAccount()` returning `{ status: "ok" }`, after the provider has confirmed the
-terminal `User deleted` response. Only that branch issues a five-minute, identity-free signed value in an HttpOnly,
+The only confirmed-success boundary is `closeAccount()` returning `{ status: "ok" }`, after terminal provider deletion and
+confirmed removal of the transient fence. Only that branch issues a five-minute, identity-free signed value in an HttpOnly,
 `SameSite=Strict` cookie scoped to `/close-account/complete`, then redirects to that public route. Partial, unknown,
 wrong-password, CSRF, and provider-error branches never issue the cookie and cannot run client-side account cleanup.
 
@@ -57,30 +93,37 @@ When Framebriar is integrated, keep it out of the destructive server transaction
 2. do not request deletion of separately retained delivered reports without a separate product/privacy design and verified
    hosted retention behavior.
 
-Framebriar currently has no app-account identifier in the clean baseline used by this branch. Do not add a Framebriar dependency
-here; resolve the `SettingsScreen.tsx` and `globals.css` integration seams after this change lands.
+Framebriar local-only integration may stop and clear the unsent browser outbox and disconnect after this confirmed-success
+signal. Its browser SDK cannot delete delivered reports, and those reports may contain identifying notes or preview screenshots;
+there is no structured Packed Smart account id or email that maps them reliably. Do not claim those hosted reports are erased,
+transmit a new identifier, or change the hosted service without a separate product/privacy decision. Legacy donor-database
+retention is also outside this core app transaction.
 
-## Retained fence and privacy decision
+## No account tombstone after confirmed closure
 
-`account_deletions` intentionally retains an opaque provider user id and `started_at`, with no email, credential, preference,
-trip, packing-list, or location data. That record is necessary to block cached/stale provider sessions and concurrent mutations
-from recreating owner data, and to make a partially completed deletion retryable after a process restart.
+`account_deletions` contains an opaque provider user id, the provider identity creation time, and the keyed setup-email digest
+while deletion is incomplete. Those values are used only to bind retries and repeat both cleanup sweeps. The row is removed
+after the provider's terminal response and the final app-data sweep. Confirmed normal closure therefore leaves no app setup,
+owner, owned-content, or deletion-fence row.
 
-The fence is still account-linked retained data. Consequently this design promises deletion of the auth identity and all owned
-app content, not absolute erasure of every database value. No expiry is encoded because issue #28 has not established the
-maximum session/cache/backup interval or legal retention policy. Before expiring tombstones, product/privacy must choose a period
-that exceeds every possible stale-session lifetime and define backup/log handling. Neon must also be verified not to reuse a
-deleted provider user id on re-registration; until that hosted behavior is confirmed, id reuse would leave a newly registered
-identity fenced rather than risk reopening deleted data.
+Provider user-id uniqueness is not trusted as a safety mechanism. Recovery and cleanup require the recorded identity creation
+time to match; the setup digest is removed, the positive setup result is not cached across requests, and a later identity must
+complete its own inbox-owned setup-link flow. An absent fence never authorizes an old session by itself: every request performs
+an authoritative provider session read.
+
+This application can promise removal from its live app database and provider identity only to the extent verified by those
+systems. Neon/provider audit logs, caches, deletion timelines, and database backups follow their configured service policies and
+are not synchronously erased or verified by this request. Partial failures may temporarily retain the recovery fence as
+described above; the app never labels that state complete.
 
 ## Verification boundary
 
 Automated tests use synthetic accounts, the in-memory/PGlite database, and mocked/provider-fake responses. They verify the full
-owned-row cascade, cross-owner isolation, the write fence, idempotent retries, wrong-password behavior, CSRF origin checking,
-provider failures, and the recovery sign-in path. Contract tests also require both deletion and provisioning to await the same
-owner lock before their first fence read/write. PGlite has one connection and serializes transactions even without the advisory
-lock, so its concurrency test verifies the durable outcome but cannot demonstrate real PostgreSQL lock contention. Automated
-tests never call Neon or a deployed environment.
+owned-row cascade, cross-owner isolation, the transient write fence and terminal removal, idempotent retries, authoritative
+session reads, stale-request revalidation, wrong-password behavior, CSRF origin checking, provider failures, and the recovery
+sign-in path. Contract tests require deletion, provisioning, and terminal cleanup to await the same owner lock. PGlite has one
+connection and serializes transactions even without the advisory lock, so its concurrency test verifies the durable outcome but
+cannot demonstrate real PostgreSQL lock contention. Automated tests never call Neon or a deployed environment.
 
 Before enabling this feature in a disposable non-production Neon Auth project, verify with a synthetic email that:
 
@@ -89,11 +132,16 @@ Before enabling this feature in a disposable non-production Neon Auth project, v
 3. `deleteUser({ password })` returns the confirmed terminal response
    `{ success: true, message: "User deleted" }`, deletes the identity, clears the current cookie, and invalidates every remaining
    session; a response such as `{ success: true, message: "Verification email sent" }` is not treated as deletion;
-4. the same email can register again and receives a different provider user id;
-5. deletion is enabled for the project and the SDK response shapes match the installed `@neondatabase/auth@0.6.0-beta` adapter.
-6. on two independent PostgreSQL connections, pause deletion after it takes the owner lock and starts its transaction, start
+4. the same email can register again; record whether the provider id changes, and confirm `user.createdAt` is present and
+   stable on password sign-in and cache-bypassed session reads but changes for the newly created identity;
+5. an authoritative `getSession` rejects a revoked session immediately rather than honoring the 300-second session-data cookie;
+6. deletion is enabled and response shapes match the installed `@neondatabase/auth@0.6.0-beta` adapter; using the app's
+   existing pooled database role, select only `exists(...)` for a synthetic `(id, createdAt)` from `neon_auth.user`, then
+   verify it changes immediately from true to false when that synthetic identity is deleted; and
+7. on two independent PostgreSQL connections, pause deletion after it takes the owner lock and starts its transaction, start
    provisioning for the same provider id, then commit deletion; provisioning must wait, refuse the fenced identity, and leave
-   `users` empty with exactly one `account_deletions` row. Repeat with provisioning first and deletion second.
+   `users` empty with exactly one transient `account_deletions` row. Repeat with provisioning first and deletion second, then
+   simulate terminal provider deletion and verify the final locked sweep leaves both tables empty.
 
-Do not run that check against Production or with a real account. Provider-side retention, audit logs, backups, and deletion
-timelines remain hosted-service policy questions and are not asserted by this code.
+Do not run that check against Production or with a real account. No hosted test is authorized by this document. Provider-side
+retention, audit logs, backups, and deletion timelines remain hosted-service policy questions and are not asserted by this code.

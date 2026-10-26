@@ -20,7 +20,7 @@ export function CloseAccountSheet({
     <ModalSheet
       open
       title="Close your account?"
-      description="This permanently removes your account identity, trips, packing lists, Staples, saved lists, and preferences. An opaque security record is kept to prevent deleted data from being recreated. It can’t be undone."
+      description="This permanently deletes your account identity, trips, packing lists, Staples, saved lists, and preferences. Confirmed closure leaves no live Packed Smart account record. Previously sent feedback and provider backups may follow separate retention policies. It can’t be undone."
       onClose={onClose}
       dismissOnBackdrop={false}
       actions={

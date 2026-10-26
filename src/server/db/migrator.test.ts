@@ -21,7 +21,8 @@ const EXPECTED_TAGS = [
   "0008_stamp_labels",
   "0009_staple_quantity_rules",
   "0010_staples_setup",
-  "0011_graceful_talos",
+  "0011_icy_leech",
+  "0012_flimsy_redwing",
 ];
 
 // One in-memory Postgres for the file; each test starts from an empty public schema.

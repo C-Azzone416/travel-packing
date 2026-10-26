@@ -7,7 +7,11 @@ import { parseAllowlist } from "./allowlist";
 import { closeAccount, deletionSession } from "./close-account";
 import type { RuntimeAuth } from "./auth-runtime";
 
-const SESSION = { userId: "synthetic-owner", email: "owner@example.test" };
+const SESSION = {
+  userId: "synthetic-owner",
+  email: "owner@example.test",
+  identityCreatedAt: 1_700_000_000_000,
+};
 const PASSWORD = "synthetic-password";
 let context: Awaited<ReturnType<typeof createMigratedDb>>;
 let fake: ReturnType<typeof createFakeAuth>;
@@ -36,6 +40,15 @@ beforeEach(async () => {
 afterAll(async () => context.client.close());
 
 describe("closeAccount", () => {
+  const withProviderIdentityAbsent = (): Db =>
+    new Proxy(context.db as unknown as Db, {
+      get(target, property, receiver) {
+        if (property === "execute") return async () => ({ rows: [{ exists: false }] });
+        const value = Reflect.get(target, property, receiver) as unknown;
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+
   it("reads only the raw recovery provider session", async () => {
     auth.provider = { ...fake, getSession: async () => null };
     expect(await deletionSession(auth)).toEqual(SESSION);
@@ -50,7 +63,7 @@ describe("closeAccount", () => {
     expect(await deletionSession(auth)).toBeNull();
   });
 
-  it("reauthenticates, fences and purges app data, revokes other sessions, then deletes the identity", async () => {
+  it("reauthenticates, purges app data, deletes the identity, then removes the transient fence", async () => {
     expect(await closeAccount(auth, context.db as unknown as Db, SESSION, PASSWORD)).toEqual({
       status: "ok",
     });
@@ -60,9 +73,7 @@ describe("closeAccount", () => {
     ]);
     expect(fake.current).toBeNull();
     expect((await context.client.query("SELECT * FROM users")).rows).toEqual([]);
-    expect((await context.client.query("SELECT user_id FROM account_deletions")).rows).toEqual([
-      { user_id: SESSION.userId },
-    ]);
+    expect((await context.client.query("SELECT user_id FROM account_deletions")).rows).toEqual([]);
   });
 
   it("does nothing when the current password is wrong", async () => {
@@ -133,6 +144,23 @@ describe("closeAccount", () => {
     expect((await context.client.query("SELECT * FROM account_deletions")).rows).toEqual([]);
   });
 
+  it("never deletes a new provider identity that reused an id from a pending deletion", async () => {
+    await context.client.query(
+      "INSERT INTO account_deletions (user_id, identity_created_at, setup_email_digest) VALUES ($1, $2, $3)",
+      [SESSION.userId, new Date(SESSION.identityCreatedAt - 1), "b".repeat(64)],
+    );
+
+    expect(await closeAccount(auth, context.db as unknown as Db, SESSION, PASSWORD)).toEqual({
+      status: "unavailable",
+      deletionStarted: false,
+    });
+    expect(fake.flows.calls).toEqual([]);
+    expect(fake.signOutCalls).toBe(1);
+    expect((await context.client.query("SELECT id FROM users")).rows).toEqual([
+      { id: SESSION.userId },
+    ]);
+  });
+
   it("leaves a safe, retryable fence if session revocation fails after the app purge", async () => {
     fake.flows.answers.revokeOtherSessions = { ok: false, reason: "unavailable" };
     expect(await closeAccount(auth, context.db as unknown as Db, SESSION, PASSWORD)).toEqual({
@@ -159,7 +187,79 @@ describe("closeAccount", () => {
     });
     expect(
       (await context.client.query("SELECT count(*)::int AS count FROM account_deletions")).rows,
-    ).toEqual([{ count: 1 }]);
+    ).toEqual([{ count: 0 }]);
+  });
+
+  it("finishes when a lost provider response is reconciled to an absent auth identity", async () => {
+    fake.flows.answers.deleteUser = { ok: false, reason: "unavailable" };
+    expect(await closeAccount(auth, withProviderIdentityAbsent(), SESSION, PASSWORD)).toEqual({
+      status: "ok",
+    });
+    expect((await context.client.query("SELECT * FROM account_deletions")).rows).toEqual([]);
+    expect((await context.client.query("SELECT * FROM users")).rows).toEqual([]);
+  });
+
+  it("does not claim completion when provider deletion succeeds but transient fence removal fails", async () => {
+    let transactions = 0;
+    const wrapped = {
+      ...context.db,
+      transaction: async (work: Parameters<Db["transaction"]>[0]) => {
+        transactions += 1;
+        if (transactions === 2) throw new Error("synthetic final cleanup outage");
+        const result = await context.db.transaction(work);
+        setup.blockedUserIds.add(SESSION.userId);
+        return result;
+      },
+    } as unknown as Db;
+
+    expect(await closeAccount(auth, wrapped, SESSION, PASSWORD)).toEqual({
+      status: "unavailable",
+      deletionStarted: true,
+      providerDeleted: true,
+    });
+    expect(fake.current).toBeNull();
+    expect((await context.client.query("SELECT * FROM users")).rows).toEqual([]);
+    expect((await context.client.query("SELECT user_id FROM account_deletions")).rows).toEqual([
+      { user_id: SESSION.userId },
+    ]);
+  });
+
+  it("accepts terminal cleanup whose commit acknowledgement was lost when the fence reread is absent", async () => {
+    let transactions = 0;
+    const wrapped = {
+      ...context.db,
+      transaction: async (work: Parameters<Db["transaction"]>[0]) => {
+        transactions += 1;
+        if (transactions !== 2) return context.db.transaction(work);
+        await context.db.transaction(work);
+        setup.blockedUserIds.delete(SESSION.userId);
+        throw new Error("synthetic final cleanup acknowledgement lost");
+      },
+    } as unknown as Db;
+
+    expect(await closeAccount(auth, wrapped, SESSION, PASSWORD)).toEqual({ status: "ok" });
+    expect((await context.client.query("SELECT * FROM account_deletions")).rows).toEqual([]);
+  });
+
+  it("does not report success when the terminal fence belongs to another identity generation", async () => {
+    const deleteUser = fake.deleteUser.bind(fake);
+    fake.deleteUser = async (password) => {
+      const result = await deleteUser(password);
+      await context.client.query(
+        "UPDATE account_deletions SET identity_created_at = $2 WHERE user_id = $1",
+        [SESSION.userId, new Date(SESSION.identityCreatedAt + 1)],
+      );
+      return result;
+    };
+
+    expect(await closeAccount(auth, context.db as unknown as Db, SESSION, PASSWORD)).toEqual({
+      status: "unavailable",
+      deletionStarted: "unknown",
+      providerDeleted: true,
+    });
+    expect((await context.client.query("SELECT user_id FROM account_deletions")).rows).toEqual([
+      { user_id: SESSION.userId },
+    ]);
   });
 
   it("does not call the provider delete if the database transaction fails", async () => {

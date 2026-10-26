@@ -5,6 +5,7 @@ import { createMigratedDb, resetData } from "../db/__fixtures__/db";
 import { accountDeletions, users } from "../db/schema";
 import type { Db } from "../db/retention";
 import { lockAccountDeletion } from "../auth/account-deletion-lock";
+import { beginAccountDeletion } from "../auth/account-deletion";
 import { createFakeAuth, makeContext, OTHER_OWNER, OWNER, signedInAs } from "./__fixtures__/seed";
 import { fail } from "./result";
 import { createRateLimiter } from "../locations/rate-limit";
@@ -88,14 +89,90 @@ describe("run", () => {
     expect(rows.rows).toEqual([{ id: OWNER.userId }]);
   });
 
-  it("cannot recreate an owner or run a handler after a durable deletion fence exists", async () => {
-    await ctx.client.query("INSERT INTO account_deletions (user_id) VALUES ($1)", [OWNER.userId]);
+  it("cannot recreate an owner or run a handler while a transient deletion fence exists", async () => {
+    await ctx.client.query(
+      "INSERT INTO account_deletions (user_id, identity_created_at, setup_email_digest) VALUES ($1, $2, $3)",
+      [OWNER.userId, new Date(1), "a".repeat(64)],
+    );
     let ran = false;
     const result = await run(context(), schema, { name: "x" }, async () => {
       ran = true;
     });
     expect(result).toEqual(fail("UNAUTHENTICATED"));
     expect(ran).toBe(false);
+    expect((await ctx.client.query("SELECT id FROM users")).rows).toEqual([]);
+  });
+
+  it("revalidates under the owner lock so an in-flight stale session cannot recreate the owner", async () => {
+    const original = fake.getSession.bind(fake);
+    let reads = 0;
+    fake.getSession = async () => {
+      reads += 1;
+      return reads === 1 ? OWNER : null;
+    };
+    try {
+      let ran = false;
+      const result = await run(context(), schema, { name: "x" }, async () => {
+        ran = true;
+      });
+      expect(result).toEqual(fail("UNAUTHENTICATED"));
+      expect(reads).toBe(2);
+      expect(ran).toBe(false);
+      expect((await ctx.client.query("SELECT id FROM users")).rows).toEqual([]);
+    } finally {
+      fake.getSession = original;
+    }
+  });
+
+  it("rejects an id-reused provider identity when its incarnation changed during the owner-lock wait", async () => {
+    const original = fake.getSession.bind(fake);
+    let reads = 0;
+    fake.getSession = async () => {
+      reads += 1;
+      return reads === 1 ? { ...OWNER, identityCreatedAt: 1 } : { ...OWNER, identityCreatedAt: 2 };
+    };
+    try {
+      const result = await run(context(), schema, { name: "x" }, async () => "ran");
+      expect(result).toEqual(fail("UNAUTHENTICATED"));
+      expect(reads).toBe(2);
+      expect((await ctx.client.query("SELECT id FROM users")).rows).toEqual([]);
+    } finally {
+      fake.getSession = original;
+    }
+  });
+
+  it("keeps the owner lock through the handler so deletion cannot overtake an old request", async () => {
+    let handlerEntered!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      handlerEntered = resolve;
+    });
+    let releaseHandler!: () => void;
+    const release = new Promise<void>((resolve) => {
+      releaseHandler = resolve;
+    });
+    const oldRequest = run(context(), schema, { name: "x" }, async () => {
+      handlerEntered();
+      await release;
+      return "old request finished";
+    });
+    await entered;
+
+    let deletionSettled = false;
+    const deletion = beginAccountDeletion(
+      ctx.db as unknown as Db,
+      OWNER.userId,
+      1,
+      "a".repeat(64),
+    ).then((result) => {
+      deletionSettled = true;
+      return result;
+    });
+    await new Promise<void>((resolve) => setTimeout(resolve, 10));
+    expect(deletionSettled).toBe(false);
+
+    releaseHandler();
+    await expect(oldRequest).resolves.toEqual({ ok: true, data: "old request finished" });
+    await expect(deletion).resolves.toBe("started");
     expect((await ctx.client.query("SELECT id FROM users")).rows).toEqual([]);
   });
 
@@ -114,7 +191,11 @@ describe("run", () => {
     });
     const deletion = ctx.db.transaction(async (transaction) => {
       await lockAccountDeletion(transaction, OWNER.userId);
-      await transaction.insert(accountDeletions).values({ userId: OWNER.userId });
+      await transaction.insert(accountDeletions).values({
+        userId: OWNER.userId,
+        identityCreatedAt: new Date(1),
+        setupEmailDigest: "a".repeat(64),
+      });
       deletionLocked();
       await release;
       await transaction.delete(users).where(eq(users.id, OWNER.userId));
