@@ -4,8 +4,8 @@ People who have an invitation can send the developer a note, and on test builds 
 the people who run it: what is captured, what never is, how to set it up, and how to check it on a Preview. Developer setup (package
 access, the fake service used in tests) is in [framebriar.md](framebriar.md).
 
-Nothing in this repository holds a token, an invitation or a credential. Every value below is a placeholder: `<APP_ID>`,
-`<INVITATION>`, `<GITHUB_PACKAGES_TOKEN>`, `<PREVIEW_ORIGIN>`, `<PRODUCTION_ORIGIN>`.
+Nothing in this repository holds a token, an invitation or a credential. `<INVITATION>` below is a placeholder and must be shared
+privately. The app id and origins are public configuration and are written exactly.
 
 ## What is captured, and what never is
 
@@ -30,18 +30,18 @@ lists the rest under "Also sent".
 
 These steps belong to the owner of the Framebriar service and of this repository; the app's developers cannot do them.
 
-1. **Register the app:** `framebriar-admin games add <APP_ID>` (the app uses the id `travel-packing`; builds: any).
-2. **Allow the exact origins** the app is served from, and no others:
-   `framebriar-admin origins add <PREVIEW_ORIGIN> --azure-cors`, plus `http://localhost:3000` for local development if wanted. Add
-   `<PRODUCTION_ORIGIN>` only when feedback goes to Production (a decision for the owner). Old per-deployment Preview addresses stay
-   out.
-3. **Let CI install the SDK:** in the `@masra91/framebriar` package settings, under **Manage Actions access**, add this repository
-   with read access. Until then every CI install fails (the SDK is a private package; see [framebriar.md](framebriar.md)).
+1. **Register the app:** `framebriar-admin games add travel-packing` (builds: any). Check status first; do not add a duplicate if it
+   already exists.
+2. **Allow only the exact origins** the app uses. Each must be in both Framebriar's registry and Azure platform CORS:
+   `framebriar-admin origins add http://localhost:3000 --azure-cors`,
+   `framebriar-admin origins add https://travel-packing-preview.vercel.app --azure-cors`, and
+   `framebriar-admin origins add https://packed-smart.vercel.app --azure-cors`. Old per-deployment Preview addresses stay out.
+3. **Install the SDK:** the repository pins the exact private SDK distributable as
+   `vendor/framebriar/framebriar-0.4.1.tgz`. A normal `npm ci` needs no package token or registry access; provenance and the update
+   procedure are in [framebriar.md](framebriar.md).
 4. **Let a person connect:** issue an invitation for the app, for example
-   `framebriar-admin invite <APP_ID> --days 7 --uses 1`, and give `<INVITATION>` to that person privately. An invitation works once
+   `framebriar-admin invite travel-packing --days 7 --uses 1`, and give `<INVITATION>` to that person privately. An invitation works once
    and expires; the connection it creates lasts 30 days.
-5. Local installs need `GITHUB_PACKAGES_TOKEN=<GITHUB_PACKAGES_TOKEN>` in the environment: a token that can read the package (for
-   example `gh auth token`, with `read:packages`).
 
 ## Connecting and disconnecting (for the person using the app)
 
@@ -61,14 +61,15 @@ These steps belong to the owner of the Framebriar service and of this repository
 The automated tests use a fake service and never call the real one, so a real delivery is checked by hand once per deployment that
 changes feedback. Use a Preview, not Production.
 
-1. The owner issues one invitation for `<APP_ID>` (step 4 above) and gives it to the person doing the check.
-2. Open the Preview at its stable address (`<PREVIEW_ORIGIN>`) and sign in. On Settings, paste the invitation and press Connect.
+1. The owner issues one invitation for `travel-packing` (step 4 above) and gives it to the person doing the check.
+2. Open the Preview at its stable address (`https://travel-packing-preview.vercel.app`) and sign in. On Settings, paste the
+   invitation and press Connect.
    Expect "Connected", an expiry date about 30 days away, and the field empty.
 3. On the Trips screen press Feedback. Expect the sheet with the screenshot ticked and a thumbnail. Write "Preview delivery check",
    press Send. Expect "Saved on this device", and then, within a minute, "Received. Thank you." (or the toast, if the sheet was closed).
-4. As the owner, list the app's feedback: `framebriar-admin feedback` (add `pull` to download the notes and screenshot). Expect one new report whose game is `<APP_ID>` with the
-   note, the screenshot, the scene code `trips`, and an app version matching the Preview's commit. Nothing else identifying: no email,
-   no trip name in the context fields.
+4. As the owner, list the app's feedback: `framebriar-admin feedback` (add `pull` to download the notes and screenshot). Expect one
+   new report whose game is `travel-packing` with the note, the screenshot, the scene code `trips`, and an app version matching the
+   Preview's commit. Nothing else identifying: no email, no trip name in the context fields.
 5. Offline recovery: turn the network off, send a second report (expect "Saved on this device"), turn it on, and expect it to arrive.
 6. Press Disconnect on Settings and confirm. Expect the invitation field back. Ask the owner to confirm the access is revoked.
 7. Record the date, the commit and the result on the pull request or issue. Do not paste the invitation, any token or any report
