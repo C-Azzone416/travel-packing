@@ -32,10 +32,11 @@ These steps belong to the owner of the Framebriar service and of this repository
 
 1. **Register the app:** `framebriar-admin games add travel-packing` (builds: any). Check status first; do not add a duplicate if it
    already exists.
-2. **Allow only the exact origins** the app uses. Each must be in both Framebriar's registry and Azure platform CORS:
-   `framebriar-admin origins add http://localhost:3000 --azure-cors`,
-   `framebriar-admin origins add https://travel-packing-preview.vercel.app --azure-cors`, and
-   `framebriar-admin origins add https://packed-smart.vercel.app --azure-cors`. Old per-deployment Preview addresses stay out.
+2. **Allow only the exact origins** the app uses. Each must be in both Framebriar's registry and Azure platform CORS. The shared
+   service currently allows local development at exactly `http://localhost:8080` and the stable Preview at
+   `https://travel-packing-preview.vercel.app`. Start local development with `npm run dev -- --hostname localhost --port 8080`;
+   `localhost` and `127.0.0.1` are different origins. `http://localhost:3000`, Production
+   (`https://packed-smart.vercel.app`) and old per-deployment Preview addresses intentionally stay out until separately approved.
 3. **Install the SDK:** the repository pins the exact private SDK distributable as
    `vendor/framebriar/framebriar-0.4.1.tgz`. A normal `npm ci` needs no package token or registry access; provenance and the update
    procedure are in [framebriar.md](framebriar.md).
