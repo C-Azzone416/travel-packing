@@ -66,7 +66,11 @@ export function CloseAccountSheet({
           <div className="auth-error" role="alert">
             <span aria-hidden="true">⚠ </span>
             {state.error}{" "}
-            {state.recovery ? <Link href="/close-account">Finish account closure</Link> : null}
+            {state.recovery ? (
+              <Link className="auth-link inline-link" href="/close-account">
+                Finish account closure
+              </Link>
+            ) : null}
           </div>
         ) : null}
       </form>

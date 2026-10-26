@@ -118,19 +118,24 @@ describe("SettingsScreen", () => {
     const closeAccount = vi
       .fn<(previous: CloseAccountState, formData: FormData) => Promise<CloseAccountState>>()
       .mockResolvedValueOnce({
-        error: "We couldn’t close your account. Nothing was deleted. Try again.",
+        error:
+          "Your Packed Smart data is removed and access is blocked, but account closure wasn’t confirmed. Try again to finish.",
         fieldErrors: {},
+        recovery: true,
       })
       .mockReturnValueOnce(retry);
     setup(undefined, undefined, undefined, closeAccount);
     await userEvent.click(screen.getByRole("button", { name: "Close account" }));
     const submit = screen.getByRole("button", { name: "Close account permanently" });
     await userEvent.click(submit);
-    expect(await screen.findByText(/Nothing was deleted/)).toBeTruthy();
+    expect(await screen.findByText(/data is removed/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Finish account closure" }).className).toBe(
+      "auth-link inline-link",
+    );
 
     await userEvent.click(submit);
     expect(screen.getByRole("button", { name: "Closing…" }).hasAttribute("disabled")).toBe(true);
-    expect(screen.queryByText(/Nothing was deleted/)).toBeNull();
+    expect(screen.queryByText(/data is removed/)).toBeNull();
 
     await act(async () => resolveRetry({ error: null, fieldErrors: {} }));
   });
