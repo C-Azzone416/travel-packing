@@ -373,6 +373,9 @@ test.describe("more states", DEVICE, () => {
     await expect(page.getByRole("region", { name: "Loading Staples setup" })).toBeVisible();
     await expectAccessible(page, "authenticated setup loading");
     release();
+    // Let the held page finish loading first: once the gate opens, the dashboard fires its own action, and that late action
+    // must not be mistaken for the new page's setup check by the route below (it was, under load, and the notice never showed).
+    await expect(page.getByRole("heading", { name: "Your travel ledger" })).toBeVisible();
     await page.unroute("**/*");
     // Only the setup check fails: the non-blocking notice leaves the dashboard usable.
     let aborted = false;
