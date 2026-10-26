@@ -4448,8 +4448,8 @@ a.back {
   margin: 0 auto 8px;
   padding: 10px 18px;
   border-radius: 14px;
-  background: var(--card, #fff);
-  border: 1px solid var(--line, #ddd);
+  background: var(--paper);
+  border: 1px solid var(--line);
 }
 .feedback-notice p {
   margin: 0;
@@ -4476,7 +4476,7 @@ a.back {
   border: 1px solid var(--line);
   border-radius: 14px;
   padding: 10px 14px;
-  background: #fff;
+  background: var(--control-bg);
   color: var(--ink);
   font: inherit;
   resize: vertical;
@@ -4491,7 +4491,7 @@ a.back {
 .feedback-check input {
   width: 22px;
   height: 22px;
-  accent-color: var(--teal, #166d7a);
+  accent-color: var(--accent);
 }
 .feedback-shot {
   display: grid;
