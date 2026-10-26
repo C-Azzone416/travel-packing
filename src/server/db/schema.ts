@@ -83,11 +83,22 @@ export const users = pgTable(
  * Accounts whose password was set through an emailed link (#83). Sign-in is refused for any address without a row here,
  * so a password chosen by someone else before the owner verified the address can never open a session. Keyed by an HMAC-SHA-256
  * digest of the normalized email, because there is no user id before the first session and the app stores no raw
- * addresses. A row is created only when a reset link (setup or forgot-password) is used successfully, and never removed.
+ * addresses. A row is created only when a reset link (setup or forgot-password) is used successfully, and is removed only
+ * in the same transaction that permanently deletes that account's app data.
  */
 export const accountSetups = pgTable("account_setups", {
   emailDigest: text("email_digest").primaryKey(),
   completedAt: timestamp("completed_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Durable fence for an account whose irreversible deletion has begun. It deliberately has no foreign key to `users`:
+ * the row must outlive the app-side user so a cached provider session cannot recreate that user or write orphaned data.
+ * The provider user id is opaque; no email, trip detail, or credential is retained here.
+ */
+export const accountDeletions = pgTable("account_deletions", {
+  userId: text("user_id").primaryKey(),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 const ownerId = () =>

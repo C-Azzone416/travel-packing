@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { SaveStatusProvider, useSaveStatus } from "@/components/shell/SaveStatus";
 import { ToastProvider } from "@/components/ui/Toast";
 import { lastSavedText, SettingsScreen } from "./SettingsScreen";
+import type { CloseAccountState } from "./close-account-state";
 
 let tracker: ReturnType<typeof useSaveStatus>;
 function Capture() {
@@ -27,6 +28,13 @@ function setup(
         settings: { weatherOptIn: boolean; temperatureUnit: "F" | "C" };
       }
   >,
+  closeAccount = vi.fn(
+    async (previous: CloseAccountState, formData: FormData): Promise<CloseAccountState> => {
+      void previous;
+      void formData;
+      return { error: null, fieldErrors: {} };
+    },
+  ),
 ) {
   let saved = { weatherOptIn: false, temperatureUnit: "F" as "F" | "C" };
   const update =
@@ -46,11 +54,12 @@ function setup(
           updateWeather={update}
           initialAppearance="base"
           updateAppearance={async (appearance) => ({ ok: true as const, appearance })}
+          closeAccount={closeAccount}
         />
       </SaveStatusProvider>
     </ToastProvider>,
   );
-  return { signOut, updateWeather: update, ...view };
+  return { signOut, updateWeather: update, closeAccount, ...view };
 }
 
 describe("SettingsScreen", () => {
@@ -68,6 +77,36 @@ describe("SettingsScreen", () => {
     setup(null);
     expect(screen.queryByText(/Signed in as/)).toBeNull();
     expect(screen.getByRole("button", { name: "Sign out" })).toBeTruthy();
+  });
+
+  it("requires the password and exact irreversible confirmation in a nondismissable account sheet", async () => {
+    const { closeAccount } = setup();
+    await userEvent.click(screen.getByRole("button", { name: "Close account" }));
+    expect(screen.getByRole("dialog", { name: "Close your account?" })).toBeTruthy();
+    expect(screen.getByLabelText("Current password").getAttribute("autocomplete")).toBe(
+      "current-password",
+    );
+    expect(screen.getByLabelText("Type DELETE to confirm")).toBeTruthy();
+
+    await userEvent.click(screen.getByTestId("modal-backdrop"));
+    expect(screen.getByRole("dialog", { name: "Close your account?" })).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(closeAccount).not.toHaveBeenCalled();
+  });
+
+  it("submits only the explicit password and DELETE confirmation", async () => {
+    const { closeAccount } = setup();
+    await userEvent.click(screen.getByRole("button", { name: "Close account" }));
+    await userEvent.type(screen.getByLabelText("Current password"), "synthetic-password");
+    await userEvent.type(screen.getByLabelText("Type DELETE to confirm"), "DELETE");
+    await userEvent.click(screen.getByRole("button", { name: "Close account permanently" }));
+    expect(closeAccount).toHaveBeenCalledTimes(1);
+    const submitted = closeAccount.mock.calls[0][1] as FormData;
+    expect(Object.fromEntries(submitted)).toEqual({
+      password: "synthetic-password",
+      confirmation: "DELETE",
+    });
   });
 
   it("is honest before anything was saved (one line, no 'saved' claim, no Last saved), then after a real write", async () => {

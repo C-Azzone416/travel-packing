@@ -31,6 +31,7 @@ describe("smokeTest", () => {
       "ok   /forgot-password: 200 (expected 200)",
       "ok   /reset-password: 200 (expected 200)",
       "ok   /finish-setup: 200 (expected 200)",
+      "ok   /close-account: 200 (expected 200)",
       "ok   /: 307 (expected a redirect to /sign-in when signed out)",
     ]);
   });
@@ -69,6 +70,7 @@ describe("smokeTest", () => {
       "FAIL /forgot-password: no response (expected 200)",
       "FAIL /reset-password: no response (expected 200)",
       "FAIL /finish-setup: no response (expected 200)",
+      "FAIL /close-account: no response (expected 200)",
       "FAIL /: no response (expected a redirect to /sign-in when signed out)",
     ]);
   });

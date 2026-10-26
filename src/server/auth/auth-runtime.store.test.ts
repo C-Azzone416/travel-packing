@@ -40,7 +40,7 @@ afterAll(async () => {
   await ctx.client.close();
 });
 beforeEach(async () => {
-  await ctx.client.exec('TRUNCATE TABLE "account_setups"');
+  await ctx.client.exec('TRUNCATE TABLE "account_deletions", "account_setups"');
   resetAuthRuntime();
   createNeonAuth.mockReset();
   setAuthLogSink(() => {});
@@ -86,6 +86,27 @@ describe("the runtime's setup store (Neon provider)", () => {
     // Made after the setup: allowed.
     createdAt = new Date(Date.now() + 60_000).toISOString();
     expect(await auth.provider.getSession()).toMatchObject({ email: OWNER });
+  });
+
+  it("keeps a durable deletion fence after a runtime rebuild while raw auth remains available only for recovery", async () => {
+    createNeonAuth.mockReturnValue({
+      getSession: async () => ({
+        data: {
+          user: { id: "u1", email: OWNER, emailVerified: true },
+          session: { createdAt: new Date(Date.now() + 60_000).toISOString() },
+        },
+      }),
+    });
+    const auth = await getAuth(env);
+    await auth.setup.markComplete(OWNER);
+    await ctx.client.query("INSERT INTO account_deletions (user_id) VALUES ($1)", ["u1"]);
+    expect(await auth.provider.getSession()).toBeNull();
+    expect(await auth.deletionProvider.getSession()).toMatchObject({ userId: "u1", email: OWNER });
+
+    resetAuthRuntime();
+    const rebuilt = await getAuth(env);
+    expect(await rebuilt.provider.getSession()).toBeNull();
+    expect(await rebuilt.deletionProvider.getSession()).toMatchObject({ userId: "u1" });
   });
 
   it("a link's seal and the digest key are separate keys derived from the same secret", async () => {

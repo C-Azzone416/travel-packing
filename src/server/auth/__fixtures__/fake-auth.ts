@@ -26,6 +26,7 @@ export interface FakeAuth extends AuthProvider {
   signOutCalls: number;
   failNextGetSession: boolean;
   failNextSignOut: boolean;
+  blockedDeletionUserIds: Set<string>;
 }
 
 export function createFakeAuth(users: FakeUser[] = []): FakeAuth {
@@ -50,6 +51,7 @@ export function createFakeAuth(users: FakeUser[] = []): FakeAuth {
     signOutCalls: 0,
     failNextGetSession: false,
     failNextSignOut: false,
+    blockedDeletionUserIds: new Set(),
     async getSession() {
       if (fake.failNextGetSession) {
         fake.failNextGetSession = false;
@@ -81,6 +83,17 @@ export function createFakeAuth(users: FakeUser[] = []): FakeAuth {
         throw new Error("provider down for secret@example.test");
       }
       fake.current = null;
+    },
+    async revokeOtherSessions() {
+      return answer("revokeOtherSessions", []);
+    },
+    async deleteUser(password) {
+      const result = await answer("deleteUser", [password]);
+      if ((result as FlowResult).ok) fake.current = null;
+      return result as FlowResult<"invalid" | "unavailable">;
+    },
+    async isAccountDeletionBlocked(userId) {
+      return fake.blockedDeletionUserIds.has(userId);
     },
   };
   return fake;

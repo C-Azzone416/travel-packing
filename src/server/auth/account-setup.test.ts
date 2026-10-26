@@ -169,6 +169,35 @@ describe("withSetupGate", () => {
     expect(fake.signOutCalls).toBe(0);
   });
 
+  it("keeps a fenced identity out of the app but preserves its raw session for deletion recovery", async () => {
+    const store = createMemorySetupStore([OWNER.email]);
+    store.blockedUserIds.add(OWNER.userId);
+    const gated = withSetupGate(fake, store, allowlist);
+    expect(await gated.signInWithPassword(OWNER.email, OWNER.password)).toEqual({
+      ok: false,
+      deletionPending: true,
+      diagnostic: { reason: "account-deletion-pending" },
+    });
+    expect(fake.current).toMatchObject({ userId: OWNER.userId });
+    expect(await gated.getSession()).toBeNull();
+    expect(fake.signOutCalls).toBe(0);
+  });
+
+  it("fails closed and cleans up a new session if the deletion fence cannot be checked", async () => {
+    const store = createMemorySetupStore([OWNER.email]);
+    store.isAccountDeletionBlocked = async () => {
+      throw new Error("synthetic database outage for owner@example.test");
+    };
+    const gated = withSetupGate(fake, store, allowlist);
+    expect(await gated.signInWithPassword(OWNER.email, OWNER.password)).toEqual({
+      ok: false,
+      unfinished: true,
+      diagnostic: { reason: "setup-unavailable" },
+    });
+    expect(fake.current).toBeNull();
+    expect(fake.signOutCalls).toBe(1);
+  });
+
   it("starts allowing the account the moment it is marked set up", async () => {
     const store = createMemorySetupStore();
     const gated = withSetupGate(fake, store, allowlist);
@@ -235,7 +264,7 @@ describe("withSetupGate", () => {
     expect(events()).toEqual([]);
   });
 
-  it("remembers a positive answer, so the store is asked once per address, not once per request", async () => {
+  it("remembers a positive answer once per provider identity, not once per request", async () => {
     let asked = 0;
     const store: AccountSetupStore = {
       completedAt: async () => {
@@ -248,6 +277,16 @@ describe("withSetupGate", () => {
     fake.current = { userId: "u1", email: OWNER.email };
     for (let i = 0; i < 5; i += 1) await gated.getSession();
     expect(asked).toBe(1);
+  });
+
+  it("does not let a newly registered provider identity inherit the deleted identity's cached setup", async () => {
+    const store = createMemorySetupStore([OWNER.email]);
+    const gated = withSetupGate(fake, store, allowlist);
+    fake.current = { userId: "old-provider-id", email: OWNER.email };
+    expect(await gated.getSession()).not.toBeNull();
+    store.digests.clear();
+    fake.current = { userId: "new-provider-id", email: OWNER.email };
+    expect(await gated.getSession()).toBeNull();
   });
 
   it("does not remember a negative answer: a newly set-up account gets in at once", async () => {

@@ -24,6 +24,7 @@ export type SignInFailureReason =
   | "provider-rejected"
   | "provider-response-invalid"
   | "session-not-created"
+  | "account-deletion-pending"
   | "setup-pending"
   | "setup-unavailable";
 
@@ -45,6 +46,8 @@ export type SignInResult =
       ok: false;
       unverified?: true;
       unfinished?: true;
+      /** The password was right, but this identity is fenced while provider deletion is retried. */
+      deletionPending?: true;
       diagnostic?: SignInDiagnostic;
     };
 
@@ -103,4 +106,10 @@ export interface AuthProvider {
   ): Promise<FlowResult<"weak-password" | "invalid" | "too-many" | "unavailable">>;
   /** End the current session (clears the session cookie). Safe to call when signed out. */
   signOut(): Promise<void>;
+  /** Revoke every session except the current request's session. */
+  revokeOtherSessions(): Promise<FlowResult<"unavailable">>;
+  /** Permanently delete the current provider identity after verifying its current password. */
+  deleteUser(password: string): Promise<FlowResult<"invalid" | "unavailable">>;
+  /** True once app-data deletion has begun for this provider user id. Failures must reject access. */
+  isAccountDeletionBlocked(userId: string): Promise<boolean>;
 }

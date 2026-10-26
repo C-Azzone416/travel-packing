@@ -233,6 +233,17 @@ describe("the remembered address after sign-in and sign-out (#209)", () => {
 });
 
 describe("signInAction", () => {
+  it("routes a correctly authenticated fenced identity to account-closure recovery", async () => {
+    vi.spyOn(fake, "signInWithPassword").mockResolvedValueOnce({
+      ok: false,
+      deletionPending: true,
+      diagnostic: { reason: "account-deletion-pending" },
+    });
+    await expect(
+      signInAction({ error: null }, form("owner@example.test", "pw-owner")),
+    ).rejects.toThrow("NEXT_REDIRECT:/close-account");
+  });
+
   it("redirects an allowlisted owner to the app", async () => {
     await expect(
       signInAction({ error: null }, form("owner@example.test", "pw-owner")),

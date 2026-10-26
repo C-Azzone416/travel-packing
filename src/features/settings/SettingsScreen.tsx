@@ -14,6 +14,8 @@ import {
 } from "@/domain/appearance";
 import type { WeatherSettings } from "@/server/data/weather-store";
 import type { AppearanceResult } from "./appearance-actions";
+import { CloseAccountSheet } from "./CloseAccountSheet";
+import type { CloseAccountState } from "./close-account-state";
 import { ThemePicker } from "./ThemePicker";
 import type { WeatherSettingsResult } from "./weather-actions";
 
@@ -27,6 +29,7 @@ export interface SettingsScreenProps {
   /** The theme saved on the account (Base when none was chosen). */
   initialAppearance: Appearance;
   updateAppearance: (appearance: Appearance) => Promise<AppearanceResult>;
+  closeAccount: (previous: CloseAccountState, formData: FormData) => Promise<CloseAccountState>;
 }
 
 /** Show a theme now: the attribute drives the role tokens, the cookie lets the server render it before first paint. */
@@ -56,6 +59,7 @@ export function SettingsScreen({
   updateWeather,
   initialAppearance,
   updateAppearance,
+  closeAccount,
 }: SettingsScreenProps) {
   const { status, lastSavedAt, retry, track } = useSaveStatus();
   const toast = useToast();
@@ -64,6 +68,7 @@ export function SettingsScreen({
   const [weatherError, setWeatherError] = useState(false);
   const [appearance, setAppearance] = useState(initialAppearance);
   const [appearanceError, setAppearanceError] = useState(false);
+  const [closingAccount, setClosingAccount] = useState(false);
 
   // The account's theme is the truth. If this device was showing another one (a new device, or a choice made
   // elsewhere), show the account's now and refresh the cookie. This never writes to the account.
@@ -147,6 +152,15 @@ export function SettingsScreen({
               Sign out
             </Button>
           </form>
+          <div className="close-account-entry">
+            <h3>Close account</h3>
+            <p className="muted">
+              Permanently remove your account identity and Packed Smart content.
+            </p>
+            <Button variant="danger" onClick={() => setClosingAccount(true)}>
+              Close account
+            </Button>
+          </div>
         </Card>
         <Card as="section" padded aria-labelledby="settings-save">
           <h2 id="settings-save">Save status</h2>
@@ -205,6 +219,9 @@ export function SettingsScreen({
           <p className="weather-credit tiny muted">Weather data by Open-Meteo.com</p>
         </Card>
       </div>
+      {closingAccount ? (
+        <CloseAccountSheet action={closeAccount} onClose={() => setClosingAccount(false)} />
+      ) : null}
     </section>
   );
 }

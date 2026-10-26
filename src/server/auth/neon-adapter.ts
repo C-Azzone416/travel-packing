@@ -55,6 +55,8 @@ export interface NeonAuthLike {
     verifyEmail(input: { email: string; otp: string }): Promise<NeonCallResult | null>;
   };
   signOut(): Promise<NeonCallResult | null>;
+  revokeOtherSessions?(): Promise<NeonCallResult | null>;
+  deleteUser?(input: { password: string }): Promise<NeonCallResult | null>;
 }
 
 /**
@@ -149,6 +151,10 @@ function narrow<Reason extends FlowFailure>(
   fallback: Reason,
 ): Reason {
   return (allowed as readonly FlowFailure[]).includes(reason) ? (reason as Reason) : fallback;
+}
+
+function record(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" ? (value as Record<string, unknown>) : null;
 }
 
 /** The sign-up form asks only for email and password; the provider requires a display name, so use the address's local part. */
@@ -251,6 +257,40 @@ export function createNeonAuthProvider(neon: NeonAuthLike): AuthProvider {
         // Never surface the provider's thrown value or resolved error message; either may contain request details.
         throw new Error("Auth provider sign-out failed");
       }
+    },
+    async revokeOtherSessions() {
+      try {
+        const result = await (neon.revokeOtherSessions?.() ?? Promise.resolve(null));
+        return !result?.error && record(result?.data)?.status === true
+          ? { ok: true }
+          : { ok: false, reason: "unavailable" };
+      } catch {
+        logAuthEvent("provider-error");
+        return { ok: false, reason: "unavailable" };
+      }
+    },
+    async deleteUser(password) {
+      try {
+        const result = await (neon.deleteUser?.({ password }) ?? Promise.resolve(null));
+        if (result?.error) {
+          return {
+            ok: false,
+            reason: classifyFailure(result.error) === "unavailable" ? "unavailable" : "invalid",
+          };
+        }
+        const data = record(result?.data);
+        // Better Auth can answer successfully after merely sending a verification email. Only this response confirms that
+        // the installed endpoint actually removed the identity and sessions; every other 2xx stays fenced and retryable.
+        return data?.success === true && data.message === "User deleted"
+          ? { ok: true }
+          : { ok: false, reason: "unavailable" };
+      } catch {
+        logAuthEvent("provider-error");
+        return { ok: false, reason: "unavailable" };
+      }
+    },
+    async isAccountDeletionBlocked() {
+      return false;
     },
   };
 }

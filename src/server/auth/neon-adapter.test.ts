@@ -20,6 +20,8 @@ function fakeNeon(
     requestReset?: Answer;
     reset?: Answer;
     signOut?: SignOutAnswer;
+    revokeOtherSessions?: Answer;
+    deleteUser?: Answer;
   } = {},
 ) {
   const calls = {
@@ -30,6 +32,8 @@ function fakeNeon(
     verify: [] as unknown[],
     requestReset: [] as unknown[],
     reset: [] as unknown[],
+    revokeOtherSessions: 0,
+    deleteUser: [] as unknown[],
   };
   const answer = (value: Answer | undefined): Promise<CallResult> =>
     typeof value === "function" ? value() : Promise.resolve(value ?? { data: {} });
@@ -78,6 +82,14 @@ function fakeNeon(
         ? value()
         : Promise.resolve(value === undefined ? { data: { success: true }, error: null } : value);
     },
+    revokeOtherSessions() {
+      calls.revokeOtherSessions += 1;
+      return answer(overrides.revokeOtherSessions);
+    },
+    deleteUser(input) {
+      calls.deleteUser.push(input);
+      return answer(overrides.deleteUser);
+    },
   };
   return { neon, calls };
 }
@@ -88,6 +100,67 @@ let logged: string[];
 beforeEach(() => {
   logged = [];
   setAuthLogSink((line) => logged.push(line));
+});
+
+describe("account deletion provider calls", () => {
+  it("revokes other sessions and deletes the current identity with the supplied password", async () => {
+    const { neon, calls } = fakeNeon({
+      revokeOtherSessions: { data: { status: true } },
+      deleteUser: { data: { success: true, message: "User deleted" } },
+    });
+    const provider = createNeonAuthProvider(neon);
+    expect(await provider.revokeOtherSessions()).toEqual({ ok: true });
+    expect(await provider.deleteUser("synthetic-password")).toEqual({ ok: true });
+    expect(calls.revokeOtherSessions).toBe(1);
+    expect(calls.deleteUser).toEqual([{ password: "synthetic-password" }]);
+  });
+
+  it("does not mistake a verification-email response or an unconfirmed revocation for completed cleanup", async () => {
+    const { neon } = fakeNeon({
+      revokeOtherSessions: { data: {} },
+      deleteUser: { data: { success: true, message: "Verification email sent" } },
+    });
+    const provider = createNeonAuthProvider(neon);
+    expect(await provider.revokeOtherSessions()).toEqual({ ok: false, reason: "unavailable" });
+    expect(await provider.deleteUser("synthetic-password")).toEqual({
+      ok: false,
+      reason: "unavailable",
+    });
+  });
+
+  it("fails closed when the installed SDK methods are unavailable", async () => {
+    const { neon } = fakeNeon();
+    delete neon.revokeOtherSessions;
+    delete neon.deleteUser;
+    const provider = createNeonAuthProvider(neon);
+    expect(await provider.revokeOtherSessions()).toEqual({ ok: false, reason: "unavailable" });
+    expect(await provider.deleteUser("synthetic-password")).toEqual({
+      ok: false,
+      reason: "unavailable",
+    });
+  });
+
+  it("maps credential rejection separately from outages without exposing provider details", async () => {
+    const invalid = fakeNeon({
+      deleteUser: { data: null, error: { status: 401, code: "INVALID_PASSWORD" } },
+    });
+    expect(await createNeonAuthProvider(invalid.neon).deleteUser("wrong-password")).toEqual({
+      ok: false,
+      reason: "invalid",
+    });
+    const down = fakeNeon({
+      revokeOtherSessions: { data: null, error: { status: 503, code: "INTERNAL_ERROR" } },
+      deleteUser: { data: null, error: { status: 503, code: "INTERNAL_ERROR" } },
+    });
+    expect(await createNeonAuthProvider(down.neon).revokeOtherSessions()).toEqual({
+      ok: false,
+      reason: "unavailable",
+    });
+    expect(await createNeonAuthProvider(down.neon).deleteUser("synthetic-password")).toEqual({
+      ok: false,
+      reason: "unavailable",
+    });
+  });
 });
 afterEach(() => setAuthLogSink());
 

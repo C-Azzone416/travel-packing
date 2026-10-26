@@ -85,6 +85,17 @@ describe("run", () => {
     expect(rows.rows).toEqual([{ id: OWNER.userId }]);
   });
 
+  it("cannot recreate an owner or run a handler after a durable deletion fence exists", async () => {
+    await ctx.client.query("INSERT INTO account_deletions (user_id) VALUES ($1)", [OWNER.userId]);
+    let ran = false;
+    const result = await run(context(), schema, { name: "x" }, async () => {
+      ran = true;
+    });
+    expect(result).toEqual(fail("UNAUTHENTICATED"));
+    expect(ran).toBe(false);
+    expect((await ctx.client.query("SELECT id FROM users")).rows).toEqual([]);
+  });
+
   it("a signed-out request is UNAUTHENTICATED and never reaches the handler or the database", async () => {
     signedInAs(fake, null);
     let ran = false;

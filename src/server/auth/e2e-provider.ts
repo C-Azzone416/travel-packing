@@ -8,7 +8,7 @@
 // token has no file and is rejected, so knowing the owner's email is not enough.
 
 import { randomBytes, randomInt } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { cookies } from "next/headers";
 import type { AuthProvider, AuthSession, FlowResult } from "./types";
@@ -139,6 +139,13 @@ async function startSession(env: Env, email: string) {
 
 /** Any email signs in if it knows the shared synthetic password; the allowlist decides who gets in. */
 export function createE2eAuthProvider(env: Env): AuthProvider {
+  async function removeSessions(email: string, except?: string): Promise<void> {
+    for (const name of readdirSync(stateDirOf(env), { withFileTypes: true })) {
+      if (!name.isFile() || !TOKEN_PATTERN.test(name.name) || name.name === except) continue;
+      if (sessionFor(env, name.name)?.email === email)
+        rmSync(sessionFile(env, name.name), { force: true });
+    }
+  }
   return {
     async getSession(): Promise<AuthSession | null> {
       const found = sessionFor(env, (await cookies()).get(E2E_COOKIE)?.value);
@@ -193,6 +200,29 @@ export function createE2eAuthProvider(env: Env): AuthProvider {
       const token = jar.get(E2E_COOKIE)?.value;
       if (token && TOKEN_PATTERN.test(token)) rmSync(sessionFile(env, token), { force: true });
       jar.delete(E2E_COOKIE);
+    },
+    async revokeOtherSessions() {
+      const token = (await cookies()).get(E2E_COOKIE)?.value;
+      const session = sessionFor(env, token);
+      if (!session) return { ok: false, reason: "unavailable" };
+      await removeSessions(session.email, token);
+      return { ok: true };
+    },
+    async deleteUser(password) {
+      const jar = await cookies();
+      const token = jar.get(E2E_COOKIE)?.value;
+      const session = sessionFor(env, token);
+      if (!session) return { ok: false, reason: "invalid" };
+      const account = readAccount(env, session.email);
+      const expected = account?.password ?? env.AUTH_E2E_PASSWORD;
+      if (!expected || password !== expected) return { ok: false, reason: "invalid" };
+      await removeSessions(session.email);
+      rmSync(accountFile(env, session.email), { force: true });
+      jar.delete(E2E_COOKIE);
+      return { ok: true };
+    },
+    async isAccountDeletionBlocked() {
+      return false;
     },
   };
 }

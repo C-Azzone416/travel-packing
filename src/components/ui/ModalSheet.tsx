@@ -141,18 +141,19 @@ export function ModalSheet({
       event.preventDefault();
       return;
     }
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (
-      event.shiftKey &&
-      (document.activeElement === first || document.activeElement === dialogRef.current)
-    ) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
+    // Move focus ourselves instead of relying on the platform's tab order. Mobile Safari can omit buttons from its
+    // native Tab sequence even though they are programmatically focusable; letting it choose there can escape to the
+    // browser/page after a text field. One explicit sequence keeps the trap identical across keyboard implementations.
+    const current = focusable.indexOf(document.activeElement as HTMLElement);
+    const next = event.shiftKey
+      ? current <= 0
+        ? focusable.length - 1
+        : current - 1
+      : current < 0 || current === focusable.length - 1
+        ? 0
+        : current + 1;
+    event.preventDefault();
+    focusable[next].focus();
   }
 
   return createPortal(

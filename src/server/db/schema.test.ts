@@ -543,6 +543,7 @@ describe("progress follows item quantity", () => {
 
 describe("drizzle schema matches the migrated database", () => {
   const tables = [
+    schema.accountDeletions,
     schema.users,
     schema.staples,
     schema.trips,

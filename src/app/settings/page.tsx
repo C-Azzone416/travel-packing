@@ -8,6 +8,7 @@ import {
   getWeatherSettingsAction,
   updateWeatherSettingsAction,
 } from "@/features/settings/weather-actions";
+import { closeAccountAction } from "@/features/settings/close-account-actions";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -26,6 +27,7 @@ export default async function SettingsPage() {
       updateWeather={updateWeatherSettingsAction}
       initialAppearance={appearance}
       updateAppearance={updateAppearanceAction}
+      closeAccount={closeAccountAction}
     />
   );
 }

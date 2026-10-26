@@ -8,12 +8,12 @@
 // server actions all see it, including a session cookie minted by calling the auth service directly).
 //
 // The record is a SHA-256 digest of the normalized email (there is no user id before the first session, and the app keeps
-// no raw addresses). It is only ever added, never removed.
+// no raw addresses). It is removed only as part of the account-deletion transaction.
 
 import { createHmac } from "node:crypto";
 import { eq } from "drizzle-orm";
 import type { Db } from "@/server/db/retention";
-import { accountSetups } from "@/server/db/schema";
+import { accountDeletions, accountSetups } from "@/server/db/schema";
 import { isAllowed, normalizeEmail, type Allowlist } from "./allowlist";
 import { logAuthEvent } from "./safe-log";
 import type { AuthProvider } from "./types";
@@ -23,6 +23,13 @@ export interface AccountSetupStore {
   completedAt(email: string): Promise<number | null>;
   /** Records that this address's password was set through an emailed link. Safe to repeat. */
   markComplete(email: string): Promise<void>;
+  /**
+   * The opaque database key to remove with an account. Null means this store has no durable row. Keeping the digest
+   * calculation here prevents deletion code from reaching for the auth cookie secret.
+   */
+  removalDigest?(email: string): string | null;
+  /** Whether deletion has begun for this opaque provider user id. Errors are allowed to fail the caller closed. */
+  isAccountDeletionBlocked?(userId: string): Promise<boolean>;
 }
 
 /** The HMAC key for digests, derived from the app secret with a fixed label so the secret itself is never used directly. */
@@ -48,6 +55,17 @@ export function createDbSetupStore(db: Db, key: string): AccountSetupStore {
         .values({ emailDigest: emailDigest(email, key) })
         .onConflictDoNothing();
     },
+    removalDigest(email) {
+      return emailDigest(email, key);
+    },
+    async isAccountDeletionBlocked(userId) {
+      const rows = await db
+        .select({ userId: accountDeletions.userId })
+        .from(accountDeletions)
+        .where(eq(accountDeletions.userId, userId))
+        .limit(1);
+      return rows.length > 0;
+    },
   };
 }
 
@@ -56,16 +74,24 @@ export const TEST_DIGEST_KEY = "test-digest-key";
 export function createMemorySetupStore(
   complete: string[] = [],
   now: () => number = Date.now,
-): AccountSetupStore & { digests: Map<string, number> } {
+): AccountSetupStore & { digests: Map<string, number>; blockedUserIds: Set<string> } {
   const digest = (email: string) => emailDigest(email, TEST_DIGEST_KEY);
   const digests = new Map<string, number>(complete.map((email) => [digest(email), 0]));
+  const blockedUserIds = new Set<string>();
   return {
     digests,
+    blockedUserIds,
     async completedAt(email) {
       return digests.get(digest(email)) ?? null;
     },
     async markComplete(email) {
       if (!digests.has(digest(email))) digests.set(digest(email), now());
+    },
+    removalDigest(email) {
+      return digest(email);
+    },
+    async isAccountDeletionBlocked(userId) {
+      return blockedUserIds.has(userId);
     },
   };
 }
@@ -76,6 +102,12 @@ export const NOTHING_SET_UP: AccountSetupStore = {
     return null;
   },
   async markComplete() {},
+  removalDigest() {
+    return null;
+  },
+  async isAccountDeletionBlocked() {
+    return true;
+  },
 };
 
 /**
@@ -88,15 +120,17 @@ export function withSetupGate(
   store: AccountSetupStore,
   allowlist: Allowlist,
 ): AuthProvider {
+  // Include the provider identity. A deleted address may register again with a new provider user id; that new identity must
+  // not inherit the old identity's in-process positive setup result after the durable setup digest has been removed.
   const known = new Map<string, number>();
   type SetupState =
     { status: "complete"; at: number } | { status: "pending" } | { status: "unavailable" };
   /** Whether the account was set up (0 = no requirement), still pending, or could not be checked. */
-  async function setupState(email: string): Promise<SetupState> {
+  async function setupState(email: string, userId: string): Promise<SetupState> {
     // An address that is not allowlisted never gets in whatever its setup says; leave it to the allowlist's own denial (the
     // access-denied screen and the signed-out session), exactly as before this gate existed.
     if (!isAllowed(allowlist, email)) return { status: "complete", at: 0 };
-    const key = normalizeEmail(email);
+    const key = `${normalizeEmail(email)}\u0000${userId}`;
     const cached = known.get(key);
     if (cached !== undefined) return { status: "complete", at: cached };
     let at: number | null;
@@ -108,12 +142,23 @@ export function withSetupGate(
     if (at !== null) known.set(key, at);
     return at === null ? { status: "pending" } : { status: "complete", at };
   }
+  async function deletionBlocked(userId: string): Promise<"blocked" | "clear" | "unavailable"> {
+    try {
+      return (await store.isAccountDeletionBlocked?.(userId)) ? "blocked" : "clear";
+    } catch {
+      return "unavailable";
+    }
+  }
   return {
     ...provider,
+    isAccountDeletionBlocked(userId) {
+      return store.isAccountDeletionBlocked?.(userId) ?? provider.isAccountDeletionBlocked(userId);
+    },
     async getSession() {
       const session = await provider.getSession();
       if (!session) return null;
-      const setup = await setupState(session.email);
+      if ((await deletionBlocked(session.userId)) !== "clear") return null;
+      const setup = await setupState(session.email, session.userId);
       if (setup.status === "unavailable") {
         // There is no request-scoped sign-in reference on ordinary session reads; retain the closed legacy event here.
         logAuthEvent("provider-error");
@@ -131,8 +176,18 @@ export function withSetupGate(
       const result = await provider.signInWithPassword(email, password);
       // A session made by this very call is newer than any setup, so only "was it ever set up" matters here.
       if (!result.ok) return result;
-      const setup = await setupState(result.session.email);
-      if (setup.status === "complete") return result;
+      const deletion = await deletionBlocked(result.session.userId);
+      // A confirmed fence deliberately leaves the newly minted raw-provider session alive. The sign-in action sends it to
+      // the isolated recovery screen, which can retry identity/session deletion without restoring any app access or data.
+      if (deletion === "blocked") {
+        return {
+          ok: false,
+          deletionPending: true,
+          diagnostic: { reason: "account-deletion-pending" },
+        };
+      }
+      const setup = await setupState(result.session.email, result.session.userId);
+      if (deletion === "clear" && setup.status === "complete") return result;
       // Right password, verified address, but never set up through a link: no session, and nothing says why beyond "finish".
       let cleanupFailed = false;
       try {
@@ -144,7 +199,12 @@ export function withSetupGate(
         ok: false,
         unfinished: true,
         diagnostic: {
-          reason: setup.status === "pending" ? "setup-pending" : "setup-unavailable",
+          reason:
+            deletion === "unavailable"
+              ? "setup-unavailable"
+              : setup.status === "pending"
+                ? "setup-pending"
+                : "setup-unavailable",
           ...(cleanupFailed ? { cleanupFailed: true } : {}),
         },
       };

@@ -32,6 +32,7 @@ function setup(
           })}
           initialAppearance={initial}
           updateAppearance={updateAppearance}
+          closeAccount={async () => ({ error: null, fieldErrors: {} })}
         />
       </SaveStatusProvider>
     </ToastProvider>,

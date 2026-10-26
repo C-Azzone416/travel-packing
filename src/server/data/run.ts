@@ -4,6 +4,7 @@
 //   3. run the handler, scoped to that owner
 //   4. map failures to a typed Result (no stack traces, no data, no database text)
 
+import { eq, sql } from "drizzle-orm";
 import { ZodError, type ZodType } from "zod";
 import { authorizeOwner } from "../auth/guard";
 import { createRateLimiter, type RateLimiter } from "../locations/rate-limit";
@@ -59,8 +60,24 @@ export function setDataRateLimiter(next?: RateLimiter): void {
 }
 
 /** The app-side owner row every other row references. Safe to call repeatedly. */
-async function ensureUser(db: Db, ownerId: string): Promise<void> {
-  await db.insert(schema.users).values({ id: ownerId }).onConflictDoNothing();
+async function ensureUser(db: Db, ownerId: string): Promise<boolean> {
+  // The NOT EXISTS predicate and insert are one statement. Once a deletion fence commits, no stale or concurrent
+  // request can auto-provision the app-side owner again.
+  await db.execute(sql`
+    insert into ${schema.users} (id)
+    select ${ownerId}
+    where not exists (
+      select 1 from ${schema.accountDeletions}
+      where ${schema.accountDeletions.userId} = ${ownerId}
+    )
+    on conflict do nothing
+  `);
+  const rows = await db
+    .select({ id: schema.users.id })
+    .from(schema.users)
+    .where(eq(schema.users.id, ownerId))
+    .limit(1);
+  return rows.length === 1;
 }
 
 export async function run<Input, Output>(
@@ -88,7 +105,7 @@ export async function run<Input, Output>(
   }
 
   try {
-    await ensureUser(context.db, decision.session.userId);
+    if (!(await ensureUser(context.db, decision.session.userId))) refuse(fail("UNAUTHENTICATED"));
     return ok(await handler({ db: context.db, ownerId: decision.session.userId }, parsed.data));
   } catch (error) {
     if (error instanceof Refusal) {
