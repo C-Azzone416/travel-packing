@@ -87,17 +87,15 @@ digest—no user id, email, credential, or provider token—and it never appears
 including when signal consumption or local cleanup fails or exceeds its bounded wait, so an already-deleted user cannot be
 stranded.
 
-Framebriar remains outside the destructive server transaction. After confirmed closure, the client cleanup seam:
+After confirmed closure, the client cleanup seam stops the mounted Framebriar queue and best-effort deletes every account-scoped
+or legacy Framebriar IndexedDB database in this browser profile. It does not hold or reconstruct a browser credential, call the
+enrollment API after the session is gone, or claim that delivered reports were deleted. The account-scoped client introduced in
+#260 keeps enrollment credentials on the server; #261 must call `revokeAndEraseEnrollment` before account deletion and remains a
+separate release-integration gate.
 
-1. stops the active Framebriar outbox, best-effort clears its browser-profile-local outbox, then disconnects access; and
-2. do not request deletion of separately retained delivered reports without a separate product/privacy design and verified
-   hosted retention behavior.
-
-Framebriar local-only integration may stop and clear the unsent browser outbox and disconnect after this confirmed-success
-signal. Its browser SDK cannot delete delivered reports, and those reports may contain identifying notes or preview screenshots;
-there is no structured Packed Smart account id or email that maps them reliably. Do not claim those hosted reports are erased,
-transmit a new identifier, or change the hosted service without a separate product/privacy decision. Legacy donor-database
-retention is also outside this core app transaction.
+Delivered reports may contain identifying notes or Preview screenshots, and the current protocol has no delete-by-account
+operation. Do not claim those hosted reports are erased, transmit a new identifier, or change the hosted service without a
+separate product/privacy decision.
 
 ## No account tombstone after confirmed closure
 

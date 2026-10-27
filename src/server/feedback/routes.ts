@@ -101,6 +101,8 @@ export interface RouteDeps {
   client: FramebriarClient;
   env?: Env;
   now?: () => number;
+  /** Overrides for the per-account request limits. Only the synthetic e2e build passes any (e2e-upstream.ts); real builds use LIMITS. */
+  limits?: Partial<Record<Kind, { limit: number; windowMs: number }>>;
 }
 
 type Kind = "status" | "redeem" | "disconnect" | "reports";
@@ -120,7 +122,7 @@ export function createFeedbackRoutes(deps: RouteDeps) {
   const limiters = Object.fromEntries(
     (Object.keys(LIMITS) as Kind[]).map((kind) => [
       kind,
-      createRateLimiter({ ...LIMITS[kind], now: deps.now }),
+      createRateLimiter({ ...LIMITS[kind], ...deps.limits?.[kind], now: deps.now }),
     ]),
   ) as Record<Kind, RateLimiter>;
 

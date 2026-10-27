@@ -22,6 +22,12 @@ export const BUILD_MARKERS: readonly BuildMarker[] = [
     text: "e2e-test-only-pg-driver",
     source: "src/server/db/e2e-driver.ts",
   },
+  // The seam that points the server's Framebriar client at the e2e fake service (#260).
+  {
+    name: "the e2e Framebriar upstream seam",
+    text: "e2e-framebriar-upstream",
+    source: "src/server/feedback/e2e-upstream.ts",
+  },
   // The sample trips are for tests only; the dashboard reads real data.
   {
     name: "the dashboard sample-trip fixtures",
@@ -50,9 +56,19 @@ export const FRAMEBRIAR_MARKERS: readonly BuildMarker[] = [
     source: "src/features/feedback/FeedbackSettings.tsx",
   },
   {
-    name: "the Framebriar access SDK",
-    text: "Playtest access unavailable",
-    source: "node_modules/@masra91/framebriar/adapters/browser/playtest-access.mjs",
+    name: "the Framebriar per-account report queue SDK",
+    text: "Local feedback storage is full",
+    source: "node_modules/@masra91/framebriar/adapters/browser/queue.mjs",
+  },
+  {
+    name: "the app's per-account outbox scope",
+    text: "Not an outbox key",
+    source: "src/features/feedback/account-scope.ts",
+  },
+  {
+    name: "the app's report proxy transport",
+    text: "The answer did not match this report. It is kept.",
+    source: "src/features/feedback/delivery.ts",
   },
   {
     name: "the Framebriar durable outbox SDK",
@@ -68,6 +84,23 @@ export const FRAMEBRIAR_MARKERS: readonly BuildMarker[] = [
     name: "the Framebriar local report SDK",
     text: "A reviewed PNG of at most 8 MiB is required",
     source: "node_modules/@masra91/framebriar/adapters/browser/local-export.mjs",
+  },
+];
+
+// What no build with feedback in it may contain (#260): the SDK's browser-held enrollment. Since the enrollment moved to the server,
+// no refresh or access credential has a storage path in the browser, so these modules (the controller that redeems, refreshes and
+// stores one, and its IndexedDB store) must never reach a Preview, local or e2e bundle either. They are texts unique to those SDK
+// files, checked by `check:preview-feedback-in-build` next to the markers above.
+export const FRAMEBRIAR_BROWSER_CREDENTIAL_MARKERS: readonly BuildMarker[] = [
+  {
+    name: "the SDK's browser access controller (redeems and refreshes a credential)",
+    text: "Playtest access unavailable",
+    source: "node_modules/@masra91/framebriar/adapters/browser/playtest-access.mjs",
+  },
+  {
+    name: "the SDK's browser enrollment store (keeps a credential in IndexedDB)",
+    text: "Enrollment storage unavailable",
+    source: "node_modules/@masra91/framebriar/adapters/browser/enrollment-store.mjs",
   },
 ];
 

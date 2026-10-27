@@ -91,3 +91,12 @@ Running the device specs in WebKit found four things Chromium could not:
    flagged element after scrolling it into view; a real violation still fails (`a11y-helper.spec.ts`).
 4. **Next's prefetches, cancelled by a hard navigation**, surface as an unhandled "Fetch API cannot load ... access control checks".
    That is the browser unloading the page, not an app fault; the tour now lets the page go idle before each hard navigation.
+
+## Feedback specs and the fake Framebriar process (#260)
+
+The `feedback-*.spec.ts` files drive the real app and server. The app's **server** talks to a fake Framebriar, a separate process
+Playwright starts on `E2E_PORT + 300` (default 3400) through the e2e-only upstream seam; the specs steer it over
+`/__control/` from `tests/e2e/helpers/feedback.ts` (`fakeFramebriar.reset()`, `issueInvitation()`, `failNext()`, `setOffline()`,
+`revokeAll()`, `counts()`, `delivered()`). The e2e server has a `FRAMEBRIAR_CREDENTIAL_KEYS` key ring so the enrollment feature is on.
+`feedback-accounts.spec.ts` covers shared-browser account switching, sign-out clearing, cleared-storage recovery and a second device.
+See [framebriar.md](framebriar.md#the-e2e-upstream-seam-260).

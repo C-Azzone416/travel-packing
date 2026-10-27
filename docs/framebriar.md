@@ -47,8 +47,9 @@ deployment URLs—shows no feedback UI and starts no access controller, IndexedD
 compile-time replacement is the stronger boundary and its CSP does not allow the Framebriar origin. The stable Preview's CSP
 allows only the pinned service endpoint; Azure CORS independently allows only approved app origins.
 
-The e2e build is the sole exception to the port check. It contains the real SDK so Playwright can route every request to the
-synthetic fake service. `NEXT_PUBLIC_E2E_BUILD` is refused in every Vercel environment and the e2e artifact is never deployed.
+The e2e build is the sole exception to the port check. It contains the real SDK and talks, through the app's own server, to a
+synthetic fake service (see "The e2e upstream seam" below). `NEXT_PUBLIC_E2E_BUILD` is refused in every Vercel environment and
+the e2e artifact is never deployed.
 
 ## Screenshots: the build switch
 
@@ -75,6 +76,19 @@ module only by that exact specifier. Guards:
 The header's Feedback button opens the review sheet (design's #129 section 4). Nothing leaves the device until the person presses
 Send, and saving and delivering are different steps with different words:
 
+Whose reports these are (#260): the browser holds **no Framebriar credential at all**. The enrollment belongs to the signed-in
+account and lives on the server ([framebriar-enrollment.md](framebriar-enrollment.md)); delivery goes to the app's own
+`/api/feedback/reports`, and the server talks to Framebriar. What is written but not yet sent is kept per account: one IndexedDB
+database per account, `framebriar-v1-acct-<outboxKey>`, where `outboxKey` is an opaque value from the server (never the email or
+user id). Signing out clears that account's unsent notes and screenshots from the device first (Delete unsent reports in Settings
+does the same on request) and nothing is delivered while signed out; the server enrollment is not touched, so signing back in is
+still Connected. When the provider mounts it also deletes every other account's database and the old per-browser
+`framebriar-enrollment-*` / `framebriar-v1-outbox-*` ones, so an account switch without a sign-out click (an expired session)
+cannot leave the first account's reports for the second. A queued report is never submitted through another account's session.
+Cleared browser storage loses only unsent reports; the account stays connected and a second device needs no new invitation.
+The screen shows truthfully: not connected, connected, expired, ended, switched off, rate limited, offline, unavailable (including a
+server without its key ring) and needs reconnect.
+
 1. **Saved on this device.** Send prepares the report with the SDK (`prepareLocalFeedback`) and commits it to the durable outbox
    (`createDurableFeedback`, IndexedDB, 10 reports / 32 MiB, kept until delivered or cleared). Only a committed save says "Saved".
    Storage full, unavailable or unconfirmed say so and keep the notes; a retry after an unconfirmed save reuses the same report id,
@@ -97,6 +111,8 @@ is absent from Production bundles.
 redeem, refresh, disconnect, report intake, media upload with an upload ticket, and CORS. It validates reports with the SDK's own
 `normalizeReport`, so tests exercise the real SDK against it.
 
+- **Two layers.** Unit tests (`src/test/fake-feedback-server.ts` for the app's own routes, this file for the wire) run in process. The
+  e2e run uses the same wire fake as a small separate process (below).
 - **No network.** The SDK pins its endpoint (`FEEDBACK_ENDPOINT`) and refuses any other, so a test never repoints the SDK. Unit tests
   pass `fake.fetch` as the SDK's `fetchImpl` (and stub the global `fetch` for report delivery). E2E specs call
   `routeFramebriar(context, fake)` from `src/test/fake-framebriar-playwright.ts`, which answers every request to the pinned
@@ -115,3 +131,14 @@ redeem, refresh, disconnect, report intake, media upload with an upload ticket, 
 A real end-to-end delivery is a manual check at the stable Preview or exact local origin `http://localhost:8080`, after
 invitation creation is separately approved. The fake proves the protocol without real user data but is never a substitute for
 that bounded check.
+
+## The e2e upstream seam (#260)
+
+The server's Framebriar client talks to one pinned address. In the **e2e build only** (`NEXT_PUBLIC_E2E_BUILD=1`),
+`src/server/feedback/e2e-upstream.ts` sends calls to that address to `http://127.0.0.1:$E2E_FRAMEBRIAR_PORT/api` instead (any other
+URL is refused), and lifts the per-account redemption limit, because the run connects the same accounts repeatedly. The fake is
+`tests/e2e/support/fake-framebriar-server.ts`, a Node process wrapping `createFakeFramebriar()` with control routes under
+`/__control/` (health, reset, invite, fail-next, revoke-all, offline, enrollment-ms, counts, delivered), started by Playwright on
+`E2E_PORT + 300`. `next.config.ts` resolves the module to `e2e-upstream.disabled.ts` (which returns nothing) in every other build,
+and `npm run check:no-e2e-in-build` fails a build that contains its marker `e2e-framebriar-upstream`. The browser needs no routing
+any more, so `routeFramebriar` is not used by the feedback specs.

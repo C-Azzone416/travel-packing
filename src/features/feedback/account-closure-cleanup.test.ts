@@ -1,111 +1,83 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { DurableFeedback } from "@masra91/framebriar/browser/durable-feedback";
-import type { PlaytestAccess } from "@masra91/framebriar/browser/playtest-access";
+import { createMemoryIdb } from "@/test/fake-feedback-server";
+import { accountDatabaseName } from "./account-scope";
 import {
   clearLocalFeedbackAfterAccountClosure,
   registerAccountClosureFeedbackCleanup,
   type AccountClosureFeedbackCleanupDependencies,
 } from "./account-closure-cleanup";
 
+const A = "A".repeat(43);
+const B = "B".repeat(43);
 let unregister: () => void = () => undefined;
-afterEach(() => unregister());
 
-function setup(
-  options: { clearFails?: boolean; createOutboxFails?: boolean; disconnectFails?: boolean } = {},
-) {
-  const order: string[] = [];
-  const outbox = {
-    stop: vi.fn(() => order.push("stop")),
-    clear: vi.fn(async () => {
-      order.push("clear");
-      if (options.clearFails) throw new Error("synthetic clear failure");
-      return {};
-    }),
-  } as unknown as DurableFeedback;
-  const access = {
-    disconnect: vi.fn(async () => {
-      order.push("disconnect");
-      if (options.disconnectFails) throw new Error("synthetic disconnect failure");
-      return { forgotten: true, revoked: true };
-    }),
-    dispose: vi.fn(() => order.push("dispose")),
-  } as unknown as PlaytestAccess;
+afterEach(() => {
+  unregister();
+  unregister = () => undefined;
+});
+
+function setup(names: string[] = []) {
+  const idb = createMemoryIdb(names);
   const dependencies: AccountClosureFeedbackCleanupDependencies = {
     enabled: () => true,
-    createAccess: vi.fn(async () => access),
-    createOutbox: vi.fn(async () => {
-      if (options.createOutboxFails) throw new Error("synthetic outbox failure");
-      return outbox;
-    }),
+    indexedDB: () => idb.factory,
   };
-  return { access, dependencies, order, outbox };
+  return { dependencies, idb };
 }
 
 describe("confirmed account-closure feedback cleanup", () => {
-  it("uses the mounted controller to stop delivery before clearing and disconnecting", async () => {
-    const { access, dependencies, order, outbox } = setup();
+  it("stops and clears the mounted account before sweeping every account and legacy outbox", async () => {
+    const { dependencies, idb } = setup([
+      accountDatabaseName(A),
+      accountDatabaseName(B),
+      "framebriar-enrollment-v2-old",
+      "framebriar-v1-outbox-old",
+      "unrelated",
+    ]);
+    const mounted = vi.fn(async () => undefined);
+    unregister = registerAccountClosureFeedbackCleanup(mounted);
+
+    await clearLocalFeedbackAfterAccountClosure(dependencies);
+
+    expect(mounted).toHaveBeenCalledOnce();
+    expect([...idb.present]).toEqual(["unrelated"]);
+  });
+
+  it("cold-starts by sweeping storage when no mounted provider is available", async () => {
+    const { dependencies, idb } = setup([accountDatabaseName(A), "framebriar-enrollment-v1-old"]);
+
+    await clearLocalFeedbackAfterAccountClosure(dependencies);
+
+    expect([...idb.present]).toEqual([]);
+  });
+
+  it("still sweeps storage when mounted cleanup fails", async () => {
+    const { dependencies, idb } = setup([accountDatabaseName(A)]);
     unregister = registerAccountClosureFeedbackCleanup(async () => {
-      outbox.stop();
-      await outbox.clear();
-      await access.disconnect();
+      throw new Error("synthetic clear failure");
     });
 
     await clearLocalFeedbackAfterAccountClosure(dependencies);
 
-    expect(order).toEqual(["stop", "clear", "disconnect"]);
-    expect(dependencies.createAccess).not.toHaveBeenCalled();
+    expect([...idb.present]).toEqual([]);
   });
 
-  it("cold-starts cleanup when no mounted controller is available", async () => {
-    const { access, dependencies, order, outbox } = setup();
-
-    await clearLocalFeedbackAfterAccountClosure(dependencies);
-
-    expect(order).toEqual(["stop", "clear", "disconnect", "stop", "dispose"]);
-    expect(outbox.clear).toHaveBeenCalledOnce();
-    expect(access.disconnect).toHaveBeenCalledOnce();
+  it("does nothing when IndexedDB is unavailable", async () => {
+    const mounted = vi.fn(async () => undefined);
+    unregister = registerAccountClosureFeedbackCleanup(mounted);
+    await clearLocalFeedbackAfterAccountClosure({ enabled: () => true, indexedDB: () => null });
+    expect(mounted).toHaveBeenCalledOnce();
   });
 
-  it("still forgets access and disposes when local outbox clearing fails", async () => {
-    const { access, dependencies, order } = setup({ clearFails: true });
-
-    await expect(clearLocalFeedbackAfterAccountClosure(dependencies)).rejects.toThrow(
-      "synthetic clear failure",
-    );
-
-    expect(order).toEqual(["stop", "clear", "disconnect", "stop", "dispose"]);
-    expect(access.disconnect).toHaveBeenCalledOnce();
-  });
-
-  it("still forgets access when loading the local outbox fails", async () => {
-    const { access, dependencies, order } = setup({ createOutboxFails: true });
-
-    await expect(clearLocalFeedbackAfterAccountClosure(dependencies)).rejects.toThrow(
-      "synthetic outbox failure",
-    );
-
-    expect(order).toEqual(["disconnect", "dispose"]);
-    expect(access.disconnect).toHaveBeenCalledOnce();
-  });
-
-  it("disposes after a disconnect failure", async () => {
-    const { access, dependencies, order } = setup({ disconnectFails: true });
-
-    await expect(clearLocalFeedbackAfterAccountClosure(dependencies)).rejects.toThrow(
-      "synthetic disconnect failure",
-    );
-
-    expect(order).toEqual(["stop", "clear", "disconnect", "stop", "dispose"]);
-    expect(access.dispose).toHaveBeenCalledOnce();
-  });
-
-  it("does not load the SDK outside an approved feedback runtime", async () => {
-    const { dependencies } = setup();
+  it("does not touch feedback state outside an approved feedback runtime", async () => {
+    const { dependencies, idb } = setup([accountDatabaseName(A)]);
+    const mounted = vi.fn(async () => undefined);
+    unregister = registerAccountClosureFeedbackCleanup(mounted);
     dependencies.enabled = () => false;
 
     await clearLocalFeedbackAfterAccountClosure(dependencies);
 
-    expect(dependencies.createAccess).not.toHaveBeenCalled();
-    expect(dependencies.createOutbox).not.toHaveBeenCalled();
+    expect(mounted).not.toHaveBeenCalled();
+    expect([...idb.present]).toEqual([accountDatabaseName(A)]);
   });
 });

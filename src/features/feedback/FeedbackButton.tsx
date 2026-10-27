@@ -15,11 +15,15 @@ import { COPY, FeedbackSheet, type TakenScreenshot } from "./FeedbackSheet";
 // screen where nothing may be captured (Settings and the sign-in and account screens), and disabled until the person is
 // connected. When this build offers screenshots the screen is captured BEFORE the sheet opens, so the sheet is not in it.
 export function FeedbackButton() {
-  const { available, status, subscribeReceipts } = useFeedbackAccess();
+  const { available, status, scopeKey, subscribeReceipts } = useFeedbackAccess();
   const pathname = usePathname();
   const toast = useToast();
   const [opening, setOpening] = useState(false);
-  const [open, setOpen] = useState<{ n: number; screenshot: TakenScreenshot | null } | null>(null);
+  const [open, setOpen] = useState<{
+    n: number;
+    scope: string | null;
+    screenshot: TakenScreenshot | null;
+  } | null>(null);
   const [receivedId, setReceivedId] = useState<string | null>(null);
   const opens = useRef(0);
   const sheetOpen = useRef(false);
@@ -39,15 +43,18 @@ export function FeedbackButton() {
     [subscribeReceipts, toast],
   );
 
+  // A sheet opened for one account is never shown to another: its unsent notes and screenshot go with the account.
+  const sheet = open && open.scope === scopeKey ? open : null;
+
   if (!available || captureBlocked(pathname)) return null;
 
   async function openSheet() {
-    if (opening || open) return;
+    if (opening || sheet) return;
     setOpening(true);
     const screenshot = screenshotCaptureAvailable ? { blob: await captureScreenshot() } : null;
     opens.current += 1;
     setReceivedId(null);
-    setOpen({ n: opens.current, screenshot });
+    setOpen({ n: opens.current, scope: scopeKey, screenshot });
     setOpening(false);
   }
 
@@ -76,11 +83,11 @@ export function FeedbackButton() {
         </svg>
         <span className="feedback-button-label">Feedback</span>
       </button>
-      {open ? (
+      {sheet ? (
         <FeedbackSheet
-          key={open.n}
+          key={sheet.n}
           pathname={pathname}
-          screenshot={open.screenshot}
+          screenshot={sheet.screenshot}
           receivedId={receivedId}
           onSaved={(id) => savedIds.current.add(id)}
           onClose={() => setOpen(null)}

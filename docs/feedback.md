@@ -50,15 +50,17 @@ These steps belong to the owner of the Framebriar service and of this repository
 ## Connecting and disconnecting (for the person using the app)
 
 - **Connect:** Settings, "Send feedback to the developer". Paste the invitation into the field and press Connect. The field empties
-  at once and the invitation is not stored anywhere. When it works the section says "Connected" and until when. The Feedback button
+  at once and the invitation is not stored anywhere. The connection belongs to your account, not the browser: it works on your other
+  devices and survives clearing the browser's storage. When it works the section says "Connected" and until when. The Feedback button
   in the header then turns on.
 - **Send a report:** press Feedback, write what happened, untick the screenshot if it is offered and you don't want it, and press Send.
   "Saved on this device" means the report is kept here and will go out when the device is online; "Received" means the developer's
-  service has it. Reports waiting to send are kept across reloads, offline periods and even a disconnect.
+  service has it. Reports waiting to send are kept on this device for your account across reloads, offline periods and even a disconnect.
+  **Signing out deletes them** (they are never sent while signed out, and never shown to or sent by another account on the same
+  browser). Settings also has "Delete unsent reports".
 - **When access ends:** a notice under the header says the access expired or needs a new invitation (the same notice, with a button
   to Settings, appears on every screen except Settings). Reports saved meanwhile stay on the device until a new invitation is added.
-- **Disconnect:** Settings, "Disconnect", then confirm. Feedback access is removed from the device and, when the service can be
-  reached, ended on the service. Reports that have not been sent stay on the device.
+- **Disconnect:** Settings, "Disconnect", then confirm. Feedback access for your account is ended on the service. If the service cannot be reached, nothing changes and it says so. Reports that have not been sent stay on the device.
 
 ## Real delivery check (manual, with a separately approved real invitation)
 
