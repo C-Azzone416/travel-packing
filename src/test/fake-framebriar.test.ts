@@ -57,7 +57,7 @@ function memoryStore(): EnrollmentStore {
   };
 }
 
-function setup(options: { now?: () => number } = {}) {
+function setup(options: { now?: () => number; keepMedia?: boolean } = {}) {
   const fake = createFakeFramebriar(options);
   const store = memoryStore();
   const access = createPlaytestAccess({
@@ -313,6 +313,24 @@ describe("report delivery, through the real SDK", () => {
     expect((await send(access, body, shot.blob)).status).toBe("ready");
     expect(fake.delivered()[0].media).toEqual({ bytes: 128 });
     expect(fake.requests().map((entry) => entry.route)).toEqual(["redeem", "report", "media"]);
+  });
+
+  it("keeps the uploaded picture only when asked to, so a test can look at the PNG that was delivered", async () => {
+    const keeping = setup({ keepMedia: true });
+    vi.stubGlobal("fetch", keeping.fake.fetch);
+    await connected(keeping.fake, keeping.access);
+    const shot = png(128);
+    const body = report({}, shot);
+    await send(keeping.access, body, shot.blob);
+    expect(keeping.fake.mediaOf(body.id)?.length).toBe(128);
+    expect(keeping.fake.mediaOf(body.id.toUpperCase())?.length).toBe(128);
+    expect(keeping.fake.mediaOf("00000000-0000-4000-8000-000000000000")).toBeNull();
+
+    const plain = setup();
+    vi.stubGlobal("fetch", plain.fake.fetch);
+    await connected(plain.fake, plain.access);
+    await send(plain.access, body, shot.blob);
+    expect(plain.fake.mediaOf(body.id)).toBeNull();
   });
 
   it("answers a repeated identical report as delivered once, and a changed one with a conflict", async () => {

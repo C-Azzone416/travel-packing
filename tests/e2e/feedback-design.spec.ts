@@ -55,11 +55,15 @@ for (const theme of THEMES) {
       const dialog = page.getByRole("dialog", { name: "Send feedback" });
       await expect(dialog.getByRole("button", { name: "Cancel" })).toBeVisible();
       await expect(dialog.getByRole("button", { name: "Send" })).toBeVisible();
-      if (width === 390) {
-        const thumbnail = dialog.getByRole("img", { name: "Screenshot of the screen you were on" });
-        await expect(thumbnail).toBeVisible();
-        expect((await thumbnail.boundingBox())?.height).toBeLessThanOrEqual(120);
+      // The Cancel / Send footer is pinned: both are inside the visible screen without scrolling, whatever the theme or size.
+      const viewport = page.viewportSize();
+      for (const name of ["Cancel", "Send"]) {
+        const box = await dialog.getByRole("button", { name }).boundingBox();
+        expect(box && box.y >= 0 && box.y + box.height <= (viewport?.height ?? 0)).toBe(true);
       }
+      const preview = dialog.getByRole("img", { name: /^Your screenshot\. Marks you draw/ });
+      await expect(preview).toBeVisible();
+      expect((await preview.boundingBox())?.height).toBeLessThanOrEqual(480);
       await expectAccessible(page, `${theme} ${width} feedback sheet`);
       await shot(page, `${theme}-${width}-sheet`);
       await dialog.getByRole("button", { name: "Cancel" }).click();

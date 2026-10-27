@@ -14,11 +14,14 @@ import {
 import { portFrom } from "./ports";
 
 const port = portFrom(process.env.E2E_FRAMEBRIAR_PORT, 0);
-let fake: FakeFramebriar = createFakeFramebriar();
+let fake: FakeFramebriar = createFakeFramebriar({ keepMedia: true });
 let enrollmentMs: number | undefined;
 
 const fresh = () => {
-  fake = createFakeFramebriar(enrollmentMs === undefined ? {} : { enrollmentMs });
+  fake = createFakeFramebriar({
+    keepMedia: true,
+    ...(enrollmentMs === undefined ? {} : { enrollmentMs }),
+  });
 };
 
 async function readBody(request: IncomingMessage): Promise<Buffer> {
@@ -70,6 +73,17 @@ async function control(request: IncomingMessage, response: ServerResponse, path:
         response,
         200,
         fake.delivered().map(({ report, media }) => ({ report, mediaBytes: media?.bytes ?? null })),
+      );
+    case "media":
+      // Every uploaded picture by report id, as base64: the e2e looks at the PNG that was really queued and delivered.
+      return send(
+        response,
+        200,
+        Object.fromEntries(
+          fake
+            .delivered()
+            .map(({ report }) => [report.id, fake.mediaOf(report.id)?.toString("base64") ?? null]),
+        ),
       );
     default:
       return send(response, 404, { error: "unknown control route" });
