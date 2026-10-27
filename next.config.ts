@@ -18,6 +18,11 @@ export const E2E_ONLY_MODULES: readonly { specifier: string; stub: string }[] = 
   { specifier: "@/server/auth/e2e-provider", stub: "./src/server/auth/e2e-provider.disabled.ts" },
   // The Postgres driver for the e2e database (#52).
   { specifier: "@/server/db/e2e-driver", stub: "./src/server/db/e2e-driver.disabled.ts" },
+  // The seam that points the server's Framebriar client at the e2e fake service (#260).
+  {
+    specifier: "@/server/feedback/e2e-upstream",
+    stub: "./src/server/feedback/e2e-upstream.disabled.ts",
+  },
 ];
 
 // Framebriar is compiled into the stable Preview, exact local development and synthetic e2e builds. A Production or

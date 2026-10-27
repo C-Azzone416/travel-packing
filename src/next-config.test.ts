@@ -43,6 +43,11 @@ const MODULES = [
     "./src/server/auth/e2e-provider.disabled.ts",
   ],
   ["the e2e Postgres driver", "@/server/db/e2e-driver", "./src/server/db/e2e-driver.disabled.ts"],
+  [
+    "the e2e Framebriar upstream seam",
+    "@/server/feedback/e2e-upstream",
+    "./src/server/feedback/e2e-upstream.disabled.ts",
+  ],
 ] as const;
 
 const FEEDBACK_STUB = "./src/features/feedback/feedback.disabled.tsx";

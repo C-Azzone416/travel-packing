@@ -22,6 +22,12 @@ export const BUILD_MARKERS: readonly BuildMarker[] = [
     text: "e2e-test-only-pg-driver",
     source: "src/server/db/e2e-driver.ts",
   },
+  // The seam that points the server's Framebriar client at the e2e fake service (#260).
+  {
+    name: "the e2e Framebriar upstream seam",
+    text: "e2e-framebriar-upstream",
+    source: "src/server/feedback/e2e-upstream.ts",
+  },
   // The sample trips are for tests only; the dashboard reads real data.
   {
     name: "the dashboard sample-trip fixtures",

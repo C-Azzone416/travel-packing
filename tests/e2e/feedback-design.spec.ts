@@ -1,11 +1,9 @@
 import { mkdirSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
-import { createFakeFramebriar } from "../../src/test/fake-framebriar";
-import { routeFramebriar } from "../../src/test/fake-framebriar-playwright";
 import { expectAccessible } from "./helpers/a11y";
 import { ownerEmailFor, signInAsOwner } from "./helpers/auth";
 import { setOwnerAppearance } from "./helpers/database";
-import { connectFeedback, goToTrips } from "./helpers/feedback";
+import { connectFeedback, fakeFramebriar, goToTrips } from "./helpers/feedback";
 
 const THEMES = ["base", "ocean", "terracotta", "violet"] as const;
 const WIDTHS = [390, 1280] as const;
@@ -34,18 +32,18 @@ for (const theme of THEMES) {
   for (const width of WIDTHS) {
     test(`${theme} feedback at ${width}px has an accessible header control, form and sheet`, async ({
       page,
-      context,
     }) => {
       await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
-      const fake = createFakeFramebriar();
-      await routeFramebriar(context, fake);
+      // A short enrollment, so the notice at the end is the real "expired" state.
+      await fakeFramebriar.reset();
+      await fakeFramebriar.setEnrollmentMs(6000);
       await useTheme(page, theme);
 
       await page.goto("/settings");
       await expect(page.locator("html")).toHaveAttribute("data-appearance", theme);
       const invitation = page.getByLabel("Invitation");
       await expect(invitation.locator("xpath=..")).toHaveClass(/\bfield\b/);
-      await connectFeedback(page, fake);
+      await connectFeedback(page);
       await goToTrips(page);
 
       const feedback = page.getByRole("button", { name: "Send feedback" });
@@ -66,11 +64,13 @@ for (const theme of THEMES) {
       await shot(page, `${theme}-${width}-sheet`);
       await dialog.getByRole("button", { name: "Cancel" }).click();
 
-      fake.revokeAll();
-      await page.reload();
-      await expect(page.locator(".feedback-notice")).toContainText(
-        "Feedback needs a new invitation before it can send.",
-      );
+      await expect(async () => {
+        await page.reload();
+        await expect(page.locator(".feedback-notice")).toContainText(
+          "Your feedback access has expired.",
+          { timeout: 1500 },
+        );
+      }).toPass({ timeout: 30_000 });
       await expectAccessible(page, `${theme} ${width} feedback notice`);
       await shot(page, `${theme}-${width}-notice`);
     });
