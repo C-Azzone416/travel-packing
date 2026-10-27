@@ -273,9 +273,9 @@ describe("the screenshot option", () => {
     expect(outbox.box.enqueue.mock.calls[0][0].media).toBeNull();
   });
 
-  it("a screenshot one byte under the sendable size is offered; exactly at it is over (strictly smaller)", async () => {
+  it("a screenshot of exactly the sendable size is offered; one byte more is over", async () => {
     capture.take.mockResolvedValue(
-      new Blob([new Uint8Array(SCREENSHOT_SEND_LIMIT_BYTES - 1)], { type: "image/png" }),
+      new Blob([new Uint8Array(SCREENSHOT_SEND_LIMIT_BYTES)], { type: "image/png" }),
     );
     const user = userEvent.setup();
     const first = mount();
@@ -285,7 +285,7 @@ describe("the screenshot option", () => {
     first.unmount();
 
     capture.take.mockResolvedValue(
-      new Blob([new Uint8Array(SCREENSHOT_SEND_LIMIT_BYTES)], { type: "image/png" }),
+      new Blob([new Uint8Array(SCREENSHOT_SEND_LIMIT_BYTES + 1)], { type: "image/png" }),
     );
     mount();
     const atLimit = await openSheet(user);

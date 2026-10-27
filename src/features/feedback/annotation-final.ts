@@ -1,6 +1,6 @@
 // What leaves the sheet as the screenshot at Send (#266). One decision, made BEFORE the report reaches the route or the outbox:
 // no image at all (text only), the reviewed picture as it was, or the picture with the marks on it. A picture that is not
-// strictly under the send limit is reported as too large, and nothing else is substituted for it: not a shrunk copy, not a crop,
+// no larger than the send limit is reported as too large, and nothing else is substituted for it: not a shrunk copy, not a crop,
 // not the picture without its marks.
 import { compositeMarks, type CompositeDeps } from "./annotation-composite";
 import { allStrokes, type Drawing } from "./annotation-model";

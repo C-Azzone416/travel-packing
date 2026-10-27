@@ -103,7 +103,7 @@ sheet's React state, keyed by the outbox scope (`use-annotation-draft.ts`), so c
 never show or attach them; nothing is stored. At Send, `annotation-final.ts` makes the one decision before anything reaches the route or
 the outbox: no picture (unticked: nothing is composited), the reviewed Blob untouched (no marks), or `annotation-composite.ts` draws the
 strokes (two rings under the ink, so they show on light and dark pictures) onto the natural-size image and exports a PNG. A result that is
-not **strictly under** 4,000,000 bytes (`screenshot-limit.ts`) is refused with a recoverable message; it is never shrunk, cropped, sent
+larger than 4,000,000 bytes (`screenshot-limit.ts`; exactly 4,000,000 is accepted, 4,000,001 is not) is refused with a recoverable message; it is never shrunk, cropped, sent
 without its marks or replaced. The feature is Preview-only like the rest of the feedback UI (the editor has a build marker, so the
 Production absence check covers it and the Preview positive check requires it).
 

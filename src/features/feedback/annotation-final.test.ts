@@ -97,21 +97,25 @@ describe("what is sent as the screenshot", () => {
     expect(result.kind === "ready" && result.annotated).toBe(true);
   });
 
-  it("accepts a result one byte under the limit and refuses one exactly at it (strictly smaller)", async () => {
+  it("accepts a result of exactly the limit and refuses one byte more", async () => {
     const under = await finalScreenshot({
       include: true,
       original: png(10),
       drawing: marked,
-      deps: composing(png(SCREENSHOT_SEND_LIMIT_BYTES - 1)).deps,
+      deps: composing(png(SCREENSHOT_SEND_LIMIT_BYTES)).deps,
     });
     expect(under.kind).toBe("ready");
     const at = await finalScreenshot({
       include: true,
       original: png(10),
       drawing: marked,
-      deps: composing(png(SCREENSHOT_SEND_LIMIT_BYTES)).deps,
+      deps: composing(png(SCREENSHOT_SEND_LIMIT_BYTES + 1)).deps,
     });
-    expect(at).toEqual({ kind: "too-large", bytes: SCREENSHOT_SEND_LIMIT_BYTES, annotated: true });
+    expect(at).toEqual({
+      kind: "too-large",
+      bytes: SCREENSHOT_SEND_LIMIT_BYTES + 1,
+      annotated: true,
+    });
   });
 
   it("says too large for an annotated picture over the limit: no shrunk copy, no crop, not the unmarked picture", async () => {
@@ -133,12 +137,12 @@ describe("what is sent as the screenshot", () => {
   it("says too large for an unmarked picture that is already over the limit", async () => {
     const result = await finalScreenshot({
       include: true,
-      original: png(SCREENSHOT_SEND_LIMIT_BYTES),
+      original: png(SCREENSHOT_SEND_LIMIT_BYTES + 1),
       drawing: EMPTY_DRAWING,
     });
     expect(result).toEqual({
       kind: "too-large",
-      bytes: SCREENSHOT_SEND_LIMIT_BYTES,
+      bytes: SCREENSHOT_SEND_LIMIT_BYTES + 1,
       annotated: false,
     });
   });

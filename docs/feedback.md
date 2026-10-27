@@ -56,7 +56,7 @@ These steps belong to the owner of the Framebriar service and of this repository
 - **Send a report:** press Feedback, write what happened, untick the screenshot if it is offered and you don't want it, and press Send.
   When the screenshot is offered you can **draw on it** with a finger, a pen or a mouse (four inks: Black, Red, Blue, Yellow; Undo and
   Clear drawing; Undo also brings back a drawing you just cleared). Anything you draw is part of the picture that's sent, and nothing
-  is sent until you press Send. The marks are put on the picture only at Send, and the picture must be under 4.0 MB: if it is not, it
+  is sent until you press Send. The marks are put on the picture only at Send, and the picture may be at most 4,000,000 bytes (4.0 MB): if it is larger, it
   isn't sent and nothing is shrunk or cropped (remove marks, or untick the screenshot to send your notes only). Drawing needs a pointer;
   the notes are the way to describe a problem without one. Cancelling, signing out or switching account throws the marks away.
   "Saved on this device" means the report is kept here and will go out when the device is online; "Received" means the developer's
