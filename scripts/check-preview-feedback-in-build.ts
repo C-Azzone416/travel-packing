@@ -32,8 +32,10 @@ if (missing.length > 0) {
   process.exit(1);
 }
 
-// The enrollment lives on the server (#260): no browser credential code may be in a build that has feedback in it.
-const credentialHits = markerHits(BUILD_DIR, FRAMEBRIAR_BROWSER_CREDENTIAL_MARKERS);
+// The enrollment lives on the server (#260): no browser credential code may be in a build that has feedback in it, in any directory.
+const credentialHits = DIRS.flatMap((dir) =>
+  markerHits(dir, FRAMEBRIAR_BROWSER_CREDENTIAL_MARKERS),
+);
 if (credentialHits.length > 0) {
   for (const name of new Set(credentialHits.map((hit) => hit.name))) {
     const files = credentialHits.filter((hit) => hit.name === name);

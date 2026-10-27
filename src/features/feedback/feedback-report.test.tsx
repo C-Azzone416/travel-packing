@@ -228,6 +228,11 @@ describe("the screenshot option", () => {
     expect(outbox.box.enqueue.mock.calls[0][0].report.media).toBeNull();
   });
 
+  it("pins the sendable screenshot size to 4,000,000 bytes, under Vercel's ~4.5 MB request body limit", () => {
+    // A literal on purpose: the other tests read the constant, so only this one fails if the number drifts.
+    expect(SCREENSHOT_SEND_LIMIT_BYTES).toBe(4_000_000);
+  });
+
   it("a screenshot over the sendable size is not offered, never shrunk, and the notes still send", async () => {
     capture.take.mockResolvedValue(
       new Blob([new Uint8Array(SCREENSHOT_SEND_LIMIT_BYTES + 1)], { type: "image/png" }),
