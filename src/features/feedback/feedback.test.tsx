@@ -169,6 +169,7 @@ describe("the provider", () => {
     const h = harness(connectedState);
     let release: (box: unknown) => void = () => undefined;
     const late = new Promise((resolve) => (release = resolve));
+    const createOutbox = vi.fn(() => late as never);
     const view = render(
       <FeedbackAccessProvider
         enabled
@@ -176,12 +177,12 @@ describe("the provider", () => {
         indexedDBImpl={h.idb.factory}
         createChannel={() => null}
         preload={async () => undefined}
-        createOutbox={() => late as never}
+        createOutbox={createOutbox}
       >
         <p>x</p>
       </FeedbackAccessProvider>,
     );
-    await waitFor(() => expect(h.server.count("status")).toBe(1));
+    await waitFor(() => expect(createOutbox).toHaveBeenCalled());
     view.unmount();
     const box = { stop: vi.fn() };
     release(box);
