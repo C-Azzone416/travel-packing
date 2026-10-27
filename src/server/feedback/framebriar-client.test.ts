@@ -14,13 +14,19 @@ const grant = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
-function clientFor(respond: (url: string, init: RequestInit) => Response | Promise<Response>) {
+function clientFor(
+  respond: (url: string, init: RequestInit) => Response | Promise<Response>,
+  diagnostics: { timingNow?: () => number; log?: (line: string) => void } = {},
+) {
   const calls: { url: string; init: RequestInit }[] = [];
   const fetchImpl = (async (url: string, init: RequestInit) => {
     calls.push({ url, init });
     return respond(url, init);
   }) as unknown as typeof fetch;
-  return { client: createFramebriarClient({ fetchImpl, now: () => NOW }), calls };
+  return {
+    client: createFramebriarClient({ fetchImpl, now: () => NOW, ...diagnostics }),
+    calls,
+  };
 }
 const ok = (body: unknown) => Response.json(body);
 
@@ -195,6 +201,102 @@ describe("submitReport", () => {
     ...extra,
   });
   const png = new Uint8Array([1, 2, 3]);
+
+  it("logs only closed, content-free diagnostics for metadata and media delivery", async () => {
+    const lines: string[] = [];
+    const times = [100, 104, 105, 117];
+    const answers = [
+      receipt({ status: "pending", ticket: "ticket-secret-value" }),
+      new Response("private upstream failure", { status: 503 }),
+    ];
+    const report = JSON.stringify({
+      id: "private-report-id",
+      note: "Private note owner@example.test",
+      signedUrl: "https://storage.example.test/private?sas=secret",
+    });
+    const { client } = clientFor(
+      () => {
+        const answer = answers.shift();
+        return answer instanceof Response ? answer : ok(answer);
+      },
+      {
+        timingNow: () => times.shift()!,
+        log: (line) => lines.push(line),
+      },
+    );
+
+    expect(
+      await client.submitReport({
+        accessToken: "access-token-secret-value",
+        report,
+        media: new TextEncoder().encode("private screenshot bytes"),
+      }),
+    ).toEqual({ kind: "uncertain" });
+    expect(lines.map((line) => JSON.parse(line))).toEqual([
+      {
+        scope: "feedback",
+        event: "framebriar_upstream",
+        phase: "metadata",
+        outcome: "ok",
+        elapsedMs: 4,
+        status: 200,
+      },
+      {
+        scope: "feedback",
+        event: "framebriar_upstream",
+        phase: "media",
+        outcome: "upstream",
+        elapsedMs: 12,
+        status: 503,
+      },
+    ]);
+    const serialized = lines.join("\n");
+    for (const forbidden of [
+      "private-report-id",
+      "Private note",
+      "owner@example.test",
+      "storage.example.test",
+      "ticket-secret-value",
+      "access-token-secret-value",
+      "private screenshot bytes",
+      "private upstream failure",
+    ]) {
+      expect(serialized).not.toContain(forbidden);
+    }
+  });
+
+  it.each([
+    ["timeout", () => new DOMException("secret timeout detail", "TimeoutError"), "timeout"],
+    ["network", () => new TypeError("secret network detail"), "network"],
+  ])(
+    "keeps a %s failure category bounded and preserves the uncertain result",
+    async (_name, error, outcome) => {
+      const lines: string[] = [];
+      const times = [10, 70];
+      const { client } = clientFor(
+        () => {
+          throw error();
+        },
+        { timingNow: () => times.shift()!, log: (line) => lines.push(line) },
+      );
+
+      expect(
+        await client.submitReport({
+          accessToken: "secret-access-token",
+          report: '{"note":"secret report text"}',
+          media: null,
+        }),
+      ).toEqual({ kind: "uncertain" });
+      expect(JSON.parse(lines[0])).toEqual({
+        scope: "feedback",
+        event: "framebriar_upstream",
+        phase: "metadata",
+        outcome,
+        elapsedMs: 60,
+      });
+      expect(lines[0]).not.toMatch(/secret|detail|token|report text/i);
+    },
+  );
 
   it("delivers a report without media in one call, with the bearer token", async () => {
     const { client, calls } = clientFor(() => ok(receipt()));
