@@ -6,6 +6,7 @@ import {
   ALIAS_HEAD_STEP,
   checkCiWorkflow,
   checkDeployWorkflow,
+  checkVercelConfig,
   checkVercelCliLock,
   ciJob,
   MIN_CI_TIMEOUT_MINUTES,
@@ -18,6 +19,7 @@ import {
 const DIR = join(process.cwd(), ".github", "workflows");
 const deploy = readFileSync(join(DIR, "deploy-vercel.yml"), "utf8");
 const ci = readFileSync(join(DIR, "ci.yml"), "utf8");
+const vercelConfig = readFileSync("vercel.json", "utf8");
 
 /** The real file with one edit; the edit must change something, so a mutant cannot silently be a no-op. */
 function mutate(from: string | RegExp, to: string): string {
@@ -37,8 +39,15 @@ describe("the real workflows", () => {
   it("deploy-vercel.yml keeps its safety contract", () => {
     expect(checkDeployWorkflow(deploy)).toEqual([]);
   });
-});
 
+  it("vercel.json keeps dependency installation out of vercel build", () => {
+    expect(checkVercelConfig(vercelConfig)).toEqual([]);
+    expect(checkVercelConfig('{"framework":"nextjs"}').join("\n")).toMatch(/installCommand/);
+    expect(
+      checkVercelConfig('{"framework":"nextjs","installCommand":"npm ci"}').join("\n"),
+    ).toMatch(/empty string/);
+  });
+});
 describe("unpinnedActions", () => {
   it.each([
     ["a tag", "      - uses: actions/checkout@v4"],
@@ -65,7 +74,7 @@ function movedInjection(): string {
     deploy,
   )?.[1];
   expect(block).toBeTruthy();
-  const anchor = "      # `vercel build` works";
+  const anchor = "      # The root install above already populated node_modules.";
   expect(deploy).toContain(anchor);
   return deploy.replace(block as string, "").replace(anchor, `${block}${anchor}`);
 }
@@ -83,6 +92,75 @@ function aliasBeforeSmoke(): string {
 
 describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
   it.each([
+    [
+      "repository-token package access is added",
+      mutate(
+        "  actions: read # to read the `ci` result for this commit",
+        "  actions: read # to read the `ci` result for this commit\n  packages: read",
+      ),
+      /must not grant the repository token package access/,
+    ],
+    [
+      "a root install loses its package token",
+      mutate(
+        /      - name: Install\n        env:\n          NODE_AUTH_TOKEN: \$\{\{ secrets\.FRAMEBRIAR_PACKAGES_TOKEN \}\}\n        run: npm ci --ignore-scripts/,
+        "      - name: Install\n        run: npm ci --ignore-scripts",
+      ),
+      /deploy job must give the Framebriar secret/,
+    ],
+    [
+      "vercel build receives the package token",
+      mutate(
+        "      - name: Build\n        run:",
+        "      - name: Build\n        env:\n          NODE_AUTH_TOKEN: ${{ secrets.FRAMEBRIAR_PACKAGES_TOKEN }}\n        run:",
+      ),
+      /vercel build and everything it launches must not receive/,
+    ],
+    [
+      "the build-time package credential guard is removed",
+      mutate("          npx tsx scripts/check-package-credentials.ts\n", ""),
+      /vercel build must fail closed when a package credential is present/,
+    ],
+    [
+      "the exact Preview artifact check is removed",
+      mutate(
+        /      - name: Preview contains feedback UI and browser SDK\n        if: env\.TARGET == 'preview'\n        run: npm run check:preview-feedback-in-build -- \.vercel\/output\n/,
+        "",
+      ),
+      /exact Vercel Preview artifact must prove feedback UI and SDK are present/,
+    ],
+    [
+      "the Production feedback exclusion check runs on Preview",
+      mutate(
+        "      - name: Production contains no feedback UI or browser SDK\n        if: env.TARGET == 'production'",
+        "      - name: Production contains no feedback UI or browser SDK\n        if: env.TARGET == 'preview'",
+      ),
+      /exact Vercel Production artifact must prove feedback UI and SDK are absent/,
+    ],
+    [
+      "the Production capture exclusion check is weakened",
+      mutate(
+        "        run: npm run check:no-capture-in-build -- .vercel/output\n",
+        "        run: echo skipped-capture-check\n",
+      ),
+      /exact Vercel Production artifact must prove screenshot capture is absent/,
+    ],
+    [
+      "dependency scripts receive the package token",
+      mutate(
+        "      - name: Run install scripts without package credential\n        run:",
+        "      - name: Run install scripts without package credential\n        env:\n          NODE_AUTH_TOKEN: ${{ secrets.FRAMEBRIAR_PACKAGES_TOKEN }}\n        run:",
+      ),
+      /dependency lifecycle scripts must run once/,
+    ],
+    [
+      "the locked Vercel CLI install receives the package token",
+      mutate(
+        "      - name: Install the locked Vercel CLI\n        run:",
+        "      - name: Install the locked Vercel CLI\n        env:\n          NODE_AUTH_TOKEN: ${{ secrets.FRAMEBRIAR_PACKAGES_TOKEN }}\n        run:",
+      ),
+      /locked Vercel CLI install must not receive/,
+    ],
     [
       "a push triggers the deploy directly",
       mutate("on:\n", "on:\n  push:\n    branches:\n      - develop\n"),
@@ -111,10 +189,15 @@ describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
     ["a pull request trigger", mutate("on:\n", "on:\n  pull_request:\n"), /pull request/],
     ["inherited secrets", `${deploy}\n    secrets: inherit\n`, /inherited/],
     [
+      "a production build that does not force screenshots off",
+      mutate("FEEDBACK_SCREENSHOTS=0 vercel build --prod", "vercel build --prod"),
+      /production build must set FEEDBACK_SCREENSHOTS=0/,
+    ],
+    [
       "the gate reads a secret",
       mutate(
-        "      - name: Install\n        run: npm ci\n\n      - name: Release",
-        "      - name: Install\n        run: echo ${{ secrets.VERCEL_TOKEN }}\n\n      - name: Release",
+        "        run: node --experimental-strip-types scripts/release-gate.ts",
+        "        env:\n          TOKEN: ${{ secrets.VERCEL_TOKEN }}\n        run: node --experimental-strip-types scripts/release-gate.ts",
       ),
       /gate job must not read/,
     ],
@@ -129,13 +212,13 @@ describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
     [
       "the gate is skipped",
       mutate("scripts/release-gate.ts", "scripts/other.ts"),
-      /run the release gate/,
+      /run the dependency-free release gate/,
     ],
     [
       "context interpolated into a shell",
       mutate(
-        "run: npx tsx scripts/release-gate.ts",
-        "run: echo ${{ inputs.release_sha }}; npx tsx scripts/release-gate.ts",
+        "run: node --experimental-strip-types scripts/release-gate.ts",
+        "run: echo ${{ inputs.release_sha }}; node --experimental-strip-types scripts/release-gate.ts",
       ),
       /never interpolate/,
     ],
@@ -669,6 +752,37 @@ describe("checkCiWorkflow", () => {
   });
 
   it.each([
+    [
+      "repository-token package access is added",
+      mutateCi(
+        "permissions:\n  contents: read\n",
+        "permissions:\n  contents: read\n  packages: read\n",
+      ),
+      /must not grant the repository token package access/,
+    ],
+    [
+      "an install token exposed to fork pull requests",
+      inJob(
+        "unit",
+        "NODE_AUTH_TOKEN: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && secrets.FRAMEBRIAR_PACKAGES_TOKEN || '' }}",
+        "NODE_AUTH_TOKEN: ${{ secrets.FRAMEBRIAR_PACKAGES_TOKEN }}",
+      ),
+      /unit's fetch-only root install must receive the package token only/,
+    ],
+    [
+      "dependency scripts receive the package token",
+      inJob(
+        "unit",
+        "      - name: Run install scripts without package credential\n        run:",
+        "      - name: Run install scripts without package credential\n        env:\n          NODE_AUTH_TOKEN: ${{ secrets.FRAMEBRIAR_PACKAGES_TOKEN }}\n        run:",
+      ),
+      /unit's dependency lifecycle scripts must run once without package credentials/,
+    ],
+    [
+      "an explicit permission block adds package read",
+      inJob("mode", "      contents: read\n", "      contents: read\n      packages: read\n"),
+      /mode's explicit permissions must not grant package access/,
+    ],
     ["the summary job renamed", mutateCi(/^ {2}ci:/m, "  summary:"), /ci job is missing/],
     [
       "an extra job nobody summarises",
@@ -801,10 +915,25 @@ describe("checkCiWorkflow", () => {
       "the production build made with the e2e flag",
       inJob(
         "build",
-        "      - name: Build\n        run: npm run build\n",
-        "      - name: Build\n        env:\n          NEXT_PUBLIC_E2E_BUILD: '1'\n        run: npm run build\n",
+        "      - name: Build\n        run: npm run build:production\n",
+        "      - name: Build\n        env:\n          NEXT_PUBLIC_E2E_BUILD: '1'\n        run: npm run build:production\n",
       ),
       /build job must build exactly like production/,
+    ],
+    [
+      "the production-mode build replaced by a plain build",
+      inJob("build", "npm run build:production\n", "npm run build\n"),
+      /build job is missing npm run build:production/,
+    ],
+    [
+      "the screenshot capture check dropped",
+      inJob("build", /npm run check:no-capture-in-build\n/g, "true\n"),
+      /build job is missing check:no-capture-in-build/,
+    ],
+    [
+      "the Production feedback exclusion check dropped",
+      inJob("build", /npm run check:no-feedback-in-build\n/g, "true\n"),
+      /build job is missing check:no-feedback-in-build/,
     ],
     [
       "the production build uploading an artifact",
@@ -861,12 +990,22 @@ describe("checkCiWorkflow", () => {
     ],
     [
       "an e2e job installing the wrong browser",
+      inJob("e2e", 'npx playwright install "$BROWSER"', "npx playwright install chromium"),
+      /install its own browser/,
+    ],
+    [
+      "the Playwright dependency retry dropped",
+      inJob("e2e", "for attempt in 1 2", "for attempt in 1"),
+      /dependency install needs one bounded timeout retry/,
+    ],
+    [
+      "the Playwright dependency timeout dropped",
       inJob(
         "e2e",
-        'npx playwright install --with-deps "$BROWSER"',
-        "npx playwright install --with-deps chromium",
+        "timeout --kill-after=30s 5m npx playwright install-deps",
+        "npx playwright install-deps",
       ),
-      /install its own browser/,
+      /dependency install needs one bounded timeout retry/,
     ],
     [
       "a cache shared by both browsers",
@@ -884,6 +1023,15 @@ describe("checkCiWorkflow", () => {
       /at the same time/,
     ],
     ["e2e rebuilding", inJob("e2e", 'E2E_PREBUILT: "1"', 'E2E_PREBUILT: "0"'), /E2E_PREBUILT/],
+    [
+      "feedback design evidence is not preserved",
+      inJob(
+        "e2e",
+        "FEEDBACK_DESIGN_SHOTS: test-results/feedback-design",
+        "FEEDBACK_DESIGN_SHOTS: ''",
+      ),
+      /preserve the feedback design matrix/,
+    ],
     [
       "e2e without the download",
       inJob("e2e", "name: e2e-build\n          path: .next", "name: other\n          path: .next"),
@@ -1127,7 +1275,6 @@ describe("the ci summary script, run for real", () => {
     expect(run("full", { mode: "cancelled" })).not.toBe(0);
   });
 });
-
 describe("dependabotProblems (#225)", () => {
   const config = readFileSync(join(process.cwd(), ".github", "dependabot.yml"), "utf8");
 

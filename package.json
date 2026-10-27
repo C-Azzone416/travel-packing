@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:production": "VERCEL_ENV=production next build",
     "start": "next start",
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
@@ -23,7 +24,12 @@
     "db:check": "drizzle-kit check",
     "db:migrate": "tsx scripts/db-migrate.ts",
     "check:no-e2e-in-build": "tsx scripts/check-no-e2e-in-build.ts",
-    "build:webpack": "next build --webpack",
+    "check:no-capture-in-build": "tsx scripts/check-no-capture-in-build.ts",
+    "check:no-feedback-in-build": "tsx scripts/check-no-feedback-in-build.ts",
+    "check:preview-feedback-in-build": "tsx scripts/check-preview-feedback-in-build.ts",
+    "build:webpack": "VERCEL_ENV=production next build --webpack",
+    "build:preview": "VERCEL_ENV=preview next build",
+    "build:preview:webpack": "VERCEL_ENV=preview next build --webpack",
     "build:e2e": "NEXT_PUBLIC_E2E_BUILD=1 next build",
     "db:migrate:remote": "tsx scripts/db-migrate-remote.ts",
     "db:seed": "tsx scripts/db-seed.ts",
@@ -36,9 +42,11 @@
     "smoke": "tsx scripts/smoke-test.ts"
   },
   "dependencies": {
+    "@masra91/framebriar": "0.4.1",
     "@neondatabase/auth": "0.6.0-beta",
     "@neondatabase/serverless": "^1.2.0",
     "drizzle-orm": "^0.45.4",
+    "html-to-image": "1.11.13",
     "next": "^16.4.2",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
@@ -74,5 +82,11 @@
       "esbuild": "^0.25.0"
     },
     "zod": "$zod"
+  },
+  "allowScripts": {
+    "core-js": false,
+    "esbuild@0.25.12": true,
+    "esbuild@0.28.2": true,
+    "unrs-resolver@1.12.2": true
   }
 }

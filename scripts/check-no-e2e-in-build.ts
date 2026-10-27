@@ -7,10 +7,12 @@ import { BUILD_MARKERS } from "../src/tooling/build-markers";
 
 const BUILD_DIR = ".next";
 
-function* files(dir: string): Generator<string> {
+function* files(dir: string, root = dir): Generator<string> {
   for (const name of readdirSync(dir)) {
+    // Incremental compiler inputs are not deployed and can describe a different build mode from the current output.
+    if (dir === root && name === "cache") continue;
     const path = join(dir, name);
-    if (statSync(path).isDirectory()) yield* files(path);
+    if (statSync(path).isDirectory()) yield* files(path, root);
     else yield path;
   }
 }

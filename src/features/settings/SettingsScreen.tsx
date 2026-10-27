@@ -12,6 +12,7 @@ import {
   parseAppearance,
   type Appearance,
 } from "@/domain/appearance";
+import { FeedbackSettings } from "@/features/feedback/FeedbackSettings";
 import type { WeatherSettings } from "@/server/data/weather-store";
 import type { AppearanceResult } from "./appearance-actions";
 import { ThemePicker } from "./ThemePicker";
@@ -204,6 +205,7 @@ export function SettingsScreen({
           ) : null}
           <p className="weather-credit tiny muted">Weather data by Open-Meteo.com</p>
         </Card>
+        <FeedbackSettings />
       </div>
     </section>
   );

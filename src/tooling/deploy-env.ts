@@ -2,9 +2,17 @@
 // It reports variable NAMES only, never values: a value could be a connection string or a secret.
 
 import { isPlainEmail } from "../server/auth/allowlist";
+import { screenshotEnvProblems } from "./feedback-screenshots";
 
 export type DeployTarget = "preview" | "production";
 type Env = Record<string, string | undefined>;
+
+export const PACKAGE_AUTH_VARIABLES = [
+  "NODE_AUTH_TOKEN",
+  "NPM_AUTH_TOKEN",
+  "NPM_TOKEN",
+  "FRAMEBRIAR_PACKAGES_TOKEN",
+] as const;
 
 /** Test-only switches. If any of these exist in a deployed environment, a build could ship the fake sign-in. */
 export const FORBIDDEN_EVERYWHERE = [
@@ -14,6 +22,9 @@ export const FORBIDDEN_EVERYWHERE = [
   "SEED_DATABASE_URL",
   // Lets the location search be pointed at another server; for e2e only.
   "OPEN_METEO_GEOCODING_URL",
+  // Package credentials belong only to the dedicated dependency-fetch step. If Vercel has any of these configured,
+  // its builder and the application compiler would inherit them.
+  ...PACKAGE_AUTH_VARIABLES,
 ] as const;
 
 /** Every variable the fake sign-in family reads starts with this; none may exist in a deployed environment. */
@@ -66,6 +77,13 @@ export function allowlistProblem(value: string | undefined): string | null {
 
 function present(env: Env, name: string): boolean {
   return (env[name] ?? "").trim().length > 0;
+}
+
+/** Package credentials must be absent from the application compiler and every child process it launches. */
+export function packageCredentialProblems(env: Env): string[] {
+  return PACKAGE_AUTH_VARIABLES.filter((name) => present(env, name)).map(
+    (name) => `${name} must not be present during the application build`,
+  );
 }
 
 /** A host in canonical form, or null when the value is not a URL. */
@@ -174,6 +192,8 @@ export function checkDeployEnv(
     const problem = allowlistProblem(env.OWNER_EMAIL_ALLOWLIST);
     if (problem) problems.push(`OWNER_EMAIL_ALLOWLIST ${problem}`);
   }
+  // Production never captures screenshots (#130): FEEDBACK_SCREENSHOTS must be unset or 0 there.
+  problems.push(...screenshotEnvProblems(target, env));
   // Production may leave the provider unset (search off) or use the real one; any other value is a mistake.
   const provider = env.LOCATION_PROVIDER?.trim();
   if (target === "production" && provider && provider !== PREVIEW_LOCATION_PROVIDER) {
