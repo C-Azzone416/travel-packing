@@ -5,24 +5,29 @@ import { usePathname } from "next/navigation";
 import { buttonClassName } from "@/components/ui/Button";
 import { useFeedbackAccess } from "./FeedbackAccess";
 
-type Notice = NonNullable<ReturnType<typeof useFeedbackAccess>["status"]>["notice"];
+type Notice = NonNullable<NonNullable<ReturnType<typeof useFeedbackAccess>["status"]>["notice"]>;
 
-const NOTICES: Record<NonNullable<Notice>, { text: string; action: string }> = {
+// Each says what is true and what the person can do. None blocks the app, and reports already saved stay on this device.
+const NOTICES: Record<Notice, { text: string; action: string }> = {
   expired: {
-    text: "Your feedback access has expired. Reports you save are kept on this device until you reconnect.",
+    text: "Your feedback access has expired. Reports you saved are kept on this device until you reconnect.",
     action: "Reconnect",
   },
-  "access-required": {
-    text: "Feedback needs a new invitation before it can send. Reports you save are kept on this device.",
+  revoked: {
+    text: "Your feedback access was ended. Reports you saved are kept on this device. Add a new invitation to send them.",
     action: "Add invitation",
   },
-  "connection-uncertain": {
-    text: "We couldn’t confirm your feedback connection. Saved reports stay on this device and send once it’s confirmed.",
-    action: "Check connection",
+  disabled: {
+    text: "Feedback is switched off for now. Reports you saved are kept on this device.",
+    action: "See details",
   },
-  "migration-required": {
-    text: "We found more than one feedback connection on this device. Add a new invitation to choose one. Saved reports are kept.",
-    action: "Add invitation",
+  unavailable: {
+    text: "Feedback isn’t available right now. Reports you saved are kept on this device.",
+    action: "See details",
+  },
+  "finish-connecting": {
+    text: "Feedback isn’t finished connecting. Paste the same invitation again to finish. It won’t be spent twice.",
+    action: "Finish connecting",
   },
 };
 

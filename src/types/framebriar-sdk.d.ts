@@ -89,6 +89,7 @@ declare module "@masra91/framebriar/browser/playtest-access" {
 
 declare module "@masra91/framebriar/browser/submit-feedback" {
   export class FeedbackSubmitError extends Error {
+    constructor(code: string, message: string);
     code: string;
     retryAfterMs?: number;
   }
@@ -115,6 +116,20 @@ declare module "@masra91/framebriar/browser/local-export" {
     captureContext: Record<string, unknown>;
     notes?: string;
   }): Promise<PreparedFeedback>;
+}
+
+declare module "@masra91/framebriar/browser/queue" {
+  import type { NormalizedReport } from "@masra91/framebriar/protocol";
+  /** The SDK's IndexedDB-backed report queue. The database is named `framebriar-v1-<scope>`. */
+  export class OfflineQueue {
+    constructor(
+      scope: string,
+      options?: { now?: () => number; indexedDB?: IDBFactory; timeoutMs?: number },
+    );
+    readonly name: string;
+    all(): Promise<{ report: NormalizedReport; blob: Blob | null }[]>;
+    clear(): Promise<unknown>;
+  }
 }
 
 declare module "@masra91/framebriar/browser/durable-feedback" {
@@ -150,6 +165,16 @@ declare module "@masra91/framebriar/browser/durable-feedback" {
     getToken: () => Promise<string | undefined>;
     onReceipt?: (receipt: { id: string; gameId: string; status: string }) => void;
     onChange?: (status: OutboxStatus) => void;
+    /** Injected so the outbox lives in one database per account (#260). Without it the SDK names the database from the endpoint. */
+    queue?: import("@masra91/framebriar/browser/queue").OfflineQueue;
+    /** Injected so reports go through the app's own authenticated route instead of the SDK's HTTPS + Bearer transport (#260). */
+    send?: (options: {
+      report: NormalizedReport;
+      media: Blob | null;
+      endpoint: string;
+      getToken: () => Promise<string | undefined>;
+      signal?: AbortSignal;
+    }) => Promise<{ id: string; status: string; gameId: string }>;
   }): DurableFeedback;
 }
 

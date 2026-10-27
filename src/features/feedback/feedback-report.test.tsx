@@ -3,8 +3,9 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DurableFeedback, OutboxStatus } from "@masra91/framebriar/browser/durable-feedback";
-import type { AccessStatus, PlaytestAccess } from "@masra91/framebriar/browser/playtest-access";
 import { ToastProvider } from "@/components/ui/Toast";
+import { createFakeFeedbackServer, createMemoryIdb } from "@/test/fake-feedback-server";
+import { createFakeOutbox, OUTBOX_STATUS as STATUS } from "@/test/fake-outbox";
 import {
   FeedbackAccessProvider,
   outboxView,
@@ -25,108 +26,44 @@ vi.mock("@/features/feedback/screenshot-capture", () => ({
   captureScreenshot: () => capture.take(),
 }));
 
-const CONNECTED: AccessStatus = {
-  state: "connected",
-  connected: true,
-  enrolled: true,
-  canCapture: true,
-  notice: null,
-  expiresAt: null,
-};
+type Enqueue = DurableFeedback["enqueue"];
+const outboxStub = createFakeOutbox;
 
-function accessStub(initial: Partial<AccessStatus> = {}) {
-  let status = { ...CONNECTED, ...initial };
-  const listeners = new Set<(s: AccessStatus) => void>();
-  const access = {
-    endpoint: "https://example.test/api",
-    status: () => status,
-    subscribe: (listener: (s: AccessStatus) => void) => {
-      listeners.add(listener);
-      listener(status);
-      return () => listeners.delete(listener);
-    },
-    start: vi.fn(async () => status),
-    stop: vi.fn(),
-    connect: vi.fn(async () => true),
-    getToken: vi.fn(async () => "token"),
-    disconnect: vi.fn(async () => ({ forgotten: true, revoked: true as boolean | null })),
-    dispose: vi.fn(),
-  } as unknown as PlaytestAccess;
-  return {
-    access,
-    push(next: Partial<AccessStatus>) {
-      status = { ...status, ...next };
-      act(() => listeners.forEach((l) => l(status)));
-    },
-  };
+/** A fake server that says "connected" unless told otherwise: the Feedback button is only on for a connected account. */
+function serverStub(initial: Parameters<typeof createFakeFeedbackServer>[0] = {}) {
+  return createFakeFeedbackServer({ status: "connected", ...initial });
 }
 
-const STATUS: OutboxStatus = {
-  state: "available",
-  items: 0,
-  bytes: 0,
-  maxItems: 10,
-  maxBytes: 32 * 1024 * 1024,
-  retention: "until-delivered-or-cleared",
-};
-
-type Enqueue = DurableFeedback["enqueue"];
-
-function outboxStub(enqueue?: Enqueue) {
-  let listener: ((s: OutboxStatus) => void) | undefined;
-  let onReceipt: ((receipt: { id: string }) => void) | undefined;
-  const box = {
-    status: () => STATUS,
-    subscribe: vi.fn((fn: (s: OutboxStatus) => void) => {
-      listener = fn;
-      return () => {
-        listener = undefined;
-      };
-    }),
-    enqueue: vi.fn<Enqueue>(
-      enqueue ??
-        (async ({ report }) => ({
-          id: report.id,
-          gameId: "travel-packing",
-          status: "saved-local" as const,
-          sent: false as const,
-        })),
-    ),
-    start: vi.fn(async () => undefined),
-    resume: vi.fn(async () => undefined),
-    stop: vi.fn(),
-    clear: vi.fn(),
-  };
-  const create: CreateOutbox = vi.fn(async (_access, receipt) => {
-    onReceipt = receipt;
-    return box as unknown as DurableFeedback;
-  });
+function providerProps(server: ReturnType<typeof serverStub>, create: CreateOutbox) {
   return {
-    box,
-    create,
-    status: (next: Partial<OutboxStatus>) => act(() => listener?.({ ...STATUS, ...next })),
-    receive: (id: string) => act(() => onReceipt?.({ id })),
+    enabled: true as const,
+    fetchImpl: server.fetch,
+    createOutbox: create,
+    indexedDBImpl: createMemoryIdb().factory,
+    createChannel: () => null,
   };
 }
 
 function mount(
-  options: { status?: Partial<AccessStatus>; outbox?: ReturnType<typeof outboxStub> } = {},
+  options: {
+    server?: Parameters<typeof createFakeFeedbackServer>[0];
+    outbox?: ReturnType<typeof createFakeOutbox>;
+  } = {},
 ) {
-  const access = accessStub(options.status);
+  const server = serverStub(options.server);
   const outbox = options.outbox ?? outboxStub();
   const view = render(
     <ToastProvider>
-      <FeedbackAccessProvider
-        enabled
-        create={async () => access.access}
-        createOutbox={outbox.create}
-      >
+      <FeedbackAccessProvider {...providerProps(server, outbox.create)}>
         <FeedbackButton />
       </FeedbackAccessProvider>
     </ToastProvider>,
   );
-  return { ...view, access, outbox };
+  return { ...view, server, outbox };
 }
+
+/** The status route is asked again on pageshow; this is how a test makes the server's new answer reach the page. */
+const refresh = () => act(async () => void window.dispatchEvent(new Event("pageshow")));
 
 const feedbackButton = () => screen.getByRole("button", { name: "Send feedback" });
 const png = () => new Blob([new Uint8Array(64)], { type: "image/png" });
@@ -149,10 +86,11 @@ afterEach(() => vi.restoreAllMocks());
 
 describe("the entry point", () => {
   it("is disabled until the person can capture", async () => {
-    const { access } = mount({ status: { canCapture: false } });
+    const { server } = mount({ server: { status: "not-connected" } });
     await waitFor(() => expect(feedbackButton()).toHaveProperty("disabled", true));
-    access.push({ canCapture: true });
-    expect(feedbackButton()).toHaveProperty("disabled", false);
+    server.state.status = "connected";
+    await refresh();
+    await waitFor(() => expect(feedbackButton()).toHaveProperty("disabled", false));
   });
 
   it.each([
@@ -533,10 +471,9 @@ describe("when saving does not work", () => {
   it("no outbox at all (no IndexedDB): nothing is claimed saved", async () => {
     const user = userEvent.setup();
     const create: CreateOutbox = async () => null;
-    const access = accessStub();
     render(
       <ToastProvider>
-        <FeedbackAccessProvider enabled create={async () => access.access} createOutbox={create}>
+        <FeedbackAccessProvider {...providerProps(serverStub(), create)}>
           <FeedbackButton />
         </FeedbackAccessProvider>
       </ToastProvider>,
@@ -630,13 +567,10 @@ describe("what goes into a report (privacy)", () => {
 describe("the outbox inside the provider", () => {
   it("fetches the code that prepares a report as soon as the app is up, so saving works with no connection", async () => {
     const preload = vi.fn(async () => undefined);
-    const access = accessStub();
     render(
       <ToastProvider>
         <FeedbackAccessProvider
-          enabled
-          create={async () => access.access}
-          createOutbox={outboxStub().create}
+          {...providerProps(serverStub(), outboxStub().create)}
           preload={preload}
         >
           <FeedbackButton />
@@ -647,13 +581,10 @@ describe("the outbox inside the provider", () => {
   });
 
   it("a failing preload changes nothing", async () => {
-    const access = accessStub();
     render(
       <ToastProvider>
         <FeedbackAccessProvider
-          enabled
-          create={async () => access.access}
-          createOutbox={outboxStub().create}
+          {...providerProps(serverStub(), outboxStub().create)}
           preload={async () => Promise.reject(new Error("offline"))}
         >
           <FeedbackButton />
@@ -665,20 +596,20 @@ describe("the outbox inside the provider", () => {
 
   it("starts on its own, shows what is waiting and blocked, and resumes once connected", async () => {
     const outbox = outboxStub();
-    const { access } = mount({ status: { connected: false }, outbox });
+    const { server } = mount({ server: { status: "not-connected" }, outbox });
     await waitFor(() => expect(outbox.box.start).toHaveBeenCalled());
     expect(outbox.box.resume).not.toHaveBeenCalled();
-    access.push({ connected: true });
+    server.state.status = "connected";
+    await refresh();
     await waitFor(() => expect(outbox.box.resume).toHaveBeenCalledTimes(1));
   });
 
   it("stops with the page and starts again when it comes back", async () => {
     const outbox = outboxStub();
-    const { access } = mount({ outbox });
+    mount({ outbox });
     await waitFor(() => expect(outbox.box.start).toHaveBeenCalledTimes(1));
     act(() => window.dispatchEvent(new Event("pagehide")));
     expect(outbox.box.stop).toHaveBeenCalled();
-    expect(access.access.stop).toHaveBeenCalled();
     act(() => window.dispatchEvent(new Event("pageshow")));
     await waitFor(() => expect(outbox.box.start).toHaveBeenCalledTimes(2));
   });
@@ -692,14 +623,13 @@ describe("the outbox inside the provider", () => {
 
     const late = outboxStub();
     let release: (() => void) | undefined;
-    const slow: CreateOutbox = async (a, r) => {
+    const slow: CreateOutbox = async (options) => {
       await new Promise<void>((resolve) => (release = resolve));
-      return late.create(a, r);
+      return late.create(options);
     };
-    const access = accessStub();
     const second = render(
       <ToastProvider>
-        <FeedbackAccessProvider enabled create={async () => access.access} createOutbox={slow}>
+        <FeedbackAccessProvider {...providerProps(serverStub(), slow)}>
           <FeedbackButton />
         </FeedbackAccessProvider>
       </ToastProvider>,
@@ -708,7 +638,6 @@ describe("the outbox inside the provider", () => {
     second.unmount();
     await act(async () => release?.());
     await waitFor(() => expect(late.box.stop).toHaveBeenCalled());
-    expect(access.access.dispose).toHaveBeenCalled();
   });
 
   it("a failing outbox constructor leaves feedback usable for connecting, with saving unavailable", async () => {
@@ -716,10 +645,9 @@ describe("the outbox inside the provider", () => {
     const create: CreateOutbox = async () => {
       throw new Error("no storage");
     };
-    const access = accessStub();
     render(
       <ToastProvider>
-        <FeedbackAccessProvider enabled create={async () => access.access} createOutbox={create}>
+        <FeedbackAccessProvider {...providerProps(serverStub(), create)}>
           <FeedbackButton />
         </FeedbackAccessProvider>
       </ToastProvider>,

@@ -17,3 +17,8 @@ export function FeedbackNotice() {
 export function FeedbackSettings() {
   return null;
 }
+
+// Sign-out clears unsent feedback on the device. With no feedback in this build there is nothing to clear.
+export function useFeedbackSignOut(): () => Promise<void> {
+  return async () => undefined;
+}
