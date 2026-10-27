@@ -1,10 +1,9 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { OTHER_EMAIL, signIn, signInAsOwner } from "./helpers/auth";
 import { chooseFromMenu } from "./helpers/menu";
 import { expectAccessible } from "./helpers/a11y";
 import { DEVICE } from "./helpers/device";
+import { serverActionId } from "./helpers/server-action";
 
 // Axe checks (#21) for every screen and every dialog, at both viewports (the two Playwright projects). Each state is
 // reached the way a person reaches it, against the real e2e database.
@@ -14,21 +13,6 @@ async function openDashboard(page: Page) {
   await page.clock.setFixedTime(NOW);
   await signInAsOwner(page);
   await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
-}
-
-function staplesSetupActionId(): string {
-  const manifest = JSON.parse(
-    readFileSync(join(process.cwd(), ".next/server/server-reference-manifest.json"), "utf8"),
-  ) as {
-    node?: Record<string, { exportedName?: string; filename?: string }>;
-  };
-  const match = Object.entries(manifest.node ?? {}).find(
-    ([, reference]) =>
-      reference.filename === "src/features/trips/trip-actions.ts" &&
-      reference.exportedName === "getStaplesSetupAction",
-  );
-  expect(match, "built getStaplesSetupAction server reference").toBeTruthy();
-  return match![0];
 }
 
 test.describe("signed out", DEVICE, () => {
@@ -379,7 +363,6 @@ test.describe("more states", DEVICE, () => {
 
   test("the dashboard while it loads, and when it cannot load", async ({ page }) => {
     await openDashboard(page);
-    const setupAction = staplesSetupActionId();
     // Answers held back until the check is done: the skeleton shows for as long as we need.
     let release!: () => void;
     const held = new Promise<void>((resolve) => (release = resolve));
@@ -391,13 +374,18 @@ test.describe("more states", DEVICE, () => {
     await expect(page.getByRole("region", { name: "Loading Staples setup" })).toBeVisible();
     await expectAccessible(page, "authenticated setup loading");
     release();
+    // The setup gate leaves its loading state exactly when the setup action answers, so the held page has finished with it.
     await expect(page.getByRole("region", { name: "Loading Staples setup" })).toHaveCount(0);
     await page.unroute("**/*");
-    // Only the setup check fails: the non-blocking notice leaves the dashboard usable.
+    // Only the setup check fails: the non-blocking notice leaves the dashboard usable. It is matched by its action id, not as
+    // "the first POST to /": the dashboard's own actions go to the same path, and one of them arriving first took the abort (#256).
+    const setupAction = serverActionId(
+      "src/features/trips/trip-actions.ts",
+      "getStaplesSetupAction",
+    );
     let aborted = false;
     await page.route("**/*", (route) => {
-      const request = route.request();
-      if (!aborted && request.headers()["next-action"] === setupAction) {
+      if (!aborted && route.request().headers()["next-action"] === setupAction) {
         aborted = true;
         return route.abort("failed");
       }
