@@ -16,6 +16,7 @@ const redirect = (location: string, status = 307) =>
   new Response(null, { status, headers: { location } });
 const healthy = (): Routes => ({
   ...Object.fromEntries(PUBLIC_PATHS.map((path) => [path, new Response("ok", { status: 200 })])),
+  "/close-account": redirect("/settings"),
   "/": redirect("/sign-in"),
 });
 
@@ -31,7 +32,7 @@ describe("smokeTest", () => {
       "ok   /forgot-password: 200 (expected 200)",
       "ok   /reset-password: 200 (expected 200)",
       "ok   /finish-setup: 200 (expected 200)",
-      "ok   /close-account: 200 (expected 200)",
+      "ok   /close-account: 307 (expected a redirect to /settings while account closure is disabled)",
       "ok   /close-account/complete: 200 (expected 200)",
       "ok   /: 307 (expected a redirect to /sign-in when signed out)",
     ]);
@@ -40,6 +41,28 @@ describe("smokeTest", () => {
   it("accepts an absolute redirect to sign-in", async () => {
     const routes = { ...healthy(), "/": redirect("https://x.test/sign-in?next=%2F", 302) };
     expect((await smokeTest("https://x.test", fakeFetch(routes))).ok).toBe(true);
+  });
+
+  it("pins the hosted account-closure switch off", async () => {
+    for (const response of [
+      new Response("enabled", { status: 200 }),
+      redirect("/settings", 301),
+      redirect("/settings", 302),
+      redirect("/settings", 303),
+      redirect("/settings", 308),
+      redirect("/sign-in"),
+      redirect("http://x.test/settings"),
+      redirect("https://x.test:444/settings"),
+      redirect("https://elsewhere.test/settings"),
+      redirect("http://[bad"),
+    ]) {
+      const result = await smokeTest(
+        "https://x.test",
+        fakeFetch({ ...healthy(), "/close-account": response }),
+      );
+      expect(result.ok).toBe(false);
+      expect(result.lines.find((line) => line.startsWith("FAIL /close-account:"))).toBeTruthy();
+    }
   });
 
   it("fails when sign-in is not 200", async () => {
@@ -71,7 +94,7 @@ describe("smokeTest", () => {
       "FAIL /forgot-password: no response (expected 200)",
       "FAIL /reset-password: no response (expected 200)",
       "FAIL /finish-setup: no response (expected 200)",
-      "FAIL /close-account: no response (expected 200)",
+      "FAIL /close-account: no response (expected a redirect to /settings while account closure is disabled)",
       "FAIL /close-account/complete: no response (expected 200)",
       "FAIL /: no response (expected a redirect to /sign-in when signed out)",
     ]);
