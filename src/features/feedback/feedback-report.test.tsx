@@ -253,17 +253,29 @@ describe("the screenshot option", () => {
     expect(outbox.box.enqueue.mock.calls[0][0].media).toBeNull();
   });
 
-  it("a screenshot exactly at the sendable size is still offered", async () => {
+  it("a screenshot one byte under the sendable size is still offered; exactly at it is not (strictly smaller)", async () => {
     capture.take.mockResolvedValue(
-      new Blob([new Uint8Array(SCREENSHOT_SEND_LIMIT_BYTES)], { type: "image/png" }),
+      new Blob([new Uint8Array(SCREENSHOT_SEND_LIMIT_BYTES - 1)], { type: "image/png" }),
     );
     const user = userEvent.setup();
-    mount();
+    const first = mount();
     const dialog = await openSheet(user);
     const box = within(dialog).getByRole("checkbox", { name: COPY.screenshotLabel });
     expect(box).toHaveProperty("checked", true);
     expect(box).toHaveProperty("disabled", false);
     expect(within(dialog).queryByText(COPY.screenshotTooLarge)).toBeNull();
+    first.unmount();
+
+    capture.take.mockResolvedValue(
+      new Blob([new Uint8Array(SCREENSHOT_SEND_LIMIT_BYTES)], { type: "image/png" }),
+    );
+    mount();
+    const atLimit = await openSheet(user);
+    expect(within(atLimit).getByText(COPY.screenshotTooLarge)).toBeTruthy();
+    expect(within(atLimit).getByRole("checkbox", { name: COPY.screenshotLabel })).toHaveProperty(
+      "disabled",
+      true,
+    );
   });
 
   it("is absent, not disabled, where the build has no screenshots (Production)", async () => {

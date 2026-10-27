@@ -6,6 +6,7 @@ import { ModalSheet } from "@/components/ui/ModalSheet";
 import { feedbackBuildSha } from "./build-sha";
 import { reportContext } from "./capture-policy";
 import { useFeedbackAccess } from "./FeedbackAccess";
+import { SCREENSHOT_SEND_LIMIT_BYTES, fitsSendLimit } from "./screenshot-limit";
 
 export const NOTES_MAX = 2000;
 const COUNTER_FROM = 1800;
@@ -15,13 +16,7 @@ export interface TakenScreenshot {
   blob: Blob | null;
 }
 
-/**
- * The largest screenshot offered. A report goes through the app's own route, and the host rejects a request body over about
- * 4.5 MB before the app sees it (#259), while the SDK itself allows 8 MiB. Staying under this keeps a report that has a
- * screenshot sendable; a bigger one is not offered (never shrunk or cut) and the notes still send. To be confirmed in the manual
- * Preview check.
- */
-export const SCREENSHOT_SEND_LIMIT_BYTES = 4_000_000;
+export { SCREENSHOT_SEND_LIMIT_BYTES };
 
 type Problem = "full" | "unavailable" | "uncertain" | null;
 
@@ -101,7 +96,7 @@ export function FeedbackSheet({
   const [notes, setNotes] = useState("");
   // A screenshot over the sendable size is treated like one that could not be taken: not offered, never shrunk.
   const taken = screenshot?.blob ?? null;
-  const tooLarge = taken !== null && taken.size > SCREENSHOT_SEND_LIMIT_BYTES;
+  const tooLarge = taken !== null && !fitsSendLimit(taken.size);
   const blob = tooLarge ? null : taken;
   const [include, setInclude] = useState(blob !== null);
   const [phase, setPhase] = useState<"form" | "saving" | "saved">("form");
