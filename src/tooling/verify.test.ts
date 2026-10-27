@@ -99,9 +99,9 @@ describe("verifyParityProblems: each drift is caught", () => {
       "a build step added to ci.yml",
       mutate(
         "      - name: Scan the webpack client bundle\n",
-        "      - name: Again\n        run: npm run build\n\n      - name: Scan the webpack client bundle\n",
+        "      - name: Again\n        run: npm run build:production\n\n      - name: Scan the webpack client bundle\n",
       ),
-      /"build" 2x/,
+      /"build:production" 2x/,
     ],
     [
       "the e2e step run twice",

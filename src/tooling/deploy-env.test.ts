@@ -9,6 +9,7 @@ import {
   hostOf,
   parseBuildEnvFile,
   parseEnvFile,
+  packageCredentialProblems,
   productionHost,
   PRODUCTION_HOST_FORMAT,
   REQUIRED,
@@ -30,6 +31,26 @@ const production = {
   DATABASE_URL: `postgres://u:p@${PROD_HOST.replace("ep-prod-1", "ep-prod-1-pooler")}/db`,
   DATABASE_URL_UNPOOLED: `postgres://u:p@${PROD_HOST}/db`,
 };
+
+describe("checkDeployEnv: screenshots (#130)", () => {
+  it("fails a production environment that switches screenshots on, naming the variable only", () => {
+    const problems = checkDeployEnv(
+      "production",
+      { ...production, FEEDBACK_SCREENSHOTS: "1" },
+      PROD_HOST,
+    );
+    expect(problems).toEqual([expect.stringContaining("FEEDBACK_SCREENSHOTS must be unset or 0")]);
+  });
+
+  it("accepts production with screenshots off, and a preview with them on", () => {
+    expect(
+      checkDeployEnv("production", { ...production, FEEDBACK_SCREENSHOTS: "0" }, PROD_HOST),
+    ).toEqual([]);
+    expect(checkDeployEnv("preview", { ...good, FEEDBACK_SCREENSHOTS: "1" }, PROD_HOST)).toEqual(
+      [],
+    );
+  });
+});
 
 describe("checkDeployEnv", () => {
   it("accepts a complete preview environment on its own database", () => {
@@ -117,6 +138,10 @@ describe("checkDeployEnv", () => {
     "E2E_DATABASE_URL",
     "SEED_DATABASE_URL",
     "OPEN_METEO_GEOCODING_URL",
+    "NODE_AUTH_TOKEN",
+    "NPM_AUTH_TOKEN",
+    "NPM_TOKEN",
+    "FRAMEBRIAR_PACKAGES_TOKEN",
   ])("refuses %s in both environments, naming it but not its value", (name) => {
     for (const target of ["preview", "production"] as const) {
       const problems = checkDeployEnv(
@@ -221,6 +246,21 @@ describe("checkDeployEnv", () => {
     const env = { ...good, DATABASE_URL: `postgres://u:p@x-${PROD_HOST}/db` };
     expect(checkDeployEnv("preview", env, PROD_HOST)).toEqual([]);
   });
+});
+
+describe("packageCredentialProblems", () => {
+  it("accepts a credential-free build environment", () => {
+    expect(packageCredentialProblems({ VERCEL_ENV: "preview" })).toEqual([]);
+  });
+
+  it.each(["NODE_AUTH_TOKEN", "NPM_AUTH_TOKEN", "NPM_TOKEN", "FRAMEBRIAR_PACKAGES_TOKEN"])(
+    "rejects %s by name without echoing its value",
+    (name) => {
+      const problems = packageCredentialProblems({ [name]: "sentinel-do-not-print" });
+      expect(problems).toEqual([`${name} must not be present during the application build`]);
+      expect(problems.join()).not.toContain("sentinel-do-not-print");
+    },
+  );
 });
 
 describe("hostOf", () => {

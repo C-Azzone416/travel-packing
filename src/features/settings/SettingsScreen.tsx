@@ -12,6 +12,7 @@ import {
   parseAppearance,
   type Appearance,
 } from "@/domain/appearance";
+import { FeedbackSettings } from "@/features/feedback/FeedbackSettings";
 import type { WeatherSettings } from "@/server/data/weather-store";
 import type { AppearanceResult } from "./appearance-actions";
 import { CloseAccountSheet } from "./CloseAccountSheet";
@@ -218,6 +219,7 @@ export function SettingsScreen({
           ) : null}
           <p className="weather-credit tiny muted">Weather data by Open-Meteo.com</p>
         </Card>
+        <FeedbackSettings />
       </div>
       {closingAccount ? (
         <CloseAccountSheet action={closeAccount} onClose={() => setClosingAccount(false)} />

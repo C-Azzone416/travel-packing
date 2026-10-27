@@ -4441,3 +4441,130 @@ a.back {
     width: 100%;
   }
 }
+
+/* Feedback (#131) */
+.topbar-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.feedback-button {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.topbar .feedback-button.secondary {
+  border-color: var(--header-muted);
+  background: transparent;
+  color: var(--header-ink);
+}
+.topbar .feedback-button.secondary:hover {
+  background: color-mix(in srgb, var(--header-ink) 12%, transparent);
+}
+.topbar .feedback-button.secondary:active {
+  background: color-mix(in srgb, var(--header-ink) 20%, transparent);
+}
+.topbar .feedback-button:focus-visible {
+  outline-color: var(--focus-on-header);
+}
+.feedback-button-label {
+  display: none;
+}
+@media (min-width: 900px) {
+  .feedback-button-label {
+    display: inline;
+  }
+}
+.feedback-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  width: min(100%, 1272px);
+  margin: 10px auto 8px;
+  padding: 10px 24px;
+  border: 1px solid color-mix(in srgb, var(--notice-ink) 28%, transparent);
+  border-radius: var(--control-radius);
+  background: var(--notice);
+  color: var(--notice-ink);
+}
+.feedback-notice p {
+  margin: 0;
+  flex: 1 1 240px;
+}
+.feedback-notice .button.secondary {
+  border-color: color-mix(in srgb, var(--notice-ink) 55%, transparent);
+  background: transparent;
+  color: var(--notice-ink);
+}
+.feedback-notice .button.secondary:hover {
+  background: color-mix(in srgb, var(--notice-ink) 10%, transparent);
+}
+.feedback-state,
+.feedback-form,
+.feedback-confirm {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+}
+.feedback-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Feedback report sheet (#132) */
+.field textarea {
+  width: 100%;
+  min-height: 112px;
+  max-height: 40vh;
+  border: 1px solid var(--line);
+  border-radius: var(--control-radius);
+  padding: 10px 14px;
+  background: var(--control-bg);
+  color: var(--ink);
+  font: inherit;
+  resize: vertical;
+}
+.feedback-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  font-weight: 700;
+}
+.feedback-check input {
+  width: 22px;
+  height: 22px;
+  accent-color: var(--accent);
+}
+.feedback-shot {
+  display: grid;
+  gap: 6px;
+}
+.feedback-thumb {
+  max-width: min(160px, 100%);
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--control-radius);
+  object-fit: contain;
+}
+@media (max-width: 659px) {
+  .feedback-thumb {
+    width: auto;
+    max-height: 120px;
+  }
+}
+.feedback-problem {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+}
+.feedback-result h3 {
+  margin: 0 0 6px;
+}
+.feedback-result p {
+  margin: 0;
+}
