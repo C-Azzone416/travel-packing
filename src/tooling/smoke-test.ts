@@ -26,12 +26,12 @@ export interface SmokeResult {
 
 const REDIRECTS = new Set([301, 302, 303, 307, 308]);
 
-function isSameSiteRedirect(response: Response, base: string, pathname: string): boolean {
+function isSameOriginRedirect(response: Response, base: string, pathname: string): boolean {
   if (!REDIRECTS.has(response.status)) return false;
   const location = response.headers.get("location") ?? "";
   try {
     const target = new URL(location, base);
-    return target.host === new URL(base).host && target.pathname === pathname;
+    return target.origin === new URL(base).origin && target.pathname === pathname;
   } catch {
     return false;
   }
@@ -131,7 +131,7 @@ export async function smokeTest(
       await check(
         path,
         "expected a redirect to /settings while account closure is disabled",
-        (response) => isSameSiteRedirect(response, base, "/settings"),
+        (response) => response.status === 307 && isSameOriginRedirect(response, base, "/settings"),
       );
       continue;
     }
@@ -139,7 +139,7 @@ export async function smokeTest(
   }
   // A signed-out visitor to / is redirected to /sign-in ON THIS SITE: a redirect elsewhere that happens to end in /sign-in is not it.
   await check("/", "expected a redirect to /sign-in when signed out", (response) =>
-    isSameSiteRedirect(response, base, "/sign-in"),
+    isSameOriginRedirect(response, base, "/sign-in"),
   );
   return { ok, lines, vercelAuthentication };
 }

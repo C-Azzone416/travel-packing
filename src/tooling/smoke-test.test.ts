@@ -46,7 +46,13 @@ describe("smokeTest", () => {
   it("pins the hosted account-closure switch off", async () => {
     for (const response of [
       new Response("enabled", { status: 200 }),
+      redirect("/settings", 301),
+      redirect("/settings", 302),
+      redirect("/settings", 303),
+      redirect("/settings", 308),
       redirect("/sign-in"),
+      redirect("http://x.test/settings"),
+      redirect("https://x.test:444/settings"),
       redirect("https://elsewhere.test/settings"),
       redirect("http://[bad"),
     ]) {
