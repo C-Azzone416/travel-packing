@@ -10,6 +10,9 @@ never change the service here. The contract remains the private source repositor
 Nothing in this repository holds a token, an invitation or an endpoint credential. Every value below is a placeholder. What
 is captured, owner setup and the local delivery check are in [feedback.md](feedback.md).
 
+Account-scoped enrollment held on the server (one invitation per account, not per browser) is described in
+[framebriar-enrollment.md](framebriar-enrollment.md).
+
 ## Installing the package
 
 `package.json` pins `@masra91/framebriar` to exact version `0.4.1`; `package-lock.json` pins the private GitHub Package URL and

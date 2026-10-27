@@ -5,20 +5,22 @@ Design basis: plan §18 "Suggested logical data sets" and §20 items 5–6 (item
 
 ## Tables
 
-| Table                 | Plan data set       | Purpose                                                                                                         |
-| --------------------- | ------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `users`               | users               | App-side mirror of the auth user (id supplied by the auth provider, #9). Owner of every row.                    |
-| `account_setups`      | (auth, #83)         | Addresses whose password was set through an emailed link (digest of the email). Not owner data: no `owner_id`.  |
-| `staples`             | staples             | Future-trip defaults. Versioned on their own (`version`). Never referenced by trip rows.                        |
-| `saved_lists`         | (saved lists, #140) | A named list of items to add to new trips. Owner-scoped template; never referenced by trip rows.                |
-| `saved_list_items`    | (saved lists, #140) | The items of a saved list: identity (`semantic_id`), name, category, `qty` only. No packed counts or trip data. |
-| `trips`               | trips               | One saved trip; also carries Ready, toiletry-bag placement, archive flag, `deleted_at`.                         |
-| `trip_preferences`    | trip_preferences    | The preferences a trip was calculated from, plus suggestion memory / suppressed suggestions.                    |
-| `trip_items`          | trip_items          | Immutable snapshot of each item on a trip.                                                                      |
-| `trip_item_progress`  | trip_item_progress  | Mutable packed counts, kept apart from the item snapshot.                                                       |
-| `trip_stops`          | trips (stops)       | The ordered stops (1-6) of a trip: place, arrive and leave dates (epic #107).                                   |
-| `weather_suggestions` | weather_suggestions | The status of each weather suggestion on a trip: one row per (trip, semantic id), plus a short rule signature.  |
-| _(recently deleted)_  | —                   | Not a table: `trips.deleted_at` (see Recoverable delete).                                                       |
+| Table                    | Plan data set       | Purpose                                                                                                                              |
+| ------------------------ | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `users`                  | users               | App-side mirror of the auth user (id supplied by the auth provider, #9). Owner of every row.                                         |
+| `account_setups`         | (auth, #83)         | Addresses whose password was set through an emailed link (digest of the email). Not owner data: no `owner_id`.                       |
+| `staples`                | staples             | Future-trip defaults. Versioned on their own (`version`). Never referenced by trip rows.                                             |
+| `saved_lists`            | (saved lists, #140) | A named list of items to add to new trips. Owner-scoped template; never referenced by trip rows.                                     |
+| `saved_list_items`       | (saved lists, #140) | The items of a saved list: identity (`semantic_id`), name, category, `qty` only. No packed counts or trip data.                      |
+| `trips`                  | trips               | One saved trip; also carries Ready, toiletry-bag placement, archive flag, `deleted_at`.                                              |
+| `trip_preferences`       | trip_preferences    | The preferences a trip was calculated from, plus suggestion memory / suppressed suggestions.                                         |
+| `trip_items`             | trip_items          | Immutable snapshot of each item on a trip.                                                                                           |
+| `trip_item_progress`     | trip_item_progress  | Mutable packed counts, kept apart from the item snapshot.                                                                            |
+| `trip_stops`             | trips (stops)       | The ordered stops (1-6) of a trip: place, arrive and leave dates (epic #107).                                                        |
+| `weather_suggestions`    | weather_suggestions | The status of each weather suggestion on a trip: one row per (trip, semantic id), plus a short rule signature.                       |
+| `framebriar_enrollments` | (feedback, #259)    | One account's Framebriar enrollment, **AES-256-GCM sealed**, keyed by `(owner_id, generation)`. See `docs/framebriar-enrollment.md`. |
+| `framebriar_redemptions` | (feedback, #259)    | A started, uncommitted invitation redemption: its attempt id, written before the network call. One per account.                      |
+| _(recently deleted)_     | —                   | Not a table: `trips.deleted_at` (see Recoverable delete).                                                                            |
 
 Export/backup metadata (the last logical data set) is not modelled; it waits on the export decisions in plan §19.
 
@@ -33,6 +35,9 @@ users 1──* trips ──* trip_items ──1 trip_item_progress
                ├──* weather_suggestions   (unique (trip_id, semantic id))
                └── copied_from ──> trips   (self reference, ON DELETE SET NULL)
 ```
+
+`users.generation` is a random uuid set when the row is provisioned (#259). The two Framebriar tables reference `users(id, generation)`, so a
+row can only exist for the account generation that made it and a recreated account never matches an old row.
 
 Every table except `account_setups` has a non-null `owner_id` referencing `users.id` (`ON DELETE CASCADE`). `account_setups` is
 auth bookkeeping keyed by an HMAC digest of the normalized email (there is no user id before the first session, and the app keeps

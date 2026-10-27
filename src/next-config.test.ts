@@ -51,6 +51,7 @@ const FEEDBACK_MODULES = [
   ["@/features/feedback/FeedbackButton", FEEDBACK_STUB],
   ["@/features/feedback/FeedbackNotice", FEEDBACK_STUB],
   ["@/features/feedback/FeedbackSettings", FEEDBACK_STUB],
+  ["@/server/feedback/runtime", "./src/server/feedback/runtime.disabled.ts"],
 ] as const;
 const aliases = (entries: readonly (readonly [string, string])[]) => Object.fromEntries(entries);
 
