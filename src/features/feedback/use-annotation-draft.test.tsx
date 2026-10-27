@@ -53,6 +53,19 @@ describe("the marks on a sheet's screenshot", () => {
     expect(hasMarks(result.current.drawing)).toBe(false);
   });
 
+  it("ignores a late call from the previous account's render, so its mark never lands in the new account's sheet", () => {
+    const { result, rerender } = renderHook(({ scope }) => useAnnotationDraft(scope), {
+      initialProps: { scope: "account-a" as string | null },
+    });
+    const stale = result.current;
+    rerender({ scope: "account-b" });
+    act(() => stale.begin(ink, { x: 9, y: 9 }));
+    act(() => stale.end());
+    expect(hasMarks(result.current.drawing)).toBe(false);
+    act(() => drawOne(result.current, 30));
+    expect(strokeCount(result.current.drawing)).toBe(1);
+  });
+
   it("a stroke drawn after a switch belongs to the new account only", () => {
     const { result, rerender } = renderHook(({ scope }) => useAnnotationDraft(scope), {
       initialProps: { scope: "account-a" as string | null },

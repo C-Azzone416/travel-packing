@@ -41,10 +41,9 @@ export function useAnnotationDraft(scope: string | null): AnnotationDraft {
 
   const change = useCallback(
     (step: (current: Drawing) => Drawing) =>
-      setHeld((now) => ({
-        scope,
-        drawing: step(now.scope === scope ? now.drawing : EMPTY_DRAWING),
-      })),
+      // A late call from an earlier account's render (a pointer event still in flight when the account changed) is dropped: it
+      // must not put its mark into the new account's sheet.
+      setHeld((now) => (now.scope === scope ? { scope, drawing: step(now.drawing) } : now)),
     [scope],
   );
 
