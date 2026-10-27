@@ -292,6 +292,13 @@ describe("Settings section: checking and the six server states", () => {
     expect(screen.queryByText(/Feedback works until/)).toBeNull();
   });
 
+  it("keeps the invitation form (a password field, memory only) out of any screenshot (#273)", async () => {
+    mount(harness());
+    const field = await screen.findByLabelText("Invitation");
+    expect(field.getAttribute("type")).toBe("password");
+    expect(field.closest("form")?.getAttribute("data-feedback-exclude")).toBe("invitation");
+  });
+
   it("a pending redemption asks for the same invitation again and keeps the form", async () => {
     mount(harness({ redemption: "pending" }));
     expect(await screen.findByText("Not finished")).toBeTruthy();
@@ -630,7 +637,7 @@ describe("the notice banner", () => {
 });
 
 describe("the Feedback button", () => {
-  it("is labelled, disabled unless connected, and absent on Settings", async () => {
+  it("is labelled, disabled unless connected, and offered on Settings too (#273)", async () => {
     const h = harness();
     const view = mount(h, <FeedbackButton />);
     const button = await screen.findByRole("button", { name: "Send feedback" });
@@ -639,6 +646,9 @@ describe("the Feedback button", () => {
     await act(async () => window.dispatchEvent(new Event("pageshow")));
     await waitFor(() => expect(button).toHaveProperty("disabled", false));
     pathname = "/settings";
+    view.rerender(providerFor(h, <FeedbackButton />));
+    expect(screen.getByRole("button", { name: "Send feedback" })).toHaveProperty("disabled", false);
+    pathname = "/sign-in";
     view.rerender(providerFor(h, <FeedbackButton />));
     expect(screen.queryByRole("button", { name: "Send feedback" })).toBeNull();
   });

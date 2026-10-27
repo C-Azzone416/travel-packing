@@ -80,7 +80,11 @@ export async function openSettings(page: Page) {
 
 export async function goToTrips(page: Page) {
   await nav(page).getByRole("link", { name: "Trips" }).click();
-  await expect(page.getByRole("button", { name: "Send feedback" })).toBeVisible();
+  // The header button is on Settings too now (#273), so it is not proof of arrival: wait for the Trips screen itself, where the only
+  // "Send feedback" is the header's (Settings has an action of its own with the same name).
+  await page.waitForURL((url) => url.pathname === "/");
+  await expect(page.locator(".feedback-button")).toBeVisible();
+  await expect(page.locator(".feedback-send-action")).toHaveCount(0);
 }
 
 /** Pastes an invitation (a fresh one unless given) on Settings and waits for Connected. */
@@ -95,7 +99,7 @@ export async function connectedOnTrips(page: Page) {
   await openSettings(page);
   await connectFeedback(page);
   await goToTrips(page);
-  await expect(page.getByRole("button", { name: "Send feedback" })).toBeEnabled();
+  await expect(page.locator(".feedback-button")).toBeEnabled();
 }
 
 export async function openSettingsFromNav(page: Page) {

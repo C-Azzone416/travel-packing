@@ -30,6 +30,17 @@ vi.mock("@/features/feedback/screenshot-capture", () => ({
   captureScreenshot: async () => null,
 }));
 
+/** The header's Feedback button: the Settings card has its own "Send feedback" action with the same name (#273). */
+async function findHeaderButton() {
+  return waitFor(() => {
+    const found = screen
+      .getAllByRole("button", { name: "Send feedback" })
+      .find((button) => button.classList.contains("feedback-button"));
+    if (!found) throw new Error("no header button yet");
+    return found;
+  });
+}
+
 /** One fake outbox per account key, the way the real one is one database per account. */
 function outboxesByKey() {
   const boxes = new Map<string, FakeOutbox>();
@@ -155,7 +166,7 @@ describe("one browser, several accounts: the outbox is named by the account", ()
     expect(await screen.findByText("2 reports waiting to send on this device.")).toBeTruthy();
 
     // A's notes are typed into the open sheet...
-    await user.click(await screen.findByRole("button", { name: "Send feedback" }));
+    await user.click(await findHeaderButton());
     const dialog = await screen.findByRole("dialog", { name: "Send feedback" });
     await user.type(within(dialog).getByLabelText(COPY.notesLabel), "A's private notes");
 
@@ -173,7 +184,7 @@ describe("one browser, several accounts: the outbox is named by the account", ()
     a.status({ items: 9, blocked: 9 });
     expect(screen.queryByText(/9 reports waiting/)).toBeNull();
     // B can open a fresh, empty sheet.
-    await user.click(await screen.findByRole("button", { name: "Send feedback" }));
+    await user.click(await findHeaderButton());
     const second = await screen.findByRole("dialog", { name: "Send feedback" });
     expect((within(second).getByLabelText(COPY.notesLabel) as HTMLTextAreaElement).value).toBe("");
   });
@@ -186,7 +197,7 @@ describe("one browser, several accounts: the outbox is named by the account", ()
     server.state.outboxKey = OUTBOX_KEY_B;
     await pageshow();
     await waitFor(() => expect(outboxes.boxes.get(OUTBOX_KEY_B)?.box.start).toHaveBeenCalled());
-    await user.click(await screen.findByRole("button", { name: "Send feedback" }));
+    await user.click(await findHeaderButton());
     const dialog = await screen.findByRole("dialog", { name: "Send feedback" });
     await user.type(within(dialog).getByLabelText(COPY.notesLabel), "for B");
     await user.click(within(dialog).getByRole("button", { name: "Send" }));
@@ -198,7 +209,7 @@ describe("one browser, several accounts: the outbox is named by the account", ()
   it("with no key from the server (it cannot name one) there is no outbox, nothing can be saved, and the button is off", async () => {
     const server = createFakeFeedbackServer({ status: "unavailable", outboxKey: null });
     const { outboxes } = mount({ server });
-    const button = await screen.findByRole("button", { name: "Send feedback" });
+    const button = await findHeaderButton();
     await waitFor(() => expect(server.count("status")).toBe(1));
     expect(button).toHaveProperty("disabled", true);
     expect(outboxes.create).not.toHaveBeenCalled();
@@ -220,7 +231,9 @@ describe("a session that has ended", () => {
     await waitFor(() => expect(outboxes.boxes.get(OUTBOX_KEY_A)?.box.start).toHaveBeenCalled());
     server.state.session = "out";
     await pageshow();
-    await waitFor(() => expect(screen.queryByRole("button", { name: "Send feedback" })).toBeNull());
+    await waitFor(() =>
+      expect(screen.queryAllByRole("button", { name: "Send feedback" })).toHaveLength(0),
+    );
     expect(screen.queryByRole("heading", { name: "Send feedback to the developer" })).toBeNull();
     expect(outboxes.boxes.get(OUTBOX_KEY_A)!.box.stop).toHaveBeenCalled();
     expect(server.count("reports")).toBe(0);
@@ -231,7 +244,7 @@ describe("a session that has ended", () => {
     const server = createFakeFeedbackServer({ status: "connected", session: "forbidden" });
     mount({ server });
     await waitFor(() => expect(server.count("status")).toBe(1));
-    expect(screen.queryByRole("button", { name: "Send feedback" })).toBeNull();
+    expect(screen.queryAllByRole("button", { name: "Send feedback" })).toHaveLength(0);
   });
 });
 

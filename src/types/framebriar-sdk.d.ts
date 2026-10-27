@@ -183,4 +183,6 @@ declare module "html-to-image" {
     node: HTMLElement,
     options?: Record<string, unknown>,
   ): Promise<Blob | null>;
+  /** The serialised clone as an SVG data URL. The capture uses toBlob; the tests read this to see what was cloned. */
+  export function toSvg(node: HTMLElement, options?: Record<string, unknown>): Promise<string>;
 }

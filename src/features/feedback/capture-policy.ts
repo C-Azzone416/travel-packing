@@ -2,7 +2,10 @@
 // Pure and free of the screenshot switch: the entry point, the sheet and the real capture code all use it, so the blocklist
 // cannot be bypassed by a later entry point.
 
-/** Screens where nothing is ever captured: sign-in and account screens (credentials, codes, emails) and Settings. */
+/**
+ * Screens where nothing is ever captured: sign-in and account screens (credentials, codes, emails). Settings is not one of them
+ * (#273): it is captured with its sensitive parts left out before the picture is made (capture-exclusion.ts).
+ */
 const BLOCKED: readonly RegExp[] = [
   /^\/sign-in(\/|$)/,
   /^\/sign-up(\/|$)/,
@@ -11,7 +14,8 @@ const BLOCKED: readonly RegExp[] = [
   /^\/reset-password(\/|$)/,
   /^\/finish-setup(\/|$)/,
   /^\/access-denied(\/|$)/,
-  /^\/settings(\/|$)/,
+  // Account closure asks for the current password and the word DELETE (#273: these stay blocked while Settings opens up).
+  /^\/close-account(\/|$)/,
 ];
 
 export function captureBlocked(pathname: string): boolean {

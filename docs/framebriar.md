@@ -109,8 +109,22 @@ Production absence check covers it and the Preview positive check requires it).
 
 What a report may contain (`capture-policy.ts`): the person's notes, an optional screenshot, and approved codes and numbers only: the
 screen code (`trips`, `new-trip`, `trip`, `review`, `staples`, `other`; never the path), a viewport class, the input kind, the app
-version, the capture time. No trip names, places, dates, emails or ids. The sheet lists what is sent. Capture is blocked on Settings
-and the sign-in and account screens, in the entry point, the sheet context and the capture code itself.
+version, the capture time. No trip names, places, dates, emails or ids. The sheet lists what is sent. Capture is blocked on the sign-in and
+account screens (never on Trips, Staples etc.), in the entry point, the sheet context and the capture code itself.
+
+Settings (#273) is captured with its sensitive parts left out **before** the picture is made (`capture-exclusion.ts`). The screenshot is a
+clone of the page's DOM, and `html-to-image` asks the capture's `filter` about each node before it clones it, copies its value or reads
+its children, so an excluded node and everything in it never exists in any PNG, preview, annotation or upload (nothing is blurred or
+covered afterwards, and no unsanitised copy is kept). The contract: `data-feedback-exclude` keeps an element and its subtree out; every
+`input[type=password]` is out regardless; `data-feedback-sensitive-portal` on something that exists only while a sensitive dialog is open
+(the Close account sheet) means no picture at all while it is open or if it opened during the capture; an identity region
+(`data-feedback-identity`, the Account line) must contain its `account-identity` exclusion or the capture is refused. Whenever the
+capture cannot be proven clean it returns null and the report goes as text only. The unit tests run the real library over pages with
+synthetic canaries and read what it cloned. The browser e2e (`feedback-settings.spec.ts`) paints a magenta canary on the account email row (found by
+its text, not by the marker) and a cyan one on an ordinary card, then reads the pixels of the PNG the sheet produced: no magenta, plenty of
+cyan. Known limitation, not new: WebKit (Playwright's, so very likely Safari on a phone) takes the picture from the top of the page whatever the
+scroll position, because the capture library's scroll offset is not honoured there; what is left out is unaffected, and the phone e2e
+uses a screen tall enough for the whole page.
 
 Screenshots follow the build switch above: ticked by default where the Preview/local/e2e build has them (the capture is taken before
 the sheet opens so the sheet is not in it). The capture uses `html-to-image` (MIT), imported only by the capture module, so it

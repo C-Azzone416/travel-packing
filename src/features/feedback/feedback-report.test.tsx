@@ -13,6 +13,7 @@ import {
   type CreateOutbox,
 } from "./FeedbackAccess";
 import { FeedbackButton } from "./FeedbackButton";
+import { FeedbackSettings } from "./FeedbackSettings";
 import { EDITOR_COPY } from "./ScreenshotEditor";
 import { COPY, SCREENSHOT_SEND_LIMIT_BYTES, SHOT_PROBLEM_COPY } from "./FeedbackSheet";
 
@@ -24,7 +25,12 @@ vi.mock("@/features/feedback/screenshot-capture", () => ({
   get screenshotCaptureAvailable() {
     return capture.available;
   },
-  captureScreenshot: () => capture.take(),
+  // The tests give a Blob for a picture, null for an ordinary failure, or the string "private" for a private surface being open.
+  captureScreenshot: async () => {
+    const taken = await capture.take();
+    if (taken === "private") return { kind: "private" };
+    return taken ? { kind: "ok", blob: taken } : { kind: "failed" };
+  },
 }));
 
 // Compositing needs a real canvas, which jsdom does not have: the tests decide what it returns and see what it was given.
@@ -102,8 +108,6 @@ describe("the entry point", () => {
   });
 
   it.each([
-    "/settings",
-    "/settings/x",
     "/sign-in",
     "/sign-up",
     "/verify",
@@ -224,19 +228,46 @@ describe("the screenshot option", () => {
     expect(media).toBeInstanceOf(Blob);
   });
 
-  it("when the capture fails the box is unticked and disabled, and the notes still send", async () => {
+  it("when the capture fails there is one plain line in place of the checkbox group, and the notes still send", async () => {
     capture.take.mockResolvedValue(null);
     const user = userEvent.setup();
     const { outbox } = mount();
     const dialog = await openSheet(user);
-    const box = within(dialog).getByRole("checkbox", { name: COPY.screenshotLabel });
-    expect(box).toHaveProperty("checked", false);
-    expect(box).toHaveProperty("disabled", true);
-    expect(within(dialog).getByText(COPY.screenshotFailed)).toBeTruthy();
+    // No disabled checkbox, no editor: one muted line with an info mark (not a warning).
+    expect(within(dialog).queryByRole("checkbox")).toBeNull();
+    expect(within(dialog).queryByRole("radiogroup")).toBeNull();
+    const line = dialog.querySelector(".feedback-no-shot");
+    expect(line?.textContent).toBe(`ⓘ ${COPY.screenshotFailed}`);
+    expect(line?.closest("[role=alert]")).toBeNull();
+    expect(within(dialog).getByRole("status").textContent).toBe(COPY.screenshotFailed);
     await user.type(within(dialog).getByLabelText(COPY.notesLabel), "just words");
     await user.click(within(dialog).getByRole("button", { name: "Send" }));
     await screen.findByText(COPY.saved);
     expect(outbox.box.enqueue.mock.calls[0][0].report.media).toBeNull();
+  });
+
+  it("when something private is open it says so, plainly, in place of the checkbox group, and the notes still send", async () => {
+    capture.take.mockResolvedValue("private");
+    const user = userEvent.setup();
+    const { outbox } = mount();
+    const dialog = await openSheet(user);
+    expect(COPY.screenshotPrivate).toBe(
+      "No screenshot this time: something private is open on this screen. You can still send your notes.",
+    );
+    expect(within(dialog).queryByRole("checkbox")).toBeNull();
+    expect(dialog.querySelector(".feedback-no-shot")?.textContent).toBe(
+      `ⓘ ${COPY.screenshotPrivate}`,
+    );
+    expect(within(dialog).queryByText(COPY.screenshotFailed)).toBeNull();
+    expect(within(dialog).getByRole("status").textContent).toBe(COPY.screenshotPrivate);
+    // Notes stay first, and Cancel and Send are unchanged.
+    expect(within(dialog).getByLabelText(COPY.notesLabel)).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: "Cancel" })).toBeTruthy();
+    await user.type(within(dialog).getByLabelText(COPY.notesLabel), "private thing open");
+    await user.click(within(dialog).getByRole("button", { name: "Send" }));
+    await screen.findByText(COPY.saved);
+    expect(outbox.box.enqueue.mock.calls[0][0].report.media).toBeNull();
+    expect(outbox.box.enqueue.mock.calls[0][0].media).toBeNull();
   });
 
   it("pins the sendable screenshot size to 4,000,000 bytes, under Vercel's ~4.5 MB request body limit", () => {
@@ -989,5 +1020,111 @@ describe("marking the screenshot", () => {
     expect(footer?.contains(within(dialog).getByRole("button", { name: "Send" }))).toBe(true);
     expect(footer?.contains(within(dialog).getByRole("button", { name: "Cancel" }))).toBe(true);
     expect(footer?.closest(".feedback-form")).toBeNull();
+  });
+});
+
+describe("the Settings screenshot (#273)", () => {
+  it("says what was left out, under the preview, only when the picture is of Settings", async () => {
+    const user = userEvent.setup();
+    pathname = "/settings";
+    mount();
+    const dialog = await openSheet(user);
+    const disclosure = within(dialog).getByText(COPY.settingsDisclosure);
+    expect(disclosure.textContent).toBe(
+      "Your account email and any invitation or password field are left out of this screenshot.",
+    );
+    // Before the existing note and the drawing note.
+    const note = within(dialog).getByText(`${COPY.screenshotNote} ${COPY.screenshotDrawNote}`);
+    expect(
+      disclosure.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("is not said on other screens", async () => {
+    const user = userEvent.setup();
+    mount();
+    const dialog = await openSheet(user);
+    expect(within(dialog).queryByText(COPY.settingsDisclosure)).toBeNull();
+    expect(
+      within(dialog).getByText(`${COPY.screenshotNote} ${COPY.screenshotDrawNote}`),
+    ).toBeTruthy();
+  });
+
+  it("is not said when there is no picture, or when it is unticked", async () => {
+    const user = userEvent.setup();
+    pathname = "/settings";
+    mount();
+    const dialog = await openSheet(user);
+    await user.click(within(dialog).getByRole("checkbox", { name: COPY.screenshotLabel }));
+    expect(within(dialog).queryByText(COPY.settingsDisclosure)).toBeNull();
+  });
+});
+
+describe("the Send feedback action in the Settings card (#273)", () => {
+  function mountBoth(status: "connected" | "not-connected" | "expired" = "connected") {
+    const server = serverStub({ status });
+    const outbox = outboxStub();
+    pathname = "/settings";
+    render(
+      <ToastProvider>
+        <FeedbackAccessProvider {...providerProps(server, outbox.create)}>
+          <FeedbackButton />
+          <FeedbackSettings />
+        </FeedbackAccessProvider>
+      </ToastProvider>,
+    );
+    return { server, outbox };
+  }
+
+  const cardAction = () =>
+    screen
+      .getAllByRole("button", { name: "Send feedback" })
+      .find((button) => button.classList.contains("feedback-send-action"));
+
+  it("is in the card when connected, before Disconnect, next to the header button with the same name", async () => {
+    mountBoth();
+    await waitFor(() => expect(cardAction()).toBeTruthy());
+    expect(screen.getAllByRole("button", { name: "Send feedback" })).toHaveLength(2);
+    const row = cardAction()!.parentElement!;
+    expect([...row.querySelectorAll("button")].map((button) => button.textContent)).toEqual([
+      "Send feedback",
+      "Disconnect",
+    ]);
+  });
+
+  it("opens the same sheet as the header button, and focus returns to the control that opened it", async () => {
+    const user = userEvent.setup();
+    mountBoth();
+    await waitFor(() => expect(cardAction()).toBeTruthy());
+    await user.click(cardAction()!);
+    const dialog = await screen.findByRole("dialog", { name: "Send feedback" });
+    expect(capture.take).toHaveBeenCalledTimes(1);
+    // Nothing was captured until it was pressed, and one press makes one sheet.
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(document.activeElement).toBe(cardAction());
+
+    const header = screen
+      .getAllByRole("button", { name: "Send feedback" })
+      .find((button) => button.classList.contains("feedback-button"))!;
+    await user.click(header);
+    await screen.findByRole("dialog", { name: "Send feedback" });
+    expect(capture.take).toHaveBeenCalledTimes(2);
+  });
+
+  it("is not rendered when the person cannot send (no dead control), and the header button is dimmed", async () => {
+    mountBoth("not-connected");
+    await waitFor(() => expect(screen.getByLabelText("Invitation")).toBeTruthy());
+    expect(cardAction()).toBeUndefined();
+    const buttons = screen.getAllByRole("button", { name: "Send feedback" });
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0]).toHaveProperty("disabled", true);
+  });
+
+  it.each(["expired"] as const)("is not rendered when the enrollment is %s", async (status) => {
+    mountBoth(status);
+    await waitFor(() => expect(screen.getByText("Expired")).toBeTruthy());
+    expect(cardAction()).toBeUndefined();
   });
 });

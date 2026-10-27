@@ -15,7 +15,8 @@ import { COPY, FeedbackSheet, type TakenScreenshot } from "./FeedbackSheet";
 // screen where nothing may be captured (Settings and the sign-in and account screens), and disabled until the person is
 // connected. When this build offers screenshots the screen is captured BEFORE the sheet opens, so the sheet is not in it.
 export function FeedbackButton() {
-  const { available, status, scopeKey, subscribeReceipts } = useFeedbackAccess();
+  const { available, status, scopeKey, subscribeReceipts, registerReportOpener } =
+    useFeedbackAccess();
   const pathname = usePathname();
   const toast = useToast();
   const [opening, setOpening] = useState(false);
@@ -43,15 +44,29 @@ export function FeedbackButton() {
     [subscribeReceipts, toast],
   );
 
+  // The Settings card's "Send feedback" opens this same sheet (#273): it asks through the provider, and this button does the opening,
+  // so there is one flow, one receipt toast and one place that decides whether anything may be captured.
+  const openRef = useRef<() => void>(() => undefined);
+  useEffect(() => {
+    openRef.current = () => void openSheet();
+  });
+  useEffect(() => registerReportOpener(() => openRef.current()), [registerReportOpener]);
+
   // A sheet opened for one account is never shown to another: its unsent notes and screenshot go with the account.
   const sheet = open && open.scope === scopeKey ? open : null;
 
   if (!available || captureBlocked(pathname)) return null;
 
   async function openSheet() {
-    if (opening || sheet) return;
+    // Both controls share one rule: nothing opens unless this person can send, on a screen where reports may be made at all.
+    if (opening || sheet || !status?.canCapture || !available || captureBlocked(pathname)) return;
     setOpening(true);
-    const screenshot = screenshotCaptureAvailable ? { blob: await captureScreenshot() } : null;
+    const taken = screenshotCaptureAvailable ? await captureScreenshot() : null;
+    const screenshot: TakenScreenshot | null = taken
+      ? taken.kind === "ok"
+        ? { blob: taken.blob, reason: null }
+        : { blob: null, reason: taken.kind }
+      : null;
     opens.current += 1;
     setReceivedId(null);
     setOpen({ n: opens.current, scope: scopeKey, screenshot });

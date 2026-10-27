@@ -147,7 +147,8 @@ export function SettingsScreen({
         <Card as="section" padded aria-labelledby="settings-account">
           <h2 id="settings-account">Account</h2>
           {email ? (
-            <p>
+            // The whole row is left out of any feedback screenshot before the picture is made, so no label is left dangling (#273, capture-exclusion.ts).
+            <p data-feedback-identity data-feedback-exclude="account-identity">
               Signed in as <strong>{email}</strong>
             </p>
           ) : null}

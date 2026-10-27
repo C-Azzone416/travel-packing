@@ -21,8 +21,9 @@ test(
   async ({ page }) => {
     await openSettings(page);
 
-    // Not connected: the field is a password input, and the Feedback button is not offered on Settings at all.
-    await expect(page.getByRole("button", { name: "Send feedback" })).toHaveCount(0);
+    // Not connected: the field is a password input, the card has no Send feedback (no dead control), and the header button is dimmed.
+    await expect(page.locator(".feedback-send-action")).toHaveCount(0);
+    await expect(page.locator(".feedback-button")).toBeDisabled();
     await expect(page.getByLabel("Invitation")).toHaveAttribute("type", "password");
     await expectAccessible(page, "Settings, feedback not connected");
 
@@ -50,6 +51,8 @@ test(
     await goToTrips(page);
     await expect(page.getByRole("button", { name: "Send feedback" })).toBeEnabled();
     await openSettingsFromNav(page);
+    // Connected: the card offers Send feedback too, ahead of Disconnect (#273).
+    await expect(page.locator(".feedback-send-action")).toBeVisible();
 
     await page.getByRole("button", { name: "Disconnect" }).click();
     await expect(page.getByRole("button", { name: "Keep connected" })).toBeFocused();

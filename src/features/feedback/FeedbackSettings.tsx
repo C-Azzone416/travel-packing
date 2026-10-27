@@ -70,7 +70,8 @@ export function expiryText(expiresAt: string | null): string | null {
 // account and lives on the server, so connecting once works on every device. The invitation lives only in the field until Connect
 // is pressed (then it is cleared) and in the request; nothing here stores or logs it.
 export function FeedbackSettings() {
-  const { available, status, outbox, connect, disconnect, clearUnsent } = useFeedbackAccess();
+  const { available, status, outbox, connect, disconnect, clearUnsent, openReport } =
+    useFeedbackAccess();
   const toast = useToast();
   const fieldId = useId();
   const helpId = useId();
@@ -189,11 +190,23 @@ export function FeedbackSettings() {
           {disconnected}
         </p>
       ) : null}
-      {connected && !confirming ? (
+      {connected && !confirming && !confirmingClear ? (
+        // One row: Send feedback (the same sheet as the header button, shown only where that button is on), then Disconnect and, when
+        // there are any, Delete unsent reports. On a phone Send feedback has the row to itself (#273, design's spec section 1).
         <div className="feedback-actions">
+          {status?.canCapture ? (
+            <Button className="feedback-send-action" disabled={busy} onClick={openReport}>
+              Send feedback
+            </Button>
+          ) : null}
           <Button variant="secondary" disabled={busy} onClick={() => setConfirming(true)}>
             Disconnect
           </Button>
+          {unsent > 0 ? (
+            <Button variant="secondary" disabled={busy} onClick={() => setConfirmingClear(true)}>
+              Delete unsent reports
+            </Button>
+          ) : null}
         </div>
       ) : null}
       {confirming ? (
@@ -212,7 +225,7 @@ export function FeedbackSettings() {
           </div>
         </div>
       ) : null}
-      {unsent > 0 && !confirmingClear ? (
+      {unsent > 0 && !confirmingClear && !(connected && !confirming) ? (
         <div className="feedback-actions">
           <Button variant="secondary" disabled={busy} onClick={() => setConfirmingClear(true)}>
             Delete unsent reports
@@ -236,7 +249,8 @@ export function FeedbackSettings() {
         </div>
       ) : null}
       {canRedeem ? (
-        <form onSubmit={submit} className="feedback-form">
+        // The invitation is memory-only and sits in a password field; the whole form is also kept out of any screenshot (#273).
+        <form onSubmit={submit} className="feedback-form" data-feedback-exclude="invitation">
           <div className="field">
             <label htmlFor={fieldId}>Invitation</label>
             <input
