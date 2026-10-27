@@ -372,6 +372,8 @@ jobs:
         env:
           E2E_PREBUILT: "1"
           E2E_PROJECT: ${{ matrix.project }}
+          # The desktop matrix writes all four feedback themes at phone and desktop widths into the uploaded test-results artifact.
+          FEEDBACK_DESIGN_SHOTS: test-results/feedback-design
         run: npm run test:e2e -- --project="$E2E_PROJECT"
 
       - name: Upload Playwright report

@@ -72,7 +72,9 @@ test("an invitation that does not work is explained, and the field is empty agai
   await openSettings(page);
   await page.getByLabel("Invitation").fill("A".repeat(43));
   await page.getByRole("button", { name: "Connect" }).click();
-  await expect(page.getByText(/^That invitation didn’t work\./)).toBeVisible();
+  await expect(
+    page.getByRole("alert").filter({ hasText: /^⚠ That invitation didn’t work\./ }),
+  ).toBeVisible();
   await expect(page.getByLabel("Invitation")).toHaveValue("");
 });
 

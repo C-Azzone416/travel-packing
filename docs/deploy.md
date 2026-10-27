@@ -35,7 +35,10 @@ reviewed credential-isolation design; otherwise it will fail closed because depe
      `DATABASE_URL_UNPOOLED` point at the production database host.
 3. `vercel build`, then `scripts/check-build-output.ts` (the output must contain server functions: an output without them deploys "fine" and
    answers every request with a 404), then `npm run check:no-e2e-in-build` (the fake sign-in, the e2e driver and the sample fixtures must
-   not be in the output).
+   not be in the output). Target-specific scans inspect this exact Vercel artifact before upload: Preview must contain the
+   Framebriar UI and every browser SDK module the app uses; Production must contain neither feedback UI/SDK nor screenshot
+   capture. These scans read `.vercel/output`, the directory the following deploy step uploads, rather than an intermediate
+   `.next` tree. A target whose build-time gate was misread therefore fails closed before deploy.
 4. A second check (`scripts/check-migration-target.ts`) looks at the GitHub environment's `DATABASE_URL_UNPOOLED`, the secret
    the migrate and seed steps actually use: in a preview run it must NOT be `PRODUCTION_DB_HOST`, in a production run it
    MUST be. Then migrations run as their own logged step over the **direct** connection (`npm run db:migrate:remote`).

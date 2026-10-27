@@ -4430,6 +4430,20 @@ a.back {
   align-items: center;
   gap: 6px;
 }
+.topbar .feedback-button.secondary {
+  border-color: var(--header-muted);
+  background: transparent;
+  color: var(--header-ink);
+}
+.topbar .feedback-button.secondary:hover {
+  background: color-mix(in srgb, var(--header-ink) 12%, transparent);
+}
+.topbar .feedback-button.secondary:active {
+  background: color-mix(in srgb, var(--header-ink) 20%, transparent);
+}
+.topbar .feedback-button:focus-visible {
+  outline-color: var(--focus-on-header);
+}
 .feedback-button-label {
   display: none;
 }
@@ -4444,16 +4458,25 @@ a.back {
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
-  max-width: 1120px;
-  margin: 0 auto 8px;
-  padding: 10px 18px;
-  border-radius: 14px;
-  background: var(--paper);
-  border: 1px solid var(--line);
+  width: min(100%, 1272px);
+  margin: 10px auto 8px;
+  padding: 10px 24px;
+  border: 1px solid color-mix(in srgb, var(--notice-ink) 28%, transparent);
+  border-radius: var(--control-radius);
+  background: var(--notice);
+  color: var(--notice-ink);
 }
 .feedback-notice p {
   margin: 0;
   flex: 1 1 240px;
+}
+.feedback-notice .button.secondary {
+  border-color: color-mix(in srgb, var(--notice-ink) 55%, transparent);
+  background: transparent;
+  color: var(--notice-ink);
+}
+.feedback-notice .button.secondary:hover {
+  background: color-mix(in srgb, var(--notice-ink) 10%, transparent);
 }
 .feedback-state,
 .feedback-form,
@@ -4474,7 +4497,7 @@ a.back {
   min-height: 112px;
   max-height: 40vh;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--control-radius);
   padding: 10px 14px;
   background: var(--control-bg);
   color: var(--ink);
@@ -4501,7 +4524,14 @@ a.back {
   max-width: min(160px, 100%);
   height: auto;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--control-radius);
+  object-fit: contain;
+}
+@media (max-width: 659px) {
+  .feedback-thumb {
+    width: auto;
+    max-height: 120px;
+  }
 }
 .feedback-problem {
   display: grid;

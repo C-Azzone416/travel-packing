@@ -205,7 +205,7 @@ describe("the provider", () => {
     const user = userEvent.setup();
     await user.type(screen.getByLabelText("Invitation"), "abc");
     await user.click(screen.getByRole("button", { name: "Connect" }));
-    expect(await alertEl()).toHaveProperty("textContent", CONNECT_FAILURE.uncertain);
+    expect((await alertEl()).textContent).toContain(CONNECT_FAILURE.uncertain);
   });
 });
 
@@ -215,6 +215,7 @@ describe("Settings section: connecting", () => {
     expect(screen.getByRole("heading", { name: "Send feedback to the developer" })).toBeTruthy();
     const field = screen.getByLabelText("Invitation");
     expect(field).toHaveProperty("type", "password");
+    expect(field.parentElement?.classList.contains("field")).toBe(true);
     expect(field.getAttribute("autocomplete")).toBe("off");
     expect(field.getAttribute("spellcheck")).toBe("false");
     expect(
@@ -255,17 +256,28 @@ describe("Settings section: connecting", () => {
       await user.click(screen.getByRole("button", { name: "Connect" }));
     };
     await attempt();
-    expect((await alertEl()).textContent).toBe(CONNECT_FAILURE.invalid);
+    const invalidAlert = await alertEl();
+    expect(invalidAlert.textContent).toContain(CONNECT_FAILURE.invalid);
+    expect(invalidAlert.querySelector('[aria-hidden="true"]')?.textContent).toContain("⚠");
+    const field = screen.getByLabelText("Invitation");
+    expect(field.getAttribute("aria-invalid")).toBe("true");
+    const describedBy = field.getAttribute("aria-describedby")?.split(" ") ?? [];
+    expect(describedBy).toHaveLength(2);
+    expect(describedBy.every((id) => Boolean(document.getElementById(id)))).toBe(true);
     push({ notice: "connection-uncertain" });
     await attempt();
     await waitFor(() =>
-      expect(document.querySelector(".field-error")?.textContent).toBe(CONNECT_FAILURE.uncertain),
+      expect(document.querySelector(".field-error")?.textContent).toContain(
+        CONNECT_FAILURE.uncertain,
+      ),
     );
     vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
     push({ notice: null });
     await attempt();
     await waitFor(() =>
-      expect(document.querySelector(".field-error")?.textContent).toBe(CONNECT_FAILURE.offline),
+      expect(document.querySelector(".field-error")?.textContent).toContain(
+        CONNECT_FAILURE.offline,
+      ),
     );
     expect(document.body.textContent).not.toContain("code-1");
   });
@@ -465,6 +477,6 @@ describe("against the real SDK and the fake service", () => {
     );
     await user.type(await screen.findByLabelText("Invitation"), "A".repeat(43));
     await user.click(screen.getByRole("button", { name: "Connect" }));
-    expect((await alertEl()).textContent).toBe(CONNECT_FAILURE.invalid);
+    expect((await alertEl()).textContent).toContain(CONNECT_FAILURE.invalid);
   });
 });

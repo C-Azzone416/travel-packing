@@ -197,7 +197,10 @@ export function FeedbackSheet({
         <div className="feedback-form">
           {problem ? (
             <div className="feedback-problem" role="alert">
-              <p className="field-error">{PROBLEM_TEXT[problem]}</p>
+              <p className="field-error">
+                <span aria-hidden="true">⚠ </span>
+                {PROBLEM_TEXT[problem]}
+              </p>
               {problem === "unavailable" && include && blob ? (
                 <p className="tiny muted">{COPY.tryWithoutScreenshot}</p>
               ) : null}

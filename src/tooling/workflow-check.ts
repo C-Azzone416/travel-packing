@@ -220,6 +220,50 @@ export function checkDeployWorkflow(workflow: string): string[] {
     );
   if (!/npx tsx scripts\/check-package-credentials\.ts/.test(buildStep))
     problems.push("vercel build must fail closed when a package credential is present");
+  const previewFeedback = stepsOf(
+    jobBody(workflow, "deploy") ?? "",
+    "Preview contains feedback UI and browser SDK",
+  );
+  if (
+    previewFeedback.length !== 1 ||
+    !/if:\s*env\.TARGET == 'preview'/.test(previewFeedback[0]) ||
+    !/run:\s*npm run check:preview-feedback-in-build -- \.vercel\/output/.test(previewFeedback[0])
+  ) {
+    problems.push("the exact Vercel Preview artifact must prove feedback UI and SDK are present");
+  }
+  for (const [name, command, message] of [
+    [
+      "Production contains no feedback UI or browser SDK",
+      "check:no-feedback-in-build",
+      "the exact Vercel Production artifact must prove feedback UI and SDK are absent",
+    ],
+    [
+      "Production contains no screenshot capture",
+      "check:no-capture-in-build",
+      "the exact Vercel Production artifact must prove screenshot capture is absent",
+    ],
+  ] as const) {
+    const steps = stepsOf(jobBody(workflow, "deploy") ?? "", name);
+    if (
+      steps.length !== 1 ||
+      !/if:\s*env\.TARGET == 'production'/.test(steps[0]) ||
+      !steps[0].includes(`run: npm run ${command} -- .vercel/output`)
+    ) {
+      problems.push(message);
+    }
+  }
+  const buildIndex = workflow.indexOf("      - name: Build\n");
+  const deployIndex = workflow.indexOf("      - name: Deploy\n");
+  for (const check of [
+    "Preview contains feedback UI and browser SDK",
+    "Production contains no feedback UI or browser SDK",
+    "Production contains no screenshot capture",
+  ]) {
+    const index = workflow.indexOf(`      - name: ${check}\n`);
+    if (!(index > buildIndex && index < deployIndex)) {
+      problems.push(`${check} must run after build and before deploy`);
+    }
+  }
   if (count(/NODE_AUTH_TOKEN:/g) !== 1)
     problems.push("NODE_AUTH_TOKEN may appear only on the deploy root fetch-only install");
   const cliInstall =
@@ -787,6 +831,8 @@ export function checkCiWorkflow(workflow: string): string[] {
     problems.push("the e2e job must download the e2e build");
   if (!/E2E_PREBUILT:\s*"1"/.test(e2e))
     problems.push("the e2e job must start the downloaded build (E2E_PREBUILT)");
+  if (!/FEEDBACK_DESIGN_SHOTS:\s*test-results\/feedback-design/.test(e2e))
+    problems.push("the e2e job must preserve the feedback design matrix in its artifact");
   if (!/npm run test:e2e -- --project="\$E2E_PROJECT"/.test(e2e))
     problems.push("the e2e job must run npm run test:e2e for its own project");
   if (/--shard|workers/.test(e2e))

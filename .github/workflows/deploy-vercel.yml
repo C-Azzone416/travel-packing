@@ -146,6 +146,18 @@ jobs:
       - name: No test-only code in the build
         run: npm run check:no-e2e-in-build
 
+      - name: Preview contains feedback UI and browser SDK
+        if: env.TARGET == 'preview'
+        run: npm run check:preview-feedback-in-build -- .vercel/output
+
+      - name: Production contains no feedback UI or browser SDK
+        if: env.TARGET == 'production'
+        run: npm run check:no-feedback-in-build -- .vercel/output
+
+      - name: Production contains no screenshot capture
+        if: env.TARGET == 'production'
+        run: npm run check:no-capture-in-build -- .vercel/output
+
       # The migrate and seed steps use the GitHub environment's secret, which the Vercel env check never sees. Prove it
       # points at the right database first: not production in a preview run, production in a production run.
       - name: Check the migration target

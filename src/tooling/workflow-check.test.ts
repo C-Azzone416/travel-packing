@@ -122,6 +122,30 @@ describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
       /vercel build must fail closed when a package credential is present/,
     ],
     [
+      "the exact Preview artifact check is removed",
+      mutate(
+        /      - name: Preview contains feedback UI and browser SDK\n        if: env\.TARGET == 'preview'\n        run: npm run check:preview-feedback-in-build -- \.vercel\/output\n/,
+        "",
+      ),
+      /exact Vercel Preview artifact must prove feedback UI and SDK are present/,
+    ],
+    [
+      "the Production feedback exclusion check runs on Preview",
+      mutate(
+        "      - name: Production contains no feedback UI or browser SDK\n        if: env.TARGET == 'production'",
+        "      - name: Production contains no feedback UI or browser SDK\n        if: env.TARGET == 'preview'",
+      ),
+      /exact Vercel Production artifact must prove feedback UI and SDK are absent/,
+    ],
+    [
+      "the Production capture exclusion check is weakened",
+      mutate(
+        "        run: npm run check:no-capture-in-build -- .vercel/output\n",
+        "        run: echo skipped-capture-check\n",
+      ),
+      /exact Vercel Production artifact must prove screenshot capture is absent/,
+    ],
+    [
       "dependency scripts receive the package token",
       mutate(
         "      - name: Run install scripts without package credential\n        run:",
@@ -999,6 +1023,15 @@ describe("checkCiWorkflow", () => {
       /at the same time/,
     ],
     ["e2e rebuilding", inJob("e2e", 'E2E_PREBUILT: "1"', 'E2E_PREBUILT: "0"'), /E2E_PREBUILT/],
+    [
+      "feedback design evidence is not preserved",
+      inJob(
+        "e2e",
+        "FEEDBACK_DESIGN_SHOTS: test-results/feedback-design",
+        "FEEDBACK_DESIGN_SHOTS: ''",
+      ),
+      /preserve the feedback design matrix/,
+    ],
     [
       "e2e without the download",
       inJob("e2e", "name: e2e-build\n          path: .next", "name: other\n          path: .next"),

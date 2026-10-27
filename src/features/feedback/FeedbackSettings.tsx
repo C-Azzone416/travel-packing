@@ -40,6 +40,7 @@ export function FeedbackSettings() {
   const toast = useToast();
   const fieldId = useId();
   const helpId = useId();
+  const errorId = useId();
   const [invitation, setInvitation] = useState("");
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
@@ -149,27 +150,31 @@ export function FeedbackSettings() {
       ) : null}
       {showForm ? (
         <form onSubmit={submit} className="feedback-form">
-          <label htmlFor={fieldId}>Invitation</label>
-          <input
-            id={fieldId}
-            type="password"
-            autoComplete="off"
-            spellCheck={false}
-            value={invitation}
-            aria-describedby={helpId}
-            onChange={(event) => setInvitation(event.target.value)}
-          />
-          <p id={helpId} className="tiny muted">
-            Paste the invitation the developer sent you. It works once and isn’t stored.
-          </p>
+          <div className="field">
+            <label htmlFor={fieldId}>Invitation</label>
+            <input
+              id={fieldId}
+              type="password"
+              autoComplete="off"
+              spellCheck={false}
+              value={invitation}
+              aria-invalid={failure ? true : undefined}
+              aria-describedby={failure ? `${helpId} ${errorId}` : helpId}
+              onChange={(event) => setInvitation(event.target.value)}
+            />
+            <p id={helpId} className="tiny muted">
+              Paste the invitation the developer sent you. It works once and isn’t stored.
+            </p>
+            {failure ? (
+              <p id={errorId} className="field-error" role="alert">
+                <span aria-hidden="true">⚠ </span>
+                {failure}
+              </p>
+            ) : null}
+          </div>
           <Button type="submit" disabled={busy || invitation.trim() === ""}>
             {busy ? "Connecting…" : "Connect"}
           </Button>
-          {failure ? (
-            <p className="field-error" role="alert">
-              {failure}
-            </p>
-          ) : null}
         </form>
       ) : null}
       <p className="tiny muted">

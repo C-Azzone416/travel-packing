@@ -4,12 +4,12 @@
 import { statSync } from "node:fs";
 import { FRAMEBRIAR_MARKERS, markerHits } from "../src/tooling/build-markers";
 
-const BUILD_DIR = ".next";
+const BUILD_DIR = process.argv[2] ?? ".next";
 
 try {
   statSync(BUILD_DIR);
 } catch {
-  console.error(`No ${BUILD_DIR} directory: run \`npm run build:preview\` first.`);
+  console.error(`No ${BUILD_DIR} directory: build Preview first.`);
   process.exit(2);
 }
 
