@@ -289,7 +289,8 @@ describe("two accounts, two devices, a cleared browser", () => {
       credentials: row.credentials,
       expiresAt: row.expiresAt,
     });
-    expect(await svc.accessToken(B)).toEqual({ ok: false, code: "UNAVAILABLE" });
+    expect(await svc.accessToken(B)).toEqual({ ok: false, code: "NEEDS_RECONNECT" });
+    expect((await svc.status(B)).status).toBe("needs_reconnect");
   });
 });
 
@@ -418,11 +419,113 @@ describe("key rotation", () => {
     expect(await service().accessToken(A)).toMatchObject({ ok: true });
   });
 
-  it("a lost key means unavailable (re-invitation), never a crash and never a plaintext fallback", async () => {
+  it("a key ring that cannot open the row (a removed version, or a wrong key) is needs_reconnect, not connected", async () => {
+    await connect(service());
+    for (const wrong of [ringOf("k9", { k9: keyText() }), ringOf("k1", { k1: keyText() })]) {
+      ring = wrong;
+      const svc = service();
+      expect(await svc.status(A)).toMatchObject({
+        status: "needs_reconnect",
+        expiresAt: null,
+        redemption: "none",
+      });
+      expect(await svc.accessToken(A)).toEqual({ ok: false, code: "NEEDS_RECONNECT" });
+    }
+    expect(fake.count("refresh")).toBe(0);
+  });
+
+  it("a missing key ring is unavailable and touches nothing: a missing secret is not lost data", async () => {
+    await connect(service());
+    const before = (await rows())[0];
+    const svc = service({ keys: () => null });
+    expect((await svc.status(A)).status).toBe("unavailable");
+    expect(await svc.accessToken(A)).toEqual({ ok: false, code: "UNAVAILABLE" });
+    expect(await svc.redeem(A, fake.issueInvitation())).toEqual({ ok: false, code: "UNAVAILABLE" });
+    expect(await svc.disconnect(A)).toEqual({ ok: false, code: "UNAVAILABLE" });
+    expect(await svc.revokeAndEraseEnrollment(A)).toEqual({
+      status: "failed",
+      reason: "unavailable",
+    });
+    expect((await rows())[0]).toEqual(before);
+    // The key comes back and everything works again.
+    expect((await service().status(A)).status).toBe("connected");
+  });
+
+  it("a row nobody can read replaces cleanly on a new invitation, and the recovery is a real connection", async () => {
     await connect(service());
     ring = ringOf("k9", { k9: keyText() });
-    expect(await service().accessToken(A)).toEqual({ ok: false, code: "UNAVAILABLE" });
-    expect((await service().status(A)).status).toBe("connected");
+    const svc = service();
+    expect((await svc.status(A)).status).toBe("needs_reconnect");
+    const [stale] = await rows();
+    expect(await svc.redeem(A, fake.issueInvitation())).toMatchObject({
+      ok: true,
+      status: "connected",
+    });
+    const [fresh] = await rows();
+    expect(fresh.keyVersion).toBe("k9");
+    expect(fresh.revision).toBe(stale.revision + 1);
+    expect((await svc.status(A)).status).toBe("connected");
+    expect(await svc.accessToken(A)).toMatchObject({ ok: true });
+    expect(fake.count("redeem")).toBe(2);
+  });
+
+  it("replacing is safe against a racing writer: it never overwrites a row that changed since it was seen", async () => {
+    await connect(service());
+    ring = ringOf("k9", { k9: keyText() });
+    const invitation = fake.issueInvitation();
+    const svc = service();
+    // Another instance replaces the row between this redeem reading it and committing.
+    const original = fake.fetch;
+    let raced = false;
+    const racing = createEnrollmentService({
+      db: db(),
+      client: createFramebriarClient({
+        fetchImpl: (async (input: RequestInfo | URL, init?: RequestInit) => {
+          if (!raced) {
+            raced = true;
+            await db()
+              .update(schema.framebriarEnrollments)
+              .set({ revision: 99 })
+              .where(eq(schema.framebriarEnrollments.ownerId, A));
+          }
+          return original(input, init);
+        }) as typeof fetch,
+        now,
+      }),
+      keys: () => ring,
+      now,
+    });
+    expect(await racing.redeem(A, invitation)).toEqual({ ok: false, code: "UNCERTAIN" });
+    expect((await rows())[0].revision).toBe(99);
+    expect((await racing.status(A)).redemption).toBe("pending");
+    // The retry reuses the attempt id (the same family) and commits against the row as it is now.
+    expect(await svc.redeem(A, invitation)).toMatchObject({ ok: true });
+    expect(fake.familyCount()).toBe(2);
+    expect((await rows())[0].revision).toBe(100);
+  });
+
+  it("a first connection that loses a race to another first connection does not overwrite it", async () => {
+    const svc = service();
+    const invitation = fake.issueInvitation();
+    const original = fake.fetch;
+    let raced = false;
+    const racing = createEnrollmentService({
+      db: db(),
+      client: createFramebriarClient({
+        fetchImpl: (async (input: RequestInfo | URL, init?: RequestInit) => {
+          if (!raced) {
+            raced = true;
+            await connect(svc, A);
+          }
+          return original(input, init);
+        }) as typeof fetch,
+        now,
+      }),
+      keys: () => ring,
+      now,
+    });
+    expect(await racing.redeem(A, invitation)).toEqual({ ok: false, code: "UNCERTAIN" });
+    expect((await rows())[0].revision).toBe(1);
   });
 });
 
@@ -504,11 +607,79 @@ describe("disconnect and revokeAndEraseEnrollment", () => {
     expect(await rows()).toHaveLength(0);
   });
 
-  it("with no usable key it fails closed instead of erasing a credential it cannot revoke", async () => {
+  it("with no key ring at all it fails closed instead of erasing anything", async () => {
     await connect(service());
     const result = await service({ keys: () => null }).revokeAndEraseEnrollment(A);
     expect(result).toEqual({ status: "failed", reason: "unavailable" });
     expect(await rows()).toHaveLength(1);
+  });
+
+  it("a ring that cannot open the row: disconnect erases it and says nothing was revoked", async () => {
+    await connect(service());
+    ring = ringOf("k9", { k9: keyText() });
+    expect(await service().disconnect(A)).toEqual({ ok: true, revoked: false });
+    expect(await rows()).toHaveLength(0);
+    expect(fake.count("disconnect")).toBe(0);
+    expect(fake.activeFamilies()).toBe(1);
+    expect((await service().status(A)).status).toBe("not-connected");
+  });
+
+  it("a ring that cannot open the row: the seam erases everything and reports erased_unrevocable, a distinct result", async () => {
+    await connect(service());
+    ring = ringOf("k9", { k9: keyText() });
+    const result = await service().revokeAndEraseEnrollment(A);
+    expect(result).toEqual({ status: "erased_unrevocable", unrevocableAttempts: 0 });
+    expect(result.status).not.toBe("erased");
+    expect(await rows()).toHaveLength(0);
+    expect(await db().select().from(schema.framebriarRedemptions)).toHaveLength(0);
+    expect(await service().revokeAndEraseEnrollment(A)).toEqual({ status: "none" });
+  });
+
+  it("erased_unrevocable also clears an abandoned attempt and counts it, and a failing erase is a failure not a success", async () => {
+    const svc = service();
+    await connect(svc);
+    clock += REDEMPTION_WINDOW_MS + 1000;
+    fake.failNext("redeem", { kind: "network" });
+    ring = ringOf("k9", { k9: keyText() });
+    await service().redeem(A, fake.issueInvitation());
+    // The redeem above replaced nothing (network failure) and left an attempt; the row is still the old unreadable one.
+    clock += REDEMPTION_WINDOW_MS + 1000;
+    const failing = {
+      ...db(),
+      select: db().select.bind(db()),
+      insert: db().insert.bind(db()),
+      delete: () => {
+        throw new Error("down");
+      },
+    } as unknown as Db;
+    const broken = createEnrollmentService({
+      db: failing,
+      client: createFramebriarClient({ fetchImpl: fake.fetch, now }),
+      keys: () => ring,
+      now,
+    });
+    expect(await broken.revokeAndEraseEnrollment(A)).toEqual({
+      status: "failed",
+      reason: "unavailable",
+    });
+    expect(await rows()).toHaveLength(1);
+    expect(await service().revokeAndEraseEnrollment(A)).toEqual({
+      status: "erased_unrevocable",
+      unrevocableAttempts: 1,
+    });
+    expect(await rows()).toHaveLength(0);
+    expect(await db().select().from(schema.framebriarRedemptions)).toHaveLength(0);
+  });
+
+  it("a revoked or expired row nobody can read is still just erased as before (no revoke is needed)", async () => {
+    await connect(service());
+    clock += 31 * 86_400_000;
+    ring = ringOf("k9", { k9: keyText() });
+    expect((await service().status(A)).status).toBe("expired");
+    expect(await service().revokeAndEraseEnrollment(A)).toMatchObject({
+      status: "erased",
+      revoked: false,
+    });
   });
 
   it("while a redemption can still be retried it refuses, then counts an abandoned attempt as unrevocable", async () => {

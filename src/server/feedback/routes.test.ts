@@ -404,6 +404,29 @@ describe("enrollment routes", () => {
     expect(fake.urls()).toEqual([]);
   });
 
+  it("a key ring that cannot open the row is needs_reconnect; a new invitation replaces it", async () => {
+    await connected();
+    const other = routesFor({ VERCEL_ENV: "preview" }, randomBytes(32).toString("base64"));
+    expect(await body(await other.status(get("enrollment")))).toMatchObject({
+      status: "needs_reconnect",
+      expiresAt: null,
+    });
+    expect(await body(await other.reports(reportRequest(reportFor(null), null)))).toEqual({
+      v: 1,
+      error: "NEEDS_RECONNECT",
+    });
+    expect((await other.reports(reportRequest(reportFor(null), null))).status).toBe(409);
+    expect(
+      await body(
+        await other.redeem(post("enrollment/redeem", { invitation: fake.issueInvitation() })),
+      ),
+    ).toMatchObject({ status: "connected" });
+    expect(await body(await other.status(get("enrollment")))).toMatchObject({
+      status: "connected",
+    });
+    expect((await other.reports(reportRequest(reportFor(null), null))).status).toBe(200);
+  });
+
   it("two accounts never see each other's enrollment through the routes", async () => {
     const routes = routesFor();
     await connected(routes);

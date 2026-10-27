@@ -60,9 +60,19 @@ case it was (`FRAMEBRIAR_CREDENTIAL_KEYS injected | omitted | invalid`), never t
 2. Check what is left on `k1`: `select key_version, count(*) from framebriar_enrollments group by 1;`
 3. When nothing is on `k1` (or after 30 days, the longest an enrollment lives), remove `k1` from the ring.
 
-**Loss:** a lost or wrong key cannot be recovered. Every row sealed under it fails closed (operations answer `unavailable`). Generate a new
-ring, and **re-invite**: each account redeems a new invitation, which replaces its row. The old Framebriar families are unreachable
-and simply end at their fixed deadline (30 days); say so to the Framebriar owner if you want them revoked from their side.
+**Loss:** a lost or wrong key cannot be recovered, and it is handled in two different ways on purpose:
+
+- **The secret is missing entirely** (the variable is absent, empty or not a valid ring): status is `unavailable`. Nothing is judged or
+  erased, because a missing secret is a configuration problem, not lost data. Put the ring back and everything works again.
+- **A valid ring is present but cannot open an account's row** (that row's key version was removed from the ring, or the value is a
+  different key): status is `needs_reconnect`. The credential is unreachable, so the person redeems a **new invitation**, which
+  replaces the row (same attempt-id rules as any redemption, and a compare-and-swap on the row revision so it never overwrites a
+  row that changed meanwhile). **Disconnect** also works: it erases the row and answers `revoked: false`, because nothing was revoked.
+  The old Framebriar family can no longer be revoked from here; it simply ends at its fixed deadline (30 days). Tell the Framebriar owner
+  if you want it revoked from their side.
+
+So recovering from key loss is: generate a new ring (`openssl` command above), set it in both places, deploy, and have each affected
+account redeem a new invitation.
 
 ## Behaviour that matters
 
@@ -75,6 +85,7 @@ and simply end at their fixed deadline (30 days); say so to the Framebriar owner
   two minutes before it expires, and across instances every write names the row revision it read and loses cleanly (compare and swap),
   so two phones cannot corrupt the credential. The refresh credential does not rotate (a response that tries to is refused). A Framebriar
   rate limit stops further attempts for that account until it has passed.
+- **`needs_reconnect`**: see Loss above. It is only ever reported for an `active`, unexpired row; an expired, revoked or disabled row keeps its own status.
 - **Fail closed**: an unreachable Framebriar, key ring or database is `UNCERTAIN`/`UNAVAILABLE`, never a guess. A 401 from Framebriar marks the
   enrollment `revoked`, a 403 `disabled`; the status route then says so and nothing more is sent.
 - **The report proxy** talks to one fixed address (`FRAMEBRIAR_ENDPOINT` in `framebriar-client.ts`); no request field names a destination. It
