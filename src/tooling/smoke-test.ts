@@ -1,5 +1,6 @@
 // Post-deploy smoke test: every public auth page answers 200 to a signed-out visitor (no owner session needed, so it
-// works on the first preview, before any account exists), and a protected page sends a signed-out visitor to sign-in.
+// works on the first preview, before any account exists), except the deliberately disabled account-closure page, which
+// redirects to Settings. A protected page sends a signed-out visitor to sign-in.
 // Redirects are not followed, so a bounce is seen as a bounce. A passing check prints the path and status only. A failing
 // one also prints what tells a platform error from an app error: the x-vercel-error and x-vercel-id response headers and
 // the first 200 characters of the body. Request headers, the bypass secret and the Location header are never printed.
@@ -24,6 +25,17 @@ export interface SmokeResult {
 }
 
 const REDIRECTS = new Set([301, 302, 303, 307, 308]);
+
+function isSameSiteRedirect(response: Response, base: string, pathname: string): boolean {
+  if (!REDIRECTS.has(response.status)) return false;
+  const location = response.headers.get("location") ?? "";
+  try {
+    const target = new URL(location, base);
+    return target.host === new URL(base).host && target.pathname === pathname;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Is this Vercel Authentication (deployment protection) answering instead of the app? It answers a protected address with a 401
@@ -111,20 +123,23 @@ export async function smokeTest(
     }
   }
 
-  // The list the request gate uses, so a sign-up page (#27) is checked as soon as it becomes public.
+  // The list the request gate uses, so a sign-up page (#27) is checked as soon as it becomes public. Account closure is
+  // intentionally different while the hosted kill switch is off: accepting a 200 here would silently stop pinning the
+  // disabled rollout. Enabling the feature later therefore requires an explicit smoke-contract change after its gates.
   for (const path of PUBLIC_PATHS) {
+    if (path === "/close-account") {
+      await check(
+        path,
+        "expected a redirect to /settings while account closure is disabled",
+        (response) => isSameSiteRedirect(response, base, "/settings"),
+      );
+      continue;
+    }
     await check(path, "expected 200", (response) => response.status === 200);
   }
   // A signed-out visitor to / is redirected to /sign-in ON THIS SITE: a redirect elsewhere that happens to end in /sign-in is not it.
-  await check("/", "expected a redirect to /sign-in when signed out", (response) => {
-    if (!REDIRECTS.has(response.status)) return false;
-    const location = response.headers.get("location") ?? "";
-    try {
-      const target = new URL(location, base);
-      return target.host === new URL(base).host && target.pathname === "/sign-in";
-    } catch {
-      return false;
-    }
-  });
+  await check("/", "expected a redirect to /sign-in when signed out", (response) =>
+    isSameSiteRedirect(response, base, "/sign-in"),
+  );
   return { ok, lines, vercelAuthentication };
 }
