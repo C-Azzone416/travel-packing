@@ -7,7 +7,7 @@ import { SCREENSHOT_SEND_LIMIT_BYTES } from "./screenshot-limit";
 const png = (bytes: number) => new Blob([new Uint8Array(bytes)], { type: "image/png" });
 
 const marked: Drawing = endStroke(
-  beginStroke(EMPTY_DRAWING, { color: "red", width: 6 }, { x: 5, y: 5 }),
+  beginStroke(EMPTY_DRAWING, { color: "red", width: 6, unit: 1 }, { x: 5, y: 5 }),
 );
 
 function composing(output: Blob | null) {
@@ -86,7 +86,7 @@ describe("what is sent as the screenshot", () => {
   });
 
   it("includes a stroke that is still being drawn when Send is pressed", async () => {
-    const open = beginStroke(EMPTY_DRAWING, { color: "red", width: 6 }, { x: 1, y: 1 });
+    const open = beginStroke(EMPTY_DRAWING, { color: "red", width: 6, unit: 1 }, { x: 1, y: 1 });
     const output = png(2000);
     const result = await finalScreenshot({
       include: true,
@@ -111,7 +111,7 @@ describe("what is sent as the screenshot", () => {
       drawing: marked,
       deps: composing(png(SCREENSHOT_SEND_LIMIT_BYTES)).deps,
     });
-    expect(at).toEqual({ kind: "too-large", bytes: SCREENSHOT_SEND_LIMIT_BYTES });
+    expect(at).toEqual({ kind: "too-large", bytes: SCREENSHOT_SEND_LIMIT_BYTES, annotated: true });
   });
 
   it("says too large for an annotated picture over the limit: no shrunk copy, no crop, not the unmarked picture", async () => {
@@ -122,7 +122,11 @@ describe("what is sent as the screenshot", () => {
       drawing: marked,
       deps: composing(png(SCREENSHOT_SEND_LIMIT_BYTES + 500)).deps,
     });
-    expect(result).toEqual({ kind: "too-large", bytes: SCREENSHOT_SEND_LIMIT_BYTES + 500 });
+    expect(result).toEqual({
+      kind: "too-large",
+      bytes: SCREENSHOT_SEND_LIMIT_BYTES + 500,
+      annotated: true,
+    });
     expect(result).not.toHaveProperty("blob");
   });
 
@@ -132,7 +136,11 @@ describe("what is sent as the screenshot", () => {
       original: png(SCREENSHOT_SEND_LIMIT_BYTES),
       drawing: EMPTY_DRAWING,
     });
-    expect(result).toEqual({ kind: "too-large", bytes: SCREENSHOT_SEND_LIMIT_BYTES });
+    expect(result).toEqual({
+      kind: "too-large",
+      bytes: SCREENSHOT_SEND_LIMIT_BYTES,
+      annotated: false,
+    });
   });
 
   it("says failed, without falling back to the unmarked picture, when the marks cannot be drawn", async () => {

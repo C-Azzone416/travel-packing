@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DurableFeedback, OutboxStatus } from "@masra91/framebriar/browser/durable-feedback";
@@ -13,7 +13,8 @@ import {
   type CreateOutbox,
 } from "./FeedbackAccess";
 import { FeedbackButton } from "./FeedbackButton";
-import { COPY, SCREENSHOT_SEND_LIMIT_BYTES } from "./FeedbackSheet";
+import { EDITOR_COPY } from "./ScreenshotEditor";
+import { COPY, SCREENSHOT_SEND_LIMIT_BYTES, SHOT_PROBLEM_COPY } from "./FeedbackSheet";
 
 let pathname = "/trips/6c1f7d2e-9b1a-4c55-8a2e-0d3f2c9a7b11";
 vi.mock("next/navigation", () => ({ usePathname: () => pathname }));
@@ -24,6 +25,13 @@ vi.mock("@/features/feedback/screenshot-capture", () => ({
     return capture.available;
   },
   captureScreenshot: () => capture.take(),
+}));
+
+// Compositing needs a real canvas, which jsdom does not have: the tests decide what it returns and see what it was given.
+const composite = vi.hoisted(() => ({ run: vi.fn() }));
+vi.mock("./annotation-composite", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./annotation-composite")>()),
+  compositeMarks: (...args: unknown[]) => composite.run(...args),
 }));
 
 type Enqueue = DurableFeedback["enqueue"];
@@ -169,14 +177,17 @@ describe("the review sheet", () => {
 });
 
 describe("the screenshot option", () => {
-  it("is ticked by default with a thumbnail and the plain warning", async () => {
+  it("is ticked by default with the editor and the plain warning", async () => {
     const user = userEvent.setup();
     mount();
     const dialog = await openSheet(user);
     const box = within(dialog).getByRole("checkbox", { name: COPY.screenshotLabel });
     expect(box).toHaveProperty("checked", true);
-    expect(within(dialog).getByRole("img", { name: COPY.thumbnailAlt })).toBeTruthy();
-    expect(within(dialog).getByText(COPY.screenshotNote)).toBeTruthy();
+    expect(within(dialog).getByRole("img", { name: EDITOR_COPY.canvasLabel })).toBeTruthy();
+    expect(within(dialog).getByText(COPY.screenshotHint)).toBeTruthy();
+    expect(
+      within(dialog).getByText(`${COPY.screenshotNote} ${COPY.screenshotDrawNote}`),
+    ).toBeTruthy();
   });
 
   it("is taken before the sheet opens", async () => {
@@ -186,7 +197,7 @@ describe("the screenshot option", () => {
     expect(capture.take).toHaveBeenCalledTimes(1);
   });
 
-  it("unticking removes the thumbnail and sends the notes only", async () => {
+  it("unticking removes the editor and sends the notes only", async () => {
     const user = userEvent.setup();
     const { outbox } = mount();
     const dialog = await openSheet(user);
@@ -233,37 +244,44 @@ describe("the screenshot option", () => {
     expect(SCREENSHOT_SEND_LIMIT_BYTES).toBe(4_000_000);
   });
 
-  it("a screenshot over the sendable size is not offered, never shrunk, and the notes still send", async () => {
-    capture.take.mockResolvedValue(
-      new Blob([new Uint8Array(SCREENSHOT_SEND_LIMIT_BYTES + 1)], { type: "image/png" }),
-    );
+  it("a screenshot over the sendable size stays ticked with the alert, is not sent or shrunk, and unticking sends the notes", async () => {
+    const big = SCREENSHOT_SEND_LIMIT_BYTES + 500_000;
+    capture.take.mockResolvedValue(new Blob([new Uint8Array(big)], { type: "image/png" }));
     const user = userEvent.setup();
     const { outbox } = mount();
     const dialog = await openSheet(user);
     const box = within(dialog).getByRole("checkbox", { name: COPY.screenshotLabel });
-    expect(box).toHaveProperty("checked", false);
-    expect(box).toHaveProperty("disabled", true);
-    expect(within(dialog).getByText(COPY.screenshotTooLarge)).toBeTruthy();
-    expect(within(dialog).queryByText(COPY.screenshotFailed)).toBeNull();
+    expect(box).toHaveProperty("checked", true);
+    expect(box).toHaveProperty("disabled", false);
+    const alert = within(dialog).getByText(SHOT_PROBLEM_COPY.alone(big));
+    expect(alert.textContent).toContain("4.5 MB, over the 4.0 MB limit");
+    // The editor tools are hidden when there is nothing to draw on.
+    expect(within(dialog).queryByRole("radiogroup")).toBeNull();
     expect(within(dialog).queryByRole("img")).toBeNull();
+
     await user.type(within(dialog).getByLabelText(COPY.notesLabel), "big screen");
+    await user.click(within(dialog).getByRole("button", { name: "Send" }));
+    expect(outbox.box.enqueue).not.toHaveBeenCalled();
+    expect(within(dialog).getByText(SHOT_PROBLEM_COPY.alone(big))).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: "Send" })).toHaveProperty("disabled", false);
+
+    await user.click(box);
+    expect(within(dialog).queryByText(SHOT_PROBLEM_COPY.alone(big))).toBeNull();
     await user.click(within(dialog).getByRole("button", { name: "Send" }));
     await screen.findByText(COPY.saved);
     expect(outbox.box.enqueue.mock.calls[0][0].report.media).toBeNull();
     expect(outbox.box.enqueue.mock.calls[0][0].media).toBeNull();
   });
 
-  it("a screenshot one byte under the sendable size is still offered; exactly at it is not (strictly smaller)", async () => {
+  it("a screenshot one byte under the sendable size is offered; exactly at it is over (strictly smaller)", async () => {
     capture.take.mockResolvedValue(
       new Blob([new Uint8Array(SCREENSHOT_SEND_LIMIT_BYTES - 1)], { type: "image/png" }),
     );
     const user = userEvent.setup();
     const first = mount();
     const dialog = await openSheet(user);
-    const box = within(dialog).getByRole("checkbox", { name: COPY.screenshotLabel });
-    expect(box).toHaveProperty("checked", true);
-    expect(box).toHaveProperty("disabled", false);
-    expect(within(dialog).queryByText(COPY.screenshotTooLarge)).toBeNull();
+    expect(within(dialog).getByRole("radiogroup", { name: EDITOR_COPY.inkGroup })).toBeTruthy();
+    expect(within(dialog).queryByText(/over the 4\.0 MB limit/)).toBeNull();
     first.unmount();
 
     capture.take.mockResolvedValue(
@@ -271,11 +289,8 @@ describe("the screenshot option", () => {
     );
     mount();
     const atLimit = await openSheet(user);
-    expect(within(atLimit).getByText(COPY.screenshotTooLarge)).toBeTruthy();
-    expect(within(atLimit).getByRole("checkbox", { name: COPY.screenshotLabel })).toHaveProperty(
-      "disabled",
-      true,
-    );
+    expect(within(atLimit).getByText(/over the 4\.0 MB limit/)).toBeTruthy();
+    expect(within(atLimit).queryByRole("radiogroup")).toBeNull();
   });
 
   it("is absent, not disabled, where the build has no screenshots (Production)", async () => {
@@ -734,5 +749,245 @@ describe("outboxView and saveFailure", () => {
     [null, "unavailable"],
   ])("%j is %s", (error, reason) => {
     expect(saveFailure(error)).toEqual({ ok: false, reason });
+  });
+});
+
+describe("marking the screenshot", () => {
+  const BOX = { left: 0, top: 0, width: 400, height: 800 };
+  const composed = () => new Blob([new Uint8Array(1234)], { type: "image/png" });
+  const surface = {
+    clearRect: vi.fn(),
+    save: vi.fn(),
+    restore: vi.fn(),
+    beginPath: vi.fn(),
+    moveTo: vi.fn(),
+    lineTo: vi.fn(),
+    quadraticCurveTo: vi.fn(),
+    arc: vi.fn(),
+    stroke: vi.fn(),
+    fill: vi.fn(),
+    drawImage: vi.fn(),
+    lineCap: "",
+    lineJoin: "",
+    lineWidth: 0,
+    strokeStyle: "",
+    fillStyle: "",
+  };
+
+  beforeEach(() => {
+    composite.run.mockReset();
+    composite.run.mockImplementation(async () => ({ kind: "ok", blob: composed() }));
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(
+      surface as unknown as CanvasRenderingContext2D,
+    );
+    vi.spyOn(HTMLCanvasElement.prototype, "getBoundingClientRect").mockReturnValue({
+      ...BOX,
+      right: 400,
+      bottom: 800,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+  });
+
+  /** Loads the preview picture (800x1600, shown at half size) and draws one mark with the mouse. */
+  function draw(dialog: HTMLElement, y = 100) {
+    const image = dialog.querySelector(".shot-image") as HTMLImageElement;
+    Object.defineProperty(image, "naturalWidth", { value: 800, configurable: true });
+    Object.defineProperty(image, "naturalHeight", { value: 1600, configurable: true });
+    fireEvent.load(image);
+    const canvas = within(dialog).getByRole("img", { name: EDITOR_COPY.canvasLabel });
+    const pointer = { pointerId: 1, pointerType: "mouse", button: 0 };
+    fireEvent.pointerDown(canvas, { ...pointer, clientX: 50, clientY: y });
+    fireEvent.pointerMove(canvas, { ...pointer, clientX: 120, clientY: y + 40 });
+    fireEvent.pointerUp(canvas, { ...pointer, clientX: 200, clientY: y + 40 });
+  }
+
+  async function writeNote(
+    user: ReturnType<typeof userEvent.setup>,
+    dialog: HTMLElement,
+    text = "Look here",
+  ) {
+    await user.type(within(dialog).getByLabelText(COPY.notesLabel), text);
+  }
+
+  it("queues the PNG with the marks on it, made from the reviewed picture and these strokes", async () => {
+    const user = userEvent.setup();
+    const reviewed = png();
+    capture.take.mockResolvedValue(reviewed);
+    const { outbox } = mount();
+    const dialog = await openSheet(user);
+    draw(dialog);
+    await writeNote(user, dialog);
+    await user.click(within(dialog).getByRole("button", { name: "Send" }));
+    await screen.findByText(COPY.saved);
+
+    expect(composite.run).toHaveBeenCalledTimes(1);
+    const [source, strokes] = composite.run.mock.calls[0];
+    expect(source).toBe(reviewed);
+    expect(strokes).toHaveLength(1);
+    expect(strokes[0].points[0]).toEqual({ x: 100, y: 200 });
+    const { report, media } = outbox.box.enqueue.mock.calls[0][0];
+    expect(report.media).toMatchObject({ type: "image/png", bytes: 1234 });
+    expect(media?.size).toBe(1234);
+  });
+
+  it("queues the reviewed picture itself, untouched, when nothing was drawn", async () => {
+    const user = userEvent.setup();
+    const { outbox } = mount();
+    const dialog = await openSheet(user);
+    await writeNote(user, dialog);
+    await user.click(within(dialog).getByRole("button", { name: "Send" }));
+    await screen.findByText(COPY.saved);
+    expect(composite.run).not.toHaveBeenCalled();
+    expect(outbox.box.enqueue.mock.calls[0][0].report.media).toMatchObject({ bytes: 64 });
+  });
+
+  it("sends text only when unticked, whatever was drawn, and brings the marks back when ticked again", async () => {
+    const user = userEvent.setup();
+    const { outbox } = mount();
+    const dialog = await openSheet(user);
+    draw(dialog);
+    expect(within(dialog).getByText("1 mark.")).toBeTruthy();
+    const box = within(dialog).getByRole("checkbox", { name: COPY.screenshotLabel });
+    await user.click(box);
+    expect(within(dialog).queryByRole("radiogroup")).toBeNull();
+    await user.click(box);
+    expect(within(dialog).getByText("1 mark.")).toBeTruthy();
+    await user.click(box);
+    await writeNote(user, dialog);
+    await user.click(within(dialog).getByRole("button", { name: "Send" }));
+    await screen.findByText(COPY.saved);
+    expect(composite.run).not.toHaveBeenCalled();
+    expect(outbox.box.enqueue.mock.calls[0][0].report.media).toBeNull();
+    expect(outbox.box.enqueue.mock.calls[0][0].media).toBeNull();
+  });
+
+  it("does not send a picture with marks over the limit, says so, and recovers with Clear drawing", async () => {
+    const user = userEvent.setup();
+    const reviewed = png();
+    capture.take.mockResolvedValue(reviewed);
+    composite.run.mockResolvedValue({
+      kind: "ok",
+      blob: new Blob([new Uint8Array(SCREENSHOT_SEND_LIMIT_BYTES + 200_000)], {
+        type: "image/png",
+      }),
+    });
+    const { outbox } = mount();
+    const dialog = await openSheet(user);
+    draw(dialog);
+    await writeNote(user, dialog);
+    await user.click(within(dialog).getByRole("button", { name: "Send" }));
+    const message = SHOT_PROBLEM_COPY.marks(SCREENSHOT_SEND_LIMIT_BYTES + 200_000);
+    expect(await within(dialog).findByText(message)).toBeTruthy();
+    expect(message).toContain("4.2 MB, over the 4.0 MB limit");
+    expect(outbox.box.enqueue).not.toHaveBeenCalled();
+    expect(within(dialog).getByLabelText(COPY.notesLabel)).toHaveProperty("value", "Look here");
+    expect(within(dialog).getByRole("button", { name: "Send" })).toHaveProperty("disabled", false);
+
+    // Changing the marks is the way out: the old message goes, and the unmarked picture is what is sent.
+    await user.click(within(dialog).getByRole("button", { name: "Clear drawing" }));
+    expect(within(dialog).queryByText(message)).toBeNull();
+    await user.click(within(dialog).getByRole("button", { name: "Send" }));
+    await screen.findByText(COPY.saved);
+    expect(outbox.box.enqueue.mock.calls[0][0].report.media).toMatchObject({ bytes: 64 });
+  });
+
+  it("does not send when the marks cannot be added, keeps the notes, and unticking sends them", async () => {
+    const user = userEvent.setup();
+    composite.run.mockResolvedValue({ kind: "failed" });
+    const { outbox } = mount();
+    const dialog = await openSheet(user);
+    draw(dialog);
+    await writeNote(user, dialog);
+    await user.click(within(dialog).getByRole("button", { name: "Send" }));
+    expect(await within(dialog).findByText(SHOT_PROBLEM_COPY.failed)).toBeTruthy();
+    expect(outbox.box.enqueue).not.toHaveBeenCalled();
+    expect(within(dialog).getByLabelText(COPY.notesLabel)).toHaveProperty("value", "Look here");
+
+    await user.click(within(dialog).getByRole("checkbox", { name: COPY.screenshotLabel }));
+    expect(within(dialog).queryByText(SHOT_PROBLEM_COPY.failed)).toBeNull();
+    await user.click(within(dialog).getByRole("button", { name: "Send" }));
+    await screen.findByText(COPY.saved);
+    expect(outbox.box.enqueue.mock.calls[0][0].report.media).toBeNull();
+  });
+
+  it("turns the tools off while saving", async () => {
+    const user = userEvent.setup();
+    let release: () => void = () => undefined;
+    const outbox = createFakeOutbox(
+      () =>
+        new Promise((resolve) => {
+          release = () =>
+            resolve({ id: "x", gameId: "travel-packing", status: "saved-local", sent: false });
+        }),
+    );
+    mount({ outbox });
+    const dialog = await openSheet(user);
+    draw(dialog);
+    await writeNote(user, dialog);
+    await user.click(within(dialog).getByRole("button", { name: "Send" }));
+    await within(dialog).findByRole("button", { name: "Saving…" });
+    expect(within(dialog).getByRole("button", { name: "Undo" })).toHaveProperty("disabled", true);
+    expect(within(dialog).getByRole("button", { name: "Clear drawing" })).toHaveProperty(
+      "disabled",
+      true,
+    );
+    expect(within(dialog).getByRole("checkbox", { name: COPY.screenshotLabel })).toHaveProperty(
+      "disabled",
+      true,
+    );
+    await act(async () => release());
+  });
+
+  it("opens each sheet clean: cancelling throws the marks away", async () => {
+    const user = userEvent.setup();
+    mount();
+    const first = await openSheet(user);
+    draw(first);
+    expect(within(first).getByText("1 mark.")).toBeTruthy();
+    await user.click(within(first).getByRole("button", { name: "Cancel" }));
+    const second = await openSheet(user);
+    expect(within(second).getByText(EDITOR_COPY.hint)).toBeTruthy();
+    expect(within(second).getByRole("button", { name: "Clear drawing" })).toHaveProperty(
+      "disabled",
+      true,
+    );
+  });
+
+  it("prepares a new report when the marks change after a save that could not be confirmed", async () => {
+    const user = userEvent.setup();
+    const outbox = createFakeOutbox();
+    outbox.box.enqueue.mockRejectedValueOnce(new Error("unconfirmed"));
+    mount({ outbox });
+    const dialog = await openSheet(user);
+    draw(dialog);
+    await writeNote(user, dialog);
+    await user.click(within(dialog).getByRole("button", { name: "Send" }));
+    await within(dialog).findByRole("alert");
+    expect(composite.run).toHaveBeenCalledTimes(1);
+    draw(dialog, 300);
+    await user.click(within(dialog).getByRole("button", { name: "Send" }));
+    await screen.findByText(COPY.saved);
+    expect(composite.run).toHaveBeenCalledTimes(2);
+    expect(composite.run.mock.calls[1][1]).toHaveLength(2);
+  });
+
+  it("puts a visible alert on the picture group, not the whole sheet, and keeps Cancel and Send in the dialog footer", async () => {
+    const user = userEvent.setup();
+    composite.run.mockResolvedValue({ kind: "failed" });
+    mount();
+    const dialog = await openSheet(user);
+    draw(dialog);
+    await writeNote(user, dialog);
+    await user.click(within(dialog).getByRole("button", { name: "Send" }));
+    const alert = (await within(dialog).findByText(SHOT_PROBLEM_COPY.failed)).closest(
+      "[role=alert]",
+    );
+    expect(alert?.closest(".feedback-shot")).toBeTruthy();
+    const footer = dialog.querySelector(".modal-actions");
+    expect(footer?.contains(within(dialog).getByRole("button", { name: "Send" }))).toBe(true);
+    expect(footer?.contains(within(dialog).getByRole("button", { name: "Cancel" }))).toBe(true);
+    expect(footer?.closest(".feedback-form")).toBeNull();
   });
 });

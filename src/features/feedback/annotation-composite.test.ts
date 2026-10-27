@@ -8,7 +8,7 @@ import {
   type CompositeDeps,
   type DrawingSurface,
 } from "./annotation-composite";
-import { INK_COLORS, type Stroke } from "./annotation-model";
+import { EDGE_HALO, EDGE_OUTLINE, INK_COLORS, type Stroke } from "./annotation-model";
 
 /** A surface that records every call, so a test can read what was drawn, in what colour and where. */
 function recordingSurface() {
@@ -79,6 +79,7 @@ function fakeDeps(
 const stroke = (overrides: Partial<Stroke> = {}): Stroke => ({
   color: "red",
   width: 6,
+  unit: 1,
   points: [
     { x: 10, y: 10 },
     { x: 40, y: 10 },
@@ -100,19 +101,28 @@ describe("compositing the marks onto the reviewed screenshot", () => {
     expect(fake.calls).toContain("stroke");
   });
 
-  it("smooths a stroke through its midpoints and ends on the last point", async () => {
+  it("draws each stroke in three passes over the same path: outline, white halo, then the colour", async () => {
+    const fake = fakeDeps();
+    await compositeMarks(source, [stroke({ width: 6, unit: 1 })], fake.deps);
+    // Rings are 1 and 1.5 CSS px wide on each side: the outline pass is 6 + 2 x 2.5 = 11, the halo 6 + 2 x 1.5 = 9, the core 6.
+    expect(fake.styles).toEqual([
+      { stroke: EDGE_OUTLINE, fill: "", width: 11 },
+      { stroke: EDGE_HALO, fill: "", width: 9 },
+      { stroke: INK_COLORS[1].value, fill: "", width: 6 },
+    ]);
+  });
+
+  it("scales the rings with the picture: a stroke drawn at 2 natural px per CSS px has rings twice as wide", async () => {
+    const fake = fakeDeps();
+    await compositeMarks(source, [stroke({ width: 8, unit: 2 })], fake.deps);
+    expect(fake.styles.map((style) => style.width)).toEqual([18, 14, 8]);
+  });
+
+  it("smooths a stroke through its midpoints and ends on the last point, the same path in every pass", async () => {
     const fake = fakeDeps();
     await compositeMarks(source, [stroke()], fake.deps);
-    expect(fake.calls).toEqual([
-      "image 0,0",
-      "save",
-      "begin",
-      "move 10,10",
-      "curve 40,10 55,25",
-      "line 70,40",
-      "stroke",
-      "restore",
-    ]);
+    const pass = ["begin", "move 10,10", "curve 40,10 55,25", "line 70,40", "stroke"];
+    expect(fake.calls).toEqual(["image 0,0", "save", ...pass, ...pass, ...pass, "restore"]);
   });
 
   it("draws a two-point stroke as a straight line", async () => {
@@ -129,33 +139,39 @@ describe("compositing the marks onto the reviewed screenshot", () => {
       ],
       fake.deps,
     );
-    expect(fake.calls).toEqual([
-      "image 0,0",
-      "save",
-      "begin",
-      "move 1,2",
-      "line 30,40",
-      "stroke",
-      "restore",
-    ]);
+    const pass = ["begin", "move 1,2", "line 30,40", "stroke"];
+    expect(fake.calls).toEqual(["image 0,0", "save", ...pass, ...pass, ...pass, "restore"]);
   });
 
-  it("draws a tap as a filled dot as wide as the line", async () => {
-    const fake = fakeDeps();
-    await compositeMarks(source, [stroke({ width: 10, points: [{ x: 5, y: 6 }] })], fake.deps);
-    expect(fake.calls).toContain("arc 5,6 r5");
-    expect(fake.calls).toContain("fill");
-    expect(fake.calls).not.toContain("stroke");
-  });
-
-  it("uses each stroke's own colour and width", async () => {
+  it("draws a tap as dots: edge rings, then the colour, each as wide as its line", async () => {
     const fake = fakeDeps();
     await compositeMarks(
       source,
-      [stroke({ color: "blue", width: 8 }), stroke({ color: "white", width: 3 })],
+      [stroke({ width: 10, unit: 1, points: [{ x: 5, y: 6 }] })],
       fake.deps,
     );
-    expect(fake.styles).toEqual([
+    expect(fake.calls.filter((call) => call.startsWith("arc"))).toEqual([
+      "arc 5,6 r7.5",
+      "arc 5,6 r6.5",
+      "arc 5,6 r5",
+    ]);
+    expect(fake.calls).not.toContain("stroke");
+    expect(fake.styles.map((style) => style.fill)).toEqual([
+      EDGE_OUTLINE,
+      EDGE_HALO,
+      INK_COLORS[1].value,
+    ]);
+  });
+
+  it("uses each stroke's own colour", async () => {
+    const fake = fakeDeps();
+    await compositeMarks(
+      source,
+      [stroke({ color: "blue", width: 8 }), stroke({ color: "yellow", width: 3 })],
+      fake.deps,
+    );
+    const cores = fake.styles.filter((_style, index) => index % 3 === 2);
+    expect(cores).toEqual([
       { stroke: INK_COLORS[2].value, fill: "", width: 8 },
       { stroke: INK_COLORS[3].value, fill: "", width: 3 },
     ]);

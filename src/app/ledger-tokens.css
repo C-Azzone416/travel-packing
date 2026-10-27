@@ -168,3 +168,11 @@
   --control-radius: 4px;
   --state-radius: 50%;
 }
+
+/* The two rings under every annotation stroke (#266, design's spec section 2): a near-black line outside, then a white halo, then the
+   ink. They are the same in every theme on purpose: the stroke must show on a light, a dark and a mid-grey picture, which is
+   independent of the app's colours. The ink hexes themselves live in annotation-model.ts because they are painted into a PNG. */
+:root {
+  --ink-edge-outer: #111111;
+  --ink-edge-halo: #ffffff;
+}

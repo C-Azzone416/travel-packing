@@ -96,6 +96,17 @@ server without its key ring) and needs reconnect.
 2. **Received.** The outbox delivers later, with persisted backoff, resuming when the connection comes back (online event, connected
    status, page shown). The service's confirmation turns the open sheet into "Received. Thank you." or raises a toast.
 
+Annotation (#266). The review sheet shows the screenshot large (`ScreenshotEditor.tsx`) and the person can mark it. The marks are plain
+data in the picture's natural pixels (`annotation-model.ts`: four inks, Undo / Clear drawing with Undo restoring a Clear, bounds on
+strokes and points, pointer to natural-pixel mapping with letterboxing, stroke width = 4 CSS px as shown). They live only in the open
+sheet's React state, keyed by the outbox scope (`use-annotation-draft.ts`), so cancel, sign-out, an account switch or a second sheet can
+never show or attach them; nothing is stored. At Send, `annotation-final.ts` makes the one decision before anything reaches the route or
+the outbox: no picture (unticked: nothing is composited), the reviewed Blob untouched (no marks), or `annotation-composite.ts` draws the
+strokes (two rings under the ink, so they show on light and dark pictures) onto the natural-size image and exports a PNG. A result that is
+not **strictly under** 4,000,000 bytes (`screenshot-limit.ts`) is refused with a recoverable message; it is never shrunk, cropped, sent
+without its marks or replaced. The feature is Preview-only like the rest of the feedback UI (the editor has a build marker, so the
+Production absence check covers it and the Preview positive check requires it).
+
 What a report may contain (`capture-policy.ts`): the person's notes, an optional screenshot, and approved codes and numbers only: the
 screen code (`trips`, `new-trip`, `trip`, `review`, `staples`, `other`; never the path), a viewport class, the input kind, the app
 version, the capture time. No trip names, places, dates, emails or ids. The sheet lists what is sent. Capture is blocked on Settings

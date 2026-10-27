@@ -19,7 +19,7 @@ import {
 // goes away (cancel, sign-out, a second sheet), they are gone, so another account's sheet can never show or attach them.
 export interface AnnotationDraft {
   drawing: Drawing;
-  begin(ink: { color: InkColorId; width: number }, point: Point): void;
+  begin(ink: { color: InkColorId; width: number; unit: number }, point: Point): void;
   extend(point: Point): void;
   end(): void;
   cancel(): void;

@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { hasMarks, strokeCount } from "./annotation-model";
 import { useAnnotationDraft } from "./use-annotation-draft";
 
-const ink = { color: "red", width: 6 } as const;
+const ink = { color: "red", width: 6, unit: 1 } as const;
 
 function drawOne(draft: ReturnType<typeof useAnnotationDraft>, x = 10) {
   draft.begin(ink, { x, y: x });

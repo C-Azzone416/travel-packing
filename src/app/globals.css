@@ -4540,21 +4540,160 @@ a.back {
   height: 22px;
   accent-color: var(--accent);
 }
+/* Feedback sheet with the screenshot editor (#266, design's spec). Like Edit Trip, the heading and the Cancel / Send footer stay in
+   view and only the body scrolls. --feedback-vh follows the VISUAL viewport (the software keyboard), set by the sheet while it is open. */
+:root {
+  --feedback-vh: 100dvh;
+}
+.modal:has(.feedback-form) {
+  display: flex;
+  flex-direction: column;
+  width: min(100%, 760px);
+  max-height: calc(var(--feedback-vh) - 36px);
+  overflow: hidden;
+}
+.modal:has(.feedback-form) .modal-head {
+  flex: none;
+}
+.modal .feedback-form {
+  flex: 1 1 auto;
+  align-content: start;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0 -21px;
+  padding: 0 21px;
+}
+.modal:has(.feedback-form) .modal-actions {
+  flex: none;
+  margin: 12px -21px -21px;
+  padding: 12px 21px;
+  border-top: 1px solid var(--line);
+  background: var(--paper);
+}
 .feedback-shot {
   display: grid;
-  gap: 6px;
+  gap: 10px;
+  margin-top: 6px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
 }
-.feedback-thumb {
-  max-width: min(160px, 100%);
-  height: auto;
-  border: 1px solid var(--line);
+.feedback-shot-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px 12px;
+}
+.shot-editor,
+.shot-tools {
+  display: grid;
+  gap: 8px;
+}
+.ink-picker {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.ink-swatch {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 2px;
+  min-height: 44px;
+  padding: 4px 6px;
+  border: 1px solid var(--line-strong);
   border-radius: var(--control-radius);
+  background: var(--control-bg);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+/* Selection is a heavier border (inset, so nothing shifts), a tick and aria-checked: never colour alone. */
+.ink-swatch[aria-checked="true"] {
+  border-color: var(--ink);
+  box-shadow: inset 0 0 0 2px var(--ink);
+}
+.ink-swatch:focus-visible {
+  outline: 3px solid var(--accent-2);
+  outline-offset: 2px;
+}
+.ink-swatch[aria-disabled="true"] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.ink-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  /* The same two rings that sit under every stroke (a near-black line, then white), so the dot is seen on any background. */
+  box-shadow:
+    0 0 0 1.5px var(--ink-edge-halo),
+    0 0 0 2.5px var(--ink-edge-outer);
+}
+.ink-name {
+  font-size: 13px;
+  font-weight: 700;
+}
+.ink-check {
+  position: absolute;
+  top: 3px;
+  right: 7px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.shot-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.shot-actions .button {
+  min-height: 44px;
+  justify-content: center;
+}
+.shot-status {
+  margin: 0;
+}
+.shot-preview {
+  position: relative;
+  width: 100%;
+  height: min(60dvh, 480px);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--detail-surface);
+}
+.shot-image,
+.shot-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
 }
-@media (max-width: 659px) {
-  .feedback-thumb {
-    width: auto;
-    max-height: 120px;
+.shot-image {
+  pointer-events: none;
+  user-select: none;
+}
+/* Only the canvas stops the browser scrolling or zooming under a finger; the body around it still scrolls. */
+.shot-canvas {
+  touch-action: none;
+  cursor: crosshair;
+}
+@media (min-width: 660px) {
+  .shot-tools {
+    grid-template-columns: auto auto;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .ink-picker {
+    grid-template-columns: repeat(4, 88px);
+  }
+  .shot-actions {
+    display: flex;
+  }
+  .shot-preview {
+    height: min(46dvh, 420px);
   }
 }
 .feedback-problem {

@@ -25,12 +25,12 @@ test(
 
     await page.getByRole("button", { name: "Send feedback" }).click();
     const dialog = page.getByRole("dialog", { name: "Send feedback" });
-    // This is an e2e build, so the screenshot is on, ticked by default, and shown as a thumbnail.
+    // This is an e2e build, so the screenshot is on, ticked by default, and shown in the editor.
     await expect(
       dialog.getByRole("checkbox", { name: "Include a screenshot of this screen" }),
     ).toBeChecked();
     await expect(
-      dialog.getByRole("img", { name: "Screenshot of the screen you were on" }),
+      dialog.getByRole("img", { name: /^Your screenshot\. Marks you draw are sent with it/ }),
     ).toBeVisible();
     await expectAccessible(page, "feedback sheet");
     await expect(dialog.getByRole("button", { name: "Send" })).toBeDisabled();
@@ -41,7 +41,7 @@ test(
       dialog.getByText("You’re offline. It will be saved here and sent when you’re back online."),
     ).toBeVisible();
     // Playwright's WebKit keeps storage in memory only and cannot store a picture in IndexedDB (real Safari can), so on the
-    // phone the saved report is notes-only; the capture itself was still taken in WebKit, as the thumbnail above shows.
+    // phone the saved report is notes-only; the capture itself was still taken in WebKit, as the preview above shows.
     const phone = test.info().project.name === "phone";
     if (phone) {
       await dialog.getByRole("checkbox", { name: "Include a screenshot of this screen" }).uncheck();

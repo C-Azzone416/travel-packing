@@ -71,6 +71,11 @@ export const FRAMEBRIAR_MARKERS: readonly BuildMarker[] = [
     source: "src/features/feedback/delivery.ts",
   },
   {
+    name: "the screenshot annotation editor",
+    text: "Drawing needs a finger, a pen or a mouse",
+    source: "src/features/feedback/ScreenshotEditor.tsx",
+  },
+  {
     name: "the Framebriar durable outbox SDK",
     text: "outbox-v2-",
     source: "node_modules/@masra91/framebriar/adapters/browser/durable-feedback.mjs",

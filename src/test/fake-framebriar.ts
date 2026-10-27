@@ -54,6 +54,8 @@ export interface FakeFramebriarOptions {
   allowedOrigins?: readonly string[];
   /** How long a new enrollment lasts. The service's is 30 days; a test can make it short to watch it expire. */
   enrollmentMs?: number;
+  /** Keep the bytes of each uploaded picture so a test can look at them (`mediaOf`). Off by default: nothing is recorded but sizes. */
+  keepMedia?: boolean;
 }
 
 const token = () => randomBytes(32).toString("base64url");
@@ -68,7 +70,9 @@ export function createFakeFramebriar({
   now = Date.now,
   allowedOrigins,
   enrollmentMs = 30 * DAY,
+  keepMedia = false,
 }: FakeFramebriarOptions = {}) {
+  const pictures = new Map<string, Buffer>(); // report id -> uploaded PNG, only with keepMedia
   let lifetime = enrollmentMs;
   const invitations = new Map<string, { usesLeft: number; expiresAt: number }>();
   const families = new Map<string, Family>(); // by refresh token
@@ -199,6 +203,7 @@ export function createFakeFramebriar({
     )
       return respond(route, reject(400));
     entry.delivered.media = { bytes: bytes.length };
+    if (keepMedia) pictures.set(id, bytes);
     tickets.delete(ticket);
     return respond(route, reply({ id, gameId, status: "ready" }, 200));
   }
@@ -325,6 +330,8 @@ export function createFakeFramebriar({
       }
     },
     delivered: (): DeliveredReport[] => [...reports.values()].map((entry) => entry.delivered),
+    /** The picture uploaded for a report, when the fake was made with `keepMedia`. */
+    mediaOf: (id: string): Buffer | null => pictures.get(id.toLowerCase()) ?? null,
     requests: (): readonly RecordedRequest[] => log,
     count: (route: FakeRoute) => log.filter((entry) => entry.route === route).length,
   };

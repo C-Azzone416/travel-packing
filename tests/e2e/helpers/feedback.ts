@@ -51,6 +51,8 @@ export const fakeFramebriar = {
   setEnrollmentMs: (ms: number) => call<{ ok: true }>("enrollment-ms", { ms }),
   counts: () => call<Record<FakeRoute, number>>("counts"),
   delivered: () => call<DeliveredReport[]>("delivered"),
+  /** The PNG the service received for a report, as base64, or null if none. */
+  mediaOf: async (id: string) => (await call<Record<string, string | null>>("media"))[id] ?? null,
 };
 
 /** The server-held enrollment and any unfinished redemption for one account, so a spec can start from "never connected". */

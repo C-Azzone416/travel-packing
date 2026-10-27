@@ -1,11 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/Button";
 import { ModalSheet } from "@/components/ui/ModalSheet";
 import { feedbackBuildSha } from "./build-sha";
 import { reportContext } from "./capture-policy";
+import { finalScreenshot } from "./annotation-final";
+import type { Drawing } from "./annotation-model";
 import { useFeedbackAccess } from "./FeedbackAccess";
+import { ScreenshotEditor } from "./ScreenshotEditor";
+import { useAnnotationDraft } from "./use-annotation-draft";
 import { SCREENSHOT_SEND_LIMIT_BYTES, fitsSendLimit } from "./screenshot-limit";
 
 export const NOTES_MAX = 2000;
@@ -29,9 +33,10 @@ export const COPY = {
   screenshotLabel: "Include a screenshot of this screen",
   screenshotNote: "It shows what’s on screen right now, including trip names and places.",
   screenshotFailed: "Couldn’t capture the screen. You can still send your notes.",
-  screenshotTooLarge:
-    "The screenshot is too large to send from here, so it isn’t included. Your notes still send.",
-  thumbnailAlt: "Screenshot of the screen you were on",
+  screenshotHint: "Untick to send notes only.",
+  // Design's #266 spec section 6: the existing sentence, then one new one.
+  screenshotDrawNote:
+    "Anything you draw is part of the picture that’s sent. Nothing is sent until you press Send.",
   alsoSent: "Also sent: the app version and the name of the screen you were on.",
   offline: "You’re offline. It will be saved here and sent when you’re back online.",
   needNote: "Write a note to send.",
@@ -48,6 +53,20 @@ export const COPY = {
   tryWithoutScreenshot:
     "If it keeps failing, untick the screenshot and press Send again. Your notes are kept.",
 } as const;
+
+/** Sizes are decimal megabytes with one decimal, like the byte limit (design's #266 spec section 5). */
+const megabytes = (bytes: number) => `${(bytes / 1_000_000).toFixed(1)} MB`;
+
+export const SHOT_PROBLEM_COPY = {
+  marks: (bytes: number) =>
+    `Your screenshot with marks is ${megabytes(bytes)}, over the 4.0 MB limit, so it wasn’t sent. Nothing was shrunk or cropped. Press Undo or Clear drawing to remove marks, or untick the screenshot to send your notes only.`,
+  alone: (bytes: number) =>
+    `This screenshot is ${megabytes(bytes)}, over the 4.0 MB limit, so it can’t be sent. Untick the screenshot to send your notes only.`,
+  failed:
+    "We couldn’t add your marks to the screenshot, so nothing was sent. Try again, or untick the screenshot to send your notes only.",
+} as const;
+
+type ShotProblem = { kind: "marks" | "alone"; bytes: number } | { kind: "failed" };
 
 const PROBLEM_TEXT: Record<Exclude<Problem, null>, string> = {
   full: COPY.full,
@@ -72,6 +91,27 @@ function useOnline(): boolean {
   );
 }
 
+/**
+ * Keeps the sheet inside the part of the screen that is actually visible. With the software keyboard open a phone's visual
+ * viewport is much shorter than the layout viewport, so the sheet follows it (`--feedback-vh`) and its pinned footer stays on screen.
+ */
+function useVisualViewportHeight() {
+  useEffect(() => {
+    const root = document.documentElement;
+    const viewport = window.visualViewport;
+    const apply = () =>
+      root.style.setProperty("--feedback-vh", `${viewport?.height ?? window.innerHeight}px`);
+    apply();
+    viewport?.addEventListener("resize", apply);
+    viewport?.addEventListener("scroll", apply);
+    return () => {
+      viewport?.removeEventListener("resize", apply);
+      viewport?.removeEventListener("scroll", apply);
+      root.style.removeProperty("--feedback-vh");
+    };
+  }, []);
+}
+
 export interface FeedbackSheetProps {
   /** The route the person is on; only an approved code for it is ever put in the report. */
   pathname: string;
@@ -94,21 +134,36 @@ export function FeedbackSheet({
   const { prepareReport, saveReport } = useFeedbackAccess();
   const online = useOnline();
   const [notes, setNotes] = useState("");
-  // A screenshot over the sendable size is treated like one that could not be taken: not offered, never shrunk.
+  const { scopeKey } = useFeedbackAccess();
   const taken = screenshot?.blob ?? null;
-  const tooLarge = taken !== null && !fitsSendLimit(taken.size);
-  const blob = tooLarge ? null : taken;
-  const [include, setInclude] = useState(blob !== null);
+  // A screenshot over the limit stays ticked and says so; Send waits until it is unticked (nothing is shrunk, cropped or swapped).
+  const aloneTooLarge = taken !== null && !fitsSendLimit(taken.size);
+  const [include, setInclude] = useState(taken !== null);
   const [phase, setPhase] = useState<"form" | "saving" | "saved">("form");
   const [problem, setProblem] = useState<Problem>(null);
+  // What was refused at Send, and for which marks and tick: it is not shown for a drawing or tick that has since changed.
+  const [refused, setRefused] = useState<{
+    problem: ShotProblem;
+    drawing: Drawing;
+    include: boolean;
+  } | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const attempt = useRef(0);
   const abort = useRef<AbortController | null>(null);
   const prepared = useRef<Awaited<ReturnType<typeof prepareReport>> | null>(null);
+  const preparedFrom = useRef<{ drawing: Drawing; include: boolean } | null>(null);
+  const alertRef = useRef<HTMLDivElement>(null);
+  const draft = useAnnotationDraft(scopeKey);
+  useVisualViewportHeight();
 
-  const thumbnail = useMemo(() => (blob ? URL.createObjectURL(blob) : null), [blob]);
-  useEffect(() => () => (thumbnail ? URL.revokeObjectURL(thumbnail) : undefined), [thumbnail]);
+  const shotProblem: ShotProblem | null =
+    refused && refused.drawing === draft.drawing && refused.include === include
+      ? refused.problem
+      : include && taken && aloneTooLarge
+        ? { kind: "alone", bytes: taken.size }
+        : null;
+  const showEditor = include && taken !== null && !aloneTooLarge;
 
   const trimmed = notes.trim();
   const received = savedId !== null && receivedId === savedId;
@@ -126,20 +181,44 @@ export function FeedbackSheet({
     const controller = new AbortController();
     abort.current = controller;
     setProblem(null);
+    setRefused(null);
     setPhase("saving");
     try {
-      // The same prepared report (and id) is reused when the last save could not be confirmed, so a retry cannot duplicate it.
-      prepared.current ??= await prepareReport({
-        notes: trimmed,
-        screenshot: include ? blob : null,
-        context: reportContext({
-          pathname,
-          viewportWidth: window.innerWidth,
-          coarsePointer: window.matchMedia?.("(pointer: coarse)").matches ?? false,
-          buildSha: feedbackBuildSha(process.env.NEXT_PUBLIC_BUILD_SHA),
-          now: new Date(),
-        }),
-      });
+      // The same prepared report (and id) is reused when the last save could not be confirmed, so a retry cannot duplicate it,
+      // unless the marks or the tick changed since: then it is a different report and is prepared again.
+      const was = preparedFrom.current;
+      if (was && (was.drawing !== draft.drawing || was.include !== include))
+        prepared.current = null;
+      if (!prepared.current) {
+        // The picture that goes out is decided here, BEFORE anything reaches the route or the outbox.
+        const shot = await finalScreenshot({ include, original: taken, drawing: draft.drawing });
+        if (mine !== attempt.current) return;
+        if (shot.kind === "too-large" || shot.kind === "failed") {
+          setRefused({
+            problem:
+              shot.kind === "failed"
+                ? { kind: "failed" }
+                : { kind: shot.annotated ? "marks" : "alone", bytes: shot.bytes },
+            drawing: draft.drawing,
+            include,
+          });
+          setPhase("form");
+          requestAnimationFrame(() => alertRef.current?.scrollIntoView?.({ block: "nearest" }));
+          return;
+        }
+        preparedFrom.current = { drawing: draft.drawing, include };
+        prepared.current = await prepareReport({
+          notes: trimmed,
+          screenshot: shot.kind === "ready" ? shot.blob : null,
+          context: reportContext({
+            pathname,
+            viewportWidth: window.innerWidth,
+            coarsePointer: window.matchMedia?.("(pointer: coarse)").matches ?? false,
+            buildSha: feedbackBuildSha(process.env.NEXT_PUBLIC_BUILD_SHA),
+            now: new Date(),
+          }),
+        });
+      }
       const outcome = await saveReport(prepared.current, controller.signal);
       if (mine !== attempt.current) return;
       if (outcome.ok) {
@@ -209,7 +288,7 @@ export function FeedbackSheet({
                 <span aria-hidden="true">⚠ </span>
                 {PROBLEM_TEXT[problem]}
               </p>
-              {problem === "unavailable" && include && blob ? (
+              {problem === "unavailable" && include && taken ? (
                 <p className="tiny muted">{COPY.tryWithoutScreenshot}</p>
               ) : null}
               {problem === "unavailable" ? (
@@ -229,6 +308,7 @@ export function FeedbackSheet({
               value={notes}
               aria-describedby="feedback-notes-help"
               disabled={phase === "saving"}
+              onFocus={(event) => event.currentTarget.scrollIntoView?.({ block: "nearest" })}
               onChange={(event) => {
                 prepared.current = null;
                 setNotes(event.target.value);
@@ -246,37 +326,51 @@ export function FeedbackSheet({
           </div>
           {screenshot ? (
             <div className="feedback-shot">
-              {blob ? (
+              {taken ? (
                 <>
-                  <label className="feedback-check">
-                    <input
-                      type="checkbox"
-                      checked={include}
-                      disabled={phase === "saving"}
-                      onChange={(event) => {
-                        prepared.current = null;
-                        setInclude(event.target.checked);
-                      }}
-                    />
-                    <span>{COPY.screenshotLabel}</span>
-                  </label>
-                  {include && thumbnail ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- a local object URL, not a remote image
-                    <img className="feedback-thumb" src={thumbnail} alt={COPY.thumbnailAlt} />
+                  <div className="feedback-shot-head">
+                    <label className="feedback-check">
+                      <input
+                        type="checkbox"
+                        checked={include}
+                        disabled={phase === "saving"}
+                        onChange={(event) => {
+                          prepared.current = null;
+                          setInclude(event.target.checked);
+                        }}
+                      />
+                      <span>{COPY.screenshotLabel}</span>
+                    </label>
+                    <span className="tiny muted">{COPY.screenshotHint}</span>
+                  </div>
+                  {showEditor ? (
+                    <ScreenshotEditor blob={taken} draft={draft} disabled={phase === "saving"} />
                   ) : null}
-                  <p className="tiny muted">{COPY.screenshotNote}</p>
+                  {shotProblem ? (
+                    <div className="feedback-problem" role="alert" ref={alertRef}>
+                      <p className="field-error">
+                        <span aria-hidden="true">⚠ </span>
+                        {shotProblem.kind === "failed"
+                          ? SHOT_PROBLEM_COPY.failed
+                          : SHOT_PROBLEM_COPY[shotProblem.kind](shotProblem.bytes)}
+                      </p>
+                    </div>
+                  ) : null}
+                  {include ? (
+                    <p className="tiny muted">
+                      {COPY.screenshotNote} {COPY.screenshotDrawNote}
+                    </p>
+                  ) : null}
                 </>
               ) : (
-                <label className="feedback-check">
-                  <input type="checkbox" checked={false} disabled readOnly />
-                  <span>{COPY.screenshotLabel}</span>
-                </label>
+                <>
+                  <label className="feedback-check">
+                    <input type="checkbox" checked={false} disabled readOnly />
+                    <span>{COPY.screenshotLabel}</span>
+                  </label>
+                  <p className="tiny muted">{COPY.screenshotFailed}</p>
+                </>
               )}
-              {!blob ? (
-                <p className="tiny muted">
-                  {tooLarge ? COPY.screenshotTooLarge : COPY.screenshotFailed}
-                </p>
-              ) : null}
             </div>
           ) : null}
           <p className="tiny muted">{COPY.alsoSent}</p>

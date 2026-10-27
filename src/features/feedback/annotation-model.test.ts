@@ -9,7 +9,13 @@ import {
   beginStroke,
   cancelStroke,
   clearDrawing,
-  defaultStrokeWidth,
+  canUndo,
+  fitScale,
+  inkFor,
+  STROKE_CSS_PX,
+  MIN_STROKE_NATURAL_PX,
+  EDGE_HALO,
+  EDGE_OUTLINE,
   endStroke,
   extendStroke,
   hasMarks,
@@ -22,7 +28,7 @@ import {
   type Size,
 } from "./annotation-model";
 
-const ink = { color: "red", width: 6 } as const;
+const ink = { color: "red", width: 6, unit: 1 } as const;
 
 function stroked(...paths: { x: number; y: number }[][]): Drawing {
   let drawing: Drawing = EMPTY_DRAWING;
@@ -36,6 +42,7 @@ function stroked(...paths: { x: number; y: number }[][]): Drawing {
 
 describe("the four inks", () => {
   it("are four, with distinct names and distinct colours", () => {
+    expect(INK_COLORS.map((color) => color.label)).toEqual(["Black", "Red", "Blue", "Yellow"]);
     expect(INK_COLORS).toHaveLength(4);
     expect(new Set(INK_COLORS.map((color) => color.id)).size).toBe(4);
     expect(new Set(INK_COLORS.map((color) => color.value)).size).toBe(4);
@@ -49,11 +56,33 @@ describe("the four inks", () => {
 });
 
 describe("the line width", () => {
-  it("scales with the shorter side of the screenshot and never goes under 4", () => {
-    expect(defaultStrokeWidth({ width: 390, height: 844 })).toBe(4);
-    expect(defaultStrokeWidth({ width: 1280, height: 900 })).toBe(5);
-    expect(defaultStrokeWidth({ width: 2560, height: 1800 })).toBe(11);
-    expect(defaultStrokeWidth({ width: 100, height: 3000 })).toBe(4);
+  it("is 4 CSS pixels as shown, so the saved picture has the weight that was drawn", () => {
+    // A 1280-wide screenshot shown at 640 wide: each CSS pixel is 2 natural pixels, so 4 CSS px is 8 natural px.
+    expect(inkFor("red", 0.5)).toEqual({ color: "red", width: 8, unit: 2 });
+    expect(inkFor("blue", 1)).toEqual({ color: "blue", width: STROKE_CSS_PX, unit: 1 });
+  });
+
+  it("is never under 3 natural pixels, even when the picture is shown larger than it is", () => {
+    expect(inkFor("red", 4).width).toBe(MIN_STROKE_NATURAL_PX);
+    expect(inkFor("red", 4).unit).toBe(0.25);
+  });
+
+  it("falls back to one natural pixel per CSS pixel for a scale that is not usable", () => {
+    for (const scale of [0, -1, Number.NaN, Number.POSITIVE_INFINITY * 0]) {
+      expect(inkFor("red", scale).unit).toBe(1);
+    }
+  });
+
+  it("uses the same scale the pointer mapping does (contain)", () => {
+    expect(fitScale({ width: 600, height: 800 }, { width: 800, height: 1600 })).toBe(0.5);
+    expect(fitScale({ width: 400, height: 1000 }, { width: 800, height: 1600 })).toBe(0.5);
+    expect(fitScale({ width: 0, height: 10 }, { width: 800, height: 1600 })).toBeNull();
+    expect(fitScale({ width: 10, height: 10 }, { width: 8, height: Number.NaN })).toBeNull();
+  });
+
+  it("has an edge of near-black and white under every stroke", () => {
+    expect(EDGE_OUTLINE).toBe("#111111");
+    expect(EDGE_HALO).toBe("#ffffff");
   });
 });
 
@@ -151,7 +180,11 @@ describe("drawing strokes", () => {
   });
 
   it("builds a stroke from down, move, up and keeps its colour and width", () => {
-    let drawing = beginStroke(EMPTY_DRAWING, { color: "blue", width: 9 }, { x: 10, y: 10 });
+    let drawing = beginStroke(
+      EMPTY_DRAWING,
+      { color: "blue", width: 9, unit: 2 },
+      { x: 10, y: 10 },
+    );
     expect(drawing.active?.points).toEqual([{ x: 10, y: 10 }]);
     expect(hasMarks(drawing)).toBe(true);
     drawing = extendStroke(drawing, { x: 30, y: 10 });
@@ -161,6 +194,7 @@ describe("drawing strokes", () => {
       {
         color: "blue",
         width: 9,
+        unit: 2,
         points: [
           { x: 10, y: 10 },
           { x: 30, y: 10 },
@@ -191,14 +225,17 @@ describe("drawing strokes", () => {
 
   it("finishes an open stroke when another begins", () => {
     let drawing = beginStroke(EMPTY_DRAWING, ink, { x: 1, y: 1 });
-    drawing = beginStroke(drawing, { color: "yellow", width: 4 }, { x: 40, y: 40 });
+    drawing = beginStroke(drawing, { color: "yellow", width: 4, unit: 1 }, { x: 40, y: 40 });
     expect(drawing.strokes).toHaveLength(1);
     expect(drawing.active?.color).toBe("yellow");
   });
 
   it("ignores a point that is not a number, a bad width, and a move or up with nothing open", () => {
     expect(beginStroke(EMPTY_DRAWING, ink, { x: Number.NaN, y: 1 })).toBe(EMPTY_DRAWING);
-    expect(beginStroke(EMPTY_DRAWING, { color: "red", width: 0 }, { x: 1, y: 1 })).toBe(
+    expect(beginStroke(EMPTY_DRAWING, { color: "red", width: 0, unit: 1 }, { x: 1, y: 1 })).toBe(
+      EMPTY_DRAWING,
+    );
+    expect(beginStroke(EMPTY_DRAWING, { color: "red", width: 4, unit: 0 }, { x: 1, y: 1 })).toBe(
       EMPTY_DRAWING,
     );
     expect(extendStroke(EMPTY_DRAWING, { x: 1, y: 1 })).toBe(EMPTY_DRAWING);
@@ -260,8 +297,41 @@ describe("Undo, Clear and cancel", () => {
 
   it("Clear drawing removes every mark, including one being drawn", () => {
     const drawing = beginStroke(stroked(path(0), path(100)), ink, { x: 1, y: 1 });
-    expect(clearDrawing(drawing)).toBe(EMPTY_DRAWING);
+    const cleared = clearDrawing(drawing);
+    expect(cleared.strokes).toEqual([]);
+    expect(cleared.active).toBeNull();
+    expect(hasMarks(cleared)).toBe(false);
     expect(clearDrawing(EMPTY_DRAWING)).toBe(EMPTY_DRAWING);
+    expect(clearDrawing(cleared)).toBe(cleared);
+  });
+
+  it("Undo right after Clear brings the whole cleared drawing back in one step", () => {
+    const drawing = stroked(path(0), path(100), path(200));
+    const cleared = clearDrawing(drawing);
+    expect(canUndo(cleared)).toBe(true);
+    const restored = undo(cleared);
+    expect(restored.strokes).toEqual(drawing.strokes);
+    expect(restored.cleared).toBeNull();
+    // ... and Undo after that is an ordinary undo of the last mark.
+    expect(undo(restored).strokes).toHaveLength(2);
+  });
+
+  it("a new stroke after Clear makes the cleared drawing unrecoverable", () => {
+    const cleared = clearDrawing(stroked(path(0), path(100)));
+    const redrawn = endStroke(beginStroke(cleared, ink, { x: 300, y: 300 }));
+    expect(redrawn.cleared).toBeNull();
+    expect(redrawn.strokes).toHaveLength(1);
+    const undone = undo(redrawn);
+    expect(undone.strokes).toHaveLength(0);
+    expect(undo(undone)).toBe(undone);
+  });
+
+  it("knows when Undo and Clear have something to do", () => {
+    expect(canUndo(EMPTY_DRAWING)).toBe(false);
+    expect(canUndo(stroked(path(0)))).toBe(true);
+    expect(canUndo(clearDrawing(stroked(path(0))))).toBe(true);
+    expect(canUndo(undo(clearDrawing(undo(clearDrawing(stroked(path(0)))))))).toBe(true);
+    expect(canUndo(undo(stroked(path(0))))).toBe(false);
   });
 
   it("a cancelled gesture drops the half-drawn stroke only", () => {

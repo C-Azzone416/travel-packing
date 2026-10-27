@@ -10,7 +10,8 @@ export type FinalScreenshot =
   /** Text only: nothing is composited, saved or uploaded. */
   | { kind: "none" }
   | { kind: "ready"; blob: Blob; annotated: boolean }
-  | { kind: "too-large"; bytes: number }
+  /** `annotated`: the size is that of the picture WITH marks (so removing marks may fix it), not of the screenshot alone. */
+  | { kind: "too-large"; bytes: number; annotated: boolean }
   | { kind: "failed" };
 
 export async function finalScreenshot(options: {
@@ -27,11 +28,11 @@ export async function finalScreenshot(options: {
   if (strokes.length === 0) {
     return fitsSendLimit(original.size)
       ? { kind: "ready", blob: original, annotated: false }
-      : { kind: "too-large", bytes: original.size };
+      : { kind: "too-large", bytes: original.size, annotated: false };
   }
   const composed = await compositeMarks(original, strokes, deps);
   if (composed.kind !== "ok") return { kind: "failed" };
   return fitsSendLimit(composed.blob.size)
     ? { kind: "ready", blob: composed.blob, annotated: true }
-    : { kind: "too-large", bytes: composed.blob.size };
+    : { kind: "too-large", bytes: composed.blob.size, annotated: true };
 }
