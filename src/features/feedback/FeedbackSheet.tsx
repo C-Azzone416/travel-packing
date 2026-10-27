@@ -18,6 +18,11 @@ const COUNTER_FROM = 1800;
 /** The screenshot taken before the sheet opened (so the sheet is not in it). Null: this build has no screenshot option. */
 export interface TakenScreenshot {
   blob: Blob | null;
+  /**
+   * Why there is no picture, when there is none: `private` means something private is open on this screen (or the parts to leave out
+   * could not be proven left out), anything else is an ordinary failure. They are worded differently (#273).
+   */
+  reason?: "private" | "failed" | null;
 }
 
 export { SCREENSHOT_SEND_LIMIT_BYTES };
@@ -33,6 +38,13 @@ export const COPY = {
   screenshotLabel: "Include a screenshot of this screen",
   screenshotNote: "It shows what’s on screen right now, including trip names and places.",
   screenshotFailed: "Couldn’t capture the screen. You can still send your notes.",
+  // Design's #273 spec section 2: not an error, so ⓘ and not ⚠. Said when a private form or dialog is open, or the parts to leave out
+  // could not be identified.
+  screenshotPrivate:
+    "No screenshot this time: something private is open on this screen. You can still send your notes.",
+  // Section 3: Settings is captured with the account email and any invitation or password field left out, which a person cannot see.
+  settingsDisclosure:
+    "Your account email and any invitation or password field are left out of this screenshot.",
   screenshotHint: "Untick to send notes only.",
   // Design's #266 spec section 6: the existing sentence, then one new one.
   screenshotDrawNote:
@@ -164,6 +176,9 @@ export function FeedbackSheet({
         ? { kind: "alone", bytes: taken.size }
         : null;
   const showEditor = include && taken !== null && !aloneTooLarge;
+  const onSettings = pathname === "/settings" || pathname.startsWith("/settings/");
+  const noShotText =
+    screenshot?.reason === "private" ? COPY.screenshotPrivate : COPY.screenshotFailed;
 
   const trimmed = notes.trim();
   const received = savedId !== null && receivedId === savedId;
@@ -248,7 +263,14 @@ export function FeedbackSheet({
     }
   }
 
-  const announcement = received ? "Received." : phase === "saved" ? "Saved on this device." : "";
+  // With no picture the sheet says why as it opens, through the same polite region the Saved / Received states use.
+  const announcement = received
+    ? "Received."
+    : phase === "saved"
+      ? "Saved on this device."
+      : screenshot && !taken
+        ? noShotText
+        : "";
 
   return (
     <ModalSheet
@@ -356,6 +378,9 @@ export function FeedbackSheet({
                       </p>
                     </div>
                   ) : null}
+                  {include && onSettings ? (
+                    <p className="tiny muted">{COPY.settingsDisclosure}</p>
+                  ) : null}
                   {include ? (
                     <p className="tiny muted">
                       {COPY.screenshotNote} {COPY.screenshotDrawNote}
@@ -363,13 +388,11 @@ export function FeedbackSheet({
                   ) : null}
                 </>
               ) : (
-                <>
-                  <label className="feedback-check">
-                    <input type="checkbox" checked={false} disabled readOnly />
-                    <span>{COPY.screenshotLabel}</span>
-                  </label>
-                  <p className="tiny muted">{COPY.screenshotFailed}</p>
-                </>
+                // No picture: one plain line takes the checkbox group's place (no disabled checkbox), and the notes still send.
+                <p className="tiny muted feedback-no-shot">
+                  <span aria-hidden="true">ⓘ </span>
+                  {noShotText}
+                </p>
               )}
             </div>
           ) : null}

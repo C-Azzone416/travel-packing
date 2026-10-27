@@ -46,12 +46,15 @@ const sourceOf = async (root: HTMLElement) =>
   );
 
 describe("the Settings page as a screenshot sees it", () => {
-  it("shows the address on the page, and leaves it out of the clone while the rest stays", async () => {
+  it("shows the address on the page, and leaves the whole row out of the clone while the rest stays", async () => {
     const view = mount();
     expect(screen.getByText(EMAIL)).toBeTruthy();
     const source = await sourceOf(view.container);
     expect(source).not.toContain(EMAIL);
-    expect(source).toContain("Signed in as");
+    // The label goes with it: nothing is left dangling, and nothing is painted over (design's #273 spec section 3).
+    expect(source).not.toContain("Signed in as");
+    expect(source).toContain("Account");
+    expect(source).toContain("Sign out");
     expect(source).toContain(ORDINARY);
     expect(source).toContain("Appearance");
   });

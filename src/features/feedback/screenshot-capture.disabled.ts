@@ -3,6 +3,8 @@
 
 export const screenshotCaptureAvailable: boolean = false;
 
-export async function captureScreenshot(): Promise<Blob | null> {
-  return null;
+export type CaptureResult = { kind: "failed" };
+
+export async function captureScreenshot(): Promise<CaptureResult> {
+  return { kind: "failed" };
 }

@@ -145,5 +145,6 @@ test("a disconnect that cannot reach the service changes nothing and says so", a
 test("the Feedback button is offered on Settings (#273)", DEVICE, async ({ page }) => {
   await connectedOnTrips(page);
   await openSettingsFromNav(page);
-  await expect(page.getByRole("button", { name: "Send feedback" })).toBeEnabled();
+  await expect(page.locator(".feedback-button")).toBeEnabled();
+  await expect(page.locator(".feedback-send-action")).toBeEnabled();
 });

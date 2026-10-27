@@ -14,6 +14,8 @@ const BLOCKED: readonly RegExp[] = [
   /^\/reset-password(\/|$)/,
   /^\/finish-setup(\/|$)/,
   /^\/access-denied(\/|$)/,
+  // Account closure asks for the current password and the word DELETE (#273: these stay blocked while Settings opens up).
+  /^\/close-account(\/|$)/,
 ];
 
 export function captureBlocked(pathname: string): boolean {

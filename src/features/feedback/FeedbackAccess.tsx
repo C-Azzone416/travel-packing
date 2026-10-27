@@ -81,6 +81,13 @@ export interface FeedbackAccessValue {
   saveReport: (prepared: PreparedFeedback, signal?: AbortSignal) => Promise<SaveOutcome>;
   /** Called with the id of each report the service has confirmed (Received). Returns the unsubscribe. */
   subscribeReceipts: (listener: (id: string) => void) => () => void;
+  /**
+   * Opens the report sheet, the same one the header Feedback button opens (#273): the Settings card's "Send feedback" action calls this.
+   * Does nothing when no sheet is mounted. The sheet itself decides whether anything may be captured.
+   */
+  openReport: () => void;
+  /** The header button's sheet registers itself here for `openReport`. Returns the unregister. */
+  registerReportOpener: (open: () => void) => () => void;
   /** Deletes this account's unsent reports from this device. Sign-out does it itself; this is the explicit "clear" in Settings. */
   clearUnsent: () => Promise<void>;
   /** Sign-out: stops delivery and deletes this account's unsent notes and screenshots from this device. The server enrollment stays. */
@@ -101,6 +108,8 @@ const NOT_READY: FeedbackAccessValue = {
   },
   saveReport: async () => ({ ok: false, reason: "unavailable" }),
   subscribeReceipts: () => () => undefined,
+  openReport: () => undefined,
+  registerReportOpener: () => () => undefined,
   clearUnsent: async () => undefined,
   clearLocal: async () => undefined,
 };
@@ -479,6 +488,15 @@ function EnabledFeedbackAccessProvider({
     channelRef.current?.postMessage("account-ended");
   }, []);
 
+  const reportOpener = useRef<(() => void) | null>(null);
+  const openReport = useCallback(() => reportOpener.current?.(), []);
+  const registerReportOpener = useCallback((open: () => void) => {
+    reportOpener.current = open;
+    return () => {
+      if (reportOpener.current === open) reportOpener.current = null;
+    };
+  }, []);
+
   const status = useMemo(
     () => (view && !signedOut ? feedbackStatus(view, { online, rateLimited }) : null),
     [view, signedOut, online, rateLimited],
@@ -496,6 +514,8 @@ function EnabledFeedbackAccessProvider({
       prepareReport,
       saveReport,
       subscribeReceipts,
+      openReport,
+      registerReportOpener,
       clearUnsent,
       clearLocal,
     }),
@@ -509,6 +529,8 @@ function EnabledFeedbackAccessProvider({
       prepareReport,
       saveReport,
       subscribeReceipts,
+      openReport,
+      registerReportOpener,
       clearUnsent,
       clearLocal,
     ],

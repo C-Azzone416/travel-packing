@@ -4528,6 +4528,18 @@ a.back {
   font: inherit;
   resize: vertical;
 }
+/* Settings card (#273): on a phone Send feedback has a row to itself, full width and 44px; on desktop it leads the row of actions. */
+.feedback-send-action {
+  min-height: 44px;
+}
+@media (max-width: 659px) {
+  .feedback-send-action {
+    flex: 1 1 100%;
+  }
+}
+.feedback-no-shot {
+  margin: 0;
+}
 .feedback-check {
   display: flex;
   align-items: center;

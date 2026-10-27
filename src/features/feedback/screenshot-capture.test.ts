@@ -39,7 +39,7 @@ describe("the screenshot capture module and its production stub", () => {
 
   it("the stub can never capture and holds none of the real module's code or marker", async () => {
     expect(stub.screenshotCaptureAvailable).toBe(false);
-    expect(await stub.captureScreenshot()).toBeNull();
+    expect(await stub.captureScreenshot()).toEqual({ kind: "failed" });
     const { readFileSync } = await import("node:fs");
     const { join } = await import("node:path");
     const source = readFileSync(
@@ -68,7 +68,7 @@ describe("captureScreenshot", () => {
   ])("captures nothing on %s, even if called directly", async (path) => {
     at(path);
     const real = await loadReal();
-    expect(await real.captureScreenshot()).toBeNull();
+    expect(await real.captureScreenshot()).toEqual({ kind: "failed" });
     expect(toBlob).not.toHaveBeenCalled();
   });
 
@@ -80,8 +80,8 @@ describe("captureScreenshot", () => {
       return png(1000);
     });
     const real = await loadReal();
-    const blob = await real.captureScreenshot();
-    expect(blob?.size).toBe(1000);
+    const result = await real.captureScreenshot();
+    expect(result.kind === "ok" && result.blob.size).toBe(1000);
     expect(during).toBe("");
     expect(document.documentElement.hasAttribute("data-feedback-screenshot-capture")).toBe(false);
     const [node, options] = toBlob.mock.calls[0];
@@ -124,7 +124,8 @@ describe("captureScreenshot", () => {
       settingsWithIdentity(true);
       toBlob.mockResolvedValue(png(500));
       const real = await loadReal();
-      expect((await real.captureScreenshot())?.size).toBe(500);
+      const taken = await real.captureScreenshot();
+      expect(taken.kind === "ok" && taken.blob.size).toBe(500);
       expect(toBlob).toHaveBeenCalledTimes(1);
     });
 
@@ -136,7 +137,7 @@ describe("captureScreenshot", () => {
       document.body.append(portal);
       toBlob.mockResolvedValue(png(500));
       const real = await loadReal();
-      expect(await real.captureScreenshot()).toBeNull();
+      expect(await real.captureScreenshot()).toEqual({ kind: "private" });
       expect(toBlob).not.toHaveBeenCalled();
     });
 
@@ -145,7 +146,7 @@ describe("captureScreenshot", () => {
       settingsWithIdentity(false);
       toBlob.mockResolvedValue(png(500));
       const real = await loadReal();
-      expect(await real.captureScreenshot()).toBeNull();
+      expect(await real.captureScreenshot()).toEqual({ kind: "private" });
       expect(toBlob).not.toHaveBeenCalled();
     });
 
@@ -159,7 +160,7 @@ describe("captureScreenshot", () => {
         return png(500);
       });
       const real = await loadReal();
-      expect(await real.captureScreenshot()).toBeNull();
+      expect(await real.captureScreenshot()).toEqual({ kind: "private" });
       expect(document.documentElement.hasAttribute("data-feedback-screenshot-capture")).toBe(false);
     });
 
@@ -167,7 +168,8 @@ describe("captureScreenshot", () => {
       at("/trips/abc");
       toBlob.mockResolvedValue(png(500));
       const real = await loadReal();
-      expect((await real.captureScreenshot())?.size).toBe(500);
+      const taken = await real.captureScreenshot();
+      expect(taken.kind === "ok" && taken.blob.size).toBe(500);
     });
   });
 
@@ -175,13 +177,14 @@ describe("captureScreenshot", () => {
     const big = 8 * 1024 * 1024 + 1;
     toBlob.mockResolvedValueOnce(png(big)).mockResolvedValueOnce(png(500));
     const real = await loadReal();
-    expect((await real.captureScreenshot())?.size).toBe(500);
+    const taken = await real.captureScreenshot();
+    expect(taken.kind === "ok" && taken.blob.size).toBe(500);
     expect(toBlob.mock.calls.map((call) => (call[1] as { pixelRatio: number }).pixelRatio)).toEqual(
       [1, 0.5],
     );
     toBlob.mockReset();
     toBlob.mockResolvedValue(png(big));
-    expect(await real.captureScreenshot()).toBeNull();
+    expect(await real.captureScreenshot()).toEqual({ kind: "failed" });
     expect(toBlob).toHaveBeenCalledTimes(3);
   });
 
@@ -191,19 +194,19 @@ describe("captureScreenshot", () => {
   ])("returns null when the library produces %s", async (_name, result) => {
     toBlob.mockResolvedValue(result);
     const real = await loadReal();
-    expect(await real.captureScreenshot()).toBeNull();
+    expect(await real.captureScreenshot()).toEqual({ kind: "failed" });
   });
 
   it("returns null for a blob that is not a PNG", async () => {
     toBlob.mockResolvedValue(new Blob([new Uint8Array(10)], { type: "image/jpeg" }));
     const real = await loadReal();
-    expect(await real.captureScreenshot()).toBeNull();
+    expect(await real.captureScreenshot()).toEqual({ kind: "failed" });
   });
 
   it("never throws: a failing library becomes null and the attribute is still removed", async () => {
     toBlob.mockRejectedValue(new Error("tainted canvas"));
     const real = await loadReal();
-    expect(await real.captureScreenshot()).toBeNull();
+    expect(await real.captureScreenshot()).toEqual({ kind: "failed" });
     expect(document.documentElement.hasAttribute("data-feedback-screenshot-capture")).toBe(false);
   });
 });

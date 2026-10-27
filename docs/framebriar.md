@@ -120,7 +120,11 @@ covered afterwards, and no unsanitised copy is kept). The contract: `data-feedba
 (the Close account sheet) means no picture at all while it is open or if it opened during the capture; an identity region
 (`data-feedback-identity`, the Account line) must contain its `account-identity` exclusion or the capture is refused. Whenever the
 capture cannot be proven clean it returns null and the report goes as text only. The unit tests run the real library over pages with
-synthetic canaries and read what it cloned.
+synthetic canaries and read what it cloned. The browser e2e (`feedback-settings.spec.ts`) paints a magenta canary on the account email row (found by
+its text, not by the marker) and a cyan one on an ordinary card, then reads the pixels of the PNG the sheet produced: no magenta, plenty of
+cyan. Known limitation, not new: WebKit (Playwright's, so very likely Safari on a phone) takes the picture from the top of the page whatever the
+scroll position, because the capture library's scroll offset is not honoured there; what is left out is unaffected, and the phone e2e
+uses a screen tall enough for the whole page.
 
 Screenshots follow the build switch above: ticked by default where the Preview/local/e2e build has them (the capture is taken before
 the sheet opens so the sheet is not in it). The capture uses `html-to-image` (MIT), imported only by the capture module, so it
