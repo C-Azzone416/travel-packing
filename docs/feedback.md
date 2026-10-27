@@ -40,9 +40,9 @@ These steps belong to the owner of the Framebriar service and of this repository
    `npm run dev -- --hostname localhost --port 8080`; `localhost` and `127.0.0.1` are different origins. The shared service
    already has both origins in its registry and Azure CORS. Leave every existing service origin and app unchanged. Arbitrary
    Vercel deployment URLs and Production remain disallowed.
-3. **Install the SDK:** the repository pins the exact private SDK distributable as
-   `vendor/framebriar/framebriar-0.4.1.tgz`. A normal `npm ci` needs no package token or registry access; provenance and the update
-   procedure are in [framebriar.md](framebriar.md).
+3. **Install the SDK:** the repository pins `@masra91/framebriar@0.4.1` from Mason's private GitHub Package. The committed
+   `.npmrc` contains only the scoped registry and an environment-variable placeholder; package credentials remain outside the
+   repository. Access and update requirements are in [framebriar.md](framebriar.md).
 4. **Let a person connect (separate approval required):** issue an invitation for the app, for example
    `framebriar-admin invite travel-packing --days 7 --uses 1`, and give `<INVITATION>` to that person privately. An invitation works once
    and expires; the connection it creates lasts 30 days.

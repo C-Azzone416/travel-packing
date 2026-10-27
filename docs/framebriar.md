@@ -1,29 +1,29 @@
 # Framebriar: package access and the fake service (#127, #130)
 
 The stable Preview and exact local development origin can send feedback to the shared Framebriar service through its browser
-SDK, `@masra91/framebriar`. Production contains no feedback UI or browser SDK. The SDK is private. As a temporary CI
-workaround, this public repository vendors only the exact `0.4.1` npm distributable at
-`vendor/framebriar/framebriar-0.4.1.tgz`. It does not include the Framebriar service, owner admin tooling, infrastructure,
-credentials, invitations or backend configuration. We consume the SDK and never change the service here. The contract remains
-the private source repository's `docs/general-feedback-v2.md` and `docs/distribution.md`.
+SDK, `@masra91/framebriar`. Production contains no feedback UI or browser SDK. The SDK is private, and this repository
+consumes Mason's maintained `0.4.1` GitHub Package directly. It does not copy the package archive, Framebriar service, owner
+admin tooling, infrastructure, credentials, invitations or backend configuration into the repository. We consume the SDK and
+never change the service here. The contract remains the private source repository's `docs/general-feedback-v2.md` and
+`docs/distribution.md`.
 
 Nothing in this repository holds a token, an invitation or an endpoint credential. Every value below is a placeholder. What
 is captured, owner setup and the local delivery check are in [feedback.md](feedback.md).
 
 ## Installing the package
 
-`package.json` pins the dependency to `file:vendor/framebriar/framebriar-0.4.1.tgz`; `package-lock.json` pins that archive's
-npm SHA-512 integrity. A normal `npm ci` installs it without `.npmrc`, `GITHUB_PACKAGES_TOKEN`, `packages: read`, or access to
-the private repository. The vendored artifact's source tag, commit, license, size and hashes are recorded in
-[`vendor/framebriar/README.md`](../vendor/framebriar/README.md).
+`package.json` pins `@masra91/framebriar` to exact version `0.4.1`; `package-lock.json` pins the private GitHub Package URL and
+npm SHA-512 integrity. The committed `.npmrc` contains only the `@masra91` registry route and `${NODE_AUTH_TOKEN}` placeholder.
+It contains no credential. Every install needs a read-only package credential supplied by the invoking environment.
 
-The package has no runtime npm dependencies. Its 32 extracted files match a fresh SDK build from private source tag `v0.4.1`
-byte-for-byte. The package manifest retains `license: UNLICENSED`; vendoring it does not make it open-source.
+The package has no runtime npm dependencies. Published `0.4.1` identifies private source repository `masra91/framebriar` and
+source tag `v0.4.1`; the package manifest retains `license: UNLICENSED`. Private-package access is not a credential for the
+Framebriar service and does not change the package's stated terms.
 
-Update the archive deliberately and in its own change after reading the private package changelog. Use an already-authorized
-source route, compare the published distributable with the matching source tag, and update the archive and every provenance
-value together. Never copy the Framebriar backend, admin or infrastructure sources, and never add credentials, invitations,
-tokens or backend configuration to this repository.
+Update the exact version deliberately and in its own change after reading the private package changelog. Use an authorized
+package-reader route, verify the published version and lockfile integrity, and review the matching private source tag. Never copy
+the package archive, Framebriar backend, admin or infrastructure sources, and never add credentials, invitations, tokens or
+backend configuration to this repository.
 
 The shared Framebriar backend still owns its Azure Blob storage and the SDK continues to use the existing endpoint/protocol.
 This repository neither provisions nor configures Blob storage; runtime service access remains a separate operational setup.
