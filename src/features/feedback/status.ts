@@ -5,7 +5,7 @@ import type { EnrollmentState, EnrollmentView } from "./enrollment-client";
 
 /** Things the strip under the header may say. Each means "feedback cannot send until something changes", and none leaves the app unusable. */
 export type FeedbackNoticeKind =
-  "expired" | "revoked" | "disabled" | "unavailable" | "finish-connecting";
+  "expired" | "revoked" | "disabled" | "unavailable" | "needs-reconnect" | "finish-connecting";
 
 export interface FeedbackStatus {
   /** The server's last answer: unavailable, not-connected, connected, expired, revoked or disabled. */
@@ -35,9 +35,11 @@ export function feedbackStatus(
     view.status === "disabled" ||
     view.status === "unavailable"
       ? view.status
-      : pendingRedemption
-        ? "finish-connecting"
-        : null;
+      : view.status === "needs_reconnect"
+        ? "needs-reconnect"
+        : pendingRedemption
+          ? "finish-connecting"
+          : null;
   return {
     connection: view.status,
     expiresAt: connected ? view.expiresAt : null,

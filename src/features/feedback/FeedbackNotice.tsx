@@ -25,6 +25,10 @@ const NOTICES: Record<Notice, { text: string; action: string }> = {
     text: "Feedback isn’t available right now. Reports you saved are kept on this device.",
     action: "See details",
   },
+  "needs-reconnect": {
+    text: "Your saved feedback connection can’t be reopened. Add a new invitation to send again. Reports you saved are kept on this device.",
+    action: "Add invitation",
+  },
   "finish-connecting": {
     text: "Feedback isn’t finished connecting. Paste the same invitation again to finish. It won’t be spent twice.",
     action: "Finish connecting",

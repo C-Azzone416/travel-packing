@@ -9,12 +9,20 @@ export const REDEEM_PATH = `${ENROLLMENT_PATH}/redeem`;
 export const DISCONNECT_PATH = `${ENROLLMENT_PATH}/disconnect`;
 
 export type EnrollmentState =
-  "unavailable" | "not-connected" | "connected" | "expired" | "revoked" | "disabled";
+  | "unavailable"
+  | "not-connected"
+  | "connected"
+  /** The server holds an enrollment it can no longer open (its key was retired or lost): a new invitation replaces it. */
+  | "needs_reconnect"
+  | "expired"
+  | "revoked"
+  | "disabled";
 
 const STATES: readonly EnrollmentState[] = [
   "unavailable",
   "not-connected",
   "connected",
+  "needs_reconnect",
   "expired",
   "revoked",
   "disabled",

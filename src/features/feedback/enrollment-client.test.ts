@@ -47,13 +47,18 @@ describe("readEnrollment", () => {
     expect(seen[0].init.body).toBeUndefined();
   });
 
-  it.each(["unavailable", "not-connected", "connected", "expired", "revoked", "disabled"] as const)(
-    "passes the %s state through",
-    async (status) => {
-      const result = await readEnrollment(createFakeFeedbackServer({ status }).fetch);
-      expect(result).toMatchObject({ kind: "ok", view: { status } });
-    },
-  );
+  it.each([
+    "unavailable",
+    "not-connected",
+    "connected",
+    "needs_reconnect",
+    "expired",
+    "revoked",
+    "disabled",
+  ] as const)("passes the %s state through", async (status) => {
+    const result = await readEnrollment(createFakeFeedbackServer({ status }).fetch);
+    expect(result).toMatchObject({ kind: "ok", view: { status } });
+  });
 
   it("reports a pending redemption and a missing outbox key", async () => {
     const server = createFakeFeedbackServer({

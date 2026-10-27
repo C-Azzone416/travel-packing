@@ -263,6 +263,7 @@ describe("Settings section: checking and the six server states", () => {
     ["not-connected", null, true],
     ["expired", "Expired", true],
     ["revoked", "Ended", true],
+    ["needs_reconnect", "Needs invitation", true],
     ["disabled", "Switched off", false],
     ["unavailable", "Unavailable", false],
   ] as const)("%s: badge %s, invitation form %s", async (status, badge, form) => {
@@ -579,6 +580,7 @@ describe("the notice banner", () => {
   it.each([
     ["expired", /Your feedback access has expired/, "Reconnect"],
     ["revoked", /Your feedback access was ended/, "Add invitation"],
+    ["needs_reconnect", /saved feedback connection can’t be reopened/, "Add invitation"],
     ["disabled", /Feedback is switched off for now/, "See details"],
     ["unavailable", /Feedback isn’t available right now/, "See details"],
   ] as const)("shows %s with its action", async (status, text, action) => {
@@ -640,7 +642,7 @@ describe("the Feedback button", () => {
     expect(screen.queryByRole("button", { name: "Send feedback" })).toBeNull();
   });
 
-  it.each(["expired", "revoked", "disabled", "unavailable"] as const)(
+  it.each(["expired", "revoked", "needs_reconnect", "disabled", "unavailable"] as const)(
     "is disabled when the enrollment is %s",
     async (status) => {
       mount(harness({ status }), <FeedbackButton />);

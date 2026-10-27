@@ -45,6 +45,15 @@ describe("feedbackStatus", () => {
     },
   );
 
+  it("a connection the server can no longer open names itself 'needs-reconnect' and cannot capture", () => {
+    expect(feedbackStatus(view({ status: "needs_reconnect" }), here)).toMatchObject({
+      connection: "needs_reconnect",
+      connected: false,
+      canCapture: false,
+      notice: "needs-reconnect",
+    });
+  });
+
   it("a pending redemption asks to finish connecting, but only while not connected", () => {
     expect(feedbackStatus(view({ redemption: "pending" }), here)).toMatchObject({
       pendingRedemption: true,

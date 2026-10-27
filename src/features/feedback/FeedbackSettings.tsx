@@ -37,6 +37,8 @@ export const DISCONNECT_RESULT: Record<DisconnectResult, string> = {
 };
 
 const STATE_TEXT = {
+  needsReconnect:
+    "Your saved feedback connection can’t be reopened. Add a new invitation to send feedback again.",
   expired: "Your feedback access has expired. Add a new invitation to send feedback again.",
   revoked: "Your feedback access was ended. Add a new invitation to send feedback again.",
   disabled:
@@ -47,6 +49,7 @@ const STATE_TEXT = {
 } as const;
 
 const BADGE = {
+  needsReconnect: "Needs invitation",
   expired: "Expired",
   revoked: "Ended",
   disabled: "Switched off",
@@ -85,16 +88,21 @@ export function FeedbackSettings() {
   const connection = status?.connection ?? null;
   // A new invitation can fix these. "Switched off" and "unavailable" need the developer or time, so no form is offered for them.
   const canRedeem =
-    connection === "not-connected" || connection === "expired" || connection === "revoked";
+    connection === "not-connected" ||
+    connection === "needs_reconnect" ||
+    connection === "expired" ||
+    connection === "revoked";
   const stateKey =
     status?.pendingRedemption === true
       ? "pending"
-      : connection === "expired" ||
-          connection === "revoked" ||
-          connection === "disabled" ||
-          connection === "unavailable"
-        ? connection
-        : null;
+      : connection === "needs_reconnect"
+        ? "needsReconnect"
+        : connection === "expired" ||
+            connection === "revoked" ||
+            connection === "disabled" ||
+            connection === "unavailable"
+          ? connection
+          : null;
   const expiry = connected ? expiryText(status?.expiresAt ?? null) : null;
   const unsent = outbox.waiting + outbox.blocked;
 

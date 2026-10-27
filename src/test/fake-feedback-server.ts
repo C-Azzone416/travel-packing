@@ -117,10 +117,11 @@ export function createFakeFeedbackServer(initial: Partial<FakeFeedbackState> = {
     if (state.status !== "connected") {
       const code = {
         "not-connected": "NOT_CONNECTED",
+        needs_reconnect: "NEEDS_RECONNECT",
         expired: "EXPIRED",
         revoked: "REVOKED",
         disabled: "DISABLED",
-      }[state.status as "not-connected" | "expired" | "revoked" | "disabled"];
+      }[state.status as "not-connected" | "needs_reconnect" | "expired" | "revoked" | "disabled"];
       return code ? error(409, code) : error(503, "UNAVAILABLE");
     }
     const form = init.body as FormData;

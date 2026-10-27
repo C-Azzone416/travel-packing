@@ -134,7 +134,7 @@ describe("what each answer means to the outbox", () => {
     });
   });
 
-  it.each(["NOT_CONNECTED", "EXPIRED", "REVOKED", "DISABLED"] as const)(
+  it.each(["NOT_CONNECTED", "NEEDS_RECONNECT", "EXPIRED", "REVOKED", "DISABLED"] as const)(
     "a 409 %s is access-required and tells the app at once",
     async (code) => {
       const onEnrollmentProblem = vi.fn();

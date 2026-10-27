@@ -15,8 +15,15 @@ export const REPORTS_PATH = "/api/feedback/reports";
 export const DELIVERY_TIMEOUT_MS = 60_000;
 
 /** Enrollment problems the server names on a 409. The status route reports the same; the caller refreshes it. */
-export type EnrollmentProblem = "NOT_CONNECTED" | "EXPIRED" | "REVOKED" | "DISABLED";
-const PROBLEMS: readonly string[] = ["NOT_CONNECTED", "EXPIRED", "REVOKED", "DISABLED"];
+export type EnrollmentProblem =
+  "NOT_CONNECTED" | "NEEDS_RECONNECT" | "EXPIRED" | "REVOKED" | "DISABLED";
+const PROBLEMS: readonly string[] = [
+  "NOT_CONNECTED",
+  "NEEDS_RECONNECT",
+  "EXPIRED",
+  "REVOKED",
+  "DISABLED",
+];
 
 export interface DeliveryOptions {
   fetchImpl?: typeof fetch;
