@@ -1,4 +1,5 @@
-import { resolve } from "node:path";
+import { readdirSync, readFileSync } from "node:fs";
+import { basename, join, resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 afterEach(() => {
@@ -43,6 +44,11 @@ const MODULES = [
     "./src/server/auth/e2e-provider.disabled.ts",
   ],
   ["the e2e Postgres driver", "@/server/db/e2e-driver", "./src/server/db/e2e-driver.disabled.ts"],
+  [
+    "the e2e Framebriar upstream seam",
+    "@/server/feedback/e2e-upstream",
+    "./src/server/feedback/e2e-upstream.disabled.ts",
+  ],
 ] as const;
 
 const FEEDBACK_STUB = "./src/features/feedback/feedback.disabled.tsx";
@@ -253,5 +259,29 @@ describe("next.config: screenshot capture is compiled in only when screenshots a
       ...aliases(FEEDBACK_MODULES),
       [CAPTURE]: CAPTURE_STUB,
     });
+  });
+});
+
+describe("e2e-only modules are imported by their alias", () => {
+  // next.config.ts swaps a module only when it is imported by its exact `@/...` specifier. A relative import of the same file
+  // is NOT swapped, and would put the real e2e module into a Preview or Production build (it did once: the Framebriar seam).
+  function sources(dir: string): string[] {
+    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) return sources(path);
+      return /\.tsx?$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name) ? [path] : [];
+    });
+  }
+
+  it("no source file reaches an e2e-only module by a relative path", async () => {
+    const { E2E_ONLY_MODULES } = await loadModule();
+    const files = sources(resolve(__dirname));
+    expect(E2E_ONLY_MODULES.length).toBeGreaterThan(0);
+    for (const { specifier } of E2E_ONLY_MODULES) {
+      const name = basename(specifier);
+      const relative = new RegExp(`from\\s+["']\\.{1,2}/(?:[^"']*/)?${name}["']`);
+      const offenders = files.filter((file) => relative.test(readFileSync(file, "utf8")));
+      expect(offenders, `${specifier} must be imported by its alias`).toEqual([]);
+    }
   });
 });

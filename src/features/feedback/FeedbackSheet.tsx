@@ -15,6 +15,14 @@ export interface TakenScreenshot {
   blob: Blob | null;
 }
 
+/**
+ * The largest screenshot offered. A report goes through the app's own route, and the host rejects a request body over about
+ * 4.5 MB before the app sees it (#259), while the SDK itself allows 8 MiB. Staying under this keeps a report that has a
+ * screenshot sendable; a bigger one is not offered (never shrunk or cut) and the notes still send. To be confirmed in the manual
+ * Preview check.
+ */
+export const SCREENSHOT_SEND_LIMIT_BYTES = 4_000_000;
+
 type Problem = "full" | "unavailable" | "uncertain" | null;
 
 // Exact strings from design's #129 section 4. Apostrophes are typographic, like the rest of the app.
@@ -26,6 +34,8 @@ export const COPY = {
   screenshotLabel: "Include a screenshot of this screen",
   screenshotNote: "It shows what’s on screen right now, including trip names and places.",
   screenshotFailed: "Couldn’t capture the screen. You can still send your notes.",
+  screenshotTooLarge:
+    "The screenshot is too large to send from here, so it isn’t included. Your notes still send.",
   thumbnailAlt: "Screenshot of the screen you were on",
   alsoSent: "Also sent: the app version and the name of the screen you were on.",
   offline: "You’re offline. It will be saved here and sent when you’re back online.",
@@ -89,7 +99,11 @@ export function FeedbackSheet({
   const { prepareReport, saveReport } = useFeedbackAccess();
   const online = useOnline();
   const [notes, setNotes] = useState("");
-  const [include, setInclude] = useState(Boolean(screenshot?.blob));
+  // A screenshot over the sendable size is treated like one that could not be taken: not offered, never shrunk.
+  const taken = screenshot?.blob ?? null;
+  const tooLarge = taken !== null && taken.size > SCREENSHOT_SEND_LIMIT_BYTES;
+  const blob = tooLarge ? null : taken;
+  const [include, setInclude] = useState(blob !== null);
   const [phase, setPhase] = useState<"form" | "saving" | "saved">("form");
   const [problem, setProblem] = useState<Problem>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
@@ -98,7 +112,6 @@ export function FeedbackSheet({
   const abort = useRef<AbortController | null>(null);
   const prepared = useRef<Awaited<ReturnType<typeof prepareReport>> | null>(null);
 
-  const blob = screenshot?.blob ?? null;
   const thumbnail = useMemo(() => (blob ? URL.createObjectURL(blob) : null), [blob]);
   useEffect(() => () => (thumbnail ? URL.revokeObjectURL(thumbnail) : undefined), [thumbnail]);
 
@@ -264,7 +277,11 @@ export function FeedbackSheet({
                   <span>{COPY.screenshotLabel}</span>
                 </label>
               )}
-              {!blob ? <p className="tiny muted">{COPY.screenshotFailed}</p> : null}
+              {!blob ? (
+                <p className="tiny muted">
+                  {tooLarge ? COPY.screenshotTooLarge : COPY.screenshotFailed}
+                </p>
+              ) : null}
             </div>
           ) : null}
           <p className="tiny muted">{COPY.alsoSent}</p>

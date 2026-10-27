@@ -981,6 +981,27 @@ describe("checkCiWorkflow", () => {
       /build job must make the Preview output offline/,
     ],
     [
+      "the build job never checks the Preview output for e2e-only modules",
+      inJob(
+        "build",
+        "      - name: The Preview output carries no e2e-only module\n        run: npm run check:no-e2e-in-build\n",
+        "",
+      ),
+      /build job must run check:no-e2e-in-build on the Preview output/,
+    ],
+    [
+      "the Preview e2e check moved before the Preview output is made",
+      inJob(
+        "build",
+        "      - name: The Preview output carries no e2e-only module\n        run: npm run check:no-e2e-in-build\n",
+        "",
+      ).replace(
+        "      - name: Install the locked Vercel CLI\n",
+        "      - name: Early\n        run: npm run check:no-e2e-in-build\n      - name: Install the locked Vercel CLI\n",
+      ),
+      /build job must run check:no-e2e-in-build on the Preview output/,
+    ],
+    [
       "the build job makes the Preview output but never checks it",
       inJob("build", "npm run check:preview-feedback-in-build -- .vercel/output .next", "true"),
       /build job must make the Preview output offline/,

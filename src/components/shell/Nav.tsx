@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useFeedbackSignOut } from "@/features/feedback/FeedbackAccess";
 import { isActive, NAV_ITEMS } from "./nav-items";
 
 export interface NavProps {
@@ -35,6 +36,7 @@ function SignOutIcon() {
 // Fixed bottom bar on phones, compact vertical rail from 900px (CSS only).
 export function Nav({ signOut, email }: NavProps = {}) {
   const pathname = usePathname();
+  const clearFeedback = useFeedbackSignOut();
   return (
     <nav className="bottom-nav" aria-label="Primary navigation">
       {NAV_ITEMS.map((item) => (
@@ -49,7 +51,14 @@ export function Nav({ signOut, email }: NavProps = {}) {
       ))}
       {signOut && email ? (
         // One tap, no confirm, as on Settings. Never the current page, so no aria-current.
-        <form action={signOut} className="nav-signout">
+        <form
+          action={async () => {
+            // The account's unsent feedback notes and screenshots leave this device before the session does (#260).
+            await clearFeedback();
+            await signOut();
+          }}
+          className="nav-signout"
+        >
           <button type="submit" title={`Signed in as ${email}`}>
             <span aria-hidden="true">
               <SignOutIcon />

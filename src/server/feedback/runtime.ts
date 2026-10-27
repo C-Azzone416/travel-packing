@@ -6,11 +6,14 @@
 import "server-only";
 import { getAuth } from "@/server/auth/auth-runtime";
 import { getAppDb } from "@/server/db/app-db";
+// By this exact specifier: next.config.ts swaps it for a stub in every build that is not the e2e build (a relative import would not be swapped).
+import { e2eRouteLimits, e2eUpstreamFetch } from "@/server/feedback/e2e-upstream";
 import { createEnrollmentService, type EnrollmentService } from "./enrollment-service";
 import { createFramebriarClient } from "./framebriar-client";
 import { createFeedbackRoutes } from "./routes";
 
-const client = createFramebriarClient();
+// In the synthetic e2e build the client talks to a local fake instead of the real service (null, so the default, everywhere else).
+const client = createFramebriarClient({ fetchImpl: e2eUpstreamFetch() ?? undefined });
 let service: EnrollmentService | undefined;
 
 async function getService(): Promise<EnrollmentService | null> {
@@ -20,4 +23,9 @@ async function getService(): Promise<EnrollmentService | null> {
   return service;
 }
 
-export const feedbackRoutes = createFeedbackRoutes({ getAuth, getService, client });
+export const feedbackRoutes = createFeedbackRoutes({
+  getAuth,
+  getService,
+  client,
+  limits: e2eRouteLimits(),
+});

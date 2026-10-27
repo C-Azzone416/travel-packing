@@ -11,4 +11,6 @@ export function portFrom(value: string | undefined, fallback: number): number {
 export const PORT = portFrom(process.env.E2E_PORT, 3100);
 export const OPEN_METEO_PORT = PORT + 100;
 export const FAKE_GEOCODER_PORT = PORT + 200;
+/** The fake Framebriar service the app's server talks to in e2e (#260), and its control endpoints. */
+export const FAKE_FRAMEBRIAR_PORT = PORT + 300;
 export const E2E_DB_PORT = portFrom(process.env.E2E_DB_PORT, 5433);
