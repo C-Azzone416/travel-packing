@@ -11,6 +11,11 @@ describe("captureBlocked", () => {
     "/finish-setup",
     "/access-denied",
     "/sign-in/callback",
+    // Account closure asks for the current password and the word DELETE; it stays blocked while Settings opens up (#273).
+    "/close-account",
+    "/close-account/",
+    "/close-account/complete",
+    "/close-account/complete/extra",
   ])("blocks %s", (path) => {
     expect(captureBlocked(path)).toBe(true);
   });
@@ -27,6 +32,9 @@ describe("captureBlocked", () => {
     "/settings/account",
     "/settingsx",
     "/signin",
+    // Only the route and what is under it: a different word that merely starts the same is a different screen, as with /settingsx.
+    "/close-accounts",
+    "/close-account-x",
   ])("allows %s", (path) => {
     expect(captureBlocked(path)).toBe(false);
   });
