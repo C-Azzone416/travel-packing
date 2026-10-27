@@ -1,5 +1,20 @@
 # Account deletion (#237)
 
+## Rollout gate
+
+Account closure is disabled unless the server receives the exact value `CLOSE_ACCOUNT_ENABLED=1`. Missing, blank, or malformed
+configuration fails closed. While disabled, Settings does not render the Close account entry, the public recovery route redirects
+to Settings, both server actions reject before reading session or database state, the destructive core refuses direct calls, and
+the signed-out reconciler neither queries nor mutates deletion state. The completion route remains available only to consume a
+one-time completion cookie already issued after confirmed provider deletion.
+
+The synthetic Playwright environment sets the switch only for its isolated fake-auth/PGlite run. Preview and Production land with
+the variable unset. Before either hosted target is enabled, validate this flow with an explicitly approved synthetic account on
+the non-production Neon Auth/database branch, and complete #261 so Framebriar enrollment revocation and erasure participates in
+truthful deletion retries. Delivered Framebriar reports cannot currently be erased through its browser SDK and must not be
+described as deleted. Landing this code does not authorize changing hosted configuration, creating or deleting hosted accounts,
+or exercising the destructive flow against real data.
+
 ## User flow
 
 Settings opens a non-backdrop-dismissable confirmation sheet. The owner must enter the current password and type `DELETE`

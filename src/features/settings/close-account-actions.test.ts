@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   closeAccount: vi.fn(),
@@ -60,6 +60,7 @@ function form(password = "synthetic-password", confirmation = "DELETE") {
 }
 
 beforeEach(() => {
+  vi.stubEnv("CLOSE_ACCOUNT_ENABLED", "1");
   vi.clearAllMocks();
   resetSignInLimits();
   mocks.requestHeaders = new Headers({
@@ -75,8 +76,20 @@ beforeEach(() => {
   mocks.forgetPendingEmail.mockResolvedValue(undefined);
   blocked.mockResolvedValue(true);
 });
+afterEach(() => vi.unstubAllEnvs());
 
 describe("closeAccountAction", () => {
+  it("rejects a direct action call while rollout is off before reading request, auth or data", async () => {
+    vi.stubEnv("CLOSE_ACCOUNT_ENABLED", "");
+    await expect(closeAccountAction(INITIAL_CLOSE_ACCOUNT_STATE, form())).resolves.toEqual({
+      error: "Account closure is not available right now. Nothing was deleted.",
+      fieldErrors: {},
+    });
+    expect(mocks.getAuth).not.toHaveBeenCalled();
+    expect(mocks.getAppDb).not.toHaveBeenCalled();
+    expect(mocks.closeAccount).not.toHaveBeenCalled();
+  });
+
   it("requires a same-origin request before reading auth or touching data", async () => {
     mocks.requestHeaders.set("origin", "https://evil.example.test");
     await expect(closeAccountAction(INITIAL_CLOSE_ACCOUNT_STATE, form())).resolves.toMatchObject({
@@ -218,6 +231,19 @@ describe("closeAccountAction", () => {
 });
 
 describe("retryCloseAccountAction", () => {
+  it("rejects direct retry and reconciliation while rollout is off", async () => {
+    vi.stubEnv("CLOSE_ACCOUNT_ENABLED", "invalid");
+    await expect(retryCloseAccountAction(INITIAL_CLOSE_ACCOUNT_STATE, form())).resolves.toEqual({
+      error: "Account closure is not available right now. Nothing was deleted.",
+      fieldErrors: {},
+      recovery: true,
+    });
+    expect(mocks.getAuth).not.toHaveBeenCalled();
+    expect(mocks.getAppDb).not.toHaveBeenCalled();
+    expect(blocked).not.toHaveBeenCalled();
+    expect(mocks.closeAccount).not.toHaveBeenCalled();
+  });
+
   it("requires a same-origin retry before reading auth", async () => {
     mocks.requestHeaders.set("origin", "https://evil.example.test");
     await expect(retryCloseAccountAction(INITIAL_CLOSE_ACCOUNT_STATE, form())).resolves.toEqual({

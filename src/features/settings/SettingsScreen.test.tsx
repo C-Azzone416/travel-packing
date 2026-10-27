@@ -35,6 +35,7 @@ function setup(
       return { error: null, fieldErrors: {} };
     },
   ),
+  accountClosureEnabled = true,
 ) {
   let saved = { weatherOptIn: false, temperatureUnit: "F" as "F" | "C" };
   const update =
@@ -54,6 +55,7 @@ function setup(
           updateWeather={update}
           initialAppearance="base"
           updateAppearance={async (appearance) => ({ ok: true as const, appearance })}
+          accountClosureEnabled={accountClosureEnabled}
           closeAccount={closeAccount}
         />
       </SaveStatusProvider>
@@ -77,6 +79,12 @@ describe("SettingsScreen", () => {
     setup(null);
     expect(screen.queryByText(/Signed in as/)).toBeNull();
     expect(screen.getByRole("button", { name: "Sign out" })).toBeTruthy();
+  });
+
+  it("hides the destructive entry point while the server rollout gate is off", () => {
+    setup(undefined, undefined, undefined, undefined, false);
+    expect(screen.queryByRole("button", { name: "Close account" })).toBeNull();
+    expect(screen.queryByText("Permanently remove your account identity")).toBeNull();
   });
 
   it("requires the password and exact irreversible confirmation in a nondismissable account sheet", async () => {

@@ -153,12 +153,14 @@ Vercel project environment variables, per environment (Preview and Production ge
 | `NEON_AUTH_BASE_URL`         | preview auth                                                              | production auth       |
 | `NEON_AUTH_COOKIE_SECRET`    | its own random value                                                      | its own random value  |
 | `OWNER_EMAIL_ALLOWLIST`      | preview owner(s)                                                          | Caroline              |
+| `CLOSE_ACCOUNT_ENABLED`      | unset initially; exact `1` only after the documented release gates        | unset initially       |
 | `LOCATION_PROVIDER`          | `open-meteo` (required)                                                   | unset or `open-meteo` |
 | `WEATHER_PROVIDER`           | `open-meteo`                                                              | `open-meteo`          |
 | `FRAMEBRIAR_CREDENTIAL_KEYS` | optional Secret, see [framebriar-enrollment.md](framebriar-enrollment.md) | never set             |
 
 Never set `NEXT_PUBLIC_E2E_BUILD`, `AUTH_E2E_*`, `E2E_DATABASE_URL` or `OPEN_METEO_GEOCODING_URL` in Vercel or GitHub. Never expose the
-production `DATABASE_URL` to the Preview environment.
+production `DATABASE_URL` to the Preview environment. `CLOSE_ACCOUNT_ENABLED` is deliberately absent from both hosted targets when
+the feature lands; enabling it is a separate release decision after the gates in [account-deletion.md](account-deletion.md).
 
 ## The stable Preview address (#96)
 

@@ -5,6 +5,7 @@ import type { Db } from "@/server/db/retention";
 import { accountDeletions, accountSetups, users } from "@/server/db/schema";
 import { lockAccountDeletion, lockAccountSetup } from "./account-deletion-lock";
 import { providerIdentityState } from "./provider-identity";
+import { accountClosureEnabled } from "./account-closure-rollout";
 
 export type AccountDeletionReconciliation = "completed" | "pending" | "unavailable";
 export interface AccountDeletionReconciliationSummary {
@@ -100,6 +101,7 @@ export async function reconcileAccountDeletion(
   identityCreatedAt: number,
   setupEmailDigest: string,
 ): Promise<AccountDeletionReconciliation> {
+  if (!accountClosureEnabled()) return "unavailable";
   const providerState = await providerIdentityState(db, userId, identityCreatedAt);
   if (providerState === "present") return "pending";
   if (providerState === "unavailable") return "unavailable";
@@ -143,6 +145,7 @@ export async function reconcilePendingAccountDeletions(
     pending: 0,
     unavailable: 0,
   };
+  if (!accountClosureEnabled()) return summary;
   let fences: {
     userId: string;
     identityCreatedAt: Date;

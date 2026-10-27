@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getAuth } from "@/server/auth/auth-runtime";
 import { reconcilePendingAccountDeletions } from "@/server/auth/account-deletion";
+import { accountClosureEnabled } from "@/server/auth/account-closure-rollout";
 import { authorizeOwner } from "@/server/auth/guard";
 import { getAppDb } from "@/server/db/app-db";
 import {
@@ -28,7 +29,7 @@ export default async function SignInPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { notice } = await searchParams;
-  const db = await getAppDb();
+  const db = accountClosureEnabled() ? await getAppDb() : null;
   if (db) {
     try {
       await reconcilePendingAccountDeletions(db);

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { APPEARANCE_COOKIE } from "@/domain/appearance";
 import { getAuth } from "@/server/auth/auth-runtime";
+import { accountClosureEnabled } from "@/server/auth/account-closure-rollout";
 import {
   ACCOUNT_CLOSURE_COMPLETE_PATH,
   issueAccountClosureCompletion,
@@ -28,6 +29,7 @@ const UNKNOWN =
   "We couldn’t confirm whether account closure started. Try again; if access is blocked, sign in to finish closing the account.";
 const FINAL_CLEANUP =
   "Your identity and Packed Smart content were deleted, but removal of a temporary closure marker couldn’t be confirmed. Do not create a new account yet.";
+const CLOSURE_DISABLED = "Account closure is not available right now. Nothing was deleted.";
 
 /** The provider identity is already gone. Local-cookie cleanup is best effort; redirect must always complete. */
 async function finishConfirmedClosure(auth: Awaited<ReturnType<typeof getAuth>>): Promise<never> {
@@ -49,6 +51,7 @@ export async function closeAccountAction(
   _previous: CloseAccountState,
   formData: FormData,
 ): Promise<CloseAccountState> {
+  if (!accountClosureEnabled()) return { error: CLOSURE_DISABLED, fieldErrors: {} };
   const requestHeaders = await headers();
   if (!hasSameRequestOrigin(requestHeaders)) return { error: TRY_AGAIN, fieldErrors: {} };
 
@@ -113,6 +116,9 @@ export async function retryCloseAccountAction(
   _previous: CloseAccountState,
   formData: FormData,
 ): Promise<CloseAccountState> {
+  if (!accountClosureEnabled()) {
+    return { error: CLOSURE_DISABLED, fieldErrors: {}, recovery: true };
+  }
   const requestHeaders = await headers();
   if (!hasSameRequestOrigin(requestHeaders)) return { error: TRY_AGAIN, fieldErrors: {} };
 

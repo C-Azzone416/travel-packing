@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMigratedDb, resetData } from "@/server/db/__fixtures__/db";
 import type { Db } from "@/server/db/retention";
 import { createFakeAuth } from "./__fixtures__/fake-auth";
@@ -22,6 +22,7 @@ beforeAll(async () => {
   context = await createMigratedDb();
 });
 beforeEach(async () => {
+  vi.stubEnv("CLOSE_ACCOUNT_ENABLED", "1");
   await resetData(context.client);
   await context.client.query("INSERT INTO users (id) VALUES ($1)", [SESSION.userId]);
   fake = createFakeAuth([{ ...SESSION, password: PASSWORD }]);
@@ -37,6 +38,7 @@ beforeEach(async () => {
     completionSignals: { issue: () => "", open: () => false },
   };
 });
+afterEach(() => vi.unstubAllEnvs());
 afterAll(async () => context.client.close());
 
 describe("closeAccount", () => {
@@ -48,6 +50,20 @@ describe("closeAccount", () => {
         return typeof value === "function" ? value.bind(target) : value;
       },
     });
+
+  it("refuses a direct core call while rollout is off without authenticating or touching data", async () => {
+    vi.stubEnv("CLOSE_ACCOUNT_ENABLED", "");
+    expect(await closeAccount(auth, context.db as unknown as Db, SESSION, PASSWORD)).toEqual({
+      status: "unavailable",
+      deletionStarted: false,
+    });
+    expect(fake.flows.calls).toEqual([]);
+    expect(fake.current).toEqual(SESSION);
+    expect((await context.client.query("SELECT id FROM users")).rows).toEqual([
+      { id: SESSION.userId },
+    ]);
+    expect((await context.client.query("SELECT * FROM account_deletions")).rows).toEqual([]);
+  });
 
   it("reads only the raw recovery provider session", async () => {
     auth.provider = { ...fake, getSession: async () => null };

@@ -30,6 +30,8 @@ export interface SettingsScreenProps {
   /** The theme saved on the account (Base when none was chosen). */
   initialAppearance: Appearance;
   updateAppearance: (appearance: Appearance) => Promise<AppearanceResult>;
+  /** Server-side rollout decision. Missing or invalid configuration passes false and hides every closure entry point. */
+  accountClosureEnabled: boolean;
   closeAccount: (previous: CloseAccountState, formData: FormData) => Promise<CloseAccountState>;
 }
 
@@ -60,6 +62,7 @@ export function SettingsScreen({
   updateWeather,
   initialAppearance,
   updateAppearance,
+  accountClosureEnabled,
   closeAccount,
 }: SettingsScreenProps) {
   const { status, lastSavedAt, retry, track } = useSaveStatus();
@@ -153,15 +156,17 @@ export function SettingsScreen({
               Sign out
             </Button>
           </form>
-          <div className="close-account-entry">
-            <h3>Close account</h3>
-            <p className="muted">
-              Permanently remove your account identity and Packed Smart content.
-            </p>
-            <Button variant="danger" onClick={() => setClosingAccount(true)}>
-              Close account
-            </Button>
-          </div>
+          {accountClosureEnabled ? (
+            <div className="close-account-entry">
+              <h3>Close account</h3>
+              <p className="muted">
+                Permanently remove your account identity and Packed Smart content.
+              </p>
+              <Button variant="danger" onClick={() => setClosingAccount(true)}>
+                Close account
+              </Button>
+            </div>
+          ) : null}
         </Card>
         <Card as="section" padded aria-labelledby="settings-save">
           <h2 id="settings-save">Save status</h2>
@@ -221,7 +226,7 @@ export function SettingsScreen({
         </Card>
         <FeedbackSettings />
       </div>
-      {closingAccount ? (
+      {accountClosureEnabled && closingAccount ? (
         <CloseAccountSheet action={closeAccount} onClose={() => setClosingAccount(false)} />
       ) : null}
     </section>

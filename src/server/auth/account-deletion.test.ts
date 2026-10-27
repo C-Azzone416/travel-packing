@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMigratedDb, resetData } from "@/server/db/__fixtures__/db";
 import type { Db } from "@/server/db/retention";
 import {
@@ -17,10 +17,12 @@ beforeAll(async () => {
   );
 });
 beforeEach(async () => {
+  vi.stubEnv("CLOSE_ACCOUNT_ENABLED", "1");
   await resetData(context.client);
   await context.client.exec('TRUNCATE TABLE "account_deletions", "account_setups"');
   await context.client.exec('TRUNCATE TABLE neon_auth."user"');
 });
+afterEach(() => vi.unstubAllEnvs());
 afterAll(async () => context.client.close());
 
 const OWNER = "synthetic-owner";
@@ -250,6 +252,31 @@ describe("completeAccountDeletion", () => {
 });
 
 describe("reconcileAccountDeletion", () => {
+  it("does not query or erase a fence while rollout is off", async () => {
+    const execute = vi.fn();
+    vi.stubEnv("CLOSE_ACCOUNT_ENABLED", "");
+    await expect(
+      reconcileAccountDeletion(
+        { execute } as unknown as Db,
+        OWNER,
+        IDENTITY_CREATED_AT,
+        OWNER_DIGEST,
+      ),
+    ).resolves.toBe("unavailable");
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it("does no bounded candidate query or cleanup while rollout is off", async () => {
+    const execute = vi.fn();
+    vi.stubEnv("CLOSE_ACCOUNT_ENABLED", "invalid");
+    await expect(reconcilePendingAccountDeletions({ execute } as unknown as Db)).resolves.toEqual({
+      completed: 0,
+      pending: 0,
+      unavailable: 0,
+    });
+    expect(execute).not.toHaveBeenCalled();
+  });
+
   it("keeps the fence while the exact provider identity still exists", async () => {
     await seed(OWNER, OWNER_DIGEST, 1);
     await beginAccountDeletion(

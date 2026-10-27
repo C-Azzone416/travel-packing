@@ -9,6 +9,7 @@ import {
 import type { RuntimeAuth } from "./auth-runtime";
 import type { AuthSession } from "./types";
 import type { Db } from "@/server/db/retention";
+import { accountClosureEnabled } from "./account-closure-rollout";
 
 export type CloseAccountOutcome =
   | { status: "ok" }
@@ -47,6 +48,9 @@ export async function closeAccount(
   session: AuthSession,
   password: string,
 ): Promise<CloseAccountOutcome> {
+  // The action checks too, but the destructive core must remain safe if another caller reaches it directly.
+  if (!accountClosureEnabled()) return { status: "unavailable", deletionStarted: false };
+
   const verified = await auth.deletionProvider.signInWithPassword(session.email, password);
   if (!verified.ok) {
     return verified.diagnostic?.reason === "credentials-rejected"

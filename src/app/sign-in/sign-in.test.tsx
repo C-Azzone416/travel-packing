@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createFakeAuth } from "@/server/auth/__fixtures__/fake-auth";
 import { parseAllowlist } from "@/server/auth/allowlist";
 
@@ -117,7 +117,20 @@ describe("SignInForm", () => {
 
 const search = (params: Record<string, string> = {}) => ({ searchParams: Promise.resolve(params) });
 
+beforeEach(() => {
+  vi.stubEnv("CLOSE_ACCOUNT_ENABLED", "1");
+  reconcile.mockClear();
+});
+afterEach(() => vi.unstubAllEnvs());
+
 describe("SignInPage", () => {
+  it("does not open deletion reconciliation while rollout is off", async () => {
+    vi.stubEnv("CLOSE_ACCOUNT_ENABLED", "");
+    fake.current = null;
+    expect(renderToStaticMarkup(await SignInPage(search()))).toContain("Welcome back");
+    expect(reconcile).not.toHaveBeenCalled();
+  });
+
   it("shows the form to a signed-out visitor", async () => {
     fake.current = null;
     expect(renderToStaticMarkup(await SignInPage(search()))).toContain("Welcome back");
