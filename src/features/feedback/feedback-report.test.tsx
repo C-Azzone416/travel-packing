@@ -102,8 +102,6 @@ describe("the entry point", () => {
   });
 
   it.each([
-    "/settings",
-    "/settings/x",
     "/sign-in",
     "/sign-up",
     "/verify",

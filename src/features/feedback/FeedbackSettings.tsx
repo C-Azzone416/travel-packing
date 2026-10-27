@@ -236,7 +236,8 @@ export function FeedbackSettings() {
         </div>
       ) : null}
       {canRedeem ? (
-        <form onSubmit={submit} className="feedback-form">
+        // The invitation is memory-only and sits in a password field; the whole form is also kept out of any screenshot (#273).
+        <form onSubmit={submit} className="feedback-form" data-feedback-exclude="invitation">
           <div className="field">
             <label htmlFor={fieldId}>Invitation</label>
             <input

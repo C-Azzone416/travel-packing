@@ -142,8 +142,8 @@ test("a disconnect that cannot reach the service changes nothing and says so", a
   await fakeFramebriar.setOffline(false);
 });
 
-test("the Feedback button is not offered on Settings", DEVICE, async ({ page }) => {
+test("the Feedback button is offered on Settings (#273)", DEVICE, async ({ page }) => {
   await connectedOnTrips(page);
   await openSettingsFromNav(page);
-  await expect(page.getByRole("button", { name: "Send feedback" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Send feedback" })).toBeEnabled();
 });

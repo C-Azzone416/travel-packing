@@ -1,5 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  EXCLUDE_ATTRIBUTE,
+  IDENTITY_REGION_ATTRIBUTE,
+  SENSITIVE_PORTAL_ATTRIBUTE,
+} from "./capture-exclusion";
 import * as stub from "./screenshot-capture.disabled";
 
 const toBlob = vi.fn();
@@ -19,6 +24,7 @@ function at(path: string) {
 afterEach(() => {
   toBlob.mockReset();
   at("/");
+  document.body.innerHTML = "";
 });
 
 describe("the screenshot capture module and its production stub", () => {
@@ -53,7 +59,6 @@ describe("the screenshot capture module and its production stub", () => {
 
 describe("captureScreenshot", () => {
   it.each([
-    "/settings",
     "/sign-in",
     "/verify",
     "/reset-password",
@@ -88,17 +93,82 @@ describe("captureScreenshot", () => {
     });
   });
 
-  it("leaves password fields out of the picture", async () => {
+  it("hands the library the exclusion filter, so marked regions and every password field are left out before cloning", async () => {
     toBlob.mockResolvedValue(png(10));
     const real = await loadReal();
     await real.captureScreenshot();
     const { filter } = toBlob.mock.calls[0][1] as { filter: (node: Node) => boolean };
     const password = document.createElement("input");
     password.type = "password";
-    const text = document.createElement("input");
+    const marked = document.createElement("div");
+    marked.setAttribute(EXCLUDE_ATTRIBUTE, "");
     expect(filter(password)).toBe(false);
-    expect(filter(text)).toBe(true);
+    expect(filter(marked)).toBe(false);
+    expect(filter(document.createElement("input"))).toBe(true);
     expect(filter(document.createElement("div"))).toBe(true);
+  });
+
+  describe("on Settings (#273)", () => {
+    function settingsWithIdentity(marked: boolean) {
+      const region = document.createElement("p");
+      region.setAttribute(IDENTITY_REGION_ATTRIBUTE, "");
+      const email = document.createElement("strong");
+      if (marked) email.setAttribute(EXCLUDE_ATTRIBUTE, "account-identity");
+      email.textContent = "canary@example.invalid";
+      region.append(email);
+      document.body.append(region);
+    }
+
+    it("takes the picture, with the sensitive parts left out, when they are all marked", async () => {
+      at("/settings");
+      settingsWithIdentity(true);
+      toBlob.mockResolvedValue(png(500));
+      const real = await loadReal();
+      expect((await real.captureScreenshot())?.size).toBe(500);
+      expect(toBlob).toHaveBeenCalledTimes(1);
+    });
+
+    it("takes no picture at all, and never starts the library, while a sensitive dialog is open", async () => {
+      at("/settings");
+      settingsWithIdentity(true);
+      const portal = document.createElement("form");
+      portal.setAttribute(SENSITIVE_PORTAL_ATTRIBUTE, "");
+      document.body.append(portal);
+      toBlob.mockResolvedValue(png(500));
+      const real = await loadReal();
+      expect(await real.captureScreenshot()).toBeNull();
+      expect(toBlob).not.toHaveBeenCalled();
+    });
+
+    it("takes no picture when the identity is shown but its exclusion cannot be found", async () => {
+      at("/settings");
+      settingsWithIdentity(false);
+      toBlob.mockResolvedValue(png(500));
+      const real = await loadReal();
+      expect(await real.captureScreenshot()).toBeNull();
+      expect(toBlob).not.toHaveBeenCalled();
+    });
+
+    it("throws the picture away if a sensitive dialog opens while it is being made", async () => {
+      at("/settings");
+      settingsWithIdentity(true);
+      toBlob.mockImplementation(async () => {
+        const portal = document.createElement("form");
+        portal.setAttribute(SENSITIVE_PORTAL_ATTRIBUTE, "");
+        document.body.append(portal);
+        return png(500);
+      });
+      const real = await loadReal();
+      expect(await real.captureScreenshot()).toBeNull();
+      expect(document.documentElement.hasAttribute("data-feedback-screenshot-capture")).toBe(false);
+    });
+
+    it("the same page without the dialog is captured, so the refusal above is the dialog's doing", async () => {
+      at("/trips/abc");
+      toBlob.mockResolvedValue(png(500));
+      const real = await loadReal();
+      expect((await real.captureScreenshot())?.size).toBe(500);
+    });
   });
 
   it("scales down until the picture fits in 8 MiB, then gives up", async () => {

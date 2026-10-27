@@ -14,20 +14,21 @@ privately. The app id and origins are public configuration and are written exact
 A report holds what the person typed and a few approved codes. The review sheet shows the notes and the screenshot (if any), and
 lists the rest under "Also sent".
 
-| Sent                                                                                                          | Never sent or captured                                                               |
-| ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| The notes the person wrote (2,000 characters at most)                                                         | Passwords, sign-in codes, invitations, tokens                                        |
-| A screenshot of the screen, **only in Preview/local/test builds**, ticked by default and removable per report | Email addresses; trip names, places, dates or ids in the report's own fields         |
-| The screen as a code: `trips`, `new-trip`, `trip`, `review`, `staples` or `other`                             | The address of the page (it contains a trip id)                                      |
-| A viewport class (`phone`, `tablet`, `desktop`), the input kind, the app version, the capture time            | Anything from Settings or the sign-in and account screens: nothing is captured there |
+| Sent                                                                                                          | Never sent or captured                                                                                                                |
+| ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| The notes the person wrote (2,000 characters at most)                                                         | Passwords, sign-in codes, invitations, tokens                                                                                         |
+| A screenshot of the screen, **only in Preview/local/test builds**, ticked by default and removable per report | Email addresses; trip names, places, dates or ids in the report's own fields                                                          |
+| The screen as a code: `trips`, `new-trip`, `trip`, `review`, `staples` or `other`                             | The address of the page (it contains a trip id)                                                                                       |
+| A viewport class (`phone`, `tablet`, `desktop`), the input kind, the app version, the capture time            | The signed-in address, an invitation, any password field, and anything on the sign-in and account screens (nothing is captured there) |
 
 - A screenshot shows what is on screen, including trip names and places. The sheet says so next to the tick box. Production
   contains no Framebriar UI, SDK or screenshot code (see "Preview build and exact-origin boundary" in
   [framebriar.md](framebriar.md)).
 - Telemetry is off. Nothing here collects performance or diagnostic data; adding it later needs its own decision and a disclosure line
   in Settings.
-- Capture is blocked on Settings and on the sign-in, sign-up, verify, forgot-password, reset-password, finish-setup and
-  access-denied screens, in the Feedback button and in the capture code itself.
+- Capture is blocked on the sign-in, sign-up, verify, forgot-password, reset-password, finish-setup and access-denied screens, in the
+  Feedback button and in the capture code itself. On Settings the screenshot leaves out the signed-in address, the invitation form and
+  every password field before the picture is made, and there is no screenshot at all while the Close account dialog is open.
 
 ## Owner setup (once)
 

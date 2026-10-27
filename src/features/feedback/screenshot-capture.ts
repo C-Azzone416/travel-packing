@@ -3,6 +3,7 @@
 // can reach the production bundle, and `npm run check:no-capture-in-build` fails the build if the marker below is found there.
 // Import it as "@/features/feedback/screenshot-capture" (the exact specifier next.config.ts swaps); never by a relative path.
 import { captureBlocked } from "./capture-policy";
+import { captureReadiness, includeInCapture } from "./capture-exclusion";
 
 /** Unique to this module: the production-build check looks for it. Keep it in sync with src/tooling/build-markers.ts. */
 export const SCREENSHOT_CAPTURE_MARKER = "feedback-screenshot-capture";
@@ -21,6 +22,9 @@ const PIXEL_RATIOS = [1, 0.5, 0.25] as const;
  */
 export async function captureScreenshot(): Promise<Blob | null> {
   if (typeof window === "undefined" || captureBlocked(window.location.pathname)) return null;
+  // Settings and other screens that show something sensitive are captured with those parts left out (capture-exclusion.ts);
+  // when that cannot be proven, there is no picture and the report goes as text only.
+  if (!captureReadiness(document).ok) return null;
   const root = document.documentElement;
   // The marker is part of this attribute's name, so a bundler cannot keep this function without it.
   root.setAttribute(`data-${SCREENSHOT_CAPTURE_MARKER}`, "");
@@ -35,9 +39,11 @@ export async function captureScreenshot(): Promise<Blob | null> {
           transformOrigin: "top left",
           transform: `translate(${-window.scrollX}px, ${-window.scrollY}px)`,
         },
-        // A page-sized capture of the visible screen, without scripts or hidden inputs.
-        filter: (node: Node) => !(node instanceof HTMLInputElement && node.type === "password"),
+        // Asked before each node is cloned or its value read: marked regions and every password field never enter the picture.
+        filter: includeInCapture,
       });
+      // A sensitive dialog that opened while the picture was being made is not in a state anyone proved clean: no picture.
+      if (!captureReadiness(document).ok) return null;
       if (blob && blob.type === "image/png" && blob.size > 0 && blob.size <= MAX_BYTES) return blob;
       if (!blob) return null;
     }

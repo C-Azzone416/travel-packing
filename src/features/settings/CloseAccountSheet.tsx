@@ -40,7 +40,14 @@ export function CloseAccountSheet({
         </>
       }
     >
-      <form id={formId} action={formAction} className="close-account-form" noValidate>
+      {/* While this is open no feedback screenshot is taken at all (#273): it holds a password and a confirmation. */}
+      <form
+        id={formId}
+        action={formAction}
+        className="close-account-form"
+        data-feedback-sensitive-portal=""
+        noValidate
+      >
         <p>
           To confirm, enter your current password and type <strong>DELETE</strong>.
         </p>

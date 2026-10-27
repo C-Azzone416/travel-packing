@@ -10,9 +10,6 @@ describe("captureBlocked", () => {
     "/reset-password",
     "/finish-setup",
     "/access-denied",
-    "/settings",
-    "/settings/",
-    "/settings/account",
     "/sign-in/callback",
   ])("blocks %s", (path) => {
     expect(captureBlocked(path)).toBe(true);
@@ -24,6 +21,10 @@ describe("captureBlocked", () => {
     "/trips/abc",
     "/trips/abc/review",
     "/staples",
+    // Settings is captured with its sensitive parts left out before the picture is made (#273).
+    "/settings",
+    "/settings/",
+    "/settings/account",
     "/settingsx",
     "/signin",
   ])("allows %s", (path) => {
