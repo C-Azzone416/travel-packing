@@ -61,8 +61,8 @@ by a manual run) builds with a pinned Vercel CLI and deploys the prebuilt output
 The Vercel CLI is installed from its own lockfile, `tools/vercel-cli` (the exact version, every transitive and its integrity hash; `npm ci --prefix tools/vercel-cli --ignore-scripts`, then on the PATH; never a global install or `npx`), and `VERCEL_CLI_VERSION` in the workflow must equal the locked version: see [tools/vercel-cli/README.md](../tools/vercel-cli/README.md) for how to upgrade it. `@neondatabase/auth` is pinned to an exact
 version in `package.json`. Bump either in a PR.
 
-The application install and `vercel build` consume the private Framebriar SDK with the workflow run's short-lived
-`GITHUB_TOKEN`, limited to `packages: read`. No long-lived package token is stored in GitHub or Vercel, and the
+The application install and `vercel build` consume the private Framebriar SDK with the expiring, read-only
+`FRAMEBRIAR_PACKAGES_TOKEN` repository secret. It is stored only in GitHub Actions, never Vercel, and the
 production-capable `VERCEL_TOKEN` is not exposed to either install or build.
 
 ## Things to know

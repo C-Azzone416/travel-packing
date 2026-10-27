@@ -83,31 +83,34 @@ function aliasBeforeSmoke(): string {
 describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
   it.each([
     [
-      "package-read permission is removed",
-      mutate("  packages: read # the short-lived", "  packages: none # the short-lived"),
-      /packages: read/,
+      "repository-token package access is added",
+      mutate(
+        "  actions: read # to read the `ci` result for this commit",
+        "  actions: read # to read the `ci` result for this commit\n  packages: read",
+      ),
+      /must not grant the repository token package access/,
     ],
     [
       "a root install loses its package token",
       mutate(
-        /      - name: Install\n        env:\n          NODE_AUTH_TOKEN: \$\{\{ github\.token \}\}\n        run: npm ci/,
+        /      - name: Install\n        env:\n          NODE_AUTH_TOKEN: \$\{\{ secrets\.FRAMEBRIAR_PACKAGES_TOKEN \}\}\n        run: npm ci/,
         "      - name: Install\n        run: npm ci",
       ),
-      /gate must give the short-lived GitHub token/,
+      /deploy job must give the Framebriar secret/,
     ],
     [
       "vercel build loses its package token",
       mutate(
-        /      - name: Build\n        env:\n          NODE_AUTH_TOKEN: \$\{\{ github\.token \}\}\n/,
+        /      - name: Build\n        env:\n          NODE_AUTH_TOKEN: \$\{\{ secrets\.FRAMEBRIAR_PACKAGES_TOKEN \}\}\n/,
         "      - name: Build\n",
       ),
-      /vercel build needs the short-lived package token/,
+      /vercel build needs the Framebriar package secret/,
     ],
     [
       "the locked Vercel CLI install receives the package token",
       mutate(
         "      - name: Install the locked Vercel CLI\n        run:",
-        "      - name: Install the locked Vercel CLI\n        env:\n          NODE_AUTH_TOKEN: ${{ github.token }}\n        run:",
+        "      - name: Install the locked Vercel CLI\n        env:\n          NODE_AUTH_TOKEN: ${{ secrets.FRAMEBRIAR_PACKAGES_TOKEN }}\n        run:",
       ),
       /locked Vercel CLI install must not receive/,
     ],
@@ -146,8 +149,8 @@ describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
     [
       "the gate reads a secret",
       mutate(
-        "        run: npm ci\n\n      - name: Release",
-        "        run: echo ${{ secrets.VERCEL_TOKEN }}\n\n      - name: Release",
+        "        run: node --experimental-strip-types scripts/release-gate.ts",
+        "        env:\n          TOKEN: ${{ secrets.VERCEL_TOKEN }}\n        run: node --experimental-strip-types scripts/release-gate.ts",
       ),
       /gate job must not read/,
     ],
@@ -162,13 +165,13 @@ describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
     [
       "the gate is skipped",
       mutate("scripts/release-gate.ts", "scripts/other.ts"),
-      /run the release gate/,
+      /run the dependency-free release gate/,
     ],
     [
       "context interpolated into a shell",
       mutate(
-        "run: npx tsx scripts/release-gate.ts",
-        "run: echo ${{ inputs.release_sha }}; npx tsx scripts/release-gate.ts",
+        "run: node --experimental-strip-types scripts/release-gate.ts",
+        "run: echo ${{ inputs.release_sha }}; node --experimental-strip-types scripts/release-gate.ts",
       ),
       /never interpolate/,
     ],
@@ -703,23 +706,26 @@ describe("checkCiWorkflow", () => {
 
   it.each([
     [
-      "package-read permission removed",
-      mutateCi("  packages: read\n", "  packages: none\n"),
-      /ci needs packages: read/,
+      "repository-token package access is added",
+      mutateCi(
+        "permissions:\n  contents: read\n",
+        "permissions:\n  contents: read\n  packages: read\n",
+      ),
+      /must not grant the repository token package access/,
     ],
     [
       "an install token exposed to fork pull requests",
       inJob(
         "unit",
-        "NODE_AUTH_TOKEN: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && github.token || '' }}",
-        "NODE_AUTH_TOKEN: ${{ github.token }}",
+        "NODE_AUTH_TOKEN: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && secrets.FRAMEBRIAR_PACKAGES_TOKEN || '' }}",
+        "NODE_AUTH_TOKEN: ${{ secrets.FRAMEBRIAR_PACKAGES_TOKEN }}",
       ),
       /unit's root install must receive the package token only/,
     ],
     [
-      "an explicit permission block drops package read",
-      inJob("mode", "      packages: read\n", ""),
-      /mode's explicit permissions must retain packages: read/,
+      "an explicit permission block adds package read",
+      inJob("mode", "      contents: read\n", "      contents: read\n      packages: read\n"),
+      /mode's explicit permissions must not grant package access/,
     ],
     ["the summary job renamed", mutateCi(/^ {2}ci:/m, "  summary:"), /ci job is missing/],
     [

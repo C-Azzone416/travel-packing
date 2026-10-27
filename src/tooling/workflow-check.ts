@@ -162,30 +162,25 @@ export function checkDeployWorkflow(workflow: string): string[] {
   if (!/scripts\/require-ci\.ts/.test(requireCi))
     problems.push("the CI check must run scripts/require-ci.ts");
 
-  // The private SDK is fetched with the run's short-lived token. It is package-read only, reaches the two application
-  // installs and Vercel's second install during `vercel build`, and never reaches the independently locked Vercel CLI.
+  // The private SDK is fetched with the repository's expiring read-only package token. The gate remains dependency- and
+  // secret-free; the credential reaches only the deploy job's application install and Vercel's second install during
+  // `vercel build`, never the independently locked Vercel CLI.
   const permissionBlock = /^permissions:\n((?: {2}.*\n)*)/m.exec(workflow)?.[1] ?? "";
-  if (!/^ {2}packages:\s*read(?:\s+#.*)?\s*$/m.test(permissionBlock))
-    problems.push("the deploy workflow needs packages: read for the private SDK");
-  for (const [jobName, job] of [
-    ["gate", jobBody(workflow, "gate") ?? ""],
-    ["deploy", jobBody(workflow, "deploy") ?? ""],
-  ] as const) {
-    const installs = stepsOf(job, "run: npm ci\n");
-    if (
-      installs.length !== 1 ||
-      !/NODE_AUTH_TOKEN:\s*\$\{\{\s*github\.token\s*\}\}/.test(installs[0])
-    ) {
-      problems.push(
-        `${jobName} must give the short-lived GitHub token only to its root npm ci step`,
-      );
-    }
-  }
+  if (/^ {2}packages:\s*/m.test(permissionBlock))
+    problems.push("the deploy workflow must not grant the repository token package access");
+  if (stepsOf(jobBody(workflow, "gate") ?? "", "run: npm ci\n").length !== 0)
+    problems.push("the release gate must not install dependencies or receive the package secret");
+  const installs = stepsOf(jobBody(workflow, "deploy") ?? "", "run: npm ci\n");
+  if (
+    installs.length !== 1 ||
+    !/NODE_AUTH_TOKEN:\s*\$\{\{\s*secrets\.FRAMEBRIAR_PACKAGES_TOKEN\s*\}\}/.test(installs[0])
+  )
+    problems.push("the deploy job must give the Framebriar secret only to its root npm ci step");
   const buildStep = stepsOf(jobBody(workflow, "deploy") ?? "", "- name: Build")[0] ?? "";
-  if (!/NODE_AUTH_TOKEN:\s*\$\{\{\s*github\.token\s*\}\}/.test(buildStep))
-    problems.push("vercel build needs the short-lived package token for its second install");
-  if (count(/NODE_AUTH_TOKEN:/g) !== 3)
-    problems.push("NODE_AUTH_TOKEN may appear only on the two root installs and vercel build");
+  if (!/NODE_AUTH_TOKEN:\s*\$\{\{\s*secrets\.FRAMEBRIAR_PACKAGES_TOKEN\s*\}\}/.test(buildStep))
+    problems.push("vercel build needs the Framebriar package secret for its second install");
+  if (count(/NODE_AUTH_TOKEN:/g) !== 2)
+    problems.push("NODE_AUTH_TOKEN may appear only on the deploy root install and vercel build");
   const cliInstall =
     stepsOf(jobBody(workflow, "deploy") ?? "", "Install the locked Vercel CLI")[0] ?? "";
   if (/NODE_AUTH_TOKEN/.test(cliInstall))
@@ -202,8 +197,8 @@ export function checkDeployWorkflow(workflow: string): string[] {
     if (/secrets\./.test(gate)) problems.push("the gate job must not read any secret");
     if (/^\s+environment:/m.test(gate))
       problems.push("the gate job must not use a GitHub environment");
-    if (!/scripts\/release-gate\.ts/.test(gate))
-      problems.push("the gate job must run the release gate");
+    if (!/node --experimental-strip-types scripts\/release-gate\.ts/.test(gate))
+      problems.push("the gate job must run the dependency-free release gate");
     if (/run:[^\n]*\$\{\{\s*(?:github|inputs)\./.test(gate)) {
       problems.push(
         "the gate job must pass context through env, never interpolate it into a shell command",
@@ -594,10 +589,10 @@ export function checkCiWorkflow(workflow: string): string[] {
 
   const permissionBlock =
     /^permissions:\n((?: {2}.*\n)*)/m.exec(workflow.slice(0, jobsStart))?.[1] ?? "";
-  if (!/^ {2}packages:\s*read\s*$/m.test(permissionBlock))
-    problems.push("ci needs packages: read for the private SDK");
+  if (/^ {2}packages:\s*/m.test(permissionBlock))
+    problems.push("ci must not grant the repository token package access");
   const trustedPackageToken =
-    /NODE_AUTH_TOKEN:\s*\$\{\{\s*\(github\.event_name != 'pull_request' \|\| github\.event\.pull_request\.head\.repo\.full_name == github\.repository\) && github\.token \|\| ''\s*\}\}/;
+    /NODE_AUTH_TOKEN:\s*\$\{\{\s*\(github\.event_name != 'pull_request' \|\| github\.event\.pull_request\.head\.repo\.full_name == github\.repository\) && secrets\.FRAMEBRIAR_PACKAGES_TOKEN \|\| ''\s*\}\}/;
   for (const name of ["mode", "checks", "unit", "build", "e2e-build", "e2e"] as const) {
     const installs = stepsOf(body(name) ?? "", "run: npm ci\n");
     if (installs.length !== 1 || !trustedPackageToken.test(installs[0]))
@@ -605,10 +600,11 @@ export function checkCiWorkflow(workflow: string): string[] {
         `${name}'s root install must receive the package token only for pushes and same-repository pull requests`,
       );
   }
-  for (const name of ["mode", "checks", "deploy"] as const) {
-    if (!/^ {6}packages:\s*read\s*$/m.test(body(name) ?? ""))
-      problems.push(`${name}'s explicit permissions must retain packages: read`);
-  }
+  if ((workflow.match(/secrets\.FRAMEBRIAR_PACKAGES_TOKEN/g) ?? []).length !== 6)
+    problems.push("the Framebriar package secret may appear only on the six trusted root installs");
+  for (const name of ["mode", "checks", "deploy"] as const)
+    if (/^ {6}packages:\s*/m.test(body(name) ?? ""))
+      problems.push(`${name}'s explicit permissions must not grant package access`);
 
   const concurrency = /^concurrency:\n((?: {2}.*\n)*)/m.exec(workflow)?.[1] ?? "";
   if (
@@ -622,8 +618,8 @@ export function checkCiWorkflow(workflow: string): string[] {
     const job = body(name) ?? "";
     if (!/^ {4}timeout-minutes:\s*\d+/m.test(job))
       problems.push(`the ${name} job needs a timeout-minutes`);
-    if (/secrets\.(?!GITHUB_TOKEN\b)/.test(job))
-      problems.push(`the ${name} job must read no secret but GITHUB_TOKEN`);
+    if (/secrets\.(?!GITHUB_TOKEN\b|FRAMEBRIAR_PACKAGES_TOKEN\b)/.test(job))
+      problems.push(`the ${name} job must read no secret but GITHUB_TOKEN or the package token`);
     if (/secrets:\s*inherit/.test(job)) problems.push(`the ${name} job must not inherit secrets`);
     if (/continue-on-error/.test(job))
       problems.push(`the ${name} job must not use continue-on-error`);

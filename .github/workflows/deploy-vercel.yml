@@ -28,7 +28,6 @@ concurrency:
 permissions:
   contents: read
   actions: read # to read the `ci` result for this commit
-  packages: read # the short-lived repository token reads the private Framebriar SDK package
 
 env:
   VERCEL_CLI_VERSION: 64.5.0 # pinned (never a moving tag)
@@ -49,16 +48,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-
-      - name: Install
-        env:
-          NODE_AUTH_TOKEN: ${{ github.token }}
-        run: npm ci
-
       - name: Release gate (which target may this run deploy?)
         id: gate
         env:
@@ -69,7 +58,7 @@ jobs:
           TRIGGERING_ACTOR: ${{ github.triggering_actor }}
           REPO_OWNER: ${{ github.repository_owner }}
           RELEASE_SHA: ${{ inputs.release_sha }}
-        run: npx tsx scripts/release-gate.ts
+        run: node --experimental-strip-types scripts/release-gate.ts
 
   deploy:
     needs: gate
@@ -88,7 +77,7 @@ jobs:
 
       - name: Install
         env:
-          NODE_AUTH_TOKEN: ${{ github.token }}
+          NODE_AUTH_TOKEN: ${{ secrets.FRAMEBRIAR_PACKAGES_TOKEN }}
         run: npm ci
 
       # A preview deploy only exists after `ci` passed (the caller's `needs: ci`). A manual production run has no such
@@ -138,10 +127,10 @@ jobs:
         run: npx tsx scripts/check-deploy-env.ts "$TARGET" ".vercel/.env.${TARGET}.local"
 
       # `vercel build` works from the files `vercel pull` wrote and performs its own dependency install. It receives only
-      # this run's short-lived, package-read GITHUB_TOKEN; the production-capable VERCEL_TOKEN remains absent.
+      # the read-only, expiring package token; the production-capable VERCEL_TOKEN remains absent.
       - name: Build
         env:
-          NODE_AUTH_TOKEN: ${{ github.token }}
+          NODE_AUTH_TOKEN: ${{ secrets.FRAMEBRIAR_PACKAGES_TOKEN }}
         run: |
           if [ "$TARGET" = production ]; then VERCEL_ENV=production FEEDBACK_SCREENSHOTS=0 vercel build --prod; else vercel build; fi
 
