@@ -6,8 +6,8 @@
 import "server-only";
 import { getAuth } from "@/server/auth/auth-runtime";
 import { getAppDb } from "@/server/db/app-db";
+import { e2eRouteLimits, e2eUpstreamFetch } from "./e2e-upstream";
 import { createEnrollmentService, type EnrollmentService } from "./enrollment-service";
-import { e2eUpstreamFetch, e2eRouteLimits } from "./e2e-upstream";
 import { createFramebriarClient } from "./framebriar-client";
 import { createFeedbackRoutes } from "./routes";
 
