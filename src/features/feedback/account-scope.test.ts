@@ -4,6 +4,7 @@ import {
   ACCOUNT_DB_PREFIX,
   accountDatabaseName,
   accountScope,
+  deleteAllAccountOutboxes,
   deleteAccountOutbox,
   deleteLegacyDatabases,
   sweepOtherAccounts,
@@ -121,6 +122,26 @@ describe("deleteAccountOutbox (sign-out)", () => {
   it("refuses a key that is not the server's", async () => {
     const idb = createMemoryIdb(["x"]);
     await expect(deleteAccountOutbox(idb.factory, "nope")).rejects.toThrow();
+  });
+});
+
+describe("deleteAllAccountOutboxes (confirmed account closure)", () => {
+  it("deletes every account-scoped outbox and leaves unrelated and legacy databases", async () => {
+    const idb = createMemoryIdb([
+      accountDatabaseName(A),
+      accountDatabaseName(B),
+      "framebriar-v1-outbox-v2-legacy",
+      "app-own-db",
+    ]);
+
+    expect(await deleteAllAccountOutboxes(idb.factory)).toEqual({
+      listed: true,
+      deleted: 2,
+      failed: 0,
+    });
+    expect([...idb.present].sort()).toEqual(
+      ["framebriar-v1-outbox-v2-legacy", "app-own-db"].sort(),
+    );
   });
 });
 

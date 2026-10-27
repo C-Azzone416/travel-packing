@@ -8,6 +8,10 @@ export const VERIFY_PATH = "/verify";
 export const FORGOT_PASSWORD_PATH = "/forgot-password";
 export const RESET_PASSWORD_PATH = "/reset-password";
 export const FINISH_SETUP_PATH = "/finish-setup";
+/** Isolated retry surface for an identity whose app data is already fenced/deleted. */
+export const CLOSE_ACCOUNT_PATH = "/close-account";
+/** One-time, identity-free client-cleanup handoff after confirmed provider deletion. */
+export const CLOSE_ACCOUNT_COMPLETE_PATH = "/close-account/complete";
 
 /** Everything else is protected. */
 export const PUBLIC_PATHS: readonly string[] = [
@@ -18,4 +22,6 @@ export const PUBLIC_PATHS: readonly string[] = [
   FORGOT_PASSWORD_PATH,
   RESET_PASSWORD_PATH,
   FINISH_SETUP_PATH,
+  CLOSE_ACCOUNT_PATH,
+  CLOSE_ACCOUNT_COMPLETE_PATH,
 ];

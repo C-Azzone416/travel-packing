@@ -17,10 +17,19 @@ import { createNeonAuthProvider } from "./neon-adapter";
 import { NO_SEALS, createSetupSeals, sealKey, type SetupSeals } from "./setup-seal";
 import { allowlistFingerprint, malformedEntries } from "./allowlist-fingerprint";
 import { logAllowlistLoaded, logAuthEvent } from "./safe-log";
+import {
+  NO_ACCOUNT_CLOSURE_SIGNALS,
+  accountClosureSignalKey,
+  createAccountClosureSignals,
+  type AccountClosureSignals,
+} from "./account-closure-signal";
 import type { AuthProvider } from "./types";
 
 export interface RuntimeAuth {
+  /** Normal app provider, wrapped with the setup/deletion gate. */
   provider: AuthProvider;
+  /** Raw provider used only by the fenced account-deletion recovery flow. Never use this for app-data access. */
+  deletionProvider: AuthProvider;
   allowlist: Allowlist;
   /** False when configuration is missing/invalid and everything is denied. */
   available: boolean;
@@ -28,6 +37,8 @@ export interface RuntimeAuth {
   setup: AccountSetupStore;
   /** Signs and opens the "this link is for <address>" value on reset links. */
   seals: SetupSeals;
+  /** Issues identity-free, short-lived proofs only for the confirmed account-deletion completion screen. */
+  completionSignals: AccountClosureSignals;
 }
 
 const unavailableProvider: AuthProvider = {
@@ -53,15 +64,26 @@ const unavailableProvider: AuthProvider = {
     return { ok: false, reason: "unavailable" };
   },
   async signOut() {},
+  async revokeOtherSessions() {
+    return { ok: false, reason: "unavailable" };
+  },
+  async deleteUser() {
+    return { ok: false, reason: "unavailable" };
+  },
+  async isAccountDeletionBlocked() {
+    return true;
+  },
 };
 
 export function unavailableAuth(): RuntimeAuth {
   return {
     provider: unavailableProvider,
+    deletionProvider: unavailableProvider,
     allowlist: new Set(),
     available: false,
     setup: NOTHING_SET_UP,
     seals: NO_SEALS,
+    completionSignals: NO_ACCOUNT_CLOSURE_SIGNALS,
   };
 }
 
@@ -82,17 +104,18 @@ async function buildE2eAuth(
     const { createE2eAuthProvider, e2eAuthEnabled } = await import("@/server/auth/e2e-provider");
     if (e2eAuthEnabled(env)) {
       logWarning("auth: e2e fake sign-in enabled (e2e builds only; never on Vercel)");
+      const deletionProvider = createE2eAuthProvider(env);
       return {
-        provider: withSetupGate(
-          createE2eAuthProvider(env),
-          setup,
-          parseAllowlist(env.OWNER_EMAIL_ALLOWLIST),
-        ),
+        provider: withSetupGate(deletionProvider, setup, parseAllowlist(env.OWNER_EMAIL_ALLOWLIST)),
+        deletionProvider,
         allowlist: parseAllowlist(env.OWNER_EMAIL_ALLOWLIST),
         available: true,
         setup,
         // Any non-empty secret signs the e2e links; the fake password is already required to be set.
         seals: createSetupSeals(sealKey(env.AUTH_E2E_PASSWORD ?? "")),
+        completionSignals: createAccountClosureSignals(
+          accountClosureSignalKey(env.AUTH_E2E_PASSWORD ?? ""),
+        ),
       };
     }
   }
@@ -152,12 +175,15 @@ async function buildAuth(
     // Loaded lazily so unit tests and builds without configuration never touch the SDK.
     const { createNeonAuth } = await import("@neondatabase/auth/next/server");
     const neon = createNeonAuth({ baseUrl, cookies: { secret: cookieSecret } });
+    const deletionProvider = createNeonAuthProvider(neon);
     return {
-      provider: withSetupGate(createNeonAuthProvider(neon), setup, allowlist),
+      provider: withSetupGate(deletionProvider, setup, allowlist),
+      deletionProvider,
       allowlist,
       available: true,
       setup,
       seals: createSetupSeals(sealKey(cookieSecret)),
+      completionSignals: createAccountClosureSignals(accountClosureSignalKey(cookieSecret)),
     };
   } catch {
     logAuthEvent("provider-error");

@@ -20,6 +20,8 @@ const e2eEnv = {
   NEXT_PUBLIC_E2E_BUILD: "1",
   AUTH_E2E_FAKE: "1",
   AUTH_E2E_PASSWORD: E2E_PASSWORD,
+  // Synthetic-only destructive coverage. Hosted Preview/Production remain off unless explicitly enabled later.
+  CLOSE_ACCOUNT_ENABLED: "1",
   // Server-side session tokens for the fake sign-in (ignored by git via test-results/).
   AUTH_E2E_STATE_DIR: join(process.cwd(), "test-results", "e2e-sessions"),
   // The app reads and writes a real Postgres (the PGlite socket server below), not a stand-in.

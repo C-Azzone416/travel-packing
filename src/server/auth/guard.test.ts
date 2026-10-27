@@ -59,6 +59,13 @@ describe("authorizeOwner", () => {
     expect(await authorizeOwner(fake, allowlist)).toEqual({ status: "unauthenticated" });
     expect(logged.map((line) => JSON.parse(line).event)).toEqual(["provider-error"]);
   });
+
+  it("denies a stale session once account deletion has begun", async () => {
+    fake.current = OWNER;
+    fake.blockedDeletionUserIds.add(OWNER.userId);
+    expect(await authorizeOwner(fake, allowlist)).toEqual({ status: "unauthenticated" });
+    expect(fake.current).toEqual(OWNER);
+  });
 });
 
 describe("requireOwner (data-layer gate)", () => {

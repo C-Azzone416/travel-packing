@@ -12,6 +12,7 @@ import {
 } from "@/test/fake-feedback-server";
 import { createFakeOutbox, type FakeOutbox } from "@/test/fake-outbox";
 import { accountDatabaseName } from "./account-scope";
+import { clearLocalFeedbackAfterAccountClosure } from "./account-closure-cleanup";
 import {
   FeedbackAccessProvider,
   SIGN_OUT_CLEAR_LIMIT_MS,
@@ -231,6 +232,39 @@ describe("a session that has ended", () => {
     mount({ server });
     await waitFor(() => expect(server.count("status")).toBe(1));
     expect(screen.queryByRole("button", { name: "Send feedback" })).toBeNull();
+  });
+});
+
+describe("confirmed account closure", () => {
+  it("stops the mounted queue, clears every local account outbox and never calls the enrollment API", async () => {
+    const server = createFakeFeedbackServer({ status: "connected" });
+    const idb = createMemoryIdb([
+      accountDatabaseName(OUTBOX_KEY_A),
+      accountDatabaseName(OUTBOX_KEY_B),
+      "framebriar-enrollment-v2-old",
+    ]);
+    const channel = channelStub();
+    const { outboxes } = mount({ server, idb, channel });
+    const current = await waitFor(() => {
+      const box = outboxes.boxes.get(OUTBOX_KEY_A);
+      if (!box) throw new Error("no outbox");
+      return box;
+    });
+    await waitFor(() => expect(current.box.start).toHaveBeenCalled());
+    const calls = server.calls.length;
+
+    await clearLocalFeedbackAfterAccountClosure({
+      enabled: () => true,
+      indexedDB: () => idb.factory,
+    });
+
+    expect(current.box.stop).toHaveBeenCalled();
+    expect(current.box.clear).toHaveBeenCalledOnce();
+    expect([...idb.present]).toEqual([]);
+    expect(channel.posted).toEqual(["account-ended"]);
+    expect(server.count("disconnect")).toBe(0);
+    expect(server.count("reports")).toBe(0);
+    expect(server.calls.length).toBe(calls);
   });
 });
 

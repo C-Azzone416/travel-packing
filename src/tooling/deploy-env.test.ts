@@ -136,6 +136,7 @@ describe("checkDeployEnv", () => {
   it.each([
     "NEXT_PUBLIC_E2E_BUILD",
     "E2E_DATABASE_URL",
+    "E2E_FRAMEBRIAR_PORT",
     "SEED_DATABASE_URL",
     "OPEN_METEO_GEOCODING_URL",
     "NODE_AUTH_TOKEN",

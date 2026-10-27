@@ -22,6 +22,8 @@ const EXPECTED_TAGS = [
   "0009_staple_quantity_rules",
   "0010_staples_setup",
   "0011_framebriar_enrollment",
+  "0012_icy_leech",
+  "0013_flimsy_redwing",
 ];
 
 // One in-memory Postgres for the file; each test starts from an empty public schema.
@@ -80,6 +82,7 @@ describe("migrateUp", () => {
     expect(await migrateUp(client, migrations)).toEqual(EXPECTED_TAGS);
     expect(await appliedMigrations(client)).toEqual(EXPECTED_TAGS);
     expect(await userTables()).toEqual([
+      "account_deletions",
       "account_setups",
       "framebriar_enrollments",
       "framebriar_redemptions",

@@ -6,6 +6,8 @@ export function FeedbackAccessProvider({ children }: { children: ReactNode }) {
   return children;
 }
 
+export async function clearLocalFeedbackAfterAccountClosure(): Promise<void> {}
+
 export function FeedbackButton() {
   return null;
 }

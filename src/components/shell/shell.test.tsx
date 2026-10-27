@@ -66,6 +66,8 @@ describe("Nav Sign out (#117)", () => {
     const button = screen.getByRole("button", { name: "Sign out" });
     // Last in the nav, so the links come first in the tab order.
     expect(nav.lastElementChild?.contains(button)).toBe(true);
+    // WebKit's phone profile only includes the submit control in sequential keyboard navigation when it is explicit.
+    expect(button.getAttribute("tabindex")).toBe("0");
     expect(button.getAttribute("title")).toBe("Signed in as owner@example.test");
     expect(button.getAttribute("aria-current")).toBeNull();
     expect(button.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");

@@ -8,7 +8,7 @@
 // token has no file and is rejected, so knowing the owner's email is not enough.
 
 import { randomBytes, randomInt } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { cookies } from "next/headers";
 import type { AuthProvider, AuthSession, FlowResult } from "./types";
@@ -41,11 +41,15 @@ function sessionFile(env: Env, token: string): string {
 function sessionFor(
   env: Env,
   token: string | undefined,
-): { email: string; issuedAt: number } | null {
+): { email: string; issuedAt: number; identityCreatedAt: number } | null {
   if (!token || !TOKEN_PATTERN.test(token)) return null;
   try {
-    const [email, made] = readFileSync(sessionFile(env, token), "utf8").trim().split("\n");
-    return email ? { email, issuedAt: Number(made) || 0 } : null;
+    const [email, made, identityMade] = readFileSync(sessionFile(env, token), "utf8")
+      .trim()
+      .split("\n");
+    return email
+      ? { email, issuedAt: Number(made) || 0, identityCreatedAt: Number(identityMade) || 1 }
+      : null;
   } catch {
     return null;
   }
@@ -70,6 +74,7 @@ const tokenFile = (env: Env, token: string) => join(stateDirOf(env), `rtoken-${t
 interface E2eAccount {
   password: string;
   verified: boolean;
+  identityCreatedAt: number;
 }
 
 function readAccount(env: Env, email: string): E2eAccount | null {
@@ -128,29 +133,44 @@ function spendToken(env: Env, token: string): string | null {
   }
 }
 
-async function startSession(env: Env, email: string) {
+async function startSession(env: Env, email: string, identityCreatedAt: number) {
   const token = randomBytes(32).toString("hex");
   mkdirSync(env.AUTH_E2E_STATE_DIR ?? "", { recursive: true });
   const issuedAt = Date.now();
-  writeFileSync(sessionFile(env, token), `${email}\n${issuedAt}`);
+  writeFileSync(sessionFile(env, token), `${email}\n${issuedAt}\n${identityCreatedAt}`);
   (await cookies()).set(E2E_COOKIE, token, { httpOnly: true, sameSite: "lax", path: "/" });
-  return { ok: true as const, session: { userId: `e2e-${email}`, email, issuedAt } };
+  return {
+    ok: true as const,
+    session: { userId: `e2e-${email}`, email, issuedAt, identityCreatedAt },
+  };
 }
 
 /** Any email signs in if it knows the shared synthetic password; the allowlist decides who gets in. */
 export function createE2eAuthProvider(env: Env): AuthProvider {
+  async function removeSessions(email: string, except?: string): Promise<void> {
+    for (const name of readdirSync(stateDirOf(env), { withFileTypes: true })) {
+      if (!name.isFile() || !TOKEN_PATTERN.test(name.name) || name.name === except) continue;
+      if (sessionFor(env, name.name)?.email === email)
+        rmSync(sessionFile(env, name.name), { force: true });
+    }
+  }
   return {
     async getSession(): Promise<AuthSession | null> {
       const found = sessionFor(env, (await cookies()).get(E2E_COOKIE)?.value);
       return found
-        ? { userId: `e2e-${found.email}`, email: found.email, issuedAt: found.issuedAt }
+        ? {
+            userId: `e2e-${found.email}`,
+            email: found.email,
+            issuedAt: found.issuedAt,
+            identityCreatedAt: found.identityCreatedAt,
+          }
         : null;
     },
     async signUp(email, password) {
       if (password.length < 8) return { ok: false, reason: "weak-password" };
       // A taken address looks like a new account, as with the real provider: nothing is created or mailed.
       if (!readAccount(env, email)) {
-        writeAccount(env, email, { password, verified: false });
+        writeAccount(env, email, { password, verified: false, identityCreatedAt: Date.now() });
         mailCode(env, email);
       }
       return { ok: true };
@@ -183,16 +203,41 @@ export function createE2eAuthProvider(env: Env): AuthProvider {
       const account = readAccount(env, email);
       if (account) {
         if (password !== account.password) return { ok: false };
-        return account.verified ? startSession(env, email) : { ok: false, unverified: true };
+        return account.verified
+          ? startSession(env, email, account.identityCreatedAt)
+          : { ok: false, unverified: true };
       }
       if (!env.AUTH_E2E_PASSWORD || password !== env.AUTH_E2E_PASSWORD) return { ok: false };
-      return startSession(env, email);
+      return startSession(env, email, 1);
     },
     async signOut() {
       const jar = await cookies();
       const token = jar.get(E2E_COOKIE)?.value;
       if (token && TOKEN_PATTERN.test(token)) rmSync(sessionFile(env, token), { force: true });
       jar.delete(E2E_COOKIE);
+    },
+    async revokeOtherSessions() {
+      const token = (await cookies()).get(E2E_COOKIE)?.value;
+      const session = sessionFor(env, token);
+      if (!session) return { ok: false, reason: "unavailable" };
+      await removeSessions(session.email, token);
+      return { ok: true };
+    },
+    async deleteUser(password) {
+      const jar = await cookies();
+      const token = jar.get(E2E_COOKIE)?.value;
+      const session = sessionFor(env, token);
+      if (!session) return { ok: false, reason: "invalid" };
+      const account = readAccount(env, session.email);
+      const expected = account?.password ?? env.AUTH_E2E_PASSWORD;
+      if (!expected || password !== expected) return { ok: false, reason: "invalid" };
+      await removeSessions(session.email);
+      rmSync(accountFile(env, session.email), { force: true });
+      jar.delete(E2E_COOKIE);
+      return { ok: true };
+    },
+    async isAccountDeletionBlocked() {
+      return false;
     },
   };
 }

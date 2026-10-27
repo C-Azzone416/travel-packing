@@ -68,7 +68,7 @@ export function createVerifiedAccount(email: string, password: string): void {
   mkdirSync(STATE_DIR, { recursive: true });
   writeFileSync(
     join(STATE_DIR, `acct-${hex(email)}`),
-    JSON.stringify({ password, verified: true }),
+    JSON.stringify({ password, verified: true, identityCreatedAt: Date.now() }),
   );
 }
 
@@ -80,7 +80,7 @@ export function preRegisterAccount(email: string, password: string): void {
   mkdirSync(STATE_DIR, { recursive: true });
   writeFileSync(
     join(STATE_DIR, `acct-${hex(email)}`),
-    JSON.stringify({ password, verified: false }),
+    JSON.stringify({ password, verified: false, identityCreatedAt: Date.now() }),
   );
   writeFileSync(join(STATE_DIR, `inbox-verify-${hex(email)}`), "424242:0");
 }

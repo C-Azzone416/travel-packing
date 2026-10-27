@@ -8,7 +8,7 @@ import { getAuth } from "@/server/auth/auth-runtime";
 import { flowLimits } from "@/server/auth/flow-limits";
 import { forgetPendingEmail, rememberPendingEmail } from "@/server/auth/pending-email";
 import { ACCESS_DENIED_PATH, SIGN_IN_PATH } from "@/server/auth/proxy-handler";
-import { FINISH_SETUP_PATH, VERIFY_PATH } from "@/server/auth/public-paths";
+import { CLOSE_ACCOUNT_PATH, FINISH_SETUP_PATH, VERIFY_PATH } from "@/server/auth/public-paths";
 import { resetPasswordUrl } from "@/server/auth/request-origin";
 import { createAuthReference, logAuthEvent } from "@/server/auth/safe-log";
 import { signInOwner, signOutOwner } from "@/server/auth/sign-in";
@@ -73,6 +73,11 @@ export async function signInAction(
     }
     await rememberPendingEmail(email.trim().toLowerCase());
     redirect(FINISH_SETUP_PATH);
+  }
+  if (outcome === "deletion-pending") {
+    limits.recordSuccess(email, address);
+    await forgetPendingEmail();
+    redirect(CLOSE_ACCOUNT_PATH);
   }
   limits.recordFailure(email, address);
   if (outcome === "denied") redirect(ACCESS_DENIED_PATH);

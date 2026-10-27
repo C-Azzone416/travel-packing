@@ -8,6 +8,8 @@ import {
   getWeatherSettingsAction,
   updateWeatherSettingsAction,
 } from "@/features/settings/weather-actions";
+import { closeAccountAction } from "@/features/settings/close-account-actions";
+import { accountClosureEnabled } from "@/server/auth/account-closure-rollout";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -26,6 +28,8 @@ export default async function SettingsPage() {
       updateWeather={updateWeatherSettingsAction}
       initialAppearance={appearance}
       updateAppearance={updateAppearanceAction}
+      accountClosureEnabled={accountClosureEnabled()}
+      closeAccount={closeAccountAction}
     />
   );
 }

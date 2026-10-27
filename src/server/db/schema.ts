@@ -92,11 +92,27 @@ export const users = pgTable(
  * Accounts whose password was set through an emailed link (#83). Sign-in is refused for any address without a row here,
  * so a password chosen by someone else before the owner verified the address can never open a session. Keyed by an HMAC-SHA-256
  * digest of the normalized email, because there is no user id before the first session and the app stores no raw
- * addresses. A row is created only when a reset link (setup or forgot-password) is used successfully, and never removed.
+ * addresses. A row is created only when a reset link (setup or forgot-password) is used successfully, and is removed only
+ * in the same transaction that permanently deletes that account's app data.
  */
 export const accountSetups = pgTable("account_setups", {
   emailDigest: text("email_digest").primaryKey(),
   completedAt: timestamp("completed_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Transient fence for an account whose irreversible deletion is in progress. It deliberately has no foreign key to `users`
+ * so it survives the app-data purge while provider deletion is retried. Confirmed closure removes this row; only the opaque
+ * provider user id and creation time bind recovery to that exact identity incarnation. The setup digest lets terminal
+ * cleanup repeat its sweep after provider confirmation, and the nullable retry time fairly paces recovery. Every value
+ * disappears with the fence.
+ */
+export const accountDeletions = pgTable("account_deletions", {
+  userId: text("user_id").primaryKey(),
+  identityCreatedAt: timestamp("identity_created_at", { withTimezone: true }).notNull(),
+  setupEmailDigest: text("setup_email_digest").notNull(),
+  /** Pending-only retry bookkeeping. Terminal cleanup deletes this with the rest of the fence. */
+  lastReconcileAttemptAt: timestamp("last_reconcile_attempt_at", { withTimezone: true }),
 });
 
 const ownerId = () =>

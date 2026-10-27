@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { ownerEmailFor, signInAsOwner } from "./helpers/auth";
 import { chooseFromMenu } from "./helpers/menu";
 import { DEVICE } from "./helpers/device";
+import { expectAccessible } from "./helpers/a11y";
 
 // Settings and the truthful save states (#19), against the real app and database.
 const NOW = new Date("2026-10-16T12:00:00");
@@ -49,6 +50,49 @@ test("Account shows who is signed in, and Sign out goes straight through to sign
   await page.goto("/settings");
   await expect(page).toHaveURL(/\/sign-in/);
 });
+
+test(
+  "Close account requires explicit destructive confirmation in an accessible keyboard-contained sheet",
+  DEVICE,
+  async ({ page }) => {
+    await openSettings(page);
+    const opener = page.getByRole("main").getByRole("button", { name: "Close account" });
+    const dialog = page.getByRole("dialog", { name: "Close your account?" });
+    await opener.focus();
+    await page.keyboard.press("Enter");
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByLabel("Current password")).toBeFocused();
+    const focusIsInside = () => dialog.evaluate((node) => node.contains(document.activeElement));
+    for (let press = 0; press < 10; press += 1) {
+      await page.keyboard.press("Tab");
+      expect(await focusIsInside(), `Tab ${press + 1} stays in the dialog`).toBe(true);
+    }
+    for (let press = 0; press < 10; press += 1) {
+      await page.keyboard.press("Shift+Tab");
+      expect(await focusIsInside(), `Shift+Tab ${press + 1} stays in the dialog`).toBe(true);
+    }
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await expect(opener).toBeFocused();
+    await opener.click();
+    await expect(dialog.getByLabel("Current password")).toHaveAttribute(
+      "autocomplete",
+      "current-password",
+    );
+    await expect(dialog.getByLabel("Type DELETE to confirm")).toBeVisible();
+    await expectAccessible(page, "close account confirmation sheet");
+    const overflow = await dialog.evaluate((node) => node.scrollWidth - node.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(0);
+    for (const button of [
+      dialog.getByRole("button", { name: "Cancel" }),
+      dialog.getByRole("button", { name: "Close account permanently" }),
+    ]) {
+      expect(Math.round((await button.boundingBox())!.height)).toBeGreaterThanOrEqual(44);
+    }
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(dialog).toHaveCount(0);
+  },
+);
 
 test("nothing is claimed saved before anything was, and 'Last saved' appears after a real save", async ({
   page,

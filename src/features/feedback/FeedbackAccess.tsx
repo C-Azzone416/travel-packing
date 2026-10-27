@@ -21,6 +21,7 @@ import {
 } from "./account-scope";
 import { feedbackE2eBuild, feedbackRuntimeEnabled, PREVIEW_FEEDBACK_ORIGIN } from "./availability";
 import { feedbackBuildSha } from "./build-sha";
+import { registerAccountClosureFeedbackCleanup } from "./account-closure-cleanup";
 import type { reportContext } from "./capture-policy";
 import { createProxySend, REPORTS_PATH } from "./delivery";
 import {
@@ -332,6 +333,7 @@ function EnabledFeedbackAccessProvider({
   useEffect(() => {
     if (!outboxKey) return;
     let cancelled = false;
+    let unregisterAccountClosureCleanup: () => void = () => undefined;
     let box: DurableFeedback | null = null;
     let unsubscribe: (() => void) | undefined;
     const stop = () => box?.stop();
@@ -353,6 +355,15 @@ function EnabledFeedbackAccessProvider({
       }
       box = created;
       boxRef.current = { key: outboxKey, box: created };
+      unregisterAccountClosureCleanup = registerAccountClosureFeedbackCleanup(async () => {
+        if (boxRef.current?.key === outboxKey) boxRef.current = null;
+        created?.stop();
+        await created?.clear().catch(() => undefined);
+        const currentFactory = idbRef.current;
+        if (currentFactory)
+          await deleteAccountOutbox(currentFactory, outboxKey).catch(() => undefined);
+        channelRef.current?.postMessage("account-ended");
+      });
       // Saving must work with no connection at all, so the code that prepares a report is fetched now, not at Send.
       void preload().catch(() => undefined);
       if (created) {
@@ -368,6 +379,7 @@ function EnabledFeedbackAccessProvider({
     })();
     return () => {
       cancelled = true;
+      unregisterAccountClosureCleanup();
       window.removeEventListener("pagehide", stop);
       window.removeEventListener("pageshow", resume);
       unsubscribe?.();

@@ -133,6 +133,7 @@ describe("signInOwner", () => {
           throw new Error("database secret for owner@example.test");
         },
         markComplete: async () => {},
+        resetPasswordAndMarkComplete: async (_email, reset) => reset(),
       };
       fake.failNextSignOut = cleanupFails;
       const allowlist = parseAllowlist(OWNER.email);

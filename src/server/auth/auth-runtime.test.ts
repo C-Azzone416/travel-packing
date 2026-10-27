@@ -163,6 +163,16 @@ describe("getAuth", () => {
     expect(unavailableAuth().seals.seal("owner@example.test")).toBe("");
   });
 
+  it("signs identity-free account-closure completion signals with a purpose-derived key", async () => {
+    createNeonAuth.mockReturnValue({});
+    const auth = await getAuth(env, { setupStore: createMemorySetupStore() });
+    const signal = auth.completionSignals.issue();
+    expect(auth.completionSignals.open(signal)).toBe(true);
+    expect(signal).not.toContain("owner@example.test");
+    expect(unavailableAuth().completionSignals.open(signal)).toBe(false);
+    expect(unavailableAuth().completionSignals.issue()).toBe("");
+  });
+
   it("builds once per process until reset", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const first = getAuth({});

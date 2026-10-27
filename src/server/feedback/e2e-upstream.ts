@@ -14,6 +14,7 @@ export const E2E_UPSTREAM_MARKER = "e2e-framebriar-upstream";
 export function e2eUpstreamFetch(
   env: Record<string, string | undefined> = process.env,
 ): typeof fetch | null {
+  if (env.NEXT_PUBLIC_E2E_BUILD !== "1" || env.VERCEL) return null;
   const port = env.E2E_FRAMEBRIAR_PORT;
   if (!port || !/^\d{4,5}$/.test(port) || Number(port) > 65535) return null;
   const target = `http://127.0.0.1:${port}/api`;
@@ -28,9 +29,22 @@ export function e2eUpstreamFetch(
   };
 }
 
-/** The e2e run connects the same few accounts over and over, so its redemption limit is lifted (real builds keep the real one). */
+/**
+ * The e2e run drives the same few synthetic accounts through the entire browser suite. Lift every per-account route limit
+ * only while the loopback fake is active; otherwise later tests can hit the production status-read limit merely because
+ * earlier tests rendered the shared app shell. Real builds keep every production limit.
+ */
 export function e2eRouteLimits(
   env: Record<string, string | undefined> = process.env,
-): { redeem: { limit: number; windowMs: number } } | undefined {
-  return e2eUpstreamFetch(env) ? { redeem: { limit: 10_000, windowMs: 60_000 } } : undefined;
+):
+  | Record<"status" | "redeem" | "disconnect" | "reports", { limit: number; windowMs: number }>
+  | undefined {
+  if (!e2eUpstreamFetch(env)) return undefined;
+  const unlimitedForSyntheticSuite = { limit: 10_000, windowMs: 60_000 };
+  return {
+    status: unlimitedForSyntheticSuite,
+    redeem: unlimitedForSyntheticSuite,
+    disconnect: unlimitedForSyntheticSuite,
+    reports: unlimitedForSyntheticSuite,
+  };
 }

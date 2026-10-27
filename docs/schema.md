@@ -9,6 +9,7 @@ Design basis: plan §18 "Suggested logical data sets" and §20 items 5–6 (item
 | ------------------------ | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | `users`                  | users               | App-side mirror of the auth user (id supplied by the auth provider, #9). Owner of every row.                                         |
 | `account_setups`         | (auth, #83)         | Addresses whose password was set through an emailed link (digest of the email). Not owner data: no `owner_id`.                       |
+| `account_deletions`      | (auth, #237)        | Transient identity-incarnation/setup fence while deletion is incomplete; removed after confirmed closure.                            |
 | `staples`                | staples             | Future-trip defaults. Versioned on their own (`version`). Never referenced by trip rows.                                             |
 | `saved_lists`            | (saved lists, #140) | A named list of items to add to new trips. Owner-scoped template; never referenced by trip rows.                                     |
 | `saved_list_items`       | (saved lists, #140) | The items of a saved list: identity (`semantic_id`), name, category, `qty` only. No packed counts or trip data.                      |
@@ -39,9 +40,12 @@ users 1──* trips ──* trip_items ──1 trip_item_progress
 `users.generation` is a random uuid set when the row is provisioned (#259). The two Framebriar tables reference `users(id, generation)`, so a
 row can only exist for the account generation that made it and a recreated account never matches an old row.
 
-Every table except `account_setups` has a non-null `owner_id` referencing `users.id` (`ON DELETE CASCADE`). `account_setups` is
-auth bookkeeping keyed by an HMAC digest of the normalized email (there is no user id before the first session, and the app keeps
-no raw addresses); it is only added to, by the reset-link flow (`docs/auth-screens.md`).
+Every owned-data table below `users` has a non-null `owner_id` referencing `users.id` (`ON DELETE CASCADE`). The two auth
+bookkeeping tables are exceptions. `account_setups` is keyed by an HMAC digest of the normalized email (there is no user id
+before the first session, and the app keeps no raw addresses); the reset-link flow adds it (`docs/auth-screens.md`) and account
+deletion removes the matching digest. `account_deletions` stores the opaque provider user id, provider identity creation time,
+keyed setup digest, and nullable last reconciliation-attempt time while deletion is incomplete; it has no foreign key by
+design, so deleting `users` cannot remove the fence. Confirmed closure removes it explicitly.
 
 ### Ownership is enforced by the keys
 
@@ -120,6 +124,12 @@ These reveal where and when someone travels. Keep them out of logs, analytics, f
 
 `users.id` and `owner_id` identify the account holder.
 
+`account_deletions` is temporary security state identifying one in-progress provider identity incarnation. Provider failures
+keep its opaque user id, identity creation time, keyed setup digest, and pending-only retry time so stale sessions cannot
+recreate data, cleanup cannot target a reused id, and bounded signed-out reconciliation makes progress without hot-looping a
+failing row. A terminal provider response triggers a final owner/setup sweep and deletes this row before the app reports
+success.
+
 ## Recoverable delete and the purge seam
 
 Removing a trip sets `trips.deleted_at`; undo clears it. A partial index on `deleted_at` keeps the Recently deleted
@@ -127,6 +137,10 @@ query and the purge cheap. `src/server/db/retention.ts` exposes `softDeleteTrip`
 `listRecentlyDeleted`, and `purgeDeletedBefore(db, cutoff, ownerId?)`. **No retention period is hard-coded**: the
 cutoff is a required argument, so the policy (#28) decides it. Purging hard-deletes the trip and cascades to its
 children.
+
+Closing an account is different from recoverable trip deletion: it inserts a transient deletion fence, removes the matching
+`account_setups` digest, and hard-deletes `users` in one transaction. The existing cascades then remove every owned row,
+including soft-deleted trips. After terminal provider deletion, a final locked sweep removes any late owner row and the fence.
 
 ## Migrations
 

@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { SaveStatusProvider, useSaveStatus } from "@/components/shell/SaveStatus";
 import { ToastProvider } from "@/components/ui/Toast";
 import { lastSavedText, SettingsScreen } from "./SettingsScreen";
+import type { CloseAccountState } from "./close-account-state";
 
 let tracker: ReturnType<typeof useSaveStatus>;
 function Capture() {
@@ -27,6 +28,14 @@ function setup(
         settings: { weatherOptIn: boolean; temperatureUnit: "F" | "C" };
       }
   >,
+  closeAccount = vi.fn(
+    async (previous: CloseAccountState, formData: FormData): Promise<CloseAccountState> => {
+      void previous;
+      void formData;
+      return { error: null, fieldErrors: {} };
+    },
+  ),
+  accountClosureEnabled = true,
 ) {
   let saved = { weatherOptIn: false, temperatureUnit: "F" as "F" | "C" };
   const update =
@@ -46,11 +55,13 @@ function setup(
           updateWeather={update}
           initialAppearance="base"
           updateAppearance={async (appearance) => ({ ok: true as const, appearance })}
+          accountClosureEnabled={accountClosureEnabled}
+          closeAccount={closeAccount}
         />
       </SaveStatusProvider>
     </ToastProvider>,
   );
-  return { signOut, updateWeather: update, ...view };
+  return { signOut, updateWeather: update, closeAccount, ...view };
 }
 
 describe("SettingsScreen", () => {
@@ -68,6 +79,77 @@ describe("SettingsScreen", () => {
     setup(null);
     expect(screen.queryByText(/Signed in as/)).toBeNull();
     expect(screen.getByRole("button", { name: "Sign out" })).toBeTruthy();
+  });
+
+  it("hides the destructive entry point while the server rollout gate is off", () => {
+    setup(undefined, undefined, undefined, undefined, false);
+    expect(screen.queryByRole("button", { name: "Close account" })).toBeNull();
+    expect(screen.queryByText("Permanently remove your account identity")).toBeNull();
+  });
+
+  it("requires the password and exact irreversible confirmation in a nondismissable account sheet", async () => {
+    const { closeAccount } = setup();
+    await userEvent.click(screen.getByRole("button", { name: "Close account" }));
+    expect(screen.getByRole("dialog", { name: "Close your account?" })).toBeTruthy();
+    expect(
+      screen.getByText(/Confirmed closure leaves no live Packed Smart account record/),
+    ).toBeTruthy();
+    expect(screen.getByText(/It can’t be undone/)).toBeTruthy();
+    expect(screen.getByLabelText("Current password").getAttribute("autocomplete")).toBe(
+      "current-password",
+    );
+    expect(screen.getByLabelText("Type DELETE to confirm")).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByLabelText("Current password"));
+
+    await userEvent.click(screen.getByTestId("modal-backdrop"));
+    expect(screen.getByRole("dialog", { name: "Close your account?" })).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(closeAccount).not.toHaveBeenCalled();
+  });
+
+  it("submits only the explicit password and DELETE confirmation", async () => {
+    const { closeAccount } = setup();
+    await userEvent.click(screen.getByRole("button", { name: "Close account" }));
+    await userEvent.type(screen.getByLabelText("Current password"), "synthetic-password");
+    await userEvent.type(screen.getByLabelText("Type DELETE to confirm"), "DELETE");
+    await userEvent.click(screen.getByRole("button", { name: "Close account permanently" }));
+    expect(closeAccount).toHaveBeenCalledTimes(1);
+    const submitted = closeAccount.mock.calls[0][1] as FormData;
+    expect(Object.fromEntries(submitted)).toEqual({
+      password: "synthetic-password",
+      confirmation: "DELETE",
+    });
+  });
+
+  it("hides a stale failure while a retry is pending", async () => {
+    let resolveRetry!: (state: CloseAccountState) => void;
+    const retry = new Promise<CloseAccountState>((resolve) => {
+      resolveRetry = resolve;
+    });
+    const closeAccount = vi
+      .fn<(previous: CloseAccountState, formData: FormData) => Promise<CloseAccountState>>()
+      .mockResolvedValueOnce({
+        error:
+          "Your Packed Smart data is removed and access is blocked, but account closure wasn’t confirmed. Try again to finish.",
+        fieldErrors: {},
+        recovery: true,
+      })
+      .mockReturnValueOnce(retry);
+    setup(undefined, undefined, undefined, closeAccount);
+    await userEvent.click(screen.getByRole("button", { name: "Close account" }));
+    const submit = screen.getByRole("button", { name: "Close account permanently" });
+    await userEvent.click(submit);
+    expect(await screen.findByText(/data is removed/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Finish account closure" }).className).toBe(
+      "auth-link inline-link",
+    );
+
+    await userEvent.click(submit);
+    expect(screen.getByRole("button", { name: "Closing…" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.queryByText(/data is removed/)).toBeNull();
+
+    await act(async () => resolveRetry({ error: null, fieldErrors: {} }));
   });
 
   it("is honest before anything was saved (one line, no 'saved' claim, no Last saved), then after a real write", async () => {

@@ -90,6 +90,11 @@ export function sweepOtherAccounts(factory: Factory, keepKey: string): Promise<S
   return deleteMatching(factory, (name) => name.startsWith(ACCOUNT_DB_PREFIX) && name !== keep);
 }
 
+/** Confirmed account closure: delete every account-scoped feedback outbox in this browser profile. */
+export function deleteAllAccountOutboxes(factory: Factory): Promise<Sweep> {
+  return deleteMatching(factory, (name) => name.startsWith(ACCOUNT_DB_PREFIX));
+}
+
 /** Sign-out: delete this account's own outbox. */
 export async function deleteAccountOutbox(factory: Factory, outboxKey: string): Promise<boolean> {
   return deleteDatabase(factory, accountDatabaseName(outboxKey));

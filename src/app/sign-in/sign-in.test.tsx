@@ -1,9 +1,13 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createFakeAuth } from "@/server/auth/__fixtures__/fake-auth";
 import { parseAllowlist } from "@/server/auth/allowlist";
 
 const fake = createFakeAuth();
+const reconcile = vi.hoisted(() =>
+  vi.fn(async () => ({ completed: 0, pending: 0, unavailable: 0 })),
+);
+const syntheticDb = {};
 vi.mock("@/server/auth/auth-runtime", () => ({
   getAuth: async () => ({
     provider: fake,
@@ -15,6 +19,10 @@ vi.mock("next/navigation", () => ({
   redirect: (path: string) => {
     throw new Error(`NEXT_REDIRECT:${path}`);
   },
+}));
+vi.mock("@/server/db/app-db", () => ({ getAppDb: async () => syntheticDb }));
+vi.mock("@/server/auth/account-deletion", () => ({
+  reconcilePendingAccountDeletions: reconcile,
 }));
 
 import SignInPage from "./page";
@@ -109,9 +117,29 @@ describe("SignInForm", () => {
 
 const search = (params: Record<string, string> = {}) => ({ searchParams: Promise.resolve(params) });
 
+beforeEach(() => {
+  vi.stubEnv("CLOSE_ACCOUNT_ENABLED", "1");
+  reconcile.mockClear();
+});
+afterEach(() => vi.unstubAllEnvs());
+
 describe("SignInPage", () => {
+  it("does not open deletion reconciliation while rollout is off", async () => {
+    vi.stubEnv("CLOSE_ACCOUNT_ENABLED", "");
+    fake.current = null;
+    expect(renderToStaticMarkup(await SignInPage(search()))).toContain("Welcome back");
+    expect(reconcile).not.toHaveBeenCalled();
+  });
+
   it("shows the form to a signed-out visitor", async () => {
     fake.current = null;
+    expect(renderToStaticMarkup(await SignInPage(search()))).toContain("Welcome back");
+    expect(reconcile).toHaveBeenCalledWith(syntheticDb);
+  });
+
+  it("keeps sign-in available when background deletion reconciliation fails", async () => {
+    fake.current = null;
+    reconcile.mockRejectedValueOnce(new Error("synthetic database outage"));
     expect(renderToStaticMarkup(await SignInPage(search()))).toContain("Welcome back");
   });
 

@@ -99,13 +99,20 @@ export const NOW = new Date("2030-03-10T12:00:00.000Z");
 export function makeContext(db: Db, fake: FakeAuth, now: Date = NOW): DataContext {
   return {
     db,
-    auth: { provider: fake, allowlist: parseAllowlist(`${OWNER.email}, ${OTHER_OWNER.email}`) },
+    auth: {
+      provider: fake,
+      deletionProvider: fake,
+      allowlist: parseAllowlist(`${OWNER.email}, ${OTHER_OWNER.email}`),
+    },
     now: () => now,
   };
 }
 
-export function signedInAs(fake: FakeAuth, user: { userId: string; email: string } | null): void {
-  fake.current = user;
+export function signedInAs(
+  fake: FakeAuth,
+  user: { userId: string; email: string; identityCreatedAt?: number } | null,
+): void {
+  fake.current = user ? { ...user, identityCreatedAt: user.identityCreatedAt ?? 1 } : null;
 }
 
 export { createFakeAuth };

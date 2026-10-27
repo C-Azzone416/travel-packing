@@ -2243,6 +2243,30 @@ input:disabled {
   margin: 0 0 8px;
   font-size: 18px;
 }
+.close-account-entry {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+.close-account-entry h3,
+.close-account-entry p {
+  margin: 0 0 8px;
+}
+.close-account-form {
+  display: grid;
+  gap: 16px;
+}
+.close-account-form > p {
+  margin: 0;
+}
+@media (max-width: 480px) {
+  .modal:has(.close-account-form) .modal-actions {
+    flex-direction: column-reverse;
+  }
+  .modal:has(.close-account-form) .modal-actions .button {
+    width: 100%;
+  }
+}
 .temperature-units {
   margin: 16px 0 0;
   padding: 0;

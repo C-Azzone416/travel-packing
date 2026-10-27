@@ -1,0 +1,1 @@
+ALTER TABLE "account_deletions" ADD COLUMN "last_reconcile_attempt_at" timestamp with time zone;

@@ -39,6 +39,8 @@ export const finishSetupHelper = (email: string | null) =>
     ? `We've sent a link to ${email}. Open it to choose your password. It expires in ${RESET_LIFETIME_HOURS} hour.`
     : "Open the link we emailed to choose your password. If you can't find it, we can send another.";
 export const PASSWORD_SET = "Password set. Sign in with your new password.";
+export const ACCOUNT_CLOSED =
+  "Your account identity and Packed Smart trips, lists, and preferences were permanently deleted.";
 /** Added under the one generic sign-in error, the same for every address (so it says nothing about any account). */
 export const SIGN_IN_HINT_BEFORE =
   "If you just signed up, check your email for a link to finish setting up, or ";
