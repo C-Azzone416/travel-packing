@@ -4,3 +4,7 @@
 export function e2eUpstreamFetch(): typeof fetch | null {
   return null;
 }
+
+export function e2eRouteLimits(): undefined {
+  return undefined;
+}

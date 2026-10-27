@@ -27,3 +27,10 @@ export function e2eUpstreamFetch(
     return fetch(`${target}${url.slice(FRAMEBRIAR_ENDPOINT.length)}`, init);
   };
 }
+
+/** The e2e run connects the same few accounts over and over, so its redemption limit is lifted (real builds keep the real one). */
+export function e2eRouteLimits(
+  env: Record<string, string | undefined> = process.env,
+): { redeem: { limit: number; windowMs: number } } | undefined {
+  return e2eUpstreamFetch(env) ? { redeem: { limit: 10_000, windowMs: 60_000 } } : undefined;
+}

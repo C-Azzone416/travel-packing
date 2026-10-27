@@ -86,7 +86,9 @@ test("a lost answer is finished by pasting the same invitation again, which is s
   await page.getByRole("button", { name: "Connect" }).click();
   await expect(page.getByRole("alert").filter({ hasText: /may have been used/ })).toBeVisible();
   await expect(page.getByText("Not finished")).toBeVisible();
-  await expect(page.getByText(/Paste the same invitation again to finish/)).toBeVisible();
+  await expect(
+    page.locator("p.tiny.muted", { hasText: /Paste the same invitation again to finish/ }),
+  ).toBeVisible();
 
   await connectFeedback(page, invitation);
   await expect(page.getByText("Not finished")).toHaveCount(0);

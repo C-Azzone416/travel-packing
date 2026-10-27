@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { e2eUpstreamFetch as stubbed } from "./e2e-upstream.disabled";
-import { E2E_UPSTREAM_MARKER, e2eUpstreamFetch } from "./e2e-upstream";
+import {
+  e2eRouteLimits as stubbedLimits,
+  e2eUpstreamFetch as stubbed,
+} from "./e2e-upstream.disabled";
+import { E2E_UPSTREAM_MARKER, e2eRouteLimits, e2eUpstreamFetch } from "./e2e-upstream";
 import { FRAMEBRIAR_ENDPOINT } from "./framebriar-client";
 
 describe("the e2e upstream seam", () => {
@@ -46,6 +49,12 @@ describe("the e2e upstream seam", () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+
+  it("lifts the redemption limit only where the seam is on", () => {
+    expect(e2eRouteLimits({})).toBeUndefined();
+    expect(e2eRouteLimits({ E2E_FRAMEBRIAR_PORT: "3400" })?.redeem.limit).toBeGreaterThan(100);
+    expect(stubbedLimits()).toBeUndefined();
   });
 
   it("its stub, the one every other build gets, never redirects anything", () => {
