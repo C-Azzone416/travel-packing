@@ -9,6 +9,7 @@ import {
   hostOf,
   parseBuildEnvFile,
   parseEnvFile,
+  packageCredentialProblems,
   productionHost,
   PRODUCTION_HOST_FORMAT,
   REQUIRED,
@@ -137,6 +138,10 @@ describe("checkDeployEnv", () => {
     "E2E_DATABASE_URL",
     "SEED_DATABASE_URL",
     "OPEN_METEO_GEOCODING_URL",
+    "NODE_AUTH_TOKEN",
+    "NPM_AUTH_TOKEN",
+    "NPM_TOKEN",
+    "FRAMEBRIAR_PACKAGES_TOKEN",
   ])("refuses %s in both environments, naming it but not its value", (name) => {
     for (const target of ["preview", "production"] as const) {
       const problems = checkDeployEnv(
@@ -241,6 +246,21 @@ describe("checkDeployEnv", () => {
     const env = { ...good, DATABASE_URL: `postgres://u:p@x-${PROD_HOST}/db` };
     expect(checkDeployEnv("preview", env, PROD_HOST)).toEqual([]);
   });
+});
+
+describe("packageCredentialProblems", () => {
+  it("accepts a credential-free build environment", () => {
+    expect(packageCredentialProblems({ VERCEL_ENV: "preview" })).toEqual([]);
+  });
+
+  it.each(["NODE_AUTH_TOKEN", "NPM_AUTH_TOKEN", "NPM_TOKEN", "FRAMEBRIAR_PACKAGES_TOKEN"])(
+    "rejects %s by name without echoing its value",
+    (name) => {
+      const problems = packageCredentialProblems({ [name]: "sentinel-do-not-print" });
+      expect(problems).toEqual([`${name} must not be present during the application build`]);
+      expect(problems.join()).not.toContain("sentinel-do-not-print");
+    },
+  );
 });
 
 describe("hostOf", () => {

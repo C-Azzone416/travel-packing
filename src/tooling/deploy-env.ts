@@ -7,6 +7,13 @@ import { screenshotEnvProblems } from "./feedback-screenshots";
 export type DeployTarget = "preview" | "production";
 type Env = Record<string, string | undefined>;
 
+export const PACKAGE_AUTH_VARIABLES = [
+  "NODE_AUTH_TOKEN",
+  "NPM_AUTH_TOKEN",
+  "NPM_TOKEN",
+  "FRAMEBRIAR_PACKAGES_TOKEN",
+] as const;
+
 /** Test-only switches. If any of these exist in a deployed environment, a build could ship the fake sign-in. */
 export const FORBIDDEN_EVERYWHERE = [
   "NEXT_PUBLIC_E2E_BUILD",
@@ -15,6 +22,9 @@ export const FORBIDDEN_EVERYWHERE = [
   "SEED_DATABASE_URL",
   // Lets the location search be pointed at another server; for e2e only.
   "OPEN_METEO_GEOCODING_URL",
+  // Package credentials belong only to the dedicated dependency-fetch step. If Vercel has any of these configured,
+  // its builder and the application compiler would inherit them.
+  ...PACKAGE_AUTH_VARIABLES,
 ] as const;
 
 /** Every variable the fake sign-in family reads starts with this; none may exist in a deployed environment. */
@@ -67,6 +77,13 @@ export function allowlistProblem(value: string | undefined): string | null {
 
 function present(env: Env, name: string): boolean {
   return (env[name] ?? "").trim().length > 0;
+}
+
+/** Package credentials must be absent from the application compiler and every child process it launches. */
+export function packageCredentialProblems(env: Env): string[] {
+  return PACKAGE_AUTH_VARIABLES.filter((name) => present(env, name)).map(
+    (name) => `${name} must not be present during the application build`,
+  );
 }
 
 /** A host in canonical form, or null when the value is not a URL. */

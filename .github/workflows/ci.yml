@@ -52,7 +52,10 @@ jobs:
       - name: Install
         env:
           NODE_AUTH_TOKEN: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && secrets.FRAMEBRIAR_PACKAGES_TOKEN || '' }}
-        run: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Run install scripts without package credential
+        run: npm rebuild esbuild unrs-resolver && node scripts/install-hooks.mjs
 
       - name: Decide how much to run
         id: mode
@@ -89,7 +92,10 @@ jobs:
       - name: Install
         env:
           NODE_AUTH_TOKEN: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && secrets.FRAMEBRIAR_PACKAGES_TOKEN || '' }}
-        run: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Run install scripts without package credential
+        run: npm rebuild esbuild unrs-resolver && node scripts/install-hooks.mjs
 
       # Fails on any committed file over 1 MiB or any local database, build, test, dependency, or env file.
       - name: Repository hygiene
@@ -147,7 +153,10 @@ jobs:
       - name: Install
         env:
           NODE_AUTH_TOKEN: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && secrets.FRAMEBRIAR_PACKAGES_TOKEN || '' }}
-        run: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Run install scripts without package credential
+        run: npm rebuild esbuild unrs-resolver && node scripts/install-hooks.mjs
 
       # vitest exits non-zero when any coverage threshold (90%) is missed.
       # An explicit `shell: bash` enables pipefail (the default shell does
@@ -194,7 +203,10 @@ jobs:
       - name: Install
         env:
           NODE_AUTH_TOKEN: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && secrets.FRAMEBRIAR_PACKAGES_TOKEN || '' }}
-        run: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Run install scripts without package credential
+        run: npm rebuild esbuild unrs-resolver && node scripts/install-hooks.mjs
 
       # A production-mode build (VERCEL_ENV=production): the screenshot capture module resolves to its stub here.
       - name: Build
@@ -252,7 +264,10 @@ jobs:
       - name: Install
         env:
           NODE_AUTH_TOKEN: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && secrets.FRAMEBRIAR_PACKAGES_TOKEN || '' }}
-        run: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Run install scripts without package credential
+        run: npm rebuild esbuild unrs-resolver && node scripts/install-hooks.mjs
 
       - name: Build for e2e
         run: npm run build:e2e
@@ -298,7 +313,10 @@ jobs:
       - name: Install
         env:
           NODE_AUTH_TOKEN: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && secrets.FRAMEBRIAR_PACKAGES_TOKEN || '' }}
-        run: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Run install scripts without package credential
+        run: npm rebuild esbuild unrs-resolver && node scripts/install-hooks.mjs
 
       - name: Download the e2e build
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2

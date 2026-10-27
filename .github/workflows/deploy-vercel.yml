@@ -78,7 +78,12 @@ jobs:
       - name: Install
         env:
           NODE_AUTH_TOKEN: ${{ secrets.FRAMEBRIAR_PACKAGES_TOKEN }}
-        run: npm ci
+        run: npm ci --ignore-scripts
+
+      # Dependency lifecycle scripts are untrusted install-time code. Run them only after the step-scoped package
+      # credential is gone. The repo's own prepare script installs its local git hooks and is harmless on the runner.
+      - name: Run install scripts without package credential
+        run: npm rebuild esbuild unrs-resolver && node scripts/install-hooks.mjs
 
       # A preview deploy only exists after `ci` passed (the caller's `needs: ci`). A manual production run has no such
       # guarantee, so it looks once, at this exact commit: a green, completed, latest `ci` run, or it stops. No waiting.
@@ -126,12 +131,12 @@ jobs:
           PRODUCTION_DB_HOST: ${{ secrets.PRODUCTION_DB_HOST }}
         run: npx tsx scripts/check-deploy-env.ts "$TARGET" ".vercel/.env.${TARGET}.local"
 
-      # `vercel build` works from the files `vercel pull` wrote and performs its own dependency install. It receives only
-      # the read-only, expiring package token; the production-capable VERCEL_TOKEN remains absent.
+      # The root install above already populated node_modules. Repo-controlled `vercel.json` disables the builder's
+      # second install, so the package credential is absent from Vercel/Next and everything they launch. The environment
+      # check also refuses package-auth variables pulled from Vercel itself.
       - name: Build
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.FRAMEBRIAR_PACKAGES_TOKEN }}
         run: |
+          npx tsx scripts/check-package-credentials.ts
           if [ "$TARGET" = production ]; then VERCEL_ENV=production FEEDBACK_SCREENSHOTS=0 vercel build --prod; else vercel build; fi
 
       # An output without server functions deploys "fine" and then answers every request with a 404; stop before uploading it.

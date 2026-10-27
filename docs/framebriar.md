@@ -14,7 +14,8 @@ is captured, owner setup and the local delivery check are in [feedback.md](feedb
 
 `package.json` pins `@masra91/framebriar` to exact version `0.4.1`; `package-lock.json` pins the private GitHub Package URL and
 npm SHA-512 integrity. The committed `.npmrc` contains only the `@masra91` registry route and `${NODE_AUTH_TOKEN}` placeholder.
-It contains no credential. Every install needs a read-only package credential supplied by the invoking environment.
+It contains no credential. CI supplies a read-only package credential only to `npm ci --ignore-scripts`; the allowlisted,
+pinned `esbuild` and `unrs-resolver` lifecycle scripts and the Vercel/Next build run afterward without it. Fork pull requests get no credential and fail closed at install.
 
 The package has no runtime npm dependencies. Published `0.4.1` identifies private source repository `masra91/framebriar` and
 source tag `v0.4.1`; the package manifest retains `license: UNLICENSED`. Private-package access is not a credential for the

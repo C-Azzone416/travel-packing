@@ -135,6 +135,28 @@ export const CLEANUP_STEP = [
   'run: npx tsx scripts/cleanup-previews.ts "$DEPLOY_URL" "$PREVIEW_ALIAS"',
 ];
 
+/** Repo-owned Vercel settings that keep dependency fetching separate from compilation. */
+export function checkVercelConfig(text: string): string[] {
+  let config: unknown;
+  try {
+    config = JSON.parse(text);
+  } catch {
+    return ["vercel.json is not valid JSON"];
+  }
+  if (!config || typeof config !== "object" || Array.isArray(config)) {
+    return ["vercel.json must be an object"];
+  }
+  const object = config as Record<string, unknown>;
+  const problems: string[] = [];
+  if (object.framework !== "nextjs") problems.push("vercel.json must pin the Next.js framework");
+  if (object.installCommand !== "") {
+    problems.push(
+      "vercel.json must set installCommand to the empty string so vercel build cannot fetch dependencies",
+    );
+  }
+  return problems;
+}
+
 /** What must be true of `.github/workflows/deploy-vercel.yml`. Returns the broken rules (empty when fine). */
 export function checkDeployWorkflow(workflow: string): string[] {
   const problems: string[] = [];
@@ -163,24 +185,43 @@ export function checkDeployWorkflow(workflow: string): string[] {
     problems.push("the CI check must run scripts/require-ci.ts");
 
   // The private SDK is fetched with the repository's expiring read-only package token. The gate remains dependency- and
-  // secret-free; the credential reaches only the deploy job's application install and Vercel's second install during
-  // `vercel build`, never the independently locked Vercel CLI.
+  // secret-free; the credential reaches only npm's fetch-only application install. Dependency lifecycle scripts run in
+  // a later credential-free step, and Vercel's second install is disabled in vercel.json.
   const permissionBlock = /^permissions:\n((?: {2}.*\n)*)/m.exec(workflow)?.[1] ?? "";
   if (/^ {2}packages:\s*/m.test(permissionBlock))
     problems.push("the deploy workflow must not grant the repository token package access");
   if (stepsOf(jobBody(workflow, "gate") ?? "", "run: npm ci\n").length !== 0)
     problems.push("the release gate must not install dependencies or receive the package secret");
-  const installs = stepsOf(jobBody(workflow, "deploy") ?? "", "run: npm ci\n");
+  const installs = stepsOf(jobBody(workflow, "deploy") ?? "", "run: npm ci --ignore-scripts\n");
   if (
     installs.length !== 1 ||
     !/NODE_AUTH_TOKEN:\s*\$\{\{\s*secrets\.FRAMEBRIAR_PACKAGES_TOKEN\s*\}\}/.test(installs[0])
   )
     problems.push("the deploy job must give the Framebriar secret only to its root npm ci step");
+  const installScripts = stepsOf(
+    jobBody(workflow, "deploy") ?? "",
+    "Run install scripts without package credential",
+  );
+  if (
+    installScripts.length !== 1 ||
+    !/run:\s*npm rebuild esbuild unrs-resolver && node scripts\/install-hooks\.mjs/.test(
+      installScripts[0],
+    ) ||
+    /NODE_AUTH_TOKEN|FRAMEBRIAR_PACKAGES_TOKEN/.test(installScripts[0])
+  ) {
+    problems.push(
+      "dependency lifecycle scripts must run once, after install, without package credentials",
+    );
+  }
   const buildStep = stepsOf(jobBody(workflow, "deploy") ?? "", "- name: Build")[0] ?? "";
-  if (!/NODE_AUTH_TOKEN:\s*\$\{\{\s*secrets\.FRAMEBRIAR_PACKAGES_TOKEN\s*\}\}/.test(buildStep))
-    problems.push("vercel build needs the Framebriar package secret for its second install");
-  if (count(/NODE_AUTH_TOKEN:/g) !== 2)
-    problems.push("NODE_AUTH_TOKEN may appear only on the deploy root install and vercel build");
+  if (/NODE_AUTH_TOKEN|FRAMEBRIAR_PACKAGES_TOKEN/.test(buildStep))
+    problems.push(
+      "vercel build and everything it launches must not receive the package credential",
+    );
+  if (!/npx tsx scripts\/check-package-credentials\.ts/.test(buildStep))
+    problems.push("vercel build must fail closed when a package credential is present");
+  if (count(/NODE_AUTH_TOKEN:/g) !== 1)
+    problems.push("NODE_AUTH_TOKEN may appear only on the deploy root fetch-only install");
   const cliInstall =
     stepsOf(jobBody(workflow, "deploy") ?? "", "Install the locked Vercel CLI")[0] ?? "";
   if (/NODE_AUTH_TOKEN/.test(cliInstall))
@@ -594,11 +635,23 @@ export function checkCiWorkflow(workflow: string): string[] {
   const trustedPackageToken =
     /NODE_AUTH_TOKEN:\s*\$\{\{\s*\(github\.event_name != 'pull_request' \|\| github\.event\.pull_request\.head\.repo\.full_name == github\.repository\) && secrets\.FRAMEBRIAR_PACKAGES_TOKEN \|\| ''\s*\}\}/;
   for (const name of ["mode", "checks", "unit", "build", "e2e-build", "e2e"] as const) {
-    const installs = stepsOf(body(name) ?? "", "run: npm ci\n");
+    const installs = stepsOf(body(name) ?? "", "run: npm ci --ignore-scripts\n");
     if (installs.length !== 1 || !trustedPackageToken.test(installs[0]))
       problems.push(
-        `${name}'s root install must receive the package token only for pushes and same-repository pull requests`,
+        `${name}'s fetch-only root install must receive the package token only for pushes and same-repository pull requests`,
       );
+    const scripts = stepsOf(body(name) ?? "", "Run install scripts without package credential");
+    if (
+      scripts.length !== 1 ||
+      !/run:\s*npm rebuild esbuild unrs-resolver && node scripts\/install-hooks\.mjs/.test(
+        scripts[0],
+      ) ||
+      /NODE_AUTH_TOKEN|FRAMEBRIAR_PACKAGES_TOKEN/.test(scripts[0])
+    ) {
+      problems.push(
+        `${name}'s dependency lifecycle scripts must run once without package credentials`,
+      );
+    }
   }
   if ((workflow.match(/secrets\.FRAMEBRIAR_PACKAGES_TOKEN/g) ?? []).length !== 6)
     problems.push("the Framebriar package secret may appear only on the six trusted root installs");

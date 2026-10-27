@@ -82,5 +82,11 @@
       "esbuild": "^0.25.0"
     },
     "zod": "$zod"
+  },
+  "allowScripts": {
+    "core-js": false,
+    "esbuild@0.25.12": true,
+    "esbuild@0.28.2": true,
+    "unrs-resolver@1.12.2": true
   }
 }

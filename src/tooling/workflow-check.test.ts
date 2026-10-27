@@ -6,6 +6,7 @@ import {
   ALIAS_HEAD_STEP,
   checkCiWorkflow,
   checkDeployWorkflow,
+  checkVercelConfig,
   checkVercelCliLock,
   ciJob,
   MIN_CI_TIMEOUT_MINUTES,
@@ -18,6 +19,7 @@ import {
 const DIR = join(process.cwd(), ".github", "workflows");
 const deploy = readFileSync(join(DIR, "deploy-vercel.yml"), "utf8");
 const ci = readFileSync(join(DIR, "ci.yml"), "utf8");
+const vercelConfig = readFileSync("vercel.json", "utf8");
 
 /** The real file with one edit; the edit must change something, so a mutant cannot silently be a no-op. */
 function mutate(from: string | RegExp, to: string): string {
@@ -36,6 +38,14 @@ describe("the real workflows", () => {
 
   it("deploy-vercel.yml keeps its safety contract", () => {
     expect(checkDeployWorkflow(deploy)).toEqual([]);
+  });
+
+  it("vercel.json keeps dependency installation out of vercel build", () => {
+    expect(checkVercelConfig(vercelConfig)).toEqual([]);
+    expect(checkVercelConfig('{"framework":"nextjs"}').join("\n")).toMatch(/installCommand/);
+    expect(
+      checkVercelConfig('{"framework":"nextjs","installCommand":"npm ci"}').join("\n"),
+    ).toMatch(/empty string/);
   });
 });
 describe("unpinnedActions", () => {
@@ -64,7 +74,7 @@ function movedInjection(): string {
     deploy,
   )?.[1];
   expect(block).toBeTruthy();
-  const anchor = "      # `vercel build` works";
+  const anchor = "      # The root install above already populated node_modules.";
   expect(deploy).toContain(anchor);
   return deploy.replace(block as string, "").replace(anchor, `${block}${anchor}`);
 }
@@ -93,18 +103,31 @@ describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
     [
       "a root install loses its package token",
       mutate(
-        /      - name: Install\n        env:\n          NODE_AUTH_TOKEN: \$\{\{ secrets\.FRAMEBRIAR_PACKAGES_TOKEN \}\}\n        run: npm ci/,
-        "      - name: Install\n        run: npm ci",
+        /      - name: Install\n        env:\n          NODE_AUTH_TOKEN: \$\{\{ secrets\.FRAMEBRIAR_PACKAGES_TOKEN \}\}\n        run: npm ci --ignore-scripts/,
+        "      - name: Install\n        run: npm ci --ignore-scripts",
       ),
       /deploy job must give the Framebriar secret/,
     ],
     [
-      "vercel build loses its package token",
+      "vercel build receives the package token",
       mutate(
-        /      - name: Build\n        env:\n          NODE_AUTH_TOKEN: \$\{\{ secrets\.FRAMEBRIAR_PACKAGES_TOKEN \}\}\n/,
-        "      - name: Build\n",
+        "      - name: Build\n        run:",
+        "      - name: Build\n        env:\n          NODE_AUTH_TOKEN: ${{ secrets.FRAMEBRIAR_PACKAGES_TOKEN }}\n        run:",
       ),
-      /vercel build needs the Framebriar package secret/,
+      /vercel build and everything it launches must not receive/,
+    ],
+    [
+      "the build-time package credential guard is removed",
+      mutate("          npx tsx scripts/check-package-credentials.ts\n", ""),
+      /vercel build must fail closed when a package credential is present/,
+    ],
+    [
+      "dependency scripts receive the package token",
+      mutate(
+        "      - name: Run install scripts without package credential\n        run:",
+        "      - name: Run install scripts without package credential\n        env:\n          NODE_AUTH_TOKEN: ${{ secrets.FRAMEBRIAR_PACKAGES_TOKEN }}\n        run:",
+      ),
+      /dependency lifecycle scripts must run once/,
     ],
     [
       "the locked Vercel CLI install receives the package token",
@@ -720,7 +743,16 @@ describe("checkCiWorkflow", () => {
         "NODE_AUTH_TOKEN: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && secrets.FRAMEBRIAR_PACKAGES_TOKEN || '' }}",
         "NODE_AUTH_TOKEN: ${{ secrets.FRAMEBRIAR_PACKAGES_TOKEN }}",
       ),
-      /unit's root install must receive the package token only/,
+      /unit's fetch-only root install must receive the package token only/,
+    ],
+    [
+      "dependency scripts receive the package token",
+      inJob(
+        "unit",
+        "      - name: Run install scripts without package credential\n        run:",
+        "      - name: Run install scripts without package credential\n        env:\n          NODE_AUTH_TOKEN: ${{ secrets.FRAMEBRIAR_PACKAGES_TOKEN }}\n        run:",
+      ),
+      /unit's dependency lifecycle scripts must run once without package credentials/,
     ],
     [
       "an explicit permission block adds package read",
