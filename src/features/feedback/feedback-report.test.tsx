@@ -13,7 +13,7 @@ import {
   type CreateOutbox,
 } from "./FeedbackAccess";
 import { FeedbackButton } from "./FeedbackButton";
-import { COPY } from "./FeedbackSheet";
+import { COPY, SCREENSHOT_SEND_LIMIT_BYTES } from "./FeedbackSheet";
 
 let pathname = "/trips/6c1f7d2e-9b1a-4c55-8a2e-0d3f2c9a7b11";
 vi.mock("next/navigation", () => ({ usePathname: () => pathname }));
@@ -226,6 +226,39 @@ describe("the screenshot option", () => {
     await user.click(within(dialog).getByRole("button", { name: "Send" }));
     await screen.findByText(COPY.saved);
     expect(outbox.box.enqueue.mock.calls[0][0].report.media).toBeNull();
+  });
+
+  it("a screenshot over the sendable size is not offered, never shrunk, and the notes still send", async () => {
+    capture.take.mockResolvedValue(
+      new Blob([new Uint8Array(SCREENSHOT_SEND_LIMIT_BYTES + 1)], { type: "image/png" }),
+    );
+    const user = userEvent.setup();
+    const { outbox } = mount();
+    const dialog = await openSheet(user);
+    const box = within(dialog).getByRole("checkbox", { name: COPY.screenshotLabel });
+    expect(box).toHaveProperty("checked", false);
+    expect(box).toHaveProperty("disabled", true);
+    expect(within(dialog).getByText(COPY.screenshotTooLarge)).toBeTruthy();
+    expect(within(dialog).queryByText(COPY.screenshotFailed)).toBeNull();
+    expect(within(dialog).queryByRole("img")).toBeNull();
+    await user.type(within(dialog).getByLabelText(COPY.notesLabel), "big screen");
+    await user.click(within(dialog).getByRole("button", { name: "Send" }));
+    await screen.findByText(COPY.saved);
+    expect(outbox.box.enqueue.mock.calls[0][0].report.media).toBeNull();
+    expect(outbox.box.enqueue.mock.calls[0][0].media).toBeNull();
+  });
+
+  it("a screenshot exactly at the sendable size is still offered", async () => {
+    capture.take.mockResolvedValue(
+      new Blob([new Uint8Array(SCREENSHOT_SEND_LIMIT_BYTES)], { type: "image/png" }),
+    );
+    const user = userEvent.setup();
+    mount();
+    const dialog = await openSheet(user);
+    const box = within(dialog).getByRole("checkbox", { name: COPY.screenshotLabel });
+    expect(box).toHaveProperty("checked", true);
+    expect(box).toHaveProperty("disabled", false);
+    expect(within(dialog).queryByText(COPY.screenshotTooLarge)).toBeNull();
   });
 
   it("is absent, not disabled, where the build has no screenshots (Production)", async () => {
