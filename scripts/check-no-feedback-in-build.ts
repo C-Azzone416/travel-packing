@@ -4,16 +4,21 @@
 import { statSync } from "node:fs";
 import { FRAMEBRIAR_MARKERS, markerHits } from "../src/tooling/build-markers";
 
-const BUILD_DIR = process.argv[2] ?? ".next";
+// Usage: tsx scripts/check-no-feedback-in-build.ts [dir...]   (default .next)
+// Pass `.vercel/output .next` to check what a deploy uploads: the output holds the browser files, while its server functions point at
+// the compiled server files in `.next`, which is where server-side Framebriar code would be.
+const DIRS = process.argv.slice(2).length > 0 ? process.argv.slice(2) : [".next"];
 
-try {
-  statSync(BUILD_DIR);
-} catch {
-  console.error(`No ${BUILD_DIR} directory: build Production first.`);
-  process.exit(2);
+for (const dir of DIRS) {
+  try {
+    statSync(dir);
+  } catch {
+    console.error(`No ${dir} directory: build Production first.`);
+    process.exit(2);
+  }
 }
 
-const hits = markerHits(BUILD_DIR, FRAMEBRIAR_MARKERS);
+const hits = DIRS.flatMap((dir) => markerHits(dir, FRAMEBRIAR_MARKERS));
 if (hits.length > 0) {
   for (const name of new Set(hits.map((hit) => hit.name))) {
     const files = hits.filter((hit) => hit.name === name);

@@ -97,6 +97,10 @@ account redeem a new invitation.
 - **Production**: the whole path is compiled out. `next.config.ts` resolves `@/server/feedback/runtime` to `runtime.disabled.ts` (four
   handlers that answer 404) in every build that is not stable Preview, local development or the e2e build, and
   `npm run check:no-feedback-in-build` fails a Production build that contains the marker `framebriar-enrollment-server`.
+  A Vercel build output (`.vercel/output`) holds the browser files and function configuration only: its server functions list compiled
+  server files (`filePathMap`) that stay in `.next`. The deploy therefore scans **both** (`.vercel/output .next`), and so does the
+  `build` CI job, which makes the same Preview output offline (`npm run build:preview-output`: the locked CLI, a placeholder project, no
+  token, no login) and runs `check:preview-feedback-in-build` on it, so a pull request cannot merge what the Preview deploy would refuse.
 
 ## Account deletion (follow-up, not wired here)
 
