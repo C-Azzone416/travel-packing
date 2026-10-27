@@ -3,6 +3,7 @@ import { OTHER_EMAIL, signIn, signInAsOwner } from "./helpers/auth";
 import { chooseFromMenu } from "./helpers/menu";
 import { expectAccessible } from "./helpers/a11y";
 import { DEVICE } from "./helpers/device";
+import { serverActionId } from "./helpers/server-action";
 
 // Axe checks (#21) for every screen and every dialog, at both viewports (the two Playwright projects). Each state is
 // reached the way a person reaches it, against the real e2e database.
@@ -373,12 +374,18 @@ test.describe("more states", DEVICE, () => {
     await expect(page.getByRole("region", { name: "Loading Staples setup" })).toBeVisible();
     await expectAccessible(page, "authenticated setup loading");
     release();
+    // The setup gate leaves its loading state exactly when the setup action answers, so the held page has finished with it.
+    await expect(page.getByRole("region", { name: "Loading Staples setup" })).toHaveCount(0);
     await page.unroute("**/*");
-    // Only the setup check fails: the non-blocking notice leaves the dashboard usable.
+    // Only the setup check fails: the non-blocking notice leaves the dashboard usable. It is matched by its action id, not as
+    // "the first POST to /": the dashboard's own actions go to the same path, and one of them arriving first took the abort (#256).
+    const setupAction = serverActionId(
+      "src/features/trips/trip-actions.ts",
+      "getStaplesSetupAction",
+    );
     let aborted = false;
     await page.route("**/*", (route) => {
-      const request = route.request();
-      if (!aborted && isAction(request) && new URL(request.url()).pathname === "/") {
+      if (!aborted && route.request().headers()["next-action"] === setupAction) {
         aborted = true;
         return route.abort("failed");
       }
