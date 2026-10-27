@@ -6,7 +6,8 @@
 import "server-only";
 import { getAuth } from "@/server/auth/auth-runtime";
 import { getAppDb } from "@/server/db/app-db";
-import { e2eRouteLimits, e2eUpstreamFetch } from "./e2e-upstream";
+// By this exact specifier: next.config.ts swaps it for a stub in every build that is not the e2e build (a relative import would not be swapped).
+import { e2eRouteLimits, e2eUpstreamFetch } from "@/server/feedback/e2e-upstream";
 import { createEnrollmentService, type EnrollmentService } from "./enrollment-service";
 import { createFramebriarClient } from "./framebriar-client";
 import { createFeedbackRoutes } from "./routes";
