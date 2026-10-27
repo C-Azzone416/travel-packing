@@ -137,6 +137,12 @@ export const VERIFY_STEPS: readonly VerifyStep[] = [
     command: [...npm("check:preview-feedback-in-build"), "--", ".vercel/output", ".next"],
     quick: false,
   },
+  {
+    id: "check:no-e2e-in-build",
+    label: "No e2e code in the Preview output",
+    command: npm("check:no-e2e-in-build"),
+    quick: false,
+  },
   // CI builds the e2e variant once and hands it to the phone and desktop jobs; locally the same two steps run in order.
   {
     id: "build:e2e",
