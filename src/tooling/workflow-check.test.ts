@@ -122,9 +122,25 @@ describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
       /vercel build must fail closed when a package credential is present/,
     ],
     [
+      "the Preview check scanning only the output, which holds no server code",
+      mutate(
+        "run: npm run check:preview-feedback-in-build -- .vercel/output .next",
+        "run: npm run check:preview-feedback-in-build -- .vercel/output",
+      ),
+      /exact Vercel Preview artifact must prove feedback UI and SDK are present/,
+    ],
+    [
+      "the Production exclusion check scanning only the output",
+      mutate(
+        "run: npm run check:no-feedback-in-build -- .vercel/output .next",
+        "run: npm run check:no-feedback-in-build -- .vercel/output",
+      ),
+      /exact Vercel Production artifact must prove feedback UI and SDK are absent/,
+    ],
+    [
       "the exact Preview artifact check is removed",
       mutate(
-        /      - name: Preview contains feedback UI and browser SDK\n        if: env\.TARGET == 'preview'\n        run: npm run check:preview-feedback-in-build -- \.vercel\/output\n/,
+        /      - name: Preview contains feedback UI and browser SDK\n        if: env\.TARGET == 'preview'\n        run: npm run check:preview-feedback-in-build -- \.vercel\/output \.next\n/,
         "",
       ),
       /exact Vercel Preview artifact must prove feedback UI and SDK are present/,
@@ -958,6 +974,30 @@ describe("checkCiWorkflow", () => {
       "the Production feedback exclusion check dropped",
       inJob("build", /npm run check:no-feedback-in-build\n/g, "true\n"),
       /build job is missing check:no-feedback-in-build/,
+    ],
+    [
+      "the build job no longer makes the Preview output",
+      inJob("build", "npm run build:preview-output", "true"),
+      /build job must make the Preview output offline/,
+    ],
+    [
+      "the build job makes the Preview output but never checks it",
+      inJob("build", "npm run check:preview-feedback-in-build -- .vercel/output .next", "true"),
+      /build job must make the Preview output offline/,
+    ],
+    [
+      "the build job checks the Preview output without the server build directory",
+      inJob(
+        "build",
+        "npm run check:preview-feedback-in-build -- .vercel/output .next",
+        "npm run check:preview-feedback-in-build -- .vercel/output",
+      ),
+      /build job must make the Preview output offline/,
+    ],
+    [
+      "the build job making the Preview output without the locked CLI",
+      inJob("build", "npm ci --prefix tools/vercel-cli --ignore-scripts", "true"),
+      /build job must make the Preview output offline/,
     ],
     [
       "the production build uploading an artifact",

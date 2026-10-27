@@ -28,3 +28,6 @@ results.sarif
 
 # Test report kept by npm run verify so a failure names its test (#150)
 .verify-logs/
+
+# Vercel CLI local state and build output (`npm run build:preview-output` makes them)
+.vercel
