@@ -23,7 +23,15 @@ import type { AccessGrant, FramebriarClient } from "./framebriar-client";
 import { open, parseKeyRing, seal, type KeyRing, type SealContext } from "./key-ring";
 
 export type EnrollmentStatus =
-  "unavailable" | "not-connected" | "connected" | "expired" | "revoked" | "disabled";
+  | "unavailable"
+  | "not-connected"
+  | "connected"
+  /** A key ring is present but cannot open this account's row (its key version was removed, or the value is wrong): the credential
+   * is unreachable, so the person must redeem a new invitation. Distinct from "unavailable", where nothing is touched. */
+  | "needs_reconnect"
+  | "expired"
+  | "revoked"
+  | "disabled";
 
 export interface StatusView {
   status: EnrollmentStatus;
@@ -41,6 +49,7 @@ export type EnrollmentError =
   | "UNCERTAIN"
   | "RATE_LIMITED"
   | "NOT_CONNECTED"
+  | "NEEDS_RECONNECT"
   | "EXPIRED"
   | "REVOKED"
   | "DISABLED";
@@ -54,6 +63,10 @@ export type RevokeAndEraseResult =
    * counts redemption attempts whose answer was lost: Framebriar has no way to revoke them without their credential, so they
    * end at their fixed deadline. */
   | { status: "erased"; revoked: boolean; unrevocableAttempts: number }
+  /** The key ring is present but cannot open the credential, so the family could not be revoked. Everything held is erased, and the
+   * family lives until Framebriar's fixed deadline. Whether deletion may report success on this is the deletion policy's call (#261),
+   * not this module's. */
+  | { status: "erased_unrevocable"; unrevocableAttempts: number }
   /** Revocation succeeded, but erasing the credential failed: it is revoked and useless, and must be erased again. */
   | { status: "partial"; revoked: true; erased: false }
   /** Nothing was changed: Framebriar or the key ring or the database was not usable. Try again. */
@@ -126,11 +139,17 @@ export function createEnrollmentService({
     generation: row.generation,
   });
 
+  /** Whether the ring in hand can open this row's credential. Only meaningful when there is a ring. */
+  const readable = (row: EnrollmentRow, ring: KeyRing): boolean =>
+    parseCredentials(open(ring, context(row), row.keyVersion, row.credentials)) !== null;
+
   function view(row: EnrollmentRow | null, ring: KeyRing | null): EnrollmentStatus {
+    // No ring at all is "unavailable": a missing secret must never be read as lost data, so nothing is judged or touched.
     if (!ring) return "unavailable";
     if (!row) return "not-connected";
     if (row.state !== "active") return row.state;
-    return row.expiresAt.getTime() <= now() ? "expired" : "connected";
+    if (row.expiresAt.getTime() <= now()) return "expired";
+    return readable(row, ring) ? "connected" : "needs_reconnect";
   }
 
   async function status(ownerId: string): Promise<StatusView> {
@@ -144,7 +163,10 @@ export function createEnrollmentService({
       const state = view(row, ring);
       return {
         status: state,
-        expiresAt: row && state !== "unavailable" ? row.expiresAt.toISOString() : null,
+        expiresAt:
+          row && state !== "unavailable" && state !== "needs_reconnect"
+            ? row.expiresAt.toISOString()
+            : null,
         redemption: live ? "pending" : "none",
         outboxKey: outboxKeyFor(ownerId, generation),
       };
@@ -161,10 +183,12 @@ export function createEnrollmentService({
     if (!ring) return { ok: false, code: "UNAVAILABLE" };
     let generation: string;
     let attemptId: string;
+    let seen: EnrollmentRow | null;
     try {
       generation = await accountGeneration(db, ownerId);
-      const existing = await loadEnrollment(db, ownerId, generation);
-      if (view(existing, ring) === "connected") return { ok: false, code: "ALREADY_CONNECTED" };
+      seen = await loadEnrollment(db, ownerId, generation);
+      // Anything else (none, expired, revoked, disabled, or one this ring cannot open) is replaced by the new enrollment.
+      if (view(seen, ring) === "connected") return { ok: false, code: "ALREADY_CONNECTED" };
       // The attempt id is durable before Framebriar hears about it.
       attemptId = await beginRedemption(db, ownerId, generation, new Date(now()), newAttemptId);
     } catch {
@@ -188,14 +212,18 @@ export function createEnrollmentService({
     const grant = outcome.value;
     try {
       const sealed = seal(ring, { ownerId, generation }, JSON.stringify(grantCredentials(grant)));
-      await commitRedemption(db, {
+      // The replace names the revision it saw: if another writer changed the row meanwhile, nothing is overwritten.
+      const committed = await commitRedemption(db, {
         ownerId,
         generation,
         attemptId,
         keyVersion: sealed.keyVersion,
         credentials: sealed.sealed,
         expiresAt: new Date(grant.refreshExpiresAt),
+        expectedRevision: seen?.revision ?? null,
       });
+      // The attempt stays, so retrying with the same invitation gets the same family back and commits against the fresh row.
+      if (!committed) return { ok: false, code: "UNCERTAIN" };
     } catch {
       // Not committed: the attempt stays, so the same invitation retried with the same id recovers the same family.
       return { ok: false, code: "UNAVAILABLE" };
@@ -248,7 +276,8 @@ export function createEnrollmentService({
     } catch {
       return { ok: false, code: "UNAVAILABLE" };
     }
-    if (!current) return { ok: false, code: "UNAVAILABLE" };
+    // A ring is present (checked above) and cannot open the row: the credential is unreachable, a new invitation is the way back.
+    if (!current) return { ok: false, code: "NEEDS_RECONNECT" };
     const { row, credentials } = current;
     if (!force && credentials.access && credentials.access.expiresAt - now() > REFRESH_MARGIN_MS)
       return { ok: true, token: credentials.access.token };
@@ -321,6 +350,9 @@ export function createEnrollmentService({
         return { ok: true, revoked: false };
       case "erased":
         return { ok: true, revoked: result.revoked };
+      case "erased_unrevocable":
+        // Honest: the row is gone but the family could not be revoked, so it is not reported as revoked.
+        return { ok: true, revoked: false };
       case "partial":
         return { ok: false, code: "UNAVAILABLE" };
       default:
@@ -366,7 +398,17 @@ export function createEnrollmentService({
       const credentials = parseCredentials(
         open(ring, context(row), row.keyVersion, row.credentials),
       );
-      if (!credentials) return { status: "failed", reason: "unavailable" };
+      if (!credentials) {
+        // A ring that is present but cannot open the row: the family cannot be revoked and the row is useless. Erase it (and any
+        // abandoned attempt), and say plainly that nothing was revoked.
+        try {
+          if (!(await eraseEnrollment(db, row))) throw new Error("not erased");
+          if (pending) await clearRedemption(db, ownerId, generation);
+        } catch {
+          return { status: "failed", reason: "unavailable" };
+        }
+        return { status: "erased_unrevocable", unrevocableAttempts: pending ? 1 : 0 };
+      }
       const outcome = await client.disconnect(credentials.refreshToken);
       if (outcome.kind === "uncertain") return { status: "failed", reason: "uncertain" };
       if (outcome.kind === "rejected") {

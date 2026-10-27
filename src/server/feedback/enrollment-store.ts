@@ -160,8 +160,10 @@ export async function clearRedemption(
 }
 
 /**
- * Commits a successful redemption: the sealed enrollment replaces any old one and the pending attempt is removed, in one
- * transaction. The caller reports success only after this returns.
+ * Commits a successful redemption: the sealed enrollment replaces the one that was seen and the pending attempt is removed, in one
+ * transaction. `expectedRevision` is the revision of the row the caller saw (null: there was none): if another writer changed or
+ * created it meanwhile, nothing is written and this returns false, so a replace can never overwrite a newer enrollment. The caller
+ * reports success only after this returns true.
  */
 export async function commitRedemption(
   db: Db,
@@ -172,31 +174,39 @@ export async function commitRedemption(
     keyVersion: string;
     credentials: string;
     expiresAt: Date;
+    expectedRevision: number | null;
   },
-): Promise<void> {
-  await db.transaction(async (tx) => {
-    await tx
-      .insert(schema.framebriarEnrollments)
-      .values({
-        ownerId: input.ownerId,
-        generation: input.generation,
-        keyVersion: input.keyVersion,
-        credentials: input.credentials,
-        expiresAt: input.expiresAt,
-        state: "active",
-      })
-      .onConflictDoUpdate({
-        target: schema.framebriarEnrollments.ownerId,
-        set: {
-          generation: input.generation,
-          keyVersion: input.keyVersion,
-          credentials: input.credentials,
-          expiresAt: input.expiresAt,
-          state: "active",
-          revision: sql`${schema.framebriarEnrollments.revision} + 1`,
-          updatedAt: new Date(),
-        },
-      });
+): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    const sealed = {
+      keyVersion: input.keyVersion,
+      credentials: input.credentials,
+      expiresAt: input.expiresAt,
+      state: "active" as const,
+    };
+    const written =
+      input.expectedRevision === null
+        ? await tx
+            .insert(schema.framebriarEnrollments)
+            .values({ ownerId: input.ownerId, generation: input.generation, ...sealed })
+            .onConflictDoNothing()
+            .returning({ ownerId: schema.framebriarEnrollments.ownerId })
+        : await tx
+            .update(schema.framebriarEnrollments)
+            .set({
+              ...sealed,
+              revision: sql`${schema.framebriarEnrollments.revision} + 1`,
+              updatedAt: new Date(),
+            })
+            .where(
+              and(
+                eq(schema.framebriarEnrollments.ownerId, input.ownerId),
+                eq(schema.framebriarEnrollments.generation, input.generation),
+                eq(schema.framebriarEnrollments.revision, input.expectedRevision),
+              ),
+            )
+            .returning({ ownerId: schema.framebriarEnrollments.ownerId });
+    if (written.length === 0) return false;
     await tx
       .delete(schema.framebriarRedemptions)
       .where(
@@ -205,5 +215,6 @@ export async function commitRedemption(
           eq(schema.framebriarRedemptions.attemptId, input.attemptId),
         ),
       );
+    return true;
   });
 }
