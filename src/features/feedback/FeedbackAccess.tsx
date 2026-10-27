@@ -16,9 +16,14 @@ import type { PreparedFeedback } from "@masra91/framebriar/browser/local-export"
 import type { AccessStatus, PlaytestAccess } from "@masra91/framebriar/browser/playtest-access";
 import { feedbackE2eBuild, feedbackRuntimeEnabled } from "./availability";
 import { feedbackBuildSha } from "./build-sha";
+import {
+  clearFeedbackResources,
+  registerAccountClosureFeedbackCleanup,
+} from "./account-closure-cleanup";
 import type { reportContext } from "./capture-policy";
+import { FEEDBACK_GAME_ID, loadOutbox, type CreateOutbox } from "./outbox";
 
-export const FEEDBACK_GAME_ID = "travel-packing";
+export type { CreateOutbox } from "./outbox";
 
 export type ConnectResult = "connected" | "invalid" | "offline" | "uncertain";
 export type DisconnectResult = "ended" | "device-only";
@@ -95,23 +100,6 @@ async function loadAccess(): Promise<PlaytestAccess> {
  * The durable on-device report outbox, built from the access controller's endpoint and token (#132). Null where this browser has
  * no IndexedDB, so a report can never be claimed saved when it was not. The SDK is loaded here and nowhere on the server.
  */
-export type CreateOutbox = (
-  access: PlaytestAccess,
-  onReceipt: (receipt: { id: string }) => void,
-) => Promise<DurableFeedback | null>;
-
-export const loadOutbox: CreateOutbox = async (access, onReceipt) => {
-  if (typeof indexedDB === "undefined") return null;
-  const { createDurableFeedback } = await import("@masra91/framebriar/browser/durable-feedback");
-  return createDurableFeedback({
-    gameId: FEEDBACK_GAME_ID,
-    buildSha: feedbackBuildSha(process.env.NEXT_PUBLIC_BUILD_SHA),
-    endpoint: access.endpoint,
-    getToken: () => access.getToken(),
-    onReceipt,
-  });
-};
-
 export function outboxView(status: OutboxStatus): OutboxView {
   return {
     waiting: status.items,
@@ -173,6 +161,7 @@ function EnabledFeedbackAccessProvider({
 
   useEffect(() => {
     let cancelled = false;
+    let unregisterAccountClosureCleanup: () => void = () => undefined;
     let unsubscribe: (() => void) | undefined;
     let unsubscribeOutbox: (() => void) | undefined;
     let stop = () => undefined as void;
@@ -195,6 +184,9 @@ function EnabledFeedbackAccessProvider({
           return;
         }
         outboxRef.current = box;
+        unregisterAccountClosureCleanup = registerAccountClosureFeedbackCleanup(() =>
+          clearFeedbackResources(access, box),
+        );
         // Saving must work with no connection at all, so the code that prepares a report is fetched now, not at Send.
         void preload().catch(() => undefined);
         if (box) unsubscribeOutbox = box.subscribe((next) => setOutbox(outboxView(next)));
@@ -214,6 +206,7 @@ function EnabledFeedbackAccessProvider({
       .catch(() => undefined);
     return () => {
       cancelled = true;
+      unregisterAccountClosureCleanup();
       window.removeEventListener("pagehide", stop);
       window.removeEventListener("pageshow", resume);
       unsubscribe?.();

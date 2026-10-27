@@ -87,9 +87,9 @@ digest—no user id, email, credential, or provider token—and it never appears
 including when signal consumption or local cleanup fails or exceeds its bounded wait, so an already-deleted user cannot be
 stranded.
 
-When Framebriar is integrated, keep it out of the destructive server transaction and implement the existing client cleanup seam:
+Framebriar remains outside the destructive server transaction. After confirmed closure, the client cleanup seam:
 
-1. stop the Framebriar outbox, best-effort clear its browser-profile-local outbox, then disconnect access; and
+1. stops the active Framebriar outbox, best-effort clears its browser-profile-local outbox, then disconnects access; and
 2. do not request deletion of separately retained delivered reports without a separate product/privacy design and verified
    hosted retention behavior.
 

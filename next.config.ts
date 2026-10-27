@@ -27,6 +27,10 @@ export const E2E_ONLY_MODULES: readonly { specifier: string; stub: string }[] = 
 // carrying the e2e flag by the deploy environment gate.
 export const FEEDBACK_ONLY_MODULES: readonly { specifier: string; stub: string }[] = [
   {
+    specifier: "@/features/feedback/account-closure-cleanup",
+    stub: "./src/features/feedback/feedback.disabled.tsx",
+  },
+  {
     specifier: "@/features/feedback/FeedbackAccess",
     stub: "./src/features/feedback/feedback.disabled.tsx",
   },
