@@ -245,6 +245,19 @@ jobs:
       - name: Scan the webpack client bundle
         run: npm run check:client-bundle
 
+      # The Preview deploy checks what `vercel build` makes (`.vercel/output` plus the `.next` its server functions point to), and a
+      # pull request never reaches the deploy job: the first Preview deploy that carried server-side Framebriar code (#259) failed
+      # its own check for exactly that reason. So the same build is made here, offline (a placeholder project, no token, no call to
+      # Vercel) with the locked CLI, and held to the same check. Keep this LAST: it replaces `.next` with a Preview build.
+      - name: Install the locked Vercel CLI
+        run: npm ci --prefix tools/vercel-cli --ignore-scripts
+
+      - name: Build the Preview output offline, as the deploy does
+        run: npm run build:preview-output
+
+      - name: The Preview output carries the feedback UI, SDK and server code
+        run: npm run check:preview-feedback-in-build -- .vercel/output .next
+
   # The one build the browser tests run against: the app compiled WITH the e2e-only sign-in and database driver, which is why
   # it cannot be the production build above. Made once and handed to both e2e jobs as an artifact, so neither rebuilds. It is
   # never deployed and lives for a day, only in this workflow run.

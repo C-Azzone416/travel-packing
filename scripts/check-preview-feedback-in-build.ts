@@ -4,16 +4,22 @@
 import { statSync } from "node:fs";
 import { FRAMEBRIAR_MARKERS, markerHits } from "../src/tooling/build-markers";
 
-const BUILD_DIR = process.argv[2] ?? ".next";
+// Usage: tsx scripts/check-preview-feedback-in-build.ts [dir...]   (default .next)
+// A Vercel build output (.vercel/output) holds the browser files and function CONFIGURATION only: its server functions list the
+// compiled server files (filePathMap) that stay in the build directory, so server code is found in `.next`, not in the output.
+// Pass both to check what a deploy actually uploads: `.vercel/output .next`. Every marker must be found in at least one of them.
+const DIRS = process.argv.slice(2).length > 0 ? process.argv.slice(2) : [".next"];
 
-try {
-  statSync(BUILD_DIR);
-} catch {
-  console.error(`No ${BUILD_DIR} directory: build Preview first.`);
-  process.exit(2);
+for (const dir of DIRS) {
+  try {
+    statSync(dir);
+  } catch {
+    console.error(`No ${dir} directory: build Preview first.`);
+    process.exit(2);
+  }
 }
 
-const hits = markerHits(BUILD_DIR, FRAMEBRIAR_MARKERS);
+const hits = DIRS.flatMap((dir) => markerHits(dir, FRAMEBRIAR_MARKERS));
 const names = new Set(hits.map((hit) => hit.name));
 const missing = FRAMEBRIAR_MARKERS.filter((marker) => !names.has(marker.name));
 
