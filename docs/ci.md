@@ -28,7 +28,9 @@ Parallel jobs in one workflow (`.github/workflows/ci.yml`):
   the split work. The browser download is cached by Playwright version.
 - **Concurrency:** a new push to a pull request cancels its older run. A push to `develop` never cancels a run (it may be deploying).
 - vitest uses threads (about 19% less CPU, same tests and coverage).
-- Fork pull requests get no secrets (none of these jobs reads one but `GITHUB_TOKEN`), and the deploy runs only for a push to `develop`.
+- Root dependency installs use the run's short-lived `GITHUB_TOKEN` with `packages: read` to fetch the private Framebriar SDK.
+  That token is supplied only for pushes and same-repository pull requests; a fork receives an empty package token and fails
+  closed instead of receiving the private package. The deploy still runs only for a push to `develop`.
 - `npm run check:workflows` enforces all of this with a mutant test per rule: the job set, every heavy job gated on the mode, gitleaks
   first, the e2e matrix being exactly phone and desktop on separate runners, the artifact being named, hidden-file-inclusive and
   one-day, the production build never carrying the e2e flag, and the deploy workflow never touching an artifact.

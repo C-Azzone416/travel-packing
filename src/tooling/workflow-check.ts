@@ -162,6 +162,35 @@ export function checkDeployWorkflow(workflow: string): string[] {
   if (!/scripts\/require-ci\.ts/.test(requireCi))
     problems.push("the CI check must run scripts/require-ci.ts");
 
+  // The private SDK is fetched with the run's short-lived token. It is package-read only, reaches the two application
+  // installs and Vercel's second install during `vercel build`, and never reaches the independently locked Vercel CLI.
+  const permissionBlock = /^permissions:\n((?: {2}.*\n)*)/m.exec(workflow)?.[1] ?? "";
+  if (!/^ {2}packages:\s*read(?:\s+#.*)?\s*$/m.test(permissionBlock))
+    problems.push("the deploy workflow needs packages: read for the private SDK");
+  for (const [jobName, job] of [
+    ["gate", jobBody(workflow, "gate") ?? ""],
+    ["deploy", jobBody(workflow, "deploy") ?? ""],
+  ] as const) {
+    const installs = stepsOf(job, "run: npm ci\n");
+    if (
+      installs.length !== 1 ||
+      !/NODE_AUTH_TOKEN:\s*\$\{\{\s*github\.token\s*\}\}/.test(installs[0])
+    ) {
+      problems.push(
+        `${jobName} must give the short-lived GitHub token only to its root npm ci step`,
+      );
+    }
+  }
+  const buildStep = stepsOf(jobBody(workflow, "deploy") ?? "", "- name: Build")[0] ?? "";
+  if (!/NODE_AUTH_TOKEN:\s*\$\{\{\s*github\.token\s*\}\}/.test(buildStep))
+    problems.push("vercel build needs the short-lived package token for its second install");
+  if (count(/NODE_AUTH_TOKEN:/g) !== 3)
+    problems.push("NODE_AUTH_TOKEN may appear only on the two root installs and vercel build");
+  const cliInstall =
+    stepsOf(jobBody(workflow, "deploy") ?? "", "Install the locked Vercel CLI")[0] ?? "";
+  if (/NODE_AUTH_TOKEN/.test(cliInstall))
+    problems.push("the independently locked Vercel CLI install must not receive the package token");
+
   // A production build never captures screenshots (#130): the switch is forced off on the build line itself.
   if (!/FEEDBACK_SCREENSHOTS=0 vercel build --prod/.test(workflow))
     problems.push("the production build must set FEEDBACK_SCREENSHOTS=0");
@@ -562,6 +591,24 @@ export function checkCiWorkflow(workflow: string): string[] {
     problems.push("marking a draft ready must run the full validation (ready_for_review)");
   if (/^\s*workflow_dispatch:/m.test(workflow.slice(0, jobsStart)))
     problems.push("ci.yml must not be dispatchable by hand");
+
+  const permissionBlock =
+    /^permissions:\n((?: {2}.*\n)*)/m.exec(workflow.slice(0, jobsStart))?.[1] ?? "";
+  if (!/^ {2}packages:\s*read\s*$/m.test(permissionBlock))
+    problems.push("ci needs packages: read for the private SDK");
+  const trustedPackageToken =
+    /NODE_AUTH_TOKEN:\s*\$\{\{\s*\(github\.event_name != 'pull_request' \|\| github\.event\.pull_request\.head\.repo\.full_name == github\.repository\) && github\.token \|\| ''\s*\}\}/;
+  for (const name of ["mode", "checks", "unit", "build", "e2e-build", "e2e"] as const) {
+    const installs = stepsOf(body(name) ?? "", "run: npm ci\n");
+    if (installs.length !== 1 || !trustedPackageToken.test(installs[0]))
+      problems.push(
+        `${name}'s root install must receive the package token only for pushes and same-repository pull requests`,
+      );
+  }
+  for (const name of ["mode", "checks", "deploy"] as const) {
+    if (!/^ {6}packages:\s*read\s*$/m.test(body(name) ?? ""))
+      problems.push(`${name}'s explicit permissions must retain packages: read`);
+  }
 
   const concurrency = /^concurrency:\n((?: {2}.*\n)*)/m.exec(workflow)?.[1] ?? "";
   if (

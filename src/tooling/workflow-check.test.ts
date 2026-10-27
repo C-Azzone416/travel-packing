@@ -83,6 +83,35 @@ function aliasBeforeSmoke(): string {
 describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
   it.each([
     [
+      "package-read permission is removed",
+      mutate("  packages: read # the short-lived", "  packages: none # the short-lived"),
+      /packages: read/,
+    ],
+    [
+      "a root install loses its package token",
+      mutate(
+        /      - name: Install\n        env:\n          NODE_AUTH_TOKEN: \$\{\{ github\.token \}\}\n        run: npm ci/,
+        "      - name: Install\n        run: npm ci",
+      ),
+      /gate must give the short-lived GitHub token/,
+    ],
+    [
+      "vercel build loses its package token",
+      mutate(
+        /      - name: Build\n        env:\n          NODE_AUTH_TOKEN: \$\{\{ github\.token \}\}\n/,
+        "      - name: Build\n",
+      ),
+      /vercel build needs the short-lived package token/,
+    ],
+    [
+      "the locked Vercel CLI install receives the package token",
+      mutate(
+        "      - name: Install the locked Vercel CLI\n        run:",
+        "      - name: Install the locked Vercel CLI\n        env:\n          NODE_AUTH_TOKEN: ${{ github.token }}\n        run:",
+      ),
+      /locked Vercel CLI install must not receive/,
+    ],
+    [
       "a push triggers the deploy directly",
       mutate("on:\n", "on:\n  push:\n    branches:\n      - develop\n"),
       /push must not trigger/,
@@ -673,6 +702,25 @@ describe("checkCiWorkflow", () => {
   });
 
   it.each([
+    [
+      "package-read permission removed",
+      mutateCi("  packages: read\n", "  packages: none\n"),
+      /ci needs packages: read/,
+    ],
+    [
+      "an install token exposed to fork pull requests",
+      inJob(
+        "unit",
+        "NODE_AUTH_TOKEN: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && github.token || '' }}",
+        "NODE_AUTH_TOKEN: ${{ github.token }}",
+      ),
+      /unit's root install must receive the package token only/,
+    ],
+    [
+      "an explicit permission block drops package read",
+      inJob("mode", "      packages: read\n", ""),
+      /mode's explicit permissions must retain packages: read/,
+    ],
     ["the summary job renamed", mutateCi(/^ {2}ci:/m, "  summary:"), /ci job is missing/],
     [
       "an extra job nobody summarises",

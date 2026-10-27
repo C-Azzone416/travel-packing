@@ -4,7 +4,8 @@ name: CI
 # The repository is public, so standard runners are free: the goal is wall-clock time, and the work runs as parallel jobs
 # (checks, unit, the production builds, and phone and desktop e2e on SEPARATE runners). The job named `ci` at the bottom is
 # the one required check: it needs every job above it, always runs, and passes only if the mode's jobs all succeeded
-# (docs/ci.md). Nothing here reads a secret except GITHUB_TOKEN, and the deploy runs only on a push to develop.
+# (docs/ci.md). Root installs receive only the run's short-lived GITHUB_TOKEN, with package-read permission, and only for a
+# push or a same-repository pull request. A fork never receives private-package access. Deploy runs only on develop pushes.
 #
 # A draft pull request runs the cheap checks only, and its `ci` ends red on purpose, so a draft can never be mistaken for
 # validated; a ready pull request, and a push to develop or main, run everything. A push to develop whose files are
@@ -22,6 +23,7 @@ on:
 
 permissions:
   contents: read
+  packages: read
 
 # A newer push to a pull request cancels its older run. A push to develop must never cancel a run that is deploying.
 concurrency:
@@ -36,6 +38,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+      packages: read
       pull-requests: read # lists the pull requests of a commit
       actions: read # reads earlier `ci` runs
     outputs:
@@ -49,6 +52,8 @@ jobs:
           cache: npm
 
       - name: Install
+        env:
+          NODE_AUTH_TOKEN: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && github.token || '' }}
         run: npm ci
 
       - name: Decide how much to run
@@ -67,6 +72,7 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+      packages: read
       pull-requests: read # gitleaks lists a pull request's commits
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -84,6 +90,8 @@ jobs:
           cache: npm
 
       - name: Install
+        env:
+          NODE_AUTH_TOKEN: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && github.token || '' }}
         run: npm ci
 
       # Fails on any committed file over 1 MiB or any local database, build, test, dependency, or env file.
@@ -140,6 +148,8 @@ jobs:
           cache: npm
 
       - name: Install
+        env:
+          NODE_AUTH_TOKEN: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && github.token || '' }}
         run: npm ci
 
       # vitest exits non-zero when any coverage threshold (90%) is missed.
@@ -185,6 +195,8 @@ jobs:
           cache: npm
 
       - name: Install
+        env:
+          NODE_AUTH_TOKEN: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && github.token || '' }}
         run: npm ci
 
       # A production-mode build (VERCEL_ENV=production): the screenshot capture module resolves to its stub here.
@@ -241,6 +253,8 @@ jobs:
           cache: npm
 
       - name: Install
+        env:
+          NODE_AUTH_TOKEN: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && github.token || '' }}
         run: npm ci
 
       - name: Build for e2e
@@ -285,6 +299,8 @@ jobs:
           cache: npm
 
       - name: Install
+        env:
+          NODE_AUTH_TOKEN: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && github.token || '' }}
         run: npm ci
 
       - name: Download the e2e build
@@ -400,5 +416,6 @@ jobs:
     permissions:
       contents: read
       actions: read
+      packages: read
     uses: ./.github/workflows/deploy-vercel.yml
     secrets: inherit

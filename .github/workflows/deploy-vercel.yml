@@ -28,6 +28,7 @@ concurrency:
 permissions:
   contents: read
   actions: read # to read the `ci` result for this commit
+  packages: read # the short-lived repository token reads the private Framebriar SDK package
 
 env:
   VERCEL_CLI_VERSION: 64.5.0 # pinned (never a moving tag)
@@ -54,6 +55,8 @@ jobs:
           cache: npm
 
       - name: Install
+        env:
+          NODE_AUTH_TOKEN: ${{ github.token }}
         run: npm ci
 
       - name: Release gate (which target may this run deploy?)
@@ -84,6 +87,8 @@ jobs:
           cache: npm
 
       - name: Install
+        env:
+          NODE_AUTH_TOKEN: ${{ github.token }}
         run: npm ci
 
       # A preview deploy only exists after `ci` passed (the caller's `needs: ci`). A manual production run has no such
@@ -132,9 +137,11 @@ jobs:
           PRODUCTION_DB_HOST: ${{ secrets.PRODUCTION_DB_HOST }}
         run: npx tsx scripts/check-deploy-env.ts "$TARGET" ".vercel/.env.${TARGET}.local"
 
-      # `vercel build` works from the files `vercel pull` wrote; it needs no token (so the build, which runs project
-      # code, never sees one).
+      # `vercel build` works from the files `vercel pull` wrote and performs its own dependency install. It receives only
+      # this run's short-lived, package-read GITHUB_TOKEN; the production-capable VERCEL_TOKEN remains absent.
       - name: Build
+        env:
+          NODE_AUTH_TOKEN: ${{ github.token }}
         run: |
           if [ "$TARGET" = production ]; then VERCEL_ENV=production FEEDBACK_SCREENSHOTS=0 vercel build --prod; else vercel build; fi
 
