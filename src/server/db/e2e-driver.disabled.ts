@@ -14,4 +14,8 @@ export function createE2eDb(): Db {
   throw new Error("The e2e database driver is not compiled into this build");
 }
 
+export function createSharedE2eDb(): Db {
+  throw new Error("The e2e database driver is not compiled into this build");
+}
+
 export async function closeE2eDb(): Promise<void> {}

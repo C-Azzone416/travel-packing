@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMigratedDb } from "../db/__fixtures__/db";
 import type { Db } from "../db/retention";
 import { createFakeAuth, type FakeAuth } from "./__fixtures__/fake-auth";
@@ -162,6 +162,24 @@ describe("stores", () => {
       await expect(withSetupGate(fake, store, allowlist).getSession()).resolves.toBeNull();
       expect((await ctx.client.query("SELECT * FROM account_deletions")).rows).toEqual([]);
       expect((await ctx.client.query("SELECT * FROM account_setups")).rows).toEqual([]);
+    });
+
+    it("does not open a transaction for the common no-fence session check", async () => {
+      await store.markComplete(OWNER.email);
+      const at = (await store.completedAt(OWNER.email)) ?? 0;
+      fake.current = {
+        userId: OWNER.userId,
+        email: OWNER.email,
+        identityCreatedAt: 2,
+        issuedAt: at + 1,
+      };
+      const transactionSpy = vi.spyOn(ctx.db, "transaction");
+
+      await expect(withSetupGate(fake, store, allowlist).getSession()).resolves.toMatchObject({
+        userId: OWNER.userId,
+      });
+      expect(transactionSpy).not.toHaveBeenCalled();
+      transactionSpy.mockRestore();
     });
   });
 });

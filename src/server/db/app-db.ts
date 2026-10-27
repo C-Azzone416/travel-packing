@@ -15,9 +15,11 @@ let cached: Db | undefined;
  * an inert stub otherwise) and it is refused on Vercel. The import must use the exact aliased specifier below.
  */
 async function openE2eDb(env: Env): Promise<Db | null> {
-  if (process.env.NEXT_PUBLIC_E2E_BUILD === "1") {
-    const { createE2eDb, e2eDatabaseEnabled } = await import("@/server/db/e2e-driver");
-    if (e2eDatabaseEnabled(env)) return createE2eDb(env.E2E_DATABASE_URL?.trim() ?? "");
+  const buildFlag = process.env.NEXT_PUBLIC_E2E_BUILD;
+  if (buildFlag === "1") {
+    const { createSharedE2eDb, e2eDatabaseEnabled } = await import("@/server/db/e2e-driver");
+    if (e2eDatabaseEnabled({ ...env, NEXT_PUBLIC_E2E_BUILD: buildFlag }))
+      return createSharedE2eDb(env.E2E_DATABASE_URL?.trim() ?? "");
   }
   return null;
 }

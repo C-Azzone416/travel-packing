@@ -96,6 +96,20 @@ export function createDbSetupStore(db: Db, key: string): AccountSetupStore {
     async deletionState(session) {
       if (session.identityCreatedAt === undefined)
         throw new Error("provider identity generation missing");
+      // The ordinary case has no fence. Avoid opening a transaction (and taking an advisory lock) for every session read:
+      // Next can evaluate several server components concurrently, while the PGlite e2e backend has one transactional
+      // connection. Serializing every harmless read there eventually starves unrelated requests. `authorizeOwner` performs
+      // a second fence read before returning `ok`, and every owner-data mutation takes this same lock and re-reads the
+      // fence, so a deletion that begins after this fast read still cannot recreate owner data.
+      const existing = await db
+        .select({ userId: accountDeletions.userId })
+        .from(accountDeletions)
+        .where(eq(accountDeletions.userId, session.userId))
+        .limit(1);
+      if (existing.length === 0) return "clear";
+
+      // A present fence needs the serialized path: it may belong to this identity (blocked), or to an older provider
+      // identity whose setup proof must be removed before the fence is cleared.
       return db.transaction(async (transaction) => {
         await lockAccountDeletion(transaction, session.userId);
         const rows = await transaction

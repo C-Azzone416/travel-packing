@@ -18,6 +18,7 @@ export const PACKAGE_AUTH_VARIABLES = [
 export const FORBIDDEN_EVERYWHERE = [
   "NEXT_PUBLIC_E2E_BUILD",
   "E2E_DATABASE_URL",
+  "E2E_FRAMEBRIAR_PORT",
   // The seed target is chosen per run in CI, never configured on a deployed app.
   "SEED_DATABASE_URL",
   // Lets the location search be pointed at another server; for e2e only.

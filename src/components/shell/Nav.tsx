@@ -59,7 +59,7 @@ export function Nav({ signOut, email }: NavProps = {}) {
           }}
           className="nav-signout"
         >
-          <button type="submit" title={`Signed in as ${email}`}>
+          <button type="submit" tabIndex={0} title={`Signed in as ${email}`}>
             <span aria-hidden="true">
               <SignOutIcon />
             </span>
