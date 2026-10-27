@@ -31,6 +31,7 @@
     "build:preview": "VERCEL_ENV=preview next build",
     "build:preview:webpack": "VERCEL_ENV=preview next build --webpack",
     "build:e2e": "NEXT_PUBLIC_E2E_BUILD=1 next build",
+    "build:preview-output": "tsx scripts/build-preview-output.ts",
     "db:migrate:remote": "tsx scripts/db-migrate-remote.ts",
     "db:seed": "tsx scripts/db-seed.ts",
     "db:seed:preview": "tsx scripts/seed-preview.ts",

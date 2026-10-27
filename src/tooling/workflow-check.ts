@@ -227,7 +227,9 @@ export function checkDeployWorkflow(workflow: string): string[] {
   if (
     previewFeedback.length !== 1 ||
     !/if:\s*env\.TARGET == 'preview'/.test(previewFeedback[0]) ||
-    !/run:\s*npm run check:preview-feedback-in-build -- \.vercel\/output/.test(previewFeedback[0])
+    !/run:\s*npm run check:preview-feedback-in-build -- \.vercel\/output \.next\s*$/m.test(
+      previewFeedback[0],
+    )
   ) {
     problems.push("the exact Vercel Preview artifact must prove feedback UI and SDK are present");
   }
@@ -247,7 +249,10 @@ export function checkDeployWorkflow(workflow: string): string[] {
     if (
       steps.length !== 1 ||
       !/if:\s*env\.TARGET == 'production'/.test(steps[0]) ||
-      !steps[0].includes(`run: npm run ${command} -- .vercel/output`)
+      !new RegExp(
+        `run: npm run ${command} -- \\.vercel/output${command === "check:no-feedback-in-build" ? " \\.next" : ""}\\s*$`,
+        "m",
+      ).test(steps[0])
     ) {
       problems.push(message);
     }
@@ -781,6 +786,22 @@ export function checkCiWorkflow(workflow: string): string[] {
   };
   requireStep("unit", "npm run test:coverage", "the unit job must run the coverage tests");
   requireStep("build", "npm run build:webpack", "the build job must run the webpack build");
+  // What the deploy scans is made and scanned here too, so a pull request cannot merge what the Preview deploy would refuse.
+  const buildJob = body("build") ?? "";
+  const offline = buildJob.indexOf("npm run build:preview-output");
+  const previewScan = buildJob.indexOf(
+    "npm run check:preview-feedback-in-build -- .vercel/output .next",
+  );
+  if (
+    !buildJob.includes("npm ci --prefix tools/vercel-cli --ignore-scripts") ||
+    offline < 0 ||
+    previewScan < offline ||
+    offline < buildJob.indexOf("npm run build:webpack")
+  ) {
+    problems.push(
+      "the build job must make the Preview output offline with the locked Vercel CLI (after the production builds) and run check:preview-feedback-in-build on .vercel/output and .next",
+    );
+  }
   for (const needle of [
     "npm run build:production\n",
     "check:no-e2e-in-build",

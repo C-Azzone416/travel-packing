@@ -9,6 +9,7 @@ const config = [
     ignores: [
       "reference/**",
       ".next/**",
+      ".vercel/**",
       "coverage/**",
       "playwright-report/**",
       "test-results/**",

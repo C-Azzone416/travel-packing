@@ -124,6 +124,19 @@ export const VERIFY_STEPS: readonly VerifyStep[] = [
     command: npm("check:client-bundle"),
     quick: false,
   },
+  // What the Preview deploy scans, made offline with the locked CLI (CI's build job does the same, last: it replaces `.next`).
+  {
+    id: "build:preview-output",
+    label: "Preview build output (offline vercel build)",
+    command: npm("build:preview-output"),
+    quick: false,
+  },
+  {
+    id: "check:preview-feedback-in-build",
+    label: "Preview output carries the feedback UI, SDK and server code",
+    command: [...npm("check:preview-feedback-in-build"), "--", ".vercel/output", ".next"],
+    quick: false,
+  },
   // CI builds the e2e variant once and hands it to the phone and desktop jobs; locally the same two steps run in order.
   {
     id: "build:e2e",
