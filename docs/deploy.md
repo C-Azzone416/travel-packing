@@ -128,6 +128,8 @@ GitHub **environment `preview`**:
 - secret `DATABASE_URL_UNPOOLED` — the **preview** Neon branch's direct connection string;
 - secrets `DATABASE_URL` (the preview branch's pooled connection string), `OWNER_EMAIL_ALLOWLIST` and
   `NEON_AUTH_COOKIE_SECRET` (the same values as the Vercel Preview Secrets, see [Deploy secrets](#deploy-secrets));
+- secret `FRAMEBRIAR_CREDENTIAL_KEYS` (optional, #259) — the key ring that seals server-held Framebriar credentials, the same value as the Vercel Preview
+  Secret. The deploy never fails without it: feedback enrollment is simply unavailable. Generation and rotation: [framebriar-enrollment.md](framebriar-enrollment.md);
 - variable `PREVIEW_DB_HOST` — that preview database's host name (the seed allowlist);
 - **secret** `PREVIEW_SEED_OWNER_ID` — the Better Auth user id of the preview owner whose account should see the sample trips. **Leave it unset for the first run** ([First preview bootstrap](#first-preview-bootstrap)); set it after the owner has signed up and verified;
 - secret `VERCEL_AUTOMATION_BYPASS_SECRET` — only if Vercel deployment protection is on for previews.
@@ -144,15 +146,16 @@ add them as a second lock, not a replacement.)
 
 Vercel project environment variables, per environment (Preview and Production get different values):
 
-| Name                      | Preview                      | Production            |
-| ------------------------- | ---------------------------- | --------------------- |
-| `DATABASE_URL`            | preview Neon branch (pooled) | production (pooled)   |
-| `DATABASE_URL_UNPOOLED`   | preview Neon branch (direct) | production (direct)   |
-| `NEON_AUTH_BASE_URL`      | preview auth                 | production auth       |
-| `NEON_AUTH_COOKIE_SECRET` | its own random value         | its own random value  |
-| `OWNER_EMAIL_ALLOWLIST`   | preview owner(s)             | Caroline              |
-| `LOCATION_PROVIDER`       | `open-meteo` (required)      | unset or `open-meteo` |
-| `WEATHER_PROVIDER`        | `open-meteo`                 | `open-meteo`          |
+| Name                         | Preview                                                                   | Production            |
+| ---------------------------- | ------------------------------------------------------------------------- | --------------------- |
+| `DATABASE_URL`               | preview Neon branch (pooled)                                              | production (pooled)   |
+| `DATABASE_URL_UNPOOLED`      | preview Neon branch (direct)                                              | production (direct)   |
+| `NEON_AUTH_BASE_URL`         | preview auth                                                              | production auth       |
+| `NEON_AUTH_COOKIE_SECRET`    | its own random value                                                      | its own random value  |
+| `OWNER_EMAIL_ALLOWLIST`      | preview owner(s)                                                          | Caroline              |
+| `LOCATION_PROVIDER`          | `open-meteo` (required)                                                   | unset or `open-meteo` |
+| `WEATHER_PROVIDER`           | `open-meteo`                                                              | `open-meteo`          |
+| `FRAMEBRIAR_CREDENTIAL_KEYS` | optional Secret, see [framebriar-enrollment.md](framebriar-enrollment.md) | never set             |
 
 Never set `NEXT_PUBLIC_E2E_BUILD`, `AUTH_E2E_*`, `E2E_DATABASE_URL` or `OPEN_METEO_GEOCODING_URL` in Vercel or GitHub. Never expose the
 production `DATABASE_URL` to the Preview environment.

@@ -124,6 +124,9 @@ jobs:
           DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
           OWNER_EMAIL_ALLOWLIST: ${{ secrets.OWNER_EMAIL_ALLOWLIST }}
           NEON_AUTH_COOKIE_SECRET: ${{ secrets.NEON_AUTH_COOKIE_SECRET }}
+          # Optional, Preview only (#259): seals the server-held Framebriar credentials. Absent or invalid never fails the deploy; the
+          # script leaves it out and account feedback enrollment stays unavailable. A production run never writes it.
+          FRAMEBRIAR_CREDENTIAL_KEYS: ${{ secrets.FRAMEBRIAR_CREDENTIAL_KEYS }}
         run: npx tsx scripts/inject-deploy-secrets.ts ".vercel/.env.${TARGET}.local"
 
       - name: Check the deploy environment (names only, no values)

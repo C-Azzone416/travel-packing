@@ -60,6 +60,11 @@ export const FRAMEBRIAR_MARKERS: readonly BuildMarker[] = [
     source: "node_modules/@masra91/framebriar/adapters/browser/durable-feedback.mjs",
   },
   {
+    name: "the Framebriar server enrollment and report proxy",
+    text: "framebriar-enrollment-server",
+    source: "src/server/feedback/key-ring.ts",
+  },
+  {
     name: "the Framebriar local report SDK",
     text: "A reviewed PNG of at most 8 MiB is required",
     source: "node_modules/@masra91/framebriar/adapters/browser/local-export.mjs",

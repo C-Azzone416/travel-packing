@@ -46,6 +46,12 @@ export const FEEDBACK_ONLY_MODULES: readonly { specifier: string; stub: string }
     specifier: "@/features/feedback/FeedbackSettings",
     stub: "./src/features/feedback/feedback.disabled.tsx",
   },
+  // The account-scoped enrollment and report-proxy routes (#259): server-side, the same Preview/dev/e2e gate. Production's four
+  // handlers answer 404 and import nothing, so no key ring, enrollment or Framebriar server code is in a Production build.
+  {
+    specifier: "@/server/feedback/runtime",
+    stub: "./src/server/feedback/runtime.disabled.ts",
+  },
 ];
 
 // Screenshot capture is compiled in only when screenshots are switched on (#130): stable Preview, local development and

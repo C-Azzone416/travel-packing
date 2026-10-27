@@ -24,6 +24,8 @@ export const SECRET_ENV_NAMES = [
   "NODE_AUTH_TOKEN",
   "OPEN_METEO_FORECAST_URL",
   "OPEN_METEO_ARCHIVE_URL",
+  // The key ring that seals server-held Framebriar credentials (#259).
+  "FRAMEBRIAR_CREDENTIAL_KEYS",
 ] as const;
 
 /** Shapes of secret VALUES (a connection string with a password, a private key, common token prefixes). */
@@ -57,6 +59,11 @@ export const SERVER_ONLY_MARKERS: readonly { name: string; text: string; source:
     name: "the fake Framebriar service",
     text: "framebriar-fake-service",
     source: "src/test/fake-framebriar.ts",
+  },
+  {
+    name: "the Framebriar key ring and enrollment",
+    text: "framebriar-enrollment-server",
+    source: "src/server/feedback/key-ring.ts",
   },
   {
     name: "the weather provider",

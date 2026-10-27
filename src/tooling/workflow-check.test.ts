@@ -273,6 +273,30 @@ describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
       /NEON_AUTH_COOKIE_SECRET must be injected from secrets|secrets\.\* only/,
     ],
     [
+      "the Framebriar key ring read from a variable",
+      mutate(
+        "FRAMEBRIAR_CREDENTIAL_KEYS: ${{ secrets.FRAMEBRIAR_CREDENTIAL_KEYS }}",
+        "FRAMEBRIAR_CREDENTIAL_KEYS: ${{ vars.FRAMEBRIAR_CREDENTIAL_KEYS }}",
+      ),
+      /FRAMEBRIAR_CREDENTIAL_KEYS must be passed to the injection step from secrets|secrets\.\* only/,
+    ],
+    [
+      "the Framebriar key ring dropped from the injection step",
+      mutate(
+        "          FRAMEBRIAR_CREDENTIAL_KEYS: ${{ secrets.FRAMEBRIAR_CREDENTIAL_KEYS }}\n",
+        "",
+      ),
+      /FRAMEBRIAR_CREDENTIAL_KEYS must be passed to the injection step from secrets/,
+    ],
+    [
+      "the Framebriar key ring read by another step",
+      mutate(
+        "      - name: Check the deploy environment (names only, no values)\n        env:",
+        "      - name: Check the deploy environment (names only, no values)\n        env:\n          LEAK: ${{ secrets.FRAMEBRIAR_CREDENTIAL_KEYS }}",
+      ),
+      /secrets\.FRAMEBRIAR_CREDENTIAL_KEYS must be read only by the secret injection step/,
+    ],
+    [
       "the project settings never printed",
       mutate("scripts/print-project-settings.ts", "scripts/other.ts"),
       /project settings must be printed after vercel pull and before the build/,
