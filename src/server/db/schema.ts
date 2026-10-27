@@ -66,6 +66,12 @@ export const users = pgTable(
   "users",
   {
     id: text("id").primaryKey(),
+    /**
+     * A random value set when this row is provisioned (#259). Anything that must never survive a deleted-and-recreated account
+     * (the Framebriar enrollment) is keyed by (id, generation), so a new account with a reused provider id never matches an
+     * old row. Never shown to the browser; only a digest of it is.
+     */
+    generation: uuid("generation").notNull().defaultRandom(),
     /** The person agreed to send map coordinates and dates to the weather provider (epic #107). Off until chosen. */
     weatherOptIn: boolean("weather_opt_in").notNull().default(false),
     temperatureUnit: text("temperature_unit", { enum: TEMPERATURE_UNITS }).notNull().default("F"),
@@ -76,7 +82,10 @@ export const users = pgTable(
     staplesReminderDismissed: boolean("staples_reminder_dismissed").notNull().default(false),
     createdAt: createdAt(),
   },
-  (table) => [check("users_temperature_unit_known", sql`${table.temperatureUnit} in ('F', 'C')`)],
+  (table) => [
+    check("users_temperature_unit_known", sql`${table.temperatureUnit} in ('F', 'C')`),
+    unique("users_id_generation_unique").on(table.id, table.generation),
+  ],
 );
 
 /**
@@ -450,5 +459,63 @@ export const weatherSuggestions = pgTable(
       foreignColumns: [trips.id, trips.ownerId],
     }).onDelete("cascade"),
     check("weather_suggestions_signature_short", sql`char_length(${table.ruleSignature}) <= 200`),
+  ],
+);
+
+export const FRAMEBRIAR_ENROLLMENT_STATES = ["active", "revoked", "disabled"] as const;
+
+/**
+ * One account's Framebriar enrollment (#259), held server-side and encrypted. `credentials` is AES-256-GCM output (see
+ * src/server/feedback/key-ring.ts): the refresh credential and any cached access token, bound to this owner, generation and key
+ * version, so a row copied to another account does not decrypt. The deadline and state are plain metadata, not credentials.
+ * `revision` is the compare-and-swap guard: every write names the revision it read, so two instances cannot corrupt a row.
+ * The composite key to users(id, generation) means a row can only exist for the account generation that created it.
+ */
+export const framebriarEnrollments = pgTable(
+  "framebriar_enrollments",
+  {
+    ownerId: text("owner_id").primaryKey(),
+    generation: uuid("generation").notNull(),
+    keyVersion: text("key_version").notNull(),
+    credentials: text("credentials").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    state: text("state", { enum: FRAMEBRIAR_ENROLLMENT_STATES }).notNull().default("active"),
+    revision: integer("revision").notNull().default(1),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    foreignKey({
+      name: "framebriar_enrollments_user_fk",
+      columns: [table.ownerId, table.generation],
+      foreignColumns: [users.id, users.generation],
+    }).onDelete("cascade"),
+    check(
+      "framebriar_enrollments_state_known",
+      sql`${table.state} in ('active', 'revoked', 'disabled')`,
+    ),
+    check("framebriar_enrollments_revision_positive", sql`${table.revision} >= 1`),
+  ],
+);
+
+/**
+ * A redemption that was started but not yet committed (#259). The attempt id is written BEFORE the network call, so a lost
+ * response can be retried with the same id (Framebriar's idempotency window) and never spends a second invitation. One per
+ * account; removed in the same transaction that commits the enrollment, or when Framebriar rejects the invitation.
+ */
+export const framebriarRedemptions = pgTable(
+  "framebriar_redemptions",
+  {
+    ownerId: text("owner_id").primaryKey(),
+    generation: uuid("generation").notNull(),
+    attemptId: uuid("attempt_id").notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    foreignKey({
+      name: "framebriar_redemptions_user_fk",
+      columns: [table.ownerId, table.generation],
+      foreignColumns: [users.id, users.generation],
+    }).onDelete("cascade"),
   ],
 );

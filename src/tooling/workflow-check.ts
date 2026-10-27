@@ -488,13 +488,25 @@ export function checkDeployWorkflow(workflow: string): string[] {
         problems.push(`${name} must be injected from secrets.${name}`);
       }
     }
+    if (
+      !/^\s+FRAMEBRIAR_CREDENTIAL_KEYS:\s*\$\{\{\s*secrets\.FRAMEBRIAR_CREDENTIAL_KEYS\s*\}\}\s*$/m.test(
+        injection,
+      )
+    ) {
+      problems.push("FRAMEBRIAR_CREDENTIAL_KEYS must be passed to the injection step from secrets");
+    }
     const values = [...injection.matchAll(/^\s+[A-Z_]+:\s*(.+)$/gm)].map((match) => match[1]);
     if (values.some((value) => !/^\$\{\{\s*secrets\.[A-Z_]+\s*\}\}$/.test(value.trim()))) {
       problems.push("the secret injection may take values from secrets.* only");
     }
   }
   // Those four secret names are read in that one step and nowhere else (the migration URL is the one reuse).
-  for (const name of ["DATABASE_URL", "OWNER_EMAIL_ALLOWLIST", "NEON_AUTH_COOKIE_SECRET"]) {
+  for (const name of [
+    "DATABASE_URL",
+    "OWNER_EMAIL_ALLOWLIST",
+    "NEON_AUTH_COOKIE_SECRET",
+    "FRAMEBRIAR_CREDENTIAL_KEYS",
+  ]) {
     if (count(new RegExp(`secrets\\.${name}\\b`, "g")) > 1) {
       problems.push(`secrets.${name} must be read only by the secret injection step`);
     }
