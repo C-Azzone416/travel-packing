@@ -4,8 +4,8 @@
 // The CSP allows inline scripts and styles because Next.js emits its own inline bootstrap script and the app uses inline
 // styles; a nonce-based policy needs per-request middleware and is a follow-up. Everything else is closed: no foreign
 // origins for scripts, styles, images, fonts or frames. Local development and synthetic e2e builds may connect to the
-// feedback service; hosted builds do not carry Framebriar and do not allow its origin. The geocoder and weather
-// providers are only ever called by the server. No <object>, no framing at all, forms post only to this origin.
+// feedback service; Preview carries Framebriar and Production does not. The geocoder and weather providers are only ever
+// called by the server. No <object>, no framing at all, forms post only to this origin.
 
 /** The feedback service's origin, pinned by the SDK (FEEDBACK_ENDPOINT); a unit test keeps the two in step. */
 export const FEEDBACK_ORIGIN = "https://framebriar-masra91-poc.azurewebsites.net";

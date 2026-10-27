@@ -141,25 +141,33 @@ describe("next.config: test-only modules are compiled in only for e2e builds", (
   });
 });
 
-describe("next.config: Framebriar is compiled only for exact local development or synthetic e2e", () => {
-  it("covers every app entry point with one inert hosted stub", async () => {
+describe("next.config: Framebriar is compiled only for stable Preview, exact local development or synthetic e2e", () => {
+  it("covers every app entry point with one inert Production stub", async () => {
     const { FEEDBACK_ONLY_MODULES } = await loadModule();
     expect(FEEDBACK_ONLY_MODULES.map(({ specifier, stub }) => [specifier, stub])).toEqual(
       FEEDBACK_MODULES,
     );
   });
 
-  it.each(["preview", "production"])(
-    "stubs every Framebriar entry point in a %s build even if the e2e flag is present",
-    async (target) => {
-      vi.stubEnv("NEXT_PUBLIC_E2E_BUILD", "1");
-      vi.stubEnv("VERCEL_ENV", target);
-      const { default: config } = await loadModule();
-      expect(config.turbopack?.resolveAlias).toEqual(
-        expect.objectContaining(aliases(FEEDBACK_MODULES)),
-      );
-    },
-  );
+  it("keeps the real modules in a Preview build and fixes the public Preview bit", async () => {
+    vi.stubEnv("NEXT_PUBLIC_E2E_BUILD", "");
+    vi.stubEnv("VERCEL_ENV", "preview");
+    const { default: config } = await loadModule();
+    for (const [specifier] of FEEDBACK_MODULES) {
+      expect(config.turbopack?.resolveAlias).not.toHaveProperty(specifier);
+    }
+    expect(config.env?.NEXT_PUBLIC_FEEDBACK_PREVIEW_BUILD).toBe("1");
+  });
+
+  it("stubs every Framebriar entry point in Production even if the e2e flag is present", async () => {
+    vi.stubEnv("NEXT_PUBLIC_E2E_BUILD", "1");
+    vi.stubEnv("VERCEL_ENV", "production");
+    const { default: config } = await loadModule();
+    expect(config.turbopack?.resolveAlias).toEqual(
+      expect.objectContaining(aliases(FEEDBACK_MODULES)),
+    );
+    expect(config.env?.NEXT_PUBLIC_FEEDBACK_PREVIEW_BUILD).toBe("0");
+  });
 
   it("keeps the real modules in local development", async () => {
     vi.stubEnv("NODE_ENV", "development");
@@ -200,11 +208,11 @@ describe("next.config: screenshot capture is compiled in only when screenshots a
     expect(registered).toEqual([]);
   });
 
-  it("keeps capture but stubs feedback in a Preview build", async () => {
+  it("keeps capture and feedback in a Preview build", async () => {
     vi.stubEnv("NEXT_PUBLIC_E2E_BUILD", "1");
     vi.stubEnv("VERCEL_ENV", "preview");
     const { default: config } = await loadModule();
-    expect(config.turbopack?.resolveAlias).toEqual(aliases(FEEDBACK_MODULES));
+    expect(config.turbopack?.resolveAlias).toEqual({});
   });
 
   it.each([
@@ -220,11 +228,13 @@ describe("next.config: screenshot capture is compiled in only when screenshots a
       vi.stubEnv("FEEDBACK_SCREENSHOTS", env.FEEDBACK_SCREENSHOTS ?? "");
       const { default: config } = await loadModule();
       expect(config.turbopack?.resolveAlias).toEqual({
-        ...(env.VERCEL_ENV ? aliases(FEEDBACK_MODULES) : {}),
+        ...(env.VERCEL_ENV === "production" ? aliases(FEEDBACK_MODULES) : {}),
         [CAPTURE]: CAPTURE_STUB,
       });
       const { registered } = await runWebpack();
-      expect(registered).toHaveLength((env.VERCEL_ENV ? FEEDBACK_MODULES.length : 0) + 1);
+      expect(registered).toHaveLength(
+        (env.VERCEL_ENV === "production" ? FEEDBACK_MODULES.length : 0) + 1,
+      );
       const resource = { request: CAPTURE };
       const replacement = registered.find(({ pattern }) => pattern.test(CAPTURE));
       expect(replacement?.pattern.test(`${CAPTURE}.disabled`)).toBe(false);

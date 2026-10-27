@@ -1,9 +1,10 @@
 # Feedback to the developer (#127)
 
-At exact local origin `http://localhost:8080`, people who have an invitation can send the developer a note and optional
-screenshot from inside the app. Preview and Production contain no feedback UI or SDK. This page is for the people who run the
-local integration: what is captured, what never is and how to check it. Developer setup (package access, build gates and the
-fake service used in tests) is in [framebriar.md](framebriar.md).
+At the stable Preview origin `https://travel-packing-preview.vercel.app` and exact local origin
+`http://localhost:8080`, people who have an invitation can send the developer a note and optional screenshot from inside the
+app. Arbitrary Vercel deployment URLs and Production contain no active feedback feature. This page explains what is captured,
+what never is and how to check it. Developer setup (package access, build gates and the fake service used in tests) is in
+[framebriar.md](framebriar.md).
 
 Nothing in this repository holds a token, an invitation or a credential. `<INVITATION>` below is a placeholder and must be shared
 privately. The app id and origins are public configuration and are written exactly.
@@ -13,15 +14,16 @@ privately. The app id and origins are public configuration and are written exact
 A report holds what the person typed and a few approved codes. The review sheet shows the notes and the screenshot (if any), and
 lists the rest under "Also sent".
 
-| Sent                                                                                                                | Never sent or captured                                                               |
-| ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| The notes the person wrote (2,000 characters at most)                                                               | Passwords, sign-in codes, invitations, tokens                                        |
-| A screenshot of the screen, **only in local and synthetic test builds**, ticked by default and removable per report | Email addresses; trip names, places, dates or ids in the report's own fields         |
-| The screen as a code: `trips`, `new-trip`, `trip`, `review`, `staples` or `other`                                   | The address of the page (it contains a trip id)                                      |
-| A viewport class (`phone`, `tablet`, `desktop`), the input kind, the app version, the capture time                  | Anything from Settings or the sign-in and account screens: nothing is captured there |
+| Sent                                                                                                          | Never sent or captured                                                               |
+| ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| The notes the person wrote (2,000 characters at most)                                                         | Passwords, sign-in codes, invitations, tokens                                        |
+| A screenshot of the screen, **only in Preview/local/test builds**, ticked by default and removable per report | Email addresses; trip names, places, dates or ids in the report's own fields         |
+| The screen as a code: `trips`, `new-trip`, `trip`, `review`, `staples` or `other`                             | The address of the page (it contains a trip id)                                      |
+| A viewport class (`phone`, `tablet`, `desktop`), the input kind, the app version, the capture time            | Anything from Settings or the sign-in and account screens: nothing is captured there |
 
-- A screenshot shows what is on screen, including trip names and places. The sheet says so next to the tick box. **Hosted builds
-  contain no Framebriar UI or SDK at all** (see "Local-only build and origin boundary" in [framebriar.md](framebriar.md)).
+- A screenshot shows what is on screen, including trip names and places. The sheet says so next to the tick box. Production
+  contains no Framebriar UI, SDK or screenshot code (see "Preview build and exact-origin boundary" in
+  [framebriar.md](framebriar.md)).
 - Telemetry is off. Nothing here collects performance or diagnostic data; adding it later needs its own decision and a disclosure line
   in Settings.
 - Capture is blocked on Settings and on the sign-in, sign-up, verify, forgot-password, reset-password, finish-setup and
@@ -33,10 +35,11 @@ These steps belong to the owner of the Framebriar service and of this repository
 
 1. **Register the app:** `framebriar-admin games add travel-packing` (builds: any). Check status first; do not add a duplicate if it
    already exists.
-2. **Use only the local origin:** the app enables Framebriar at exactly `http://localhost:8080`. Start it with
+2. **Use only the two approved origins:** the app enables Framebriar at stable Preview
+   `https://travel-packing-preview.vercel.app` and exact local `http://localhost:8080`. Start local development with
    `npm run dev -- --hostname localhost --port 8080`; `localhost` and `127.0.0.1` are different origins. The shared service
-   still has the stable Preview origin in its registry and Azure CORS from earlier setup, but the app intentionally does not
-   contain or run Framebriar there. Leave that service configuration unchanged. Production remains disallowed.
+   already has both origins in its registry and Azure CORS. Leave every existing service origin and app unchanged. Arbitrary
+   Vercel deployment URLs and Production remain disallowed.
 3. **Install the SDK:** the repository pins the exact private SDK distributable as
    `vendor/framebriar/framebriar-0.4.1.tgz`. A normal `npm ci` needs no package token or registry access; provenance and the update
    procedure are in [framebriar.md](framebriar.md).
@@ -57,14 +60,15 @@ These steps belong to the owner of the Framebriar service and of this repository
 - **Disconnect:** Settings, "Disconnect", then confirm. Feedback access is removed from the device and, when the service can be
   reached, ended on the service. Reports that have not been sent stay on the device.
 
-## Local delivery check (manual, with a separately approved real invitation)
+## Real delivery check (manual, with a separately approved real invitation)
 
 The automated tests use a fake service and never call the real one. If invitation creation is separately approved, check one
-real delivery from exact origin `http://localhost:8080`. Never use Preview or Production and use synthetic notes/screens only.
+real delivery from exact local origin `http://localhost:8080` or the stable Preview after its reviewed deployment. Never use
+Production or an arbitrary Vercel deployment URL, and use synthetic notes/screens only.
 
 1. The owner issues one invitation for `travel-packing` (step 4 above) and gives it to the person doing the check.
-2. Start `npm run dev -- --hostname localhost --port 8080`, open `http://localhost:8080`, and sign in with a synthetic test
-   account. On Settings, paste the invitation and press Connect.
+2. Open the reviewed stable Preview, or start `npm run dev -- --hostname localhost --port 8080` and open
+   `http://localhost:8080`, then sign in with a synthetic test account. On Settings, paste the invitation and press Connect.
    Expect "Connected", an expiry date about 30 days away, and the field empty.
 3. On the Trips screen press Feedback. Expect the sheet with the screenshot ticked and a thumbnail. Write "Local delivery check",
    press Send. Expect "Saved on this device", and then, within a minute, "Received. Thank you." (or the toast, if the sheet was closed).

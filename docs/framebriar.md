@@ -1,8 +1,8 @@
 # Framebriar: package access and the fake service (#127, #130)
 
-Local development can send feedback to the shared Framebriar service through its browser SDK,
-`@masra91/framebriar`. Preview and Production builds contain no feedback UI or browser SDK. The SDK is private. As a
-temporary CI workaround, this public repository vendors only the exact `0.4.1` npm distributable at
+The stable Preview and exact local development origin can send feedback to the shared Framebriar service through its browser
+SDK, `@masra91/framebriar`. Production contains no feedback UI or browser SDK. The SDK is private. As a temporary CI
+workaround, this public repository vendors only the exact `0.4.1` npm distributable at
 `vendor/framebriar/framebriar-0.4.1.tgz`. It does not include the Framebriar service, owner admin tooling, infrastructure,
 credentials, invitations or backend configuration. We consume the SDK and never change the service here. The contract remains
 the private source repository's `docs/general-feedback-v2.md` and `docs/distribution.md`.
@@ -28,31 +28,34 @@ tokens or backend configuration to this repository.
 The shared Framebriar backend still owns its Azure Blob storage and the SDK continues to use the existing endpoint/protocol.
 This repository neither provisions nor configures Blob storage; runtime service access remains a separate operational setup.
 
-## Local-only build and origin boundary
+## Preview build and exact-origin boundary
 
-The real feature modules are compiled only into `next dev` and the synthetic e2e build. `next.config.ts` replaces every app
-entry point (`FeedbackAccess`, `FeedbackButton`, `FeedbackNotice`, `FeedbackSettings`) with one inert module in ordinary,
-Preview and Production builds, for both Turbopack and webpack. `npm run check:no-feedback-in-build` scans the built output for
-the UI plus the access, outbox and local-report SDK chunks after both production builds.
+The real feature modules are compiled into Preview, `next dev` and the synthetic e2e build. `next.config.ts` replaces every
+app entry point (`FeedbackAccess`, `FeedbackButton`, `FeedbackNotice`, `FeedbackSettings`) with one inert module in Production
+and ordinary non-development builds, for both Turbopack and webpack. `npm run check:no-feedback-in-build` proves the UI plus
+the access, outbox and local-report SDK chunks are absent after both production builds;
+`npm run check:preview-feedback-in-build` proves they are present after either Preview build.
 
-Development has a second, runtime boundary: the provider starts only when `window.location.origin` is exactly
-`http://localhost:8080`. Start it with `npm run dev -- --hostname localhost --port 8080`. A different host, scheme or port
-shows no feedback UI and starts no access controller, IndexedDB outbox or network work. This runtime check is not the hosted
-security boundary—the compile-time replacement is—so spoofing a hostname cannot turn feedback on in a deployed build.
+Preview and development have a second, runtime boundary: the provider starts only when `window.location.origin` is exactly
+`https://travel-packing-preview.vercel.app` in a Preview build or `http://localhost:8080` in development. Start local work
+with `npm run dev -- --hostname localhost --port 8080`. A different host, scheme or port—including arbitrary Vercel Preview
+deployment URLs—shows no feedback UI and starts no access controller, IndexedDB outbox or network work. Production's
+compile-time replacement is the stronger boundary and its CSP does not allow the Framebriar origin. The stable Preview's CSP
+allows only the pinned service endpoint; Azure CORS independently allows only approved app origins.
 
 The e2e build is the sole exception to the port check. It contains the real SDK so Playwright can route every request to the
 synthetic fake service. `NEXT_PUBLIC_E2E_BUILD` is refused in every Vercel environment and the e2e artifact is never deployed.
 
 ## Screenshots: the build switch
 
-Framebriar itself is local/e2e only. Within those builds, **screenshot capture** has its own build-time choice,
+Within Preview/local/e2e builds, **screenshot capture** has its own build-time choice,
 `FEEDBACK_SCREENSHOTS`:
 
-| Build                                   | Framebriar UI/SDK | Capture code                      |
-| --------------------------------------- | ----------------- | --------------------------------- |
-| Exact local development, e2e            | Yes               | Yes by default                    |
-| Preview or Production                   | **No**            | Unreachable; Framebriar is absent |
-| Local/e2e with `FEEDBACK_SCREENSHOTS=0` | Yes               | No                                |
+| Build                                           | Framebriar UI/SDK | Capture code   |
+| ----------------------------------------------- | ----------------- | -------------- |
+| Stable Preview, exact local development, e2e    | Yes               | Yes by default |
+| Production                                      | **No**            | **No**         |
+| Preview/local/e2e with `FEEDBACK_SCREENSHOTS=0` | Yes               | No             |
 
 When off, `next.config.ts` resolves `@/features/feedback/screenshot-capture` to `screenshot-capture.disabled.ts` (the same
 mechanism as the e2e-only modules, for both Turbopack and webpack), so the capture code is not in the bundle at all. Import the
@@ -80,9 +83,9 @@ screen code (`trips`, `new-trip`, `trip`, `review`, `staples`, `other`; never th
 version, the capture time. No trip names, places, dates, emails or ids. The sheet lists what is sent. Capture is blocked on Settings
 and the sign-in and account screens, in the entry point, the sheet context and the capture code itself.
 
-Screenshots follow the build switch above: ticked by default where the local/e2e build has them (the capture is taken before
+Screenshots follow the build switch above: ticked by default where the Preview/local/e2e build has them (the capture is taken before
 the sheet opens so the sheet is not in it). The capture uses `html-to-image` (MIT), imported only by the capture module, so it
-is absent from hosted bundles too.
+is absent from Production bundles.
 
 ## The fake Framebriar service (tests only)
 
@@ -105,5 +108,6 @@ redeem, refresh, disconnect, report intake, media upload with an upload ticket, 
 - **Types.** The SDK ships plain `.mjs`; `src/types/framebriar-sdk.d.ts` declares the parts this repository uses. Extend it as the
   integration grows.
 
-A real end-to-end delivery is a manual check at exact local origin `http://localhost:8080`, after invitation creation is
-separately approved. The fake proves the protocol without real user data but is never a substitute for that bounded check.
+A real end-to-end delivery is a manual check at the stable Preview or exact local origin `http://localhost:8080`, after
+invitation creation is separately approved. The fake proves the protocol without real user data but is never a substitute for
+that bounded check.

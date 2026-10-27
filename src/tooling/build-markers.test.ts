@@ -38,9 +38,9 @@ describe("CAPTURE_MARKERS (the production build must not contain screenshot capt
   });
 });
 
-describe("FRAMEBRIAR_MARKERS (hosted builds must contain no local-only feedback code)", () => {
+describe("FRAMEBRIAR_MARKERS (Preview contains feedback and Production does not)", () => {
   it.each(FRAMEBRIAR_MARKERS.map((marker) => [marker.name, marker] as const))(
-    "%s: its text is still in its source and not in the hosted stub",
+    "%s: its text is still in its source and not in the Production stub",
     (_name, marker) => {
       expect(readFileSync(join(process.cwd(), marker.source), "utf8")).toContain(marker.text);
       expect(
@@ -73,5 +73,13 @@ describe("markerHits", () => {
     mkdirSync(clean);
     writeFileSync(join(clean, "a.js"), "console.log(1)");
     expect(markerHits(clean, CAPTURE_MARKERS)).toEqual([]);
+  });
+
+  it("ignores Next's non-deployable incremental cache", () => {
+    const build = join(scratch, "build-with-cache");
+    mkdirSync(join(build, "cache"), { recursive: true });
+    writeFileSync(join(build, "cache", "compiler.pack"), "feedback-screenshot-capture");
+    writeFileSync(join(build, "server.js"), "production output");
+    expect(markerHits(build, CAPTURE_MARKERS)).toEqual([]);
   });
 });

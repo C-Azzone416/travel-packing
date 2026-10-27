@@ -38,7 +38,7 @@ export type SaveOutcome =
 export type ReportContext = ReturnType<typeof reportContext>;
 
 export interface FeedbackAccessValue {
-  /** False outside the one approved local origin (and outside the synthetic e2e build). */
+  /** False outside the approved stable Preview/local origins (and outside the synthetic e2e build). */
   available: boolean;
   /** Null until the first answer from the access controller (it restores any saved connection first). */
   status: AccessStatus | null;

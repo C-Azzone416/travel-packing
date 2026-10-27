@@ -821,7 +821,7 @@ describe("checkCiWorkflow", () => {
       /build job is missing check:no-capture-in-build/,
     ],
     [
-      "the local-only feedback check dropped",
+      "the Production feedback exclusion check dropped",
       inJob("build", /npm run check:no-feedback-in-build\n/g, "true\n"),
       /build job is missing check:no-feedback-in-build/,
     ],

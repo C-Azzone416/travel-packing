@@ -26,7 +26,7 @@ describe("contentSecurityPolicy", () => {
     expect(production).not.toMatch(/\*|https?:\/\//);
   });
 
-  it("allows Framebriar only when the build contains the local/test feature", () => {
+  it("allows Framebriar only when the build contains the Preview/local/test feature", () => {
     const local = contentSecurityPolicy(true, true);
     const e2e = contentSecurityPolicy(false, true);
     expect(local).toContain(`connect-src 'self' ${FEEDBACK_ORIGIN} ws: wss:`);

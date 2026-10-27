@@ -142,7 +142,7 @@ describe("expiryText", () => {
 });
 
 describe("the provider", () => {
-  it("starts no controller and exposes no UI when the local-only runtime gate is closed", async () => {
+  it("starts no controller and exposes no UI when the exact-origin runtime gate is closed", async () => {
     const { access } = stub();
     const create = vi.fn(async () => access);
     render(

@@ -200,7 +200,7 @@ jobs:
       - name: Verify no screenshot capture is in the production build
         run: npm run check:no-capture-in-build
 
-      - name: Verify local-only feedback is not in the production build
+      - name: Verify Preview feedback is not in the production build
         run: npm run check:no-feedback-in-build
 
       # Nothing the browser can download may name a server secret, hold a secret-shaped value, or contain server-only
@@ -218,7 +218,7 @@ jobs:
       - name: Verify no screenshot capture is in the webpack build
         run: npm run check:no-capture-in-build
 
-      - name: Verify local-only feedback is not in the webpack build
+      - name: Verify Preview feedback is not in the webpack build
         run: npm run check:no-feedback-in-build
 
       - name: Scan the webpack client bundle

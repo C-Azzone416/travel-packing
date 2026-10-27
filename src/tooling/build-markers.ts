@@ -41,7 +41,7 @@ export const CAPTURE_MARKERS: readonly BuildMarker[] = [
   },
 ];
 
-// Local-only Framebriar must not appear anywhere in a hosted build. These cover the app UI and each SDK chunk the app
+// Framebriar must appear in Preview and stay absent from Production. These cover the app UI and each SDK chunk the app
 // can load (access, durable outbox and local report preparation), rather than relying on one tree-shaken symbol.
 export const FRAMEBRIAR_MARKERS: readonly BuildMarker[] = [
   {
@@ -74,6 +74,9 @@ export function markerHits(
   const hits: { name: string; path: string }[] = [];
   const visit = (current: string) => {
     for (const entry of readdirSync(current)) {
+      // Next keeps incremental compiler inputs from earlier build modes here. They are not emitted/deployed artifacts and
+      // may legitimately contain Preview code after a subsequent Production build in the same checkout.
+      if (current === dir && entry === "cache") continue;
       const path = join(current, entry);
       if (statSync(path).isDirectory()) visit(path);
       else {

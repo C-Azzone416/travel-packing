@@ -8,8 +8,10 @@ import { screenshotsEnabled } from "./src/tooling/feedback-screenshots";
 // real module is absent from the bundle. This holds for both bundlers (Turbopack, the default, and webpack via
 // `next build --webpack`); CI builds with each and fails if any marker appears (scripts/check-no-e2e-in-build.ts).
 const e2eBuild = process.env.NEXT_PUBLIC_E2E_BUILD === "1";
-const hostedBuild = ["preview", "production"].includes(process.env.VERCEL_ENV ?? "");
-const feedbackBuild = !hostedBuild && (process.env.NODE_ENV === "development" || e2eBuild);
+const previewBuild = process.env.VERCEL_ENV === "preview";
+const productionBuild = process.env.VERCEL_ENV === "production";
+const feedbackBuild =
+  previewBuild || (!productionBuild && (process.env.NODE_ENV === "development" || e2eBuild));
 
 export const E2E_ONLY_MODULES: readonly { specifier: string; stub: string }[] = [
   // The fake sign-in (#9).
@@ -18,10 +20,11 @@ export const E2E_ONLY_MODULES: readonly { specifier: string; stub: string }[] = 
   { specifier: "@/server/db/e2e-driver", stub: "./src/server/db/e2e-driver.disabled.ts" },
 ];
 
-// Framebriar is local-only for now. A normal or hosted build replaces every app entry point with one inert module, so
-// neither the UI nor the SDK's dynamic imports can enter a Preview or Production build. E2e builds keep the real modules
-// because Playwright routes every SDK request to its in-process fake service; Vercel is forbidden from carrying the e2e
-// flag by the deploy environment gate.
+// Framebriar is compiled into the stable Preview, exact local development and synthetic e2e builds. A Production or
+// ordinary non-development build replaces every app entry point with one inert module, so neither the UI nor the SDK's
+// dynamic imports can enter it. Preview still has a second exact-origin runtime gate: arbitrary Vercel deployment URLs
+// cannot start the controller. E2e routes every SDK request to its in-process fake service; Vercel is forbidden from
+// carrying the e2e flag by the deploy environment gate.
 export const FEEDBACK_ONLY_MODULES: readonly { specifier: string; stub: string }[] = [
   {
     specifier: "@/features/feedback/FeedbackAccess",
@@ -41,10 +44,9 @@ export const FEEDBACK_ONLY_MODULES: readonly { specifier: string; stub: string }
   },
 ];
 
-// Screenshot capture is compiled in only when screenshots are switched on (#130): local development, e2e and (although
-// Framebriar's entry points are now all stubbed there) Preview builds. In a Production build or with
-// FEEDBACK_SCREENSHOTS=0 this import also resolves to a stub. The broader FEEDBACK_ONLY_MODULES gate above is what removes
-// all feedback UI and SDK code from every hosted build.
+// Screenshot capture is compiled in only when screenshots are switched on (#130): stable Preview, local development and
+// e2e builds. In a Production build or with FEEDBACK_SCREENSHOTS=0 this import also resolves to a stub. The broader
+// FEEDBACK_ONLY_MODULES gate above is what removes all feedback UI and SDK code from Production.
 export const SCREENSHOT_ONLY_MODULES: readonly { specifier: string; stub: string }[] = [
   {
     specifier: "@/features/feedback/screenshot-capture",
@@ -77,6 +79,9 @@ const nextConfig: NextConfig = {
   // 7 to 40 hex characters and the app turns anything else into null.
   env: {
     NEXT_PUBLIC_BUILD_SHA: process.env.VERCEL_GIT_COMMIT_SHA ?? process.env.GITHUB_SHA ?? "",
+    // Public build-mode bit, fixed here rather than trusted from a deployment setting. The browser combines it with the
+    // exact stable Preview origin before it loads the SDK or starts any outbox/network work.
+    NEXT_PUBLIC_FEEDBACK_PREVIEW_BUILD: previewBuild ? "1" : "0",
   },
   // Security headers on every route (#22). `next dev` is the only development run; builds are production.
   async headers() {
