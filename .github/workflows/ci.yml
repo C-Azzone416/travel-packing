@@ -258,6 +258,11 @@ jobs:
       - name: The Preview output carries the feedback UI, SDK and server code
         run: npm run check:preview-feedback-in-build -- .vercel/output .next
 
+      # The Preview build resolves each e2e-only module to its stub (next.config.ts). A module imported by a path the swap does not
+      # match would put the real one in this build, and only this check on THIS build shows it (the checks above ran on Production).
+      - name: The Preview output carries no e2e-only module
+        run: npm run check:no-e2e-in-build
+
   # The one build the browser tests run against: the app compiled WITH the e2e-only sign-in and database driver, which is why
   # it cannot be the production build above. Made once and handed to both e2e jobs as an artifact, so neither rebuilds. It is
   # never deployed and lives for a day, only in this workflow run.

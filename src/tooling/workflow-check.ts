@@ -802,6 +802,12 @@ export function checkCiWorkflow(workflow: string): string[] {
       "the build job must make the Preview output offline with the locked Vercel CLI (after the production builds) and run check:preview-feedback-in-build on .vercel/output and .next",
     );
   }
+  // The Preview build gets the e2e stubs too, and only a check on that build proves it (the production-build check does not).
+  if (!buildJob.includes("npm run check:no-e2e-in-build", offline < 0 ? 0 : offline)) {
+    problems.push(
+      "the build job must run check:no-e2e-in-build on the Preview output, after build:preview-output",
+    );
+  }
   for (const needle of [
     "npm run build:production\n",
     "check:no-e2e-in-build",
