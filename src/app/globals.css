@@ -300,8 +300,8 @@ p {
 .sync-icon {
   font-weight: 900;
 }
-@media (max-width: 720px) {
-  /* On a phone the brief success chip is just the check (still a 44px target); its name stays available. */
+@media (max-width: 899px) {
+  /* Below 900px (phones, and the inline bar from 667 to 899) the brief success chip is just the check (still a 44px target); its name stays available. */
   .sync-chip {
     min-width: 44px;
     justify-content: center;
@@ -712,6 +712,35 @@ main {
   }
   .toast-region {
     bottom: 24px;
+  }
+}
+
+/* The inline bar between 667 and 899px (#282): brand, three links, Feedback, Sign out and any save chip must fit on one row
+   with nothing wrapped, squeezed or hidden, so the gutters, gaps and link padding tighten and the wordmark steps down.
+   The chip is already its compact form here (above). Labels never wrap at any width. */
+.bottom-nav a,
+.bottom-nav button {
+  white-space: nowrap;
+}
+@media (min-width: 721px) and (max-width: 899px),
+  (max-height: 500px) and (min-width: 667px) and (max-width: 899px) {
+  .topbar-inner {
+    gap: 4px;
+    padding-inline: 12px;
+  }
+  .brand-button {
+    margin-right: 0;
+    gap: 8px;
+  }
+  .brand-button strong {
+    font-size: 20px;
+  }
+  .bottom-nav a,
+  .bottom-nav button {
+    padding-inline: 8px;
+  }
+  .nav-signout button {
+    padding-inline: 6px;
   }
 }
 

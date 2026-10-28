@@ -475,6 +475,108 @@ test(
   },
 );
 
+/**
+ * Everything wrong with the inline bar right now: a brand link that cannot hold its wordmark, two persistent controls drawn over
+ * each other, a label broken over two lines, a control outside the viewport. Empty means the bar fits. (A row-height check
+ * missed a two-line "Sign out", so lines are counted on the text itself.)
+ */
+function barProblems(page: Page) {
+  return page.evaluate(() => {
+    const problems: string[] = [];
+    const brand = document.querySelector<HTMLElement>(".brand-button")!;
+    if (brand.scrollWidth > brand.clientWidth) {
+      problems.push(`brand overflows its box by ${brand.scrollWidth - brand.clientWidth}px`);
+    }
+    const controls: [string, Element | null][] = [
+      ["brand", brand],
+      ...[...document.querySelectorAll(".bottom-nav a")].map((e): [string, Element] => [
+        `link ${e.textContent}`,
+        e,
+      ]),
+      ["sign out", document.querySelector(".bottom-nav button")],
+      ["feedback", document.querySelector(".feedback-button")],
+      ["chip", document.querySelector(".sync-chip")],
+    ];
+    const boxes: [string, DOMRect][] = [];
+    for (const [name, element] of controls) {
+      if (!element) continue;
+      const rect = element.getBoundingClientRect();
+      if (rect.width === 0) continue;
+      boxes.push([name, rect]);
+      if (rect.left < 0 || rect.right > innerWidth) problems.push(`${name} leaves the viewport`);
+      // Lines of text: every visible text node must sit on one line.
+      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        if (!node.textContent?.trim()) continue;
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        const tops = new Set(
+          [...range.getClientRects()].filter((r) => r.width > 2).map((r) => Math.round(r.top)),
+        );
+        if (tops.size > 1) problems.push(`${name} wraps onto ${tops.size} lines`);
+      }
+    }
+    for (let i = 0; i < boxes.length; i += 1) {
+      for (let j = i + 1; j < boxes.length; j += 1) {
+        const [a, x] = boxes[i];
+        const [b, y] = boxes[j];
+        const overlap = Math.min(x.right, y.right) - Math.max(x.left, y.left);
+        const stack = Math.min(x.bottom, y.bottom) - Math.max(x.top, y.top);
+        if (overlap > 0.5 && stack > 0.5) problems.push(`${a} overlaps ${b}`);
+      }
+    }
+    const overflow = document.documentElement.scrollWidth - document.documentElement.clientWidth;
+    if (overflow > 0) problems.push(`page overflows by ${overflow}px`);
+    return problems;
+  });
+}
+
+const INLINE_SIZES = [
+  { width: 1280, height: 700 },
+  { width: 981, height: 700 },
+  { width: 844, height: 390 },
+  { width: 721, height: 700 },
+  { width: 667, height: 375 },
+] as const;
+
+for (const size of INLINE_SIZES) {
+  for (const state of ["Saving", "Saved", "Not saved"] as const) {
+    test(`the inline bar fits with the "${state}" chip at ${size.width}x${size.height} (#282)`, async ({
+      page,
+    }) => {
+      await page.clock.setFixedTime(DASHBOARD_NOW);
+      await signInAsOwner(page);
+      await page.setViewportSize(size);
+      await page.goto("/");
+      await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
+      if (MUTANT_CSS) await page.addStyleTag({ content: MUTANT_CSS });
+      expect(await barProblems(page)).toEqual([]); // no chip yet
+
+      const archiveAction = serverActionId("src/features/trips/actions.ts", "archiveTripAction");
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      await page.route("**/*", async (route) => {
+        const isArchive = route.request().headers()["next-action"] === archiveAction;
+        if (!isArchive) return route.continue();
+        if (state === "Not saved") return route.abort("failed");
+        if (state === "Saving") await held;
+        return route.continue();
+      });
+      const archive = chooseFromMenu(page, "San Diego", "Archive");
+      const chip =
+        state === "Not saved"
+          ? page.getByRole("button", { name: "Not saved, retry" })
+          : page.getByRole("link", { name: state });
+      await expect(chip).toBeVisible();
+      expect(await barProblems(page)).toEqual([]);
+      release();
+      await archive;
+    });
+  }
+}
+
 const SHORT = [
   { width: 844, height: 390 },
   { width: 667, height: 375 },
@@ -504,7 +606,6 @@ test("short viewports keep the persistent chrome small or let the bar scroll awa
         const links = [...document.querySelectorAll(".bottom-nav a, .bottom-nav button")].map((e) =>
           e.getBoundingClientRect(),
         );
-        const inner = document.querySelector(".topbar-inner")!;
         return {
           barHeight: barRect.height,
           position: getComputedStyle(bar).position,
@@ -515,7 +616,6 @@ test("short viewports keep the persistent chrome small or let the bar scroll awa
           innerWidth,
           linkHeights: links.map((r) => r.height),
           linksInView: links.every((r) => r.bottom <= innerHeight && r.top >= 0),
-          rowWraps: inner.scrollHeight > inner.clientHeight + 1,
           overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
         };
       });
@@ -526,7 +626,7 @@ test("short viewports keep the persistent chrome small or let the bar scroll awa
         expect(facts.barHeight, label).toBe(52);
         expect(facts.inline, label).toBe(true);
         expect(facts.position, label).toBe("sticky");
-        expect(facts.rowWraps, label).toBe(false);
+        expect(await barProblems(page), label).toEqual([]);
         expect((facts.innerHeight - 52) / facts.innerHeight, label).toBeGreaterThanOrEqual(0.75);
       } else {
         expect(facts.inline, label).toBe(false);
@@ -586,6 +686,7 @@ test("the bar and its ancestors keep sticky working, and the bar does not animat
   await expect(
     page.getByRole("heading", { name: "Every trip starts here", level: 1 }),
   ).toBeVisible();
+  if (MUTANT_CSS) await page.addStyleTag({ content: MUTANT_CSS });
   const bad = await page.evaluate(() => {
     const problems: string[] = [];
     for (
