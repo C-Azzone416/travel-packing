@@ -148,7 +148,12 @@ export function createFakeService(now: () => number = Date.now) {
         else {
           const ticket = token();
           tickets.set(ticket, report.id);
-          response = reply({ id: report.id, gameId: GAME_ID, status: "pending", ticket });
+          response = reply({
+            id: report.id,
+            status: "pending",
+            ticket,
+            expiresAt: new Date(now() + 5 * 60_000).toISOString(),
+          });
         }
       } else {
         const id = /\/reports\/([0-9a-f-]{36})\//i.exec(path)![1];

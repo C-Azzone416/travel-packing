@@ -221,6 +221,7 @@ export function createFeedbackRoutes(deps: RouteDeps) {
         if (!access.ok) return access;
         return deps.client.submitReport({
           accessToken: access.token,
+          reportId: parsed.id,
           report: parsed.report,
           media: parsed.media,
         });

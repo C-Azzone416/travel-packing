@@ -466,6 +466,14 @@ describe("what the fake itself enforces", () => {
     const ack = await (
       await call(fake, "/v1/reports", { method: "POST", headers, body: JSON.stringify(body) })
     ).json();
+    expect(ack).toEqual({
+      id: body.id,
+      status: "pending",
+      ticket: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
+      expiresAt: expect.any(String),
+    });
+    expect(Date.parse(ack.expiresAt)).toBeGreaterThan(Date.now());
+    expect(ack).not.toHaveProperty("gameId");
     const put = (init: {
       ticket?: string;
       type?: string;

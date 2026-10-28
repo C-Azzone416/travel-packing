@@ -203,10 +203,21 @@ describe("disconnect", () => {
 });
 
 describe("submitReport", () => {
-  const receipt = (extra: Record<string, unknown> = {}) => ({
-    id: "11111111-1111-4111-8111-111111111111",
+  const REPORT_ID = "11111111-1111-4111-8111-111111111111";
+  const TICKET = "t".repeat(43);
+  const readyReceipt = (extra: Record<string, unknown> = {}) => ({
+    id: REPORT_ID,
     gameId: GAME_ID,
     status: "ready",
+    ...extra,
+  });
+  // This is the exact reservation shape returned by Framebriar before media upload.
+  // It deliberately has no gameId; the final receipt below remains game-bound.
+  const pendingReceipt = (extra: Record<string, unknown> = {}) => ({
+    id: REPORT_ID,
+    status: "pending",
+    ticket: TICKET,
+    expiresAt: iso(5 * 60_000),
     ...extra,
   });
   const png = new Uint8Array([1, 2, 3]);
@@ -214,8 +225,9 @@ describe("submitReport", () => {
   it("logs only closed, content-free diagnostics for metadata and media delivery", async () => {
     const lines: string[] = [];
     const times = [100, 104, 105, 117];
+    const secretTicket = "s".repeat(43);
     const answers = [
-      receipt({ status: "pending", ticket: "ticket-secret-value" }),
+      pendingReceipt({ ticket: secretTicket }),
       new Response("private upstream failure", { status: 503 }),
     ];
     const report = JSON.stringify({
@@ -237,6 +249,7 @@ describe("submitReport", () => {
     expect(
       await client.submitReport({
         accessToken: "access-token-secret-value",
+        reportId: REPORT_ID,
         report,
         media: new TextEncoder().encode("private screenshot bytes"),
       }),
@@ -265,7 +278,7 @@ describe("submitReport", () => {
       "Private note",
       "owner@example.test",
       "storage.example.test",
-      "ticket-secret-value",
+      secretTicket,
       "access-token-secret-value",
       "private screenshot bytes",
       "private upstream failure",
@@ -292,6 +305,7 @@ describe("submitReport", () => {
       expect(
         await client.submitReport({
           accessToken: "secret-access-token",
+          reportId: REPORT_ID,
           report: '{"note":"secret report text"}',
           media: null,
         }),
@@ -317,6 +331,7 @@ describe("submitReport", () => {
     await expect(
       client.submitReport({
         accessToken: "secret-access-token",
+        reportId: REPORT_ID,
         report: '{"note":"secret report text"}',
         media: null,
       }),
@@ -324,15 +339,16 @@ describe("submitReport", () => {
   });
 
   it("delivers a report without media in one call, with the bearer token", async () => {
-    const { client, calls } = clientFor(() => ok(receipt()));
+    const { client, calls } = clientFor(() => ok(readyReceipt()));
     const outcome = await client.submitReport({
       accessToken: "t".repeat(32),
+      reportId: REPORT_ID,
       report: '{"id":"x"}',
       media: null,
     });
     expect(outcome).toEqual({
       kind: "ok",
-      value: { id: "11111111-1111-4111-8111-111111111111", gameId: GAME_ID },
+      value: { id: REPORT_ID, gameId: GAME_ID },
     });
     expect(calls).toHaveLength(1);
     expect((calls[0].init.headers as Record<string, string>).authorization).toBe(
@@ -341,61 +357,138 @@ describe("submitReport", () => {
     expect(calls[0].init.body).toBe('{"id":"x"}');
   });
 
-  it("uploads the PNG with the ticket once the report is pending, and is done only when that is ready", async () => {
-    const answers = [receipt({ status: "pending", ticket: "ticket-123" }), receipt()];
+  it("accepts Framebriar's gameId-free reservation, uploads the PNG, and requires a ready receipt", async () => {
+    const answers = [pendingReceipt(), readyReceipt()];
     const { client, calls } = clientFor(() => ok(answers.shift()));
     const outcome = await client.submitReport({
       accessToken: "t".repeat(32),
+      reportId: REPORT_ID,
       report: "{}",
       media: png,
     });
     expect(outcome.kind).toBe("ok");
-    expect(calls[1].url).toBe(
-      `${FRAMEBRIAR_ENDPOINT}/v1/reports/11111111-1111-4111-8111-111111111111/media`,
-    );
+    expect(calls[1].url).toBe(`${FRAMEBRIAR_ENDPOINT}/v1/reports/${REPORT_ID}/media`);
     expect(calls[1].init.method).toBe("PUT");
     expect(calls[1].init.headers).toMatchObject({
       "content-type": "image/png",
-      "x-upload-ticket": "ticket-123",
+      "x-upload-ticket": TICKET,
     });
   });
 
-  it("is uncertain when the shape is wrong: no ticket, a ticket but no media, an upload that is not ready", async () => {
-    for (const [answers, media] of [
-      [[receipt({ status: "pending" })], png],
-      [[receipt({ status: "pending", ticket: "t" })], null],
-      [[receipt({ status: "weird" })], png],
-      [[receipt({ status: "pending", ticket: "t" }), receipt({ status: "pending" })], png],
-      [[receipt({ gameId: "other" })], null],
-      [[{ id: 5 }], null],
-      [["text"], null],
-    ] as const) {
-      const queue = [...answers];
-      const { client } = clientFor(() => ok(queue.shift()));
+  it("accepts an optional matching gameId on a reservation but rejects a mismatched one", async () => {
+    const good = [pendingReceipt({ gameId: GAME_ID }), readyReceipt()];
+    expect(
+      await clientFor(() => ok(good.shift())).client.submitReport({
+        accessToken: "t".repeat(32),
+        reportId: REPORT_ID,
+        report: "{}",
+        media: png,
+      }),
+    ).toMatchObject({ kind: "ok" });
+    const mismatched = clientFor(() => ok(pendingReceipt({ gameId: "other" })));
+    expect(
+      await mismatched.client.submitReport({
+        accessToken: "t".repeat(32),
+        reportId: REPORT_ID,
+        report: "{}",
+        media: png,
+      }),
+    ).toEqual({ kind: "uncertain" });
+    expect(mismatched.calls).toHaveLength(1);
+  });
+
+  it("rejects malformed, mismatched and expired reservations before any media upload", async () => {
+    for (const answer of [
+      pendingReceipt({ id: "22222222-2222-4222-8222-222222222222" }),
+      pendingReceipt({ status: "weird" }),
+      pendingReceipt({ ticket: undefined }),
+      pendingReceipt({ ticket: "short" }),
+      pendingReceipt({ ticket: `${"t".repeat(42)}+` }),
+      pendingReceipt({ expiresAt: undefined }),
+      pendingReceipt({ expiresAt: "not-a-date" }),
+      pendingReceipt({ expiresAt: iso(-1) }),
+      pendingReceipt({ expiresAt: iso(11 * 60_000) }),
+      { id: 5 },
+      "text",
+    ]) {
+      const { client, calls } = clientFor(() => ok(answer));
       const outcome = await client.submitReport({
         accessToken: "t".repeat(32),
+        reportId: REPORT_ID,
         report: "{}",
-        media,
+        media: png,
       });
       expect(outcome.kind).toBe("uncertain");
+      expect(calls).toHaveLength(1);
     }
+  });
+
+  it("does not accept a reservation when there is no media to upload", async () => {
+    const { client, calls } = clientFor(() => ok(pendingReceipt()));
+    expect(
+      await client.submitReport({
+        accessToken: "t".repeat(32),
+        reportId: REPORT_ID,
+        report: "{}",
+        media: null,
+      }),
+    ).toEqual({ kind: "uncertain" });
+    expect(calls).toHaveLength(1);
+  });
+
+  it("requires the final receipt to match both the prepared report and game", async () => {
+    for (const final of [
+      readyReceipt({ id: "22222222-2222-4222-8222-222222222222" }),
+      readyReceipt({ gameId: "other" }),
+      readyReceipt({ status: "pending" }),
+      { id: REPORT_ID, status: "ready" },
+    ]) {
+      const answers = [pendingReceipt(), final];
+      const outcome = await clientFor(() => ok(answers.shift())).client.submitReport({
+        accessToken: "t".repeat(32),
+        reportId: REPORT_ID,
+        report: "{}",
+        media: png,
+      });
+      expect(outcome).toEqual({ kind: "uncertain" });
+    }
+  });
+
+  it("accepts an initial ready receipt without uploading media again", async () => {
+    const { client, calls } = clientFor(() => ok(readyReceipt()));
+    expect(
+      await client.submitReport({
+        accessToken: "t".repeat(32),
+        reportId: REPORT_ID,
+        report: "{}",
+        media: png,
+      }),
+    ).toEqual({ kind: "ok", value: { id: REPORT_ID, gameId: GAME_ID } });
+    expect(calls).toHaveLength(1);
   });
 
   it("passes a refusal from either call through", async () => {
     const first = clientFor(() => new Response("x", { status: 401 }));
     expect(
-      await first.client.submitReport({ accessToken: "t".repeat(32), report: "{}", media: null }),
+      await first.client.submitReport({
+        accessToken: "t".repeat(32),
+        reportId: REPORT_ID,
+        report: "{}",
+        media: null,
+      }),
     ).toEqual({
       kind: "rejected",
       status: 401,
     });
-    const answers = [
-      ok(receipt({ status: "pending", ticket: "t" })),
-      new Response("x", { status: 400 }),
-    ];
+    const answers = [ok(pendingReceipt()), new Response("x", { status: 400 })];
     const second = clientFor(() => answers.shift()!);
     expect(
-      await second.client.submitReport({ accessToken: "t".repeat(32), report: "{}", media: png }),
+      await second.client.submitReport({
+        accessToken: "t".repeat(32),
+        reportId: REPORT_ID,
+        report: "{}",
+        media: png,
+      }),
     ).toEqual({
       kind: "rejected",
       status: 400,

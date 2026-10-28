@@ -341,6 +341,7 @@ describe("Settings section: checking and the six server states", () => {
       const h = harness(connectedState);
       mount(h);
       await screen.findByText("Connected");
+      await waitFor(() => expect(h.outbox.created).toHaveLength(1));
       const send = h.outbox.created[0].send;
       h.server.failNext("reports", {
         kind: "status",
@@ -363,6 +364,7 @@ describe("Settings section: checking and the six server states", () => {
     const h = harness(connectedState);
     mount(h);
     await screen.findByText("Connected");
+    await waitFor(() => expect(h.outbox.created).toHaveLength(1));
     const send = h.outbox.created[0].send;
     h.server.state.status = "revoked";
     // The enrollment was ended elsewhere: the send learns it from the 409 (it is connected as far as this page knew).
