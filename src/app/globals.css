@@ -4877,7 +4877,7 @@ a.back {
   margin: 0;
 }
 
-/* A wordmark never wraps; under 360px the bar tightens (smaller wordmark, narrower gutters) so the save chip and Feedback
+/* A wordmark never wraps; under 360px the bar tightens (smaller wordmark and mark, narrower gutters) so the save chip and Feedback
    still fit beside it with room to spare (#282). */
 @media (max-width: 359px) {
   .topbar-inner {
@@ -4889,7 +4889,11 @@ a.back {
     padding-inline: 4px;
   }
   .brand-button strong {
-    font-size: 20px;
+    font-size: 18px;
+  }
+  .brand-mark {
+    width: 24px;
+    height: 24px;
   }
   .topbar-end {
     gap: 4px;

@@ -448,9 +448,11 @@ test(
         const word = document.querySelector(".brand-button strong")!;
         const style = getComputedStyle(word);
         const chipRect = document.querySelector(".sync-chip")!.getBoundingClientRect();
+        const brand = document.querySelector(".brand-button")!;
         return {
           height: word.getBoundingClientRect().height,
           lineHeight: parseFloat(style.fontSize) * 1.6,
+          wordOverflow: brand.scrollWidth - brand.clientWidth,
           chipWidth: chipRect.width,
           chipRight: chipRect.right,
           innerWidth,
@@ -458,6 +460,8 @@ test(
         };
       });
       expect(result.height).toBeLessThan(result.lineHeight);
+      // The wordmark is not squeezed: its box fits inside the brand link, so Feedback is never pushed by a shrinking brand.
+      expect(result.wordOverflow).toBeLessThanOrEqual(0);
       expect(result.chipWidth).toBeGreaterThanOrEqual(44);
       expect(result.chipRight).toBeLessThanOrEqual(result.innerWidth - 8);
       expect(result.overflow).toBe(0);
