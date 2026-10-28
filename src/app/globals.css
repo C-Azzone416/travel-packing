@@ -2997,7 +2997,8 @@ a.back {
   font-size: clamp(44px, 3.7vw, 56px);
   line-height: calc(var(--ledger-row) * 2);
   letter-spacing: -0.04em;
-  overflow-wrap: break-word;
+  /* Word boundaries first (balance); anywhere only as the last resort for an unbroken string, and it lets the grid shrink. */
+  overflow-wrap: anywhere;
   text-wrap: balance;
 }
 /* Place or route, then dates and nights, one muted 14px line (rows of 28px). Each segment is a flex item that wraps
@@ -3136,6 +3137,7 @@ a.back {
 }
 @container (max-width: 440px) {
   .ledger-status-row {
+    height: auto;
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: calc(var(--ledger-row) * 2) var(--ledger-row) var(--ledger-row);
     align-items: stretch;

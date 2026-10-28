@@ -188,3 +188,47 @@ for (const width of [1280, 721, 390]) {
     expect(await overflow(page)).toEqual({ page: 0, hero: 0 });
   });
 }
+
+for (const width of [390, 320]) {
+  test(`the stacked status rows are visible and clear of the actions at ${width}px`, async ({
+    page,
+  }) => {
+    await openHero(page, width);
+    const box = async (selector: string) => (await page.locator(selector).first().boundingBox())!;
+    const days = await box(".days-to-go");
+    const track = await box(".progress-track");
+    const packed = await box(".ledger-counts > span:first-child");
+    const left = await box(".ledger-counts > span:last-child");
+    const actions = await box(".ledger-actions");
+    const status = await box(".ledger-status");
+    await expect(page.locator(".progress-track")).toBeVisible();
+    await expect(page.locator(".ledger-counts > span:first-child")).toBeVisible();
+    await expect(page.locator(".ledger-counts > span:last-child")).toBeVisible();
+    expect(track.y).toBeGreaterThanOrEqual(days.y + days.height - 1);
+    expect(packed.y).toBeGreaterThanOrEqual(track.y);
+    expect(left.y).toBeGreaterThanOrEqual(track.y);
+    for (const part of [track, packed, left]) {
+      expect(part.y + part.height).toBeLessThanOrEqual(actions.y + 0.5);
+    }
+    expect(status.y + status.height).toBeLessThanOrEqual(actions.y + 0.5);
+    const rows = await rowBottoms(page);
+    expect(onGrid(rows.status), `status bottom ${rows.status}`).toBeLessThanOrEqual(1);
+    // the visible link text, not just its accessible name
+    await expect(page.locator(".ledger-actions a").first()).toHaveText(
+      /^(Continue packing|Review bag)$/,
+    );
+  });
+
+  test(`an unbroken 30-character destination does not overflow at ${width}px`, async ({ page }) => {
+    await openHero(page, width);
+    await page.evaluate(() => {
+      document.querySelector(".ledger-hero h2")!.textContent = "Llanfairpwllgwyngyllgogeryc";
+      document.querySelector(".ledger-hero h2")!.textContent += "hh";
+    });
+    expect(await overflow(page)).toEqual({ page: 0, hero: 0 });
+    const rows = await rowBottoms(page);
+    for (const [name, bottom] of Object.entries(rows)) {
+      expect(onGrid(bottom), `${name} bottom ${bottom}`).toBeLessThanOrEqual(1);
+    }
+  });
+}
