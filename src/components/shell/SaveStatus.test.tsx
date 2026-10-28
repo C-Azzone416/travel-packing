@@ -89,6 +89,7 @@ describe("SaveStatusProvider", () => {
   it("shows Saving only after 400ms, announces success, then returns to quiet idle", async () => {
     setup();
     expect(SAVING_DELAY_MS).toBe(400);
+    expect(SAVED_CONFIRMATION_MS).toBe(2_000);
     const write = deferred();
     let result: Promise<string>;
     act(() => {
@@ -134,6 +135,29 @@ describe("SaveStatusProvider", () => {
     expect(chipText()).toContain("Not saved");
     await act(async () => {
       write.resolve("ok");
+    });
+    expect(chipText()).toContain("Saved");
+  });
+
+  it("shows Saving for a later slow write after a failed write has recovered", async () => {
+    setup();
+    await act(async () => {
+      await api.track(() => Promise.reject(new Error("boom"))).catch(() => {});
+    });
+    expect(chipText()).toContain("Not saved");
+    await act(async () => {
+      await api.track(() => Promise.resolve("recovered"));
+    });
+    expect(chipText()).toContain("Saved");
+
+    const slow = deferred();
+    act(() => {
+      void api.track(() => slow.promise);
+    });
+    await advance(SAVING_DELAY_MS);
+    expect(chipText()).toContain("Saving…");
+    await act(async () => {
+      slow.resolve("later");
     });
     expect(chipText()).toContain("Saved");
   });
@@ -446,6 +470,28 @@ describe("SaveStatusProvider", () => {
     expect(chipText()).toContain("Saving…");
     await act(async () => {
       b.resolve("b");
+    });
+    expect(chipText()).toContain("Saved");
+  });
+
+  it("keeps the Saving timer when one overlapping write finishes before the delay", async () => {
+    setup();
+    const first = deferred();
+    const second = deferred();
+    act(() => {
+      void api.track(() => first.promise);
+      void api.track(() => second.promise);
+    });
+    await advance(SAVING_DELAY_MS - 1);
+    expect(hasChip()).toBe(false);
+    await act(async () => {
+      first.resolve("first");
+    });
+    expect(hasChip()).toBe(false);
+    await advance(1);
+    expect(chipText()).toContain("Saving…");
+    await act(async () => {
+      second.resolve("second");
     });
     expect(chipText()).toContain("Saved");
   });
