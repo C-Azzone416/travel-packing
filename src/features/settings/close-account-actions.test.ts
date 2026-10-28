@@ -166,6 +166,7 @@ describe("closeAccountAction", () => {
     expect(mocks.closeAccount).toHaveBeenCalledWith(auth, db, SESSION, "synthetic-password");
     expect(mocks.issueCompletion).toHaveBeenCalledWith(auth.completionSignals);
     expect(mocks.cookieDelete).toHaveBeenCalledWith("appearance");
+    expect(mocks.cookieDelete).toHaveBeenCalledWith("anon-appearance");
   });
 
   it("falls back to sign-in safely if the post-deletion completion signal cannot be issued", async () => {

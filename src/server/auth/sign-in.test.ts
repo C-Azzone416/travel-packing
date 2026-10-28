@@ -21,6 +21,21 @@ beforeEach(() => {
 });
 afterEach(() => setAuthLogSink());
 
+describe("signInOwner onSignedIn hook", () => {
+  it("is called with the session only for an allowlisted owner, and its failure never fails the sign-in", async () => {
+    const seen: string[] = [];
+    const hook = async (session: { userId: string }) => void seen.push(session.userId);
+    expect(await signInOwner(auth(), OWNER.email, OWNER.password, undefined, hook)).toBe("ok");
+    expect(await signInOwner(auth(), OTHER.email, OTHER.password, undefined, hook)).toBe("denied");
+    expect(await signInOwner(auth(), OWNER.email, "wrong", undefined, hook)).toBe("invalid");
+    expect(seen).toEqual(["u1"]);
+    const failing = async () => {
+      throw new Error("boom");
+    };
+    expect(await signInOwner(auth(), OWNER.email, OWNER.password, undefined, failing)).toBe("ok");
+  });
+});
+
 describe("signInOwner", () => {
   it("signs in an allowlisted owner", async () => {
     expect(await signInOwner(auth(), OWNER.email, OWNER.password)).toBe("ok");

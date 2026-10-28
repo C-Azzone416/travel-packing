@@ -35,6 +35,12 @@ describe("updateAppearanceAction", () => {
       "ocean",
       expect.objectContaining({ path: "/", maxAge: 31536000, sameSite: "lax" }),
     );
+    // The anonymous palette cookie (#283) is refreshed too: server-only, palette id only, one year.
+    expect(set).toHaveBeenCalledWith(
+      "anon-appearance",
+      "ocean",
+      expect.objectContaining({ httpOnly: true, path: "/", maxAge: 31536000, sameSite: "lax" }),
+    );
   });
 
   it("fails without touching the cookie when the data context or the save fails", async () => {

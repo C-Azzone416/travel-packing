@@ -3,6 +3,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { APPEARANCE_COOKIE, APPEARANCE_COOKIE_MAX_AGE, type Appearance } from "@/domain/appearance";
+import { rememberAnonymousAppearance } from "./anonymous-appearance";
 import { ACCESS_DENIED_PATH, SIGN_IN_PATH } from "@/server/auth/proxy-handler";
 import { getDataContext } from "@/server/data/runtime";
 import * as service from "@/server/data/service";
@@ -23,6 +24,8 @@ export async function updateAppearanceAction(appearance: Appearance): Promise<Ap
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
     });
+    // Signed-out pages use the last palette a signed-in person chose here; the account value is the source (#283).
+    await rememberAnonymousAppearance(result.data);
     return { ok: true, appearance: result.data };
   }
   if (result.error.code === "UNAUTHENTICATED") redirect(SIGN_IN_PATH);

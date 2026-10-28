@@ -2,7 +2,9 @@
 
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { APPEARANCE_COOKIE } from "@/domain/appearance";
+import { APPEARANCE_COOKIE, isAppearance } from "@/domain/appearance";
+import { rememberAnonymousAppearance } from "@/features/settings/anonymous-appearance";
+import { readAppearanceForUser } from "@/features/settings/saved-appearance";
 import { requestPasswordReset, resendVerificationCode } from "@/server/auth/account-flows";
 import { getAuth } from "@/server/auth/auth-runtime";
 import { flowLimits } from "@/server/auth/flow-limits";
@@ -46,6 +48,11 @@ export async function signInAction(
     formData.get("email"),
     formData.get("password"),
     reference,
+    async (session) => {
+      // The account's saved theme wins at once and refreshes the anonymous palette cookie. Never the other way round.
+      const saved = await readAppearanceForUser(session.userId);
+      if (saved) await rememberAnonymousAppearance(saved);
+    },
   );
   if (outcome === "ok") {
     limits.recordSuccess(email, address);
@@ -87,8 +94,12 @@ export async function signInAction(
 /** Sign out goes straight through (no confirm), then back to sign-in. */
 export async function signOutAction(): Promise<void> {
   await signOutOwner((await getAuth()).provider);
-  // The theme cookie mirrors the account, so it must not outlive the session on a shared browser.
-  (await cookies()).delete(APPEARANCE_COOKIE);
+  // The account mirror must not outlive the session on a shared browser. Its palette id (and only that) moves to the
+  // anonymous palette cookie, which stays so signed-out pages keep the chosen theme (#283).
+  const jar = await cookies();
+  const mirrored = jar.get(APPEARANCE_COOKIE)?.value;
+  if (isAppearance(mirrored)) await rememberAnonymousAppearance(mirrored);
+  jar.delete(APPEARANCE_COOKIE);
   // So does the address remembered for the code and setup screens (#209).
   await forgetPendingEmail();
   redirect(SIGN_IN_PATH);
