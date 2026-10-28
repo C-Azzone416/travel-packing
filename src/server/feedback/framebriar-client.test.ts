@@ -69,6 +69,15 @@ describe("every call", () => {
     }
   });
 
+  it("does not emit upload diagnostics for enrollment calls", async () => {
+    const lines: string[] = [];
+    const { client } = clientFor(() => ok(grant()), { log: (line) => lines.push(line) });
+    await client.redeem({ invitation: "i".repeat(43), attemptId: "x" });
+    await client.refresh("r".repeat(32));
+    await client.disconnect("r".repeat(32));
+    expect(lines).toEqual([]);
+  });
+
   it("reports a refusal's status and a sane Retry-After, never its text", async () => {
     const { client } = clientFor(
       () => new Response("secret provider text", { status: 429, headers: { "retry-after": "17" } }),
@@ -297,6 +306,22 @@ describe("submitReport", () => {
       expect(lines[0]).not.toMatch(/secret|detail|token|report text/i);
     },
   );
+
+  it("keeps the uncertain result when the diagnostic sink throws", async () => {
+    const { client } = clientFor(() => new Response("private upstream failure", { status: 503 }), {
+      timingNow: () => 10,
+      log: () => {
+        throw new Error("logging unavailable");
+      },
+    });
+    await expect(
+      client.submitReport({
+        accessToken: "secret-access-token",
+        report: '{"note":"secret report text"}',
+        media: null,
+      }),
+    ).resolves.toEqual({ kind: "uncertain" });
+  });
 
   it("delivers a report without media in one call, with the bearer token", async () => {
     const { client, calls } = clientFor(() => ok(receipt()));

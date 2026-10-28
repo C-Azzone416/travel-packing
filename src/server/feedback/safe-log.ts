@@ -16,6 +16,15 @@ export interface FeedbackUpstreamDiagnostic {
 export type FeedbackLogSink = (line: string) => void;
 
 const defaultSink: FeedbackLogSink = (line) => console.info(line);
+const PHASES = new Set<unknown>(["metadata", "media"] satisfies FeedbackUpstreamPhase[]);
+const OUTCOMES = new Set<unknown>([
+  "ok",
+  "refused",
+  "timeout",
+  "network",
+  "upstream",
+  "invalid-response",
+] satisfies FeedbackUpstreamOutcome[]);
 
 const boundedElapsed = (value: number): number =>
   Number.isFinite(value) ? Math.max(0, Math.min(60_000, Math.round(value))) : 0;
@@ -29,15 +38,20 @@ export function logFeedbackUpstream(
   diagnostic: FeedbackUpstreamDiagnostic,
   sink: FeedbackLogSink = defaultSink,
 ): void {
-  const status = boundedStatus(diagnostic.status);
-  sink(
-    JSON.stringify({
-      scope: "feedback",
-      event: "framebriar_upstream",
-      phase: diagnostic.phase,
-      outcome: diagnostic.outcome,
-      elapsedMs: boundedElapsed(diagnostic.elapsedMs),
-      ...(status === undefined ? {} : { status }),
-    }),
-  );
+  try {
+    if (!PHASES.has(diagnostic.phase) || !OUTCOMES.has(diagnostic.outcome)) return;
+    const status = boundedStatus(diagnostic.status);
+    sink(
+      JSON.stringify({
+        scope: "feedback",
+        event: "framebriar_upstream",
+        phase: diagnostic.phase,
+        outcome: diagnostic.outcome,
+        elapsedMs: boundedElapsed(diagnostic.elapsedMs),
+        ...(status === undefined ? {} : { status }),
+      }),
+    );
+  } catch {
+    // Diagnostics are best-effort and must never change delivery or retry behavior.
+  }
 }

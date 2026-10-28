@@ -48,4 +48,24 @@ describe("logFeedbackUpstream", () => {
     );
     info.mockRestore();
   });
+
+  it("drops values outside the runtime allowlists", () => {
+    const lines: string[] = [];
+    logFeedbackUpstream(
+      { phase: "private-report-id", outcome: "secret error text", elapsedMs: 4 } as never,
+      (line) => lines.push(line),
+    );
+    expect(lines).toEqual([]);
+  });
+
+  it("never lets a logging failure change control flow", () => {
+    expect(() =>
+      logFeedbackUpstream(
+        { phase: "media", outcome: "upstream", elapsedMs: 20_000, status: 503 },
+        () => {
+          throw new Error("logging unavailable");
+        },
+      ),
+    ).not.toThrow();
+  });
 });
