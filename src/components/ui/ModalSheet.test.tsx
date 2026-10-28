@@ -69,6 +69,16 @@ describe("ModalSheet", () => {
     expect(document.body.style.overflow).toBe("");
   });
 
+  it("returns focus to the opener without scrolling the page", async () => {
+    render(<Harness />);
+    const opener = screen.getByRole("button", { name: "Open" });
+    const focus = vi.spyOn(opener, "focus");
+    await userEvent.click(opener);
+    await userEvent.keyboard("{Escape}");
+    expect(focus).toHaveBeenLastCalledWith({ preventScroll: true });
+    focus.mockRestore();
+  });
+
   it("gives focus back to the pressed control when the browser never focused it (Safari does not focus a tapped button)", async () => {
     render(<Harness />);
     const opener = screen.getByRole("button", { name: "Open" });

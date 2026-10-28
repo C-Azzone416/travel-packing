@@ -121,7 +121,9 @@ export function ModalSheet({
       document.body.style.overflow = previousOverflow;
       // WebKit works out inertness lazily: a control that was inside the inert page cannot take focus until the style is flushed.
       void document.body.offsetHeight;
-      opener?.focus();
+      // The page cannot scroll while the sheet is open, so the opener is where the person left it. Letting focus() scroll would
+      // move a sticky opener (the Feedback button in the sticky bar, #282) to its in-flow position and jump the page.
+      opener?.focus({ preventScroll: true });
     };
   }, [open]);
 
