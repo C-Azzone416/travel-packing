@@ -3,7 +3,10 @@ import { expect, test, type Page } from "@playwright/test";
 import { expectAccessible } from "./helpers/a11y";
 import { ownerEmailFor, signInAsOwner } from "./helpers/auth";
 import { setOwnerAppearance } from "./helpers/database";
-import { connectFeedback, fakeFramebriar, goToTrips } from "./helpers/feedback";
+import { connectFeedback, connectedOnTrips, fakeFramebriar, goToTrips } from "./helpers/feedback";
+import { chooseFromMenu } from "./helpers/menu";
+import { DEVICE } from "./helpers/device";
+import { serverActionId } from "./helpers/server-action";
 
 const THEMES = ["base", "ocean", "terracotta", "violet"] as const;
 const WIDTHS = [390, 1280] as const;
@@ -80,3 +83,50 @@ for (const theme of THEMES) {
     });
   }
 }
+
+test(
+  "transient save status keeps Feedback anchored and every visible control usable",
+  DEVICE,
+  async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await fakeFramebriar.reset();
+    await connectedOnTrips(page);
+
+    const feedback = page.getByRole("button", { name: "Send feedback" });
+    const feedbackBox = (await feedback.boundingBox())!;
+    const feedbackX = Math.round(feedbackBox.x);
+    await expect(page.getByRole("link", { name: "Saved" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Saving" })).toHaveCount(0);
+
+    const archiveAction = serverActionId("src/features/trips/actions.ts", "archiveTripAction");
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route("**/*", async (route) => {
+      if (route.request().headers()["next-action"] === archiveAction) await held;
+      await route.continue();
+    });
+
+    const archive = chooseFromMenu(page, "San Diego", "Archive");
+    const saving = page.getByRole("link", { name: "Saving" });
+    await expect(saving).toBeVisible();
+    const savingBox = (await saving.boundingBox())!;
+    expect(savingBox.height).toBeGreaterThanOrEqual(44);
+    expect(savingBox.width).toBeGreaterThanOrEqual(44);
+    expect(Math.round((await feedback.boundingBox())!.x)).toBe(feedbackX);
+
+    release();
+    await archive;
+    const saved = page.getByRole("link", { name: "Saved" });
+    await expect(saved).toBeVisible();
+    const savedBox = (await saved.boundingBox())!;
+    expect(savedBox.height).toBeGreaterThanOrEqual(44);
+    expect(savedBox.width).toBeGreaterThanOrEqual(44);
+    expect(Math.round((await feedback.boundingBox())!.x)).toBe(feedbackX);
+
+    await expect(saved).toHaveCount(0, { timeout: 3_000 });
+    expect(Math.round((await feedback.boundingBox())!.x)).toBe(feedbackX);
+    await expectAccessible(page, "transient save status and Feedback header");
+  },
+);

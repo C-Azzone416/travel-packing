@@ -70,7 +70,7 @@ test("quick view filters without changing progress or touching the network", asy
   });
   const san = card(page, "San Diego");
   const progress = await san.getByText(/of \d+ packed/).innerText();
-  const chip = page.getByRole("link", { name: "Saved" });
+  await expect(page.getByRole("link", { name: "Saved" })).toHaveCount(0);
 
   await chooseFromMenu(page, "San Diego", "Quick view");
   const quick = san.locator('[id^="quick-view-"]');
@@ -84,7 +84,7 @@ test("quick view filters without changing progress or touching the network", asy
   await quick.getByRole("button", { name: "Still to pack" }).click();
 
   expect(await san.getByText(/of \d+ packed/).innerText()).toBe(progress);
-  await expect(chip).toBeVisible();
+  await expect(page.getByRole("link", { name: "Saved" })).toHaveCount(0);
   expect(requests).toEqual([]);
 });
 

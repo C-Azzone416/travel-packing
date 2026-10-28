@@ -43,6 +43,7 @@ export function AppShell({ children, signOut, email, setupActions }: AppShellPro
                     <Nav signOut={signOut} email={email} />
                     <div className="topbar-end">
                       <FeedbackButton />
+                      {/* Status appears after Feedback so the primary action keeps its anchored position. */}
                       <ConnectedSaveChip />
                     </div>
                   </div>
