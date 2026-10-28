@@ -1,7 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { SAMPLE_TODAY } from "../../../src/server/seed/sample-data";
+import { utcDate } from "../../../src/server/seed/run-date";
 import { seedSyntheticData } from "../../../src/server/seed/seed";
 import type { Db } from "../../../src/server/db/retention";
 import * as schema from "../../../src/server/db/schema";
@@ -14,7 +14,7 @@ export const E2E_DATABASE_URL = `postgres://postgres:postgres@127.0.0.1:${E2E_DB
  * created, and the ones it changed), then the sample set and default staples are loaded again. Called before each
  * test signs in, so no test depends on, or leaves behind, another test's data. Tests run one at a time.
  */
-export async function resetOwnerData(ownerId: string): Promise<void> {
+export async function resetOwnerData(ownerId: string, today: string = utcDate()): Promise<void> {
   const pool = new Pool({ connectionString: E2E_DATABASE_URL, max: 1 });
   try {
     const db = drizzle(pool, { schema }) as unknown as Db;
@@ -39,7 +39,9 @@ export async function resetOwnerData(ownerId: string): Promise<void> {
         staplesReminderDismissed: false,
       })
       .where(eq(schema.users.id, ownerId));
-    await seedSyntheticData(db, ownerId, SAMPLE_TODAY);
+    // The sample trips are relative to the date the browser will think it is (see src/server/seed/run-date.ts): signInAsOwner passes
+    // the page's own date, and a test that resets directly gets the real UTC date, so San Diego is upcoming whenever the run is.
+    await seedSyntheticData(db, ownerId, today);
   } finally {
     await pool.end();
   }

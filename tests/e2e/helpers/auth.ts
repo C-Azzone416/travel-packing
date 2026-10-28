@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { isoDate } from "../../../src/server/seed/run-date";
 import { ensureExistingOwner, resetOwnerData } from "./database";
 
 // Synthetic values for the e2e-only fake sign-in (never available on Vercel; see src/server/auth/e2e-provider.ts).
@@ -53,11 +54,25 @@ export async function signIn(page: Page, email: string, password = E2E_PASSWORD)
   await page.getByRole("button", { name: "Sign in" }).click();
 }
 
+/** The calendar date in the page's own clock (a pinned clock included), the date the app will treat as today. */
+export async function browserToday(page: Page): Promise<string> {
+  const [year, month, day] = await page.evaluate(() => {
+    const now = new Date();
+    return [now.getFullYear(), now.getMonth() + 1, now.getDate()];
+  });
+  return isoDate(year, month, day);
+}
+
 /** Sign in as this project's seeded owner (reset to the seeded state first) and wait until the app is showing. */
 export async function signInAsOwner(page: Page, email = ownerEmailFor(test.info().project.name)) {
   // Every test starts from the freshly seeded state, whatever earlier tests created or changed.
   const ownerId = `e2e-${email}`;
-  if (SEEDED_OWNER_IDS.includes(ownerId)) await resetOwnerData(ownerId);
+  if (SEEDED_OWNER_IDS.includes(ownerId)) {
+    // Seed relative to the date THIS page believes it is: the prototype's date when the test pinned the clock before signing in,
+    // the real date otherwise. Either way San Diego is upcoming and Lisbon past, on any day the suite runs (#278).
+    await page.goto("/sign-in");
+    await resetOwnerData(ownerId, await browserToday(page));
+  }
   await signIn(page, email);
   await expect(page).toHaveURL(/\/$/);
 }
