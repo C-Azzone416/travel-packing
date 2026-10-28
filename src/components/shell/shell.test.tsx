@@ -160,6 +160,9 @@ describe("SaveChip", () => {
     render(<SaveChip status="error" onOpenError={onRetry} />);
     const chip = screen.getByRole("button", { name: "Not saved, retry" });
     expect(chip.textContent).toContain("Not saved · Retry");
+    const compactText = chip.querySelector(".sync-text-compact");
+    expect(compactText?.textContent).toBe("Retry");
+    expect(compactText?.getAttribute("aria-hidden")).toBe("true");
     expect(screen.queryByRole("link")).toBeNull();
     await userEvent.click(chip);
     expect(onRetry).toHaveBeenCalledOnce();

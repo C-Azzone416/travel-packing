@@ -223,14 +223,38 @@ test.describe("error states and toasts", DEVICE, () => {
 
   test("a failed save: the error chip, its sheet, and Settings in the error state", async ({
     page,
-  }) => {
+  }, testInfo) => {
     await openDashboard(page);
+    const feedback = page.getByRole("button", { name: "Send feedback" });
+    const wordmark = page.locator(".brand-button strong");
+    const feedbackBefore = await feedback.boundingBox();
+    const wordmarkBefore = await wordmark.boundingBox();
+    expect(feedbackBefore).not.toBeNull();
+    expect(wordmarkBefore).not.toBeNull();
     await page.route("**/*", (route) =>
       isAction(route.request()) ? route.abort("failed") : route.continue(),
     );
     await chooseFromMenu(page, "San Diego", "Archive");
     const chip = page.getByRole("button", { name: "Not saved, retry" });
     await expect(chip).toBeVisible();
+    const chipBox = await chip.boundingBox();
+    const feedbackAfter = await feedback.boundingBox();
+    const wordmarkAfter = await wordmark.boundingBox();
+    expect(chipBox?.height).toBeGreaterThanOrEqual(44);
+    expect(feedbackAfter?.x).toBe(feedbackBefore?.x);
+    expect(wordmarkAfter?.height).toBe(wordmarkBefore?.height);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+      ),
+    ).toBe(true);
+    if (testInfo.project.name === "phone") {
+      await expect(chip.locator(".sync-text-compact")).toBeVisible();
+      await expect(chip.locator(".sync-text")).toBeHidden();
+    } else {
+      await expect(chip.locator(".sync-text")).toBeVisible();
+      await expect(chip.locator(".sync-text-compact")).toBeHidden();
+    }
     await expectAccessible(page, "dashboard with the error chip");
     await chip.click();
     await expect(page.getByRole("dialog", { name: "Couldn’t save" })).toBeVisible();

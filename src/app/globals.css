@@ -259,12 +259,24 @@ p {
   font-size: 8px;
 }
 .sync-chip.error {
-  min-height: 32px;
+  min-height: 44px;
   padding: 0 12px;
-  border-radius: 999px;
-  background: var(--surface);
+  background: transparent;
   color: var(--danger);
   font-weight: 700;
+}
+.sync-chip.error::before {
+  position: absolute;
+  inset: 6px 0;
+  border-radius: 999px;
+  background: var(--surface);
+  content: "";
+}
+.sync-chip.error > * {
+  position: relative;
+}
+.sync-text-compact {
+  display: none;
 }
 .sync-icon {
   font-weight: 900;
@@ -283,6 +295,12 @@ p {
     overflow: hidden;
     clip-path: inset(50%);
     white-space: nowrap;
+  }
+  .sync-chip.error .sync-text {
+    display: none;
+  }
+  .sync-chip.error .sync-text-compact {
+    display: inline;
   }
 }
 
@@ -654,10 +672,6 @@ main {
     order: 8;
     display: flex;
     margin-left: auto;
-  }
-  .topbar-inner > .sync-chip {
-    order: 9;
-    margin-left: 8px;
   }
   .nav-signout button {
     padding: 0 8px;
@@ -3303,12 +3317,6 @@ a.back {
 .later-journeys li:first-child .later-journey {
   border-top: 0;
 }
-@media (max-width: 720px) {
-  .topbar-inner > .sync-chip {
-    margin-left: auto;
-  }
-}
-
 /* When there is no weather to show, the card collapses to one quiet 44px line (audit 24). */
 .weather-panel.weather-compact,
 .weather-panel.weather-off {
