@@ -10,13 +10,16 @@ const fake = createFakeAuth([
   { email: "waiting@example.test", password: "pw-waiting", userId: "u4", verified: false },
   { email: "owner2@example.test", password: "pw-owner2", userId: "u5", unfinished: true },
   { email: "intruder@example.test", password: "pw-intruder", userId: "u2" },
+  { email: "second@example.test", password: "pw-second", userId: "u6" },
 ]);
 let available = true;
 
 vi.mock("@/server/auth/auth-runtime", () => ({
   getAuth: async () => ({
     provider: fake,
-    allowlist: parseAllowlist("owner@example.test, waiting@example.test, owner2@example.test"),
+    allowlist: parseAllowlist(
+      "owner@example.test, waiting@example.test, owner2@example.test, second@example.test",
+    ),
     seals: createSetupSeals("s".repeat(40)),
     setup: createMemorySetupStore(),
     available,
@@ -40,6 +43,14 @@ vi.mock("next/headers", () => ({
 vi.mock("next/navigation", () => ({
   redirect: (path: string) => {
     throw new Error(`NEXT_REDIRECT:${path}`);
+  },
+}));
+
+const saved = vi.hoisted(() => new Map<string, string>());
+vi.mock("@/features/settings/saved-appearance", () => ({
+  readAppearanceForUser: async (userId: string) => {
+    if (userId === "throws") throw new Error("db down");
+    return saved.get(userId);
   },
 }));
 
@@ -317,11 +328,78 @@ describe("signOutAction", () => {
     expect(fake.current).toBeNull();
   });
 
-  it("clears the theme cookie so it does not outlive the session", async () => {
+  it("clears the account mirror so it does not outlive the session, but keeps only its palette id as the anonymous cookie (#283)", async () => {
     jar.set("appearance", "ocean");
+    jar.set("cw-pending-email", "previous@example.test");
     fake.current = { userId: "u1", email: "owner@example.test" };
     await expect(signOutAction()).rejects.toThrow("NEXT_REDIRECT:/sign-in");
+    expect(fake.current).toBeNull();
     expect(jar.has("appearance")).toBe(false);
+    expect(jar.has("cw-pending-email")).toBe(false);
+    expect([...jar.entries()]).toEqual([["anon-appearance", "ocean"]]);
+  });
+
+  it("keeps the existing anonymous cookie when there is no mirror, and never stores an invalid mirror", async () => {
+    jar.set("anon-appearance", "violet");
+    await expect(signOutAction()).rejects.toThrow("NEXT_REDIRECT:/sign-in");
+    expect(jar.get("anon-appearance")).toBe("violet");
+    jar.set("appearance", "neon");
+    await expect(signOutAction()).rejects.toThrow("NEXT_REDIRECT:/sign-in");
+    expect(jar.get("anon-appearance")).toBe("violet");
+    expect(jar.has("appearance")).toBe(false);
+  });
+});
+
+describe("the anonymous palette cookie across sign-in (#283)", () => {
+  beforeEach(() => saved.clear());
+  const signIn = (email: string, password: string) =>
+    expect(signInAction({ error: null }, form(email, password))).rejects.toThrow("NEXT_REDIRECT:/");
+
+  it("each account's saved palette refreshes the anonymous cookie: A then B", async () => {
+    saved.set("u1", "terracotta");
+    saved.set("u6", "violet");
+    await signIn("owner@example.test", "pw-owner");
+    expect(jar.get("anon-appearance")).toBe("terracotta");
+    await expect(signOutAction()).rejects.toThrow("NEXT_REDIRECT:/sign-in");
+    expect(jar.get("anon-appearance")).toBe("terracotta");
+    await signIn("second@example.test", "pw-second");
+    expect(jar.get("anon-appearance")).toBe("violet");
+    await expect(signOutAction()).rejects.toThrow("NEXT_REDIRECT:/sign-in");
+    expect(jar.get("anon-appearance")).toBe("violet");
+  });
+
+  it("the anonymous value never reaches the account: sign-in only reads the account", async () => {
+    jar.set("anon-appearance", "ocean");
+    await signIn("owner@example.test", "pw-owner");
+    // Nothing saved for the account: the cookie is left alone and nothing is written anywhere.
+    expect(jar.get("anon-appearance")).toBe("ocean");
+    expect([...saved.entries()]).toEqual([]);
+  });
+
+  it("a failed read of the saved palette never fails the sign-in", async () => {
+    vi.spyOn(fake, "signInWithPassword").mockResolvedValueOnce({
+      ok: true,
+      session: { userId: "throws", email: "owner@example.test" },
+    });
+    await signIn("owner@example.test", "pw-owner");
+    expect(jar.has("anon-appearance")).toBe(false);
+  });
+
+  it("a failed or denied sign-in leaves the anonymous cookie alone", async () => {
+    saved.set("u2", "violet");
+    jar.set("anon-appearance", "ocean");
+    await expect(
+      signInAction({ error: null }, form("intruder@example.test", "pw-intruder")),
+    ).rejects.toThrow("NEXT_REDIRECT:/access-denied");
+    await signInAction({ error: null }, form("owner@example.test", "wrong"));
+    expect(jar.get("anon-appearance")).toBe("ocean");
+  });
+
+  it("the cookie value is only ever a palette id", async () => {
+    saved.set("u1", "violet");
+    await signIn("owner@example.test", "pw-owner");
+    expect(jar.get("anon-appearance")).toMatch(/^(base|ocean|terracotta|violet)$/);
+    expect([...jar.values()].join(" ")).not.toMatch(/owner|u1|@/);
   });
 });
 

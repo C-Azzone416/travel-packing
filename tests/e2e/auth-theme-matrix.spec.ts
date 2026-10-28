@@ -2,10 +2,11 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { expectAccessible } from "./helpers/a11y";
-import { E2E_PASSWORD, OTHER_EMAIL, newcomerEmailFor, signIn } from "./helpers/auth";
+import { PALETTES, chooseThemeAndSignOut } from "./helpers/appearance";
+import { E2E_PASSWORD, OTHER_EMAIL, newcomerEmailFor, signIn, signInAsOwner } from "./helpers/auth";
 import { nextNewcomerSlot, resetAccount } from "./helpers/inbox";
 
-// Field Ledger on the signed-out screens (#204), in every theme: sign-in (error and focused field), sign-up, verify, forgot password
+// Field Ledger on the signed-out screens (#204), in every theme, reached through a real Settings choice and sign-out (#283): sign-in (error and focused field), sign-up, verify, forgot password
 // (and its sent state), reset and set password, an invalid link, finish setup and access-denied. Each shows the brand-only bar at the
 // app header's height, a flat card with the 4px accent rule and no blur, and no sideways scroll; axe checks colour contrast in the
 // theme. Axe runs in every theme at 1280 and in one theme at 390 (the layout is the same in each; the width only changes where
@@ -36,13 +37,11 @@ for (const { theme, width, axe } of CELLS) {
     test.setTimeout(90_000);
     await page.setViewportSize({ width, height: width < 700 ? 844 : 900 });
     await page.emulateMedia({ reducedMotion: "reduce" });
-    await page.context().addCookies([
-      {
-        name: "appearance",
-        value: theme,
-        url: test.info().project.use.baseURL ?? "http://localhost",
-      },
-    ]);
+    // A real sign-out, not a hand-set cookie (#283): choose the theme in Settings, press Sign out, and review what the
+    // signed-out screens then render.
+    const palette = PALETTES.find((candidate) => candidate.id === theme)!;
+    await signInAsOwner(page);
+    await chooseThemeAndSignOut(page, page.context(), palette);
 
     const check = async (name: string) => {
       await expect(page.locator("html")).toHaveAttribute("data-appearance", theme);

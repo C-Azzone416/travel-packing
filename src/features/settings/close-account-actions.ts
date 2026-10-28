@@ -4,6 +4,7 @@ import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { APPEARANCE_COOKIE } from "@/domain/appearance";
+import { forgetAnonymousAppearance } from "./anonymous-appearance";
 import { getAuth } from "@/server/auth/auth-runtime";
 import { accountClosureEnabled } from "@/server/auth/account-closure-rollout";
 import {
@@ -36,6 +37,11 @@ async function finishConfirmedClosure(auth: Awaited<ReturnType<typeof getAuth>>)
   const completionIssued = await issueAccountClosureCompletion(auth.completionSignals);
   try {
     (await cookies()).delete(APPEARANCE_COOKIE);
+  } catch {
+    // Do not strand a user whose provider identity was already deleted.
+  }
+  try {
+    await forgetAnonymousAppearance();
   } catch {
     // Do not strand a user whose provider identity was already deleted.
   }

@@ -3,7 +3,7 @@
 import { cleanEmail } from "./account-flows";
 import { isAllowed, type Allowlist } from "./allowlist";
 import { logAuthEvent, type AuthEvent } from "./safe-log";
-import type { AuthProvider, ProviderRejection, SignInDiagnostic } from "./types";
+import type { AuthProvider, AuthSession, ProviderRejection, SignInDiagnostic } from "./types";
 
 /**
  * - invalid: bad credentials or missing fields (the UI shows one generic message)
@@ -22,6 +22,8 @@ export async function signInOwner(
   email: unknown,
   password: unknown,
   reference?: string,
+  /** Called only for an allowlisted, signed-in owner, with the provider session (e.g. to refresh the palette cookie). */
+  onSignedIn?: (session: AuthSession) => Promise<void>,
 ): Promise<SignInOutcome> {
   const log = (event: AuthEvent, rejection?: ProviderRejection) =>
     logAuthEvent(event, { ...rejection, reference });
@@ -63,6 +65,13 @@ export async function signInOwner(
     return "denied";
   }
   log("sign-in-succeeded");
+  if (onSignedIn) {
+    try {
+      await onSignedIn(result.session);
+    } catch {
+      // A convenience hook must never fail a sign-in that already succeeded.
+    }
+  }
   return "ok";
 }
 
