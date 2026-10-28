@@ -16,6 +16,8 @@ import { SaveChip, type SaveStatus } from "./SaveChip";
 
 // "Saving…" appears only if a write takes longer than this, to avoid flicker (#31).
 export const SAVING_DELAY_MS = 400;
+// Successful saves stay visible long enough to notice, then the header returns to its quiet state.
+export const SAVED_CONFIRMATION_MS = 2_000;
 
 interface PendingWrite {
   write: () => Promise<unknown>;
@@ -57,24 +59,62 @@ export function useSaveStatus(): SaveStatusApi {
 }
 
 const ANNOUNCE: Record<SaveStatus, string> = {
+  idle: "",
   saved: "Saved",
   saving: "Saving",
   error: "Couldn't save your last change. Retry is available.",
 };
 
 export function SaveStatusProvider({ children }: { children: ReactNode }) {
-  const [status, setStatus] = useState<SaveStatus>("saved");
+  const [status, setStatus] = useState<SaveStatus>("idle");
+  const statusRef = useRef<SaveStatus>("idle");
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const pending = useRef(0);
   const lastFailed = useRef<PendingWrite | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const savingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const failed = useRef(false);
+
+  const applyStatus = useCallback((next: SaveStatus) => {
+    statusRef.current = next;
+    setStatus(next);
+  }, []);
+
+  const clearSavingTimer = useCallback(() => {
+    if (!savingTimer.current) return;
+    clearTimeout(savingTimer.current);
+    savingTimer.current = null;
+  }, []);
+
+  const clearSavedTimer = useCallback(() => {
+    if (!savedTimer.current) return;
+    clearTimeout(savedTimer.current);
+    savedTimer.current = null;
+  }, []);
+
+  const scheduleSaving = useCallback(() => {
+    if (savingTimer.current || failed.current || pending.current === 0) return;
+    savingTimer.current = setTimeout(() => {
+      savingTimer.current = null;
+      if (!failed.current && pending.current > 0) applyStatus("saving");
+    }, SAVING_DELAY_MS);
+  }, [applyStatus]);
+
+  const showSavedConfirmation = useCallback(() => {
+    clearSavedTimer();
+    applyStatus("saved");
+    savedTimer.current = setTimeout(() => {
+      savedTimer.current = null;
+      if (statusRef.current === "saved") applyStatus("idle");
+    }, SAVED_CONFIRMATION_MS);
+  }, [applyStatus, clearSavedTimer]);
 
   useEffect(
     () => () => {
-      if (timer.current) clearTimeout(timer.current);
+      clearSavingTimer();
+      clearSavedTimer();
     },
-    [],
+    [clearSavedTimer, clearSavingTimer],
   );
 
   const track = useCallback(
@@ -85,21 +125,15 @@ export function SaveStatusProvider({ children }: { children: ReactNode }) {
     ): Promise<T> => {
       const read = options?.read ?? false;
       if (!read) {
+        clearSavedTimer();
+        if (statusRef.current === "saved") applyStatus("idle");
         pending.current += 1;
-        if (!timer.current && !failed.current) {
-          timer.current = setTimeout(() => {
-            timer.current = null;
-            setStatus((current) => (current === "error" ? current : "saving"));
-          }, SAVING_DELAY_MS);
-        }
+        scheduleSaving();
       }
       const settle = () => {
         if (read) return;
         pending.current -= 1;
-        if (pending.current === 0 && timer.current) {
-          clearTimeout(timer.current);
-          timer.current = null;
-        }
+        if (pending.current === 0) clearSavingTimer();
       };
       try {
         const result = await write();
@@ -109,20 +143,28 @@ export function SaveStatusProvider({ children }: { children: ReactNode }) {
         if (!read || lastFailed.current?.read) {
           lastFailed.current = null;
           failed.current = false;
-          if (pending.current === 0) setStatus("saved");
+          if (pending.current === 0) {
+            if (read) applyStatus("idle");
+            else showSavedConfirmation();
+          } else if (statusRef.current === "error") {
+            applyStatus("idle");
+            scheduleSaving();
+          }
         }
         if (!read) setLastSavedAt(new Date());
         onSuccess?.(result);
         return result;
       } catch (error) {
         settle();
+        clearSavingTimer();
+        clearSavedTimer();
         lastFailed.current = { write, onSuccess: onSuccess as PendingWrite["onSuccess"], read };
         failed.current = true;
-        setStatus("error");
+        applyStatus("error");
         throw error;
       }
     },
-    [],
+    [applyStatus, clearSavedTimer, clearSavingTimer, scheduleSaving, showSavedConfirmation],
   );
 
   const retry = useCallback(() => {

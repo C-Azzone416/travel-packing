@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ConnectedSaveChip,
+  SAVED_CONFIRMATION_MS,
   SAVING_DELAY_MS,
   SaveStatusProvider,
   useSaveStatus,
@@ -41,7 +42,8 @@ function deferred<T = string>() {
   return { promise, resolve, reject };
 }
 
-const chipText = () => (document.querySelector(".sync-chip") as HTMLElement).textContent;
+const chipText = () => document.querySelector(".sync-chip")?.textContent ?? "";
+const hasChip = () => document.querySelector(".sync-chip") !== null;
 const advance = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms));
 const status = () => screen.getByRole("status", { name: "Save status" }).textContent;
 const alertText = () => screen.getByRole("alert", { name: "Save error" }).textContent;
@@ -56,14 +58,14 @@ describe("SaveStatusProvider", () => {
     spy.mockRestore();
   });
 
-  it("starts as Saved, announced politely", () => {
+  it("starts quiet without claiming or announcing a save", () => {
     setup();
-    expect(chipText()).toContain("Saved");
-    expect(status()).toBe("Saved");
+    expect(hasChip()).toBe(false);
+    expect(status()).toBe("");
     expect(alertText()).toBe("");
   });
 
-  it("never flashes Saving for a write that finishes within the delay", async () => {
+  it("never flashes Saving for a quick write, then confirms Saved for a bounded time", async () => {
     setup();
     const write = deferred();
     let result: Promise<string>;
@@ -71,16 +73,20 @@ describe("SaveStatusProvider", () => {
       result = api.track(() => write.promise);
     });
     await advance(SAVING_DELAY_MS - 1);
-    expect(chipText()).toContain("Saved");
+    expect(hasChip()).toBe(false);
     await act(async () => {
       write.resolve("ok");
       await result;
     });
-    await advance(SAVING_DELAY_MS * 5);
     expect(chipText()).toContain("Saved");
+    await advance(SAVED_CONFIRMATION_MS - 1);
+    expect(chipText()).toContain("Saved");
+    await advance(1);
+    expect(hasChip()).toBe(false);
+    expect(status()).toBe("");
   });
 
-  it("shows Saving only after 400ms, announces it, then returns to Saved", async () => {
+  it("shows Saving only after 400ms, announces success, then returns to quiet idle", async () => {
     setup();
     expect(SAVING_DELAY_MS).toBe(400);
     const write = deferred();
@@ -89,7 +95,7 @@ describe("SaveStatusProvider", () => {
       result = api.track(() => write.promise);
     });
     await advance(399);
-    expect(chipText()).toContain("Saved");
+    expect(hasChip()).toBe(false);
     await advance(1);
     expect(chipText()).toContain("Saving…");
     expect(status()).toBe("Saving");
@@ -99,6 +105,9 @@ describe("SaveStatusProvider", () => {
     });
     expect(chipText()).toContain("Saved");
     expect(status()).toBe("Saved");
+    await advance(SAVED_CONFIRMATION_MS);
+    expect(hasChip()).toBe(false);
+    expect(status()).toBe("");
   });
 
   it("goes straight to Error on failure, rethrows, and announces assertively", async () => {
@@ -309,15 +318,15 @@ describe("SaveStatusProvider", () => {
         result = api.track(() => load.promise, onSuccess, { read: true });
       });
       await advance(SAVING_DELAY_MS * 10);
-      expect(chipText()).toContain("Saved");
+      expect(hasChip()).toBe(false);
       expect(chipText()).not.toContain("Saving");
-      expect(status()).toBe("Saved");
+      expect(status()).toBe("");
       await act(async () => {
         load.resolve("loaded");
         await result;
       });
       expect(onSuccess).toHaveBeenCalledWith("loaded");
-      expect(chipText()).toContain("Saved");
+      expect(hasChip()).toBe(false);
     });
 
     it("a slow write still shows Saving after 400ms, even while a read is in flight", async () => {
@@ -329,7 +338,7 @@ describe("SaveStatusProvider", () => {
         void api.track(() => write.promise);
       });
       await advance(399);
-      expect(chipText()).toContain("Saved");
+      expect(hasChip()).toBe(false);
       await advance(1);
       expect(chipText()).toContain("Saving…");
       await act(async () => {
@@ -356,7 +365,7 @@ describe("SaveStatusProvider", () => {
       });
       expect(read).toHaveBeenCalledTimes(2);
       expect(onSuccess).toHaveBeenCalledWith("fresh");
-      expect(chipText()).toContain("Saved");
+      expect(hasChip()).toBe(false);
     });
 
     it("a RETRIED read is still a read: it never shows Saving, and does not hold the chip after a save completes", async () => {
@@ -449,5 +458,34 @@ describe("SaveStatusProvider", () => {
     view.unmount();
     await advance(SAVING_DELAY_MS * 2);
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("clears its saved-confirmation timer when unmounted", async () => {
+    const view = setup();
+    await act(async () => {
+      await api.track(async () => "saved");
+    });
+    expect(chipText()).toContain("Saved");
+    view.unmount();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("cancels a stale Saved confirmation when another write starts", async () => {
+    setup();
+    await act(async () => {
+      await api.track(async () => "first");
+    });
+    expect(chipText()).toContain("Saved");
+    const next = deferred();
+    act(() => {
+      void api.track(() => next.promise);
+    });
+    expect(hasChip()).toBe(false);
+    await advance(SAVING_DELAY_MS);
+    expect(chipText()).toContain("Saving…");
+    await advance(SAVED_CONFIRMATION_MS);
+    expect(chipText()).toContain("Saving…");
+    await act(async () => next.resolve("done"));
+    expect(chipText()).toContain("Saved");
   });
 });

@@ -216,7 +216,7 @@ describe("loading and states", () => {
     await user.click(screen.getByRole("button", { name: "Try again" }));
     expect(await ready()).toBeTruthy();
     expect(getTrip).toHaveBeenCalledTimes(2);
-    expect(screen.getByRole("link", { name: "Saved" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Saved" })).toBeNull();
   });
 
   it("the chip's Retry also reloads after a failed load, and the trip renders", async () => {

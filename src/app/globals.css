@@ -233,8 +233,8 @@ p {
   }
 }
 
-/* The status chip: quiet text in the bar (design's #155 ruling). Still a persistent live region and a link to
-   Settings, 44px tall like every target. */
+/* The transient status chip is interactive while visible and remains a 44px target. Its live region is separate,
+   so quiet idle can remove the control without losing saving/error announcements. */
 .sync-chip {
   position: relative;
   flex: none;
@@ -270,7 +270,7 @@ p {
   font-weight: 900;
 }
 @media (max-width: 720px) {
-  /* On a phone the idle chip is just the check (still a 44px target); the word stays for screen readers. */
+  /* On a phone the brief success chip is just the check (still a 44px target); its name stays available. */
   .sync-chip {
     min-width: 44px;
     justify-content: center;

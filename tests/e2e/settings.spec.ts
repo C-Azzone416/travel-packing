@@ -107,7 +107,10 @@ test("nothing is claimed saved before anything was, and 'Last saved' appears aft
     .click();
   await chooseFromMenu(page, "San Diego", "Archive");
   await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toHaveCount(0);
-  await page.getByRole("link", { name: "Saved" }).click();
+  await page
+    .getByRole("navigation", { name: "Primary navigation" })
+    .getByRole("link", { name: "Settings" })
+    .click();
   await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
   await expect(page.getByText(/^Last saved \d{1,2}:\d{2}\s?[AP]M$/)).toBeVisible();
 });
@@ -177,10 +180,7 @@ test(
     const text = await page.locator("body").innerText();
     expect(text).not.toMatch(/offline|waiting|simulat|prototype|sample|reset/i);
     if (testInfo.project.name === "phone") {
-      for (const control of [
-        page.getByRole("main").getByRole("button", { name: "Sign out" }),
-        page.getByRole("link", { name: /Saved|Saving/ }),
-      ]) {
+      for (const control of [page.getByRole("main").getByRole("button", { name: "Sign out" })]) {
         expect(Math.round((await control.boundingBox())!.height)).toBeGreaterThanOrEqual(44);
       }
     }

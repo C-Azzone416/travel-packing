@@ -135,8 +135,13 @@ describe("RouteFocus", () => {
 });
 
 describe("SaveChip", () => {
-  it("shows Saved as a link to Settings by default", () => {
-    render(<SaveChip />);
+  it("renders nothing in the quiet idle state", () => {
+    const { container } = render(<SaveChip />);
+    expect(container.innerHTML).toBe("");
+  });
+
+  it("shows Saved as a link to Settings when confirming success", () => {
+    render(<SaveChip status="saved" />);
     const chip = screen.getByRole("link", { name: "Saved" });
     expect(chip.getAttribute("href")).toBe("/settings");
     expect(chip.textContent).toContain("Saved");
@@ -182,7 +187,7 @@ describe("PreviewBanner", () => {
 });
 
 describe("AppShell", () => {
-  it("puts the skip link first, then one banner holding the brand, the primary navigation and the save chip, then main", () => {
+  it("puts the skip link first, then one banner holding the brand and primary navigation, then main", () => {
     render(
       <AppShell>
         <h1>Trips</h1>
@@ -199,7 +204,7 @@ describe("AppShell", () => {
     const banner = screen.getByRole("banner");
     const nav = screen.getByRole("navigation", { name: "Primary navigation" });
     expect(banner.contains(nav)).toBe(true);
-    // Brand, then the navigation, then the status chip, all before main in reading order.
+    // Brand and navigation are before main; idle does not add a meaningless status control.
     const inBar = [...banner.querySelectorAll<HTMLElement>("a, button")];
     expect(inBar[0].getAttribute("aria-label")).toBe("Packed Smart: go to trips");
     expect(inBar.slice(1, 4).map((node) => node.textContent?.trim())).toEqual([
@@ -207,15 +212,15 @@ describe("AppShell", () => {
       expect.stringContaining("Staples"),
       expect.stringContaining("Settings"),
     ]);
-    expect(inBar.at(-1)?.getAttribute("aria-label")).toBe("Saved");
+    expect(screen.queryByRole("link", { name: "Saved" })).toBeNull();
     expect(banner.compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(banner.textContent).not.toMatch(/packing companion/i);
   });
 
-  it("brand link goes home and the save chip is present", () => {
+  it("brand link goes home and the save chip is quiet until a write happens", () => {
     render(<AppShell>x</AppShell>);
     expect(screen.getByRole("link", { name: /go to trips/i }).getAttribute("href")).toBe("/");
-    expect(screen.getByRole("link", { name: "Saved" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Saved" })).toBeNull();
   });
 
   it("provides toasts to its children", () => {
