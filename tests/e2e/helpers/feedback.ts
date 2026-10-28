@@ -4,6 +4,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import type { Db } from "../../../src/server/db/retention";
 import * as schema from "../../../src/server/db/schema";
+import { SAMPLE_TODAY } from "../../../src/server/seed/sample-data";
 import { signInAsOwner } from "./auth";
 import { E2E_DATABASE_URL } from "./database";
 import { FAKE_FRAMEBRIAR_PORT } from "../support/ports";
@@ -72,6 +73,10 @@ export async function forgetFeedbackEnrollment(ownerId: string): Promise<void> {
 }
 
 export async function openSettings(page: Page) {
+  // The synthetic trips are seeded relative to SAMPLE_TODAY. Keep their upcoming/past split stable after that
+  // calendar date passes, just like the trip-focused e2e helpers do.
+  // Install an advancing clock rather than a fixed Date: the durable outbox compares Date.now() with retry deadlines.
+  await page.clock.install({ time: new Date(`${SAMPLE_TODAY}T12:00:00`) });
   await signInAsOwner(page);
   await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
   await nav(page).getByRole("link", { name: "Settings" }).click();

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { SAMPLE_TODAY } from "../../src/server/seed/sample-data";
 
 // The real responses carry the security headers (#22), on a page, on a redirect target and on an API route.
 for (const path of ["/sign-in", "/api/locations/search?q=lon", "/"]) {
@@ -23,6 +24,7 @@ test("the CSP does not break the app: no violations while the sign-in page and d
   page.on("console", (message) => {
     if (/content security policy/i.test(message.text())) violations.push(message.text());
   });
+  await page.clock.install({ time: new Date(`${SAMPLE_TODAY}T12:00:00`) });
   const { signInAsOwner } = await import("./helpers/auth");
   await signInAsOwner(page);
   await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();

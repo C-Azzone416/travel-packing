@@ -7,6 +7,13 @@
 // not rotate and the family deadline is fixed; access tokens last at most an hour; a redemption retried with the same attempt id
 // inside Framebriar's idempotency window returns the same family.
 
+import {
+  logFeedbackUpstream,
+  type FeedbackLogSink,
+  type FeedbackUpstreamOutcome,
+  type FeedbackUpstreamPhase,
+} from "./safe-log";
+
 export const FRAMEBRIAR_ENDPOINT = "https://framebriar-masra91-poc.azurewebsites.net/api";
 export const GAME_ID = "travel-packing";
 const SCOPE_VERSION = 2;
@@ -45,6 +52,8 @@ export interface FramebriarClient {
 interface ClientOptions {
   fetchImpl?: typeof fetch;
   now?: () => number;
+  timingNow?: () => number;
+  log?: FeedbackLogSink;
 }
 
 async function readCapped(response: Response): Promise<unknown | undefined> {
@@ -78,13 +87,35 @@ const isoMs = (value: unknown): number | null => {
 export function createFramebriarClient({
   fetchImpl = fetch,
   now = Date.now,
+  timingNow = () => performance.now(),
+  log,
 }: ClientOptions = {}): FramebriarClient {
+  const diagnostic = (
+    phase: FeedbackUpstreamPhase | undefined,
+    startedAt: number,
+    outcome: FeedbackUpstreamOutcome,
+    status?: number,
+  ) => {
+    if (phase === undefined) return;
+    logFeedbackUpstream(
+      {
+        phase,
+        outcome,
+        elapsedMs: timingNow() - startedAt,
+        ...(status === undefined ? {} : { status }),
+      },
+      log,
+    );
+  };
+
   async function call<T>(
     path: string,
     init: { method: "POST" | "PUT"; headers: Record<string, string>; body: BodyInit },
     parse: (body: unknown) => T | null,
     timeoutMs = TIMEOUT_MS,
+    phase?: FeedbackUpstreamPhase,
   ): Promise<Outcome<T>> {
+    const startedAt = timingNow();
     let response: Response;
     try {
       response = await fetchImpl(`${FRAMEBRIAR_ENDPOINT}${path}`, {
@@ -94,11 +125,20 @@ export function createFramebriarClient({
         cache: "no-store",
         signal: AbortSignal.timeout(timeoutMs),
       });
-    } catch {
+    } catch (error) {
+      diagnostic(
+        phase,
+        startedAt,
+        error instanceof DOMException && error.name === "TimeoutError" ? "timeout" : "network",
+      );
       return { kind: "uncertain" };
     }
-    if (response.status >= 500) return { kind: "uncertain" };
+    if (response.status >= 500) {
+      diagnostic(phase, startedAt, "upstream", response.status);
+      return { kind: "uncertain" };
+    }
     if (response.status < 200 || response.status >= 300) {
+      diagnostic(phase, startedAt, "refused", response.status);
       const retry = Number(response.headers.get("retry-after"));
       return {
         kind: "rejected",
@@ -110,7 +150,12 @@ export function createFramebriarClient({
     }
     const body = await readCapped(response).catch(() => undefined);
     const value = body === undefined ? null : parse(body);
-    return value === null ? { kind: "uncertain" } : { kind: "ok", value };
+    if (value === null) {
+      diagnostic(phase, startedAt, "invalid-response", response.status);
+      return { kind: "uncertain" };
+    }
+    diagnostic(phase, startedAt, "ok", response.status);
+    return { kind: "ok", value };
   }
 
   const json = (payload: unknown) => ({
@@ -194,6 +239,8 @@ export function createFramebriarClient({
           body: report,
         },
         parseReceipt,
+        TIMEOUT_MS,
+        "metadata",
       );
       if (first.kind !== "ok") return first;
       const { id, gameId, status, ticket } = first.value;
@@ -214,6 +261,7 @@ export function createFramebriarClient({
         },
         parseReceipt,
         MEDIA_TIMEOUT_MS,
+        "media",
       );
       if (uploaded.kind !== "ok") return uploaded;
       return uploaded.value.status === "ready"
