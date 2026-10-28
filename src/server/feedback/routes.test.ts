@@ -660,7 +660,7 @@ describe("the report proxy", () => {
     expect(JSON.stringify(await body(response))).not.toContain("Request rejected");
   });
 
-  it("a receipt for another report or game is not delivery", async () => {
+  it("a receipt for another report is rejected by the client as an uncertain delivery", async () => {
     const { routes } = await connected();
     const other = randomUUID();
     const forged = createFramebriarClient({
@@ -684,7 +684,7 @@ describe("the report proxy", () => {
     void routes;
     const response = await routesWithForgedReceipt.reports(reportRequest(reportFor(null), null));
     expect(response.status).toBe(502);
-    expect(await body(response)).toEqual({ v: 1, error: "UPSTREAM" });
+    expect(await body(response)).toEqual({ v: 1, error: "UNCERTAIN" });
   });
 
   it("an unconfirmed upload (pending after the media call) is not delivery", async () => {

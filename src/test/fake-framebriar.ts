@@ -183,7 +183,18 @@ export function createFakeFramebriar({
       }
       const ticket = token();
       tickets.set(ticket, report.id);
-      return respond(route, reply({ id: report.id, gameId, status: "pending", ticket }, 200));
+      return respond(
+        route,
+        reply(
+          {
+            id: report.id,
+            status: "pending",
+            ticket,
+            expiresAt: new Date(now() + 5 * 60_000).toISOString(),
+          },
+          200,
+        ),
+      );
     }
 
     // media

@@ -20,6 +20,8 @@ const SCOPE_VERSION = 2;
 const TIMEOUT_MS = 8_000;
 const MEDIA_TIMEOUT_MS = 20_000;
 const MAX_RESPONSE_BYTES = 16 * 1024;
+const MAX_UPLOAD_TICKET_TTL_MS = 10 * 60 * 1000;
+const UPLOAD_TICKET = /^[A-Za-z0-9_-]{43}$/;
 
 export interface AccessGrant {
   accessToken: string;
@@ -44,6 +46,7 @@ export interface FramebriarClient {
   disconnect(refreshToken: string): Promise<Outcome<true>>;
   submitReport(input: {
     accessToken: string;
+    reportId: string;
     report: string;
     media: Uint8Array | null;
   }): Promise<Outcome<{ id: string; gameId: string }>>;
@@ -213,19 +216,39 @@ export function createFramebriarClient({
         { method: "POST", ...json({ v: 1, gameId: GAME_ID, refreshToken }) },
         (body) => ((body as { v?: unknown } | null)?.v === 1 ? true : null),
       ),
-    async submitReport({ accessToken, report, media }) {
+    async submitReport({ accessToken, reportId, report, media }) {
       const authorization = { authorization: `Bearer ${accessToken}` };
-      const parseReceipt = (body: unknown) => {
+      const parseReadyReceipt = (body: unknown) => {
         const receipt = body as Record<string, unknown> | null;
         if (typeof receipt !== "object" || receipt === null) return null;
-        return typeof receipt.id === "string" && receipt.gameId === GAME_ID
-          ? {
-              id: receipt.id,
-              gameId: receipt.gameId,
-              status: receipt.status,
-              ticket: receipt.ticket,
-            }
+        return receipt.id === reportId && receipt.status === "ready" && receipt.gameId === GAME_ID
+          ? { id: reportId, gameId: GAME_ID, status: "ready" as const }
           : null;
+      };
+      const parsePreparedReceipt = (body: unknown) => {
+        const ready = parseReadyReceipt(body);
+        if (ready !== null) return ready;
+        const receipt = body as Record<string, unknown> | null;
+        if (typeof receipt !== "object" || receipt === null) return null;
+        const expiresAt = isoMs(receipt.expiresAt);
+        const current = now();
+        if (
+          receipt.id !== reportId ||
+          receipt.status !== "pending" ||
+          (receipt.gameId !== undefined && receipt.gameId !== GAME_ID) ||
+          typeof receipt.ticket !== "string" ||
+          !UPLOAD_TICKET.test(receipt.ticket) ||
+          expiresAt === null ||
+          expiresAt <= current ||
+          expiresAt - current > MAX_UPLOAD_TICKET_TTL_MS
+        )
+          return null;
+        return {
+          id: reportId,
+          status: "pending" as const,
+          ticket: receipt.ticket,
+          expiresAt,
+        };
       };
       const first = await call(
         "/v1/reports",
@@ -238,13 +261,14 @@ export function createFramebriarClient({
           },
           body: report,
         },
-        parseReceipt,
+        parsePreparedReceipt,
         TIMEOUT_MS,
         "metadata",
       );
       if (first.kind !== "ok") return first;
-      const { id, gameId, status, ticket } = first.value;
-      if (status === "ready" && media === null) return { kind: "ok", value: { id, gameId } };
+      const { id, status } = first.value;
+      if (status === "ready") return { kind: "ok", value: { id, gameId: GAME_ID } };
+      const { ticket } = first.value;
       if (status !== "pending" || media === null || typeof ticket !== "string" || ticket === "")
         return { kind: "uncertain" };
       const uploaded = await call(
@@ -259,14 +283,12 @@ export function createFramebriarClient({
           },
           body: Buffer.from(media),
         },
-        parseReceipt,
+        parseReadyReceipt,
         MEDIA_TIMEOUT_MS,
         "media",
       );
       if (uploaded.kind !== "ok") return uploaded;
-      return uploaded.value.status === "ready"
-        ? { kind: "ok", value: { id: uploaded.value.id, gameId: uploaded.value.gameId } }
-        : { kind: "uncertain" };
+      return { kind: "ok", value: { id: uploaded.value.id, gameId: uploaded.value.gameId } };
     },
   };
 }
