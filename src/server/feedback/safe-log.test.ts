@@ -49,16 +49,21 @@ describe("logFeedbackUpstream", () => {
     info.mockRestore();
   });
 
-  it("drops values outside the runtime allowlists", () => {
+  it.each([
+    ["private-report-id", "ok"],
+    ["x", "ok"],
+    ["media", "secret error text"],
+    ["media", "x"],
+  ])("drops phase %s and outcome %s outside the runtime allowlists", (phase, outcome) => {
     const lines: string[] = [];
-    logFeedbackUpstream(
-      { phase: "private-report-id", outcome: "secret error text", elapsedMs: 4 } as never,
-      (line) => lines.push(line),
-    );
+    logFeedbackUpstream({ phase, outcome, elapsedMs: 4 } as never, (line) => lines.push(line));
     expect(lines).toEqual([]);
   });
 
   it("never lets a logging failure change control flow", () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     expect(() =>
       logFeedbackUpstream(
         { phase: "media", outcome: "upstream", elapsedMs: 20_000, status: 503 },
@@ -67,5 +72,11 @@ describe("logFeedbackUpstream", () => {
         },
       ),
     ).not.toThrow();
+    expect(info).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
+    info.mockRestore();
+    error.mockRestore();
+    warn.mockRestore();
   });
 });
