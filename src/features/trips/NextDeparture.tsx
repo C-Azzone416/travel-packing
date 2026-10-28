@@ -67,15 +67,19 @@ export function NextDeparture({
         <div className="ledger-hero-copy">
           <p className="eyebrow">Next departure · {departure.startShort}</p>
           <h2 id={titleId}>{view.destination}</h2>
-          {view.route.length && !view.routeIsTitle ? (
-            <div className="item-meta">
-              <RouteText cities={view.route} />
-            </div>
-          ) : view.place ? (
-            <div className="item-meta">{view.place}</div>
-          ) : null}
-          <p className="ledger-dates">
-            {departure.range} · {departure.nightsLabel}
+          <p className="ledger-meta">
+            <span className="ledger-meta-line">
+              {view.route.length && !view.routeIsTitle ? (
+                <span className="ledger-meta-place">
+                  <RouteText cities={view.route} />
+                </span>
+              ) : view.place && !view.routeIsTitle ? (
+                <span className="ledger-meta-place">{view.place}</span>
+              ) : null}
+              <span className="ledger-meta-dates">
+                {departure.range} · {departure.nightsLabel}
+              </span>
+            </span>
           </p>
         </div>
         <div className="stamp-slot" data-stamp-slot>
@@ -103,12 +107,12 @@ export function NextDeparture({
         <p className="weather-strip-note muted tiny">Weather is unavailable right now.</p>
       ) : null}
 
-      <div className="ledger-hero-bottom">
-        <div className="days-to-go">
-          <strong>{departure.daysToGo}</strong>
-          <span>{departure.daysLabel}</span>
-        </div>
-        <div className="ledger-progress">
+      <div className="ledger-status">
+        <div className="ledger-status-row">
+          <div className="days-to-go">
+            <strong>{departure.daysToGo}</strong>
+            <span>{departure.daysLabel}</span>
+          </div>
           <div
             className="progress-track"
             role="progressbar"
@@ -120,56 +124,56 @@ export function NextDeparture({
           >
             <span style={{ width: `${view.percent}%` }} />
           </div>
-          <div className="progress-copy">
+          <div className="ledger-counts">
             <span>
               {view.packed} of {view.total} packed
             </span>
             <span>{view.ready ? "Ready to go" : `${view.remaining} left`}</span>
           </div>
         </div>
-        <div className="ledger-actions">
-          <Link
-            className={buttonClassName()}
-            href={`/trips/${trip.id}`}
-            aria-label={`${view.ready ? "Review bag" : "Continue packing"}: ${view.destination}`}
-          >
-            {view.ready ? "Review bag" : "Continue packing"}
-          </Link>
-          <Button
-            variant="secondary"
-            disabled={busy}
-            aria-label={`Edit trip: ${view.destination}`}
-            onClick={() => onEdit(trip.id)}
-          >
-            Edit trip
-          </Button>
-          <AddItemInline
-            variant="hero"
-            formHost={formHost}
-            items={trip.items}
-            busy={busy}
-            onAdd={onAddItem}
-            onBathroom={onBathroom}
-            onEditExisting={onEditExisting}
-          />
-          <MoreMenu
-            variant="secondary"
-            subject={view.destination}
-            disabled={busy}
-            items={[
-              {
-                key: "quick",
-                label: quickOpen ? "Hide quick view" : "Quick view",
-                onSelect: () => setQuickOpen((open) => !open),
-              },
-              { key: "copy", label: "Copy trip", href: `/trips/new?copy=${trip.id}` },
-              ...(view.canArchive
-                ? [{ key: "archive", label: "Archive", onSelect: () => onArchive(trip.id) }]
-                : []),
-              { key: "remove", label: "Remove", danger: true, onSelect: () => onRemove(trip.id) },
-            ]}
-          />
-        </div>
+      </div>
+      <div className="ledger-actions">
+        <Link
+          className={buttonClassName()}
+          href={`/trips/${trip.id}`}
+          aria-label={`${view.ready ? "Review bag" : "Continue packing"}: ${view.destination}`}
+        >
+          {view.ready ? "Review bag" : "Continue packing"}
+        </Link>
+        <Button
+          variant="secondary"
+          disabled={busy}
+          aria-label={`Edit trip: ${view.destination}`}
+          onClick={() => onEdit(trip.id)}
+        >
+          Edit trip
+        </Button>
+        <AddItemInline
+          variant="hero"
+          formHost={formHost}
+          items={trip.items}
+          busy={busy}
+          onAdd={onAddItem}
+          onBathroom={onBathroom}
+          onEditExisting={onEditExisting}
+        />
+        <MoreMenu
+          variant="secondary"
+          subject={view.destination}
+          disabled={busy}
+          items={[
+            {
+              key: "quick",
+              label: quickOpen ? "Hide quick view" : "Quick view",
+              onSelect: () => setQuickOpen((open) => !open),
+            },
+            { key: "copy", label: "Copy trip", href: `/trips/new?copy=${trip.id}` },
+            ...(view.canArchive
+              ? [{ key: "archive", label: "Archive", onSelect: () => onArchive(trip.id) }]
+              : []),
+            { key: "remove", label: "Remove", danger: true, onSelect: () => onRemove(trip.id) },
+          ]}
+        />
       </div>
 
       <div className="add-item-host" ref={setFormHost} />

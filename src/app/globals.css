@@ -2952,9 +2952,12 @@ a.back {
   }
 }
 .ledger-hero {
+  --ledger-row: 28px;
+  /* A weather cell (five lines plus padding) is at most 5 rows tall at 1280 and at 390; the strip is whole rows. */
+  --ledger-weather-height: calc(var(--ledger-row) * 5);
   position: relative;
   min-width: 0;
-  padding: 24px;
+  padding: var(--ledger-row) 24px;
   border: 1px solid var(--line);
   border-top: 4px solid var(--accent);
   border-radius: var(--control-radius);
@@ -2962,9 +2965,9 @@ a.back {
     repeating-linear-gradient(
       to bottom,
       transparent 0,
-      transparent 27px,
-      var(--ledger-rule) 27px,
-      var(--ledger-rule) 28px
+      transparent calc(var(--ledger-row) - 1px),
+      var(--ledger-rule) calc(var(--ledger-row) - 1px),
+      var(--ledger-rule) var(--ledger-row)
     ),
     var(--surface);
   box-shadow: 0 8px 24px var(--ledger-shadow);
@@ -2985,28 +2988,68 @@ a.back {
   font-weight: 700;
   letter-spacing: 0.08em;
 }
-.ledger-hero h2 {
-  margin-bottom: 4px;
-  font-size: clamp(44px, 3.7vw, 56px);
-  line-height: 0.98;
-  letter-spacing: -0.04em;
-  overflow-wrap: anywhere;
+.ledger-hero .eyebrow {
+  margin: 0;
+  line-height: var(--ledger-row);
 }
-.ledger-dates {
-  margin: 8px 0 0;
+.ledger-hero h2 {
+  margin: 0;
+  font-size: clamp(44px, 3.7vw, 56px);
+  line-height: calc(var(--ledger-row) * 2);
+  letter-spacing: -0.04em;
+  /* Word boundaries first (balance); anywhere only as the last resort for an unbroken string, and it lets the grid shrink. */
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+/* Place or route, then dates and nights, one muted 14px line (rows of 28px). Each segment is a flex item that wraps
+   inside itself on word boundaries; the hairline before the dates is clipped by the wrapper when the dates start a line. */
+.ledger-meta {
+  margin: 0;
+  overflow: hidden;
   color: var(--muted);
+  font-size: 14px;
+  line-height: var(--ledger-row);
+  font-variant-numeric: tabular-nums;
+}
+.ledger-meta-line {
+  display: flex;
+  flex-wrap: wrap;
+  margin-left: -25px;
+}
+.ledger-meta-line > span {
+  position: relative;
+  min-width: 0;
+  margin-left: 25px;
+  overflow-wrap: break-word;
+}
+.ledger-meta-dates::before {
+  content: "";
+  position: absolute;
+  top: 6px;
+  left: -13px;
+  width: 1px;
+  height: 16px;
+  background: var(--line-strong);
 }
 .stamp-slot {
   flex: none;
+  display: flex;
+  align-items: center;
+  height: calc(var(--ledger-row) * 4);
 }
 .weather-strip {
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: minmax(0, 1fr);
-  margin: 20px 0 0;
+  box-sizing: border-box;
+  min-height: var(--ledger-weather-height);
+  margin: var(--ledger-row) 0 0;
   padding: 0;
   list-style: none;
-  border-block: 1px solid var(--line);
+  /* The two hairlines are inset shadows, not borders, so the strip is exactly its whole rows tall. */
+  box-shadow:
+    inset 0 1px 0 var(--line),
+    inset 0 -1px 0 var(--line);
   background: var(--weather-surface);
 }
 .weather-strip li {
@@ -3038,43 +3081,91 @@ a.back {
   color: var(--accent-2);
 }
 .weather-strip-note {
-  margin: 16px 0 0;
+  margin: var(--ledger-row) 0 0;
+  line-height: var(--ledger-row);
 }
-.ledger-hero-bottom {
+/* The status row: days to go, the track, the counts, on one baseline (2 rows). Narrower than the container query
+   allows (a phone, or huge counts) it stacks as three rows with the track on its own rule. */
+.ledger-status {
+  container-type: inline-size;
+  margin-top: var(--ledger-row);
+}
+.ledger-status-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 24px;
-  margin-top: 24px;
+  grid-template-columns: auto minmax(96px, 1fr) auto;
+  align-items: baseline;
+  align-content: start;
+  column-gap: 24px;
+  height: calc(var(--ledger-row) * 2);
 }
 .days-to-go {
   display: flex;
   align-items: baseline;
   gap: 8px;
-  line-height: 1;
+  white-space: nowrap;
 }
 .days-to-go strong {
   font-family: var(--font-display), var(--font-body), sans-serif;
   font-size: 44px;
   font-weight: 800;
+  line-height: calc(var(--ledger-row) * 2);
   letter-spacing: -0.04em;
   color: var(--ink);
 }
 .days-to-go span {
   color: var(--muted);
   font-size: 14px;
+  line-height: 20px;
 }
-.ledger-progress .progress-track span {
+.ledger-status .progress-track {
+  align-self: baseline;
+}
+.ledger-status .progress-track span {
   background: var(--progress);
 }
-.ledger-progress .progress-copy {
-  margin-bottom: 0;
-  font-size: 13px;
+.ledger-counts {
+  display: flex;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 20px;
+  font-variant-numeric: tabular-nums;
+}
+.ledger-counts span + span::before {
+  content: "·";
+  margin-inline: 8px;
+}
+@container (max-width: 440px) {
+  .ledger-status-row {
+    height: auto;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: calc(var(--ledger-row) * 2) var(--ledger-row) var(--ledger-row);
+    align-items: stretch;
+  }
+  .days-to-go {
+    align-items: baseline;
+  }
+  .ledger-status .progress-track {
+    align-self: end;
+    margin-bottom: 1px;
+  }
+  .ledger-counts {
+    align-items: center;
+    justify-content: space-between;
+    line-height: var(--ledger-row);
+    white-space: normal;
+  }
+  .ledger-counts span + span::before {
+    content: none;
+  }
 }
 .ledger-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  align-content: center;
+  align-items: center;
+  gap: 12px 8px;
+  min-height: calc(var(--ledger-row) * 2);
 }
 .ledger-hero .quick-view {
   margin-top: 16px;
@@ -3163,14 +3254,6 @@ a.back {
   background: var(--selection-surface);
 }
 
-@media (max-width: 980px) {
-  .ledger-hero-bottom {
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-  .ledger-actions {
-    grid-column: 1 / -1;
-  }
-}
 @media (max-width: 720px) {
   .topbar-inner {
     height: 60px;
@@ -3181,7 +3264,7 @@ a.back {
     gap: 0;
   }
   .stamp-slot {
-    margin-top: 14px;
+    justify-content: center;
   }
   .ledger-head {
     display: grid;
@@ -3193,21 +3276,25 @@ a.back {
     width: 100%;
   }
   .ledger-hero {
-    padding: 20px;
+    padding: var(--ledger-row) 20px;
   }
   .ledger-hero h2 {
     font-size: 40px;
   }
   .weather-strip {
     grid-auto-flow: row;
+    min-height: 0;
+  }
+  .weather-strip li {
+    box-sizing: border-box;
+    min-height: var(--ledger-weather-height);
   }
   .weather-strip li + li {
     border-left: 0;
     border-top: 1px solid var(--line);
   }
-  .ledger-hero-bottom {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 16px;
+  .ledger-actions {
+    min-height: calc(var(--ledger-row) * 4);
   }
   /* Continue packing takes the first row; Edit trip, Add item and the ⋯ share the next one. */
   .ledger-actions > .button:first-child {
@@ -3217,6 +3304,9 @@ a.back {
   .ledger-actions .add-item.hero > .button {
     flex: 1 1 0;
     min-width: 0;
+    height: 44px;
+    padding-inline: 8px;
+    white-space: nowrap;
   }
 }
 
