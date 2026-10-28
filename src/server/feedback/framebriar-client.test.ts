@@ -385,14 +385,16 @@ describe("submitReport", () => {
         media: png,
       }),
     ).toMatchObject({ kind: "ok" });
+    const mismatched = clientFor(() => ok(pendingReceipt({ gameId: "other" })));
     expect(
-      await clientFor(() => ok(pendingReceipt({ gameId: "other" }))).client.submitReport({
+      await mismatched.client.submitReport({
         accessToken: "t".repeat(32),
         reportId: REPORT_ID,
         report: "{}",
         media: png,
       }),
     ).toEqual({ kind: "uncertain" });
+    expect(mismatched.calls).toHaveLength(1);
   });
 
   it("rejects malformed, mismatched and expired reservations before any media upload", async () => {
