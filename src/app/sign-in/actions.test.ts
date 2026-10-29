@@ -28,6 +28,7 @@ vi.mock("@/server/auth/auth-runtime", () => ({
 let forwardedFor: string | null = "203.0.113.7";
 let hostHeader: string | null = "app.example.test";
 const jar = new Map<string, string>();
+let failAnonymousWrite = false;
 vi.mock("next/headers", () => ({
   headers: async () =>
     new Headers({
@@ -36,7 +37,10 @@ vi.mock("next/headers", () => ({
     }),
   cookies: async () => ({
     get: (name: string) => (jar.has(name) ? { name, value: jar.get(name) } : undefined),
-    set: (name: string, value: string) => void jar.set(name, value),
+    set: (name: string, value: string) => {
+      if (failAnonymousWrite && name === "anon-appearance") throw new Error("cookie write failed");
+      jar.set(name, value);
+    },
     delete: (name: string) => void jar.delete(name),
   }),
 }));
@@ -337,6 +341,23 @@ describe("signOutAction", () => {
     expect(jar.has("appearance")).toBe(false);
     expect(jar.has("cw-pending-email")).toBe(false);
     expect([...jar.entries()]).toEqual([["anon-appearance", "ocean"]]);
+  });
+
+  it("still deletes the mirror and the pending email, and still redirects, when the anonymous copy throws (#289)", async () => {
+    jar.set("appearance", "ocean");
+    jar.set("cw-pending-email", "previous@example.test");
+    jar.set("anon-appearance", "violet");
+    fake.current = { userId: "u1", email: "owner@example.test" };
+    failAnonymousWrite = true;
+    try {
+      await expect(signOutAction()).rejects.toThrow("NEXT_REDIRECT:/sign-in");
+    } finally {
+      failAnonymousWrite = false;
+    }
+    expect(fake.current).toBeNull();
+    expect(jar.has("appearance")).toBe(false);
+    expect(jar.has("cw-pending-email")).toBe(false);
+    expect([...jar.entries()]).toEqual([["anon-appearance", "violet"]]);
   });
 
   it("keeps the existing anonymous cookie when there is no mirror, and never stores an invalid mirror", async () => {
