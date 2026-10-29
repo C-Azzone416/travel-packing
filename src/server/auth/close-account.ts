@@ -63,17 +63,18 @@ export async function closeAccount(
     return { status: "unavailable", deletionStarted: false };
   }
 
-  const verified = await auth.deletionProvider.signInWithPassword(session.email, password);
+  const verified = await auth.deletionProvider.beginAccountClosure(session.email, password);
   if (!verified.ok) {
     return verified.diagnostic?.reason === "credentials-rejected"
       ? { status: "wrong-password" }
       : { status: "unavailable", deletionStarted: false };
   }
   if (
-    verified.session.userId !== session.userId ||
-    verified.session.email.trim().toLowerCase() !== session.email.trim().toLowerCase() ||
+    verified.authorization.session.userId !== session.userId ||
+    verified.authorization.session.email.trim().toLowerCase() !==
+      session.email.trim().toLowerCase() ||
     session.identityCreatedAt === undefined ||
-    verified.session.identityCreatedAt !== session.identityCreatedAt
+    verified.authorization.session.identityCreatedAt !== session.identityCreatedAt
   ) {
     try {
       await auth.deletionProvider.signOut();
@@ -117,9 +118,9 @@ export async function closeAccount(
 
   // Other devices are explicitly revoked first. deleteUser then removes the identity and all remaining sessions,
   // including this request's fresh one, and clears the provider cookie. Either call failing leaves the recovery fence.
-  const revoked = await auth.deletionProvider.revokeOtherSessions();
+  const revoked = await verified.authorization.revokeOtherSessions();
   if (!revoked.ok) return { status: "unavailable", deletionStarted: true };
-  const deleted = await auth.deletionProvider.deleteUser(password);
+  const deleted = await verified.authorization.deleteUser(password);
   if (!deleted.ok) {
     const reconciled = await reconcileAccountDeletion(
       db,

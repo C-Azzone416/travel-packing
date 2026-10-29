@@ -4,8 +4,19 @@ import { getAuth, resetAuthRuntime, unavailableAuth } from "./auth-runtime";
 import { allowlistFingerprint } from "./allowlist-fingerprint";
 import { setAuthLogSink } from "./safe-log";
 
+const runtimeCookieJar = new Map<string, string>();
 vi.mock("next/headers", () => ({
-  cookies: async () => ({ get: () => undefined, set: () => {}, delete: () => {} }),
+  cookies: async () => ({
+    get: (name: string) =>
+      runtimeCookieJar.has(name) ? { name, value: runtimeCookieJar.get(name) } : undefined,
+    set: (name: string, value: string) => void runtimeCookieJar.set(name, value),
+    delete: (name: string) => void runtimeCookieJar.delete(name),
+  }),
+  headers: async () =>
+    new Headers({
+      cookie: "__Secure-neon-auth.session_token=signed-ambient-cookie",
+      origin: "https://app.example.test",
+    }),
 }));
 
 const createNeonAuth = vi.fn();
@@ -25,12 +36,15 @@ let logged: string[];
 beforeEach(() => {
   resetAuthRuntime();
   createNeonAuth.mockReset();
+  runtimeCookieJar.clear();
+  runtimeCookieJar.set("__Secure-neon-auth.session_token", "signed-ambient-cookie");
   logged = [];
   setAuthLogSink((line) => logged.push(line));
 });
 
 afterEach(() => {
   setAuthLogSink();
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
@@ -83,6 +97,73 @@ describe("getAuth", () => {
     expect(auth.available).toBe(true);
     expect([...auth.allowlist]).toEqual(["owner@example.test"]);
     expect(await auth.provider.getSession()).toEqual({ userId: "u1", email: "owner@example.test" });
+  });
+
+  it("wires the fresh signed cookie through begin, revoke and delete at runtime", async () => {
+    createNeonAuth.mockReturnValue({
+      getSession: async () => ({ data: null, error: null }),
+      signIn: {
+        email: async () => {
+          runtimeCookieJar.set(
+            "__Secure-neon-auth.session_token",
+            "raw-body-token.synthetic-signature",
+          );
+          return {
+            data: {
+              token: "raw-body-token",
+              user: {
+                id: "synthetic-user",
+                email: "owner@example.test",
+                emailVerified: true,
+                createdAt: new Date(1_600_000_000_000),
+              },
+            },
+            error: null,
+          };
+        },
+      },
+      signOut: async () => ({ data: { success: true }, error: null }),
+    });
+    const fetchMock = vi.fn(async (...args: [string | URL | Request, RequestInit?]) => {
+      const [input] = args;
+      const path = new URL(input instanceof Request ? input.url : input.toString()).pathname;
+      return path.endsWith("/revoke-other-sessions")
+        ? Response.json({ status: true })
+        : Response.json(
+            { success: true, message: "User deleted" },
+            {
+              headers: {
+                "set-cookie":
+                  "__Secure-neon-auth.session_token=; Path=/; HttpOnly; Secure; Max-Age=0",
+              },
+            },
+          );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const auth = await getAuth(env, {
+      setupStore: createMemorySetupStore(["owner@example.test"]),
+    });
+    const begun = await auth.deletionProvider.beginAccountClosure(
+      "owner@example.test",
+      "synthetic-password",
+    );
+    expect(begun.ok).toBe(true);
+    if (!begun.ok) throw new Error("synthetic closure sign-in failed");
+    await expect(begun.authorization.revokeOtherSessions()).resolves.toEqual({ ok: true });
+    await expect(begun.authorization.deleteUser("synthetic-password")).resolves.toEqual({
+      ok: true,
+    });
+
+    expect(
+      fetchMock.mock.calls.map(([, init]) =>
+        new Headers((init as RequestInit).headers).get("cookie"),
+      ),
+    ).toEqual([
+      "__Secure-neon-auth.session_token=raw-body-token.synthetic-signature",
+      "__Secure-neon-auth.session_token=raw-body-token.synthetic-signature",
+    ]);
+    expect(runtimeCookieJar.get("__Secure-neon-auth.session_token")).toBe("");
   });
 
   it("logs the allowlist's size and keyed fingerprint once at start, and never an address", async () => {

@@ -14,7 +14,7 @@ import {
   type AccountSetupStore,
 } from "./account-setup";
 import { createNeonAuthProvider } from "./neon-adapter";
-import { createNeonSessionRevoker } from "./neon-session-revocation";
+import { createNeonAccountClosureCalls, createNeonSessionRevoker } from "./neon-session-revocation";
 import { NO_SEALS, createSetupSeals, sealKey, type SetupSeals } from "./setup-seal";
 import { allowlistFingerprint, malformedEntries } from "./allowlist-fingerprint";
 import { logAllowlistLoaded, logAuthEvent } from "./safe-log";
@@ -48,6 +48,9 @@ const unavailableProvider: AuthProvider = {
   },
   async signInWithPassword() {
     return { ok: false };
+  },
+  async beginAccountClosure() {
+    return { ok: false, diagnostic: { reason: "provider-unavailable" } };
   },
   async signUp() {
     return { ok: false, reason: "unavailable" };
@@ -176,8 +179,10 @@ async function buildAuth(
     // Loaded lazily so unit tests and builds without configuration never touch the SDK.
     const { createNeonAuth } = await import("@neondatabase/auth/next/server");
     const neon = createNeonAuth({ baseUrl, cookies: { secret: cookieSecret } });
+    const accountClosureCalls = createNeonAccountClosureCalls({ baseUrl, cookieSecret });
     const deletionProvider = createNeonAuthProvider(neon, {
       revokeOtherSessions: createNeonSessionRevoker({ baseUrl, cookieSecret }),
+      ...accountClosureCalls,
     });
     return {
       provider: withSetupGate(deletionProvider, setup, allowlist),

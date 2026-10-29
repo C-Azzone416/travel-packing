@@ -1,9 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createNeonSessionRevoker } from "./neon-session-revocation";
+import { createAuthServer, NEON_AUTH_SESSION_COOKIE_NAME } from "@neondatabase/auth/server";
+import { createNeonAccountClosureCalls, createNeonSessionRevoker } from "./neon-session-revocation";
 
 const nextHeaders = vi.fn();
+const nextCookies = vi.fn();
 vi.mock("next/headers", () => ({
   headers: () => nextHeaders(),
+  cookies: () => nextCookies(),
 }));
 
 const config = {
@@ -19,10 +22,158 @@ const requestHeaders = async () =>
 
 afterEach(() => {
   nextHeaders.mockReset();
+  nextCookies.mockReset();
   vi.unstubAllGlobals();
 });
 
 describe("Neon account-closure session revocation", () => {
+  it("uses the signed Set-Cookie value, not the raw token from the real SDK response contract", async () => {
+    const written: { name: string; value: string }[] = [];
+    const signedCookie = "raw-body-token.synthetic-signature";
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const path = new URL(input instanceof Request ? input.url : input.toString()).pathname;
+      if (path.endsWith("/sign-in/email")) {
+        return Response.json(
+          {
+            redirect: false,
+            token: "raw-body-token",
+            user: { id: "synthetic-user", email: "owner@example.test", emailVerified: true },
+          },
+          {
+            headers: {
+              "set-cookie": `${NEON_AUTH_SESSION_COOKIE_NAME}=${signedCookie}; Path=/; HttpOnly; Secure; SameSite=Lax`,
+            },
+          },
+        );
+      }
+      return Response.json({ session: null, user: null });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const auth = createAuthServer({
+      baseUrl: config.baseUrl,
+      cookieSecret: config.cookieSecret,
+      context: async () => ({
+        getCookies: () => "",
+        setCookie: (name: string, value: string) => void written.push({ name, value }),
+        getHeader: () => null,
+        getOrigin: () => "https://app.example.test",
+        getFramework: () => "synthetic-contract-test",
+      }),
+    });
+
+    const response = await auth.signIn.email({
+      email: "owner@example.test",
+      password: "synthetic-password",
+    });
+
+    expect(response.data?.token).toBe("raw-body-token");
+    expect(written).toContainEqual({
+      name: NEON_AUTH_SESSION_COOKIE_NAME,
+      value: signedCookie,
+    });
+    expect(written.find((cookie) => cookie.name === NEON_AUTH_SESSION_COOKIE_NAME)?.value).not.toBe(
+      response.data?.token,
+    );
+  });
+
+  it("uses one explicit fresh session for the whole destructive sequence", async () => {
+    const applied: { name: string; value: string; maxAge?: number }[] = [];
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ status: true }))
+      .mockResolvedValueOnce(
+        Response.json(
+          { success: true, message: "User deleted" },
+          {
+            headers: {
+              "set-cookie":
+                "__Secure-neon-auth.session_token=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0",
+            },
+          },
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const calls = createNeonAccountClosureCalls(config, {
+      requestHeaders,
+      applyCookie: (name, value, options) => {
+        applied.push({
+          name,
+          value,
+          ...(options.maxAge === undefined ? {} : { maxAge: options.maxAge }),
+        });
+      },
+    });
+
+    await expect(calls.revokeOtherSessionsWithSession("fresh.signed-session")).resolves.toEqual({
+      data: { status: true },
+      error: null,
+    });
+    await expect(
+      calls.deleteUserWithSession("fresh.signed-session", "synthetic-password"),
+    ).resolves.toEqual({ data: { success: true, message: "User deleted" }, error: null });
+
+    const requests = fetchMock.mock.calls.map(([url, init]) => ({
+      path: new URL(url as string).pathname,
+      cookie: new Headers((init as RequestInit).headers).get("cookie"),
+    }));
+    expect(requests).toEqual([
+      {
+        path: "/neondb/auth/revoke-other-sessions",
+        cookie: "__Secure-neon-auth.session_token=fresh.signed-session",
+      },
+      {
+        path: "/neondb/auth/delete-user",
+        cookie: "__Secure-neon-auth.session_token=fresh.signed-session",
+      },
+    ]);
+    expect(applied).toEqual(
+      expect.arrayContaining([
+        { name: "__Secure-neon-auth.session_token", value: "", maxAge: 0 },
+        { name: "__Secure-neon-auth.local.session_data", value: "", maxAge: 0 },
+      ]),
+    );
+  });
+
+  it("reads the current signed session cookie from the response cookie store", async () => {
+    nextCookies.mockResolvedValue({
+      get: (name: string) =>
+        name === NEON_AUTH_SESSION_COOKIE_NAME
+          ? { name, value: "raw-token.synthetic-signature" }
+          : undefined,
+    });
+
+    await expect(createNeonAccountClosureCalls(config).readSessionCookie()).resolves.toBe(
+      "raw-token.synthetic-signature",
+    );
+  });
+
+  it.each(["", "bad;cookie", "bad\r\ncookie"])(
+    "rejects an unsafe explicit session cookie before fetch: %j",
+    async (sessionCookie) => {
+      const fetchMock = vi.fn();
+      vi.stubGlobal("fetch", fetchMock);
+      const calls = createNeonAccountClosureCalls(config, { requestHeaders });
+
+      await expect(calls.revokeOtherSessionsWithSession(sessionCookie)).rejects.toThrow(
+        "Invalid session cookie",
+      );
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it("encodes cookie metacharacters without changing the signed value", async () => {
+    const fetchMock = vi.fn(async () => Response.json({ status: true }));
+    vi.stubGlobal("fetch", fetchMock);
+    const calls = createNeonAccountClosureCalls(config, { requestHeaders });
+
+    await calls.revokeOtherSessionsWithSession("raw=token%signature");
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(new Headers(init.headers).get("cookie")).toBe(
+      "__Secure-neon-auth.session_token=raw%3Dtoken%25signature",
+    );
+  });
+
   it("posts to the documented revoke-other-sessions endpoint with only auth cookies", async () => {
     const fetchMock = vi.fn(async () => Response.json({ status: true }));
     vi.stubGlobal("fetch", fetchMock);
@@ -147,5 +298,91 @@ describe("Neon account-closure session revocation", () => {
       data: null,
       error: { status: 0, code: "UNEXPECTED_COOKIE_MUTATION" },
     });
+  });
+
+  it("rejects a cookie mutation on a session-bound revocation", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json(
+          { status: true },
+          {
+            headers: {
+              "set-cookie": `${NEON_AUTH_SESSION_COOKIE_NAME}=changed; Path=/; HttpOnly; Secure`,
+            },
+          },
+        ),
+      ),
+    );
+
+    await expect(
+      createNeonAccountClosureCalls(config, { requestHeaders }).revokeOtherSessionsWithSession(
+        "fresh.synthetic-signature",
+      ),
+    ).resolves.toEqual({
+      data: null,
+      error: { status: 0, code: "UNEXPECTED_COOKIE_MUTATION" },
+    });
+  });
+
+  it("does not apply deletion cookies until the response exactly confirms deletion", async () => {
+    const applyCookie = vi.fn();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json(
+          { success: true, message: "Verification email sent" },
+          {
+            headers: {
+              "set-cookie": `${NEON_AUTH_SESSION_COOKIE_NAME}=; Path=/; HttpOnly; Secure; Max-Age=0`,
+            },
+          },
+        ),
+      ),
+    );
+
+    await expect(
+      createNeonAccountClosureCalls(config, {
+        requestHeaders,
+        applyCookie,
+      }).deleteUserWithSession("fresh.synthetic-signature", "synthetic-password"),
+    ).resolves.toEqual({
+      data: { success: true, message: "Verification email sent" },
+      error: null,
+    });
+    expect(applyCookie).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      "an unexpected cookie name",
+      "__Secure-neon-auth.unexpected=; Path=/; HttpOnly; Secure; Max-Age=0",
+    ],
+    [
+      "a non-expiring allowed cookie",
+      `${NEON_AUTH_SESSION_COOKIE_NAME}=changed; Path=/; HttpOnly; Secure`,
+    ],
+  ])("rejects %s without applying any deletion cookies", async (_name, setCookie) => {
+    const applyCookie = vi.fn();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json(
+          { success: true, message: "User deleted" },
+          { headers: { "set-cookie": setCookie } },
+        ),
+      ),
+    );
+
+    await expect(
+      createNeonAccountClosureCalls(config, {
+        requestHeaders,
+        applyCookie,
+      }).deleteUserWithSession("fresh.synthetic-signature", "synthetic-password"),
+    ).resolves.toEqual({
+      data: null,
+      error: { status: 0, code: "UNEXPECTED_COOKIE_MUTATION" },
+    });
+    expect(applyCookie).not.toHaveBeenCalled();
   });
 });
