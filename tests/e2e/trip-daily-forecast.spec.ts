@@ -366,6 +366,25 @@ test("extremes: a 40-character unbroken city, three-digit Fahrenheit, snow and r
   expect(new Set(marks).size).toBeGreaterThan(1);
 });
 
+// Test-only 200% text. WebKit sometimes measures before the injected stylesheet is active (#315), so wait until EVERY
+// weather day really computes to the enlarged size; fail here, clearly, if it never does.
+async function applyLargeText(page: Page, selector = ".weather-day") {
+  await page.addStyleTag({
+    content:
+      "html { font-size: 200% !important; } .weather-days, .weather-day { font-size: 32px !important; }",
+  });
+  await expect
+    .poll(
+      () =>
+        page.locator(selector).evaluateAll((els) => {
+          const sizes = els.map((el) => parseFloat(getComputedStyle(el).fontSize));
+          return sizes.length > 0 && sizes.every((size) => size >= 24);
+        }),
+      { message: "200% text precondition not active (every .weather-day must compute to >= 24px)" },
+    )
+    .toBe(true);
+}
+
 // B1 (design, #307): at 200% text the day label used to collapse to 0px and wrap one letter per line.
 for (const width of [390, 320]) {
   test(
@@ -374,10 +393,7 @@ for (const width of [390, 320]) {
     async ({ page }) => {
       await openTrip(page, [{ leave: 1, back: 15 }]);
       await setWidth(page, width);
-      await page.addStyleTag({
-        content:
-          "html { font-size: 200% !important; } .weather-days, .weather-day { font-size: 32px !important; }",
-      });
+      await applyLargeText(page);
       await expectCleanRows(page, width, { zoom: true });
       // the text really is 200%, and the fallback really happened: the rows took more than one line
       const font = await page
