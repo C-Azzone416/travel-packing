@@ -4971,12 +4971,17 @@ a.back {
   padding: 0;
   list-style: none;
 }
-/* One line when it fits. When it does not (a narrow column, or text scaled up), the temperatures and then the rain text
-   wrap onto whole extra 28px rows, right-aligned. The label never shrinks or breaks: content decides, not a pixel width. */
+/* The layout is decided per LIST, never per row, so every row of a stay shares the same columns and height:
+   one line when the list is wide enough, else two rows (label and glyph, then temperatures and rain), else three.
+   The breakpoints are in em, measured on the list, so larger text switches them just as a narrower column does.
+   The label never shrinks or breaks. */
+.weather-days {
+  container-type: inline-size;
+}
 .weather-day {
   position: relative;
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 20px 4.5em 4.5em;
   align-items: center;
   column-gap: 8px;
   min-height: var(--ledger-row);
@@ -4985,25 +4990,51 @@ a.back {
   font-variant-numeric: tabular-nums;
 }
 .weather-day-label {
-  flex: 1 1 auto;
   white-space: nowrap;
 }
 .weather-day-glyph {
-  flex: 0 0 20px;
   text-align: center;
 }
 .weather-day-temps {
-  min-width: 10ch;
-  margin-left: auto;
   text-align: right;
   white-space: nowrap;
 }
 .weather-day-rain {
-  min-width: 9ch;
-  margin-left: auto;
   color: var(--muted-text);
   text-align: right;
   white-space: nowrap;
+}
+@container (max-width: 17.9em) {
+  .weather-day {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .weather-day-label {
+    grid-column: 1;
+  }
+  .weather-day-glyph {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+  }
+  .weather-day-temps {
+    grid-column: 1;
+    grid-row: 2;
+    text-align: left;
+  }
+  .weather-day-rain {
+    grid-column: 2;
+    grid-row: 2;
+  }
+}
+@container (max-width: 11em) {
+  .weather-day-temps {
+    grid-column: 1 / -1;
+    text-align: right;
+  }
+  .weather-day-rain {
+    grid-column: 1 / -1;
+    grid-row: 3;
+  }
 }
 .weather-days-toggle {
   position: relative;

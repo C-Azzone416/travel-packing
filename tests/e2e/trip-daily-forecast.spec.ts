@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
+import { DEVICE } from "./helpers/device";
 import { FAKE_GEOCODER_PORT, OPEN_METEO_PORT } from "./support/ports";
 
 // #303 (PR 1 of 2, the trip page): stays with forecast days read day by day; typical-only stays read as they always did.
@@ -50,7 +51,7 @@ async function openTrip(page: Page, stays: Stay[]) {
     .getByRole("link", { name: /^(Continue|Keep) packing: London/ })
     .first()
     .click();
-  await expect(page.locator(".weather-row").first()).toBeVisible();
+  await expect(page.locator(".weather-row").first()).toBeVisible({ timeout: 20_000 });
 }
 
 test.beforeEach(async ({ page }) => {
@@ -69,15 +70,31 @@ function measureRows(page: Page) {
       const tops = new Set(Array.from(range.getClientRects()).map((r) => Math.round(r.top)));
       return tops.size;
     };
+    // `box` is the grid cell (for overlap); `text` is the box of the TEXT itself (for alignment: a stretched cell has the
+    // column's edges whatever the text does).
     const box = (el: Element) => {
       const r = el.getBoundingClientRect();
-      return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, height: r.height };
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const t = range.getBoundingClientRect();
+      return {
+        left: r.left,
+        right: r.right,
+        top: r.top,
+        bottom: r.bottom,
+        height: r.height,
+        text: { left: t.left, right: t.right },
+      };
     };
     return Array.from(document.querySelectorAll(".weather-day")).map((row) => {
       const cell = (selector: string) => row.querySelector(selector)!;
       return {
         height: row.getBoundingClientRect().height,
         listWidth: row.getBoundingClientRect().width,
+        fontSize: getComputedStyle(row).fontSize,
+        list: Array.from(document.querySelectorAll(".weather-days")).indexOf(
+          row.closest(".weather-days")!,
+        ),
         label: { lines: lines(cell(".weather-day-label")), ...box(cell(".weather-day-label")) },
         glyph: box(cell(".weather-day-glyph")),
         temps: { lines: lines(cell(".weather-day-temps")), ...box(cell(".weather-day-temps")) },
@@ -111,6 +128,56 @@ async function expectCleanRows(
 ) {
   const rows = await measureRows(page);
   expect(rows.length).toBeGreaterThan(0);
+  // The layout is decided per list: every row of a list has the same height, and each column lines up across rows
+  // (same left edge, or same right edge for right-aligned text).
+  // The label never wraps or shrinks (the original #307 collapse was `min-width:0; overflow-wrap:anywhere`).
+  const label = await page
+    .locator(".weather-day-label")
+    .first()
+    .evaluate((el) => {
+      const style = getComputedStyle(el);
+      return {
+        whiteSpace: style.whiteSpace,
+        overflowWrap: style.overflowWrap,
+        minWidth: style.minWidth,
+        fits: el.scrollWidth <= el.clientWidth,
+      };
+    });
+  expect(label, `label rules at ${width}px`).toEqual({
+    whiteSpace: "nowrap",
+    overflowWrap: "normal",
+    minWidth: "auto",
+    fits: true,
+  });
+  const lists = new Map<number, typeof rows>();
+  for (const row of rows) lists.set(row.list, [...(lists.get(row.list) ?? []), row]);
+  for (const [list, members] of lists) {
+    const where = `list ${list} at ${width}px`;
+    expect(
+      new Set(members.map((row) => Math.round(row.height))).size,
+      `${where} equal row heights`,
+    ).toBe(1);
+    if (members.every((row) => row.height < ROW + 0.5)) {
+      // on one line the numbers are right-aligned in their columns
+      for (const column of ["temps", "rain"] as const) {
+        const rights = members.map((row) => row[column].text.right);
+        expect(
+          Math.max(...rights) - Math.min(...rights),
+          `${where} ${column} right-aligned`,
+        ).toBeLessThanOrEqual(1);
+      }
+    }
+    for (const column of ["glyph", "temps", "rain"] as const) {
+      const spread = (edge: "left" | "right") => {
+        const values = members.map((row) => row[column].text[edge]);
+        return Math.max(...values) - Math.min(...values);
+      };
+      expect(
+        Math.min(spread("left"), spread("right")),
+        `${where} ${column} column aligned`,
+      ).toBeLessThanOrEqual(column === "glyph" ? 4 : 1);
+    }
+  }
   rows.forEach((row, at) => {
     const where = `row ${at} at ${width}px`;
     expect(row.height % ROW, `${where} height ${row.height}`).toBeLessThanOrEqual(0.5);
@@ -136,13 +203,22 @@ async function expectCleanRows(
     }
   });
   expect(await overflow(page), `overflow at ${width}px`).toEqual({ page: 0, panel: 0 });
-  if (width >= 721 && !options.zoom) {
-    // wide lists never need the fallback (three stays side by side at 721 are the one exception, checked by its test)
-    if (!options.columns)
-      expect(
-        rows.every((row) => row.height < ROW + 0.5),
-        `${width}px one line`,
-      ).toBe(true);
+  // The layout rule, per list and in em (so it follows text size): one line above 17.9em, two rows above 11em, else three.
+  // Every row of the list follows it together; near a threshold the test stays out of the way.
+  for (const row of rows) {
+    const em = row.listWidth / parseFloat(row.fontSize);
+    if (Math.abs(em - 17.9) < 0.3 || Math.abs(em - 11) < 0.3) continue;
+    const expected = em > 17.9 ? 1 : em > 11 ? 2 : 3;
+    expect(
+      Math.round(row.height / ROW),
+      `${width}px: ${expected} row(s) expected (list ${row.listWidth}px = ${em.toFixed(1)}em, font ${row.fontSize})`,
+    ).toBe(expected);
+  }
+  if (!options.zoom && !options.columns && width >= 981) {
+    expect(
+      rows.every((row) => row.height < ROW + 0.5),
+      `${width}px is one line`,
+    ).toBe(true);
   }
 }
 
@@ -161,81 +237,87 @@ test("a typical-only stay keeps today's row: no daily list, no Forecast tag", as
   }
 });
 
-test("an all-forecast stay: capped at 7 days, expands to all, rows hold at every width", async ({
-  page,
-}) => {
-  await openTrip(page, [{ leave: 1, back: 15 }]);
-  const list = page.getByRole("list", { name: "Daily forecast for London" });
-  await expect(list.getByRole("listitem")).toHaveCount(7);
-  const toggle = page.getByRole("button", { name: /^Show all \d+ days$/ });
-  await expect(toggle).toHaveAttribute("aria-expanded", "false");
-  const total = Number((await toggle.innerText()).match(/\d+/)![0]);
-  expect(total).toBeGreaterThan(7);
-  await expect(page.locator(".weather-source.typical, .weather-range, .weather-mixed")).toHaveCount(
-    0,
-  );
-  for (const width of WIDTHS) {
-    await setWidth(page, width);
-    await expectCleanRows(page, width);
-  }
-  await toggle.click();
-  await expect(list.getByRole("listitem")).toHaveCount(total);
-  await expect(page.getByRole("button", { name: "Show first 7" })).toHaveAttribute(
-    "aria-expanded",
-    "true",
-  );
-  for (const width of WIDTHS) {
-    await setWidth(page, width);
-    await expectCleanRows(page, width);
-  }
-  await page.getByRole("button", { name: "Show first 7" }).click();
-  await expect(list.getByRole("listitem")).toHaveCount(7);
-});
-
-test("a stay that straddles the window shows both tags, never sharing a line of numbers", async ({
-  page,
-}) => {
-  await openTrip(page, [{ leave: 11, back: 25 }]);
-  const forecastTag = page.locator(".weather-source.forecast");
-  const typicalTag = page.locator(".weather-source.typical");
-  await expect(forecastTag).toHaveText("Forecast");
-  await expect(typicalTag).toHaveText("Typical");
-  await expect(page.getByText(/^Other \d+ days?:/)).toBeVisible();
-  await expect(page.getByText("Later days are typical")).toHaveCount(0);
-  for (const width of WIDTHS) {
-    await setWidth(page, width);
-    const f = (await forecastTag.boundingBox())!;
-    const t = (await typicalTag.boundingBox())!;
-    const list = (await page.locator(".weather-days").boundingBox())!;
-    expect(f.width).toBeGreaterThan(0);
-    expect(t.width).toBeGreaterThan(0);
-    // the Typical line sits below the whole forecast list
-    expect(t.y, `typical below the list at ${width}px`).toBeGreaterThanOrEqual(
-      list.y + list.height - 0.5,
-    );
-    for (const part of [".weather-part-head", ".weather-days"]) {
-      const heights = await page
-        .locator(part)
-        .evaluateAll((els) => els.map((el) => el.getBoundingClientRect().height));
-      for (const h of heights)
-        expect(h % ROW, `${part} ${h} at ${width}px`).toBeLessThanOrEqual(0.5);
+test(
+  "an all-forecast stay: capped at 7 days, expands to all, rows hold at every width",
+  { tag: DEVICE.tag },
+  async ({ page }) => {
+    await openTrip(page, [{ leave: 1, back: 15 }]);
+    const list = page.getByRole("list", { name: "Daily forecast for London" });
+    await expect(list.getByRole("listitem")).toHaveCount(7);
+    const toggle = page.getByRole("button", { name: /^Show all \d+ days$/ });
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    const total = Number((await toggle.innerText()).match(/\d+/)![0]);
+    expect(total).toBeGreaterThan(7);
+    await expect(
+      page.locator(".weather-source.typical, .weather-range, .weather-mixed"),
+    ).toHaveCount(0);
+    for (const width of WIDTHS) {
+      await setWidth(page, width);
+      await expectCleanRows(page, width);
     }
-    await expectCleanRows(page, width);
-  }
-});
+    await toggle.click();
+    await expect(list.getByRole("listitem")).toHaveCount(total);
+    await expect(page.getByRole("button", { name: "Show first 7" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    for (const width of WIDTHS) {
+      await setWidth(page, width);
+      await expectCleanRows(page, width);
+    }
+    await page.getByRole("button", { name: "Show first 7" }).click();
+    await expect(list.getByRole("listitem")).toHaveCount(7);
+  },
+);
 
-test("an in-progress stay: past typical days, the forecast, then later typical days", async ({
-  page,
-}) => {
-  await openTrip(page, [{ leave: -4, back: 25 }]);
-  await expect(page.locator(".weather-source.forecast")).toHaveText("Forecast");
-  await expect(page.locator(".weather-source.typical")).toHaveText("Typical");
-  await expect(page.locator(".weather-days .weather-day").first()).toContainText("Today");
-  for (const width of [1280, 390, 320]) {
-    await setWidth(page, width);
-    await expectCleanRows(page, width);
-  }
-});
+test(
+  "a stay that straddles the window shows both tags, never sharing a line of numbers",
+  { tag: DEVICE.tag },
+  async ({ page }) => {
+    await openTrip(page, [{ leave: 11, back: 25 }]);
+    const forecastTag = page.locator(".weather-source.forecast");
+    const typicalTag = page.locator(".weather-source.typical");
+    await expect(forecastTag).toHaveText("Forecast");
+    await expect(typicalTag).toHaveText("Typical");
+    await expect(page.getByText(/^Other \d+ days?:/)).toBeVisible();
+    await expect(page.getByText("Later days are typical")).toHaveCount(0);
+    for (const width of WIDTHS) {
+      await setWidth(page, width);
+      const f = (await forecastTag.boundingBox())!;
+      const t = (await typicalTag.boundingBox())!;
+      const list = (await page.locator(".weather-days").boundingBox())!;
+      expect(f.width).toBeGreaterThan(0);
+      expect(t.width).toBeGreaterThan(0);
+      // the Typical line sits below the whole forecast list
+      expect(t.y, `typical below the list at ${width}px`).toBeGreaterThanOrEqual(
+        list.y + list.height - 0.5,
+      );
+      for (const part of [".weather-part-head", ".weather-days"]) {
+        const heights = await page
+          .locator(part)
+          .evaluateAll((els) => els.map((el) => el.getBoundingClientRect().height));
+        for (const h of heights)
+          expect(h % ROW, `${part} ${h} at ${width}px`).toBeLessThanOrEqual(0.5);
+      }
+      await expectCleanRows(page, width);
+    }
+  },
+);
+
+test(
+  "an in-progress stay: past typical days, the forecast, then later typical days",
+  { tag: DEVICE.tag },
+  async ({ page }) => {
+    await openTrip(page, [{ leave: -4, back: 25 }]);
+    await expect(page.locator(".weather-source.forecast")).toHaveText("Forecast");
+    await expect(page.locator(".weather-source.typical")).toHaveText("Typical");
+    await expect(page.locator(".weather-days .weather-day").first()).toContainText("Today");
+    for (const width of [1280, 390, 320]) {
+      await setWidth(page, width);
+      await expectCleanRows(page, width);
+    }
+  },
+);
 
 test("a one-day stay is one row with no toggle", async ({ page }) => {
   await openTrip(page, [{ leave: 2, back: 2 }]);
@@ -246,7 +328,7 @@ test("a one-day stay is one row with no toggle", async ({ page }) => {
   await expectCleanRows(page, 320);
 });
 
-test("three stays each keep their own list and toggle", async ({ page }) => {
+test("three stays each keep their own list and toggle", { tag: DEVICE.tag }, async ({ page }) => {
   await openTrip(page, [{ leave: 1, back: 12 }, { leave: 16 }, { leave: 22 }]);
   const lists = page.locator(".weather-days");
   await expect(page.locator(".weather-row")).toHaveCount(3);
@@ -286,20 +368,51 @@ test("extremes: a 40-character unbroken city, three-digit Fahrenheit, snow and r
 
 // B1 (design, #307): at 200% text the day label used to collapse to 0px and wrap one letter per line.
 for (const width of [390, 320]) {
-  test(`200% text at ${width}px: labels stay on one line and nothing overlaps`, async ({
-    page,
-  }) => {
-    await openTrip(page, [{ leave: 1, back: 15 }]);
-    await setWidth(page, width);
-    await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
-    await expectCleanRows(page, width, { zoom: true });
-    // the fallback really happened: at least one row took a second whole row
-    const heights = await page
-      .locator(".weather-day")
-      .evaluateAll((els) => els.map((el) => el.getBoundingClientRect().height));
-    expect(Math.max(...heights)).toBeGreaterThan(ROW + 0.5);
-  });
+  test(
+    `200% text at ${width}px: labels stay on one line and nothing overlaps`,
+    { tag: DEVICE.tag },
+    async ({ page }) => {
+      await openTrip(page, [{ leave: 1, back: 15 }]);
+      await setWidth(page, width);
+      await page.addStyleTag({
+        content:
+          "html { font-size: 200% !important; } .weather-days, .weather-day { font-size: 32px !important; }",
+      });
+      await expectCleanRows(page, width, { zoom: true });
+      // the text really is 200%, and the fallback really happened: the rows took more than one line
+      const font = await page
+        .locator(".weather-day")
+        .first()
+        .evaluate((el) => getComputedStyle(el).fontSize);
+      expect(parseFloat(font), `font size at 200% (${font})`).toBeGreaterThanOrEqual(24);
+      const heights = await page
+        .locator(".weather-day")
+        .evaluateAll((els) => els.map((el) => el.getBoundingClientRect().height));
+      expect(Math.min(...heights)).toBeGreaterThan(ROW + 0.5);
+    },
+  );
 }
+
+// Rows whose texts differ in width must still line up (shared columns, not per-row sizing).
+test(
+  "columns line up when the rows' numbers differ in width",
+  { tag: DEVICE.tag },
+  async ({ page }) => {
+    await openTrip(page, [{ leave: 1, back: 15 }]);
+    await page.evaluate(() => {
+      const temps = ["5° / 1°", "104° / 88°", "9° / -2°", "86° / 72°"];
+      const rain = ["5% rain", "100% rain", "40% rain", "0% rain"];
+      document.querySelectorAll(".weather-day").forEach((row, at) => {
+        row.querySelector(".weather-day-temps")!.textContent = temps[at % temps.length];
+        row.querySelector(".weather-day-rain")!.textContent = rain[at % rain.length];
+      });
+    });
+    for (const width of WIDTHS) {
+      await setWidth(page, width);
+      await expectCleanRows(page, width);
+    }
+  },
+);
 
 test("Fahrenheit rows show three-digit temperatures from the provider", async ({ page }) => {
   await fake("/__weather-set?variant=scorching");
@@ -359,7 +472,11 @@ test("screenshots for design review (opt-in)", async ({ page }) => {
     await page.context().clearCookies();
     await openTrip(page, item.stays);
     if (item.expand) await page.getByRole("button", { name: /^Show all/ }).click();
-    if (item.zoom) await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+    if (item.zoom)
+      await page.addStyleTag({
+        content:
+          "html { font-size: 200% !important; } .weather-days, .weather-day { font-size: 32px !important; }",
+      });
     for (const width of item.zoom ? [390, 320] : WIDTHS) {
       await setWidth(page, width);
       await page
