@@ -28,10 +28,11 @@ const FIXED: Record<Exclude<DisconnectResult, "erased_unrevocable">, string> = {
     "We couldn’t confirm whether your access was ended. You may still be connected. Try again.",
   pending: `Connecting didn’t finish, so it can’t be ended just yet. Wait up to ${REDEMPTION_WINDOW_MINUTES} minutes and try again.`,
   offline: "You’re offline, so nothing was changed. Disconnect again when you’re back online.",
+  "signed-out": "You’ve been signed out, so nothing was changed. Sign in again to disconnect.",
 };
 
 /** The date the leftover access ends, or null when it was not known before disconnecting. */
-function deadline(expiresAt: string | null | undefined): string | null {
+export function deadlineDate(expiresAt: string | null | undefined): string | null {
   const date = expiresAt ? new Date(expiresAt) : null;
   return date && !Number.isNaN(date.getTime()) ? DATE.format(date) : null;
 }
@@ -39,7 +40,7 @@ function deadline(expiresAt: string | null | undefined): string | null {
 /** `expiresAt` is the access deadline the status showed BEFORE disconnecting (the status is gone afterwards). */
 export function disconnectText(result: DisconnectResult, expiresAt?: string | null): string {
   if (result !== "erased_unrevocable") return FIXED[result];
-  const date = deadline(expiresAt);
+  const date = deadlineDate(expiresAt);
   return `Disconnected. We removed this app’s copy of your feedback connection, but we couldn’t end the access itself. It stops on its own ${
     date ? `on ${date}` : "at the deadline Framebriar set"
   }. Feedback can’t be sent from this app.`;

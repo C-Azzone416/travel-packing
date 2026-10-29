@@ -9,12 +9,15 @@ import {
 import type { RuntimeAuth } from "./auth-runtime";
 import type { AuthSession } from "./types";
 import type { Db } from "@/server/db/retention";
+import { accountHoldsFeedback } from "@/server/feedback/enrollment-store";
 import { accountClosureEnabled } from "./account-closure-rollout";
 
 export type CloseAccountOutcome =
   | { status: "ok" }
   | { status: "unauthenticated" }
   | { status: "wrong-password" }
+  /** The server still holds a Framebriar enrollment or connection attempt for this account (#261). Nothing was authenticated or deleted. */
+  | { status: "feedback-blocking" }
   | {
       status: "unavailable";
       deletionStarted: boolean | "unknown";
@@ -51,6 +54,15 @@ export async function closeAccount(
   // The action checks too, but the destructive core must remain safe if another caller reaches it directly.
   if (!accountClosureEnabled()) return { status: "unavailable", deletionStarted: false };
 
+  // The Framebriar gate (#261), before any reauthentication: while sealed feedback credentials or a connection attempt remain, closing
+  // is refused (the person is sent back to disconnect). Cheap and read-only; the authoritative check repeats inside the deletion
+  // transaction. A fenced retry has no owner row left, so it passes. If the database cannot answer, nothing is attempted.
+  try {
+    if (await accountHoldsFeedback(db, session.userId)) return { status: "feedback-blocking" };
+  } catch {
+    return { status: "unavailable", deletionStarted: false };
+  }
+
   const verified = await auth.deletionProvider.signInWithPassword(session.email, password);
   if (!verified.ok) {
     return verified.diagnostic?.reason === "credentials-rejected"
@@ -80,6 +92,7 @@ export async function closeAccount(
       session.identityCreatedAt,
       setupDigest,
     );
+    if (begun === "feedback-blocking") return { status: "feedback-blocking" };
     if (begun === "identity-mismatch") {
       try {
         await auth.deletionProvider.signOut();

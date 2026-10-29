@@ -48,9 +48,10 @@ export type ConnectResult =
 
 /**
  * What Disconnect really came to (#304). The first three are successes; "partial" ended the access but could not erase the saved
- * copy yet; "unavailable", "uncertain" and "pending" changed nothing; "offline" never reached the server. Every failure can be repeated.
+ * copy yet; "unavailable", "uncertain" and "pending" changed nothing; "offline" never reached the server; "signed-out" means the session
+ * ended before the call, so nothing was changed. Every failure can be repeated (after signing in again, for the last).
  */
-export type DisconnectResult = DisconnectOutcome | DisconnectFailure | "offline";
+export type DisconnectResult = DisconnectOutcome | DisconnectFailure | "offline" | "signed-out";
 
 /** Reports waiting and blocked on this device (#132), and whether this browser can keep them at all. */
 export interface OutboxView {
@@ -76,6 +77,8 @@ export interface FeedbackAccessValue {
   outbox: OutboxView;
   connect: (invitation: string) => Promise<ConnectResult>;
   disconnect: () => Promise<DisconnectResult>;
+  /** Asks the server again what this account holds (the newest answer wins). Account closure uses it after a refused attempt (#261). */
+  refresh: () => Promise<void>;
   /** Turns the reviewed notes, screenshot and context into the report to save. Call once per Send; retry a save with the same result. */
   prepareReport: (input: {
     notes: string;
@@ -108,6 +111,7 @@ const NOT_READY: FeedbackAccessValue = {
   outbox: NO_OUTBOX,
   connect: async () => ({ kind: "unavailable" }),
   disconnect: async () => "unavailable",
+  refresh: async () => undefined,
   prepareReport: async () => {
     throw new Error("Feedback is not ready");
   },
@@ -450,7 +454,7 @@ function EnabledFeedbackAccessProvider({
     }
     if (result.kind === "signed-out") {
       setSignedOut(true);
-      return "unavailable";
+      return "signed-out";
     }
     return result.reason;
   }, [refresh]);
@@ -520,6 +524,7 @@ function EnabledFeedbackAccessProvider({
       outbox,
       connect,
       disconnect,
+      refresh,
       prepareReport,
       saveReport,
       subscribeReceipts,
@@ -529,6 +534,7 @@ function EnabledFeedbackAccessProvider({
       clearLocal,
     }),
     [
+      refresh,
       signedOut,
       status,
       outboxKey,

@@ -16,6 +16,7 @@ import { hasSameRequestOrigin } from "@/server/auth/csrf";
 import { forgetPendingEmail } from "@/server/auth/pending-email";
 import { clientAddress, signInLimits } from "@/server/auth/sign-in-limit";
 import { getAppDb } from "@/server/db/app-db";
+import { accountHoldsFeedback } from "@/server/feedback/enrollment-store";
 import type { CloseAccountState } from "./close-account-state";
 
 const inputSchema = z.object({
@@ -86,6 +87,16 @@ export async function closeAccountAction(
   const session = await deletionSession(auth);
   if (!session) redirect("/sign-in");
 
+  // The Framebriar gate at the action (#261), before any rate-limit accounting or reauthentication: while the server holds this
+  // account's feedback enrollment or a connection attempt, closing is refused and the sheet goes back to the Disconnect step. This
+  // covers a stale tab, a second device and a hand-made request. The destructive core repeats the check on its own.
+  try {
+    if (await accountHoldsFeedback(db, session.userId))
+      return { error: null, fieldErrors: {}, feedbackBlocking: true };
+  } catch {
+    return { error: TRY_AGAIN, fieldErrors: {} };
+  }
+
   const address = clientAddress(requestHeaders);
   const limits = signInLimits();
   if (limits.blocked(session.email, address)) {
@@ -93,6 +104,9 @@ export async function closeAccountAction(
   }
 
   const outcome = await closeAccount(auth, db, session, parsed.data.password);
+  // Refused before reauthentication, so it is not a failed password and counts against no limit.
+  if (outcome.status === "feedback-blocking")
+    return { error: null, fieldErrors: {}, feedbackBlocking: true };
   if (outcome.status === "wrong-password") {
     limits.recordFailure(session.email, address);
     return { error: null, fieldErrors: { password: "That password wasn’t correct." } };
@@ -180,6 +194,9 @@ export async function retryCloseAccountAction(
     };
   }
   if (outcome.status === "unauthenticated") redirect("/sign-in");
+  // A fenced retry has no owner row left, so this cannot happen; if it ever does, nothing was done and the retry stays available.
+  if (outcome.status === "feedback-blocking")
+    return { error: TRY_AGAIN, fieldErrors: {}, recovery: true };
   if (outcome.status === "unavailable") {
     return outcome.providerDeleted
       ? { error: FINAL_CLEANUP, fieldErrors: {} }

@@ -3,6 +3,8 @@ import { createMemoryIdb } from "@/test/fake-feedback-server";
 import { accountDatabaseName } from "./account-scope";
 import {
   clearLocalFeedbackAfterAccountClosure,
+  forgetClosingOutbox,
+  rememberClosingOutbox,
   registerAccountClosureFeedbackCleanup,
   type AccountClosureFeedbackCleanupDependencies,
 } from "./account-closure-cleanup";
@@ -79,5 +81,53 @@ describe("confirmed account-closure feedback cleanup", () => {
 
     expect(mounted).not.toHaveBeenCalled();
     expect([...idb.present]).toEqual([accountDatabaseName(A)]);
+  });
+
+  describe("only the closing account's outbox goes (#261)", () => {
+    afterEach(() => forgetClosingOutbox());
+
+    it("deletes exactly the remembered account's database and leaves another account's unsent work", async () => {
+      const { dependencies, idb } = setup([
+        accountDatabaseName(A),
+        accountDatabaseName(B),
+        "framebriar-enrollment-v2-old",
+        "unrelated",
+      ]);
+      rememberClosingOutbox(A);
+      await clearLocalFeedbackAfterAccountClosure(dependencies);
+      expect([...idb.present].sort()).toEqual([accountDatabaseName(B), "unrelated"].sort());
+    });
+
+    it("is used once: a later cleanup with nothing remembered clears every account outbox again", async () => {
+      const { dependencies, idb } = setup([accountDatabaseName(A), accountDatabaseName(B)]);
+      rememberClosingOutbox(A);
+      await clearLocalFeedbackAfterAccountClosure(dependencies);
+      await clearLocalFeedbackAfterAccountClosure(dependencies);
+      expect([...idb.present]).toEqual([]);
+    });
+
+    it("an attempt that did not end in closure is forgotten, so nothing narrower than before is promised", async () => {
+      const { dependencies, idb } = setup([accountDatabaseName(A), accountDatabaseName(B)]);
+      rememberClosingOutbox(A);
+      forgetClosingOutbox();
+      await clearLocalFeedbackAfterAccountClosure(dependencies);
+      expect([...idb.present]).toEqual([]);
+    });
+
+    it("something that is not an outbox key clears every account outbox rather than leave work behind", async () => {
+      const { dependencies, idb } = setup([accountDatabaseName(A), accountDatabaseName(B)]);
+      rememberClosingOutbox("../../not-a-key");
+      await clearLocalFeedbackAfterAccountClosure(dependencies);
+      expect([...idb.present]).toEqual([]);
+    });
+
+    it("still stops and clears the mounted account first", async () => {
+      const { dependencies } = setup([accountDatabaseName(A)]);
+      const mounted = vi.fn(async () => undefined);
+      unregister = registerAccountClosureFeedbackCleanup(mounted);
+      rememberClosingOutbox(A);
+      await clearLocalFeedbackAfterAccountClosure(dependencies);
+      expect(mounted).toHaveBeenCalledOnce();
+    });
   });
 });

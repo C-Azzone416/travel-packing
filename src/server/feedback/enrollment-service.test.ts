@@ -5,7 +5,7 @@ import { createMigratedDb, resetData } from "../db/__fixtures__/db";
 import type { Db } from "../db/retention";
 import * as schema from "../db/schema";
 import { createFakeService, type FakeService } from "./__fixtures__/fake-service";
-import { REDEMPTION_WINDOW_MS } from "./enrollment-store";
+import { REDEMPTION_WINDOW_MS, accountHoldsFeedback } from "./enrollment-store";
 import {
   createEnrollmentService,
   outboxKeyFor,
@@ -110,6 +110,130 @@ function losingUpdates(times: number, beforeLoss?: () => Promise<void>): Db {
     },
   }) as unknown as Db;
 }
+
+describe("accountHoldsFeedback, the gate account closure reads (#261)", () => {
+  it("is false for an account that does not exist, and asking never creates it", async () => {
+    expect(await accountHoldsFeedback(db(), A)).toBe(false);
+    expect(await db().select().from(schema.users).where(eq(schema.users.id, A))).toHaveLength(0);
+  });
+
+  it("is false for an account holding nothing, true for an enrollment in ANY state, and true for a stale attempt", async () => {
+    const svc = service();
+    await svc.status(A);
+    expect(await accountHoldsFeedback(db(), A)).toBe(false);
+    await connect(svc);
+    expect(await accountHoldsFeedback(db(), A)).toBe(true);
+    clock += 31 * 86_400_000;
+    expect(await accountHoldsFeedback(db(), A)).toBe(true);
+    await svc.disconnect(A);
+    expect(await accountHoldsFeedback(db(), A)).toBe(false);
+    const [{ generation }] = await db().select().from(schema.users).where(eq(schema.users.id, A));
+    await db()
+      .insert(schema.framebriarRedemptions)
+      .values({
+        ownerId: A,
+        generation,
+        attemptId: randomUUID(),
+        createdAt: new Date(clock - 3 * REDEMPTION_WINDOW_MS),
+      });
+    expect(await accountHoldsFeedback(db(), A)).toBe(true);
+  });
+
+  it("one account's holdings are not another's", async () => {
+    await connect(service(), A);
+    await service().status(B);
+    expect(await accountHoldsFeedback(db(), B)).toBe(false);
+  });
+});
+
+describe("disconnect follow-ups from the #308 judge (#261)", () => {
+  async function staleAttempt(owner = A) {
+    const [{ generation }] = await db()
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.id, owner));
+    await db()
+      .insert(schema.framebriarRedemptions)
+      .values({
+        ownerId: owner,
+        generation,
+        attemptId: randomUUID(),
+        createdAt: new Date(clock - 3 * REDEMPTION_WINDOW_MS),
+      });
+  }
+
+  it("a switched-off (disabled) row is erased but NOT reported as 'nothing': its family was never revoked", async () => {
+    const svc = service();
+    await connect(svc);
+    fake.failNext("refresh", { kind: "status", status: 403 });
+    clock += 59 * 60_000;
+    expect(await svc.accessToken(A)).toEqual({ ok: false, code: "DISABLED" });
+    expect((await svc.status(A)).status).toBe("disabled");
+    expect(await svc.revokeAndEraseEnrollment(A)).toEqual({
+      status: "erased_unrevocable",
+      unrevocableAttempts: 0,
+    });
+    expect(fake.count("disconnect")).toBe(0);
+    expect(fake.activeFamilies()).toBe(1);
+    expect(await rows()).toHaveLength(0);
+  });
+
+  it("disconnect of a switched-off row says erased_unrevocable (no 'nothing to end'), and the credential is gone", async () => {
+    const svc = service();
+    await connect(svc);
+    fake.failNext("refresh", { kind: "status", status: 403 });
+    clock += 59 * 60_000;
+    await svc.accessToken(A);
+    expect(await svc.disconnect(A)).toEqual({
+      ok: true,
+      outcome: "erased_unrevocable",
+      revoked: false,
+    });
+    expect(await rows()).toHaveLength(0);
+  });
+
+  it("a revoked row plus an abandoned attempt is erased_unrevocable, never 'nothing' or 'ended'", async () => {
+    const svc = service();
+    await connect(svc);
+    fake.failNext("refresh", { kind: "status", status: 401 });
+    clock += 59 * 60_000;
+    await svc.accessToken(A);
+    expect((await svc.status(A)).status).toBe("revoked");
+    await staleAttempt();
+    expect(await svc.disconnect(A)).toEqual({
+      ok: true,
+      outcome: "erased_unrevocable",
+      revoked: false,
+    });
+    expect(await rows()).toHaveLength(0);
+    expect(await db().select().from(schema.framebriarRedemptions)).toHaveLength(0);
+  });
+
+  it("a row that revokes fine plus an abandoned attempt cannot be reported as 'ended': the attempt's family may be live", async () => {
+    const svc = service();
+    await connect(svc);
+    await staleAttempt();
+    expect(await svc.revokeAndEraseEnrollment(A)).toEqual({
+      status: "erased",
+      revoked: true,
+      unrevocableAttempts: 1,
+    });
+  });
+
+  it("disconnect maps that combination to erased_unrevocable (the revoked family is still reported revoked)", async () => {
+    const svc = service();
+    await connect(svc);
+    await staleAttempt();
+    expect(await svc.disconnect(A)).toEqual({
+      ok: true,
+      outcome: "erased_unrevocable",
+      revoked: true,
+    });
+    expect(fake.activeFamilies()).toBe(0);
+    expect(await rows()).toHaveLength(0);
+    expect(await db().select().from(schema.framebriarRedemptions)).toHaveLength(0);
+  });
+});
 
 describe("status hasRecord (#304)", () => {
   it("is false for an account that holds nothing, and true for a row in ANY state or a redemption attempt", async () => {
