@@ -1,11 +1,100 @@
 "use client";
 
+import { useId, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import type { TripStop } from "@/domain/trip-stops";
 import type { StopWeather } from "@/domain/weather/types";
 import type { TemperatureUnit } from "@/server/data/weather-store";
-import { displayTemperature, hasCoordinates, weatherRowView } from "./weather-view";
+import {
+  displayTemperature,
+  hasCoordinates,
+  todayUtc,
+  weatherRowView,
+  type PartSummary,
+  type WeatherRowView,
+} from "./weather-view";
+
+/** The most forecast days a stay shows before "Show all N days" (#303). */
+export const FORECAST_DAY_CAP = 7;
+
+const GLYPH_MARK = { sun: "☀", rain: "☂", snow: "❄" } as const;
+const dayCount = (count: number) => (count === 1 ? "1 day" : `${count} days`);
+
+/** "Rain on 2 of 7 days", or the dry line when nothing is wet. */
+function rainLine(part: PartSummary, dry: string) {
+  return part.rainDays > 0 ? `Rain on ${part.rainDays} of ${dayCount(part.totalDays)}` : dry;
+}
+
+/** A stay with at least one forecast day: a labelled Forecast section, a daily list, and a Typical summary. */
+function ForecastStay({ view, unit }: { view: WeatherRowView; unit: TemperatureUnit }) {
+  const [expanded, setExpanded] = useState(false);
+  const listId = useId();
+  const forecast = view.forecast as PartSummary;
+  const typical = view.typical;
+  const shown = expanded ? view.forecastDays : view.forecastDays.slice(0, FORECAST_DAY_CAP);
+  const extra = view.forecastDays.length > FORECAST_DAY_CAP;
+  return (
+    <>
+      <div className="weather-place">
+        <h3>{view.city}</h3>
+        <p className="tiny muted">
+          {view.dates} · {view.nights} {view.nights === 1 ? "night" : "nights"}
+        </p>
+      </div>
+      <div className="weather-part">
+        <p className="weather-part-head">
+          <span className="weather-source forecast">Forecast</span>
+          <span>
+            High {displayTemperature(forecast.high, unit)}° · Low{" "}
+            {displayTemperature(forecast.low, unit)}° · {rainLine(forecast, "No rain expected")}
+          </span>
+        </p>
+        <ol id={listId} className="weather-days" aria-label={`Daily forecast for ${view.city}`}>
+          {shown.map((day) => (
+            <li key={day.date} className="weather-day">
+              <span className="sr-only">{day.spoken}</span>
+              <span className="weather-day-label" aria-hidden="true">
+                {day.label}
+              </span>
+              <span className="weather-day-glyph" aria-hidden="true">
+                {GLYPH_MARK[day.glyph]}
+              </span>
+              <span className="weather-day-temps" aria-hidden="true">
+                {day.high}° / {day.low}°
+              </span>
+              <span className="weather-day-rain" aria-hidden="true">
+                {day.rainPercent}% rain
+              </span>
+            </li>
+          ))}
+        </ol>
+        {extra ? (
+          <button
+            type="button"
+            className="link-button weather-days-toggle"
+            aria-expanded={expanded}
+            aria-controls={listId}
+            onClick={() => setExpanded(!expanded)}
+          >
+            {expanded
+              ? `Show first ${FORECAST_DAY_CAP}`
+              : `Show all ${view.forecastDays.length} days`}
+          </button>
+        ) : null}
+      </div>
+      {typical ? (
+        <p className="weather-part-head weather-typical-part">
+          <span className="weather-source typical">Typical</span>
+          <span>
+            Other {dayCount(typical.totalDays)}: High {displayTemperature(typical.high, unit)}° ·
+            Low {displayTemperature(typical.low, unit)}° · {rainLine(typical, "Rarely rains")}
+          </span>
+        </p>
+      ) : null}
+    </>
+  );
+}
 
 export type WeatherPanelState =
   | { kind: "prompt" }
@@ -45,6 +134,8 @@ export interface WeatherPanelProps {
   state: WeatherPanelState;
   unit: TemperatureUnit;
   changesCount?: number;
+  /** Today as YYYY-MM-DD (UTC) for the "Today" label; defaults to the clock. */
+  today?: string;
   onOptIn: () => void;
   onDecline: () => void;
   onTurnOn: () => void;
@@ -86,12 +177,14 @@ export function WeatherPanel({
   state,
   unit,
   changesCount = 0,
+  today,
   onOptIn,
   onDecline,
   onTurnOn,
   onRefresh,
   onReview,
 }: WeatherPanelProps) {
+  const dayToday = today ?? todayUtc();
   const customOnly = stops.every((stop) => !hasCoordinates(stop));
 
   if (state.kind === "prompt") {
@@ -197,7 +290,7 @@ export function WeatherPanel({
         <ul className="weather-list" aria-label="Weather by stop">
           {stops.map((stop, index) => {
             const weather = state.stops.find((entry) => entry.stopIndex === index);
-            const view = weather ? weatherRowView(stop, weather) : null;
+            const view = weather ? weatherRowView(stop, weather, unit, dayToday) : null;
             if (!view) {
               const custom = !hasCoordinates(stop);
               return (
@@ -215,6 +308,16 @@ export function WeatherPanel({
                       Try again
                     </Button>
                   ) : null}
+                </li>
+              );
+            }
+            if (view.forecast) {
+              return (
+                <li
+                  key={`${stop.location.id}-${index}`}
+                  className="weather-row weather-row-forecast"
+                >
+                  <ForecastStay view={view} unit={unit} />
                 </li>
               );
             }

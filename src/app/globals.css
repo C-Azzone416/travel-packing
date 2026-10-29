@@ -4928,3 +4928,100 @@ a.back {
     gap: 4px;
   }
 }
+
+/* Trip weather, stays with forecast days (#303): a labelled Forecast section of 28px daily rows, then a Typical summary. */
+.weather-row.weather-row-forecast {
+  --ledger-row: 28px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  align-items: start;
+}
+.weather-row-forecast .weather-place h3,
+.weather-row-forecast .weather-place p {
+  overflow-wrap: anywhere;
+  line-height: var(--ledger-row);
+}
+.weather-row-forecast .weather-part {
+  display: grid;
+  min-width: 0;
+}
+.weather-part-head {
+  display: block;
+  min-height: var(--ledger-row);
+  margin: 0;
+  line-height: var(--ledger-row);
+  overflow-wrap: anywhere;
+}
+.weather-part-head .weather-source {
+  box-sizing: border-box;
+  margin-right: 8px;
+  vertical-align: top;
+  min-height: var(--ledger-row);
+  padding-block: 0;
+  /* two px shorter than the row: the Typical tag has a 1px border, and the tag as a whole must stay 28px */
+  line-height: calc(var(--ledger-row) - 2px);
+}
+.weather-row-forecast .weather-typical-part {
+  margin-top: 0;
+  box-shadow: inset 0 1px 0 var(--line);
+}
+.weather-days {
+  container-type: inline-size;
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.weather-day {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 20px auto auto;
+  align-items: center;
+  gap: 0 8px;
+  min-height: var(--ledger-row);
+  line-height: var(--ledger-row);
+  box-shadow: inset 0 -1px 0 var(--line);
+  font-variant-numeric: tabular-nums;
+}
+.weather-day-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.weather-day-glyph {
+  text-align: center;
+}
+.weather-day-temps {
+  white-space: nowrap;
+}
+.weather-day-rain {
+  color: var(--muted-text);
+  white-space: nowrap;
+}
+/* Too narrow for one line (very large text): the rain text drops under the temperatures, as a whole second row. */
+@container (max-width: 230px) {
+  .weather-day {
+    grid-template-columns: minmax(0, 1fr) 20px auto;
+  }
+  .weather-day-rain {
+    grid-column: 3;
+    justify-self: end;
+  }
+}
+.weather-days-toggle {
+  position: relative;
+  min-height: var(--ledger-row);
+  justify-self: start;
+  padding-block: 0;
+  line-height: var(--ledger-row);
+}
+/* The visual row stays 28px; the touch target is 44px tall. */
+.weather-days-toggle::after {
+  content: "";
+  position: absolute;
+  inset: -8px 0;
+}
+@media (min-width: 981px) {
+  .weather-days {
+    max-width: 520px;
+  }
+}

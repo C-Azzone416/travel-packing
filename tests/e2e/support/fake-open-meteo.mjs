@@ -79,8 +79,13 @@ const COOL_WET = { high: 15, low: 8, prob: 80, mm: 6, uv: 2, sun: 3 * 3600 };
 const weatherCalls = [];
 const weatherState = { variant: "base", fail: false };
 
+// #303: "varied" changes day by day (rain on every third day, snow on every fifth, odd highs), and "scorching" is
+// hot enough for three-digit Fahrenheit, so the daily rows are exercised with more than one kind of day.
+const SCORCHING = { high: 40, low: 31, prob: 0, mm: 0, uv: 11, sun: 12 * 3600 };
+
 function profileFor(latitude) {
   const first = Math.abs(Number(latitude) - 51.51) < 0.5;
+  if (weatherState.variant === "scorching") return SCORCHING;
   const hot = weatherState.variant === "dry" || first;
   return hot ? HOT_DRY : COOL_WET;
 }
@@ -95,16 +100,22 @@ function* days(start, end) {
 function weatherBody(url, forecast) {
   const profile = profileFor(url.searchParams.get("latitude"));
   const dates = [...days(url.searchParams.get("start_date"), url.searchParams.get("end_date"))];
+  const varied = weatherState.variant === "varied";
+  const ordinal = (date) => Math.floor(Date.parse(`${date}T00:00:00Z`) / 86_400_000);
+  const rainy = (date) => varied && ordinal(date) % 3 === 0;
+  const snowy = (date) => varied && ordinal(date) % 5 === 0;
   const daily = {
     time: dates,
-    temperature_2m_max: dates.map(() => profile.high),
-    temperature_2m_min: dates.map(() => profile.low),
-    precipitation_sum: dates.map(() => profile.mm),
-    snowfall_sum: dates.map(() => 0),
+    temperature_2m_max: dates.map((date) => profile.high + (varied ? ordinal(date) % 6 : 0)),
+    temperature_2m_min: dates.map((date) => profile.low + (varied ? ordinal(date) % 4 : 0)),
+    precipitation_sum: dates.map((date) => (rainy(date) ? 6 : profile.mm)),
+    snowfall_sum: dates.map((date) => (snowy(date) ? 2 : 0)),
     sunshine_duration: dates.map(() => profile.sun),
   };
   if (forecast) {
-    daily.precipitation_probability_max = dates.map(() => profile.prob);
+    daily.precipitation_probability_max = dates.map((date) =>
+      rainy(date) ? 70 : varied ? 15 : profile.prob,
+    );
     daily.uv_index_max = dates.map(() => profile.uv);
   }
   return { daily };
