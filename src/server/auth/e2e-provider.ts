@@ -133,16 +133,18 @@ function spendToken(env: Env, token: string): string | null {
   }
 }
 
-async function startSession(env: Env, email: string, identityCreatedAt: number) {
+async function mintSession(env: Env, email: string, identityCreatedAt: number) {
   const token = randomBytes(32).toString("hex");
   mkdirSync(env.AUTH_E2E_STATE_DIR ?? "", { recursive: true });
   const issuedAt = Date.now();
   writeFileSync(sessionFile(env, token), `${email}\n${issuedAt}\n${identityCreatedAt}`);
   (await cookies()).set(E2E_COOKIE, token, { httpOnly: true, sameSite: "lax", path: "/" });
-  return {
-    ok: true as const,
-    session: { userId: `e2e-${email}`, email, issuedAt, identityCreatedAt },
-  };
+  return { token, session: { userId: `e2e-${email}`, email, issuedAt, identityCreatedAt } };
+}
+
+async function startSession(env: Env, email: string, identityCreatedAt: number) {
+  const { session } = await mintSession(env, email, identityCreatedAt);
+  return { ok: true as const, session };
 }
 
 /** Any email signs in if it knows the shared synthetic password; the allowlist decides who gets in. */
@@ -209,6 +211,36 @@ export function createE2eAuthProvider(env: Env): AuthProvider {
       }
       if (!env.AUTH_E2E_PASSWORD || password !== env.AUTH_E2E_PASSWORD) return { ok: false };
       return startSession(env, email, 1);
+    },
+    async beginAccountClosure(email, password) {
+      const account = readAccount(env, email);
+      if (account) {
+        if (password !== account.password || !account.verified) return { ok: false };
+      } else if (!env.AUTH_E2E_PASSWORD || password !== env.AUTH_E2E_PASSWORD) {
+        return { ok: false };
+      }
+      const { token, session } = await mintSession(env, email, account?.identityCreatedAt ?? 1);
+      return {
+        ok: true,
+        authorization: {
+          session,
+          async revokeOtherSessions() {
+            if (!sessionFor(env, token)) return { ok: false, reason: "unavailable" };
+            await removeSessions(email, token);
+            return { ok: true };
+          },
+          async deleteUser(closurePassword) {
+            if (!sessionFor(env, token)) return { ok: false, reason: "invalid" };
+            const currentAccount = readAccount(env, email);
+            const expected = currentAccount?.password ?? env.AUTH_E2E_PASSWORD;
+            if (!expected || closurePassword !== expected) return { ok: false, reason: "invalid" };
+            await removeSessions(email);
+            rmSync(accountFile(env, email), { force: true });
+            (await cookies()).delete(E2E_COOKIE);
+            return { ok: true };
+          },
+        },
+      };
     },
     async signOut() {
       const jar = await cookies();

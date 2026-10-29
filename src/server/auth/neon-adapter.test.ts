@@ -110,6 +110,47 @@ beforeEach(() => {
 });
 
 describe("account deletion provider calls", () => {
+  it("binds closure revocation and deletion to the token minted by reauthentication", async () => {
+    const { neon, calls } = fakeNeon({
+      signIn: { data: { user: VERIFIED_USER, token: "fresh-session" } },
+      revokeOtherSessions: { data: {} },
+      deleteUser: { data: {} },
+    });
+    const revokeOtherSessionsWithSession = vi.fn(async () => ({
+      data: { status: true },
+      error: null,
+    }));
+    const deleteUserWithSession = vi.fn(async () => ({
+      data: { success: true, message: "User deleted" },
+      error: null,
+    }));
+    const provider = createNeonAuthProvider(neon, {
+      revokeOtherSessionsWithSession,
+      deleteUserWithSession,
+    });
+
+    const begun = await provider.beginAccountClosure("owner@example.test", "synthetic-password");
+    expect(begun.ok).toBe(true);
+    if (!begun.ok) throw new Error("synthetic closure sign-in failed");
+    expect(await begun.authorization.revokeOtherSessions()).toEqual({ ok: true });
+    expect(await begun.authorization.deleteUser("synthetic-password")).toEqual({ ok: true });
+    expect(revokeOtherSessionsWithSession).toHaveBeenCalledWith("fresh-session");
+    expect(deleteUserWithSession).toHaveBeenCalledWith("fresh-session", "synthetic-password");
+    expect(calls.revokeOtherSessions).toBe(0);
+    expect(calls.deleteUser).toEqual([]);
+    expect(JSON.stringify(begun)).not.toContain("fresh-session");
+  });
+
+  it("refuses closure when sign-in does not return the minted session token", async () => {
+    const { neon } = fakeNeon({ signIn: { data: { user: VERIFIED_USER } } });
+    await expect(
+      createNeonAuthProvider(neon).beginAccountClosure("owner@example.test", "synthetic-password"),
+    ).resolves.toEqual({
+      ok: false,
+      diagnostic: { reason: "session-not-created" },
+    });
+  });
+
   it("revokes other sessions and deletes the current identity with the supplied password", async () => {
     const { neon, calls } = fakeNeon({
       revokeOtherSessions: { data: { status: true } },

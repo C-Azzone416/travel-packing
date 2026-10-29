@@ -8,6 +8,7 @@
 import "server-only";
 import { logAuthEvent } from "./safe-log";
 import type {
+  AccountClosureSignInResult,
   AuthProvider,
   AuthSession,
   FlowFailure,
@@ -31,6 +32,12 @@ export interface NeonCallResult {
 export interface NeonDeletionCalls {
   /** A contract-correct session revocation call supplied by the runtime. */
   revokeOtherSessions?: () => Promise<NeonCallResult | null>;
+  /** Account-closure calls authenticated with the token minted by the immediately preceding password sign-in. */
+  revokeOtherSessionsWithSession?: (sessionToken: string) => Promise<NeonCallResult | null>;
+  deleteUserWithSession?: (
+    sessionToken: string,
+    password: string,
+  ) => Promise<NeonCallResult | null>;
 }
 
 /** The subset of the SDK this adapter uses. */
@@ -40,10 +47,10 @@ export interface NeonAuthLike {
     error?: unknown;
   } | null>;
   signIn: {
-    email(input: {
-      email: string;
-      password: string;
-    }): Promise<{ data?: { user?: NeonUser | null } | null; error?: unknown } | null>;
+    email(input: { email: string; password: string }): Promise<{
+      data?: { user?: NeonUser | null; token?: unknown } | null;
+      error?: unknown;
+    } | null>;
   };
   requestPasswordReset(input: {
     email: string;
@@ -195,6 +202,75 @@ export function createNeonAuthProvider(
   neon: NeonAuthLike,
   deletionCalls: NeonDeletionCalls = {},
 ): AuthProvider {
+  async function signIn(
+    email: string,
+    password: string,
+  ): Promise<{ result: SignInResult; sessionToken?: string }> {
+    try {
+      const response = await neon.signIn.email({ email, password });
+      if (response?.error) return { result: signInFailure(response.error) };
+      const session = toSession(response?.data?.user);
+      const sessionToken = response?.data?.token;
+      if (session) {
+        return {
+          result: { ok: true, session },
+          ...(typeof sessionToken === "string" && sessionToken.length > 0 ? { sessionToken } : {}),
+        };
+      }
+      // The provider accepted the password but the address is not verified (or it says nothing): no session either way.
+      if (response?.data?.user?.id && response.data.user.emailVerified !== true) {
+        return {
+          result: {
+            ok: false,
+            unverified: true,
+            diagnostic: { reason: "email-unverified" },
+          },
+        };
+      }
+      return { result: { ok: false, diagnostic: { reason: "provider-response-invalid" } } };
+    } catch {
+      // Nothing from the thrown value is logged: it may contain an address, password or provider response body.
+      return { result: { ok: false, diagnostic: { reason: "provider-unavailable" } } };
+    }
+  }
+
+  const revoke = async (
+    call: (() => Promise<NeonCallResult | null>) | undefined,
+  ): Promise<FlowResult<"unavailable">> => {
+    try {
+      const result = await (call?.() ?? Promise.resolve(null));
+      return !result?.error && record(result?.data)?.status === true
+        ? { ok: true }
+        : { ok: false, reason: "unavailable" };
+    } catch {
+      logAuthEvent("provider-error");
+      return { ok: false, reason: "unavailable" };
+    }
+  };
+
+  const removeIdentity = async (
+    call: (() => Promise<NeonCallResult | null>) | undefined,
+  ): Promise<FlowResult<"invalid" | "unavailable">> => {
+    try {
+      const result = await (call?.() ?? Promise.resolve(null));
+      if (result?.error) {
+        return {
+          ok: false,
+          reason: classifyFailure(result.error) === "unavailable" ? "unavailable" : "invalid",
+        };
+      }
+      const data = record(result?.data);
+      // Better Auth can answer successfully after merely sending a verification email. Only this response confirms that
+      // the installed endpoint actually removed the identity and sessions; every other 2xx stays fenced and retryable.
+      return data?.success === true && data.message === "User deleted"
+        ? { ok: true }
+        : { ok: false, reason: "unavailable" };
+    } catch {
+      logAuthEvent("provider-error");
+      return { ok: false, reason: "unavailable" };
+    }
+  };
+
   return {
     async getSession() {
       // Neon Auth caches signed session data in a browser cookie for five minutes by default. A revoked session can
@@ -204,24 +280,31 @@ export function createNeonAuthProvider(
       return result?.error ? null : toSession(result?.data?.user, result?.data?.session?.createdAt);
     },
     async signInWithPassword(email, password): Promise<SignInResult> {
-      try {
-        const result = await neon.signIn.email({ email, password });
-        if (result?.error) return signInFailure(result.error);
-        const session = toSession(result?.data?.user);
-        if (session) return { ok: true, session };
-        // The provider accepted the password but the address is not verified (or it says nothing): no session either way.
-        if (result?.data?.user?.id && result.data.user.emailVerified !== true) {
-          return {
-            ok: false,
-            unverified: true,
-            diagnostic: { reason: "email-unverified" },
-          };
-        }
-        return { ok: false, diagnostic: { reason: "provider-response-invalid" } };
-      } catch {
-        // Nothing from the thrown value is logged: it may contain an address, password or provider response body.
-        return { ok: false, diagnostic: { reason: "provider-unavailable" } };
+      return (await signIn(email, password)).result;
+    },
+    async beginAccountClosure(email, password): Promise<AccountClosureSignInResult> {
+      const signedIn = await signIn(email, password);
+      if (!signedIn.result.ok) return signedIn.result;
+      if (!signedIn.sessionToken) {
+        return { ok: false, diagnostic: { reason: "session-not-created" } };
       }
+      const sessionToken = signedIn.sessionToken;
+      const revokeWithSession = deletionCalls.revokeOtherSessionsWithSession;
+      const deleteWithSession = deletionCalls.deleteUserWithSession;
+      return {
+        ok: true,
+        authorization: {
+          session: signedIn.result.session,
+          revokeOtherSessions: () =>
+            revoke(revokeWithSession ? () => revokeWithSession(sessionToken) : undefined),
+          deleteUser: (closurePassword) =>
+            removeIdentity(
+              deleteWithSession
+                ? () => deleteWithSession(sessionToken, closurePassword)
+                : undefined,
+            ),
+        },
+      };
     },
     async signUp(email, password) {
       return flowCall(
@@ -278,36 +361,12 @@ export function createNeonAuthProvider(
       }
     },
     async revokeOtherSessions() {
-      try {
-        const call = deletionCalls.revokeOtherSessions ?? neon.revokeOtherSessions;
-        const result = await (call?.() ?? Promise.resolve(null));
-        return !result?.error && record(result?.data)?.status === true
-          ? { ok: true }
-          : { ok: false, reason: "unavailable" };
-      } catch {
-        logAuthEvent("provider-error");
-        return { ok: false, reason: "unavailable" };
-      }
+      const call = deletionCalls.revokeOtherSessions ?? neon.revokeOtherSessions;
+      return revoke(call ? () => call() : undefined);
     },
     async deleteUser(password) {
-      try {
-        const result = await (neon.deleteUser?.({ password }) ?? Promise.resolve(null));
-        if (result?.error) {
-          return {
-            ok: false,
-            reason: classifyFailure(result.error) === "unavailable" ? "unavailable" : "invalid",
-          };
-        }
-        const data = record(result?.data);
-        // Better Auth can answer successfully after merely sending a verification email. Only this response confirms that
-        // the installed endpoint actually removed the identity and sessions; every other 2xx stays fenced and retryable.
-        return data?.success === true && data.message === "User deleted"
-          ? { ok: true }
-          : { ok: false, reason: "unavailable" };
-      } catch {
-        logAuthEvent("provider-error");
-        return { ok: false, reason: "unavailable" };
-      }
+      const call = neon.deleteUser;
+      return removeIdentity(call ? () => call({ password }) : undefined);
     },
     async isAccountDeletionBlocked() {
       return false;

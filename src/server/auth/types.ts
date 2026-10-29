@@ -1,6 +1,6 @@
 // Auth contract the app depends on. The managed provider (Neon Auth / Better Auth) sits behind it, so unit
-// tests use a fake and make no network calls. The provider works on the ambient request: cookies are read and
-// written by the adapter (Next.js server context), never handled by app code.
+// tests use a fake and make no network calls. Ordinary calls use the ambient Next.js request context. Account closure
+// instead carries a server-only opaque capability so its destructive calls remain bound to the fresh reauthentication.
 
 export interface AuthSession {
   userId: string;
@@ -54,6 +54,20 @@ export type SignInResult =
     };
 
 /**
+ * A server-only, short-lived capability created by password reauthentication for account closure. Its methods are bound
+ * to the session minted by that exact sign-in, so destructive provider calls cannot accidentally fall back to the older
+ * cookie on the incoming request. Implementations must not expose or serialize the underlying provider credential.
+ */
+export interface AccountClosureAuthorization {
+  session: AuthSession;
+  revokeOtherSessions(): Promise<FlowResult<"unavailable">>;
+  deleteUser(password: string): Promise<FlowResult<"invalid" | "unavailable">>;
+}
+
+export type AccountClosureSignInResult =
+  { ok: true; authorization: AccountClosureAuthorization } | Exclude<SignInResult, { ok: true }>;
+
+/**
  * Why a sign-up, code, or reset step failed, in terms the UI may show. Deliberately small: nothing here says whether an
  * address has an account (a taken address looks like a success, a wrong code and an unknown address look the same).
  * - weak-password: the provider refused the password (too short, too long)
@@ -81,6 +95,8 @@ export interface AuthProvider {
   getSession(): Promise<AuthSession | null>;
   /** Email + password sign-in. A failure never says which part was wrong. */
   signInWithPassword(email: string, password: string): Promise<SignInResult>;
+  /** Reauthenticate and bind the whole account-closure sequence to the newly minted provider session. */
+  beginAccountClosure(email: string, password: string): Promise<AccountClosureSignInResult>;
   /**
    * Create an UNVERIFIED account and send it a verification code. A taken address is reported as success (the
    * provider sends nothing), so the result never reveals whether an address is already registered.

@@ -82,6 +82,18 @@ export function createFakeAuth(users: FakeUser[] = []): FakeAuth {
       };
       return { ok: true, session: fake.current };
     },
+    async beginAccountClosure(email, password) {
+      const signedIn = await fake.signInWithPassword(email, password);
+      if (!signedIn.ok) return signedIn;
+      return {
+        ok: true,
+        authorization: {
+          session: signedIn.session,
+          revokeOtherSessions: () => fake.revokeOtherSessions(),
+          deleteUser: (closurePassword) => fake.deleteUser(closurePassword),
+        },
+      };
+    },
     async signOut() {
       fake.signOutCalls += 1;
       if (fake.failNextSignOut) {

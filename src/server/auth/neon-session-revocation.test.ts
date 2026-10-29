@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createNeonSessionRevoker } from "./neon-session-revocation";
+import { createNeonAccountClosureCalls, createNeonSessionRevoker } from "./neon-session-revocation";
 
 const nextHeaders = vi.fn();
 vi.mock("next/headers", () => ({
@@ -23,6 +23,64 @@ afterEach(() => {
 });
 
 describe("Neon account-closure session revocation", () => {
+  it("uses one explicit fresh session for the whole destructive sequence", async () => {
+    const applied: { name: string; value: string; maxAge?: number }[] = [];
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ status: true }))
+      .mockResolvedValueOnce(
+        Response.json(
+          { success: true, message: "User deleted" },
+          {
+            headers: {
+              "set-cookie":
+                "__Secure-neon-auth.session_token=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0",
+            },
+          },
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const calls = createNeonAccountClosureCalls(config, {
+      requestHeaders,
+      applyCookie: (name, value, options) => {
+        applied.push({
+          name,
+          value,
+          ...(options.maxAge === undefined ? {} : { maxAge: options.maxAge }),
+        });
+      },
+    });
+
+    await expect(calls.revokeOtherSessionsWithSession("fresh-session")).resolves.toEqual({
+      data: { status: true },
+      error: null,
+    });
+    await expect(
+      calls.deleteUserWithSession("fresh-session", "synthetic-password"),
+    ).resolves.toEqual({ data: { success: true, message: "User deleted" }, error: null });
+
+    const requests = fetchMock.mock.calls.map(([url, init]) => ({
+      path: new URL(url as string).pathname,
+      cookie: new Headers((init as RequestInit).headers).get("cookie"),
+    }));
+    expect(requests).toEqual([
+      {
+        path: "/neondb/auth/revoke-other-sessions",
+        cookie: "__Secure-neon-auth.session_token=fresh-session",
+      },
+      {
+        path: "/neondb/auth/delete-user",
+        cookie: "__Secure-neon-auth.session_token=fresh-session",
+      },
+    ]);
+    expect(applied).toEqual(
+      expect.arrayContaining([
+        { name: "__Secure-neon-auth.session_token", value: "", maxAge: 0 },
+        { name: "__Secure-neon-auth.local.session_data", value: "", maxAge: 0 },
+      ]),
+    );
+  });
+
   it("posts to the documented revoke-other-sessions endpoint with only auth cookies", async () => {
     const fetchMock = vi.fn(async () => Response.json({ status: true }));
     vi.stubGlobal("fetch", fetchMock);
