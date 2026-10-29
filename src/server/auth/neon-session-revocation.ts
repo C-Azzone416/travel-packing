@@ -37,6 +37,8 @@ export function createNeonSessionRevoker(
       : new Headers(await headers());
     incoming.set("content-type", "application/json");
     const response = await handleAuthProxyRequest({
+      // The proxy derives Origin from this URL only if the real request lacks Origin and Referer.
+      // The deliberately invalid host then makes the provider reject the call, preserving fail-closed behavior.
       request: new Request(`https://account-closure.invalid/api/auth/${REVOCATION_PATH}`, {
         method: "POST",
         headers: incoming,

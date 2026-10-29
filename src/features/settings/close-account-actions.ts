@@ -26,7 +26,9 @@ const inputSchema = z.object({
 
 const TRY_AGAIN = "We couldn’t close your account. Nothing was deleted. Try again.";
 const PARTIAL =
-  "Your Packed Smart content is removed and protected by a temporary closure marker, but identity deletion wasn’t confirmed. Use Finish account closure below to retry now. If you are signed out, sign in again and Packed Smart will take you straight to the recovery step.";
+  "Your Packed Smart content is removed and protected by a temporary closure marker, but identity deletion wasn’t confirmed. Use Finish account closure to retry now. If you are signed out, sign in again and Packed Smart will take you straight to the recovery step.";
+const PARTIAL_RETRY =
+  "Your Packed Smart content is removed and protected by a temporary closure marker, but identity deletion wasn’t confirmed. Use Finish account closure below to retry now.";
 const UNKNOWN =
   "We couldn’t confirm whether account closure started. Try again. If you are signed out, sign in again and Packed Smart will take you straight to the recovery step.";
 const FINAL_CLEANUP =
@@ -164,14 +166,14 @@ export async function retryCloseAccountAction(
   }
 
   const [auth, db] = await Promise.all([getAuth(), getAppDb()]);
-  if (!auth.available || !db) return { error: PARTIAL, fieldErrors: {}, recovery: true };
+  if (!auth.available || !db) return { error: PARTIAL_RETRY, fieldErrors: {}, recovery: true };
   const session = await deletionSession(auth);
   if (!session) redirect("/sign-in");
   let deletionPending = false;
   try {
     deletionPending = (await auth.setup.isAccountDeletionBlocked?.(session.userId)) ?? false;
   } catch {
-    return { error: PARTIAL, fieldErrors: {}, recovery: true };
+    return { error: PARTIAL_RETRY, fieldErrors: {}, recovery: true };
   }
   if (!deletionPending) redirect("/settings");
 
@@ -200,7 +202,7 @@ export async function retryCloseAccountAction(
   if (outcome.status === "unavailable") {
     return outcome.providerDeleted
       ? { error: FINAL_CLEANUP, fieldErrors: {} }
-      : { error: PARTIAL, fieldErrors: {}, recovery: true };
+      : { error: PARTIAL_RETRY, fieldErrors: {}, recovery: true };
   }
 
   limits.recordSuccess(session.email, address);

@@ -86,7 +86,6 @@ describe("Close account: no feedback involved", () => {
     await stepTwoHeading();
     const confirmation = screen.getByLabelText("Type DELETE to confirm");
     expect(confirmation.getAttribute("autocomplete")).toBe("one-time-code");
-    expect(confirmation.getAttribute("autocomplete")).not.toBe("email");
   });
 
   it("unsent reports only (no record): no step 1, one extra line on the confirmation", async () => {

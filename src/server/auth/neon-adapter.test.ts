@@ -134,6 +134,24 @@ describe("account deletion provider calls", () => {
     expect(calls.revokeOtherSessions).toBe(0);
   });
 
+  it("fails closed when the runtime revocation call throws", async () => {
+    const { neon, calls } = fakeNeon({
+      revokeOtherSessions: { data: { status: true } },
+    });
+    const revokeOtherSessions = vi.fn(async () => {
+      throw new Error("synthetic revoker failure");
+    });
+    const provider = createNeonAuthProvider(neon, { revokeOtherSessions });
+
+    await expect(provider.revokeOtherSessions()).resolves.toEqual({
+      ok: false,
+      reason: "unavailable",
+    });
+    expect(revokeOtherSessions).toHaveBeenCalledOnce();
+    expect(calls.revokeOtherSessions).toBe(0);
+    expect(logged).toEqual([JSON.stringify({ scope: "auth", event: "provider-error" })]);
+  });
+
   it("does not mistake a verification-email response or an unconfirmed revocation for completed cleanup", async () => {
     const { neon } = fakeNeon({
       revokeOtherSessions: { data: {} },

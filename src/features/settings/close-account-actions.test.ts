@@ -216,8 +216,10 @@ describe("closeAccountAction", () => {
 
   it("makes a post-purge provider failure explicit and links to recovery", async () => {
     mocks.closeAccount.mockResolvedValue({ status: "unavailable", deletionStarted: true });
-    await expect(closeAccountAction(INITIAL_CLOSE_ACCOUNT_STATE, form())).resolves.toMatchObject({
-      error: expect.stringContaining("content is removed"),
+    await expect(closeAccountAction(INITIAL_CLOSE_ACCOUNT_STATE, form())).resolves.toEqual({
+      error:
+        "Your Packed Smart content is removed and protected by a temporary closure marker, but identity deletion wasn’t confirmed. Use Finish account closure to retry now. If you are signed out, sign in again and Packed Smart will take you straight to the recovery step.",
+      fieldErrors: {},
       recovery: true,
     });
     expect(mocks.issueCompletion).not.toHaveBeenCalled();
@@ -397,9 +399,10 @@ describe("retryCloseAccountAction", () => {
 
   it("retries an already-fenced deletion idempotently", async () => {
     mocks.closeAccount.mockResolvedValue({ status: "unavailable", deletionStarted: true });
-    await expect(
-      retryCloseAccountAction(INITIAL_CLOSE_ACCOUNT_STATE, form()),
-    ).resolves.toMatchObject({
+    await expect(retryCloseAccountAction(INITIAL_CLOSE_ACCOUNT_STATE, form())).resolves.toEqual({
+      error:
+        "Your Packed Smart content is removed and protected by a temporary closure marker, but identity deletion wasn’t confirmed. Use Finish account closure below to retry now.",
+      fieldErrors: {},
       recovery: true,
     });
     expect(blocked).toHaveBeenCalledWith(SESSION.userId);
