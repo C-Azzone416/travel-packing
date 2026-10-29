@@ -2,6 +2,7 @@ import "server-only";
 
 import { eq, sql } from "drizzle-orm";
 import type { Db } from "@/server/db/retention";
+import { accountHoldsFeedback } from "@/server/feedback/enrollment-store";
 import { accountDeletions, accountSetups, users } from "@/server/db/schema";
 import { lockAccountDeletion, lockAccountSetup } from "./account-deletion-lock";
 import { providerIdentityState } from "./provider-identity";
@@ -24,12 +25,23 @@ export async function beginAccountDeletion(
   userId: string,
   identityCreatedAt: number,
   setupEmailDigest: string,
-): Promise<"started" | "identity-mismatch"> {
+): Promise<"started" | "identity-mismatch" | "feedback-blocking"> {
   return db.transaction(async (transaction) => {
     // Provisioning takes the same lock before checking the fence. Whichever transaction goes second therefore sees
     // the first one's committed owner/fence state instead of acting on a stale READ COMMITTED snapshot.
     await lockAccountDeletion(transaction, userId);
     await lockAccountSetup(transaction, setupEmailDigest);
+    // The Framebriar gate (#261), inside the transaction so it cannot be raced: the owner row is locked first (a concurrent
+    // enrollment or redemption insert waits on it, then fails its foreign key once the row is gone), and only then is anything
+    // held checked. Deleting `users` cascades to the sealed credentials, so it must never run while any remain. Nothing has been
+    // written yet, so refusing leaves no fence behind.
+    await transaction
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.id, userId))
+      .for("update");
+    if (await accountHoldsFeedback(transaction as unknown as Db, userId))
+      return "feedback-blocking";
     await transaction
       .insert(accountDeletions)
       .values({ userId, identityCreatedAt: new Date(identityCreatedAt), setupEmailDigest })

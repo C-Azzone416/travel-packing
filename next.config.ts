@@ -35,6 +35,11 @@ export const FEEDBACK_ONLY_MODULES: readonly { specifier: string; stub: string }
     specifier: "@/features/feedback/account-closure-cleanup",
     stub: "./src/features/feedback/feedback.disabled.tsx",
   },
+  // The Disconnect step of Close account (#261): imports the access provider and the feedback copy.
+  {
+    specifier: "@/features/feedback/CloseAccountFeedback",
+    stub: "./src/features/feedback/feedback.disabled.tsx",
+  },
   {
     specifier: "@/features/feedback/FeedbackAccess",
     stub: "./src/features/feedback/feedback.disabled.tsx",

@@ -7,6 +7,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useToast } from "@/components/ui/Toast";
 import { disconnectText, isDisconnectSuccess } from "./disconnect-copy";
 import { useFeedbackAccess, type ConnectResult } from "./FeedbackAccess";
+import type { FeedbackStatus } from "./status";
 
 const DATE = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" });
 
@@ -51,7 +52,26 @@ const BADGE = {
   pending: "Not finished",
 } as const;
 
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+/** The badge Settings shows for the account's state, or null when there is nothing to badge. Shared with the Close account step (#261). */
+export function connectionBadge(
+  status: FeedbackStatus,
+): { tone: "ready" | "remaining"; label: string } | null {
+  if (status.connected) return { tone: "ready", label: "Connected" };
+  const key =
+    status.pendingRedemption === true
+      ? "pending"
+      : status.connection === "needs_reconnect"
+        ? "needsReconnect"
+        : status.connection === "expired" ||
+            status.connection === "revoked" ||
+            status.connection === "disabled" ||
+            status.connection === "unavailable"
+          ? status.connection
+          : null;
+  return key ? { tone: "remaining", label: BADGE[key] } : null;
+}
+
+export const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 export function expiryText(expiresAt: string | null): string | null {
   const date = expiresAt ? new Date(expiresAt) : null;

@@ -54,6 +54,7 @@ const MODULES = [
 const FEEDBACK_STUB = "./src/features/feedback/feedback.disabled.tsx";
 const FEEDBACK_MODULES = [
   ["@/features/feedback/account-closure-cleanup", FEEDBACK_STUB],
+  ["@/features/feedback/CloseAccountFeedback", FEEDBACK_STUB],
   ["@/features/feedback/FeedbackAccess", FEEDBACK_STUB],
   ["@/features/feedback/FeedbackButton", FEEDBACK_STUB],
   ["@/features/feedback/FeedbackNotice", FEEDBACK_STUB],

@@ -541,6 +541,9 @@ main {
 .modal-head h2 {
   margin: 0;
 }
+.modal-head .modal-eyebrow {
+  margin: 0 0 4px;
+}
 .modal-close {
   flex: none;
   display: inline-grid;

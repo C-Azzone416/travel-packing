@@ -91,6 +91,24 @@ export async function eraseEnrollment(db: Db, row: EnrollmentRow): Promise<boole
   return erased.length > 0;
 }
 
+/**
+ * Whether the server holds ANY Framebriar record for this owner's current generation: an enrollment in any state, or any redemption
+ * attempt (even one past its retry window, which can still stand for a family nobody holds a credential for). Read-only: it never
+ * provisions the owner row, so asking about a closing or closed account cannot recreate it. Account closure (#261) refuses while
+ * this is true, so sealed credentials are never deleted by a cascade. Throws when the database cannot answer (callers fail closed).
+ */
+export async function accountHoldsFeedback(db: Db, ownerId: string): Promise<boolean> {
+  const [user] = await db
+    .select({ generation: schema.users.generation })
+    .from(schema.users)
+    .where(eq(schema.users.id, ownerId));
+  if (!user) return false;
+  return (
+    (await loadEnrollment(db, ownerId, user.generation)) !== null ||
+    (await loadRedemption(db, ownerId, user.generation)) !== null
+  );
+}
+
 export interface PendingRedemption {
   attemptId: string;
   createdAt: Date;
