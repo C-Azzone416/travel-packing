@@ -98,7 +98,12 @@ export async function signOutAction(): Promise<void> {
   // anonymous palette cookie, which stays so signed-out pages keep the chosen theme (#283).
   const jar = await cookies();
   const mirrored = jar.get(APPEARANCE_COOKIE)?.value;
-  if (isAppearance(mirrored)) await rememberAnonymousAppearance(mirrored);
+  try {
+    if (isAppearance(mirrored)) await rememberAnonymousAppearance(mirrored);
+  } catch {
+    // The theme copy is cosmetic and the session is already over: a failure here must not skip the cleanup below or
+    // strand the person on an error page, so the signed-out pages just fall back to their current palette (#289).
+  }
   jar.delete(APPEARANCE_COOKIE);
   // So does the address remembered for the code and setup screens (#209).
   await forgetPendingEmail();
