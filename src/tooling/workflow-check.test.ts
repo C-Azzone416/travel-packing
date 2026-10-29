@@ -307,8 +307,8 @@ describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
     [
       "the Framebriar key ring read by another step",
       mutate(
-        "      - name: Check the deploy environment (names only, no values)\n        env:",
-        "      - name: Check the deploy environment (names only, no values)\n        env:\n          LEAK: ${{ secrets.FRAMEBRIAR_CREDENTIAL_KEYS }}",
+        "      - name: Check the deploy environment (names only, no values)\n        id: deploy_env\n        env:",
+        "      - name: Check the deploy environment (names only, no values)\n        id: deploy_env\n        env:\n          LEAK: ${{ secrets.FRAMEBRIAR_CREDENTIAL_KEYS }}",
       ),
       /secrets\.FRAMEBRIAR_CREDENTIAL_KEYS must be read only by the secret injection step/,
     ],
@@ -426,8 +426,8 @@ describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
     [
       "the Production alias smoke test given the bypass secret",
       mutate(
-        '        run: npx tsx scripts/smoke-test.ts "https://${PRODUCTION_ALIAS}"',
-        '        env:\n          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}\n        run: npx tsx scripts/smoke-test.ts "https://${PRODUCTION_ALIAS}"',
+        "          ACCOUNT_CLOSURE_MODE: ${{ steps.deploy_env.outputs.account_closure }}\n        run:",
+        "          ACCOUNT_CLOSURE_MODE: ${{ steps.deploy_env.outputs.account_closure }}\n          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}\n        run:",
       ),
       /Production alias smoke test step must be exactly as reviewed/,
     ],

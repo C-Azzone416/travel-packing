@@ -1,9 +1,10 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import {
+  accountClosureMode,
   checkDeployEnv,
   checkMigrationTarget,
   hostOf,
@@ -246,6 +247,31 @@ describe("checkDeployEnv", () => {
   it("does not treat a look-alike host as production", () => {
     const env = { ...good, DATABASE_URL: `postgres://u:p@x-${PROD_HOST}/db` };
     expect(checkDeployEnv("preview", env, PROD_HOST)).toEqual([]);
+  });
+});
+
+describe("checkDeployEnv: account-closure rollout", () => {
+  it("derives the smoke contract from the exact runtime switch", () => {
+    expect(accountClosureMode({})).toBe("disabled");
+    expect(accountClosureMode({ CLOSE_ACCOUNT_ENABLED: "" })).toBe("disabled");
+    expect(accountClosureMode({ CLOSE_ACCOUNT_ENABLED: "1" })).toBe("enabled");
+    expect(accountClosureMode({ CLOSE_ACCOUNT_ENABLED: "true" })).toBe("disabled");
+  });
+
+  it("accepts either rollout state in Preview and rejects malformed values", () => {
+    expect(checkDeployEnv("preview", good, PROD_HOST)).toEqual([]);
+    expect(checkDeployEnv("preview", { ...good, CLOSE_ACCOUNT_ENABLED: "1" }, PROD_HOST)).toEqual(
+      [],
+    );
+    expect(
+      checkDeployEnv("preview", { ...good, CLOSE_ACCOUNT_ENABLED: "true" }, PROD_HOST),
+    ).toEqual(["CLOSE_ACCOUNT_ENABLED must be unset or the exact value 1"]);
+  });
+
+  it("keeps Production disabled even if its Vercel configuration is changed", () => {
+    expect(
+      checkDeployEnv("production", { ...production, CLOSE_ACCOUNT_ENABLED: "1" }, PROD_HOST),
+    ).toEqual(["CLOSE_ACCOUNT_ENABLED must not be enabled in production"]);
   });
 });
 
@@ -607,11 +633,15 @@ describe("scripts/check-deploy-env.ts reads both targets exactly as vercel build
       `${prefix}LOCATION_PROVIDER="open-meteo"`,
     ].join("\n");
 
-  function run(target: string, text: string, host: string) {
+  function run(target: string, text: string, host: string, output?: string) {
     const file = join(dir, `${target}.env`);
     writeFileSync(file, text);
     return spawnSync(tsx, [script, target, file], {
-      env: { PATH: process.env.PATH, PRODUCTION_DB_HOST: host } as unknown as NodeJS.ProcessEnv,
+      env: {
+        PATH: process.env.PATH,
+        PRODUCTION_DB_HOST: host,
+        ...(output ? { GITHUB_OUTPUT: output } : {}),
+      } as unknown as NodeJS.ProcessEnv,
       encoding: "utf8",
     });
   }
@@ -627,6 +657,27 @@ describe("scripts/check-deploy-env.ts reads both targets exactly as vercel build
     );
     expect(result.status).toBe(0);
     expect(result.stdout).toBe(`deploy env: ok for ${target}\n`);
+  });
+
+  it("writes only the derived account-closure mode to the workflow output", () => {
+    for (const [switchLine, expected] of [
+      ["", "disabled"],
+      ["\nCLOSE_ACCOUNT_ENABLED=1", "enabled"],
+    ] as const) {
+      const output = join(dir, `output-${expected}.txt`);
+      const result = run(
+        "preview",
+        `${envFile(
+          "",
+          "postgres://u:p@ep-prev-1.x.test/db",
+          "postgres://u:p@ep-prev-1.x.test/db",
+        )}${switchLine}`,
+        PROD_HOST,
+        output,
+      );
+      expect(result.status).toBe(0);
+      expect(readFileSync(output, "utf8")).toBe(`account_closure=${expected}\n`);
+    }
   });
 
   it.each(["preview", "production"])(

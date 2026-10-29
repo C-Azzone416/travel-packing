@@ -17,8 +17,16 @@ import {
 } from "./routes";
 
 const PREVIEW = "https://travel-packing-preview.vercel.app";
-const OWNER = { email: "owner@example.test", password: "pw", userId: "owner_1" };
-const OTHER = { email: "other@example.test", password: "pw", userId: "owner_2" };
+const OWNER = {
+  email: "owner@example.test",
+  password: "synthetic-owner-password-canary-97Yx",
+  userId: "owner_1",
+};
+const OTHER = {
+  email: "other@example.test",
+  password: "synthetic-other-password-canary-42Qz",
+  userId: "owner_2",
+};
 const KEY = randomBytes(32).toString("base64");
 
 let ctx: Awaited<ReturnType<typeof createMigratedDb>>;

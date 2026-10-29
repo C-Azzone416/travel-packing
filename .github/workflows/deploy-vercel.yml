@@ -130,6 +130,7 @@ jobs:
         run: npx tsx scripts/inject-deploy-secrets.ts ".vercel/.env.${TARGET}.local"
 
       - name: Check the deploy environment (names only, no values)
+        id: deploy_env
         env:
           PRODUCTION_DB_HOST: ${{ secrets.PRODUCTION_DB_HOST }}
         run: npx tsx scripts/check-deploy-env.ts "$TARGET" ".vercel/.env.${TARGET}.local"
@@ -225,14 +226,17 @@ jobs:
 
       - name: Production alias smoke test
         if: env.TARGET == 'production'
-        run: npx tsx scripts/smoke-test.ts "https://${PRODUCTION_ALIAS}"
+        env:
+          ACCOUNT_CLOSURE_MODE: ${{ steps.deploy_env.outputs.account_closure }}
+        run: npx tsx scripts/smoke-test.ts "https://${PRODUCTION_ALIAS}" --account-closure="$ACCOUNT_CLOSURE_MODE"
 
       - name: Smoke test
         if: env.TARGET == 'preview'
         env:
           DEPLOY_URL: ${{ steps.deploy.outputs.url }}
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
-        run: npx tsx scripts/smoke-test.ts "$DEPLOY_URL"
+          ACCOUNT_CLOSURE_MODE: ${{ steps.deploy_env.outputs.account_closure }}
+        run: npx tsx scripts/smoke-test.ts "$DEPLOY_URL" --account-closure="$ACCOUNT_CLOSURE_MODE"
 
       # ---- the stable Preview alias (#96) -------------------------------------------------------------------------------
       # Reached only after a successful deploy AND smoke test: an earlier failing step ends the job, and none of these steps
@@ -262,7 +266,8 @@ jobs:
         if: env.TARGET == 'preview' && steps.alias_head.outputs.assign == 'true'
         env:
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
-        run: npx tsx scripts/smoke-test.ts "https://${PREVIEW_ALIAS}"
+          ACCOUNT_CLOSURE_MODE: ${{ steps.deploy_env.outputs.account_closure }}
+        run: npx tsx scripts/smoke-test.ts "https://${PREVIEW_ALIAS}" --account-closure="$ACCOUNT_CLOSURE_MODE"
 
       # ---- tidy up (#135) -----------------------------------------------------------------------------------------------
       # Caroline's retention decision: only the stable alias address stays reachable, so every other Preview deployment of this
