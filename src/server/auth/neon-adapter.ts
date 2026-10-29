@@ -32,10 +32,12 @@ export interface NeonCallResult {
 export interface NeonDeletionCalls {
   /** A contract-correct session revocation call supplied by the runtime. */
   revokeOtherSessions?: () => Promise<NeonCallResult | null>;
-  /** Account-closure calls authenticated with the token minted by the immediately preceding password sign-in. */
-  revokeOtherSessionsWithSession?: (sessionToken: string) => Promise<NeonCallResult | null>;
+  /** Read the signed session cookie written by the immediately preceding password sign-in. */
+  readSessionCookie?: () => Promise<string | undefined>;
+  /** Account-closure calls authenticated with that fresh signed cookie. */
+  revokeOtherSessionsWithSession?: (sessionCookie: string) => Promise<NeonCallResult | null>;
   deleteUserWithSession?: (
-    sessionToken: string,
+    sessionCookie: string,
     password: string,
   ) => Promise<NeonCallResult | null>;
 }
@@ -202,35 +204,24 @@ export function createNeonAuthProvider(
   neon: NeonAuthLike,
   deletionCalls: NeonDeletionCalls = {},
 ): AuthProvider {
-  async function signIn(
-    email: string,
-    password: string,
-  ): Promise<{ result: SignInResult; sessionToken?: string }> {
+  async function signIn(email: string, password: string): Promise<SignInResult> {
     try {
       const response = await neon.signIn.email({ email, password });
-      if (response?.error) return { result: signInFailure(response.error) };
+      if (response?.error) return signInFailure(response.error);
       const session = toSession(response?.data?.user);
-      const sessionToken = response?.data?.token;
-      if (session) {
-        return {
-          result: { ok: true, session },
-          ...(typeof sessionToken === "string" && sessionToken.length > 0 ? { sessionToken } : {}),
-        };
-      }
+      if (session) return { ok: true, session };
       // The provider accepted the password but the address is not verified (or it says nothing): no session either way.
       if (response?.data?.user?.id && response.data.user.emailVerified !== true) {
         return {
-          result: {
-            ok: false,
-            unverified: true,
-            diagnostic: { reason: "email-unverified" },
-          },
+          ok: false,
+          unverified: true,
+          diagnostic: { reason: "email-unverified" },
         };
       }
-      return { result: { ok: false, diagnostic: { reason: "provider-response-invalid" } } };
+      return { ok: false, diagnostic: { reason: "provider-response-invalid" } };
     } catch {
       // Nothing from the thrown value is logged: it may contain an address, password or provider response body.
-      return { result: { ok: false, diagnostic: { reason: "provider-unavailable" } } };
+      return { ok: false, diagnostic: { reason: "provider-unavailable" } };
     }
   }
 
@@ -280,27 +271,42 @@ export function createNeonAuthProvider(
       return result?.error ? null : toSession(result?.data?.user, result?.data?.session?.createdAt);
     },
     async signInWithPassword(email, password): Promise<SignInResult> {
-      return (await signIn(email, password)).result;
+      return signIn(email, password);
     },
     async beginAccountClosure(email, password): Promise<AccountClosureSignInResult> {
+      const readSessionCookie = deletionCalls.readSessionCookie;
+      let previousSessionCookie: string | undefined;
+      try {
+        previousSessionCookie = await readSessionCookie?.();
+      } catch {
+        return { ok: false, diagnostic: { reason: "provider-unavailable" } };
+      }
       const signedIn = await signIn(email, password);
-      if (!signedIn.result.ok) return signedIn.result;
-      if (!signedIn.sessionToken) {
+      if (!signedIn.ok) return signedIn;
+      let freshSessionCookie: string | undefined;
+      try {
+        freshSessionCookie = await readSessionCookie?.();
+      } catch {
+        return { ok: false, diagnostic: { reason: "provider-unavailable" } };
+      }
+      // Better Auth returns the raw token in JSON but authenticates cookies with the signed value it writes in
+      // Set-Cookie. Require that write to be observable and different from the incoming session; never synthesize a
+      // cookie from response data or silently fall back to the ambient request credential.
+      if (!freshSessionCookie || freshSessionCookie === previousSessionCookie) {
         return { ok: false, diagnostic: { reason: "session-not-created" } };
       }
-      const sessionToken = signedIn.sessionToken;
       const revokeWithSession = deletionCalls.revokeOtherSessionsWithSession;
       const deleteWithSession = deletionCalls.deleteUserWithSession;
       return {
         ok: true,
         authorization: {
-          session: signedIn.result.session,
+          session: signedIn.session,
           revokeOtherSessions: () =>
-            revoke(revokeWithSession ? () => revokeWithSession(sessionToken) : undefined),
+            revoke(revokeWithSession ? () => revokeWithSession(freshSessionCookie) : undefined),
           deleteUser: (closurePassword) =>
             removeIdentity(
               deleteWithSession
-                ? () => deleteWithSession(sessionToken, closurePassword)
+                ? () => deleteWithSession(freshSessionCookie, closurePassword)
                 : undefined,
             ),
         },

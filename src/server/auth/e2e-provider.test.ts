@@ -210,6 +210,52 @@ describe("createE2eAuthProvider", () => {
   });
 
   describe("account deletion", () => {
+    it("binds closure revocation and deletion to the newly minted session", async () => {
+      await provider.signInWithPassword(OWNER, env.AUTH_E2E_PASSWORD);
+      const old = jar.get(E2E_COOKIE) ?? "";
+      const begun = await provider.beginAccountClosure(OWNER, env.AUTH_E2E_PASSWORD);
+      expect(begun.ok).toBe(true);
+      if (!begun.ok) throw new Error("synthetic closure sign-in failed");
+      const fresh = jar.get(E2E_COOKIE) ?? "";
+      expect(fresh).not.toBe(old);
+
+      await expect(begun.authorization.revokeOtherSessions()).resolves.toEqual({ ok: true });
+      expect(existsSync(join(dir, old))).toBe(false);
+      expect(existsSync(join(dir, fresh))).toBe(true);
+      await expect(begun.authorization.deleteUser(env.AUTH_E2E_PASSWORD)).resolves.toEqual({
+        ok: true,
+      });
+      expect(existsSync(join(dir, fresh))).toBe(false);
+      expect(jar.has(E2E_COOKIE)).toBe(false);
+    });
+
+    it("refuses closure for a wrong password or an unverified account", async () => {
+      await expect(provider.beginAccountClosure(OWNER, "wrong-password")).resolves.toEqual({
+        ok: false,
+      });
+      await provider.signUp("unverified@example.test", "synthetic-password");
+      await expect(
+        provider.beginAccountClosure("unverified@example.test", "synthetic-password"),
+      ).resolves.toEqual({ ok: false });
+    });
+
+    it("fails closed if the bound fresh session disappears", async () => {
+      const begun = await provider.beginAccountClosure(OWNER, env.AUTH_E2E_PASSWORD);
+      expect(begun.ok).toBe(true);
+      if (!begun.ok) throw new Error("synthetic closure sign-in failed");
+      const fresh = jar.get(E2E_COOKIE) ?? "";
+      rmSync(join(dir, fresh), { force: true });
+
+      await expect(begun.authorization.revokeOtherSessions()).resolves.toEqual({
+        ok: false,
+        reason: "unavailable",
+      });
+      await expect(begun.authorization.deleteUser(env.AUTH_E2E_PASSWORD)).resolves.toEqual({
+        ok: false,
+        reason: "invalid",
+      });
+    });
+
     it("revokes every other session while preserving the current one", async () => {
       await provider.signInWithPassword(OWNER, env.AUTH_E2E_PASSWORD);
       const first = jar.get(E2E_COOKIE) ?? "";

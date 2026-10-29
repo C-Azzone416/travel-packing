@@ -110,12 +110,16 @@ beforeEach(() => {
 });
 
 describe("account deletion provider calls", () => {
-  it("binds closure revocation and deletion to the token minted by reauthentication", async () => {
+  it("binds closure revocation and deletion to the signed cookie written by reauthentication", async () => {
     const { neon, calls } = fakeNeon({
-      signIn: { data: { user: VERIFIED_USER, token: "fresh-session" } },
+      signIn: { data: { user: VERIFIED_USER, token: "raw-body-token" } },
       revokeOtherSessions: { data: {} },
       deleteUser: { data: {} },
     });
+    const readSessionCookie = vi
+      .fn<() => Promise<string | undefined>>()
+      .mockResolvedValueOnce("signed-ambient-cookie")
+      .mockResolvedValueOnce("signed-fresh-cookie");
     const revokeOtherSessionsWithSession = vi.fn(async () => ({
       data: { status: true },
       error: null,
@@ -125,6 +129,7 @@ describe("account deletion provider calls", () => {
       error: null,
     }));
     const provider = createNeonAuthProvider(neon, {
+      readSessionCookie,
       revokeOtherSessionsWithSession,
       deleteUserWithSession,
     });
@@ -134,20 +139,54 @@ describe("account deletion provider calls", () => {
     if (!begun.ok) throw new Error("synthetic closure sign-in failed");
     expect(await begun.authorization.revokeOtherSessions()).toEqual({ ok: true });
     expect(await begun.authorization.deleteUser("synthetic-password")).toEqual({ ok: true });
-    expect(revokeOtherSessionsWithSession).toHaveBeenCalledWith("fresh-session");
-    expect(deleteUserWithSession).toHaveBeenCalledWith("fresh-session", "synthetic-password");
+    expect(readSessionCookie).toHaveBeenCalledTimes(2);
+    expect(revokeOtherSessionsWithSession).toHaveBeenCalledWith("signed-fresh-cookie");
+    expect(deleteUserWithSession).toHaveBeenCalledWith("signed-fresh-cookie", "synthetic-password");
     expect(calls.revokeOtherSessions).toBe(0);
     expect(calls.deleteUser).toEqual([]);
-    expect(JSON.stringify(begun)).not.toContain("fresh-session");
+    expect(Object.keys(begun.authorization)).toEqual([
+      "session",
+      "revokeOtherSessions",
+      "deleteUser",
+    ]);
+    expect(JSON.stringify(begun)).not.toContain("signed-fresh-cookie");
   });
 
-  it("refuses closure when sign-in does not return the minted session token", async () => {
-    const { neon } = fakeNeon({ signIn: { data: { user: VERIFIED_USER } } });
+  it.each([
+    ["is not observable", [undefined, undefined]],
+    ["does not change", ["signed-ambient-cookie", "signed-ambient-cookie"]],
+  ])("refuses closure when the sign-in cookie %s", async (_name, answers) => {
+    const { neon } = fakeNeon({
+      signIn: { data: { user: VERIFIED_USER, token: "raw-body-token" } },
+    });
+    const readSessionCookie = vi
+      .fn<() => Promise<string | undefined>>()
+      .mockResolvedValueOnce(answers[0])
+      .mockResolvedValueOnce(answers[1]);
     await expect(
-      createNeonAuthProvider(neon).beginAccountClosure("owner@example.test", "synthetic-password"),
+      createNeonAuthProvider(neon, { readSessionCookie }).beginAccountClosure(
+        "owner@example.test",
+        "synthetic-password",
+      ),
     ).resolves.toEqual({
       ok: false,
       diagnostic: { reason: "session-not-created" },
+    });
+  });
+
+  it("fails closed when the signed-cookie store cannot be read", async () => {
+    const { neon } = fakeNeon({
+      signIn: { data: { user: VERIFIED_USER, token: "raw-body-token" } },
+    });
+    await expect(
+      createNeonAuthProvider(neon, {
+        readSessionCookie: async () => {
+          throw new Error("synthetic cookie store failure");
+        },
+      }).beginAccountClosure("owner@example.test", "synthetic-password"),
+    ).resolves.toEqual({
+      ok: false,
+      diagnostic: { reason: "provider-unavailable" },
     });
   });
 

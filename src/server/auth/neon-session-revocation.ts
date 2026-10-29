@@ -19,6 +19,7 @@ interface RevocationConfig {
 
 interface RevocationDeps {
   requestHeaders?: () => Promise<Headers>;
+  readCookie?: (name: string) => Promise<string | undefined>;
   applyCookie?: (
     name: string,
     value: string,
@@ -49,13 +50,18 @@ async function proxyCall(
   path: string,
   body: Record<string, string>,
   deps: RevocationDeps,
-  sessionToken?: string,
+  sessionCookie?: string,
 ): Promise<{ response: Response; data: unknown }> {
   const incoming = deps.requestHeaders ? await deps.requestHeaders() : new Headers(await headers());
   incoming.set("content-type", "application/json");
-  if (sessionToken !== undefined) {
-    if (!sessionToken || /[\r\n;]/.test(sessionToken)) throw new Error("Invalid session token");
-    incoming.set("cookie", `${NEON_AUTH_SESSION_COOKIE_NAME}=${encodeURIComponent(sessionToken)}`);
+  if (sessionCookie !== undefined) {
+    if (!sessionCookie || /[\r\n;]/.test(sessionCookie)) throw new Error("Invalid session cookie");
+    // The proxy helper parses and re-serializes the Cookie header once before forwarding it. Encode for both that
+    // normalization and the upstream cookie parser so metacharacters cannot change the forwarded cookie structure.
+    incoming.set(
+      "cookie",
+      `${NEON_AUTH_SESSION_COOKIE_NAME}=${encodeURIComponent(encodeURIComponent(sessionCookie))}`,
+    );
   }
   const response = await handleAuthProxyRequest({
     // The proxy derives Origin from this URL only if the real request lacks Origin and Referer.
@@ -101,8 +107,9 @@ async function applyConfirmedDeletionCookies(
 }
 
 export interface NeonAccountClosureCalls {
-  revokeOtherSessionsWithSession(sessionToken: string): Promise<NeonCallResult>;
-  deleteUserWithSession(sessionToken: string, password: string): Promise<NeonCallResult>;
+  readSessionCookie(): Promise<string | undefined>;
+  revokeOtherSessionsWithSession(sessionCookie: string): Promise<NeonCallResult>;
+  deleteUserWithSession(sessionCookie: string, password: string): Promise<NeonCallResult>;
 }
 
 /** Bind both destructive calls to the token minted by the closure reauthentication. */
@@ -111,21 +118,25 @@ export function createNeonAccountClosureCalls(
   deps: RevocationDeps = {},
 ): NeonAccountClosureCalls {
   return {
-    async revokeOtherSessionsWithSession(sessionToken) {
-      const { response, data } = await proxyCall(config, REVOCATION_PATH, {}, deps, sessionToken);
+    async readSessionCookie() {
+      if (deps.readCookie) return deps.readCookie(NEON_AUTH_SESSION_COOKIE_NAME);
+      return (await cookies()).get(NEON_AUTH_SESSION_COOKIE_NAME)?.value;
+    },
+    async revokeOtherSessionsWithSession(sessionCookie) {
+      const { response, data } = await proxyCall(config, REVOCATION_PATH, {}, deps, sessionCookie);
       const result = boundedResponse(response, data);
       if (!result.error && response.headers.get("set-cookie")) {
         return { data: null, error: { status: 0, code: "UNEXPECTED_COOKIE_MUTATION" } };
       }
       return result;
     },
-    async deleteUserWithSession(sessionToken, password) {
+    async deleteUserWithSession(sessionCookie, password) {
       const { response, data } = await proxyCall(
         config,
         DELETE_USER_PATH,
         { password },
         deps,
-        sessionToken,
+        sessionCookie,
       );
       const result = boundedResponse(response, data);
       const confirmed = record(data)?.success === true && record(data)?.message === "User deleted";
