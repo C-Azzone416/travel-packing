@@ -4966,46 +4966,44 @@ a.back {
   box-shadow: inset 0 1px 0 var(--line);
 }
 .weather-days {
-  container-type: inline-size;
   display: grid;
   margin: 0;
   padding: 0;
   list-style: none;
 }
+/* One line when it fits. When it does not (a narrow column, or text scaled up), the temperatures and then the rain text
+   wrap onto whole extra 28px rows, right-aligned. The label never shrinks or breaks: content decides, not a pixel width. */
 .weather-day {
   position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 20px auto auto;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0 8px;
+  column-gap: 8px;
   min-height: var(--ledger-row);
   line-height: var(--ledger-row);
   box-shadow: inset 0 -1px 0 var(--line);
   font-variant-numeric: tabular-nums;
 }
 .weather-day-label {
-  min-width: 0;
-  overflow-wrap: anywhere;
+  flex: 1 1 auto;
+  white-space: nowrap;
 }
 .weather-day-glyph {
+  flex: 0 0 20px;
   text-align: center;
 }
 .weather-day-temps {
+  min-width: 10ch;
+  margin-left: auto;
+  text-align: right;
   white-space: nowrap;
 }
 .weather-day-rain {
+  min-width: 9ch;
+  margin-left: auto;
   color: var(--muted-text);
+  text-align: right;
   white-space: nowrap;
-}
-/* Too narrow for one line (very large text): the rain text drops under the temperatures, as a whole second row. */
-@container (max-width: 230px) {
-  .weather-day {
-    grid-template-columns: minmax(0, 1fr) 20px auto;
-  }
-  .weather-day-rain {
-    grid-column: 3;
-    justify-self: end;
-  }
 }
 .weather-days-toggle {
   position: relative;
@@ -5021,7 +5019,8 @@ a.back {
   inset: -8px 0;
 }
 @media (min-width: 981px) {
-  .weather-days {
+  .weather-days,
+  .weather-row-forecast .weather-typical-part {
     max-width: 520px;
   }
 }

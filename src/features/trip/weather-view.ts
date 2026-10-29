@@ -77,7 +77,10 @@ const MONTHS = [
   "December",
 ];
 
-/** Today as a calendar date in UTC, the same clock the server uses to choose forecast days. */
+/**
+ * Today as a calendar date in UTC, the same clock the server uses to choose forecast days. Late in the evening in the
+ * Americas this is already tomorrow's date. #26 (Caroline's timezone decision) may change this; a test pins it for now.
+ */
 export const todayUtc = (): string => new Date().toISOString().slice(0, 10);
 
 const GLYPH_WORD: Record<Glyph, string> = {

@@ -104,33 +104,46 @@ async function setWidth(page: Page, width: number) {
 }
 
 /** Every daily row is whole 28px rows, each cell is one line, and no two cells touch. */
-async function expectCleanRows(page: Page, width: number) {
+async function expectCleanRows(
+  page: Page,
+  width: number,
+  options: { zoom?: boolean; columns?: boolean } = {},
+) {
   const rows = await measureRows(page);
   expect(rows.length).toBeGreaterThan(0);
   rows.forEach((row, at) => {
     const where = `row ${at} at ${width}px`;
     expect(row.height % ROW, `${where} height ${row.height}`).toBeLessThanOrEqual(0.5);
     expect(row.height, where).toBeGreaterThanOrEqual(ROW - 0.5);
-    const narrow = row.listWidth < 240;
-    // Under 240px (a phone at 320, or three stays side by side) a row may use its documented fallback: whole extra rows.
+    // Content decides: whatever does not fit goes onto a whole extra row. The label is always one line, and no two
+    // cells ever share space (on one line they are side by side; otherwise one sits below the other).
     for (const name of ["label", "temps", "rain"] as const) {
-      if (!narrow || name !== "label") expect(row[name].lines, `${where} ${name} lines`).toBe(1);
+      expect(row[name].lines, `${where} ${name} lines`).toBe(1);
     }
-    if (!narrow)
-      expect(row.label.right, `${where} label/glyph`).toBeLessThanOrEqual(row.glyph.left + 0.5);
-    expect(row.glyph.right, `${where} glyph/temps`).toBeLessThanOrEqual(row.temps.left + 0.5);
-    if (row.height < ROW * 2 - 0.5) {
-      expect(row.temps.right, `${where} temps/rain`).toBeLessThanOrEqual(row.rain.left + 0.5);
-    } else {
-      // The documented fallback (the stay's column is narrower than one line needs): the rain text sits under the
-      // temperatures as a second whole row. It happens only when the list is under 240px wide (a phone at 320, or three stays side by side).
-      expect(row.listWidth, `${where} wrapped`).toBeLessThan(240);
-      expect(row.rain.top, `${where} rain under temps`).toBeGreaterThanOrEqual(
-        row.temps.bottom - 0.5,
-      );
+    const cells = { label: row.label, glyph: row.glyph, temps: row.temps, rain: row.rain };
+    const names = Object.keys(cells) as (keyof typeof cells)[];
+    for (const [i, first] of names.entries()) {
+      for (const second of names.slice(i + 1)) {
+        const a = cells[first];
+        const b = cells[second];
+        const apart =
+          a.right <= b.left + 0.5 ||
+          b.right <= a.left + 0.5 ||
+          a.bottom <= b.top + 0.5 ||
+          b.bottom <= a.top + 0.5;
+        expect(apart, `${where}: ${first} and ${second} overlap`).toBe(true);
+      }
     }
   });
   expect(await overflow(page), `overflow at ${width}px`).toEqual({ page: 0, panel: 0 });
+  if (width >= 721 && !options.zoom) {
+    // wide lists never need the fallback (three stays side by side at 721 are the one exception, checked by its test)
+    if (!options.columns)
+      expect(
+        rows.every((row) => row.height < ROW + 0.5),
+        `${width}px one line`,
+      ).toBe(true);
+  }
 }
 
 test("a typical-only stay keeps today's row: no daily list, no Forecast tag", async ({ page }) => {
@@ -240,7 +253,7 @@ test("three stays each keep their own list and toggle", async ({ page }) => {
   await expect(lists).toHaveCount(2); // the third stay is past the window: typical only
   for (const width of WIDTHS) {
     await setWidth(page, width);
-    await expectCleanRows(page, width);
+    await expectCleanRows(page, width, { columns: true });
   }
   const toggles = page.getByRole("button", { name: /^Show all \d+ days$/ });
   const before = await toggles.count();
@@ -269,15 +282,24 @@ test("extremes: a 40-character unbroken city, three-digit Fahrenheit, snow and r
   // the day glyphs mix sun, rain and snow, and none relies on colour
   const marks = await page.locator(".weather-day-glyph").allInnerTexts();
   expect(new Set(marks).size).toBeGreaterThan(1);
-  // 200% text at 390: rows may take a second whole row, but never scroll sideways
-  await setWidth(page, 390);
-  await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
-  expect(await overflow(page)).toEqual({ page: 0, panel: 0 });
-  const heights = await page
-    .locator(".weather-day")
-    .evaluateAll((els) => els.map((el) => el.getBoundingClientRect().height));
-  for (const h of heights) expect(h % ROW).toBeLessThanOrEqual(0.5);
 });
+
+// B1 (design, #307): at 200% text the day label used to collapse to 0px and wrap one letter per line.
+for (const width of [390, 320]) {
+  test(`200% text at ${width}px: labels stay on one line and nothing overlaps`, async ({
+    page,
+  }) => {
+    await openTrip(page, [{ leave: 1, back: 15 }]);
+    await setWidth(page, width);
+    await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+    await expectCleanRows(page, width, { zoom: true });
+    // the fallback really happened: at least one row took a second whole row
+    const heights = await page
+      .locator(".weather-day")
+      .evaluateAll((els) => els.map((el) => el.getBoundingClientRect().height));
+    expect(Math.max(...heights)).toBeGreaterThan(ROW + 0.5);
+  });
+}
 
 test("Fahrenheit rows show three-digit temperatures from the provider", async ({ page }) => {
   await fake("/__weather-set?variant=scorching");
@@ -314,7 +336,13 @@ test("screenshots for design review (opt-in)", async ({ page }) => {
   test.setTimeout(240_000);
   const dir = SHOTS as string;
   mkdirSync(dir, { recursive: true });
-  const cases: { name: string; stays: Stay[]; expand?: boolean; scorch?: boolean }[] = [
+  const cases: {
+    name: string;
+    stays: Stay[];
+    expand?: boolean;
+    scorch?: boolean;
+    zoom?: boolean;
+  }[] = [
     { name: "a-typical-only", stays: [{ leave: 60, back: 63 }] },
     { name: "b-all-forecast-collapsed", stays: [{ leave: 1, back: 15 }] },
     { name: "b-all-forecast-expanded", stays: [{ leave: 1, back: 15 }], expand: true },
@@ -323,6 +351,7 @@ test("screenshots for design review (opt-in)", async ({ page }) => {
     { name: "e-single-day", stays: [{ leave: 2, back: 2 }] },
     { name: "f-three-stays", stays: [{ leave: 1, back: 12 }, { leave: 16 }, { leave: 22 }] },
     { name: "h-fahrenheit-3-digit", stays: [{ leave: 2, back: 6 }], scorch: true },
+    { name: "j-zoom200", stays: [{ leave: 11, back: 25 }], zoom: true },
   ];
   for (const item of cases) {
     await fake("/__weather-reset");
@@ -330,11 +359,22 @@ test("screenshots for design review (opt-in)", async ({ page }) => {
     await page.context().clearCookies();
     await openTrip(page, item.stays);
     if (item.expand) await page.getByRole("button", { name: /^Show all/ }).click();
-    for (const width of WIDTHS) {
+    if (item.zoom) await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+    for (const width of item.zoom ? [390, 320] : WIDTHS) {
       await setWidth(page, width);
       await page
         .locator(".weather-panel")
         .screenshot({ path: join(dir, `${item.name}-${width}.png`) });
+      if (item.name === "b-all-forecast-collapsed") {
+        // keyboard focus ring on the toggle (design N3)
+        const toggle = page.getByRole("button", { name: /^Show all/ });
+        await toggle.focus();
+        await page.keyboard.press("Shift+Tab");
+        await page.keyboard.press("Tab");
+        await page
+          .locator(".weather-panel")
+          .screenshot({ path: join(dir, `b-toggle-focus-${width}.png`) });
+      }
     }
   }
 });

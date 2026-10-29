@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TripStop } from "@/domain/trip-stops";
 import type { DayWeather, StopWeather } from "@/domain/weather/types";
 import {
@@ -37,6 +37,8 @@ const day = (over: Partial<DayWeather> = {}): DayWeather => ({
   sunshineHours: 4,
   ...over,
 });
+
+afterEach(() => vi.useRealTimers());
 
 describe("weather view", () => {
   it("converts and rounds display temperatures without changing engine units", () => {
@@ -181,6 +183,17 @@ describe("weather view", () => {
       expect(dayView(at("2031-04-02", { precipProbability: 0.5 }), "C", "x").spoken).toContain(
         "rain likely",
       );
+    });
+
+    it("todayUtc is the UTC calendar date, not the local one (pins today's behaviour; #26 may change it)", () => {
+      vi.useFakeTimers();
+      // 23:30 on 5 Apr in a UTC-8 zone is 07:30 UTC on 6 Apr
+      vi.setSystemTime(new Date("2031-04-06T07:30:00Z"));
+      expect(todayUtc()).toBe("2031-04-06");
+      vi.setSystemTime(new Date("2031-04-05T23:59:59Z"));
+      expect(todayUtc()).toBe("2031-04-05");
+      vi.setSystemTime(new Date("2031-04-06T00:00:00Z"));
+      expect(todayUtc()).toBe("2031-04-06");
     });
 
     it("defaults to Celsius and the clock's today", () => {
