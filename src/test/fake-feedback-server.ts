@@ -3,7 +3,7 @@
 // errors, and a report accepted only for a connected, signed-in account. Nothing here is a credential: it knows no token, and it
 // records only the route, the method and whether a report was accepted. It is a test double and never ships.
 
-import type { EnrollmentState } from "@/features/feedback/enrollment-client";
+import type { DisconnectOutcome, EnrollmentState } from "@/features/feedback/enrollment-client";
 
 export type Route = "status" | "redeem" | "disconnect" | "reports";
 
@@ -22,6 +22,10 @@ export interface FakeFeedbackState {
   redeem: "connected" | "rejected" | "uncertain";
   /** What a disconnect reports when it works. */
   revoked: boolean;
+  /** Overrides what a working disconnect reports; otherwise "ended" when `revoked` and it was connected, else "nothing". */
+  disconnectOutcome?: DisconnectOutcome;
+  /** Overrides whether the server holds a record; otherwise true for any state but not-connected, or a pending redemption. */
+  hasRecord?: boolean;
 }
 
 export const OUTBOX_KEY_A = "KA".padEnd(43, "a");
@@ -87,6 +91,8 @@ export function createFakeFeedbackServer(initial: Partial<FakeFeedbackState> = {
         status: state.status,
         expiresAt: state.expiresAt,
         redemption: state.redemption,
+        hasRecord:
+          state.hasRecord ?? (state.status !== "not-connected" || state.redemption === "pending"),
         outboxKey: state.outboxKey,
       });
     }
@@ -109,9 +115,13 @@ export function createFakeFeedbackServer(initial: Partial<FakeFeedbackState> = {
     }
     if (route === "disconnect") {
       const had = state.status === "connected";
+      const outcome: DisconnectOutcome =
+        state.disconnectOutcome ?? (had && state.revoked ? "ended" : "nothing");
       state.status = "not-connected";
       state.expiresAt = null;
-      return json(200, { v: 1, status: "not-connected", revoked: had && state.revoked });
+      state.redemption = "none";
+      state.hasRecord = undefined;
+      return json(200, { v: 1, status: "not-connected", outcome, revoked: outcome === "ended" });
     }
     // reports
     if (state.status !== "connected") {

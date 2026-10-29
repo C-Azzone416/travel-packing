@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useToast } from "@/components/ui/Toast";
-import { useFeedbackAccess, type ConnectResult, type DisconnectResult } from "./FeedbackAccess";
+import { disconnectText, isDisconnectSuccess } from "./disconnect-copy";
+import { useFeedbackAccess, type ConnectResult } from "./FeedbackAccess";
 
 const DATE = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" });
 
@@ -28,13 +29,6 @@ export function connectFailureText(result: ConnectFailure): string {
       return "Feedback isn’t available right now. Try again later.";
   }
 }
-
-export const DISCONNECT_RESULT: Record<DisconnectResult, string> = {
-  ended: "Disconnected. Your feedback access was ended.",
-  nothing: "You weren’t connected, so there was nothing to end.",
-  failed: "We couldn’t reach the service to end the access. You’re still connected. Try again.",
-  offline: "You’re offline, so nothing was changed. Disconnect again when you’re back online.",
-};
 
 const STATE_TEXT = {
   needsReconnect:
@@ -81,11 +75,12 @@ export function FeedbackSettings() {
   const [failure, setFailure] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [confirmingClear, setConfirmingClear] = useState(false);
-  const [disconnected, setDisconnected] = useState<string | null>(null);
+  const [disconnected, setDisconnected] = useState<{ text: string; ok: boolean } | null>(null);
 
   if (!available) return null;
 
   const connected = status?.connected === true;
+  const hasRecord = status?.hasRecord === true;
   const connection = status?.connection ?? null;
   // A new invitation can fix these. "Switched off" and "unavailable" need the developer or time, so no form is offered for them.
   const canRedeem =
@@ -123,10 +118,13 @@ export function FeedbackSettings() {
 
   async function confirmDisconnect() {
     setConfirming(false);
+    setDisconnected(null);
     setBusy(true);
+    // The deadline is only known now: once disconnected the status no longer has it.
+    const deadline = status?.expiresAt ?? null;
     const result = await disconnect();
     setBusy(false);
-    setDisconnected(DISCONNECT_RESULT[result]);
+    setDisconnected({ text: disconnectText(result, deadline), ok: isDisconnectSuccess(result) });
   }
 
   async function confirmClear() {
@@ -185,14 +183,23 @@ export function FeedbackSettings() {
           This browser can’t keep reports on the device, so feedback can’t be saved here.
         </p>
       ) : null}
-      {disconnected ? (
-        <p className="tiny" role="status">
-          {disconnected}
-        </p>
-      ) : null}
-      {connected && !confirming && !confirmingClear ? (
+      {/* Both live regions stay in the page so a result is announced when it appears; a failure is never colour alone. */}
+      <div role="status" className="tiny">
+        {disconnected?.ok ? disconnected.text : null}
+      </div>
+      <div role="alert" className="tiny">
+        {disconnected && !disconnected.ok ? (
+          <p>
+            <span aria-hidden="true">⚠ </span>
+            {disconnected.text}
+          </p>
+        ) : null}
+      </div>
+      {hasRecord && !confirming && !confirmingClear ? (
         // One row: Send feedback (the same sheet as the header button, shown only where that button is on), then Disconnect and, when
         // there are any, Delete unsent reports. On a phone Send feedback has the row to itself (#273, design's spec section 1).
+        // Disconnect is offered whenever the server holds a record, not only while connected (#304): an expired or ended enrollment
+        // still has sealed credentials to remove.
         <div className="feedback-actions">
           {status?.canCapture ? (
             <Button className="feedback-send-action" disabled={busy} onClick={openReport}>
@@ -225,7 +232,7 @@ export function FeedbackSettings() {
           </div>
         </div>
       ) : null}
-      {unsent > 0 && !confirmingClear && !(connected && !confirming) ? (
+      {unsent > 0 && !confirmingClear && !(hasRecord && !confirming) ? (
         <div className="feedback-actions">
           <Button variant="secondary" disabled={busy} onClick={() => setConfirmingClear(true)}>
             Delete unsent reports

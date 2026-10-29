@@ -6,6 +6,7 @@ const view = (over: Partial<EnrollmentView> = {}): EnrollmentView => ({
   status: "not-connected",
   expiresAt: "2026-11-19T12:00:00.000Z",
   redemption: "none",
+  hasRecord: false,
   outboxKey: "k".repeat(43),
   ...over,
 });
@@ -20,9 +21,23 @@ describe("feedbackStatus", () => {
       online: true,
       rateLimited: false,
       connected: true,
+      hasRecord: false,
       canCapture: true,
       notice: null,
     });
+  });
+
+  it("carries the server's hasRecord through unchanged, whatever the connection", () => {
+    for (const status of [
+      "connected",
+      "expired",
+      "revoked",
+      "disabled",
+      "not-connected",
+    ] as const) {
+      expect(feedbackStatus(view({ status, hasRecord: true }), here).hasRecord).toBe(true);
+      expect(feedbackStatus(view({ status, hasRecord: false }), here).hasRecord).toBe(false);
+    }
   });
 
   it("not connected: cannot capture, shows no expiry and (with nothing pending) no notice", () => {

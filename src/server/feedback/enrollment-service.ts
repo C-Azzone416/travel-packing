@@ -37,6 +37,12 @@ export interface StatusView {
   status: EnrollmentStatus;
   expiresAt: string | null;
   redemption: "none" | "pending";
+  /**
+   * Whether the server holds anything for this account's current generation: an enrollment row in ANY state (expired, revoked,
+   * switched off, unreadable) or a redemption attempt. Disconnect is offered whenever this is true (#304). The status route never
+   * calls Framebriar, so this is a database fact only.
+   */
+  hasRecord: boolean;
   /** Opaque per-account namespace for the browser's local outbox; null only when the database could not be reached. */
   outboxKey: string | null;
 }
@@ -52,7 +58,13 @@ export type EnrollmentError =
   | "NEEDS_RECONNECT"
   | "EXPIRED"
   | "REVOKED"
-  | "DISABLED";
+  | "DISABLED"
+  /** Disconnect: the access was ended but the saved copy could not be erased yet. Repeating finishes it. */
+  | "PARTIAL"
+  /** Disconnect: a connection attempt is still pending and may have made access the app holds no credential for. */
+  | "PENDING_REDEMPTION";
+
+export type DisconnectOutcome = "ended" | "nothing" | "erased_unrevocable";
 
 export type Failure = { ok: false; code: EnrollmentError; retryAfterSeconds?: number };
 
@@ -168,10 +180,17 @@ export function createEnrollmentService({
             ? row.expiresAt.toISOString()
             : null,
         redemption: live ? "pending" : "none",
+        hasRecord: row !== null || pending !== null,
         outboxKey: outboxKeyFor(ownerId, generation),
       };
     } catch {
-      return { status: "unavailable", expiresAt: null, redemption: "none", outboxKey: null };
+      return {
+        status: "unavailable",
+        expiresAt: null,
+        redemption: "none",
+        hasRecord: false,
+        outboxKey: null,
+      };
     }
   }
 
@@ -343,20 +362,40 @@ export function createEnrollmentService({
     }
   }
 
-  async function disconnect(ownerId: string): Promise<{ ok: true; revoked: boolean } | Failure> {
+  /**
+   * Disconnect, with the real outcome. "ended": Framebriar revoked the access. "nothing": there was nothing to end (no record, or a
+   * record that was already dead). "erased_unrevocable": the app's copy is erased but the access itself could not be ended (the
+   * credential was unreadable, or a lost connection attempt may have made a family we hold nothing for), so it runs to Framebriar's
+   * fixed deadline. Failures change nothing the caller must undo and can be repeated.
+   */
+  async function disconnect(
+    ownerId: string,
+  ): Promise<{ ok: true; outcome: DisconnectOutcome; revoked: boolean } | Failure> {
     const result = await revokeAndEraseEnrollment(ownerId);
     switch (result.status) {
       case "none":
-        return { ok: true, revoked: false };
+        return { ok: true, outcome: "nothing", revoked: false };
       case "erased":
-        return { ok: true, revoked: result.revoked };
+        if (result.revoked) return { ok: true, outcome: "ended", revoked: true };
+        return {
+          ok: true,
+          outcome: result.unrevocableAttempts > 0 ? "erased_unrevocable" : "nothing",
+          revoked: false,
+        };
       case "erased_unrevocable":
-        // Honest: the row is gone but the family could not be revoked, so it is not reported as revoked.
-        return { ok: true, revoked: false };
+        return { ok: true, outcome: "erased_unrevocable", revoked: false };
       case "partial":
-        return { ok: false, code: "UNAVAILABLE" };
+        return { ok: false, code: "PARTIAL" };
       default:
-        return { ok: false, code: result.reason === "uncertain" ? "UNCERTAIN" : "UNAVAILABLE" };
+        return {
+          ok: false,
+          code:
+            result.reason === "uncertain"
+              ? "UNCERTAIN"
+              : result.reason === "pending-redemption"
+                ? "PENDING_REDEMPTION"
+                : "UNAVAILABLE",
+        };
     }
   }
 

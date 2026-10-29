@@ -72,6 +72,48 @@ export async function forgetFeedbackEnrollment(ownerId: string): Promise<void> {
   }
 }
 
+/** What the server's database holds for one account: the store-level proof that Disconnect erased (or kept) the sealed credentials. */
+export async function heldFor(
+  ownerId: string,
+): Promise<{ enrollments: number; redemptions: number }> {
+  const pool = new Pool({ connectionString: E2E_DATABASE_URL, max: 1 });
+  try {
+    const db = drizzle(pool, { schema }) as unknown as Db;
+    const enrollments = await db
+      .select()
+      .from(schema.framebriarEnrollments)
+      .where(eq(schema.framebriarEnrollments.ownerId, ownerId));
+    const redemptions = await db
+      .select()
+      .from(schema.framebriarRedemptions)
+      .where(eq(schema.framebriarRedemptions.ownerId, ownerId));
+    return { enrollments: enrollments.length, redemptions: redemptions.length };
+  } finally {
+    await pool.end();
+  }
+}
+
+/**
+ * Put the stored enrollment into a state the page cannot reach by itself: past its deadline ("expired"), or sealed under a key this
+ * server no longer has ("unreadable", which the status shows as needs_reconnect). Synthetic data only.
+ */
+export async function ageEnrollment(ownerId: string, how: "expired" | "unreadable"): Promise<void> {
+  const pool = new Pool({ connectionString: E2E_DATABASE_URL, max: 1 });
+  try {
+    const db = drizzle(pool, { schema }) as unknown as Db;
+    await db
+      .update(schema.framebriarEnrollments)
+      .set(
+        how === "expired"
+          ? { expiresAt: new Date(Date.now() - 86_400_000) }
+          : { keyVersion: "retired-key" },
+      )
+      .where(eq(schema.framebriarEnrollments.ownerId, ownerId));
+  } finally {
+    await pool.end();
+  }
+}
+
 export async function openSettings(page: Page) {
   // The synthetic trips are seeded relative to SAMPLE_TODAY. Keep their upcoming/past split stable after that
   // calendar date passes, just like the trip-focused e2e helpers do.
@@ -95,7 +137,7 @@ export async function goToTrips(page: Page) {
 /** Pastes an invitation (a fresh one unless given) on Settings and waits for Connected. */
 export async function connectFeedback(page: Page, invitation?: string) {
   await page.getByLabel("Invitation").fill(invitation ?? (await fakeFramebriar.issueInvitation()));
-  await page.getByRole("button", { name: "Connect" }).click();
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
   await expect(page.locator(".status-pill", { hasText: "Connected" })).toBeVisible();
 }
 

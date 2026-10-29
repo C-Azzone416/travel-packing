@@ -34,6 +34,8 @@ export interface EnrollmentView {
   expiresAt: string | null;
   /** A redemption was started and its answer was lost: paste the SAME invitation again to finish. */
   redemption: "none" | "pending";
+  /** The server holds an enrollment in any state, or a redemption attempt: Disconnect has something to remove. */
+  hasRecord: boolean;
   /** Opaque, URL-safe, tied to the account (and its generation). The only thing the browser may name its storage with. */
   outboxKey: string | null;
 }
@@ -59,11 +61,17 @@ export type RedeemResult =
   | { kind: "signed-out" }
   | { kind: "offline" };
 
+/** What a successful Disconnect really did (#304): the access was ended, there was nothing to end, or the app's copy is erased but
+ * the access itself could not be ended and runs to Framebriar's fixed deadline. */
+export type DisconnectOutcome = "ended" | "nothing" | "erased_unrevocable";
+/** Why a Disconnect changed nothing (or not everything): each can be repeated. */
+export type DisconnectFailure = "partial" | "unavailable" | "uncertain" | "pending";
+
+const OUTCOMES: readonly DisconnectOutcome[] = ["ended", "nothing", "erased_unrevocable"];
+
 export type DisconnectResult =
-  /** `revoked` is false when there was nothing to disconnect. */
-  | { kind: "done"; revoked: boolean }
-  /** Nothing was erased; the enrollment is still active and the call can be repeated. */
-  | { kind: "failed" }
+  | { kind: "done"; outcome: DisconnectOutcome }
+  | { kind: "failed"; reason: DisconnectFailure }
   | { kind: "signed-out" }
   | { kind: "offline" };
 
@@ -113,9 +121,10 @@ const signedOut = (answer: Answer) =>
   answer.status === 401 || (answer.status === 403 && errorCode(answer) !== "BAD_ORIGIN");
 
 function readView(body: Record<string, unknown>): EnrollmentView | null {
-  const { status, expiresAt, redemption, outboxKey } = body;
+  const { status, expiresAt, redemption, hasRecord, outboxKey } = body;
   if (!STATES.includes(status as EnrollmentState)) return null;
   if (redemption !== "none" && redemption !== "pending") return null;
+  if (typeof hasRecord !== "boolean") return null;
   if (expiresAt !== null && typeof expiresAt !== "string") return null;
   if (outboxKey !== null && !(typeof outboxKey === "string" && OUTBOX_KEY.test(outboxKey)))
     return null;
@@ -123,6 +132,7 @@ function readView(body: Record<string, unknown>): EnrollmentView | null {
     status: status as EnrollmentState,
     expiresAt: expiresAt === null ? null : (expiresAt as string),
     redemption,
+    hasRecord,
     outboxKey: outboxKey === null ? null : (outboxKey as string),
   };
 }
@@ -171,8 +181,18 @@ export async function disconnectEnrollment(fetchImpl: Fetch = fetch): Promise<Di
   });
   if (answer === "offline") return { kind: "offline" };
   if (signedOut(answer)) return { kind: "signed-out" };
-  if (answer.status === 200 && answer.body?.status === "not-connected") {
-    return { kind: "done", revoked: answer.body.revoked === true };
+  const outcome = answer.body?.outcome;
+  if (
+    answer.status === 200 &&
+    answer.body?.status === "not-connected" &&
+    OUTCOMES.includes(outcome as DisconnectOutcome)
+  ) {
+    return { kind: "done", outcome: outcome as DisconnectOutcome };
   }
-  return { kind: "failed" };
+  const code = errorCode(answer);
+  if (answer.status === 409 && code === "PENDING_REDEMPTION")
+    return { kind: "failed", reason: "pending" };
+  if (answer.status === 503 && code === "PARTIAL") return { kind: "failed", reason: "partial" };
+  if (answer.status === 502 && code === "UNCERTAIN") return { kind: "failed", reason: "uncertain" };
+  return { kind: "failed", reason: "unavailable" };
 }

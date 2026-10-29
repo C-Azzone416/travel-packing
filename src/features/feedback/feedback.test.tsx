@@ -15,12 +15,8 @@ import { feedbackBuildSha } from "./build-sha";
 import { FeedbackAccessProvider } from "./FeedbackAccess";
 import { FeedbackButton } from "./FeedbackButton";
 import { FeedbackNotice } from "./FeedbackNotice";
-import {
-  connectFailureText,
-  DISCONNECT_RESULT,
-  expiryText,
-  FeedbackSettings,
-} from "./FeedbackSettings";
+import { disconnectText } from "./disconnect-copy";
+import { connectFailureText, expiryText, FeedbackSettings } from "./FeedbackSettings";
 
 let pathname = "/";
 vi.mock("next/navigation", () => ({ usePathname: () => pathname }));
@@ -274,7 +270,10 @@ describe("Settings section: checking and the six server states", () => {
     else await screen.findByRole("heading", { name: "Send feedback to the developer" });
     await waitFor(() => expect(h.server.count("status")).toBe(1));
     await waitFor(() => expect(Boolean(screen.queryByLabelText("Invitation"))).toBe(form));
-    expect(screen.queryByRole("button", { name: "Disconnect" })).toBeNull();
+    // Disconnect is offered whenever the server holds a record (#304), in every state but "nothing held".
+    expect(Boolean(screen.queryByRole("button", { name: "Disconnect" }))).toBe(
+      status !== "not-connected",
+    );
   });
 
   it("connected: badge, expiry, Disconnect, and no form (a second redeem would only be refused)", async () => {
@@ -538,9 +537,13 @@ describe("Settings section: disconnect and unsent reports", () => {
   });
 
   it.each([
-    ["ended", { revoked: true }, undefined],
-    ["nothing", { revoked: false }, undefined],
-    ["failed", {}, { kind: "status" as const, status: 502, error: "UNCERTAIN" }],
+    ["ended", { disconnectOutcome: "ended" as const }, undefined],
+    ["nothing", { disconnectOutcome: "nothing" as const }, undefined],
+    ["erased_unrevocable", { disconnectOutcome: "erased_unrevocable" as const }, undefined],
+    ["partial", {}, { kind: "status" as const, status: 503, error: "PARTIAL" }],
+    ["unavailable", {}, { kind: "status" as const, status: 503, error: "UNAVAILABLE" }],
+    ["uncertain", {}, { kind: "status" as const, status: 502, error: "UNCERTAIN" }],
+    ["pending", {}, { kind: "status" as const, status: 409, error: "PENDING_REDEMPTION" }],
     ["offline", {}, { kind: "network" as const }],
   ] as const)("reports a disconnect that is %s truthfully", async (key, state, failure) => {
     const h = harness({ ...connectedState, ...state });
@@ -549,11 +552,72 @@ describe("Settings section: disconnect and unsent reports", () => {
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: "Disconnect" }));
     await user.click(screen.getAllByRole("button", { name: "Disconnect" })[0]!);
-    expect(await screen.findByText(DISCONNECT_RESULT[key])).toBeTruthy();
+    const text = disconnectText(key, connectedState.expiresAt);
+    expect(await screen.findByText(text)).toBeTruthy();
     expect(h.server.count("disconnect")).toBe(1);
-    // A failed disconnect changed nothing: still connected. An ended one is not.
-    if (key === "failed" || key === "offline") expect(screen.getByText("Connected")).toBeTruthy();
-    else await waitFor(() => expect(screen.queryByText("Connected")).toBeNull());
+    const ok = key === "ended" || key === "nothing" || key === "erased_unrevocable";
+    // Successes are a status; every failure is an alert with a glyph, never colour alone.
+    const region = screen.getByText(text).closest("[role]");
+    expect(region?.getAttribute("role")).toBe(ok ? "status" : "alert");
+    // A failed disconnect changed nothing: still connected, and it can be repeated. A finished one is not connected.
+    if (ok) await waitFor(() => expect(screen.queryByText("Connected")).toBeNull());
+    else {
+      expect(screen.getByText("Connected")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Disconnect" })).toBeTruthy();
+    }
+  });
+
+  it("never says the access was ended, or that nothing was connected, when it could not be ended", async () => {
+    const h = harness({ ...connectedState, disconnectOutcome: "erased_unrevocable" });
+    mount(h);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Disconnect" }));
+    await user.click(screen.getAllByRole("button", { name: "Disconnect" })[0]!);
+    const text = await screen.findByText(/we couldn’t end the access itself/);
+    expect(text.textContent).toContain("It stops on its own on Nov 19, 2026.");
+    expect(text.textContent).not.toMatch(/was ended|nothing to end/);
+  });
+
+  it("a retry after a failure clears the old message and can succeed", async () => {
+    const h = harness({ ...connectedState, disconnectOutcome: "ended" });
+    h.server.failNext("disconnect", { kind: "status", status: 502, error: "UNCERTAIN" });
+    mount(h);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Disconnect" }));
+    await user.click(screen.getAllByRole("button", { name: "Disconnect" })[0]!);
+    expect(await screen.findByText(disconnectText("uncertain"))).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Disconnect" }));
+    await user.click(screen.getAllByRole("button", { name: "Disconnect" })[0]!);
+    expect(await screen.findByText(disconnectText("ended"))).toBeTruthy();
+    expect(screen.queryByText(disconnectText("uncertain"))).toBeNull();
+  });
+
+  it.each([
+    ["expired", { status: "expired" as const }],
+    ["revoked", { status: "revoked" as const }],
+    ["needs_reconnect", { status: "needs_reconnect" as const }],
+    ["disabled", { status: "disabled" as const }],
+    ["a pending redemption", { status: "not-connected" as const, redemption: "pending" as const }],
+  ])(
+    "offers Disconnect when the server holds a record but is not connected: %s",
+    async (_n, state) => {
+      const h = harness(state);
+      mount(h);
+      const user = userEvent.setup();
+      await user.click(await screen.findByRole("button", { name: "Disconnect" }));
+      await user.click(screen.getAllByRole("button", { name: "Disconnect" })[0]!);
+      expect(await screen.findByText(disconnectText("nothing"))).toBeTruthy();
+      expect(h.server.count("disconnect")).toBe(1);
+      await waitFor(() => expect(screen.queryByRole("button", { name: "Disconnect" })).toBeNull());
+    },
+  );
+
+  it("offers no Disconnect when the server holds nothing", async () => {
+    const h = harness({ status: "not-connected" });
+    mount(h);
+    await screen.findByText("Send feedback to the developer");
+    await waitFor(() => expect(h.server.count("status")).toBeGreaterThan(0));
+    expect(screen.queryByRole("button", { name: "Disconnect" })).toBeNull();
   });
 
   it("shows how many reports wait or could not be delivered, and offers to delete them with a confirm", async () => {

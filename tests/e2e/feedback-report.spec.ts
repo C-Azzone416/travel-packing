@@ -136,7 +136,7 @@ test("a disconnect that cannot reach the service changes nothing and says so", a
     .getByRole("button", { name: "Disconnect" })
     .click();
   await expect(
-    page.getByText(/couldn’t reach the service to end the access\. You’re still connected/),
+    page.getByText(/couldn’t confirm whether your access was ended\. You may still be connected/),
   ).toBeVisible();
   await expect(page.locator(".status-pill", { hasText: "Connected" })).toBeVisible();
   await fakeFramebriar.setOffline(false);
