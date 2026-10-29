@@ -64,6 +64,8 @@ export interface ModalSheetProps {
   open: boolean;
   title: string;
   description?: string;
+  /** A small line above the title, e.g. "Step 1 of 2". */
+  eyebrow?: string;
   onClose: () => void;
   children: ReactNode;
   actions?: ReactNode;
@@ -85,6 +87,7 @@ export function ModalSheet({
   open,
   title,
   description,
+  eyebrow,
   onClose,
   children,
   actions,
@@ -182,6 +185,7 @@ export function ModalSheet({
       >
         <div className="modal-head">
           <div>
+            {eyebrow ? <p className="tiny muted modal-eyebrow">{eyebrow}</p> : null}
             <h2 id={titleId}>{title}</h2>
             {description ? <p id={descriptionId}>{description}</p> : null}
           </div>

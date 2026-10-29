@@ -376,12 +376,13 @@ export function createEnrollmentService({
       case "none":
         return { ok: true, outcome: "nothing", revoked: false };
       case "erased":
-        if (result.revoked) return { ok: true, outcome: "ended", revoked: true };
-        return {
-          ok: true,
-          outcome: result.unrevocableAttempts > 0 ? "erased_unrevocable" : "nothing",
-          revoked: false,
-        };
+        // An abandoned connection attempt may stand for a family nobody holds a credential for, so even a revoked row does not make
+        // this "ended": the leftover access runs to Framebriar's deadline, which is what erased_unrevocable says.
+        if (result.unrevocableAttempts > 0)
+          return { ok: true, outcome: "erased_unrevocable", revoked: result.revoked };
+        return result.revoked
+          ? { ok: true, outcome: "ended", revoked: true }
+          : { ok: true, outcome: "nothing", revoked: false };
       case "erased_unrevocable":
         return { ok: true, outcome: "erased_unrevocable", revoked: false };
       case "partial":
@@ -466,6 +467,10 @@ export function createEnrollmentService({
         ? { status: "partial", revoked: true, erased: false }
         : { status: "failed", reason: "unavailable" };
     }
+    // Framebriar switched this app off (403) and the family was never revoked: if it is switched back on, that family could still be
+    // live. The credential is erased all the same, which is what erased_unrevocable means (the same policy as an unreadable row).
+    if (row.state === "disabled")
+      return { status: "erased_unrevocable", unrevocableAttempts: pending ? 1 : 0 };
     return { status: "erased", revoked, unrevocableAttempts: pending ? 1 : 0 };
   }
 

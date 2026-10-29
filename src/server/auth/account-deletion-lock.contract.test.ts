@@ -55,6 +55,15 @@ describe("account-deletion advisory-lock contract", () => {
       select: () => ({
         from: () => ({
           where: () => ({
+            // The Framebriar gate (#261): the owner row is locked FOR UPDATE, then what is held is read, both before any write.
+            for: async () => {
+              calls.push("lock:owner-row");
+              return [{ id: OWNER.userId }];
+            },
+            then: (resolve: (rows: unknown[]) => unknown) => {
+              calls.push("select:feedback-holds");
+              return resolve([]);
+            },
             limit: async () => {
               calls.push("select:fence");
               return [
@@ -94,6 +103,8 @@ describe("account-deletion advisory-lock contract", () => {
     expect(calls).toEqual([
       `lock:${OWNER.userId}`,
       "lock:setup",
+      "lock:owner-row",
+      "select:feedback-holds",
       "insert:fence",
       "select:fence",
       "delete:setup",

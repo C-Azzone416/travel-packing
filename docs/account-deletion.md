@@ -10,14 +10,21 @@ one-time completion cookie already issued after confirmed provider deletion.
 
 The synthetic Playwright environment sets the switch only for its isolated fake-auth/PGlite run. Preview and Production land with
 the variable unset. Before either hosted target is enabled, validate this flow with an explicitly approved synthetic account on
-the non-production Neon Auth/database branch, and complete #261 so Framebriar enrollment revocation and erasure participates in
-truthful deletion retries. Delivered Framebriar reports cannot currently be erased through its browser SDK and must not be
-described as deleted. Landing this code does not authorize changing hosted configuration, creating or deleting hosted accounts,
+the non-production Neon Auth/database branch, including the Framebriar disconnect step and server guard described below (#261).
+Delivered Framebriar reports cannot currently be erased through its browser SDK and must not be described as deleted. Landing this code does not authorize changing hosted configuration, creating or deleting hosted accounts,
 or exercising the destructive flow against real data.
 
 ## User flow
 
-Settings opens a non-backdrop-dismissable confirmation sheet. The owner must enter the current password and type `DELETE`
+Settings opens one non-backdrop-dismissable sheet with up to two steps. When this account has a Framebriar feedback enrollment (in
+any state) or an unfinished connection attempt, **step 1 of 2, "Disconnect feedback first"**, runs inside the sheet: the person
+presses Disconnect, sees the real result (the same honest messages as Settings), and only then does Continue lead to step 2. A
+failure (unavailable, uncertain, pending connection, partial, offline, signed out) stays on step 1 with a retry and offers nothing
+that moves toward deletion; no password or `DELETE` field exists in the page during step 1. Whether step 1 exists is decided when the
+sheet opens and latched, so it cannot disappear when the status refreshes. When feedback is not involved, the sheet is exactly step 2
+with no step label.
+
+Step 2 is the permanent-deletion confirmation. The owner must enter the current password and type `DELETE`
 exactly. The copy says closure permanently deletes the account and cannot be undone. The server action accepts only a
 same-origin request, obtains identity and ownership from the provider session (never from form input), applies the existing
 per-email/address sign-in limit, and reauthenticates the password immediately before deletion.
@@ -27,10 +34,47 @@ configuration or UI in this repository. The deletion flow therefore requires tha
 is added, account deletion must fail closed until that provider method has an explicit recent-authentication and deletion design;
 do not silently treat a fresh session as equivalent to a password for an OAuth/passwordless identity.
 
+## Framebriar feedback comes first (#261)
+
+Closing deletes the app owner row, and the sealed Framebriar credentials hang off it with a cascade. They must therefore be revoked
+and erased first, or they would be destroyed without ever being revoked. The rule is enforced on the server, not by the page:
+
+- **The action** (`closeAccountAction`) refuses with a typed `feedbackBlocking` state while the server holds ANY enrollment row (any
+  state) or ANY connection attempt (even one past its retry window) for the owner's current account generation. This check runs
+  before rate-limit accounting and before reauthentication, so a refusal is not a failed password and learns nothing about it.
+- **The destructive core** (`closeAccount`) repeats the check on its own before reauthenticating, so a direct call cannot bypass the
+  action.
+- **The deletion transaction** (`beginAccountDeletion`) checks once more after taking the owner lock and locking the owner row
+  `FOR UPDATE`, before writing anything. A concurrent enrollment or redemption insert waits on that row lock and then fails its
+  foreign key once the row is gone, so a connection made between the early check and the delete cannot be cascaded away. A refusal
+  writes no fence and deletes nothing.
+- If the check cannot be evaluated, nothing is attempted and the person is told nothing was deleted.
+- The recovery retry after a fence has no owner row left, so it is never blocked.
+
+The page sends the person back to step 1 when the server refuses (a second device or tab connected feedback, or the page was stale).
+The password and `DELETE` fields are removed from the page and come back blank.
+
+What "disconnected" means for closure, matching Settings' honest copy:
+
+- `ended`: Framebriar revoked the access and every sealed credential is erased.
+- `nothing`: there was nothing live to end (an expired or already revoked record, or Framebriar no longer knew the family).
+- `erased_unrevocable`: this app's copy is erased but the access itself could not be ended, so it stops on its own at Framebriar's fixed
+  deadline. This covers a credential this server can no longer open, a record Framebriar switched off (`disabled`, 403: the family was
+  never revoked and could be live again), and an abandoned connection attempt whose answer was lost (a family nobody holds a
+  credential for), even next to a record that did revoke. Closure treats it as disconnected and says plainly that leftover access
+  expires on its own, with the date when it was known.
+- Failures (`partial`, `unavailable`, `uncertain`, pending connection, offline, signed out) never count: the credential is kept (or
+  the erase is repeatable), nothing destructive happens, and the retry works.
+
+Stated limits: reports already delivered to Framebriar cannot be enumerated by app account and its SDK has no delete-by-account
+operation, so they are not deleted; leftover access that could not be revoked lives until Framebriar's deadline. Nothing here
+authorizes changing Framebriar data or configuration.
+
 ## Ordering and interrupted operations
 
 Deletion is intentionally ordered:
 
+0. Refuse while any Framebriar enrollment or connection attempt is held (above).
 1. Reauthenticate with the raw auth provider and require the returned user id and normalized email to match the session that
    opened the flow.
 2. In one database transaction, insert the transient `account_deletions(user_id, identity_created_at, setup_email_digest)`
@@ -102,11 +146,14 @@ digest—no user id, email, credential, or provider token—and it never appears
 including when signal consumption or local cleanup fails or exceeds its bounded wait, so an already-deleted user cannot be
 stranded.
 
-After confirmed closure, the client cleanup seam stops the mounted Framebriar queue and best-effort deletes every account-scoped
-or legacy Framebriar IndexedDB database in this browser profile. It does not hold or reconstruct a browser credential, call the
-enrollment API after the session is gone, or claim that delivered reports were deleted. The account-scoped client introduced in
-#260 keeps enrollment credentials on the server; #261 must call `revokeAndEraseEnrollment` before account deletion and remains a
-separate release-integration gate.
+After confirmed closure, the client cleanup seam stops the mounted Framebriar queue and best-effort deletes the closing account's own
+unsent-report outbox in this browser profile. The sheet remembers which account is closing (its opaque outbox key, which names the
+account and its generation, in module memory only: nothing is written to browser storage) when the person submits, and forgets it as
+soon as the attempt does not end in closure, so another account's unsent work in the same browser is never touched. If nothing was
+remembered (a direct visit or a reload), every account-scoped outbox and the legacy Framebriar databases are cleared, which is never
+fewer than before. It does not hold or reconstruct a browser credential, call the enrollment API after the session is gone, or claim
+that delivered reports were deleted. The account-scoped client introduced in #260 keeps enrollment credentials on the server, and
+they are revoked and erased in step 1 before any deletion starts.
 
 Delivered reports may contain identifying notes or Preview screenshots, and the current protocol has no delete-by-account
 operation. Do not claim those hosted reports are erased, transmit a new identifier, or change the hosted service without a
@@ -139,6 +186,10 @@ connection and serializes transactions even without the advisory lock, so its co
 cannot demonstrate real PostgreSQL lock contention. Automated tests never call Neon or a deployed environment.
 
 Before enabling this feature in a disposable non-production Neon Auth project, verify with a synthetic email that:
+
+0. an account with a synthetic Framebriar enrollment (against a non-production Framebriar target, never real data) cannot be closed
+   until it is disconnected in the sheet, a second device that connects while the sheet is open is refused and sent back to step 1,
+   and after Disconnect the sealed enrollment row is gone and closure completes;
 
 1. a password sign-in creates at least two sessions;
 2. `revokeOtherSessions()` invalidates the other session and keeps the current one;

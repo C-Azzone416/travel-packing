@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { expect, type Page } from "@playwright/test";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -109,6 +110,42 @@ export async function ageEnrollment(ownerId: string, how: "expired" | "unreadabl
           : { keyVersion: "retired-key" },
       )
       .where(eq(schema.framebriarEnrollments.ownerId, ownerId));
+  } finally {
+    await pool.end();
+  }
+}
+
+/** Whether the app database still has this account's owner row and any account-deletion fence (account closure, #261). */
+export async function accountRows(ownerId: string): Promise<{ owner: boolean; fence: boolean }> {
+  const pool = new Pool({ connectionString: E2E_DATABASE_URL, max: 1 });
+  try {
+    const db = drizzle(pool, { schema }) as unknown as Db;
+    const owner = await db.select().from(schema.users).where(eq(schema.users.id, ownerId));
+    const fence = await db
+      .select()
+      .from(schema.accountDeletions)
+      .where(eq(schema.accountDeletions.userId, ownerId));
+    return { owner: owner.length > 0, fence: fence.length > 0 };
+  } finally {
+    await pool.end();
+  }
+}
+
+/**
+ * Closing an account removes its "password was set through a link" record (that is part of closure). A spec that really closes one of
+ * the shared e2e accounts puts the record back afterwards so later specs can still sign in as it. The digest is the app's own HMAC.
+ */
+export async function restoreSetupRecord(email: string, secret: string): Promise<void> {
+  const emailDigest = createHmac(
+    "sha256",
+    createHmac("sha256", secret).update("carrywell:account-setup-digest:v1").digest("hex"),
+  )
+    .update(email.trim().toLowerCase())
+    .digest("hex");
+  const pool = new Pool({ connectionString: E2E_DATABASE_URL, max: 1 });
+  try {
+    const db = drizzle(pool, { schema }) as unknown as Db;
+    await db.insert(schema.accountSetups).values({ emailDigest }).onConflictDoNothing();
   } finally {
     await pool.end();
   }

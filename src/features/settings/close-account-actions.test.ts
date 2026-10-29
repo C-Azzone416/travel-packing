@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   closeAccount: vi.fn(),
+  holdsFeedback: vi.fn(),
   deletionSession: vi.fn(),
   getAuth: vi.fn(),
   getAppDb: vi.fn(),
@@ -25,6 +26,9 @@ vi.mock("@/server/auth/account-closure-completion", () => ({
 vi.mock("@/server/auth/close-account", () => ({
   closeAccount: mocks.closeAccount,
   deletionSession: mocks.deletionSession,
+}));
+vi.mock("@/server/feedback/enrollment-store", () => ({
+  accountHoldsFeedback: mocks.holdsFeedback,
 }));
 vi.mock("@/server/auth/pending-email", () => ({
   forgetPendingEmail: mocks.forgetPendingEmail,
@@ -72,6 +76,7 @@ beforeEach(() => {
   mocks.getAuth.mockResolvedValue(auth);
   mocks.getAppDb.mockResolvedValue(db);
   mocks.deletionSession.mockResolvedValue(SESSION);
+  mocks.holdsFeedback.mockResolvedValue(false);
   mocks.issueCompletion.mockResolvedValue(true);
   mocks.forgetPendingEmail.mockResolvedValue(undefined);
   blocked.mockResolvedValue(true);
@@ -409,5 +414,60 @@ describe("retryCloseAccountAction", () => {
       fieldErrors: {},
     });
     expect(mocks.issueCompletion).not.toHaveBeenCalled();
+  });
+});
+
+describe("the Framebriar gate in the action (#261)", () => {
+  it("refuses with a typed feedbackBlocking state before any rate limit or reauthentication", async () => {
+    mocks.holdsFeedback.mockResolvedValue(true);
+    expect(await closeAccountAction(INITIAL_CLOSE_ACCOUNT_STATE, form())).toEqual({
+      error: null,
+      fieldErrors: {},
+      feedbackBlocking: true,
+    });
+    expect(mocks.holdsFeedback).toHaveBeenCalledWith(db, SESSION.userId);
+    expect(mocks.closeAccount).not.toHaveBeenCalled();
+  });
+
+  it("asks the server about the session's own account only, never anything from the form", async () => {
+    const data = form();
+    data.set("userId", "someone-else");
+    mocks.closeAccount.mockResolvedValue({ status: "wrong-password" });
+    await closeAccountAction(INITIAL_CLOSE_ACCOUNT_STATE, data);
+    expect(mocks.holdsFeedback).toHaveBeenCalledWith(db, SESSION.userId);
+  });
+
+  it("a gate that cannot be evaluated says nothing was deleted and does not proceed", async () => {
+    mocks.holdsFeedback.mockRejectedValue(new Error("synthetic outage"));
+    const state = await closeAccountAction(INITIAL_CLOSE_ACCOUNT_STATE, form());
+    expect(state.error).toMatch(/Nothing was deleted/);
+    expect(state.feedbackBlocking).toBeUndefined();
+    expect(mocks.closeAccount).not.toHaveBeenCalled();
+  });
+
+  it("a refusal from the destructive core (the race the early check cannot see) is the same typed state, and not a failed password", async () => {
+    mocks.closeAccount.mockResolvedValue({ status: "feedback-blocking" });
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      expect(await closeAccountAction(INITIAL_CLOSE_ACCOUNT_STATE, form())).toEqual({
+        error: null,
+        fieldErrors: {},
+        feedbackBlocking: true,
+      });
+    }
+  });
+
+  it("is not reachable through the confirm step's validation: a bad form is still field errors", async () => {
+    mocks.holdsFeedback.mockResolvedValue(true);
+    const state = await closeAccountAction(INITIAL_CLOSE_ACCOUNT_STATE, form("x", "nope"));
+    expect(state.fieldErrors.confirmation).toBeTruthy();
+    expect(state.feedbackBlocking).toBeUndefined();
+  });
+
+  it("the recovery retry, which has no owner row, never reports feedbackBlocking", async () => {
+    mocks.closeAccount.mockResolvedValue({ status: "feedback-blocking" });
+    const state = await retryCloseAccountAction(INITIAL_CLOSE_ACCOUNT_STATE, form());
+    expect(state.feedbackBlocking).toBeUndefined();
+    expect(state.recovery).toBe(true);
+    expect(mocks.holdsFeedback).not.toHaveBeenCalled();
   });
 });

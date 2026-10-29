@@ -499,3 +499,67 @@ describe("reconcileAccountDeletion", () => {
     });
   });
 });
+
+describe("beginAccountDeletion refuses while Framebriar credentials remain (#261)", () => {
+  async function holdEnrollment(owner: string) {
+    await context.client.query(
+      "INSERT INTO framebriar_enrollments (owner_id, generation, key_version, credentials, expires_at) SELECT id, generation, 'k1', 'v1.synthetic', now() + interval '1 day' FROM users WHERE id = $1",
+      [owner],
+    );
+  }
+
+  it("returns feedback-blocking and writes nothing: no fence, no deleted owner, credentials intact", async () => {
+    await seed(OWNER, OWNER_DIGEST, 1);
+    await holdEnrollment(OWNER);
+    expect(
+      await beginAccountDeletion(
+        context.db as unknown as Db,
+        OWNER,
+        IDENTITY_CREATED_AT,
+        OWNER_DIGEST,
+      ),
+    ).toBe("feedback-blocking");
+    expect((await context.client.query("SELECT * FROM account_deletions")).rows).toEqual([]);
+    expect((await context.client.query("SELECT id FROM users")).rows).toEqual([{ id: OWNER }]);
+    expect((await context.client.query("SELECT email_digest FROM account_setups")).rows).toEqual([
+      { email_digest: OWNER_DIGEST },
+    ]);
+    expect(
+      (await context.client.query("SELECT owner_id FROM framebriar_enrollments")).rows,
+    ).toEqual([{ owner_id: OWNER }]);
+    expect((await context.client.query("SELECT id FROM trips")).rows).toHaveLength(1);
+  });
+
+  it("a connection attempt blocks too, and another owner's feedback does not", async () => {
+    await seed(OWNER, OWNER_DIGEST, 1);
+    await seed(OTHER, OTHER_DIGEST, 2);
+    await holdEnrollment(OTHER);
+    await context.client.query(
+      "INSERT INTO framebriar_redemptions (owner_id, generation, attempt_id) SELECT id, generation, gen_random_uuid() FROM users WHERE id = $1",
+      [OWNER],
+    );
+    const db = context.db as unknown as Db;
+    expect(await beginAccountDeletion(db, OWNER, IDENTITY_CREATED_AT, OWNER_DIGEST)).toBe(
+      "feedback-blocking",
+    );
+    await context.client.query("DELETE FROM framebriar_redemptions");
+    expect(await beginAccountDeletion(db, OWNER, IDENTITY_CREATED_AT, OWNER_DIGEST)).toBe(
+      "started",
+    );
+    expect((await context.client.query("SELECT id FROM users")).rows).toEqual([{ id: OTHER }]);
+    expect(
+      (await context.client.query("SELECT owner_id FROM framebriar_enrollments")).rows,
+    ).toEqual([{ owner_id: OTHER }]);
+  });
+
+  it("a fenced retry (no owner row left) is never blocked", async () => {
+    await seed(OWNER, OWNER_DIGEST, 1);
+    const db = context.db as unknown as Db;
+    expect(await beginAccountDeletion(db, OWNER, IDENTITY_CREATED_AT, OWNER_DIGEST)).toBe(
+      "started",
+    );
+    expect(await beginAccountDeletion(db, OWNER, IDENTITY_CREATED_AT, OWNER_DIGEST)).toBe(
+      "started",
+    );
+  });
+});

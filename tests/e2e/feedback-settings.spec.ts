@@ -282,7 +282,7 @@ test("opening the Close account dialog is a private surface: the page goes inert
 }) => {
   await settingsReady(page);
   await page.getByRole("button", { name: "Close account", exact: true }).click();
-  const closing = page.getByRole("dialog", { name: "Close your account?" });
+  const closing = page.getByRole("dialog", { name: "Disconnect feedback first" });
   await expect(closing).toBeVisible();
   // Nothing outside the dialog can be pressed, so the Feedback controls cannot start a capture.
   const inert = await page.evaluate(
