@@ -91,14 +91,16 @@ export function NextDeparture({
         <ul className="weather-strip" aria-label="Weather for each stay">
           {weather.cells.map((cell) => (
             <li key={cell.stopIndex}>
-              <span className="weather-glyph" aria-hidden="true">
-                {GLYPH[cell.glyph]}
-              </span>
-              <span className="weather-city">{cell.city}</span>
-              <span className="weather-dates">{cell.dates}</span>
-              <span className="weather-range">
-                {cell.range} <small>{cell.source}</small>
-              </span>
+              <div className="weather-cell-top">
+                <span className="weather-glyph" aria-hidden="true">
+                  {GLYPH[cell.glyph]}
+                </span>
+                <span className="weather-city">{cell.city}</span>
+                <span className="weather-dates">{cell.dates}</span>
+                <span className="weather-range">
+                  {cell.range} <small>{cell.source}</small>
+                </span>
+              </div>
               <span className="weather-note">{cell.note}</span>
             </li>
           ))}

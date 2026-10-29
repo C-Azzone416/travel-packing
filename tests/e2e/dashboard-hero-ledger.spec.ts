@@ -64,6 +64,24 @@ const overflow = (page: Page) =>
     };
   });
 
+/** A weather strip built from the real markup (four stays); the seeded data has the strip off. */
+async function injectWeather(page: Page, note: string) {
+  await page.evaluate((text) => {
+    const strip = document.createElement("ul");
+    strip.className = "weather-strip";
+    strip.innerHTML = [1, 2, 3, 4]
+      .map(
+        (n) =>
+          `<li><div class="weather-cell-top"><span class="weather-glyph">☀</span><span class="weather-city">Stop ${n}</span>` +
+          `<span class="weather-dates">Oct 2${n} – Oct 2${n + 1}</span>` +
+          `<span class="weather-range">61–72°F <small>typical</small></span></div>` +
+          `<span class="weather-note">${text}</span></li>`,
+      )
+      .join("");
+    document.querySelector(".ledger-hero-top")!.after(strip);
+  }, note);
+}
+
 const onGrid = (value: number) => {
   const off = value % ROW;
   return Math.min(off, ROW - off);
@@ -165,20 +183,7 @@ test("days to go, the progress bar, packed, then remaining read in that order", 
 for (const width of [1280, 721, 390]) {
   test(`a weather strip keeps the rows after it on the rules at ${width}px`, async ({ page }) => {
     await openHero(page, width);
-    await page.evaluate(() => {
-      const strip = document.createElement("ul");
-      strip.className = "weather-strip";
-      strip.innerHTML = [1, 2, 3, 4]
-        .map(
-          (n) =>
-            `<li><span class="weather-glyph">☀</span><span class="weather-city">Stop ${n}</span>` +
-            `<span class="weather-dates">Oct 2${n} – Oct 2${n + 1}</span>` +
-            `<span class="weather-range">61–72°F <small>typical</small></span>` +
-            `<span class="weather-note">Mild, pack a light layer</span></li>`,
-        )
-        .join("");
-      document.querySelector(".ledger-hero-top")!.after(strip);
-    });
+    await injectWeather(page, "Mild, pack a light layer");
     const strip = await page.locator(".weather-strip").boundingBox();
     const rows = await rowBottoms(page);
     for (const [name, bottom] of Object.entries(rows)) {
@@ -214,9 +219,8 @@ for (const width of [390, 320]) {
     const rows = await rowBottoms(page);
     expect(onGrid(rows.status), `status bottom ${rows.status}`).toBeLessThanOrEqual(1);
     // the visible link text, not just its accessible name
-    await expect(page.locator(".ledger-actions a").first()).toHaveText(
-      /^(Continue packing|Review bag)$/,
-    );
+    // (the seeded trip is not ready, so the exact string is "Continue packing"; the ready string is unit-tested)
+    await expect(page.locator(".ledger-actions a").first()).toHaveText("Continue packing");
   });
 
   test(`an unbroken 30-character destination does not overflow at ${width}px`, async ({ page }) => {
@@ -230,5 +234,221 @@ for (const width of [390, 320]) {
     for (const [name, bottom] of Object.entries(rows)) {
       expect(onGrid(bottom), `${name} bottom ${bottom}`).toBeLessThanOrEqual(1);
     }
+  });
+}
+
+// ---- #290: the worst case (every extreme at once) wraps in whole 28px rows and never overflows or overlaps ----
+
+/** Row caps from the design spec (v2), by viewport width: the most 28px rows the status block may take. */
+const ROW_CAP: Record<number, number> = { 1280: 3, 981: 4, 721: 4, 390: 5, 320: 5 };
+
+/** 4-digit days, 5-digit counts, labels about 40% longer, a long place and a long title, all at once. */
+async function worstCase(page: Page) {
+  await page.evaluate(() => {
+    const set = (selector: string, text: string) => {
+      const el = document.querySelector(selector);
+      if (el) el.textContent = text;
+    };
+    set(".ledger-hero h2", "San Francisco Bay Area and Napa Valley");
+    set(
+      ".ledger-meta-place",
+      "Northern California coast and wine country, United States of America",
+    );
+    set(".days-to-go strong", "1000");
+    set(".days-to-go span", "days remaining");
+    const counts = document.querySelectorAll(".ledger-counts > span");
+    if (counts[0]) counts[0].textContent = "12,480 of 13,000 items packed";
+    if (counts[1]) counts[1].textContent = "52,000 items left";
+  });
+}
+
+interface Box {
+  x: number;
+  y: number;
+  r: number;
+  b: number;
+}
+
+/** Measured rects (page coordinates) for the hero's parts. */
+function heroRects(page: Page) {
+  return page.evaluate(() => {
+    const rect = (selector: string): Box => {
+      const box = document.querySelector(selector)!.getBoundingClientRect();
+      return { x: box.left, y: box.top, r: box.right, b: box.bottom };
+    };
+    const hero = document.querySelector<HTMLElement>(".ledger-hero")!;
+    const box = hero.getBoundingClientRect();
+    const status = document.querySelector<HTMLElement>(".ledger-status")!;
+    const row = document.querySelector<HTMLElement>(".ledger-status-row")!;
+    return {
+      hero: rect(".ledger-hero"),
+      // the hero's padding box (inside its border) is the limit for every child
+      padRight: box.left + hero.clientLeft + hero.clientWidth,
+      status: rect(".ledger-status"),
+      days: rect(".days-to-go"),
+      track: rect(".progress-track"),
+      packed: rect(".ledger-counts > span:first-child"),
+      left: rect(".ledger-counts > span:last-child"),
+      actions: rect(".ledger-actions"),
+      stamp: rect("[data-stamp-slot]"),
+      childRights: [...status.querySelectorAll("*")].map((el) => el.getBoundingClientRect().right),
+      scroll: {
+        hero: hero.scrollWidth - hero.clientWidth,
+        status: status.scrollWidth - status.clientWidth,
+        row: row.scrollWidth - row.clientWidth,
+        page: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      },
+    };
+  });
+}
+
+const intersects = (a: Box, b: Box) =>
+  a.x < b.r - 0.5 && b.x < a.r - 0.5 && a.y < b.b - 0.5 && b.y < a.b - 0.5;
+
+for (const width of WIDTHS) {
+  test(
+    `the worst case wraps in whole rows with no overlap or overflow at ${width}px`,
+    { tag: DEVICE.tag },
+    async ({ page }) => {
+      await openHero(page, width);
+      await worstCase(page);
+      const m = await heroRects(page);
+      const statusHeight = m.status.b - m.status.y;
+
+      // overflow: nothing scrolls sideways, and every part of the status block is inside the hero's padding box
+      expect(m.scroll, "scroll overflow").toEqual({ hero: 0, status: 0, row: 0, page: 0 });
+      for (const right of m.childRights) expect(right).toBeLessThanOrEqual(m.padRight + 0.5);
+      expect(m.status.r).toBeLessThanOrEqual(m.padRight + 0.5);
+
+      // grid: the block is whole 28px rows, and no more than the spec's cap for this width
+      expect(onGrid(statusHeight), `status height ${statusHeight}`).toBeLessThanOrEqual(1);
+      expect(Math.round(statusHeight / ROW)).toBeLessThanOrEqual(ROW_CAP[width]);
+
+      // line counts from rects: each count is one line, the days numeral stays within its two rows
+      expect(m.packed.b - m.packed.y).toBeLessThanOrEqual(ROW + 1);
+      expect(m.left.b - m.left.y).toBeLessThanOrEqual(ROW + 1);
+      expect(m.days.b - m.days.y).toBeLessThanOrEqual(ROW * 2 + 1);
+
+      // overlap: the parts never intersect each other, the stamp, or the actions row
+      const parts = { days: m.days, track: m.track, packed: m.packed, left: m.left };
+      const names = Object.keys(parts) as (keyof typeof parts)[];
+      for (const [i, a] of names.entries()) {
+        for (const b of names.slice(i + 1)) {
+          expect(intersects(parts[a], parts[b]), `${a} overlaps ${b}`).toBe(false);
+        }
+        expect(intersects(parts[a], m.actions), `${a} overlaps the actions`).toBe(false);
+        expect(intersects(parts[a], m.stamp), `${a} overlaps the stamp`).toBe(false);
+      }
+      // the status block is inside the hero and ends on or above the actions row's top rule (the actions follow it in
+      // flow; the spec's "28px" is the whole-row growth, there is no extra gap between the two)
+      expect(m.status.b, "status bottom <= actions top").toBeLessThanOrEqual(m.actions.y + 0.5);
+      expect(m.status.b).toBeLessThanOrEqual(m.hero.b);
+      expect(m.track.r - m.track.x).toBeGreaterThanOrEqual(96 - 0.5);
+    },
+  );
+}
+
+// The middle dot (spec v2): between the counts only when both share a line; never at the start of a line, and not in
+// the phone arrangement (the container is at most 440px wide, which is a 390 or 320px viewport).
+for (const width of WIDTHS) {
+  test(`the dot between the counts follows the line they sit on at ${width}px`, async ({
+    page,
+  }) => {
+    await openHero(page, width);
+    await worstCase(page);
+    const m = await heroRects(page);
+    const info = await page.evaluate(() => {
+      const second = document.querySelector(".ledger-counts > span:last-child")!;
+      const counts = document.querySelector<HTMLElement>(".ledger-counts")!;
+      return {
+        dot: getComputedStyle(second, "::before").content,
+        clip: getComputedStyle(counts).overflow,
+        offset: second.getBoundingClientRect().left - counts.getBoundingClientRect().left,
+      };
+    });
+    const sameLine = Math.abs(m.packed.y - m.left.y) < 2;
+    if (width <= 440) {
+      expect(info.dot).toBe("none");
+    } else if (sameLine) {
+      expect(info.dot).toBe('"·"');
+      expect(info.offset, "room before the second count for the dot").toBeGreaterThan(16);
+    } else {
+      // the second count starts a line: its dot sits left of the box, so the wrapper must clip it
+      expect(info.clip).toBe("hidden");
+      expect(info.offset).toBeLessThan(1);
+    }
+  });
+}
+
+for (const width of [390, 320]) {
+  test(
+    `the phone stack is days (2 rows), track (1 row), counts at ${width}px`,
+    { tag: DEVICE.tag },
+    async ({ page }) => {
+      await openHero(page, width);
+      const m = await heroRects(page);
+      expect(Math.round((m.status.b - m.status.y) / ROW)).toBe(4);
+      expect(m.track.y).toBeGreaterThanOrEqual(m.days.b - 1);
+      expect(m.packed.y).toBeGreaterThanOrEqual(m.track.b - 1);
+      expect(Math.abs(m.packed.y - m.left.y)).toBeLessThan(2);
+    },
+  );
+}
+
+// A real long weather note (taller than the 140px a one-line note takes): the strip grows in whole 28px rows, nothing is
+// clipped, and the rows after it stay on the rules.
+const LONG_NOTE =
+  "Expect a long spell of cool, damp weather with morning fog along the coast, gusty afternoon winds on the ridges, " +
+  "and a real chance of rain on two of the three days, so pack a waterproof shell, warm layers, a hat and sturdy shoes " +
+  "that can take wet ground, and keep a spare pair of socks and a light dry bag for your phone and papers handy.";
+for (const width of WIDTHS) {
+  test(`a weather note taller than 140px grows the strip in whole rows at ${width}px`, async ({
+    page,
+  }) => {
+    await openHero(page, width);
+    await injectWeather(page, "Mild and dry");
+    const short = await page.locator(".weather-strip").boundingBox();
+    // a one-line note keeps each cell at today's five rows (stacked below 721px: four cells)
+    const stays = width <= 720 ? 4 : 1;
+    expect(Math.round(short!.height), "one-line note").toBe(140 * stays);
+    await page.evaluate((text) => {
+      for (const note of document.querySelectorAll(".weather-note")) note.textContent = text;
+    }, LONG_NOTE);
+    const strip = await page.locator(".weather-strip").boundingBox();
+    expect(strip!.height).toBeGreaterThan(140 * stays);
+    expect(onGrid(strip!.height), `strip height ${strip!.height}`).toBeLessThanOrEqual(1);
+    for (const cell of await page.locator(".weather-strip li").all()) {
+      const box = (await cell.boundingBox())!;
+      expect(onGrid(box.height), `cell height ${box.height}`).toBeLessThanOrEqual(1);
+      const note = (await cell.locator(".weather-note").boundingBox())!;
+      expect(note.y + note.height, "note inside its cell").toBeLessThanOrEqual(
+        box.y + box.height + 0.5,
+      );
+    }
+    const lineHeight = await page
+      .locator(".weather-note")
+      .first()
+      .evaluate((el) => getComputedStyle(el).lineHeight);
+    expect(lineHeight).toBe("28px");
+    const rows = await rowBottoms(page);
+    for (const [name, bottom] of Object.entries(rows)) {
+      expect(onGrid(bottom), `${name} bottom ${bottom}`).toBeLessThanOrEqual(1);
+    }
+    expect(await overflow(page)).toEqual({ page: 0, hero: 0 });
+  });
+}
+
+// Opt-in screenshots for design review (#290): HERO_SHOTS=<folder> renders the baseline and the worst case at each width,
+// and the worst case with a long weather note. Skipped otherwise; nothing is written into the repo.
+const SHOTS = process.env.HERO_SHOTS;
+for (const width of WIDTHS) {
+  test(`screenshots of the hero at ${width}px`, async ({ page }) => {
+    test.skip(!SHOTS, "set HERO_SHOTS=<folder> to render the hero screenshots");
+    const hero = await openHero(page, width);
+    await hero.screenshot({ path: `${SHOTS}/baseline-${width}.png` });
+    await worstCase(page);
+    await hero.screenshot({ path: `${SHOTS}/worst-${width}.png` });
+    await injectWeather(page, LONG_NOTE);
+    await hero.screenshot({ path: `${SHOTS}/worst-weather-${width}.png` });
   });
 }

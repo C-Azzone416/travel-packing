@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { screen, within } from "@testing-library/react";
+import { cleanup, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { renderInApp } from "@/test/providers";
 import { sampleLifecycleState } from "./fixtures";
@@ -115,6 +115,15 @@ describe("the hero's status row (#285)", () => {
     expect(screen.getByRole("link", { name: /Continue packing/ })).toBeTruthy();
   });
 
+  it("shows the exact link text per state: Continue packing when not ready, Review bag when ready (#290)", () => {
+    setup({ packed: 6, total: 32, remaining: 26, percent: 19, ready: false });
+    const link = () => hero().querySelector(".ledger-actions a") as HTMLElement;
+    expect(link().textContent).toBe("Continue packing");
+    cleanup();
+    setup({ packed: 32, total: 32, remaining: 0, percent: 100, ready: true });
+    expect(link().textContent).toBe("Review bag");
+  });
+
   it("shows a full track, Ready to go and Review bag at 100%", () => {
     setup({ packed: 32, total: 32, remaining: 0, percent: 100, ready: true });
     const bar = screen.getByRole("progressbar");
@@ -131,5 +140,34 @@ describe("the hero's status row (#285)", () => {
     expect(status.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(status.contains(actions)).toBe(false);
     expect(actions.firstElementChild?.textContent).toMatch(/Continue packing|Review bag/);
+  });
+
+  it("keeps everything above the weather note in one fixed-height block, and the note after it (#290)", () => {
+    setup(
+      {},
+      {
+        weather: {
+          phase: "ready",
+          cells: [
+            {
+              stopIndex: 0,
+              city: "Lisbon",
+              dates: "Oct 20 – Oct 24",
+              glyph: "rain",
+              range: "14° / 9°",
+              note: "Rain on 2 of 5 days",
+              source: "Forecast",
+            },
+          ],
+        },
+      },
+    );
+    const cell = hero().querySelector(".weather-strip li") as HTMLElement;
+    const top = cell.querySelector(":scope > .weather-cell-top") as HTMLElement;
+    expect(within(top).getByText("Lisbon")).toBeTruthy();
+    expect(top.textContent).toContain("14° / 9° Forecast");
+    expect(top.querySelector(".weather-note")).toBeNull();
+    expect(cell.lastElementChild?.className).toBe("weather-note");
+    expect(cell.lastElementChild?.textContent).toBe("Rain on 2 of 5 days");
   });
 });

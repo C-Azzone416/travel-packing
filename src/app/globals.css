@@ -3046,7 +3046,8 @@ a.back {
 }
 .ledger-hero {
   --ledger-row: 28px;
-  /* A weather cell (five lines plus padding) is at most 5 rows tall at 1280 and at 390; the strip is whole rows. */
+  /* A weather cell with a one-line note is 5 rows tall: 4 rows above the note, then the note (28px lines, so a long
+     note adds whole rows). */
   --ledger-weather-height: calc(var(--ledger-row) * 5);
   position: relative;
   min-width: 0;
@@ -3146,10 +3147,22 @@ a.back {
   background: var(--weather-surface);
 }
 .weather-strip li {
-  display: grid;
-  gap: 2px;
-  padding: 12px 14px;
+  padding: 0 14px;
   font-size: 13px;
+}
+/* Everything above the note, padding included, is exactly 4 rows (measured: the content is about 90px); only the note
+   grows, so the cell is always a whole number of rows. */
+.weather-cell-top {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  box-sizing: border-box;
+  min-height: calc(var(--ledger-row) * 4);
+  padding-top: 12px;
+}
+.weather-strip .weather-note {
+  display: block;
+  line-height: var(--ledger-row);
 }
 .weather-strip li + li {
   border-left: 1px solid var(--line);
@@ -3177,21 +3190,22 @@ a.back {
   margin: var(--ledger-row) 0 0;
   line-height: var(--ledger-row);
 }
-/* The status row: days to go, the track, the counts, on one baseline (2 rows). Narrower than the container query
-   allows (a phone, or huge counts) it stacks as three rows with the track on its own rule. */
+/* The status row: days to go, the track, the counts, on one baseline (2 rows) while they fit on one line. It wraps
+   in whole 28px rows when they do not (the counts drop to their own line first), and at most 440px wide it is the
+   phone arrangement: days (2 rows), the track (1 row), the counts (1 row, or one count per line). No fixed height. */
 .ledger-status {
   container-type: inline-size;
   margin-top: var(--ledger-row);
 }
 .ledger-status-row {
-  display: grid;
-  grid-template-columns: auto minmax(96px, 1fr) auto;
+  display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  align-content: start;
+  align-content: flex-start;
   column-gap: 24px;
-  height: calc(var(--ledger-row) * 2);
 }
 .days-to-go {
+  flex: none;
   display: flex;
   align-items: baseline;
   gap: 8px;
@@ -3211,42 +3225,53 @@ a.back {
   line-height: 20px;
 }
 .ledger-status .progress-track {
-  align-self: baseline;
+  /* 6px bar in a whole 28px row when it sits on a line of its own (21px above, 1px below). */
+  flex: 1 1 96px;
+  min-width: 96px;
+  margin: 21px 0 1px;
 }
 .ledger-status .progress-track span {
   background: var(--progress);
 }
+/* The two counts never break inside themselves; they wrap between each other. The wrapper clips the dot that sits
+   left of the second count, so it shows only when both counts share a line and never starts a line. */
 .ledger-counts {
+  flex: 0 1 auto;
   display: flex;
+  flex-wrap: wrap;
+  column-gap: 24px;
+  max-width: 100%;
+  margin-left: auto;
+  overflow: hidden;
   white-space: nowrap;
   color: var(--muted);
   font-size: 14px;
-  line-height: 20px;
+  line-height: var(--ledger-row);
   font-variant-numeric: tabular-nums;
+}
+.ledger-counts span {
+  position: relative;
 }
 .ledger-counts span + span::before {
   content: "·";
-  margin-inline: 8px;
+  position: absolute;
+  top: 0;
+  left: -16px;
+  width: 8px;
+  text-align: center;
 }
 @container (max-width: 440px) {
-  .ledger-status-row {
-    height: auto;
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: calc(var(--ledger-row) * 2) var(--ledger-row) var(--ledger-row);
-    align-items: stretch;
-  }
-  .days-to-go {
-    align-items: baseline;
+  .ledger-status .days-to-go {
+    flex: 0 0 100%;
   }
   .ledger-status .progress-track {
-    align-self: end;
-    margin-bottom: 1px;
+    flex: 0 0 100%;
+    min-width: 0;
   }
   .ledger-counts {
-    align-items: center;
+    flex: 1 1 100%;
     justify-content: space-between;
-    line-height: var(--ledger-row);
-    white-space: normal;
+    margin-left: 0;
   }
   .ledger-counts span + span::before {
     content: none;
@@ -3375,13 +3400,9 @@ a.back {
     grid-auto-flow: row;
     min-height: 0;
   }
-  .weather-strip li {
-    box-sizing: border-box;
-    min-height: var(--ledger-weather-height);
-  }
   .weather-strip li + li {
     border-left: 0;
-    border-top: 1px solid var(--line);
+    box-shadow: inset 0 1px 0 var(--line);
   }
   .ledger-actions {
     min-height: calc(var(--ledger-row) * 4);
