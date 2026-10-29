@@ -5,6 +5,7 @@ import { parseAllowlist } from "@/server/auth/allowlist";
 import { setAuthLogSink } from "@/server/auth/safe-log";
 import { createMigratedDb, resetData } from "../db/__fixtures__/db";
 import type { Db } from "../db/retention";
+import * as schema from "../db/schema";
 import { createFakeService, type FakeService } from "./__fixtures__/fake-service";
 import { createEnrollmentService } from "./enrollment-service";
 import { FRAMEBRIAR_ENDPOINT, createFramebriarClient } from "./framebriar-client";
@@ -310,6 +311,22 @@ describe("authentication, origin, content type, size and rate", () => {
     expect(
       (await routes.redeem(post("enrollment/redeem", { invitation: "A".repeat(43) }))).status,
     ).toBe(422);
+  });
+
+  it("a redeem while the account's deletion is in progress is 503 ACCOUNT_CLOSING and writes nothing (#311)", async () => {
+    await signIn();
+    await (ctx.db as unknown as Db).insert(schema.accountDeletions).values({
+      userId: OWNER.userId,
+      identityCreatedAt: new Date(1_700_000_000_000),
+      setupEmailDigest: "c".repeat(64),
+    });
+    const response = await routesFor().redeem(
+      post("enrollment/redeem", { invitation: fake.issueInvitation() }),
+    );
+    expect(response.status).toBe(503);
+    expect(await body(response)).toEqual({ v: 1, error: "ACCOUNT_CLOSING" });
+    expect(fake.count("redeem")).toBe(0);
+    expect(await (ctx.db as unknown as Db).select().from(schema.users)).toEqual([]);
   });
 
   it("an unreachable database is 503 UNAVAILABLE, not a crash", async () => {

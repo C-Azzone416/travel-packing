@@ -46,8 +46,20 @@ and erased first, or they would be destroyed without ever being revoked. The rul
   action.
 - **The deletion transaction** (`beginAccountDeletion`) checks once more after taking the owner lock and locking the owner row
   `FOR UPDATE`, before writing anything. A concurrent enrollment or redemption insert waits on that row lock and then fails its
-  foreign key once the row is gone, so a connection made between the early check and the delete cannot be cascaded away. A refusal
-  writes no fence and deletes nothing.
+  foreign key once the row is gone, so a connection made between the early check and the delete (BEFORE the fence exists) cannot
+  be cascaded away. A refusal writes no fence and deletes nothing.
+- **The window after the fence commits (#311).** The deletion commit removes the owner row, and the provider delete follows it, so
+  for a few seconds (or longer if the provider is down) a still-valid session on another device could call the enrollment
+  routes. Before #311, `accountGeneration` re-provisioned the owner row there without looking at the fence, so a redemption could
+  seal brand-new credentials that `completeAccountDeletion` (also used by the signed-out reconciler) then cascaded away WITHOUT
+  revoking them, leaving a live Framebriar family behind. That is closed: every enrollment write (provisioning the owner row,
+  creating or replacing a redemption attempt, committing a redemption, and every refresh that writes) runs in one transaction that
+  takes the same provider-id-scoped owner advisory lock as deletion and provisioning, in the same order (owner lock first; the
+  deletion transaction takes its setup lock and row lock after it), then refuses with a typed error while an `account_deletions`
+  fence exists for that owner and never recreates a fenced owner row. A write that waits behind `beginAccountDeletion` therefore
+  observes its committed fence and is refused; one that commits first leaves a row the deletion's gate sees and refuses to cascade.
+  The route answers 503 `ACCOUNT_CLOSING`, which the client shows as the existing "unavailable" copy. Erasing (disconnect) is not
+  blocked. PGlite cannot demonstrate real lock contention (one connection), so hosted step 0 below must cover it.
 - If the check cannot be evaluated, nothing is attempted and the person is told nothing was deleted.
 - The recovery retry after a fence has no owner row left, so it is never blocked.
 
@@ -189,7 +201,9 @@ Before enabling this feature in a disposable non-production Neon Auth project, v
 
 0. an account with a synthetic Framebriar enrollment (against a non-production Framebriar target, never real data) cannot be closed
    until it is disconnected in the sheet, a second device that connects while the sheet is open is refused and sent back to step 1,
-   and after Disconnect the sealed enrollment row is gone and closure completes;
+   and after Disconnect the sealed enrollment row is gone and closure completes; with the fence committed and the provider delete
+   paused, a redemption or refresh from a second device is refused (503 `ACCOUNT_CLOSING`) and leaves no `users`, enrollment or
+   attempt row (#311);
 
 1. a password sign-in creates at least two sessions;
 2. `revokeOtherSessions()` invalidates the other session and keeps the current one;

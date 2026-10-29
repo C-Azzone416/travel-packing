@@ -75,6 +75,12 @@ export const FRAMEBRIAR_MARKERS: readonly BuildMarker[] = [
     text: "Drawing needs a finger, a pen or a mouse",
     source: "src/features/feedback/ScreenshotEditor.tsx",
   },
+  // The "Disconnect feedback first" step of Close account (#261). Next swaps the whole module for a stub in Production (#311).
+  {
+    name: "the Close account feedback step",
+    text: "possibly from another device or tab",
+    source: "src/features/feedback/CloseAccountFeedback.tsx",
+  },
   {
     name: "the Framebriar durable outbox SDK",
     text: "outbox-v2-",

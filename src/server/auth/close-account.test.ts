@@ -430,6 +430,7 @@ describe("closeAccount", () => {
     });
 
     it("a gate that cannot be evaluated attempts nothing and says nothing was started", async () => {
+      const signIn = vi.spyOn(fake, "signInWithPassword");
       const broken = {
         ...reads(),
         select: () => {
@@ -441,6 +442,8 @@ describe("closeAccount", () => {
         deletionStarted: false,
       });
       expect(fake.flows.calls).toEqual([]);
+      // F2 (#311): the core must not reauthenticate when its gate cannot answer.
+      expect(signIn).not.toHaveBeenCalled();
     });
 
     it("the core refuses by itself when the early read missed it (an enrollment that appeared in between)", async () => {

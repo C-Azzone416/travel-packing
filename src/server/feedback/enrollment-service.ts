@@ -7,6 +7,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { Db } from "../db/retention";
 import {
+  AccountClosingError,
   REDEMPTION_WINDOW_MS,
   accountGeneration,
   beginRedemption,
@@ -50,6 +51,8 @@ export interface StatusView {
 /** Errors the HTTP layer maps to a status code. They are codes only: no message carries a value from the provider or the account. */
 export type EnrollmentError =
   | "UNAVAILABLE"
+  /** This account's deletion is in progress, so enrollment writes are refused (#311). Reaches the person as "unavailable". */
+  | "ACCOUNT_CLOSING"
   | "ALREADY_CONNECTED"
   | "INVITATION_REJECTED"
   | "UNCERTAIN"
@@ -128,6 +131,12 @@ function parseCredentials(text: string | null): Credentials | null {
     return null;
   }
 }
+
+/** Why a database step failed: the account is being closed (refused for good), or the database was simply not usable. */
+const dbFailure = (error: unknown): Failure => ({
+  ok: false,
+  code: error instanceof AccountClosingError ? "ACCOUNT_CLOSING" : "UNAVAILABLE",
+});
 
 const grantCredentials = (grant: AccessGrant): Credentials => ({
   refreshToken: grant.refreshToken,
@@ -210,8 +219,8 @@ export function createEnrollmentService({
       if (view(seen, ring) === "connected") return { ok: false, code: "ALREADY_CONNECTED" };
       // The attempt id is durable before Framebriar hears about it.
       attemptId = await beginRedemption(db, ownerId, generation, new Date(now()), newAttemptId);
-    } catch {
-      return { ok: false, code: "UNAVAILABLE" };
+    } catch (error) {
+      return dbFailure(error);
     }
 
     const outcome = await client.redeem({ invitation, attemptId });
@@ -243,9 +252,9 @@ export function createEnrollmentService({
       });
       // The attempt stays, so retrying with the same invitation gets the same family back and commits against the fresh row.
       if (!committed) return { ok: false, code: "UNCERTAIN" };
-    } catch {
+    } catch (error) {
       // Not committed: the attempt stays, so the same invitation retried with the same id recovers the same family.
-      return { ok: false, code: "UNAVAILABLE" };
+      return dbFailure(error);
     }
     return {
       ok: true,
@@ -281,8 +290,8 @@ export function createEnrollmentService({
     try {
       generation = await accountGeneration(db, ownerId);
       loaded = await loadEnrollment(db, ownerId, generation);
-    } catch {
-      return { ok: false, code: "UNAVAILABLE" };
+    } catch (error) {
+      return dbFailure(error);
     }
     if (!loaded) return { ok: false, code: "NOT_CONNECTED" };
     if (loaded.state === "revoked") return { ok: false, code: "REVOKED" };
@@ -292,8 +301,8 @@ export function createEnrollmentService({
     let current: { row: EnrollmentRow; credentials: Credentials } | null;
     try {
       current = await usable(loaded, ring);
-    } catch {
-      return { ok: false, code: "UNAVAILABLE" };
+    } catch (error) {
+      return dbFailure(error);
     }
     // A ring is present (checked above) and cannot open the row: the credential is unreachable, a new invitation is the way back.
     if (!current) return { ok: false, code: "NEEDS_RECONNECT" };
@@ -318,8 +327,8 @@ export function createEnrollmentService({
       const state: EnrollmentState = outcome.status === 403 ? "disabled" : "revoked";
       try {
         await updateEnrollment(db, row, { state });
-      } catch {
-        return { ok: false, code: "UNAVAILABLE" };
+      } catch (error) {
+        return dbFailure(error);
       }
       return { ok: false, code: state === "disabled" ? "DISABLED" : "REVOKED" };
     }
@@ -336,8 +345,8 @@ export function createEnrollmentService({
       // the stored row is theirs. If it was a refresh, the next call reuses theirs; if it was an erase, this call must not
       // outlive it, so re-check once.
       if (revision === null && attempt === 0) return refreshOnce(ownerId, false, 1);
-    } catch {
-      return { ok: false, code: "UNAVAILABLE" };
+    } catch (error) {
+      return dbFailure(error);
     }
     return { ok: true, token: grant.accessToken };
   }

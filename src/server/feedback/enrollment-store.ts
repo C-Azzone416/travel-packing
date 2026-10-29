@@ -4,6 +4,7 @@
 
 import { and, eq, sql } from "drizzle-orm";
 import { REDEMPTION_WINDOW_MS } from "../../domain/redemption-window";
+import { lockAccountDeletion } from "../auth/account-deletion-lock";
 import type { Db } from "../db/retention";
 import * as schema from "../db/schema";
 
@@ -21,15 +22,52 @@ export interface EnrollmentRow {
 
 export { REDEMPTION_WINDOW_MS };
 
-/** The account's generation, provisioning the app user row first (a recreated account gets a new, never-reused one). */
+/** Thrown by every enrollment write while this owner's account deletion is in progress (an `account_deletions` fence exists). */
+export class AccountClosingError extends Error {
+  constructor() {
+    super("account is closing");
+    this.name = "AccountClosingError";
+  }
+}
+
+/**
+ * Runs an enrollment write inside one transaction that first takes the SAME per-owner advisory lock account deletion and owner
+ * provisioning use (#311), and then refuses while the deletion fence exists. The order is the deletion transaction's own (owner
+ * lock first; the setup lock and the owner row lock come after it there), so the two can wait on each other but never deadlock.
+ * A write that goes second sees the committed fence instead of recreating a fenced owner row or sealing a credential that the
+ * deletion's cascade would destroy unrevoked.
+ */
+async function whileNotClosing<T>(
+  db: Db,
+  ownerId: string,
+  work: (tx: Db) => Promise<T>,
+): Promise<T> {
+  return db.transaction(async (transaction) => {
+    await lockAccountDeletion(transaction, ownerId);
+    const fence = await transaction
+      .select({ userId: schema.accountDeletions.userId })
+      .from(schema.accountDeletions)
+      .where(eq(schema.accountDeletions.userId, ownerId))
+      .limit(1);
+    if (fence.length > 0) throw new AccountClosingError();
+    return work(transaction as unknown as Db);
+  });
+}
+
+/**
+ * The account's generation, provisioning the app user row first (a recreated account gets a new, never-reused one). Refuses with
+ * `AccountClosingError`, creating nothing, while the account's deletion is in progress.
+ */
 export async function accountGeneration(db: Db, ownerId: string): Promise<string> {
-  await db.insert(schema.users).values({ id: ownerId }).onConflictDoNothing();
-  const [row] = await db
-    .select({ generation: schema.users.generation })
-    .from(schema.users)
-    .where(eq(schema.users.id, ownerId));
-  if (!row) throw new Error("account row missing");
-  return row.generation;
+  return whileNotClosing(db, ownerId, async (tx) => {
+    await tx.insert(schema.users).values({ id: ownerId }).onConflictDoNothing();
+    const [row] = await tx
+      .select({ generation: schema.users.generation })
+      .from(schema.users)
+      .where(eq(schema.users.id, ownerId));
+    if (!row) throw new Error("account row missing");
+    return row.generation;
+  });
 }
 
 export async function loadEnrollment(
@@ -58,22 +96,24 @@ export async function updateEnrollment(
   row: EnrollmentRow,
   change: Partial<Pick<EnrollmentRow, "keyVersion" | "credentials" | "expiresAt" | "state">>,
 ): Promise<number | null> {
-  const updated = await db
-    .update(schema.framebriarEnrollments)
-    .set({
-      ...change,
-      revision: sql`${schema.framebriarEnrollments.revision} + 1`,
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(schema.framebriarEnrollments.ownerId, row.ownerId),
-        eq(schema.framebriarEnrollments.generation, row.generation),
-        eq(schema.framebriarEnrollments.revision, row.revision),
-      ),
-    )
-    .returning({ revision: schema.framebriarEnrollments.revision });
-  return updated[0]?.revision ?? null;
+  return whileNotClosing(db, row.ownerId, async (tx) => {
+    const updated = await tx
+      .update(schema.framebriarEnrollments)
+      .set({
+        ...change,
+        revision: sql`${schema.framebriarEnrollments.revision} + 1`,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.framebriarEnrollments.ownerId, row.ownerId),
+          eq(schema.framebriarEnrollments.generation, row.generation),
+          eq(schema.framebriarEnrollments.revision, row.revision),
+        ),
+      )
+      .returning({ revision: schema.framebriarEnrollments.revision });
+    return updated[0]?.revision ?? null;
+  });
 }
 
 /** Deletes the enrollment when it is still at the revision that was read. */
@@ -145,19 +185,21 @@ export async function beginRedemption(
   now: Date,
   newAttemptId: () => string,
 ): Promise<string> {
-  const pending = await loadRedemption(db, ownerId, generation);
-  if (pending && now.getTime() - pending.createdAt.getTime() < REDEMPTION_WINDOW_MS) {
-    return pending.attemptId;
-  }
-  const attemptId = newAttemptId();
-  await db
-    .insert(schema.framebriarRedemptions)
-    .values({ ownerId, generation, attemptId, createdAt: now })
-    .onConflictDoUpdate({
-      target: schema.framebriarRedemptions.ownerId,
-      set: { generation, attemptId, createdAt: now },
-    });
-  return attemptId;
+  return whileNotClosing(db, ownerId, async (tx) => {
+    const pending = await loadRedemption(tx, ownerId, generation);
+    if (pending && now.getTime() - pending.createdAt.getTime() < REDEMPTION_WINDOW_MS) {
+      return pending.attemptId;
+    }
+    const attemptId = newAttemptId();
+    await tx
+      .insert(schema.framebriarRedemptions)
+      .values({ ownerId, generation, attemptId, createdAt: now })
+      .onConflictDoUpdate({
+        target: schema.framebriarRedemptions.ownerId,
+        set: { generation, attemptId, createdAt: now },
+      });
+    return attemptId;
+  });
 }
 
 export async function clearRedemption(
@@ -195,7 +237,7 @@ export async function commitRedemption(
     expectedRevision: number | null;
   },
 ): Promise<boolean> {
-  return db.transaction(async (tx) => {
+  return whileNotClosing(db, input.ownerId, async (tx) => {
     const sealed = {
       keyVersion: input.keyVersion,
       credentials: input.credentials,

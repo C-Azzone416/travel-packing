@@ -67,48 +67,61 @@ async function connect(svc: EnrollmentService, owner = A) {
 
 const rows = () => db().select().from(schema.framebriarEnrollments);
 
+/** Applies `intercept` to the database and to the transaction handed to each `transaction` callback (enrollment writes run in one, #311). */
+function intercepting(
+  real: Db,
+  intercept: (target: object, property: string | symbol) => unknown,
+  beforeTransaction?: (nth: number) => Promise<void>,
+): Db {
+  let transactions = 0;
+  const wrap = (base: object): object =>
+    new Proxy(base, {
+      get(target, property, receiver) {
+        const replaced = intercept(target, property);
+        if (replaced !== undefined) return replaced;
+        if (property === "transaction") {
+          return async (work: (tx: unknown) => Promise<unknown>) => {
+            // Anything a test does "meanwhile" runs between transactions: inside one, it would wait on the owner lock it holds.
+            await beforeTransaction?.((transactions += 1));
+            return (target as Db).transaction((tx) => work(wrap(tx as object)));
+          };
+        }
+        const value = Reflect.get(target, property, receiver) as unknown;
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+  return wrap(real as object) as unknown as Db;
+}
+
 /** A database whose erase either throws or reports that a concurrent write moved the revision (nothing deleted). */
 function erasing(mode: "throw" | "lost"): Db {
-  const real = db();
-  return new Proxy(real as object, {
-    get(target, property, receiver) {
-      if (property === "delete") {
-        return () => {
+  return intercepting(db(), (_target, property) =>
+    property === "delete"
+      ? () => {
           if (mode === "throw") throw new Error("down");
           return { where: () => ({ returning: async () => [] }) };
-        };
-      }
-      const value = Reflect.get(target, property, receiver) as unknown;
-      return typeof value === "function" ? value.bind(target) : value;
-    },
-  }) as unknown as Db;
+        }
+      : undefined,
+  );
 }
 
 /** A database where the first `times` credential updates lose the revision race (nothing written). */
 function losingUpdates(times: number, beforeLoss?: () => Promise<void>): Db {
   let left = times;
-  const real = db();
-  return new Proxy(real as object, {
-    get(target, property, receiver) {
-      if (property === "update" && left > 0) {
-        return () => {
-          left -= 1;
-          return {
-            set: () => ({
-              where: () => ({
-                returning: async () => {
-                  await beforeLoss?.();
-                  return [];
-                },
-              }),
-            }),
-          };
-        };
-      }
-      const value = Reflect.get(target, property, receiver) as unknown;
-      return typeof value === "function" ? value.bind(target) : value;
+  return intercepting(
+    db(),
+    (_target, property) =>
+      property === "update" && left > 0
+        ? () => {
+            left -= 1;
+            return { set: () => ({ where: () => ({ returning: async () => [] }) }) };
+          }
+        : undefined,
+    // The generation read is the first transaction and the credential update the second: the other writer wins in between.
+    async (nth) => {
+      if (nth === 2) await beforeLoss?.();
     },
-  }) as unknown as Db;
+  );
 }
 
 describe("accountHoldsFeedback, the gate account closure reads (#261)", () => {
@@ -421,7 +434,15 @@ describe("redeeming an invitation", () => {
   it("never reports success before the encrypted commit: a failed write keeps the attempt for a safe retry", async () => {
     const svc = service();
     const invitation = fake.issueInvitation(1);
-    const spy = vi.spyOn(db(), "transaction").mockRejectedValueOnce(new Error("disk full"));
+    // The third transaction (after the generation read and the attempt) is the encrypted commit.
+    const realTransaction = db().transaction.bind(db()) as (...args: unknown[]) => Promise<unknown>;
+    let transactions = 0;
+    const spy = vi
+      .spyOn(db(), "transaction")
+      .mockImplementation(((...args: unknown[]) =>
+        (transactions += 1) === 3
+          ? Promise.reject(new Error("disk full"))
+          : realTransaction(...args)) as never);
     expect(await svc.redeem(A, invitation)).toEqual({ ok: false, code: "UNAVAILABLE" });
     spy.mockRestore();
     expect(await rows()).toHaveLength(0);
@@ -854,14 +875,13 @@ describe("disconnect and revokeAndEraseEnrollment", () => {
   it("reports a partial result when the revoke worked but the erase did not", async () => {
     const svc = service();
     await connect(svc);
-    const failing = {
-      ...db(),
-      select: db().select.bind(db()),
-      insert: db().insert.bind(db()),
-      delete: () => {
-        throw new Error("down");
-      },
-    } as unknown as Db;
+    const failing = intercepting(db(), (_target, property) =>
+      property === "delete"
+        ? () => {
+            throw new Error("down");
+          }
+        : undefined,
+    );
     const result = await createEnrollmentService({
       db: failing,
       client: createFramebriarClient({ fetchImpl: fake.fetch, now }),
@@ -916,14 +936,13 @@ describe("disconnect and revokeAndEraseEnrollment", () => {
     await service().redeem(A, fake.issueInvitation());
     // The redeem above replaced nothing (network failure) and left an attempt; the row is still the old unreadable one.
     clock += REDEMPTION_WINDOW_MS + 1000;
-    const failing = {
-      ...db(),
-      select: db().select.bind(db()),
-      insert: db().insert.bind(db()),
-      delete: () => {
-        throw new Error("down");
-      },
-    } as unknown as Db;
+    const failing = intercepting(db(), (_target, property) =>
+      property === "delete"
+        ? () => {
+            throw new Error("down");
+          }
+        : undefined,
+    );
     const broken = createEnrollmentService({
       db: failing,
       client: createFramebriarClient({ fetchImpl: fake.fetch, now }),

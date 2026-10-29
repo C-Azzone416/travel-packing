@@ -109,6 +109,25 @@ describe("markerHits", () => {
     ]);
   });
 
+  it("finds the Close account feedback copy in a bundle, so check:no-feedback-in-build would fail (#311)", () => {
+    const bundled = join(scratch, "bundled-close-account-feedback");
+    mkdirSync(bundled);
+    const source = readFileSync(
+      join(process.cwd(), "src/features/feedback/CloseAccountFeedback.tsx"),
+      "utf8",
+    );
+    const marker = FRAMEBRIAR_MARKERS.find(
+      (entry) => entry.name === "the Close account feedback step",
+    );
+    expect(marker).toBeDefined();
+    // The real copy, as the compiled chunk would carry it.
+    expect(source).toContain(marker!.text);
+    writeFileSync(join(bundled, "chunk.js"), `x="Feedback is still connected, ${marker!.text}."`);
+    expect(markerHits(bundled, FRAMEBRIAR_MARKERS).map((hit) => hit.name)).toEqual([
+      "the Close account feedback step",
+    ]);
+  });
+
   it("reports nothing for a clean build", () => {
     const clean = join(scratch, "clean");
     mkdirSync(clean);
