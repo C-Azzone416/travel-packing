@@ -223,6 +223,11 @@ describe("redeemInvitation", () => {
       { kind: "rate-limited", retryAfterSeconds: 90 },
     ],
     ["unavailable", reply(503, { v: 1, error: "UNAVAILABLE" }), { kind: "unavailable" }],
+    [
+      "an account that is closing (#311)",
+      reply(503, { v: 1, error: "ACCOUNT_CLOSING" }),
+      { kind: "unavailable" },
+    ],
     ["too large", reply(413, { v: 1, error: "TOO_LARGE" }), { kind: "unavailable" }],
     ["a bad origin", reply(403, { v: 1, error: "BAD_ORIGIN" }), { kind: "unavailable" }],
     ["signed out", reply(401, { v: 1, error: "UNAUTHENTICATED" }), { kind: "signed-out" }],

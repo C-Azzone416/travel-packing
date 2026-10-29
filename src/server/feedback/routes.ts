@@ -50,6 +50,7 @@ const STATUS: Record<ErrorCode, number> = {
   UNCERTAIN: 502,
   UPSTREAM: 502,
   UNAVAILABLE: 503,
+  ACCOUNT_CLOSING: 503,
 };
 
 /**
