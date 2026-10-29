@@ -18,6 +18,8 @@ export interface FeedbackStatus {
   /** A recent send was refused as "too many for now"; reports wait on this device. */
   rateLimited: boolean;
   connected: boolean;
+  /** The server holds an enrollment in any state or an unfinished redemption: Disconnect is offered whenever this is true (#304). */
+  hasRecord: boolean;
   /** The Feedback button works only while connected. Saving needs no network, so being offline does not turn it off. */
   canCapture: boolean;
   notice: FeedbackNoticeKind | null;
@@ -47,6 +49,7 @@ export function feedbackStatus(
     online: options.online,
     rateLimited: options.rateLimited,
     connected,
+    hasRecord: view.hasRecord,
     canCapture: connected,
     notice,
   };

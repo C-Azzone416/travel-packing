@@ -99,6 +99,7 @@ for (const theme of THEMES) {
                   status: state.status,
                   expiresAt: state.expiresAt,
                   redemption: "pending" in state ? "pending" : "none",
+                  hasRecord: state.status !== "not-connected" || "pending" in state,
                   outboxKey: KEY,
                 }),
               })

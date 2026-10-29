@@ -3,6 +3,7 @@
 // phones, two server instances or a refresh racing a disconnect cannot corrupt the credential state.
 
 import { and, eq, sql } from "drizzle-orm";
+import { REDEMPTION_WINDOW_MS } from "../../domain/redemption-window";
 import type { Db } from "../db/retention";
 import * as schema from "../db/schema";
 
@@ -18,8 +19,7 @@ export interface EnrollmentRow {
   revision: number;
 }
 
-/** How long a started redemption can be retried with the same attempt id before a new attempt starts. */
-export const REDEMPTION_WINDOW_MS = 15 * 60 * 1000;
+export { REDEMPTION_WINDOW_MS };
 
 /** The account's generation, provisioning the app user row first (a recreated account gets a new, never-reused one). */
 export async function accountGeneration(db: Db, ownerId: string): Promise<string> {

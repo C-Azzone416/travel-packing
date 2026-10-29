@@ -81,7 +81,7 @@ for (const theme of THEMES) {
         .getByRole("group", { name: "Disconnect feedback" })
         .getByRole("button", { name: "Disconnect" })
         .click();
-      await expect(page.getByRole("status").filter({ hasText: /./ }).first()).toBeVisible();
+      await expect(page.getByRole("alert").filter({ hasText: /./ }).first()).toBeVisible();
       await toAccount(page, "start");
       await shot(page, `${tag}-5-settings-error`);
       await page.locator(".feedback-button").evaluate((button) => (button as HTMLElement).click());
@@ -136,6 +136,7 @@ for (const theme of THEMES) {
                 status: "unavailable",
                 expiresAt: null,
                 redemption: "none",
+                hasRecord: false,
                 outboxKey: null,
               }),
             })
