@@ -419,6 +419,9 @@ describe("Close account: only this account's unsent outbox is cleared, and only 
       () => new Promise<CloseAccountState>((resolve) => (settle = resolve)),
     );
     await stepTwoHeading();
+    // The provider sweeps stale account databases before it opens this account's outbox. Wait for that
+    // initialization to finish so the fixture below measures closure cleanup, not the startup sweep.
+    await waitFor(() => expect(h.outbox.box.start).toHaveBeenCalled());
     h.idb.add(accountDatabaseName(OUTBOX_KEY_A));
     h.idb.add(accountDatabaseName(OUTBOX_KEY_B));
     await h.user.type(passwordField() as HTMLElement, "x");
