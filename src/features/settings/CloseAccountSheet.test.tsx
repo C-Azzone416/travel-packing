@@ -81,6 +81,13 @@ describe("Close account: no feedback involved", () => {
     ).toBeTruthy();
   });
 
+  it("marks the DELETE phrase as a code so password managers do not treat it as an email field", async () => {
+    open({ status: "not-connected" });
+    await stepTwoHeading();
+    const confirmation = screen.getByLabelText("Type DELETE to confirm");
+    expect(confirmation.getAttribute("autocomplete")).toBe("one-time-code");
+  });
+
   it("unsent reports only (no record): no step 1, one extra line on the confirmation", async () => {
     const h = open({ status: "not-connected" });
     await stepTwoHeading();
@@ -411,6 +418,9 @@ describe("Close account: only this account's unsent outbox is cleared, and only 
       () => new Promise<CloseAccountState>((resolve) => (settle = resolve)),
     );
     await stepTwoHeading();
+    // The provider sweeps stale account databases before it opens this account's outbox. Wait for that
+    // initialization to finish so the fixture below measures closure cleanup, not the startup sweep.
+    await waitFor(() => expect(h.outbox.box.start).toHaveBeenCalled());
     h.idb.add(accountDatabaseName(OUTBOX_KEY_A));
     h.idb.add(accountDatabaseName(OUTBOX_KEY_B));
     await h.user.type(passwordField() as HTMLElement, "x");

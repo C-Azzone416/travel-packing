@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createNeonAuthProvider, type NeonAuthLike } from "./neon-adapter";
 import { setAuthLogSink } from "./safe-log";
 
@@ -120,6 +120,36 @@ describe("account deletion provider calls", () => {
     expect(await provider.deleteUser("synthetic-password")).toEqual({ ok: true });
     expect(calls.revokeOtherSessions).toBe(1);
     expect(calls.deleteUser).toEqual([{ password: "synthetic-password" }]);
+  });
+
+  it("uses the runtime's contract-correct revocation call instead of the SDK mapping", async () => {
+    const { neon, calls } = fakeNeon({
+      revokeOtherSessions: { data: {} },
+    });
+    const revokeOtherSessions = vi.fn(async () => ({ data: { status: true }, error: null }));
+    const provider = createNeonAuthProvider(neon, { revokeOtherSessions });
+
+    expect(await provider.revokeOtherSessions()).toEqual({ ok: true });
+    expect(revokeOtherSessions).toHaveBeenCalledOnce();
+    expect(calls.revokeOtherSessions).toBe(0);
+  });
+
+  it("fails closed when the runtime revocation call throws", async () => {
+    const { neon, calls } = fakeNeon({
+      revokeOtherSessions: { data: { status: true } },
+    });
+    const revokeOtherSessions = vi.fn(async () => {
+      throw new Error("synthetic revoker failure");
+    });
+    const provider = createNeonAuthProvider(neon, { revokeOtherSessions });
+
+    await expect(provider.revokeOtherSessions()).resolves.toEqual({
+      ok: false,
+      reason: "unavailable",
+    });
+    expect(revokeOtherSessions).toHaveBeenCalledOnce();
+    expect(calls.revokeOtherSessions).toBe(0);
+    expect(logged).toEqual([JSON.stringify({ scope: "auth", event: "provider-error" })]);
   });
 
   it("does not mistake a verification-email response or an unconfirmed revocation for completed cleanup", async () => {

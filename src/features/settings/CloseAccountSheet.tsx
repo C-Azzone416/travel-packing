@@ -103,7 +103,7 @@ export function CloseAccountSheet({
     <ModalSheet
       open
       title="Close your account?"
-      description="This permanently deletes your account identity, trips, packing lists, Staples, saved lists, and preferences. Confirmed closure leaves no live Packed Smart account record. Feedback you already sent to the developer can’t be deleted from here. Provider backups may follow separate retention policies. It can’t be undone."
+      description="This permanently deletes your account identity, trips, packing lists, Staples, saved lists, and preferences. The app removes its live data when closure starts and asks the identity provider to remove the account and sessions in the same request. Feedback you already sent to the developer can’t be deleted from here. Provider backups and security logs may remain under separate retention policies; Packed Smart can’t confirm or erase them. It can’t be undone."
       eyebrow={hadStepOne ? "Step 2 of 2" : undefined}
       onClose={close}
       dismissOnBackdrop={false}
@@ -137,7 +137,8 @@ export function CloseAccountSheet({
         noValidate
       >
         <p>
-          To confirm, enter your current password and type <strong>DELETE</strong>.
+          One confirmation starts the entire closure process. Enter your current password and type{" "}
+          <strong>DELETE</strong>.
         </p>
         {feedback.notes(carried, hadStepOne)}
         <PasswordField
@@ -152,7 +153,7 @@ export function CloseAccountSheet({
           id="close-account-confirmation"
           name="confirmation"
           label="Type DELETE to confirm"
-          autoComplete="off"
+          autoComplete="one-time-code"
           autoCapitalize="characters"
           spellCheck={false}
           required
