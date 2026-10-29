@@ -33,6 +33,7 @@ describe("readEnrollment", () => {
         status: "connected",
         expiresAt: "2026-12-01T00:00:00Z",
         redemption: "none",
+        hasRecord: true,
         outboxKey: OUTBOX_KEY_A,
       },
     });
@@ -90,7 +91,14 @@ describe("readEnrollment", () => {
     ["a body that is not v1", reply(200, { status: "connected" })],
     [
       "an unknown state",
-      reply(200, { v: 1, status: "mystery", expiresAt: null, redemption: "none", outboxKey: null }),
+      reply(200, {
+        v: 1,
+        status: "mystery",
+        expiresAt: null,
+        redemption: "none",
+        hasRecord: false,
+        outboxKey: null,
+      }),
     ],
     [
       "a bad redemption flag",
@@ -99,12 +107,20 @@ describe("readEnrollment", () => {
         status: "connected",
         expiresAt: null,
         redemption: "maybe",
+        hasRecord: false,
         outboxKey: null,
       }),
     ],
     [
       "a bad expiry",
-      reply(200, { v: 1, status: "connected", expiresAt: 5, redemption: "none", outboxKey: null }),
+      reply(200, {
+        v: 1,
+        status: "connected",
+        expiresAt: 5,
+        redemption: "none",
+        hasRecord: false,
+        outboxKey: null,
+      }),
     ],
     [
       "an outbox key that is not URL-safe",
@@ -113,6 +129,7 @@ describe("readEnrollment", () => {
         status: "connected",
         expiresAt: null,
         redemption: "none",
+        hasRecord: false,
         outboxKey: "../../etc/passwd",
       }),
     ],
@@ -123,7 +140,29 @@ describe("readEnrollment", () => {
         status: "connected",
         expiresAt: null,
         redemption: "none",
+        hasRecord: false,
         outboxKey: "abc",
+      }),
+    ],
+    [
+      "a status with no hasRecord",
+      reply(200, {
+        v: 1,
+        status: "connected",
+        expiresAt: null,
+        redemption: "none",
+        outboxKey: null,
+      }),
+    ],
+    [
+      "a hasRecord that is not a boolean",
+      reply(200, {
+        v: 1,
+        status: "connected",
+        expiresAt: null,
+        redemption: "none",
+        hasRecord: "yes",
+        outboxKey: null,
       }),
     ],
     ["a non-object body", reply(200, [1, 2])],
@@ -221,26 +260,50 @@ describe("disconnectEnrollment", () => {
       seen.push({ path, init });
       return server.fetch(path, init);
     }) as unknown as typeof fetch;
-    expect(await disconnectEnrollment(spy)).toEqual({ kind: "done", revoked: true });
+    expect(await disconnectEnrollment(spy)).toEqual({ kind: "done", outcome: "ended" });
     expect(seen[0].path).toBe(DISCONNECT_PATH);
     expect(seen[0].init).toMatchObject({ method: "POST", body: "{}" });
   });
 
-  it("says revoked false when there was nothing to disconnect", async () => {
+  it.each(["ended", "nothing", "erased_unrevocable"] as const)(
+    "carries the real outcome: %s",
+    async (outcome) => {
+      const server = createFakeFeedbackServer({ status: "connected", disconnectOutcome: outcome });
+      expect(await disconnectEnrollment(server.fetch)).toEqual({ kind: "done", outcome });
+    },
+  );
+
+  it("says nothing was ended when there was nothing to disconnect", async () => {
     expect(await disconnectEnrollment(createFakeFeedbackServer().fetch)).toEqual({
       kind: "done",
-      revoked: false,
+      outcome: "nothing",
     });
   });
 
   it.each([
-    ["uncertain", reply(502, { v: 1, error: "UNCERTAIN" })],
-    ["unavailable", reply(503, { v: 1, error: "UNAVAILABLE" })],
-    ["rate limited", reply(429, { v: 1, error: "RATE_LIMITED" })],
-    ["an HTML page", reply(200, "<html>")],
-  ])("is a failure, with nothing assumed erased, for %s", async (_name, fetchImpl) => {
-    expect(await disconnectEnrollment(fetchImpl)).toEqual({ kind: "failed" });
-  });
+    ["partial", reply(503, { v: 1, error: "PARTIAL" }), "partial"],
+    ["pending redemption", reply(409, { v: 1, error: "PENDING_REDEMPTION" }), "pending"],
+    ["uncertain", reply(502, { v: 1, error: "UNCERTAIN" }), "uncertain"],
+    ["unavailable", reply(503, { v: 1, error: "UNAVAILABLE" }), "unavailable"],
+    ["rate limited", reply(429, { v: 1, error: "RATE_LIMITED" }), "unavailable"],
+    ["an HTML page", reply(200, "<html>"), "unavailable"],
+    [
+      "a success with an unknown outcome",
+      reply(200, { v: 1, status: "not-connected", outcome: "mystery" }),
+      "unavailable",
+    ],
+    [
+      "a success with no outcome (never guessed)",
+      reply(200, { v: 1, status: "not-connected", revoked: true }),
+      "unavailable",
+    ],
+    ["a 409 that is not the pending code", reply(409, { v: 1, error: "REVOKED" }), "unavailable"],
+  ] as const)(
+    "is a failure with its own reason, nothing assumed erased, for %s",
+    async (_n, fetchImpl, reason) => {
+      expect(await disconnectEnrollment(fetchImpl)).toEqual({ kind: "failed", reason });
+    },
+  );
 
   it("maps signed out and offline", async () => {
     expect(await disconnectEnrollment(reply(401, { v: 1, error: "UNAUTHENTICATED" }))).toEqual({

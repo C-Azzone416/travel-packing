@@ -44,6 +44,8 @@ const STATUS: Record<ErrorCode, number> = {
   EXPIRED: 409,
   REVOKED: 409,
   DISABLED: 409,
+  PENDING_REDEMPTION: 409,
+  PARTIAL: 503,
   INVITATION_REJECTED: 422,
   UNCERTAIN: 502,
   UPSTREAM: 502,
@@ -208,7 +210,10 @@ export function createFeedbackRoutes(deps: RouteDeps) {
       if (Object.keys(body).length !== 0) return failure("INVALID_REQUEST");
       const result = await service.disconnect(ownerId);
       return result.ok
-        ? respond({ status: "not-connected", revoked: result.revoked }, 200)
+        ? respond(
+            { status: "not-connected", outcome: result.outcome, revoked: result.revoked },
+            200,
+          )
         : failure(result.code);
     }),
 

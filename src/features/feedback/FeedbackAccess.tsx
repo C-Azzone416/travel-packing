@@ -28,6 +28,8 @@ import {
   disconnectEnrollment,
   readEnrollment,
   redeemInvitation,
+  type DisconnectFailure,
+  type DisconnectOutcome,
   type EnrollmentView,
 } from "./enrollment-client";
 import { feedbackStatus, type FeedbackStatus } from "./status";
@@ -44,8 +46,11 @@ export type ConnectResult =
   | { kind: "rate-limited"; retryAfterSeconds: number | null }
   | { kind: "unavailable" };
 
-/** What Disconnect came to. "failed" means nothing was changed: the enrollment is still active on the server. */
-export type DisconnectResult = "ended" | "nothing" | "failed" | "offline";
+/**
+ * What Disconnect really came to (#304). The first three are successes; "partial" ended the access but could not erase the saved
+ * copy yet; "unavailable", "uncertain" and "pending" changed nothing; "offline" never reached the server. Every failure can be repeated.
+ */
+export type DisconnectResult = DisconnectOutcome | DisconnectFailure | "offline";
 
 /** Reports waiting and blocked on this device (#132), and whether this browser can keep them at all. */
 export interface OutboxView {
@@ -102,7 +107,7 @@ const NOT_READY: FeedbackAccessValue = {
   scopeKey: null,
   outbox: NO_OUTBOX,
   connect: async () => ({ kind: "unavailable" }),
-  disconnect: async () => "failed",
+  disconnect: async () => "unavailable",
   prepareReport: async () => {
     throw new Error("Feedback is not ready");
   },
@@ -270,6 +275,7 @@ function EnabledFeedbackAccessProvider({
         status: "unavailable",
         expiresAt: null,
         redemption: "none",
+        hasRecord: previous?.hasRecord ?? false,
         outboxKey: previous?.outboxKey ?? null,
       }));
     }
@@ -436,14 +442,17 @@ function EnabledFeedbackAccessProvider({
     const result = await disconnectEnrollment(fetchRef.current ?? undefined);
     if (result.kind === "done") {
       await refresh();
-      return result.revoked ? "ended" : "nothing";
+      return result.outcome;
     }
-    if (result.kind === "signed-out") setSignedOut(true);
     if (result.kind === "offline") {
       setOnline(false);
       return "offline";
     }
-    return "failed";
+    if (result.kind === "signed-out") {
+      setSignedOut(true);
+      return "unavailable";
+    }
+    return result.reason;
   }, [refresh]);
 
   const prepareReport = useCallback<FeedbackAccessValue["prepareReport"]>(

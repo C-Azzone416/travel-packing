@@ -206,7 +206,7 @@ test(
       .getByRole("group", { name: "Disconnect feedback" })
       .getByRole("button", { name: "Disconnect" })
       .click();
-    await expect(page.getByRole("status").filter({ hasText: /./ }).first()).toBeVisible();
+    await expect(page.getByRole("alert").filter({ hasText: /./ }).first()).toBeVisible();
     await paintCanaries(page, email());
     await scrollAccount(page, "center");
     expect(await countColour(page, await live(page), MAGENTA)).toBeGreaterThan(MIN_PIXELS);

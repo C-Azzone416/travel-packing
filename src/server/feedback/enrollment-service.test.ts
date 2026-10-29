@@ -67,6 +67,99 @@ async function connect(svc: EnrollmentService, owner = A) {
 
 const rows = () => db().select().from(schema.framebriarEnrollments);
 
+/** A database whose erase either throws or reports that a concurrent write moved the revision (nothing deleted). */
+function erasing(mode: "throw" | "lost"): Db {
+  const real = db();
+  return new Proxy(real as object, {
+    get(target, property, receiver) {
+      if (property === "delete") {
+        return () => {
+          if (mode === "throw") throw new Error("down");
+          return { where: () => ({ returning: async () => [] }) };
+        };
+      }
+      const value = Reflect.get(target, property, receiver) as unknown;
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  }) as unknown as Db;
+}
+
+/** A database where the first `times` credential updates lose the revision race (nothing written). */
+function losingUpdates(times: number, beforeLoss?: () => Promise<void>): Db {
+  let left = times;
+  const real = db();
+  return new Proxy(real as object, {
+    get(target, property, receiver) {
+      if (property === "update" && left > 0) {
+        return () => {
+          left -= 1;
+          return {
+            set: () => ({
+              where: () => ({
+                returning: async () => {
+                  await beforeLoss?.();
+                  return [];
+                },
+              }),
+            }),
+          };
+        };
+      }
+      const value = Reflect.get(target, property, receiver) as unknown;
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  }) as unknown as Db;
+}
+
+describe("status hasRecord (#304)", () => {
+  it("is false for an account that holds nothing, and true for a row in ANY state or a redemption attempt", async () => {
+    const svc = service();
+    expect(await svc.status(A)).toMatchObject({ status: "not-connected", hasRecord: false });
+    await connect(svc);
+    expect(await svc.status(A)).toMatchObject({ status: "connected", hasRecord: true });
+    clock += 31 * 86_400_000;
+    expect(await svc.status(A)).toMatchObject({ status: "expired", hasRecord: true });
+    ring = ringOf("k9", { k9: keyText() });
+    expect(await service().status(A)).toMatchObject({ hasRecord: true });
+    expect(await service({ keys: () => null }).status(A)).toMatchObject({
+      status: "unavailable",
+      hasRecord: true,
+    });
+    await service().disconnect(A);
+    expect(await service().status(A)).toMatchObject({ hasRecord: false });
+  });
+
+  it("a pending redemption is a record, even after its retry window has passed", async () => {
+    const svc = service();
+    fake.failNext("redeem", { kind: "lost-response" });
+    await svc.redeem(B, fake.issueInvitation());
+    expect(await svc.status(B)).toMatchObject({ redemption: "pending", hasRecord: true });
+    clock += REDEMPTION_WINDOW_MS + 1000;
+    expect(await svc.status(B)).toMatchObject({ redemption: "none", hasRecord: true });
+  });
+
+  it("one account's record is not another's", async () => {
+    const svc = service();
+    await connect(svc, A);
+    expect(await svc.status(B)).toMatchObject({ hasRecord: false });
+  });
+
+  it("the status view when the database is unreachable claims no record", async () => {
+    const broken = {
+      insert: () => {
+        throw new Error("down");
+      },
+    } as unknown as Db;
+    const svc = createEnrollmentService({
+      db: broken,
+      client: createFramebriarClient({ fetchImpl: fake.fetch, now }),
+      keys: () => ring,
+      now,
+    });
+    expect(await svc.status(A)).toMatchObject({ status: "unavailable", hasRecord: false });
+  });
+});
+
 describe("status", () => {
   it("is not-connected for a new account, with an opaque outbox key and no redemption pending", async () => {
     const view = await service().status(A);
@@ -102,6 +195,7 @@ describe("status", () => {
       status: "unavailable",
       expiresAt: null,
       redemption: "none",
+      hasRecord: false,
       outboxKey: null,
     });
   });
@@ -259,6 +353,56 @@ describe("two accounts, two devices, a cleared browser", () => {
     expect(next).not.toBe(generation);
     expect(after.outboxKey).not.toBe(before.outboxKey);
     expect(outboxKeyFor(A, next)).toBe(after.outboxKey);
+  });
+
+  describe("an older generation's leftovers are never this account's (#304, isolation)", () => {
+    // The foreign key makes a previous-generation row impossible by construction (deleting the user cascades). To prove the READ
+    // side filters by generation on its own, the constraints are lifted for one test and restored afterwards.
+    async function withOrphans(seed: () => PromiseLike<unknown>, run: () => Promise<void>) {
+      await ctx.client.exec(
+        "ALTER TABLE framebriar_enrollments DROP CONSTRAINT framebriar_enrollments_user_fk; ALTER TABLE framebriar_redemptions DROP CONSTRAINT framebriar_redemptions_user_fk",
+      );
+      try {
+        await seed();
+        await run();
+      } finally {
+        await ctx.client.exec(
+          "DELETE FROM framebriar_enrollments; DELETE FROM framebriar_redemptions; ALTER TABLE framebriar_enrollments ADD CONSTRAINT framebriar_enrollments_user_fk FOREIGN KEY (owner_id, generation) REFERENCES users(id, generation) ON DELETE CASCADE; ALTER TABLE framebriar_redemptions ADD CONSTRAINT framebriar_redemptions_user_fk FOREIGN KEY (owner_id, generation) REFERENCES users(id, generation) ON DELETE CASCADE",
+        );
+      }
+    }
+    const rotateGeneration = () =>
+      db().update(schema.users).set({ generation: randomUUID() }).where(eq(schema.users.id, A));
+
+    it("an old-generation enrollment is not a record, is not disconnected and is left untouched", async () => {
+      const svc = service();
+      await connect(svc);
+      const [old] = await rows();
+      await withOrphans(rotateGeneration, async () => {
+        expect(await svc.status(A)).toMatchObject({ status: "not-connected", hasRecord: false });
+        expect(await svc.disconnect(A)).toEqual({ ok: true, outcome: "nothing", revoked: false });
+        expect(fake.count("disconnect")).toBe(0);
+        expect(fake.activeFamilies()).toBe(1);
+        expect(await rows()).toEqual([old]);
+        expect(await svc.accessToken(A)).toEqual({ ok: false, code: "NOT_CONNECTED" });
+      });
+    });
+
+    it("an old-generation redemption attempt is not a record or a pending connection, and is left untouched", async () => {
+      const svc = service();
+      fake.failNext("redeem", { kind: "lost-response" });
+      await svc.redeem(A, fake.issueInvitation());
+      const before = await db().select().from(schema.framebriarRedemptions);
+      expect(before).toHaveLength(1);
+      await withOrphans(rotateGeneration, async () => {
+        expect(await svc.status(A)).toMatchObject({
+          redemption: "none",
+          hasRecord: false,
+        });
+        expect(await svc.disconnect(A)).toEqual({ ok: true, outcome: "nothing", revoked: false });
+        expect(await db().select().from(schema.framebriarRedemptions)).toEqual(before);
+      });
+    });
   });
 
   it("a row can only exist for the account generation that made it (database constraint)", async () => {
@@ -533,11 +677,11 @@ describe("disconnect and revokeAndEraseEnrollment", () => {
   it("disconnect revokes the family, then erases the credential", async () => {
     const svc = service();
     await connect(svc);
-    expect(await svc.disconnect(A)).toEqual({ ok: true, revoked: true });
+    expect(await svc.disconnect(A)).toEqual({ ok: true, outcome: "ended", revoked: true });
     expect(fake.activeFamilies()).toBe(0);
     expect(await rows()).toHaveLength(0);
     expect((await svc.status(A)).status).toBe("not-connected");
-    expect(await svc.disconnect(A)).toEqual({ ok: true, revoked: false });
+    expect(await svc.disconnect(A)).toEqual({ ok: true, outcome: "nothing", revoked: false });
   });
 
   it("an unreachable Framebriar erases nothing, so the family can still be revoked later", async () => {
@@ -617,7 +761,11 @@ describe("disconnect and revokeAndEraseEnrollment", () => {
   it("a ring that cannot open the row: disconnect erases it and says nothing was revoked", async () => {
     await connect(service());
     ring = ringOf("k9", { k9: keyText() });
-    expect(await service().disconnect(A)).toEqual({ ok: true, revoked: false });
+    expect(await service().disconnect(A)).toEqual({
+      ok: true,
+      outcome: "erased_unrevocable",
+      revoked: false,
+    });
     expect(await rows()).toHaveLength(0);
     expect(fake.count("disconnect")).toBe(0);
     expect(fake.activeFamilies()).toBe(1);
@@ -697,6 +845,148 @@ describe("disconnect and revokeAndEraseEnrollment", () => {
       unrevocableAttempts: 1,
     });
     expect(await svc.revokeAndEraseEnrollment(A)).toEqual({ status: "none" });
+  });
+
+  describe("disconnect reports the real outcome (#304)", () => {
+    it("a record that was already dead is erased as 'nothing', not as ended", async () => {
+      const svc = service();
+      await connect(svc);
+      clock += 31 * 86_400_000;
+      expect(await svc.disconnect(A)).toEqual({ ok: true, outcome: "nothing", revoked: false });
+      expect(fake.count("disconnect")).toBe(0);
+    });
+
+    it("a family Framebriar no longer knows is 'nothing' to end", async () => {
+      const svc = service();
+      await connect(svc);
+      fake.failNext("disconnect", { kind: "status", status: 401 });
+      expect(await svc.disconnect(A)).toEqual({ ok: true, outcome: "nothing", revoked: false });
+    });
+
+    it("an abandoned connection attempt cannot be revoked: erased_unrevocable, not 'nothing'", async () => {
+      const svc = service();
+      fake.failNext("redeem", { kind: "lost-response" });
+      await svc.redeem(A, fake.issueInvitation());
+      clock += REDEMPTION_WINDOW_MS + 1000;
+      expect(await svc.disconnect(A)).toEqual({
+        ok: true,
+        outcome: "erased_unrevocable",
+        revoked: false,
+      });
+    });
+
+    it("an account with nothing held is 'nothing'", async () => {
+      expect(await service().disconnect(A)).toEqual({
+        ok: true,
+        outcome: "nothing",
+        revoked: false,
+      });
+    });
+
+    it("a live connection attempt is its own failure, not 'unavailable'", async () => {
+      const svc = service();
+      fake.failNext("redeem", { kind: "lost-response" });
+      await svc.redeem(A, fake.issueInvitation());
+      expect(await svc.disconnect(A)).toEqual({ ok: false, code: "PENDING_REDEMPTION" });
+      expect((await db().select().from(schema.framebriarRedemptions)).length).toBe(1);
+    });
+
+    it("an unconfirmed revoke is UNCERTAIN and a failed erase after a revoke is PARTIAL, and the retry finishes", async () => {
+      const svc = service();
+      await connect(svc);
+      fake.failNext("disconnect", { kind: "network" });
+      expect(await svc.disconnect(A)).toEqual({ ok: false, code: "UNCERTAIN" });
+      expect(await rows()).toHaveLength(1);
+      const broken = createEnrollmentService({
+        db: erasing("throw"),
+        client: createFramebriarClient({ fetchImpl: fake.fetch, now }),
+        keys: () => ring,
+        now,
+      });
+      expect(await broken.disconnect(A)).toEqual({ ok: false, code: "PARTIAL" });
+      expect(fake.activeFamilies()).toBe(0);
+      // The family is already gone and does not block the retry.
+      expect(await svc.disconnect(A)).toEqual({ ok: true, outcome: "nothing", revoked: false });
+      expect(await rows()).toHaveLength(0);
+    });
+
+    it("a failed revoke keeps the credential so the retry can revoke, and the retry works", async () => {
+      const svc = service();
+      await connect(svc);
+      fake.failNext("disconnect", { kind: "status", status: 503 });
+      expect(await svc.disconnect(A)).toEqual({ ok: false, code: "UNCERTAIN" });
+      expect(fake.activeFamilies()).toBe(1);
+      expect(await rows()).toHaveLength(1);
+      expect(await svc.disconnect(A)).toEqual({ ok: true, outcome: "ended", revoked: true });
+      expect(fake.activeFamilies()).toBe(0);
+      expect(await rows()).toHaveLength(0);
+    });
+  });
+
+  describe("the judge's #262 prerequisites", () => {
+    const withDb = (database: Db) =>
+      createEnrollmentService({
+        db: database,
+        client: createFramebriarClient({ fetchImpl: fake.fetch, now }),
+        keys: () => ring,
+        now,
+      });
+
+    it("an erase that returns false (a lost revision race) in the erased_unrevocable path is 'failed', never a success", async () => {
+      await connect(service());
+      ring = ringOf("k9", { k9: keyText() });
+      const racing = withDb(erasing("lost"));
+      expect(await racing.revokeAndEraseEnrollment(A)).toEqual({
+        status: "failed",
+        reason: "unavailable",
+      });
+      expect(await racing.disconnect(A)).toEqual({ ok: false, code: "UNAVAILABLE" });
+      expect(await rows()).toHaveLength(1);
+      // Nothing was lost: the next attempt, with the row unchanged, finishes it.
+      expect(await service().revokeAndEraseEnrollment(A)).toEqual({
+        status: "erased_unrevocable",
+        unrevocableAttempts: 0,
+      });
+    });
+
+    it("an erase that returns false after a successful revoke is 'partial', and a retry finishes it", async () => {
+      const svc = service();
+      await connect(svc);
+      expect(await withDb(erasing("lost")).revokeAndEraseEnrollment(A)).toEqual({
+        status: "partial",
+        revoked: true,
+        erased: false,
+      });
+      expect(await svc.revokeAndEraseEnrollment(A)).toMatchObject({ status: "erased" });
+    });
+
+    it("a refresh that loses the revision race re-checks exactly once: two refreshes, and the token is still served", async () => {
+      await connect(service());
+      clock += 59 * 60_000;
+      expect(await withDb(losingUpdates(1)).accessToken(A)).toMatchObject({ ok: true });
+      expect(fake.count("refresh")).toBe(2);
+      expect((await rows())[0].revision).toBe(1 + 1);
+    });
+
+    it("never loops: when every write is lost it stops after the one re-check", async () => {
+      await connect(service());
+      clock += 59 * 60_000;
+      expect(await withDb(losingUpdates(10)).accessToken(A)).toMatchObject({ ok: true });
+      expect(fake.count("refresh")).toBe(2);
+      expect((await rows())[0].revision).toBe(1);
+    });
+
+    it("if the race was a disconnect, the re-check finds nothing and no token outlives the erase", async () => {
+      const svc = service();
+      await connect(svc);
+      clock += 59 * 60_000;
+      const losing = losingUpdates(1, async () => {
+        await svc.disconnect(A);
+      });
+      expect(await withDb(losing).accessToken(A)).toEqual({ ok: false, code: "NOT_CONNECTED" });
+      expect(fake.count("refresh")).toBe(1);
+      expect(await rows()).toHaveLength(0);
+    });
   });
 
   it("is a no-op for an account with nothing held", async () => {

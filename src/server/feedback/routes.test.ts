@@ -347,6 +347,7 @@ describe("enrollment routes", () => {
       status: "not-connected",
       expiresAt: null,
       redemption: "none",
+      hasRecord: false,
     });
     expect(first.outboxKey).toMatch(/^[A-Za-z0-9_-]{43}$/);
 
@@ -366,6 +367,7 @@ describe("enrollment routes", () => {
     expect(await body(await routes.disconnect(post("enrollment/disconnect", {})))).toEqual({
       v: 1,
       status: "not-connected",
+      outcome: "ended",
       revoked: true,
     });
     expect(await body(await routes.status(get("enrollment")))).toMatchObject({
@@ -389,6 +391,75 @@ describe("enrollment routes", () => {
     });
     fake.failNext("disconnect", { kind: "network" });
     expect((await routes.disconnect(post("enrollment/disconnect", {}))).status).toBe(502);
+  });
+
+  it("disconnect answers with the real outcome and a distinct code for each failure (#304)", async () => {
+    const { routes } = await connected();
+    fake.failNext("disconnect", { kind: "network" });
+    const uncertain = await routes.disconnect(post("enrollment/disconnect", {}));
+    expect(uncertain.status).toBe(502);
+    expect(await body(uncertain)).toEqual({ v: 1, error: "UNCERTAIN" });
+    const done = await routes.disconnect(post("enrollment/disconnect", {}));
+    expect(await body(done)).toEqual({
+      v: 1,
+      status: "not-connected",
+      outcome: "ended",
+      revoked: true,
+    });
+    // Nothing held now: "nothing", with hasRecord already false.
+    expect(await body(await routes.disconnect(post("enrollment/disconnect", {})))).toEqual({
+      v: 1,
+      status: "not-connected",
+      outcome: "nothing",
+      revoked: false,
+    });
+    expect(await body(await routes.status(get("enrollment")))).toMatchObject({ hasRecord: false });
+  });
+
+  it("disconnect while a connection attempt is pending is a 409 PENDING_REDEMPTION, and status shows a record", async () => {
+    const routes = routesFor();
+    await signIn();
+    fake.failNext("redeem", { kind: "lost-response" });
+    await routes.redeem(post("enrollment/redeem", { invitation: fake.issueInvitation() }));
+    expect(await body(await routes.status(get("enrollment")))).toMatchObject({
+      redemption: "pending",
+      hasRecord: true,
+    });
+    const refused = await routes.disconnect(post("enrollment/disconnect", {}));
+    expect(refused.status).toBe(409);
+    expect(await body(refused)).toEqual({ v: 1, error: "PENDING_REDEMPTION" });
+  });
+
+  it("disconnect that ends the access but cannot erase the copy is a 503 PARTIAL", async () => {
+    const client = createFramebriarClient({ fetchImpl: fake.fetch, now: () => clock });
+    const real = ctx.db as unknown as Db;
+    const service = createEnrollmentService({
+      db: new Proxy(real as object, {
+        get(target, property, receiver) {
+          if (property === "delete") {
+            return () => {
+              throw new Error("down");
+            };
+          }
+          const value = Reflect.get(target, property, receiver) as unknown;
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      }) as unknown as Db,
+      client,
+      keys: () => parseKeyRing(JSON.stringify({ current: "k1", keys: { k1: KEY } })),
+      now: () => clock,
+    });
+    const routes = createFeedbackRoutes({
+      getAuth: async () => ({ provider: auth, allowlist: parseAllowlist(OWNER.email) }),
+      getService: async () => service,
+      client,
+      env: { VERCEL_ENV: "preview" },
+      now: () => clock,
+    });
+    await connected(routes);
+    const partial = await routes.disconnect(post("enrollment/disconnect", {}));
+    expect(partial.status).toBe(503);
+    expect(await body(partial)).toEqual({ v: 1, error: "PARTIAL" });
   });
 
   it("a missing key ring makes every enrollment route unavailable (and the status says so), with no network call", async () => {

@@ -29,7 +29,7 @@ test(
 
     const invitation = await fakeFramebriar.issueInvitation();
     await page.getByLabel("Invitation").fill(invitation);
-    await page.getByRole("button", { name: "Connect" }).click();
+    await page.getByRole("button", { name: "Connect", exact: true }).click();
     await expect(page.getByLabel("Invitation")).toHaveCount(0);
     await expect(page.locator(".status-pill", { hasText: "Connected" })).toBeVisible();
     await expect(page.getByText(/^Feedback works until /)).toBeVisible();
@@ -71,7 +71,7 @@ test("an invitation that does not work is explained, and the field is empty agai
 }) => {
   await openSettings(page);
   await page.getByLabel("Invitation").fill("A".repeat(43));
-  await page.getByRole("button", { name: "Connect" }).click();
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
   await expect(
     page.getByRole("alert").filter({ hasText: /^⚠ That invitation didn’t work\./ }),
   ).toBeVisible();
@@ -86,7 +86,7 @@ test("a lost answer is finished by pasting the same invitation again, which is s
   // Framebriar's answer to the redemption never arrives (the call made it, the reply did not).
   await fakeFramebriar.failNext("redeem", { kind: "network" });
   await page.getByLabel("Invitation").fill(invitation);
-  await page.getByRole("button", { name: "Connect" }).click();
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
   await expect(page.getByRole("alert").filter({ hasText: /may have been used/ })).toBeVisible();
   await expect(page.getByText("Not finished")).toBeVisible();
   await expect(
