@@ -290,11 +290,17 @@ describe("Close account: step 2 after step 1", () => {
     const h = open({ ...connected, disconnectOutcome: "ended" });
     await stepOneHeading();
     await pressDisconnect(h.user);
-    await h.user.click(await screen.findByRole("button", { name: "Continue" }));
+    const continueButton = await screen.findByRole("button", { name: "Continue" });
+    await h.user.click(continueButton);
     await stepTwoHeading();
     expect(screen.getByText("Step 2 of 2")).toBeTruthy();
-    // Pressing Continue must not also submit the blank closing form (the button that follows it is a submit button).
+    // Pressing Continue must not also submit the blank closing form: the button that follows it is a submit button, so it must be a
+    // new element, never the very one that was just clicked (a click that turns its target into a submit button submits the form).
     expect(h.submitted).not.toHaveBeenCalled();
+    expect(continueButton.isConnected).toBe(false);
+    expect(screen.getByRole("button", { name: "Close account permanently" })).not.toBe(
+      continueButton,
+    );
     await waitFor(() => expect(document.activeElement).toBe(passwordField()));
     expect((passwordField() as HTMLInputElement).value).toBe("");
     expect((screen.getByLabelText("Type DELETE to confirm") as HTMLInputElement).value).toBe("");
