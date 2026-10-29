@@ -38,7 +38,7 @@ const answer = (status: number, body: Record<string, unknown>) => (page: Page) =
   );
 
 interface Case {
-  key: string;
+  label: string;
   /** Gets the account into the state the result comes from, ending on Settings with Disconnect on screen. */
   arrange: (page: Page) => Promise<void>;
   /** Region the result lands in. */
@@ -51,9 +51,9 @@ async function connected(page: Page) {
 }
 
 const CASES: Case[] = [
-  { key: "1-ended", region: "status", arrange: connected },
+  { label: "1-ended", region: "status", arrange: connected },
   {
-    key: "2-nothing-expired-record",
+    label: "2-nothing-expired-record",
     region: "status",
     arrange: async (page) => {
       await connected(page);
@@ -63,7 +63,7 @@ const CASES: Case[] = [
     },
   },
   {
-    key: "3-erased-unrevocable-no-date",
+    label: "3-erased-unrevocable-no-date",
     region: "status",
     arrange: async (page) => {
       await connected(page);
@@ -73,7 +73,7 @@ const CASES: Case[] = [
     },
   },
   {
-    key: "3b-erased-unrevocable-with-date-SYNTHETIC",
+    label: "3b-erased-unrevocable-with-date-SYNTHETIC",
     region: "status",
     arrange: async (page) => {
       await connected(page);
@@ -83,7 +83,7 @@ const CASES: Case[] = [
     },
   },
   {
-    key: "4-partial-SYNTHETIC",
+    label: "4-partial-SYNTHETIC",
     region: "alert",
     arrange: async (page) => {
       await connected(page);
@@ -91,7 +91,7 @@ const CASES: Case[] = [
     },
   },
   {
-    key: "5-unavailable-SYNTHETIC",
+    label: "5-unavailable-SYNTHETIC",
     region: "alert",
     arrange: async (page) => {
       await connected(page);
@@ -99,7 +99,7 @@ const CASES: Case[] = [
     },
   },
   {
-    key: "6-uncertain",
+    label: "6-uncertain",
     region: "alert",
     arrange: async (page) => {
       await connected(page);
@@ -107,7 +107,7 @@ const CASES: Case[] = [
     },
   },
   {
-    key: "7-pending",
+    label: "7-pending",
     region: "alert",
     arrange: async (page) => {
       await openSettings(page);
@@ -118,7 +118,7 @@ const CASES: Case[] = [
     },
   },
   {
-    key: "8-offline",
+    label: "8-offline",
     region: "alert",
     arrange: async (page) => {
       await connected(page);
@@ -129,7 +129,7 @@ const CASES: Case[] = [
 
 for (const width of WIDTHS) {
   for (const item of CASES) {
-    test(`${width}: ${item.key}`, async ({ page }) => {
+    test(`${width}: ${item.label}`, async ({ page }) => {
       test.setTimeout(120_000);
       mkdirSync(SHOTS!, { recursive: true });
       await page.setViewportSize({ width, height: width === 1280 ? 900 : 844 });
@@ -138,14 +138,14 @@ for (const width of WIDTHS) {
       await item.arrange(page);
       const card = page.locator("#settings-feedback");
       await card.scrollIntoViewIfNeeded();
-      await card.screenshot({ path: `${SHOTS}/${width}-${item.key}-before.png` });
+      await card.screenshot({ path: `${SHOTS}/${width}-${item.label}-before.png` });
 
       await pressDisconnect(page);
       const region = card.locator(`div.tiny[role="${item.region}"]`).filter({ hasText: /./ });
       await expect(region).toBeVisible();
       await card.scrollIntoViewIfNeeded();
-      await card.screenshot({ path: `${SHOTS}/${width}-${item.key}-after.png` });
-      await page.screenshot({ path: `${SHOTS}/${width}-${item.key}-after-viewport.png` });
+      await card.screenshot({ path: `${SHOTS}/${width}-${item.label}-after.png` });
+      await page.screenshot({ path: `${SHOTS}/${width}-${item.label}-after-viewport.png` });
 
       // What a picture cannot prove: no sideways overflow, nothing clipped, and how many lines the message takes.
       const measured = await region.evaluate((node) => {

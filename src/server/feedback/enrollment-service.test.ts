@@ -355,6 +355,56 @@ describe("two accounts, two devices, a cleared browser", () => {
     expect(outboxKeyFor(A, next)).toBe(after.outboxKey);
   });
 
+  describe("an older generation's leftovers are never this account's (#304, isolation)", () => {
+    // The foreign key makes a previous-generation row impossible by construction (deleting the user cascades). To prove the READ
+    // side filters by generation on its own, the constraints are lifted for one test and restored afterwards.
+    async function withOrphans(seed: () => PromiseLike<unknown>, run: () => Promise<void>) {
+      await ctx.client.exec(
+        "ALTER TABLE framebriar_enrollments DROP CONSTRAINT framebriar_enrollments_user_fk; ALTER TABLE framebriar_redemptions DROP CONSTRAINT framebriar_redemptions_user_fk",
+      );
+      try {
+        await seed();
+        await run();
+      } finally {
+        await ctx.client.exec(
+          "DELETE FROM framebriar_enrollments; DELETE FROM framebriar_redemptions; ALTER TABLE framebriar_enrollments ADD CONSTRAINT framebriar_enrollments_user_fk FOREIGN KEY (owner_id, generation) REFERENCES users(id, generation) ON DELETE CASCADE; ALTER TABLE framebriar_redemptions ADD CONSTRAINT framebriar_redemptions_user_fk FOREIGN KEY (owner_id, generation) REFERENCES users(id, generation) ON DELETE CASCADE",
+        );
+      }
+    }
+    const rotateGeneration = () =>
+      db().update(schema.users).set({ generation: randomUUID() }).where(eq(schema.users.id, A));
+
+    it("an old-generation enrollment is not a record, is not disconnected and is left untouched", async () => {
+      const svc = service();
+      await connect(svc);
+      const [old] = await rows();
+      await withOrphans(rotateGeneration, async () => {
+        expect(await svc.status(A)).toMatchObject({ status: "not-connected", hasRecord: false });
+        expect(await svc.disconnect(A)).toEqual({ ok: true, outcome: "nothing", revoked: false });
+        expect(fake.count("disconnect")).toBe(0);
+        expect(fake.activeFamilies()).toBe(1);
+        expect(await rows()).toEqual([old]);
+        expect(await svc.accessToken(A)).toEqual({ ok: false, code: "NOT_CONNECTED" });
+      });
+    });
+
+    it("an old-generation redemption attempt is not a record or a pending connection, and is left untouched", async () => {
+      const svc = service();
+      fake.failNext("redeem", { kind: "lost-response" });
+      await svc.redeem(A, fake.issueInvitation());
+      const before = await db().select().from(schema.framebriarRedemptions);
+      expect(before).toHaveLength(1);
+      await withOrphans(rotateGeneration, async () => {
+        expect(await svc.status(A)).toMatchObject({
+          redemption: "none",
+          hasRecord: false,
+        });
+        expect(await svc.disconnect(A)).toEqual({ ok: true, outcome: "nothing", revoked: false });
+        expect(await db().select().from(schema.framebriarRedemptions)).toEqual(before);
+      });
+    });
+  });
+
   it("a row can only exist for the account generation that made it (database constraint)", async () => {
     await service().status(A);
     await expect(
