@@ -81,6 +81,14 @@ describe("Close account: no feedback involved", () => {
     ).toBeTruthy();
   });
 
+  it("marks the DELETE phrase as a code so password managers do not treat it as an email field", async () => {
+    open({ status: "not-connected" });
+    await stepTwoHeading();
+    const confirmation = screen.getByLabelText("Type DELETE to confirm");
+    expect(confirmation.getAttribute("autocomplete")).toBe("one-time-code");
+    expect(confirmation.getAttribute("autocomplete")).not.toBe("email");
+  });
+
   it("unsent reports only (no record): no step 1, one extra line on the confirmation", async () => {
     const h = open({ status: "not-connected" });
     await stepTwoHeading();

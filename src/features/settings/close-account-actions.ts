@@ -26,9 +26,9 @@ const inputSchema = z.object({
 
 const TRY_AGAIN = "We couldn’t close your account. Nothing was deleted. Try again.";
 const PARTIAL =
-  "Your Packed Smart content is removed and protected by a temporary closure marker, but identity deletion wasn’t confirmed. Try again to finish.";
+  "Your Packed Smart content is removed and protected by a temporary closure marker, but identity deletion wasn’t confirmed. Use Finish account closure below to retry now. If you are signed out, sign in again and Packed Smart will take you straight to the recovery step.";
 const UNKNOWN =
-  "We couldn’t confirm whether account closure started. Try again; if access is blocked, sign in to finish closing the account.";
+  "We couldn’t confirm whether account closure started. Try again. If you are signed out, sign in again and Packed Smart will take you straight to the recovery step.";
 const FINAL_CLEANUP =
   "Your identity and Packed Smart content were deleted, but removal of a temporary closure marker couldn’t be confirmed. Do not create a new account yet.";
 const CLOSURE_DISABLED = "Account closure is not available right now. Nothing was deleted.";

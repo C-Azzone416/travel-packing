@@ -117,6 +117,19 @@ describe("closeAccountAction", () => {
     expect(mocks.closeAccount).not.toHaveBeenCalled();
   });
 
+  it("rejects an email address autofilled into the DELETE confirmation field", async () => {
+    await expect(
+      closeAccountAction(
+        INITIAL_CLOSE_ACCOUNT_STATE,
+        form("synthetic-password", "owner@example.test"),
+      ),
+    ).resolves.toEqual({
+      error: null,
+      fieldErrors: { confirmation: "Type DELETE exactly to confirm." },
+    });
+    expect(mocks.closeAccount).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["auth", { available: false }, db],
     ["database", auth, null],

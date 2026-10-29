@@ -23,9 +23,14 @@ interface NeonUser {
   createdAt?: unknown;
 }
 
-interface NeonCallResult {
+export interface NeonCallResult {
   data?: unknown;
   error?: { code?: unknown; status?: unknown } | null;
+}
+
+export interface NeonDeletionCalls {
+  /** A contract-correct session revocation call supplied by the runtime. */
+  revokeOtherSessions?: () => Promise<NeonCallResult | null>;
 }
 
 /** The subset of the SDK this adapter uses. */
@@ -186,7 +191,10 @@ function toSession(user: NeonUser | null | undefined, created?: unknown): AuthSe
   };
 }
 
-export function createNeonAuthProvider(neon: NeonAuthLike): AuthProvider {
+export function createNeonAuthProvider(
+  neon: NeonAuthLike,
+  deletionCalls: NeonDeletionCalls = {},
+): AuthProvider {
   return {
     async getSession() {
       // Neon Auth caches signed session data in a browser cookie for five minutes by default. A revoked session can
@@ -271,7 +279,8 @@ export function createNeonAuthProvider(neon: NeonAuthLike): AuthProvider {
     },
     async revokeOtherSessions() {
       try {
-        const result = await (neon.revokeOtherSessions?.() ?? Promise.resolve(null));
+        const call = deletionCalls.revokeOtherSessions ?? neon.revokeOtherSessions;
+        const result = await (call?.() ?? Promise.resolve(null));
         return !result?.error && record(result?.data)?.status === true
           ? { ok: true }
           : { ok: false, reason: "unavailable" };

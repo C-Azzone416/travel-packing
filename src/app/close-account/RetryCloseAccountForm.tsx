@@ -38,7 +38,7 @@ export function RetryCloseAccountForm() {
           id="close-account-confirmation"
           name="confirmation"
           label="Type DELETE to confirm"
-          autoComplete="off"
+          autoComplete="one-time-code"
           autoCapitalize="characters"
           spellCheck={false}
           required

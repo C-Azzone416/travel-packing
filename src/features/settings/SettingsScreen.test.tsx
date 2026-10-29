@@ -92,13 +92,18 @@ describe("SettingsScreen", () => {
     await userEvent.click(screen.getByRole("button", { name: "Close account" }));
     expect(screen.getByRole("dialog", { name: "Close your account?" })).toBeTruthy();
     expect(
-      screen.getByText(/Confirmed closure leaves no live Packed Smart account record/),
+      screen.getByText(
+        /asks the identity provider to remove the account and sessions in the same request/,
+      ),
     ).toBeTruthy();
+    expect(screen.getByText(/Packed Smart can’t confirm or erase them/)).toBeTruthy();
     expect(screen.getByText(/It can’t be undone/)).toBeTruthy();
     expect(screen.getByLabelText("Current password").getAttribute("autocomplete")).toBe(
       "current-password",
     );
-    expect(screen.getByLabelText("Type DELETE to confirm")).toBeTruthy();
+    expect(screen.getByLabelText("Type DELETE to confirm").getAttribute("autocomplete")).toBe(
+      "one-time-code",
+    );
     expect(document.activeElement).toBe(screen.getByLabelText("Current password"));
 
     await userEvent.click(screen.getByTestId("modal-backdrop"));
