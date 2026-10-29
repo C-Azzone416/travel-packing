@@ -3154,7 +3154,7 @@ a.back {
    grows, so the cell is always a whole number of rows. */
 .weather-cell-top {
   display: grid;
-  align-content: start;
+  align-content: stretch;
   gap: 2px;
   box-sizing: border-box;
   min-height: calc(var(--ledger-row) * 4);

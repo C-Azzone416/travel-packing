@@ -446,9 +446,64 @@ for (const width of WIDTHS) {
     test.skip(!SHOTS, "set HERO_SHOTS=<folder> to render the hero screenshots");
     const hero = await openHero(page, width);
     await hero.screenshot({ path: `${SHOTS}/baseline-${width}.png` });
+    await injectWeather(page, "Mild and dry");
+    await hero.screenshot({ path: `${SHOTS}/weather-normal-${width}.png` });
+    await page.locator(".weather-strip").evaluate((el) => el.remove());
     await worstCase(page);
     await hero.screenshot({ path: `${SHOTS}/worst-${width}.png` });
     await injectWeather(page, LONG_NOTE);
     await hero.screenshot({ path: `${SHOTS}/worst-weather-${width}.png` });
+  });
+}
+
+// Counts too long to share a line: in a container wider than 440px they split onto two lines, and the second count's dot
+// (left of its box) must be clipped by the counts wrapper, not drawn at the start of the line (#290 S1).
+for (const width of [981, 721]) {
+  test(`the counts split onto two lines and the dot is clipped at ${width}px`, async ({ page }) => {
+    await openHero(page, width);
+    await page.evaluate(() => {
+      const counts = document.querySelectorAll(".ledger-counts > span");
+      counts[0].textContent =
+        "1,234,567 of 9,999,999 items packed in total so far today across every trip";
+      counts[1].textContent = "8,765,432 items still left to pack today";
+    });
+    const info = await page.evaluate(() => {
+      const wrap = document.querySelector<HTMLElement>(".ledger-counts")!;
+      const second = document.querySelector(".ledger-counts > span:last-child")!;
+      const first = document.querySelector(".ledger-counts > span:first-child")!;
+      const status = document.querySelector<HTMLElement>(".ledger-status")!;
+      const w = wrap.getBoundingClientRect();
+      const s = second.getBoundingClientRect();
+      const dotLeft = s.left + parseFloat(getComputedStyle(second, "::before").left);
+      return {
+        container: status.clientWidth,
+        secondBelow: s.top - first.getBoundingClientRect().top,
+        secondAtLineStart: s.left - w.left,
+        dotOutside: dotLeft < w.left,
+        overflow: getComputedStyle(wrap).overflow,
+        content: getComputedStyle(second, "::before").content,
+      };
+    });
+    expect(info.container).toBeGreaterThan(440);
+    expect(info.secondBelow, "the counts are on two lines").toBeGreaterThanOrEqual(ROW - 1);
+    expect(info.secondAtLineStart).toBeLessThan(1);
+    expect(info.content).toBe('"·"');
+    expect(info.dotOutside, "the dot falls left of the counts box").toBe(true);
+    expect(info.overflow, "the counts clip it").toBe("hidden");
+  });
+}
+
+// Counts longer than the narrowest hero is wide: without nowrap a count would break across lines inside its own box (#290 S2).
+for (const width of [390, 320]) {
+  test(`a count never breaks inside itself at ${width}px`, async ({ page }) => {
+    await openHero(page, width);
+    await page.evaluate(() => {
+      const counts = document.querySelectorAll(".ledger-counts > span");
+      counts[0].textContent = "1,234,567 of 9,999,999 items packed so far today";
+      counts[1].textContent = "8,765,432 items left";
+    });
+    const m = await heroRects(page);
+    expect(m.packed.b - m.packed.y, "packed is one line").toBeLessThanOrEqual(ROW + 1);
+    expect(m.left.b - m.left.y, "left is one line").toBeLessThanOrEqual(ROW + 1);
   });
 }
