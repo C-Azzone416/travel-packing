@@ -19,6 +19,10 @@ const healthy = (): Routes => ({
   "/close-account": redirect("/settings"),
   "/": redirect("/sign-in"),
 });
+const accountClosureEnabled = (): Routes => ({
+  ...healthy(),
+  "/close-account": redirect("/sign-in"),
+});
 
 describe("smokeTest", () => {
   it("passes when sign-in is 200 and the protected page redirects to sign-in", async () => {
@@ -59,6 +63,36 @@ describe("smokeTest", () => {
       const result = await smokeTest(
         "https://x.test",
         fakeFetch({ ...healthy(), "/close-account": response }),
+      );
+      expect(result.ok).toBe(false);
+      expect(result.lines.find((line) => line.startsWith("FAIL /close-account:"))).toBeTruthy();
+    }
+  });
+
+  it("pins the Preview account-closure switch on without making the recovery route public", async () => {
+    const result = await smokeTest("https://x.test", fakeFetch(accountClosureEnabled()), {
+      accountClosure: "enabled",
+    });
+    expect(result.ok).toBe(true);
+    expect(result.lines).toContain(
+      "ok   /close-account: 307 (expected a redirect to /sign-in while account closure is enabled)",
+    );
+  });
+
+  it("fails the enabled contract when account closure is still disabled or publicly reachable", async () => {
+    for (const response of [
+      redirect("/settings"),
+      new Response("enabled", { status: 200 }),
+      redirect("/sign-in", 301),
+      redirect("/sign-in", 302),
+      redirect("/sign-in", 303),
+      redirect("/sign-in", 308),
+      redirect("https://elsewhere.test/sign-in"),
+    ]) {
+      const result = await smokeTest(
+        "https://x.test",
+        fakeFetch({ ...accountClosureEnabled(), "/close-account": response }),
+        { accountClosure: "enabled" },
       );
       expect(result.ok).toBe(false);
       expect(result.lines.find((line) => line.startsWith("FAIL /close-account:"))).toBeTruthy();

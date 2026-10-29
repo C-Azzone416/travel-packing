@@ -45,6 +45,13 @@ export const REQUIRED = [
 /** The location provider previews must use: a keyless, public API with no credentials to leak. */
 export const PREVIEW_LOCATION_PROVIDER = "open-meteo";
 
+export type AccountClosureMode = "disabled" | "enabled";
+
+/** The exact runtime switch translated to the non-secret mode the smoke test must prove. */
+export function accountClosureMode(env: Env): AccountClosureMode {
+  return env.CLOSE_ACCOUNT_ENABLED === "1" ? "enabled" : "disabled";
+}
+
 /**
  * What `vercel pull` writes for a Vercel Secret, whose value it cannot read (it is write-only): the literal text below,
  * 11 characters. A build or check that carried on with it would be using a placeholder as a real value.
@@ -152,6 +159,10 @@ export function checkDeployEnv(
   productionDbHost: string | undefined,
 ): string[] {
   const problems: string[] = [];
+  const closeAccount = env.CLOSE_ACCOUNT_ENABLED?.trim();
+  if (closeAccount && closeAccount !== "1") {
+    problems.push("CLOSE_ACCOUNT_ENABLED must be unset or the exact value 1");
+  }
   for (const name of FORBIDDEN_EVERYWHERE) {
     if (present(env, name)) problems.push(`${name} must not be set in a ${target} environment`);
   }
@@ -224,6 +235,9 @@ export function checkDeployEnv(
     }
   }
   if (target === "production") {
+    if (closeAccount === "1") {
+      problems.push("CLOSE_ACCOUNT_ENABLED must not be enabled in production");
+    }
     // Production proves it is looking at ITS database: both connection strings must be on PRODUCTION_DB_HOST.
     const prodHost = productionHost(productionDbHost);
     if (prodHost === "missing") {

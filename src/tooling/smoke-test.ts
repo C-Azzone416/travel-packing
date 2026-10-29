@@ -1,6 +1,6 @@
 // Post-deploy smoke test: every public auth page answers 200 to a signed-out visitor (no owner session needed, so it
-// works on the first preview, before any account exists), except the deliberately disabled account-closure page, which
-// redirects to Settings. A protected page sends a signed-out visitor to sign-in.
+// works on the first preview, before any account exists), except account closure. Its explicit deployment contract pins
+// disabled to a Settings redirect and enabled to a sign-in redirect. A protected page sends a signed-out visitor to sign-in.
 // Redirects are not followed, so a bounce is seen as a bounce. A passing check prints the path and status only. A failing
 // one also prints what tells a platform error from an app error: the x-vercel-error and x-vercel-id response headers and
 // the first 200 characters of the body. Request headers, the bypass secret and the Location header are never printed.
@@ -15,6 +15,11 @@ type Fetch = (
 export interface SmokeOptions {
   /** Sent as x-vercel-protection-bypass when the preview sits behind Vercel deployment protection. */
   bypassSecret?: string;
+  /**
+   * The rollout state this deployment is required to expose. Disabled stays the default so Production and ad-hoc
+   * invocations continue to fail closed. Preview opts into enabled explicitly in its reviewed workflow steps.
+   */
+  accountClosure?: "disabled" | "enabled";
 }
 
 export interface SmokeResult {
@@ -90,7 +95,7 @@ async function diagnostics(response: Response, bypassSecret?: string): Promise<s
 export async function smokeTest(
   baseUrl: string,
   fetchImpl: Fetch,
-  { bypassSecret }: SmokeOptions = {},
+  { bypassSecret, accountClosure = "disabled" }: SmokeOptions = {},
 ): Promise<SmokeResult> {
   const base = baseUrl.replace(/\/+$/, "");
   const headers: Record<string, string> = bypassSecret
@@ -124,10 +129,18 @@ export async function smokeTest(
   }
 
   // The list the request gate uses, so a sign-up page (#27) is checked as soon as it becomes public. Account closure is
-  // intentionally different while the hosted kill switch is off: accepting a 200 here would silently stop pinning the
-  // disabled rollout. Enabling the feature later therefore requires an explicit smoke-contract change after its gates.
+  // intentionally different: each target names the rollout state it requires. Neither state accepts a public 200, and an
+  // enabled target fails if it accidentally deploys with the kill switch off (or vice versa).
   for (const path of PUBLIC_PATHS) {
     if (path === "/close-account") {
+      if (accountClosure === "enabled") {
+        await check(
+          path,
+          "expected a redirect to /sign-in while account closure is enabled",
+          (response) => response.status === 307 && isSameOriginRedirect(response, base, "/sign-in"),
+        );
+        continue;
+      }
       await check(
         path,
         "expected a redirect to /settings while account closure is disabled",

@@ -92,7 +92,8 @@ export const ALIAS_SMOKE_STEP = [
   "if: env.TARGET == 'preview' && steps.alias_head.outputs.assign == 'true'",
   "env:",
   "VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
-  'run: npx tsx scripts/smoke-test.ts "https://${PREVIEW_ALIAS}"',
+  "ACCOUNT_CLOSURE_MODE: ${{ steps.deploy_env.outputs.account_closure }}",
+  'run: npx tsx scripts/smoke-test.ts "https://${PREVIEW_ALIAS}" --account-closure="$ACCOUNT_CLOSURE_MODE"',
 ];
 /** The Production steps (#207), exactly as reviewed: the alias is proven to be THIS deployment before it is smoke-tested, and the smoke test never gets the bypass secret. */
 export const PROD_ALIAS_STEP = [
@@ -106,7 +107,9 @@ export const PROD_ALIAS_STEP = [
 export const PROD_SMOKE_STEP = [
   "- name: Production alias smoke test",
   "if: env.TARGET == 'production'",
-  'run: npx tsx scripts/smoke-test.ts "https://${PRODUCTION_ALIAS}"',
+  "env:",
+  "ACCOUNT_CLOSURE_MODE: ${{ steps.deploy_env.outputs.account_closure }}",
+  'run: npx tsx scripts/smoke-test.ts "https://${PRODUCTION_ALIAS}" --account-closure="$ACCOUNT_CLOSURE_MODE"',
 ];
 /** The deployment-URL smoke test is for Previews only: a production deployment's generated address is behind Vercel Authentication. */
 export const DEPLOY_SMOKE_STEP = [
@@ -115,7 +118,16 @@ export const DEPLOY_SMOKE_STEP = [
   "env:",
   "DEPLOY_URL: ${{ steps.deploy.outputs.url }}",
   "VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
-  'run: npx tsx scripts/smoke-test.ts "$DEPLOY_URL"',
+  "ACCOUNT_CLOSURE_MODE: ${{ steps.deploy_env.outputs.account_closure }}",
+  'run: npx tsx scripts/smoke-test.ts "$DEPLOY_URL" --account-closure="$ACCOUNT_CLOSURE_MODE"',
+];
+/** The smoke mode comes only from the pulled-and-validated target environment, never a hard-coded target assumption. */
+export const DEPLOY_ENV_STEP = [
+  "- name: Check the deploy environment (names only, no values)",
+  "id: deploy_env",
+  "env:",
+  "PRODUCTION_DB_HOST: ${{ secrets.PRODUCTION_DB_HOST }}",
+  'run: npx tsx scripts/check-deploy-env.ts "$TARGET" ".vercel/.env.${TARGET}.local"',
 ];
 /** The locked Vercel CLI install (#208): reproducible from its own lockfile, scripts off, then put on the PATH. */
 export const CLI_INSTALL_STEP = [
@@ -365,6 +377,7 @@ export function checkDeployWorkflow(workflow: string): string[] {
     ["Prove the Production alias", PROD_ALIAS_STEP, "Production alias proof"],
     ["Production alias smoke test", PROD_SMOKE_STEP, "Production alias smoke test"],
     ["Smoke test", DEPLOY_SMOKE_STEP, "deployment smoke test"],
+    ["Check the deploy environment", DEPLOY_ENV_STEP, "deployment environment check"],
     ["Install the locked Vercel CLI", CLI_INSTALL_STEP, "locked Vercel CLI install"],
     ["Put the locked Vercel CLI on the PATH", CLI_PATH_STEP, "Vercel CLI PATH"],
     ["Delete superseded Preview deployments", CLEANUP_STEP, "Preview cleanup"],

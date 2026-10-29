@@ -8,12 +8,13 @@ to Settings, both server actions reject before reading session or database state
 the signed-out reconciler neither queries nor mutates deletion state. The completion route remains available only to consume a
 one-time completion cookie already issued after confirmed provider deletion.
 
-The synthetic Playwright environment sets the switch only for its isolated fake-auth/PGlite run. Preview and Production land with
-the variable unset. Before either hosted target is enabled, validate this flow with an explicitly approved synthetic account on
-the non-production Neon Auth/database branch, and complete #261 so Framebriar enrollment revocation and erasure participates in
-truthful deletion retries. Delivered Framebriar reports cannot currently be erased through its browser SDK and must not be
-described as deleted. Landing this code does not authorize changing hosted configuration, creating or deleting hosted accounts,
-or exercising the destructive flow against real data.
+The synthetic Playwright environment sets the switch for its isolated fake-auth/PGlite run. Production remains disabled. Preview
+may carry exact `1` only for an explicitly approved, owner-only destructive test on its isolated Neon Auth/database branch after
+the owner has confirmed the test account's Framebriar enrollment is already disconnected. That exception does not complete #261
+or authorize general rollout: enrollment revocation and erasure must still participate in truthful deletion retries before the
+feature is offered to enrolled users. Delivered Framebriar reports cannot currently be erased through its browser SDK and must
+not be described as deleted. No deployment setting authorizes creating or deleting an account; the owner separately performs and
+accepts the destructive test.
 
 ## User flow
 
