@@ -72,10 +72,11 @@ test("an expired record still has a Disconnect, and it says there was nothing to
   expect(await heldFor(ownerId())).toEqual({ enrollments: 0, redemptions: 0 });
 });
 
-test("a revoked-at-Framebriar record still has a Disconnect", async ({ page }) => {
+test("a family Framebriar no longer knows (401) leaves nothing to end, and the record is still removed", async ({
+  page,
+}) => {
   await connectedSettings(page);
-  await fakeFramebriar.revokeAll();
-  // The app has not heard yet, so it still shows Connected; its own revoke is answered 401 (already gone): nothing left to end.
+  await fakeFramebriar.failNext("disconnect", { kind: "status", status: 401 });
   await pressDisconnect(page);
   await expect(success(page, TEXT.nothing)).toBeVisible();
   expect(await heldFor(ownerId())).toEqual({ enrollments: 0, redemptions: 0 });
@@ -120,8 +121,8 @@ test("a connection that did not finish: Disconnect says to wait up to 15 minutes
   await openSettings(page);
   await fakeFramebriar.failNext("redeem", { kind: "network" });
   await page.getByLabel("Invitation").fill(await fakeFramebriar.issueInvitation());
-  await page.getByRole("button", { name: "Connect" }).click();
-  await expect(page.getByText(/^We couldn’t confirm the connection/)).toBeVisible();
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(page.getByText(/may have been used/)).toBeVisible();
   expect(await heldFor(ownerId())).toEqual({ enrollments: 0, redemptions: 1 });
   // A pending attempt is a record: Disconnect is offered, though nothing is connected.
   await pressDisconnect(page);

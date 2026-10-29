@@ -113,8 +113,8 @@ const CASES: Case[] = [
       await openSettings(page);
       await fakeFramebriar.failNext("redeem", { kind: "network" });
       await page.getByLabel("Invitation").fill(await fakeFramebriar.issueInvitation());
-      await page.getByRole("button", { name: "Connect" }).click();
-      await expect(page.getByText(/^We couldn’t confirm the connection/)).toBeVisible();
+      await page.getByRole("button", { name: "Connect", exact: true }).click();
+      await expect(page.getByText(/may have been used/)).toBeVisible();
     },
   },
   {
@@ -141,7 +141,7 @@ for (const width of WIDTHS) {
       await card.screenshot({ path: `${SHOTS}/${width}-${item.key}-before.png` });
 
       await pressDisconnect(page);
-      const region = card.getByRole(item.region).filter({ hasText: /./ });
+      const region = card.locator(`div.tiny[role="${item.region}"]`).filter({ hasText: /./ });
       await expect(region).toBeVisible();
       await card.scrollIntoViewIfNeeded();
       await card.screenshot({ path: `${SHOTS}/${width}-${item.key}-after.png` });

@@ -137,7 +137,7 @@ export async function goToTrips(page: Page) {
 /** Pastes an invitation (a fresh one unless given) on Settings and waits for Connected. */
 export async function connectFeedback(page: Page, invitation?: string) {
   await page.getByLabel("Invitation").fill(invitation ?? (await fakeFramebriar.issueInvitation()));
-  await page.getByRole("button", { name: "Connect" }).click();
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
   await expect(page.locator(".status-pill", { hasText: "Connected" })).toBeVisible();
 }
 
