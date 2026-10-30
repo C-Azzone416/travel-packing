@@ -8,7 +8,7 @@ import {
   forgetFeedbackEnrollment,
   goToTrips,
   openSettingsFromNav,
-  signOut,
+  signOutDiscardingUnsent,
 } from "./helpers/feedback";
 
 // Rendered screenshots of every account-scoped feedback state for design review (#260). Run with FEEDBACK_STATE_SHOTS=<folder>; without it
@@ -137,7 +137,7 @@ for (const theme of THEMES) {
       await expect(
         page.getByRole("heading", { name: "Send feedback to the developer" }),
       ).toBeVisible();
-      await signOut(page);
+      await signOutDiscardingUnsent(page);
       await shot(page, `${tag}-signed-out`);
       await signIn(page, SECOND_EMAIL);
       await openSettingsFromNav(page);

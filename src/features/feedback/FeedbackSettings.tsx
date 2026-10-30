@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useToast } from "@/components/ui/Toast";
 import { disconnectText, isDisconnectSuccess } from "./disconnect-copy";
-import { useFeedbackAccess, type ConnectResult } from "./FeedbackAccess";
+import { unsentCount, useFeedbackAccess, type ConnectResult } from "./FeedbackAccess";
 import type { FeedbackStatus } from "./status";
 
 const DATE = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -120,7 +120,7 @@ export function FeedbackSettings() {
           ? connection
           : null;
   const expiry = connected ? expiryText(status?.expiresAt ?? null) : null;
-  const unsent = outbox.waiting + outbox.blocked;
+  const unsent = unsentCount(outbox);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();

@@ -100,7 +100,27 @@ export interface FeedbackAccessValue {
   clearUnsent: () => Promise<void>;
   /** Sign-out: stops delivery and deletes this account's unsent notes and screenshots from this device. The server enrollment stays. */
   clearLocal: () => Promise<void>;
+  /**
+   * "Send now" for the sign-out warning (#325): wakes the SDK's own delivery (it still honours each report's saved retry time, so
+   * nothing is re-implemented here) and resolves with how many reports are still on this device (`unsentCount`) and whether any send was attempted. Capped at 15 s;
+   * a failure, a missing outbox or the cap all resolve with the count still left, never reject.
+   */
+  flushNow: () => Promise<FlushResult>;
 }
+
+/**
+ * What "Send now" came to: how many reports are still on this device, and whether any delivery was actually ATTEMPTED. A report still
+ * inside its saved retry delay is skipped by the SDK, so `attempted: false` with an unchanged count means "nothing was tried".
+ */
+export interface FlushResult {
+  remaining: number;
+  attempted: boolean;
+}
+
+/** The unsent total every warning and count uses. `waiting` is every row on the device and `blocked` is a SUBSET of it, so never add them. */
+export const unsentCount = (outbox: OutboxView) => outbox.waiting;
+/** How long "Send now" waits for delivery before it counts as a partial failure. */
+export const FLUSH_LIMIT_MS = 15_000;
 
 const NO_OUTBOX: OutboxView = { waiting: 0, blocked: 0, state: "checking" };
 
@@ -121,6 +141,7 @@ const NOT_READY: FeedbackAccessValue = {
   registerReportOpener: () => () => undefined,
   clearUnsent: async () => undefined,
   clearLocal: async () => undefined,
+  flushNow: async () => ({ remaining: 0, attempted: false }),
 };
 
 const FeedbackAccessContext = createContext<FeedbackAccessValue>(NOT_READY);
@@ -251,6 +272,10 @@ function EnabledFeedbackAccessProvider({
   const receipts = useRef(new Set<(id: string) => void>());
   const channelRef = useRef<AccountChannel | null>(null);
   const sequence = useRef(0);
+  const sendCalls = useRef(0);
+  const sendsRunning = useRef(0);
+  /** The latest unsent total, for `flushNow` when no outbox is mounted. */
+  const unsentRef = useRef(0);
   const limitTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
@@ -334,16 +359,21 @@ function EnabledFeedbackAccessProvider({
 
   // One send for this provider: it will not even ask the server while the enrollment is not connected, and it hears when the
   // server says the enrollment (or the rate limit) is the problem.
-  const send = useMemo(
-    () =>
-      createProxySend({
-        fetchImpl: (...args) => (fetchRef.current ?? fetch)(...args),
-        isConnected: () => viewRef.current?.status === "connected",
-        onEnrollmentProblem: () => void refresh(),
-        onRateLimited: noteRateLimit,
-      }),
-    [refresh, noteRateLimit],
-  );
+  // Every call the SDK makes to it is counted: that is the one honest signal that a delivery was ATTEMPTED (the SDK skips a report
+  // that is still inside its saved retry delay, and never calls the transport for it), which `flushNow` reports (#325).
+  const send = useMemo(() => {
+    const proxy = createProxySend({
+      fetchImpl: (...args) => (fetchRef.current ?? fetch)(...args),
+      isConnected: () => viewRef.current?.status === "connected",
+      onEnrollmentProblem: () => void refresh(),
+      onRateLimited: noteRateLimit,
+    });
+    return ((...args: Parameters<typeof proxy>) => {
+      sendCalls.current++;
+      sendsRunning.current++;
+      return proxy(...args).finally(() => sendsRunning.current--);
+    }) as typeof proxy;
+  }, [refresh, noteRateLimit]);
 
   const outboxKey = signedOut ? null : (view?.outboxKey ?? null);
 
@@ -491,14 +521,48 @@ function EnabledFeedbackAccessProvider({
     const current = boxRef.current;
     boxRef.current = null;
     const work = (async () => {
-      current?.box?.stop();
+      // Nothing in the clear may stop sign-out (#325 S1): a throwing stop() must not skip the clear or reject the race.
+      try {
+        current?.box?.stop();
+      } catch {
+        /* the clear below still runs */
+      }
       await current?.box?.clear().catch(() => undefined);
       const factory = idbRef.current;
       if (current && factory)
         await deleteAccountOutbox(factory, current.key).catch(() => undefined);
     })();
     await Promise.race([work, new Promise((done) => setTimeout(done, SIGN_OUT_CLEAR_LIMIT_MS))]);
-    channelRef.current?.postMessage("account-ended");
+    try {
+      channelRef.current?.postMessage("account-ended");
+    } catch {
+      /* other tabs learn on their next look */
+    }
+  }, []);
+
+  const flushNow = useCallback(async (): Promise<FlushResult> => {
+    const box = boxRef.current?.box;
+    if (!box) return { remaining: unsentRef.current, attempted: false };
+    // A send already under way (a background retry that this tap joins) is an attempt too.
+    const before = sendCalls.current;
+    const joined = sendsRunning.current > 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        box.start(),
+        new Promise((done) => {
+          timer = setTimeout(done, FLUSH_LIMIT_MS);
+        }),
+      ]);
+    } catch {
+      /* a failed send is a partial failure: the count below says what is left */
+    } finally {
+      clearTimeout(timer);
+    }
+    return {
+      remaining: unsentCount(outboxView(box.status())),
+      attempted: joined || sendCalls.current > before,
+    };
   }, []);
 
   const reportOpener = useRef<(() => void) | null>(null);
@@ -515,6 +579,9 @@ function EnabledFeedbackAccessProvider({
     [view, signedOut, online, rateLimited],
   );
   const outbox = outboxState && outboxState.key === outboxKey ? outboxState.view : NO_OUTBOX;
+  useEffect(() => {
+    unsentRef.current = unsentCount(outbox);
+  });
 
   const value = useMemo<FeedbackAccessValue>(
     () => ({
@@ -532,6 +599,7 @@ function EnabledFeedbackAccessProvider({
       registerReportOpener,
       clearUnsent,
       clearLocal,
+      flushNow,
     }),
     [
       refresh,
@@ -548,6 +616,7 @@ function EnabledFeedbackAccessProvider({
       registerReportOpener,
       clearUnsent,
       clearLocal,
+      flushNow,
     ],
   );
   return <FeedbackAccessContext.Provider value={value}>{children}</FeedbackAccessContext.Provider>;

@@ -2434,6 +2434,35 @@ input:disabled {
     width: 100%;
   }
 }
+/* The sign-out warning (#325). Up to 659px (the bottom-sheet band) the three choices stack full width, Send now on top; from 660px
+   they are one right-aligned row that wraps to full-width stacks rather than overlap. The backdrop already covers the bottom nav
+   (z-index 50); the extra bottom padding keeps the footer clear of the phone's safe-area inset. */
+.sign-out-guard {
+  display: grid;
+  gap: 10px;
+}
+.sign-out-guard p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.modal-backdrop:has(.sign-out-guard) {
+  padding-bottom: max(18px, var(--safe-bottom));
+}
+.modal:has(.sign-out-guard) .modal-actions .button {
+  min-width: 0;
+  max-width: 100%;
+  text-align: center;
+  white-space: normal;
+}
+@media (max-width: 659px) {
+  .modal:has(.sign-out-guard) .modal-actions {
+    flex-direction: column-reverse;
+    gap: 10px;
+  }
+  .modal:has(.sign-out-guard) .modal-actions .button {
+    width: 100%;
+  }
+}
 .temperature-units {
   margin: 16px 0 0;
   padding: 0;

@@ -197,6 +197,19 @@ export async function signOut(page: Page) {
   await expect(page).toHaveURL(/\/sign-in$/);
 }
 
+/**
+ * Sign out when this account still has an unsent report: the warning sheet opens first (#325), so choose "Sign out anyway", which
+ * deletes the report from this device exactly as a plain sign-out did before the warning existed.
+ */
+export async function signOutDiscardingUnsent(page: Page) {
+  await nav(page).getByRole("button", { name: "Sign out" }).click();
+  await page
+    .getByRole("dialog", { name: "Feedback hasn’t sent yet" })
+    .getByRole("button", { name: "Sign out anyway" })
+    .click();
+  await expect(page).toHaveURL(/\/sign-in$/);
+}
+
 /** The names of the feedback databases this browser holds for accounts (the outbox is one database per account). */
 export const accountOutboxDatabases = (page: Page) =>
   page.evaluate(async () =>

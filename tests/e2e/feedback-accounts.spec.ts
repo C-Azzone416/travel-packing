@@ -8,6 +8,7 @@ import {
   goToTrips,
   openSettingsFromNav,
   signOut,
+  signOutDiscardingUnsent,
 } from "./helpers/feedback";
 
 // Whose feedback is whose (#260): the enrollment belongs to the signed-in ACCOUNT and lives on the server, and what a person has written
@@ -45,7 +46,7 @@ test("one browser, two accounts: the first account's unsent report, status and s
   await firstAccountWithAWaitingReport(page);
 
   // Sign-out clears this account's unsent feedback from the device, and stops delivery: nothing is disconnected on the server.
-  await signOut(page);
+  await signOutDiscardingUnsent(page);
   expect(await accountOutboxDatabases(page)).toEqual([]);
   expect((await fakeFramebriar.counts()).disconnect).toBe(0);
   await fakeFramebriar.setOffline(false);
@@ -108,7 +109,7 @@ test("signed out, nothing is delivered: the waiting report is gone and the servi
   page,
 }) => {
   await firstAccountWithAWaitingReport(page);
-  await signOut(page);
+  await signOutDiscardingUnsent(page);
   await fakeFramebriar.setOffline(false);
   await page.waitForTimeout(6000);
   expect(await fakeFramebriar.delivered()).toEqual([]);

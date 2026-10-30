@@ -30,3 +30,27 @@ export function FeedbackSettings() {
 export function useFeedbackSignOut(): () => Promise<void> {
   return async () => undefined;
 }
+
+// The sign-out warning (#325). With no feedback in this build nothing is ever unsent, so Sign out stays one tap and the sheet
+// (and its copy) is not in the output.
+export function useFeedbackAccess(): {
+  outbox: {
+    waiting: number;
+    blocked: number;
+    state: "checking" | "available" | "storage-unavailable";
+  };
+} {
+  return { outbox: { waiting: 0, blocked: 0, state: "checking" } };
+}
+
+export function unsentCount(outbox: { waiting: number }): number {
+  return outbox.waiting;
+}
+
+export function SignOutGuardSheet(_props: {
+  open: boolean;
+  onStay: () => void;
+  signOutNow: () => Promise<void>;
+}) {
+  return null;
+}
