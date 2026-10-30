@@ -56,6 +56,7 @@ const FEEDBACK_MODULES = [
   ["@/features/feedback/account-closure-cleanup", FEEDBACK_STUB],
   ["@/features/feedback/CloseAccountFeedback", FEEDBACK_STUB],
   ["@/features/feedback/FeedbackAccess", FEEDBACK_STUB],
+  ["@/features/feedback/SignOutGuardSheet", FEEDBACK_STUB],
   ["@/features/feedback/FeedbackButton", FEEDBACK_STUB],
   ["@/features/feedback/FeedbackNotice", FEEDBACK_STUB],
   ["@/features/feedback/FeedbackSettings", FEEDBACK_STUB],

@@ -44,6 +44,11 @@ export const FEEDBACK_ONLY_MODULES: readonly { specifier: string; stub: string }
     specifier: "@/features/feedback/FeedbackAccess",
     stub: "./src/features/feedback/feedback.disabled.tsx",
   },
+  // The warning before Sign out when feedback is still unsent (#325): its copy must not reach a hosted bundle.
+  {
+    specifier: "@/features/feedback/SignOutGuardSheet",
+    stub: "./src/features/feedback/feedback.disabled.tsx",
+  },
   {
     specifier: "@/features/feedback/FeedbackButton",
     stub: "./src/features/feedback/feedback.disabled.tsx",

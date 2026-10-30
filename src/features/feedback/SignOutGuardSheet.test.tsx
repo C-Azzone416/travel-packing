@@ -284,6 +284,20 @@ describe.each<Entry>(["nav", "settings"])("sign-out warning from %s", (entry) =>
     expect(again).toBeTruthy();
   });
 
+  it("an earlier, finished send does not make a later flush count as attempted", async () => {
+    const t = await setup({ entry, unsent: 2 });
+    t.left(2);
+    // A background retry already happened and has finished (so the counters are not at their start values) ...
+    await t.outbox.created[0].send({ report: {}, media: null } as never).catch(() => undefined);
+    await t.user.click(signOutButton());
+    // ... and now every report is inside its retry delay, so this tap tries nothing.
+    await t.user.click(await screen.findByRole("button", { name: "Send now" }));
+    await screen.findByRole("button", { name: "Try again" });
+    const region = within(screen.getByRole("dialog")).getByRole("alert");
+    expect(region.textContent).toBe(CALM);
+    expect(region.querySelector(".auth-error")).toBeNull();
+  });
+
   it("joining a send that is already under way counts as an attempt (red alert, not the calm line)", async () => {
     const t = await setup({ entry, unsent: 2 });
     t.left(2);
