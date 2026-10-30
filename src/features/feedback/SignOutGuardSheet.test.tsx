@@ -8,7 +8,13 @@ import { ToastProvider } from "@/components/ui/Toast";
 import { SettingsScreen } from "@/features/settings/SettingsScreen";
 import { createFakeFeedbackServer, createMemoryIdb } from "@/test/fake-feedback-server";
 import { createFakeOutbox, OUTBOX_STATUS } from "@/test/fake-outbox";
-import { FeedbackAccessProvider, FLUSH_LIMIT_MS, useFeedbackAccess } from "./FeedbackAccess";
+import {
+  FeedbackAccessProvider,
+  FLUSH_LIMIT_MS,
+  useFeedbackAccess,
+  type FlushResult,
+} from "./FeedbackAccess";
+import { REPEAT_FEEDBACK_MS } from "./SignOutGuardSheet";
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/trips" }));
 
@@ -46,6 +52,8 @@ async function setup(
   } = {},
 ) {
   const order: string[] = [];
+  /** While set, a report send never answers (so it stays under way). */
+  const held = { reports: false };
   const signOut = vi.fn(async () => {
     order.push("signOut");
   });
@@ -59,7 +67,11 @@ async function setup(
     <ToastProvider>
       <FeedbackAccessProvider
         enabled
-        fetchImpl={server.fetch}
+        fetchImpl={(input, init) =>
+          held.reports && String(input).includes("reports")
+            ? new Promise<Response>(() => undefined)
+            : server.fetch(input, init)
+        }
         createOutbox={outbox.create}
         indexedDBImpl={createMemoryIdb().factory}
         preload={async () => undefined}
@@ -80,7 +92,17 @@ async function setup(
   const left = (items: number, blocked = 0) => {
     outbox.box.status = () => ({ ...OUTBOX_STATUS, items, blocked });
   };
-  return { signOut, order, outbox, server, left, user: userEvent.setup() };
+  /** The SDK reaches the transport when it really tries a report; with this a Send now ATTEMPTS (and fails). */
+  const attempt = () => {
+    outbox.box.start.mockImplementation(async () => {
+      try {
+        await outbox.created[0].send({ report: {}, media: null } as never);
+      } catch {
+        /* the attempt failing is the point */
+      }
+    });
+  };
+  return { signOut, order, outbox, server, left, attempt, held, user: userEvent.setup() };
 }
 
 const signOutButton = () => screen.getByRole("button", { name: "Sign out" });
@@ -88,6 +110,8 @@ const names = () =>
   within(screen.getByRole("dialog"))
     .getAllByRole("button")
     .map((b) => b.textContent);
+const CALM =
+  "Not sent yet. They’ll retry on their own in a moment, so you can wait here or try again shortly.";
 const ONE = "1 report hasn’t sent yet. Signing out deletes it from this device.";
 const many = (n: number) =>
   `${n} reports haven’t sent yet. Signing out deletes them from this device.`;
@@ -227,6 +251,7 @@ describe.each<Entry>(["nav", "settings"])("sign-out warning from %s", (entry) =>
   it("a partial send stays signed in: remaining count, alert, Try again with focus", async () => {
     const t = await setup({ entry, unsent: 3 });
     t.left(2);
+    t.attempt();
     await t.user.click(signOutButton());
     await t.user.click(await screen.findByRole("button", { name: "Send now" }));
     await t.outbox.status({ items: 2 });
@@ -244,17 +269,84 @@ describe.each<Entry>(["nav", "settings"])("sign-out warning from %s", (entry) =>
     expect(within(screen.getByRole("dialog")).getByRole("alert").textContent).toBe("");
   });
 
-  it("Try again with the reports still inside their retry delay keeps the same count and stays signed in", async () => {
+  it("a flush that attempts nothing (still inside the retry delay) shows the calm line, not the alert", async () => {
     const t = await setup({ entry, unsent: 2, blocked: 1 });
-    t.left(2, 1); // the SDK skipped them (retry delay): start() resolves at once and the count is unchanged
+    t.left(2, 1); // the SDK skipped them: start() resolves at once, nothing reached the transport, the count is unchanged
     await t.user.click(signOutButton());
     await t.user.click(await screen.findByRole("button", { name: "Send now" }));
     const again = await screen.findByRole("button", { name: "Try again" });
-    expect(screen.getByText(many(2))).toBeTruthy();
-    await t.user.click(again);
-    expect(await screen.findByRole("button", { name: "Try again" })).toBeTruthy();
+    const region = within(screen.getByRole("dialog")).getByRole("alert");
+    expect(region.textContent).toBe(CALM);
+    expect(region.querySelector(".auth-error")).toBeNull();
+    expect(region.textContent).not.toContain("⚠");
     expect(screen.getByText(many(2))).toBeTruthy();
     expect(t.signOut).not.toHaveBeenCalled();
+    expect(again).toBeTruthy();
+  });
+
+  it("joining a send that is already under way counts as an attempt (red alert, not the calm line)", async () => {
+    const t = await setup({ entry, unsent: 2 });
+    t.left(2);
+    t.held.reports = true;
+    await t.user.click(signOutButton());
+    await t.user.click(await screen.findByRole("button", { name: "Send now" }));
+    await screen.findByRole("button", { name: "Try again" });
+    expect(within(screen.getByRole("dialog")).getByRole("alert").textContent).toBe(CALM);
+    // A background retry is now in flight: the next tap joins it.
+    void t.outbox.created[0].send({ report: {}, media: null } as never).catch(() => undefined);
+    await t.user.click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() =>
+      expect(within(screen.getByRole("dialog")).getByRole("alert").textContent).toContain(
+        "Still couldn’t send",
+      ),
+    );
+  });
+
+  it("an attempted failure shows the red alert; a second consecutive one says Still couldn’t send", async () => {
+    const t = await setup({ entry, unsent: 2 });
+    t.left(2);
+    t.attempt();
+    await t.user.click(signOutButton());
+    await t.user.click(await screen.findByRole("button", { name: "Send now" }));
+    const region = () => within(screen.getByRole("dialog")).getByRole("alert");
+    await screen.findByRole("button", { name: "Try again" });
+    expect(region().querySelector(".auth-error")?.textContent).toBe(
+      "⚠ Some reports couldn’t be sent yet. They’re still on this device.",
+    );
+    const first = region().firstElementChild;
+    await t.user.click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() =>
+      expect(region().querySelector(".auth-error")?.textContent).toBe(
+        "⚠ Still couldn’t send. They’re still on this device.",
+      ),
+    );
+    // A new element, so a screen reader reads it again.
+    expect(region().firstElementChild).not.toBe(first);
+  });
+
+  it("a repeat tap keeps Sending… up for at least 600 ms", async () => {
+    const t = await setup({ entry, unsent: 2 });
+    t.left(2);
+    await t.user.click(signOutButton());
+    await t.user.click(await screen.findByRole("button", { name: "Send now" }));
+    const again = await screen.findByRole("button", { name: "Try again" });
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    fireEvent.click(again);
+    await act(async () => vi.advanceTimersByTimeAsync(REPEAT_FEEDBACK_MS - 100));
+    expect(screen.getByRole("button", { name: "Sending…" })).toBeTruthy();
+    await act(async () => vi.advanceTimersByTimeAsync(200));
+    expect(await screen.findByRole("button", { name: "Try again" })).toBeTruthy();
+  });
+
+  it("the Sending… status is read out but takes no room", async () => {
+    const t = await setup({ entry, unsent: 2 });
+    t.left(0);
+    t.outbox.box.start.mockImplementation(() => new Promise(() => undefined));
+    await t.user.click(signOutButton());
+    await t.user.click(await screen.findByRole("button", { name: "Send now" }));
+    const status = within(screen.getByRole("dialog")).getByRole("status");
+    expect(status.className).toBe("sr-only");
+    expect(status.textContent).toBe("Sending your reports…");
   });
 
   it("a rejected send is a partial failure", async () => {
@@ -373,20 +465,20 @@ describe("clearLocal never blocks sign-out (#325 S1)", () => {
 });
 
 describe("flushNow without an outbox", () => {
-  function Probe({ onValue }: { onValue: (n: Promise<number>) => void }) {
+  function Probe({ onValue }: { onValue: (n: Promise<FlushResult>) => void }) {
     const fb = useFeedbackAccess();
     return <button onClick={() => onValue(fb.flushNow())}>flush</button>;
   }
 
   it("resolves 0 where feedback is not built in", async () => {
-    let result: Promise<number> = Promise.resolve(-1);
+    let result: Promise<FlushResult> = Promise.resolve({ remaining: -1, attempted: true });
     render(<Probe onValue={(n) => (result = n)} />);
     await userEvent.setup().click(screen.getByRole("button", { name: "flush" }));
-    await expect(result).resolves.toBe(0);
+    await expect(result).resolves.toEqual({ remaining: 0, attempted: false });
   });
 
   it("resolves with the last count when this browser can keep no outbox", async () => {
-    let result: Promise<number> = Promise.resolve(-1);
+    let result: Promise<FlushResult> = Promise.resolve({ remaining: -1, attempted: true });
     render(
       <FeedbackAccessProvider
         enabled
@@ -400,6 +492,6 @@ describe("flushNow without an outbox", () => {
       </FeedbackAccessProvider>,
     );
     await userEvent.setup().click(screen.getByRole("button", { name: "flush" }));
-    await expect(result).resolves.toBe(0);
+    await expect(result).resolves.toEqual({ remaining: 0, attempted: false });
   });
 });

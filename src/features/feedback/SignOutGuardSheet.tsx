@@ -9,6 +9,9 @@ import { unsentCount, useFeedbackAccess } from "./FeedbackAccess";
 // reports (#260), so the person may send them first, stay, or sign out anyway. The sheet only decides; `signOutNow` (the one shared
 // sign-out path, use-sign-out.tsx) clears the device and ends the session.
 
+/** How long "Sending…" stays up on a repeat tap. */
+export const REPEAT_FEEDBACK_MS = 600;
+
 type Phase = "idle" | "sending" | "sent" | "leaving";
 
 export interface SignOutGuardSheetProps {
@@ -27,7 +30,9 @@ const reportsText = (n: number) =>
 export function SignOutGuardSheet({ open, onStay, signOutNow }: SignOutGuardSheetProps) {
   const fb = useFeedbackAccess();
   const [phase, setPhase] = useState<Phase>("idle");
-  const [failed, setFailed] = useState(false);
+  /** What the last Send now came to when it did not finish the job: `tap` counts the failures in a row (it also re-keys the message). */
+  const [outcome, setOutcome] = useState<{ attempted: boolean; tap: number } | null>(null);
+  const failed = outcome !== null;
   const tryAgain = useRef<HTMLButtonElement>(null);
   const stay = useRef<HTMLButtonElement>(null);
 
@@ -57,15 +62,19 @@ export function SignOutGuardSheet({ open, onStay, signOutNow }: SignOutGuardShee
 
   async function sendNow() {
     if (busy) return;
+    const taps = outcome?.tap ?? 0;
     setPhase("sending");
-    setFailed(false);
-    const left = await fb.flushNow(); // never rejects: a failed send resolves with what is left
-    if (left === 0) {
+    // A repeat tap keeps "Sending…" up for a moment, so an unchanged result still reads as a fresh answer.
+    const [result] = await Promise.all([
+      fb.flushNow(), // never rejects: a failed send resolves with what is left
+      taps > 0 ? new Promise((done) => setTimeout(done, REPEAT_FEEDBACK_MS)) : null,
+    ]);
+    if (result.remaining === 0) {
       setPhase("sent");
       await leave();
       return;
     }
-    setFailed(true);
+    setOutcome({ attempted: result.attempted, tap: taps + 1 });
     setPhase("idle");
   }
 
@@ -77,7 +86,7 @@ export function SignOutGuardSheet({ open, onStay, signOutNow }: SignOutGuardShee
 
   function stayNow() {
     if (busy) return;
-    setFailed(false);
+    setOutcome(null);
     onStay();
   }
 
@@ -132,15 +141,25 @@ export function SignOutGuardSheet({ open, onStay, signOutNow }: SignOutGuardShee
               : "Feedback isn’t connected, so these can’t be sent."}
           </p>
         ) : null}
-        <p className="tiny muted" role="status">
+        {/* Read out, never drawn: the button already says "Sending…", and a drawn line would push the sheet about 28px. */}
+        <p className="sr-only" role="status">
           {status}
         </p>
         <div role="alert">
-          {failed && !allSent ? (
-            <p className="auth-error">
-              <span aria-hidden="true">⚠ </span>Some reports couldn’t be sent yet. They’re still on
-              this device.
-            </p>
+          {outcome && !allSent ? (
+            outcome.attempted ? (
+              <p key={outcome.tap} className="auth-error">
+                <span aria-hidden="true">⚠ </span>
+                {outcome.tap > 1
+                  ? "Still couldn’t send. They’re still on this device."
+                  : "Some reports couldn’t be sent yet. They’re still on this device."}
+              </p>
+            ) : (
+              <p key={outcome.tap} className="tiny muted">
+                Not sent yet. They’ll retry on their own in a moment, so you can wait here or try
+                again shortly.
+              </p>
+            )
           ) : null}
         </div>
       </div>

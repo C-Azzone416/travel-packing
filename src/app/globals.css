@@ -2445,9 +2445,6 @@ input:disabled {
   margin: 0;
   overflow-wrap: anywhere;
 }
-.sign-out-guard p[role="status"]:empty {
-  display: none;
-}
 .modal-backdrop:has(.sign-out-guard) {
   padding-bottom: max(18px, var(--safe-bottom));
 }

@@ -204,34 +204,51 @@ test(
   },
 );
 
-test("sending, then a partial failure with the count and Try again", DEVICE, async ({ page }) => {
-  await withWaitingReports(page, 2);
-  await openFromNav(page);
-  const dialog = page.getByRole("dialog", { name: TITLE });
-  // Hold the send so the "Sending…" state can be measured, then let it fail (the service is down).
-  let release: () => void = () => undefined;
-  const held = new Promise<void>((done) => (release = done));
-  await page.route("**/api/feedback/reports", async (route) => {
-    await held;
-    await route.fulfill({ status: 503, contentType: "application/json", body: "{}" });
-  });
-  await dialog.getByRole("button", { name: "Send now" }).click();
-  // The SDK skips a report that is still inside its own retry delay, so the send can end at once (always in WebKit, after the
-  // failed first try), so the held "Sending…" state is measured on desktop only.
-  const sending = dialog.getByRole("button", { name: "Sending…" });
-  if (test.info().project.name === "desktop") {
+test(
+  "Send now inside the retry delay: the calm line, then a repeat tap shows Sending… without moving anything",
+  DEVICE,
+  async ({ page }) => {
+    await withWaitingReports(page, 2);
+    await openFromNav(page);
+    const dialog = page.getByRole("dialog", { name: TITLE });
+    // The reports were just refused (the service is down), so the SDK holds them inside their retry delay: a tap ATTEMPTS nothing
+    // and the sheet says so calmly, with no warning icon and no error styling.
+    await dialog.getByRole("button", { name: "Send now" }).click();
+    await expect(dialog.getByRole("button", { name: "Try again" })).toBeFocused({
+      timeout: 20_000,
+    });
+    const alert = dialog.getByRole("alert");
+    await expect(alert).toHaveText(
+      "Not sent yet. They’ll retry on their own in a moment, so you can wait here or try again shortly.",
+    );
+    await expect(alert.locator(".auth-error")).toHaveCount(0);
+    await expect(dialog.getByText(/^2 reports haven’t sent yet/)).toBeVisible();
+    await eachWidth(page, "not attempted + Try again");
+
+    // A repeat tap keeps Sending… up for 600 ms. The title and the buttons must not move when it appears (the status line is read
+    // out, never drawn); only the label changes width, so only the vertical position and height are compared.
+    const positions = () =>
+      dialog.evaluate((el) =>
+        [el.querySelector("h2"), ...el.querySelectorAll(".modal-actions .button")].map((node) => {
+          const r = (node as HTMLElement).getBoundingClientRect();
+          return [Math.round(r.y), Math.round(r.height)];
+        }),
+      );
+    await dialog.evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)));
+    const idle = await positions();
+    await dialog.getByRole("button", { name: "Try again" }).click();
+    const sending = dialog.getByRole("button", { name: "Sending…" });
     await expect(sending).toHaveAttribute("aria-busy", "true");
     await expect(dialog.getByRole("status")).toHaveText("Sending your reports…");
-    await eachWidth(page, "sending");
-  }
-  release();
-  await expect(dialog.getByRole("button", { name: "Try again" })).toBeFocused({ timeout: 20_000 });
-  await expect(dialog.getByRole("alert")).toContainText("Some reports couldn’t be sent yet.");
-  await expect(dialog.getByText(/^2 reports haven’t sent yet/)).toBeVisible();
-  await eachWidth(page, "partial failure + Try again");
-  await largeText(page);
-  await eachWidth(page, "partial failure + Try again at 200% text");
-});
+    expect(await positions(), "no vertical shift between idle and sending").toEqual(idle);
+    await expect(dialog.getByRole("button", { name: "Try again" })).toBeFocused({
+      timeout: 20_000,
+    });
+    await expect(alert).toContainText("Not sent yet.");
+    await largeText(page);
+    await eachWidth(page, "not attempted + Try again at 200% text");
+  },
+);
 
 test(
   "Settings sign-out warns the same way, Sign out anyway deletes the reports and signs out",

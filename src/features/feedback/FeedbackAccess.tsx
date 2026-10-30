@@ -102,10 +102,19 @@ export interface FeedbackAccessValue {
   clearLocal: () => Promise<void>;
   /**
    * "Send now" for the sign-out warning (#325): wakes the SDK's own delivery (it still honours each report's saved retry time, so
-   * nothing is re-implemented here) and resolves with how many reports are still on this device (`unsentCount`). Capped at 15 s;
+   * nothing is re-implemented here) and resolves with how many reports are still on this device (`unsentCount`) and whether any send was attempted. Capped at 15 s;
    * a failure, a missing outbox or the cap all resolve with the count still left, never reject.
    */
-  flushNow: () => Promise<number>;
+  flushNow: () => Promise<FlushResult>;
+}
+
+/**
+ * What "Send now" came to: how many reports are still on this device, and whether any delivery was actually ATTEMPTED. A report still
+ * inside its saved retry delay is skipped by the SDK, so `attempted: false` with an unchanged count means "nothing was tried".
+ */
+export interface FlushResult {
+  remaining: number;
+  attempted: boolean;
 }
 
 /** The unsent total every warning and count uses. `waiting` is every row on the device and `blocked` is a SUBSET of it, so never add them. */
@@ -132,7 +141,7 @@ const NOT_READY: FeedbackAccessValue = {
   registerReportOpener: () => () => undefined,
   clearUnsent: async () => undefined,
   clearLocal: async () => undefined,
-  flushNow: async () => 0,
+  flushNow: async () => ({ remaining: 0, attempted: false }),
 };
 
 const FeedbackAccessContext = createContext<FeedbackAccessValue>(NOT_READY);
@@ -263,6 +272,8 @@ function EnabledFeedbackAccessProvider({
   const receipts = useRef(new Set<(id: string) => void>());
   const channelRef = useRef<AccountChannel | null>(null);
   const sequence = useRef(0);
+  const sendCalls = useRef(0);
+  const sendsRunning = useRef(0);
   /** The latest unsent total, for `flushNow` when no outbox is mounted. */
   const unsentRef = useRef(0);
   const limitTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -348,16 +359,21 @@ function EnabledFeedbackAccessProvider({
 
   // One send for this provider: it will not even ask the server while the enrollment is not connected, and it hears when the
   // server says the enrollment (or the rate limit) is the problem.
-  const send = useMemo(
-    () =>
-      createProxySend({
-        fetchImpl: (...args) => (fetchRef.current ?? fetch)(...args),
-        isConnected: () => viewRef.current?.status === "connected",
-        onEnrollmentProblem: () => void refresh(),
-        onRateLimited: noteRateLimit,
-      }),
-    [refresh, noteRateLimit],
-  );
+  // Every call the SDK makes to it is counted: that is the one honest signal that a delivery was ATTEMPTED (the SDK skips a report
+  // that is still inside its saved retry delay, and never calls the transport for it), which `flushNow` reports (#325).
+  const send = useMemo(() => {
+    const proxy = createProxySend({
+      fetchImpl: (...args) => (fetchRef.current ?? fetch)(...args),
+      isConnected: () => viewRef.current?.status === "connected",
+      onEnrollmentProblem: () => void refresh(),
+      onRateLimited: noteRateLimit,
+    });
+    return ((...args: Parameters<typeof proxy>) => {
+      sendCalls.current++;
+      sendsRunning.current++;
+      return proxy(...args).finally(() => sendsRunning.current--);
+    }) as typeof proxy;
+  }, [refresh, noteRateLimit]);
 
   const outboxKey = signedOut ? null : (view?.outboxKey ?? null);
 
@@ -524,9 +540,12 @@ function EnabledFeedbackAccessProvider({
     }
   }, []);
 
-  const flushNow = useCallback(async (): Promise<number> => {
+  const flushNow = useCallback(async (): Promise<FlushResult> => {
     const box = boxRef.current?.box;
-    if (!box) return unsentRef.current;
+    if (!box) return { remaining: unsentRef.current, attempted: false };
+    // A send already under way (a background retry that this tap joins) is an attempt too.
+    const before = sendCalls.current;
+    const joined = sendsRunning.current > 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       await Promise.race([
@@ -540,7 +559,10 @@ function EnabledFeedbackAccessProvider({
     } finally {
       clearTimeout(timer);
     }
-    return unsentCount(outboxView(box.status()));
+    return {
+      remaining: unsentCount(outboxView(box.status())),
+      attempted: joined || sendCalls.current > before,
+    };
   }, []);
 
   const reportOpener = useRef<(() => void) | null>(null);
