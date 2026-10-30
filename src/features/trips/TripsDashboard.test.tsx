@@ -302,7 +302,8 @@ describe("past & archive view", () => {
     expect(screen.queryByRole("heading", { name: "Your travel ledger" })).toBeNull();
     const lisbon = card("Lisbon");
     expect(within(lisbon).getByText("Past trip")).toBeTruthy();
-    expect(within(lisbon).getByText("Ready to go")).toBeTruthy();
+    expect(within(lisbon).getByText("Marked Ready")).toBeTruthy();
+    expect(within(lisbon).queryByText("Ready to go")).toBeNull();
     expect(within(lisbon).queryByText(/Simulated/)).toBeNull();
     expect(within(lisbon).getByRole("link", { name: "Review bag: Lisbon" })).toBeTruthy();
     expect(within(lisbon).queryByRole("button", { name: /Archive|Restore/ })).toBeNull();

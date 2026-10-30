@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { LifecycleTrip } from "@/domain/trip-lifecycle";
+import { isPastTrip, type LifecycleTrip } from "@/domain/trip-lifecycle";
 import { sampleLifecycleState } from "./fixtures";
 import { formatDays, formatRange, quickViewModel, tripCardView } from "./view";
 
@@ -40,6 +40,7 @@ describe("tripCardView", () => {
       destination: "San Diego",
       place: "California, United States",
       eyebrow: null,
+      past: false,
       ready: false,
       packed: 6,
       total: 32,
@@ -56,6 +57,7 @@ describe("tripCardView", () => {
     const view = tripCardView(lisbon(), TODAY, "archive");
     expect(view).toMatchObject({
       eyebrow: "Past trip",
+      past: true,
       ready: true,
       remaining: 0,
       percent: 100,
@@ -83,6 +85,28 @@ describe("tripCardView", () => {
     const endsToday = withPatch(sanDiego(), { end: TODAY });
     expect(tripCardView(endsToday, TODAY, "upcoming").eyebrow).toBeNull();
     expect(tripCardView(endsToday, "2026-10-17", "archive").eyebrow).toBe("Past trip");
+  });
+
+  it("flags past from the existing date policy: a trip that ended yesterday is past, and so is one that ended today only once today is after its end", () => {
+    const endedYesterday = withPatch(sanDiego(), { end: "2026-10-15" });
+    expect(tripCardView(endedYesterday, TODAY, "archive").past).toBe(true);
+    const endsToday = withPatch(sanDiego(), { end: TODAY });
+    expect(tripCardView(endsToday, TODAY, "upcoming").past).toBe(isPastTrip(endsToday, TODAY));
+    const endsLater = sanDiego();
+    expect(tripCardView(endsLater, TODAY, "upcoming").past).toBe(false);
+  });
+
+  it("flags an archived trip as past by its date, not by the archive flag", () => {
+    const archivedFuture = withPatch(sanDiego(), { archived: true });
+    expect(tripCardView(archivedFuture, TODAY, "archive")).toMatchObject({
+      past: false,
+      eyebrow: "Archived trip",
+    });
+    const archivedPast = withPatch(lisbon(), { archived: true });
+    expect(tripCardView(archivedPast, TODAY, "archive")).toMatchObject({
+      past: true,
+      eyebrow: "Archived trip",
+    });
   });
 
   it("carries no weather copy: the dashboard fetches no weather, so the card says nothing about the forecast", () => {
