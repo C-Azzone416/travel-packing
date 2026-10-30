@@ -65,6 +65,8 @@ export function TripCard({
   const [quickOpen, setQuickOpen] = useState(false);
   const quickId = `quick-view-${trip.id}`;
   const past = view.past ? pastStatus(view) : null;
+  // A past trip is reviewed, not packed for: "Review bag" for every past trip (spec #301, separable).
+  const primaryLabel = view.ready || view.past ? "Review bag" : "Keep packing";
   const status = past ? (
     <StatusBadge status={past.ready ? "ready" : "remaining"}>{past.chip}</StatusBadge>
   ) : view.ready ? (
@@ -144,9 +146,9 @@ export function TripCard({
           <Link
             className={buttonClassName({ small: true })}
             href={`/trips/${trip.id}`}
-            aria-label={`${view.ready ? "Review bag" : "Keep packing"}: ${view.destination}`}
+            aria-label={`${primaryLabel}: ${view.destination}`}
           >
-            {view.ready ? "Review bag" : "Keep packing"}
+            {primaryLabel}
           </Link>
           <Link
             className={buttonClassName({ variant: "secondary", small: true })}

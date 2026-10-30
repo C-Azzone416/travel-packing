@@ -115,6 +115,14 @@ describe("TripCard wording for past cards (spec #301)", () => {
     expect(article().textContent).not.toMatch(/left/i);
   });
 
+  it("an incomplete, not Ready past trip offers Review bag, never Keep packing", () => {
+    renderCard("archive", false, pastTrip(15, 12));
+    const link = screen.getByRole("link", { name: `Review bag: ${lisbon.destination}` });
+    expect(link.textContent).toBe("Review bag");
+    expect(link.getAttribute("href")).toBe(`/trips/${lisbon.id}`);
+    expect(article().textContent).not.toMatch(/Keep packing|Continue packing/);
+  });
+
   it("a complete, not Ready past trip says All 15 packed", () => {
     renderCard("archive", false, pastTrip(15, 15));
     expect(within(article()).getByText("All 15 packed")).toBeTruthy();
