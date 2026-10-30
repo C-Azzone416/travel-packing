@@ -221,7 +221,7 @@ export function ConnectedSaveChip() {
       <ModalSheet
         open={open && status === "error"}
         title="Couldn’t save"
-        description="Your change is still on screen. Retry to save it."
+        description="Your change is still on screen. Retry to save it."
         onClose={close}
         actions={
           <>
