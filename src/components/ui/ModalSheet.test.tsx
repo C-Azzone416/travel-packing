@@ -409,6 +409,54 @@ describe("ModalSheet", () => {
     });
   });
 
+  describe("headerAction (#296)", () => {
+    it("sits before the close button in one end group, and neither takes the initial focus", () => {
+      render(
+        <ModalSheet
+          open
+          showClose
+          title="Edit"
+          onClose={() => {}}
+          headerAction={<button>Extra</button>}
+        >
+          <input aria-label="Name" />
+        </ModalSheet>,
+      );
+      const end = document.querySelector(".modal-head-end") as HTMLElement;
+      const buttons = [...end.querySelectorAll("button")].map((node) => node.textContent);
+      expect(buttons).toEqual(["Extra", "×"]);
+      expect(document.activeElement).toBe(screen.getByLabelText("Name"));
+    });
+
+    it("keeps the Tab trap across the action and the close button", async () => {
+      render(
+        <ModalSheet
+          open
+          showClose
+          title="Edit"
+          onClose={() => {}}
+          headerAction={<button>Extra</button>}
+        >
+          <input aria-label="Name" />
+        </ModalSheet>,
+      );
+      await userEvent.tab({ shift: true }); // Name -> Close dialog (last before wrap is Name; shift goes to Close)
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: "Close dialog" }));
+      await userEvent.tab();
+      expect(document.activeElement).toBe(screen.getByLabelText("Name"));
+    });
+
+    it("without it the head is exactly as before: the close button directly in the head, no end group", () => {
+      render(
+        <ModalSheet open showClose title="Plain" onClose={() => {}}>
+          <input aria-label="Name" />
+        </ModalSheet>,
+      );
+      expect(document.querySelector(".modal-head-end")).toBeNull();
+      expect(document.querySelector(".modal-head > .modal-close")).not.toBeNull();
+    });
+  });
+
   it("starts on a control that asks to be first, such as a checked radio, instead of the first control", () => {
     render(
       <ModalSheet open title="Pick" onClose={() => {}}>

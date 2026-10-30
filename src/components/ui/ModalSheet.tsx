@@ -79,6 +79,8 @@ export interface ModalSheetProps {
    * already offer their own safe choice ("Not yet", "Skip", "Keep item") leave it off. Default false.
    */
   showClose?: boolean;
+  /** A small control beside the close button in the head (the trip editor's Feedback entry, #296). Absent: the head is unchanged. */
+  headerAction?: ReactNode;
 }
 
 // Bottom sheet on phones, centered dialog from 660px. Traps focus, closes on
@@ -93,6 +95,7 @@ export function ModalSheet({
   actions,
   dismissOnBackdrop = true,
   showClose = false,
+  headerAction,
 }: ModalSheetProps) {
   const titleId = useId();
   const descriptionId = useId();
@@ -110,7 +113,7 @@ export function ModalSheet({
     const start =
       dialog.querySelector<HTMLElement>("[data-modal-autofocus]") ??
       [...dialog.querySelectorAll<HTMLElement>(FOCUSABLE)].find(
-        (node) => !node.hasAttribute("data-modal-close"),
+        (node) => !node.hasAttribute("data-modal-close") && !node.closest(".modal-head-end"),
       );
     (start ?? dialog).focus();
     // Everything else on the page is inert while the dialog is open, so focus and assistive tech stay inside
@@ -161,6 +164,18 @@ export function ModalSheet({
     focusable[next].focus();
   }
 
+  const closeButton = showClose ? (
+    <button
+      type="button"
+      className="modal-close"
+      data-modal-close=""
+      aria-label="Close dialog"
+      onClick={onClose}
+    >
+      <span aria-hidden="true">×</span>
+    </button>
+  ) : null;
+
   return createPortal(
     <div
       ref={backdropRef}
@@ -189,17 +204,14 @@ export function ModalSheet({
             <h2 id={titleId}>{title}</h2>
             {description ? <p id={descriptionId}>{description}</p> : null}
           </div>
-          {showClose ? (
-            <button
-              type="button"
-              className="modal-close"
-              data-modal-close=""
-              aria-label="Close dialog"
-              onClick={onClose}
-            >
-              <span aria-hidden="true">×</span>
-            </button>
-          ) : null}
+          {headerAction ? (
+            <div className="modal-head-end">
+              {headerAction}
+              {closeButton}
+            </div>
+          ) : (
+            closeButton
+          )}
         </div>
         {children}
         {actions ? <div className="modal-actions">{actions}</div> : null}
