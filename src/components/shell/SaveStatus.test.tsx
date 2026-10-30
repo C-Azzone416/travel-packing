@@ -231,7 +231,10 @@ describe("SaveStatusProvider", () => {
     // Tapping the chip does not retry by itself: it explains first.
     expect(write).toHaveBeenCalledTimes(1);
     const dialog = screen.getByRole("dialog", { name: "Couldn’t save" });
-    expect(within(dialog).getByText(/Your last change hasn’t been saved/)).toBeTruthy();
+    expect(
+      within(dialog).getByText("Your change is still on screen. Retry to save it."),
+    ).toBeTruthy();
+    expect(within(dialog).queryByText(/hasn’t been saved|We’ll keep it on screen/)).toBeNull();
     await act(async () => {
       within(dialog).getByRole("button", { name: "Dismiss" }).click();
     });

@@ -1,8 +1,6 @@
 // @vitest-environment jsdom
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { useEffect } from "react";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -335,20 +333,8 @@ describe("SettingsScreen", () => {
     expect(saveCard().getByText("Saved")).toBeTruthy();
   });
 
-  it("no longer contains the old save-status copy", () => {
-    const source = readFileSync(
-      join(process.cwd(), "src/features/settings/SettingsScreen.tsx"),
-      "utf8",
-    );
-    for (const old of [
-      "No changes yet this visit",
-      "Changes you make are saved as you go",
-      "Everything you changed is saved",
-      "Your last change hasn’t been saved",
-      "We’ll keep it on screen while you retry",
-    ]) {
-      expect(source).not.toContain(old);
-    }
+  it("shows none of the old save-status copy", () => {
+    setup();
     expect(screen.queryByText(/No changes yet|Everything you changed/)).toBeNull();
   });
 

@@ -135,7 +135,7 @@ test("a failed save shows Error everywhere, never claims Saved, and Retry recove
   // The chip explains before it does anything.
   await chip.click();
   const sheet = page.getByRole("dialog", { name: "Couldn’t save" });
-  await expect(sheet.getByText(/Your last change hasn’t been saved/)).toBeVisible();
+  await expect(sheet.getByText("Your change is still on screen. Retry to save it.")).toBeVisible();
   await page.screenshot({
     path: `test-results/screenshots/${testInfo.project.name}-settings-error-sheet.png`,
   });
