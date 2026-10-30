@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createAuthServer, NEON_AUTH_SESSION_COOKIE_NAME } from "@neondatabase/auth/server";
 import { createNeonAccountClosureCalls, createNeonSessionRevoker } from "./neon-session-revocation";
+import { setAuthLogSink } from "./safe-log";
 
 const nextHeaders = vi.fn();
 const nextCookies = vi.fn();
@@ -21,10 +22,19 @@ const requestHeaders = async () =>
   });
 
 afterEach(() => {
+  setAuthLogSink();
   nextHeaders.mockReset();
   nextCookies.mockReset();
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
+
+function capturePreviewDiagnostics() {
+  const lines: string[] = [];
+  vi.stubEnv("VERCEL_ENV", "preview");
+  setAuthLogSink((line) => lines.push(line));
+  return lines;
+}
 
 describe("Neon account-closure session revocation", () => {
   it("uses the signed Set-Cookie value, not the raw token from the real SDK response contract", async () => {
@@ -351,6 +361,145 @@ describe("Neon account-closure session revocation", () => {
       error: null,
     });
     expect(applyCookie).not.toHaveBeenCalled();
+  });
+
+  it("logs a bounded nonterminal 2xx outcome without its hostile response body", async () => {
+    const lines = capturePreviewDiagnostics();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          success: true,
+          message: "owner@example.test synthetic-password raw-session-token",
+          secret: "do-not-log-me",
+        }),
+      ),
+    );
+
+    await expect(
+      createNeonAccountClosureCalls(config, {
+        requestHeaders,
+        now: vi.fn().mockReturnValueOnce(100).mockReturnValueOnce(123),
+      }).deleteUserWithSession("fresh.synthetic-signature", "synthetic-password"),
+    ).resolves.toMatchObject({ error: null });
+
+    expect(lines).toHaveLength(1);
+    expect(JSON.parse(lines[0])).toEqual({
+      scope: "auth",
+      event: "account-closure-provider-call",
+      stage: "delete-user",
+      outcome: "nonterminal-response",
+      status: 200,
+      code: "UNKNOWN",
+      elapsedMs: 23,
+    });
+    expect(lines[0]).not.toContain("owner");
+    expect(lines[0]).not.toContain("password");
+    expect(lines[0]).not.toContain("token");
+    expect(lines[0]).not.toContain("do-not-log-me");
+  });
+
+  it("logs a strictly allowlisted provider rejection code and replaces a hostile code", async () => {
+    const lines = capturePreviewDiagnostics();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ code: "INVALID_PASSWORD" }, { status: 400 }))
+      .mockResolvedValueOnce(
+        Response.json(
+          { code: "owner@example.test synthetic-password raw-session-token" },
+          { status: 403 },
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const calls = createNeonAccountClosureCalls(config, { requestHeaders });
+
+    await calls.deleteUserWithSession("fresh.synthetic-signature", "synthetic-password");
+    await calls.deleteUserWithSession("fresh.synthetic-signature", "synthetic-password");
+
+    expect(lines.map((line) => JSON.parse(line))).toEqual([
+      expect.objectContaining({
+        stage: "delete-user",
+        outcome: "provider-rejected",
+        status: 400,
+        code: "INVALID_PASSWORD",
+      }),
+      expect.objectContaining({
+        stage: "delete-user",
+        outcome: "provider-rejected",
+        status: 403,
+        code: "UNKNOWN",
+      }),
+    ]);
+    expect(lines.join("\n")).not.toContain("owner");
+    expect(lines.join("\n")).not.toContain("password");
+    expect(lines.join("\n")).not.toContain("token");
+  });
+
+  it("distinguishes a transport response from an error before any response exists", async () => {
+    const lines = capturePreviewDiagnostics();
+    const fetchMock = vi.fn().mockRejectedValueOnce(new TypeError("fetch failed: secret-token"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createNeonAccountClosureCalls(config, { requestHeaders }).deleteUserWithSession(
+      "fresh.synthetic-signature",
+      "synthetic-password",
+    );
+    await expect(
+      createNeonAccountClosureCalls(config, {
+        requestHeaders: async () => {
+          throw new Error("headers contain secret-token");
+        },
+      }).deleteUserWithSession("fresh.synthetic-signature", "synthetic-password"),
+    ).rejects.toThrow("headers contain secret-token");
+
+    expect(lines.map((line) => JSON.parse(line))).toEqual([
+      expect.objectContaining({
+        stage: "delete-user",
+        outcome: "transport-error",
+        status: 502,
+        code: "NETWORK_ERROR",
+      }),
+      expect.objectContaining({
+        stage: "delete-user",
+        outcome: "early-error",
+      }),
+    ]);
+    expect(lines.join("\n")).not.toContain("secret-token");
+  });
+
+  it("logs confirmed and cookie-rejected outcomes, but emits nothing in Production", async () => {
+    const lines = capturePreviewDiagnostics();
+    const deletion = (setCookie: string) =>
+      Response.json(
+        { success: true, message: "User deleted" },
+        { headers: { "set-cookie": setCookie } },
+      );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        deletion(`${NEON_AUTH_SESSION_COOKIE_NAME}=; Path=/; HttpOnly; Secure; Max-Age=0`),
+      )
+      .mockResolvedValueOnce(
+        deletion("__Secure-neon-auth.unexpected=; Path=/; HttpOnly; Secure; Max-Age=0"),
+      )
+      .mockResolvedValueOnce(Response.json({ code: "INVALID_PASSWORD" }, { status: 400 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const calls = createNeonAccountClosureCalls(config, { requestHeaders, applyCookie: vi.fn() });
+
+    await calls.deleteUserWithSession("fresh.synthetic-signature", "synthetic-password");
+    await calls.deleteUserWithSession("fresh.synthetic-signature", "synthetic-password");
+    vi.stubEnv("VERCEL_ENV", "production");
+    await calls.deleteUserWithSession("fresh.synthetic-signature", "synthetic-password");
+
+    expect(lines.map((line) => JSON.parse(line))).toEqual([
+      expect.objectContaining({ stage: "delete-user", outcome: "confirmed", status: 200 }),
+      expect.objectContaining({
+        stage: "delete-user",
+        outcome: "unexpected-cookie-mutation",
+        status: 200,
+        code: "UNEXPECTED_COOKIE_MUTATION",
+      }),
+    ]);
   });
 
   it.each([
