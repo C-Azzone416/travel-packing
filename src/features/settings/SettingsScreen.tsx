@@ -77,7 +77,7 @@ export function SettingsScreen({
   closeAccount,
 }: SettingsScreenProps) {
   const { status, lastSavedAt, retry, track, pending } = useSaveStatus();
-  const signOutAndClear = useSignOut(signOut);
+  const signOutGuard = useSignOut(signOut);
   const toast = useToast();
   const unitsName = useId();
   const [weather, setWeather] = useState(initialWeather);
@@ -180,11 +180,12 @@ export function SettingsScreen({
               Signed in as <strong>{email}</strong>
             </p>
           ) : null}
-          <form action={signOutAndClear}>
+          <form action={signOutGuard.action}>
             <Button type="submit" variant="secondary">
               Sign out
             </Button>
           </form>
+          {signOutGuard.sheet}
           {accountClosureEnabled ? (
             <div className="close-account-entry">
               <h3>Close account</h3>

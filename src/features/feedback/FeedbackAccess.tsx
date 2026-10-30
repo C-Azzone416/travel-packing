@@ -100,7 +100,18 @@ export interface FeedbackAccessValue {
   clearUnsent: () => Promise<void>;
   /** Sign-out: stops delivery and deletes this account's unsent notes and screenshots from this device. The server enrollment stays. */
   clearLocal: () => Promise<void>;
+  /**
+   * "Send now" for the sign-out warning (#325): wakes the SDK's own delivery (it still honours each report's saved retry time, so
+   * nothing is re-implemented here) and resolves with how many reports are still on this device (waiting + blocked). Capped at 15 s;
+   * a failure, a missing outbox or the cap all resolve with the count still left, never reject.
+   */
+  flushNow: () => Promise<number>;
 }
+
+/** The unsent total every warning and count uses: waiting plus blocked. */
+export const unsentCount = (outbox: OutboxView) => outbox.waiting + outbox.blocked;
+/** How long "Send now" waits for delivery before it counts as a partial failure. */
+export const FLUSH_LIMIT_MS = 15_000;
 
 const NO_OUTBOX: OutboxView = { waiting: 0, blocked: 0, state: "checking" };
 
@@ -121,6 +132,7 @@ const NOT_READY: FeedbackAccessValue = {
   registerReportOpener: () => () => undefined,
   clearUnsent: async () => undefined,
   clearLocal: async () => undefined,
+  flushNow: async () => 0,
 };
 
 const FeedbackAccessContext = createContext<FeedbackAccessValue>(NOT_READY);
@@ -251,6 +263,8 @@ function EnabledFeedbackAccessProvider({
   const receipts = useRef(new Set<(id: string) => void>());
   const channelRef = useRef<AccountChannel | null>(null);
   const sequence = useRef(0);
+  /** The latest unsent total, for `flushNow` when no outbox is mounted. */
+  const unsentRef = useRef(0);
   const limitTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
@@ -491,14 +505,42 @@ function EnabledFeedbackAccessProvider({
     const current = boxRef.current;
     boxRef.current = null;
     const work = (async () => {
-      current?.box?.stop();
+      // Nothing in the clear may stop sign-out (#325 S1): a throwing stop() must not skip the clear or reject the race.
+      try {
+        current?.box?.stop();
+      } catch {
+        /* the clear below still runs */
+      }
       await current?.box?.clear().catch(() => undefined);
       const factory = idbRef.current;
       if (current && factory)
         await deleteAccountOutbox(factory, current.key).catch(() => undefined);
     })();
     await Promise.race([work, new Promise((done) => setTimeout(done, SIGN_OUT_CLEAR_LIMIT_MS))]);
-    channelRef.current?.postMessage("account-ended");
+    try {
+      channelRef.current?.postMessage("account-ended");
+    } catch {
+      /* other tabs learn on their next look */
+    }
+  }, []);
+
+  const flushNow = useCallback(async (): Promise<number> => {
+    const box = boxRef.current?.box;
+    if (!box) return unsentRef.current;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        box.start(),
+        new Promise((done) => {
+          timer = setTimeout(done, FLUSH_LIMIT_MS);
+        }),
+      ]);
+    } catch {
+      /* a failed send is a partial failure: the count below says what is left */
+    } finally {
+      clearTimeout(timer);
+    }
+    return unsentCount(outboxView(box.status()));
   }, []);
 
   const reportOpener = useRef<(() => void) | null>(null);
@@ -515,6 +557,9 @@ function EnabledFeedbackAccessProvider({
     [view, signedOut, online, rateLimited],
   );
   const outbox = outboxState && outboxState.key === outboxKey ? outboxState.view : NO_OUTBOX;
+  useEffect(() => {
+    unsentRef.current = unsentCount(outbox);
+  });
 
   const value = useMemo<FeedbackAccessValue>(
     () => ({
@@ -532,6 +577,7 @@ function EnabledFeedbackAccessProvider({
       registerReportOpener,
       clearUnsent,
       clearLocal,
+      flushNow,
     }),
     [
       refresh,
@@ -548,6 +594,7 @@ function EnabledFeedbackAccessProvider({
       registerReportOpener,
       clearUnsent,
       clearLocal,
+      flushNow,
     ],
   );
   return <FeedbackAccessContext.Provider value={value}>{children}</FeedbackAccessContext.Provider>;

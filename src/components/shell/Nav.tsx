@@ -36,7 +36,7 @@ function SignOutIcon() {
 // Fixed bottom bar on phones, compact vertical rail from 900px (CSS only).
 export function Nav({ signOut, email }: NavProps = {}) {
   const pathname = usePathname();
-  const signOutAndClear = useSignOut(signOut);
+  const signOutGuard = useSignOut(signOut);
   return (
     <nav className="bottom-nav" aria-label="Primary navigation">
       {NAV_ITEMS.map((item) => (
@@ -50,15 +50,18 @@ export function Nav({ signOut, email }: NavProps = {}) {
         </Link>
       ))}
       {signOut && email ? (
-        // One tap, no confirm, as on Settings. Never the current page, so no aria-current.
-        <form action={signOutAndClear} className="nav-signout">
-          <button type="submit" tabIndex={0} title={`Signed in as ${email}`}>
-            <span aria-hidden="true">
-              <SignOutIcon />
-            </span>
-            Sign out
-          </button>
-        </form>
+        // One tap with nothing unsent; with unsent feedback the warning sheet opens first (#325). Never the current page.
+        <>
+          <form action={signOutGuard.action} className="nav-signout">
+            <button type="submit" tabIndex={0} title={`Signed in as ${email}`}>
+              <span aria-hidden="true">
+                <SignOutIcon />
+              </span>
+              Sign out
+            </button>
+          </form>
+          {signOutGuard.sheet}
+        </>
       ) : null}
     </nav>
   );
