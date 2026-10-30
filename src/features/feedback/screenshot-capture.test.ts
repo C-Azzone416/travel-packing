@@ -93,6 +93,23 @@ describe("captureScreenshot", () => {
     });
   });
 
+  it("shifts a scrolled page with margins, never a transform that would displace fixed sheets (#296)", async () => {
+    at("/trips/abc");
+    Object.defineProperty(window, "scrollY", { value: 745, configurable: true });
+    Object.defineProperty(window, "scrollX", { value: 12, configurable: true });
+    toBlob.mockResolvedValue(png(1000));
+    try {
+      const real = await loadReal();
+      await real.captureScreenshot();
+      const { style } = toBlob.mock.calls[0][1] as { style: Record<string, string> };
+      expect(style).toEqual({ marginTop: "-745px", marginLeft: "-12px" });
+      expect(style.transform).toBeUndefined();
+    } finally {
+      Object.defineProperty(window, "scrollY", { value: 0, configurable: true });
+      Object.defineProperty(window, "scrollX", { value: 0, configurable: true });
+    }
+  });
+
   it("hands the library the exclusion filter, so marked regions and every password field are left out before cloning", async () => {
     toBlob.mockResolvedValue(png(10));
     const real = await loadReal();

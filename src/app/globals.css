@@ -559,6 +559,40 @@ main {
   line-height: 1;
   cursor: pointer;
 }
+.modal-head:has(.modal-head-end) > :first-child {
+  min-width: 0;
+}
+/* The head's controls when a sheet adds one beside the close button (#296): one row, 4px apart. */
+.modal-head-end {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: -6px -6px 0 0;
+}
+.modal-head-end .modal-close {
+  margin: 0;
+}
+.feedback-editor-entry {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 12px;
+  padding-right: 12px;
+}
+/* Below 400px the label goes; the accessible name stays, so the title keeps its room. */
+@media (max-width: 399px) {
+  .feedback-entry-label {
+    display: none;
+  }
+  .feedback-editor-entry {
+    width: 44px;
+    justify-content: center;
+    padding-left: 0;
+    padding-right: 0;
+  }
+}
 .modal-actions {
   display: flex;
   flex-wrap: wrap;

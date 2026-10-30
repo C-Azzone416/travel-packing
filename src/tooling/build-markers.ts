@@ -56,6 +56,11 @@ export const FRAMEBRIAR_MARKERS: readonly BuildMarker[] = [
     source: "src/features/feedback/FeedbackSettings.tsx",
   },
   {
+    name: "the Feedback entry in the trip editor",
+    text: "data-feedback-editor-entry",
+    source: "src/features/feedback/FeedbackEditorEntry.tsx",
+  },
+  {
     name: "the Framebriar per-account report queue SDK",
     text: "Local feedback storage is full",
     source: "node_modules/@masra91/framebriar/adapters/browser/queue.mjs",

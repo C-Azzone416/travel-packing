@@ -45,9 +45,13 @@ export async function captureScreenshot(): Promise<CaptureResult> {
         pixelRatio,
         width: window.innerWidth,
         height: window.innerHeight,
+        // The scrolled page is shifted with negative margins, NOT a transform (#296): a transform on the root makes it the
+        // containing block of every fixed element, so a modal sheet (position: fixed) was placed against the whole document and
+        // fell outside the picture whenever the page was scrolled. A margin moves the page's own content and leaves fixed
+        // elements (sheets, their backdrop, toasts) where the viewport shows them.
         style: {
-          transformOrigin: "top left",
-          transform: `translate(${-window.scrollX}px, ${-window.scrollY}px)`,
+          marginTop: `${-window.scrollY}px`,
+          marginLeft: `${-window.scrollX}px`,
         },
         // Asked before each node is cloned or its value read: marked regions and every password field never enter the picture.
         filter: includeInCapture,
