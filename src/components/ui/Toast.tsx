@@ -48,6 +48,16 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const focused = useRef(false);
 
   const [paused, setPaused] = useState(false);
+  // While a ModalSheet is open (`data-sheet-open` on <body>) a toast is held: its timer waits and the stylesheet clips it from view
+  // (it stays in the accessibility tree so it is still announced). It gets its full time once the last sheet closes (#341).
+  const [sheetOpen, setSheetOpen] = useState(false);
+  useEffect(() => {
+    const read = () => setSheetOpen(document.body.hasAttribute("data-sheet-open"));
+    read();
+    const observer = new MutationObserver(read);
+    observer.observe(document.body, { attributes: true, attributeFilter: ["data-sheet-open"] });
+    return () => observer.disconnect();
+  }, []);
 
   const show = useCallback<ToastApi["show"]>((message, options) => {
     // The replaced toast unmounts without a mouseleave/blur, so reset the pause
@@ -66,10 +76,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const toastId = toast?.id;
   const duration = toast?.action ? ACTION_TOAST_MS : TOAST_MS;
   useEffect(() => {
-    if (toastId === undefined || paused) return;
+    if (toastId === undefined || paused || sheetOpen) return;
     const timer = setTimeout(() => setToast(null), duration);
     return () => clearTimeout(timer);
-  }, [toastId, duration, paused]);
+  }, [toastId, duration, paused, sheetOpen]);
 
   const syncPaused = () => setPaused(hovered.current || focused.current);
 

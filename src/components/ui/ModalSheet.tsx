@@ -60,6 +60,10 @@ function openerNow(): HTMLElement | null {
   return lastOutsideFocus?.isConnected ? lastOutsideFocus : null;
 }
 
+// How many sheets are open. `data-sheet-open` on <body> is set while it is above zero so the toast provider and the stylesheet
+// can hold plain toasts behind a sheet (#341).
+let openSheets = 0;
+
 export interface ModalSheetProps {
   open: boolean;
   title: string;
@@ -107,6 +111,8 @@ export function ModalSheet({
     const opener = openerNow();
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    openSheets += 1;
+    document.body.setAttribute("data-sheet-open", "");
     const dialog = dialogRef.current as HTMLDivElement;
     // The close button comes first in the DOM, but a person opening a form wants to start in the form.
     // A control can ask to be first (a radio group asks for its checked option).
@@ -125,6 +131,8 @@ export function ModalSheet({
     return () => {
       for (const node of background) node.removeAttribute("inert");
       document.body.style.overflow = previousOverflow;
+      openSheets -= 1;
+      if (openSheets === 0) document.body.removeAttribute("data-sheet-open");
       // WebKit works out inertness lazily: a control that was inside the inert page cannot take focus until the style is flushed.
       void document.body.offsetHeight;
       // The page cannot scroll while the sheet is open, so the opener is where the person left it. Letting focus() scroll would

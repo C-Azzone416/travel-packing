@@ -467,3 +467,57 @@ describe("ModalSheet", () => {
     expect(document.activeElement).toBe(screen.getByLabelText("Two"));
   });
 });
+
+describe("data-sheet-open on <body> (#341)", () => {
+  it("is set while a sheet is open, in step with the scroll lock, and removed on close", () => {
+    const { rerender } = render(
+      <ModalSheet open={false} title="A" onClose={() => {}}>
+        x
+      </ModalSheet>,
+    );
+    expect(document.body.hasAttribute("data-sheet-open")).toBe(false);
+    rerender(
+      <ModalSheet open title="A" onClose={() => {}}>
+        x
+      </ModalSheet>,
+    );
+    expect(document.body.hasAttribute("data-sheet-open")).toBe(true);
+    expect(document.body.style.overflow).toBe("hidden");
+    rerender(
+      <ModalSheet open={false} title="A" onClose={() => {}}>
+        x
+      </ModalSheet>,
+    );
+    expect(document.body.hasAttribute("data-sheet-open")).toBe(false);
+    expect(document.body.style.overflow).toBe("");
+  });
+
+  it("stays set until the last of two sheets closes", () => {
+    const both = (a: boolean, b: boolean) => (
+      <>
+        <ModalSheet open={a} title="A" onClose={() => {}}>
+          x
+        </ModalSheet>
+        <ModalSheet open={b} title="B" onClose={() => {}}>
+          y
+        </ModalSheet>
+      </>
+    );
+    const { rerender } = render(both(true, true));
+    rerender(both(true, false));
+    expect(document.body.hasAttribute("data-sheet-open")).toBe(true);
+    rerender(both(false, false));
+    expect(document.body.hasAttribute("data-sheet-open")).toBe(false);
+  });
+
+  it("is removed when an open sheet unmounts", () => {
+    const { unmount } = render(
+      <ModalSheet open title="A" onClose={() => {}}>
+        x
+      </ModalSheet>,
+    );
+    expect(document.body.hasAttribute("data-sheet-open")).toBe(true);
+    unmount();
+    expect(document.body.hasAttribute("data-sheet-open")).toBe(false);
+  });
+});
