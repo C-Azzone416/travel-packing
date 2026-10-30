@@ -1,9 +1,15 @@
 // @vitest-environment jsdom
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { useEffect } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { SaveStatusProvider, useSaveStatus } from "@/components/shell/SaveStatus";
+import {
+  SAVED_CONFIRMATION_MS,
+  SaveStatusProvider,
+  useSaveStatus,
+} from "@/components/shell/SaveStatus";
 import { ToastProvider } from "@/components/ui/Toast";
 import { lastSavedText, SettingsScreen } from "./SettingsScreen";
 import type { CloseAccountState } from "./close-account-state";
@@ -15,6 +21,14 @@ function Capture() {
     tracker = value;
   });
   return null;
+}
+
+// The Save status card (the global sr-only region also says "Saved", so card checks are scoped to it).
+function saveCard() {
+  const heading = screen.getByRole("heading", { name: "Save status" });
+  const card = heading.closest("section");
+  if (!card) throw new Error("the Save status card is missing");
+  return within(card);
 }
 
 function setup(
@@ -157,51 +171,81 @@ describe("SettingsScreen", () => {
     await act(async () => resolveRetry({ error: null, fieldErrors: {} }));
   });
 
-  it("is honest before anything was saved (one line, no 'saved' claim, no Last saved), then after a real write", async () => {
+  it("is honest before anything was saved: Up to date with no Last saved line, then Saved after a real write", async () => {
     setup();
-    expect(
-      screen.getByText("No changes yet this visit. Changes you make are saved as you go."),
-    ).toBeTruthy();
-    expect(screen.queryByText("Everything you changed is saved.")).toBeNull();
+    expect(screen.getByText("Up to date")).toBeTruthy();
     expect(screen.queryByText(/^Last saved/)).toBeNull();
+    expect(saveCard().queryByText("Saved")).toBeNull();
     await act(async () => {
       await tracker.track(async () => "ok");
     });
-    expect(screen.getByText("Everything you changed is saved.")).toBeTruthy();
-    expect(screen.getByText(/^Last saved /).textContent).toMatch(
-      /^Last saved \d{1,2}:\d{2}\s?[AP]M$/,
-    );
+    expect(saveCard().getByText("Saved")).toBeTruthy();
+    expect(screen.queryByText("Up to date")).toBeNull();
+    expect(screen.queryByText(/^Last saved/)).toBeNull();
   });
 
-  it("says Saving… while a write is in flight, never that everything is saved", async () => {
+  it("says Saving… from the first moment of a write, before the chip's short delay, never Up to date", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {
       setup();
       let finish!: () => void;
-      const pending = new Promise<string>((resolve) => (finish = () => resolve("ok")));
+      const inFlight = new Promise<string>((resolve) => (finish = () => resolve("ok")));
       let write!: Promise<string>;
       act(() => {
-        write = tracker.track(() => pending);
+        write = tracker.track(() => inFlight);
       });
-      // "Saving…" shows only if a write takes longer than the short delay (no flicker for quick saves).
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(500);
-      });
+      expect(tracker.status).toBe("idle");
+      expect(tracker.pending).toBe(true);
       expect(screen.getByText("Saving…")).toBeTruthy();
-      expect(screen.queryByText("Everything you changed is saved.")).toBeNull();
-      expect(screen.queryByText(/^No changes yet/)).toBeNull();
+      expect(screen.queryByText("Up to date")).toBeNull();
       await act(async () => {
         finish();
         await write;
       });
-      expect(screen.getByText("Everything you changed is saved.")).toBeTruthy();
+      expect(saveCard().getByText("Saved")).toBeTruthy();
       expect(screen.queryByText("Saving…")).toBeNull();
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it("does not claim 'saved' while the last change failed, and offers Retry right in the card", async () => {
+  it("shows Saving… for a slow write, then Saved, then Up to date with Last saved once the confirmation passes", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      setup();
+      let finish!: () => void;
+      const inFlight = new Promise<string>((resolve) => (finish = () => resolve("ok")));
+      let write!: Promise<string>;
+      act(() => {
+        write = tracker.track(() => inFlight);
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(500);
+      });
+      expect(screen.getByText("Saving…")).toBeTruthy();
+      expect(screen.queryByText("Up to date")).toBeNull();
+      expect(screen.getByRole("status", { name: "Save status" }).textContent).toBe("Saving");
+      await act(async () => {
+        finish();
+        await write;
+      });
+      expect(saveCard().getByText("Saved")).toBeTruthy();
+      expect(screen.getByRole("status", { name: "Save status" }).textContent).toBe("Saved");
+      expect(screen.queryByText(/^Last saved/)).toBeNull();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(SAVED_CONFIRMATION_MS);
+      });
+      expect(screen.getByText("Up to date")).toBeTruthy();
+      expect(saveCard().queryByText("Saved")).toBeNull();
+      expect(screen.getByText(/^Last saved \d{1,2}:\d{2}\s?[AP]M$/)).toBeTruthy();
+      expect(screen.getByRole("status", { name: "Save status" }).textContent).toBe("");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("shows Not saved, the detail line and Retry after a failed change, never Up to date", async () => {
     setup();
     const write = vi
       .fn<() => Promise<string>>()
@@ -210,13 +254,102 @@ describe("SettingsScreen", () => {
     await act(async () => {
       await tracker.track(write).catch(() => {});
     });
-    expect(screen.getByText(/Your last change hasn’t been saved/)).toBeTruthy();
-    expect(screen.queryByText("Everything you changed is saved.")).toBeNull();
+    expect(screen.getByText("Not saved")).toBeTruthy();
+    expect(screen.getByText("Your change is still on screen.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
+    expect(screen.queryByText("Up to date")).toBeNull();
     expect(screen.queryByText(/^Last saved/)).toBeNull();
+    expect(saveCard().queryByText("Saved")).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(write).toHaveBeenCalledTimes(2);
-    expect(screen.getByText("Everything you changed is saved.")).toBeTruthy();
+    expect(saveCard().getByText("Saved")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+    expect(screen.queryByText("Not saved")).toBeNull();
+  });
+
+  it("keeps the failed copy and Retry while a retry is still in flight, and never says Up to date", async () => {
+    let finishRetry!: () => void;
+    const write = vi
+      .fn<() => Promise<string>>()
+      .mockRejectedValueOnce(new Error("down"))
+      .mockReturnValueOnce(
+        new Promise<string>((resolve) => {
+          finishRetry = () => resolve("ok");
+        }),
+      );
+    setup();
+    await act(async () => {
+      await tracker.track(write).catch(() => {});
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(write).toHaveBeenCalledTimes(2);
+    expect(screen.getByText("Not saved")).toBeTruthy();
+    expect(screen.getByText("Your change is still on screen.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
+    expect(screen.queryByText("Up to date")).toBeNull();
+    expect(screen.queryByText("Saving…")).toBeNull();
+    await act(async () => {
+      finishRetry();
+    });
+    expect(saveCard().getByText("Saved")).toBeTruthy();
+    expect(screen.queryByText("Not saved")).toBeNull();
+  });
+
+  it("returns from a failure to Saved, then Up to date with Last saved", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      setup();
+      const write = vi
+        .fn<() => Promise<string>>()
+        .mockRejectedValueOnce(new Error("down"))
+        .mockResolvedValue("ok");
+      await act(async () => {
+        await tracker.track(write).catch(() => {});
+      });
+      expect(screen.getByText("Not saved")).toBeTruthy();
+      await act(async () => {
+        screen.getByRole("button", { name: "Retry" }).click();
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(saveCard().getByText("Saved")).toBeTruthy();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(SAVED_CONFIRMATION_MS);
+      });
+      expect(screen.getByText("Up to date")).toBeTruthy();
+      expect(screen.getByText(/^Last saved /)).toBeTruthy();
+      expect(screen.queryByText("Not saved")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("puts no live region or role=status on the card, and marks the glyph decorative", async () => {
+    setup();
+    await act(async () => {
+      await tracker.track(async () => "ok");
+    });
+    const card = screen.getByRole("heading", { name: "Save status" }).closest("section");
+    if (!card) throw new Error("the Save status card is missing");
+    expect(card.querySelectorAll('[role="status"], [role="alert"], [aria-live]').length).toBe(0);
+    expect(card.querySelector('[aria-hidden="true"]')?.textContent).toBe("✓");
+    expect(saveCard().getByText("Saved")).toBeTruthy();
+  });
+
+  it("no longer contains the old save-status copy", () => {
+    const source = readFileSync(
+      join(process.cwd(), "src/features/settings/SettingsScreen.tsx"),
+      "utf8",
+    );
+    for (const old of [
+      "No changes yet this visit",
+      "Changes you make are saved as you go",
+      "Everything you changed is saved",
+      "Your last change hasn’t been saved",
+      "We’ll keep it on screen while you retry",
+    ]) {
+      expect(source).not.toContain(old);
+    }
+    expect(screen.queryByText(/No changes yet|Everything you changed/)).toBeNull();
   });
 
   it("has no Offline, Waiting, simulated-sync or sample-data copy, and no Data section yet", () => {

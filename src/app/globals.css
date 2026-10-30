@@ -2357,6 +2357,59 @@ input:disabled {
   margin: 0 0 8px;
   font-size: 18px;
 }
+/* Save status (#298): one row, the same height in every state, so nothing below it moves. */
+.save-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 4.5rem;
+}
+.save-status > .button {
+  flex: none;
+}
+.save-status-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+.save-status-glyph {
+  flex: none;
+  width: 20px;
+  text-align: center;
+  color: var(--muted);
+}
+.save-status-glyph-saving,
+.save-status-glyph-saved {
+  color: var(--ink);
+}
+.save-status-glyph-saved,
+.save-status-glyph-failed {
+  font-weight: 700;
+}
+.save-status-glyph-failed {
+  color: var(--danger);
+}
+.save-status-text {
+  flex: 1;
+  min-width: 0;
+}
+.save-status-line {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.save-status-line-failed {
+  font-weight: 700;
+  color: var(--danger);
+}
+.save-status-detail {
+  margin: 0;
+  font-size: 14px;
+  color: var(--muted);
+}
 .close-account-entry {
   margin-top: 20px;
   padding-top: 18px;

@@ -98,9 +98,7 @@ test("nothing is claimed saved before anything was, and 'Last saved' appears aft
   page,
 }) => {
   await openSettings(page);
-  await expect(
-    page.getByText("No changes yet this visit. Changes you make are saved as you go."),
-  ).toBeVisible();
+  await expect(page.getByText("Up to date", { exact: true })).toBeVisible();
   await page
     .getByRole("navigation", { name: "Primary navigation" })
     .getByRole("link", { name: "Trips" })
@@ -112,6 +110,8 @@ test("nothing is claimed saved before anything was, and 'Last saved' appears aft
     .getByRole("link", { name: "Settings" })
     .click();
   await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
+  // "Saved" holds for about 2s after a write, then the card settles on "Up to date" with the time.
+  await expect(page.getByText("Up to date", { exact: true })).toBeVisible({ timeout: 5_000 });
   await expect(page.getByText(/^Last saved \d{1,2}:\d{2}\s?[AP]M$/)).toBeVisible();
 });
 
@@ -147,8 +147,9 @@ test("a failed save shows Error everywhere, never claims Saved, and Retry recove
     .getByRole("navigation", { name: "Primary navigation" })
     .getByRole("link", { name: "Settings" })
     .click();
-  await expect(page.getByText(/Your last change hasn’t been saved/).first()).toBeVisible();
-  await expect(page.getByText("Everything you changed is saved.")).toHaveCount(0);
+  await expect(page.getByText("Not saved", { exact: true })).toBeVisible();
+  await expect(page.getByText("Your change is still on screen.")).toBeVisible();
+  await expect(page.getByText("Up to date", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Retry", exact: true })).toBeVisible();
   await expect(page.getByText(/^Last saved/)).toHaveCount(0);
   await page.screenshot({
