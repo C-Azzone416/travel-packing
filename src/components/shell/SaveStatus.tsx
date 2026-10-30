@@ -48,6 +48,8 @@ interface SaveStatusApi {
   lastSavedAt: Date | null;
   /** Re-run the last FAILED write only. A newer successful write clears it, so stale writes never replay. */
   retry: () => void;
+  /** True while a non-read write is in flight, including the short delay before `status` becomes "saving". */
+  pending: boolean;
 }
 
 const SaveStatusContext = createContext<SaveStatusApi | null>(null);
@@ -70,6 +72,8 @@ export function SaveStatusProvider({ children }: { children: ReactNode }) {
   const statusRef = useRef<SaveStatus>("idle");
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const pending = useRef(0);
+  // A React mirror of `pending.current > 0`, so the Settings card can say "Saving…" before the chip's delay passes.
+  const [hasPending, setHasPending] = useState(false);
   const lastFailed = useRef<PendingWrite | null>(null);
   const savingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -128,11 +132,13 @@ export function SaveStatusProvider({ children }: { children: ReactNode }) {
         clearSavedTimer();
         if (statusRef.current === "saved") applyStatus("idle");
         pending.current += 1;
+        setHasPending(true);
         scheduleSaving();
       }
       const settle = () => {
         if (read) return;
         pending.current -= 1;
+        setHasPending(pending.current > 0);
         if (pending.current === 0) clearSavingTimer();
       };
       try {
@@ -176,8 +182,8 @@ export function SaveStatusProvider({ children }: { children: ReactNode }) {
   }, [track]);
 
   const api = useMemo<SaveStatusApi>(
-    () => ({ status, lastSavedAt, track, retry }),
-    [status, lastSavedAt, track, retry],
+    () => ({ status, lastSavedAt, track, retry, pending: hasPending }),
+    [status, lastSavedAt, track, retry, hasPending],
   );
 
   // While a change is unsaved, leaving the page asks first (design's #31).

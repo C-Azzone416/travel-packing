@@ -49,6 +49,16 @@ function shownAppearance(): Appearance {
 
 const TIME = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" });
 
+type SaveView = "failed" | "saving" | "saved" | "upToDate";
+
+// One card state per row of the design table (#298). Order matters: a failure or a pending write always wins.
+const SAVE_VIEW: Record<SaveView, { glyph: string; line: string }> = {
+  failed: { glyph: "!", line: "Not saved" },
+  saving: { glyph: "●", line: "Saving…" },
+  saved: { glyph: "✓", line: "Saved" },
+  upToDate: { glyph: "✓", line: "Up to date" },
+};
+
 /** "Last saved 3:42 PM". Shown only after a real write; before one there is nothing to report. */
 export function lastSavedText(savedAt: Date): string {
   return `Last saved ${TIME.format(savedAt)}`;
@@ -66,7 +76,7 @@ export function SettingsScreen({
   accountClosureEnabled,
   closeAccount,
 }: SettingsScreenProps) {
-  const { status, lastSavedAt, retry, track } = useSaveStatus();
+  const { status, lastSavedAt, retry, track, pending } = useSaveStatus();
   const signOutAndClear = useSignOut(signOut);
   const toast = useToast();
   const unitsName = useId();
@@ -125,6 +135,22 @@ export function SettingsScreen({
     });
   }
 
+  const view: SaveView =
+    status === "error"
+      ? "failed"
+      : status === "saving" || pending
+        ? "saving"
+        : status === "saved"
+          ? "saved"
+          : "upToDate";
+  // A detail line only where it says something: the failure, or the last real save once there is one.
+  const detail =
+    view === "failed"
+      ? "Your change is still on screen."
+      : view === "upToDate" && lastSavedAt
+        ? lastSavedText(lastSavedAt)
+        : null;
+
   return (
     <section className="screen">
       <div className="page-head settings-head">
@@ -173,23 +199,20 @@ export function SettingsScreen({
         </Card>
         <Card as="section" padded aria-labelledby="settings-save">
           <h2 id="settings-save">Save status</h2>
-          {status === "error" ? (
-            <>
-              <p>Your last change hasn’t been saved. We’ll keep it on screen while you retry.</p>
-              <Button onClick={retry}>Retry</Button>
-            </>
-          ) : status === "saving" ? (
-            <p>Saving…</p>
-          ) : lastSavedAt ? (
-            <p>Everything you changed is saved.</p>
-          ) : (
-            <p>No changes yet this visit. Changes you make are saved as you go.</p>
-          )}
-          {lastSavedAt ? (
-            <p className="tiny muted" role="status">
-              {lastSavedText(lastSavedAt)}
-            </p>
-          ) : null}
+          <div className="save-status">
+            <div className="save-status-main">
+              <span className={`save-status-glyph save-status-glyph-${view}`} aria-hidden="true">
+                {SAVE_VIEW[view].glyph}
+              </span>
+              <div className="save-status-text">
+                <p className={`save-status-line save-status-line-${view}`}>
+                  {SAVE_VIEW[view].line}
+                </p>
+                {detail ? <p className="save-status-detail">{detail}</p> : null}
+              </div>
+            </div>
+            {view === "failed" ? <Button onClick={retry}>Retry</Button> : null}
+          </div>
         </Card>
         <Card as="section" padded aria-labelledby="settings-weather">
           <h2 id="settings-weather">Weather and units</h2>
