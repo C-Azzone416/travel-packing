@@ -48,6 +48,8 @@ export interface TripCardView {
   routeIsTitle: boolean;
   /** "Past trip" / "Archived trip"; upcoming trips carry no eyebrow. */
   eyebrow: string | null;
+  /** The end date is before today (by the existing date policy): the card uses historical wording. */
+  past: boolean;
   ready: boolean;
   packed: number;
   total: number;
@@ -72,6 +74,7 @@ export function tripCardView(trip: LifecycleTrip, today: string, view: TripListV
     route: routeCities(trip),
     routeIsTitle: routeIsTitle(trip),
     eyebrow: trip.archived ? "Archived trip" : past ? "Past trip" : null,
+    past,
     ready: trip.ready,
     packed: totals.packed,
     total: totals.total,
