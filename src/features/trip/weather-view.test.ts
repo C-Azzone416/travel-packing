@@ -72,6 +72,7 @@ describe("weather view", () => {
         {
           date: "2031-04-03",
           label: "Thu Apr 3",
+          parts: { weekday: "Thu", month: "Apr", day: 3 },
           spoken: "Thursday 3 April: rain likely, high 21, low 9, 40% chance of rain",
           glyph: "rain",
           high: 21,
@@ -168,6 +169,13 @@ describe("weather view", () => {
         spoken: "Sunday 6 April: sunny, high 104, low 89, 13% chance of rain",
       });
       expect(dayView(at("2031-04-01"), "C", "2031-04-01").label).toBe("Today Apr 1");
+      // the parts feed the dashboard chip ("Fri 6") and phone row ("Fri Nov 6")
+      expect(sunday.parts).toEqual({ weekday: "Sun", month: "Apr", day: 6 });
+      expect(dayView(at("2031-04-01"), "C", "2031-04-01").parts).toEqual({
+        weekday: "Today",
+        month: "Apr",
+        day: 1,
+      });
       // a year boundary and a leap day
       expect(dayView(at("2032-01-01"), "C", "x").label).toBe("Thu Jan 1");
       expect(dayView(at("2032-02-29"), "C", "x").spoken).toContain("Sunday 29 February");

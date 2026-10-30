@@ -229,6 +229,46 @@ describe("the hero's weather strip", () => {
     expect(within(cell).getByText("Rain on 1 of 1 days")).toBeTruthy();
   });
 
+  it("adds the daily forecast block after the strip, in the person's unit (#303)", async () => {
+    setup(undefined, (base) => weatherSource(base));
+    const block = await screen.findByRole("region", { name: "Forecast for San Diego" });
+    const strip = screen.getByRole("list", { name: "Weather for each stay" });
+    expect(strip.nextElementSibling).toBe(block);
+    const day = within(block).getByRole("listitem");
+    expect(day.textContent).toContain("68° / 50°");
+    expect(day.textContent).toContain("Fri Oct 23");
+  });
+
+  it("adds no daily block for a typical-only stay (#303)", async () => {
+    setup(undefined, (base) =>
+      weatherSource(base, undefined, {
+        kind: "ready",
+        stops: [
+          {
+            stopIndex: 0,
+            status: "ok",
+            days: [
+              {
+                date: "2026-10-23",
+                stopIndex: 0,
+                source: "typical",
+                highC: 20,
+                lowC: 10,
+                precipProbability: 0.1,
+                precipMm: 0,
+                snowCm: 0,
+                uvIndexMax: null,
+                sunshineHours: null,
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    await screen.findByRole("list", { name: "Weather for each stay" });
+    expect(screen.queryByRole("region", { name: /^Forecast for/ })).toBeNull();
+  });
+
   it("uses Celsius when that is the person's unit", async () => {
     setup(undefined, (base) => weatherSource(base, { weatherOptIn: true, temperatureUnit: "C" }));
     const strip = await screen.findByRole("list", { name: "Weather for each stay" });

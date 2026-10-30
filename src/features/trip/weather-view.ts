@@ -10,6 +10,8 @@ export interface DayView {
   date: string;
   /** "Fri Nov 6", or "Today Oct 28" (month first, like the stay dates). */
   label: string;
+  /** The label's parts, so the dashboard chip can show "Fri 6" and the phone row "Fri Nov 6" (#303). */
+  parts: { weekday: string; month: string; day: number };
   /** The full sentence for screen readers: "Friday 6 November: sunny, high 18, low 11, 10% chance of rain". */
   spoken: string;
   glyph: Glyph;
@@ -99,9 +101,11 @@ export function dayView(day: DayWeather, unit: TemperatureUnit, today: string): 
   const high = displayTemperature(day.highC, unit);
   const low = displayTemperature(day.lowC, unit);
   const rainPercent = Math.round(day.precipProbability * 100);
+  const shortWeekday = day.date === today ? "Today" : weekday.slice(0, 3);
   return {
     date: day.date,
-    label: `${day.date === today ? "Today" : weekday.slice(0, 3)} ${month.slice(0, 3)} ${date}`,
+    label: `${shortWeekday} ${month.slice(0, 3)} ${date}`,
+    parts: { weekday: shortWeekday, month: month.slice(0, 3), day: date },
     spoken:
       `${weekday} ${date} ${month}: ${GLYPH_WORD[glyph]}, high ${high}, low ${low}, ` +
       `${rainPercent}% chance of rain`,

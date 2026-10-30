@@ -171,3 +171,102 @@ describe("the hero's status row (#285)", () => {
     expect(cell.lastElementChild?.textContent).toBe("Rain on 2 of 5 days");
   });
 });
+
+describe("the daily forecast block (#303)", () => {
+  const cell = {
+    stopIndex: 0,
+    city: "Lisbon",
+    dates: "Oct 20 – Oct 24",
+    glyph: "rain" as const,
+    range: "14° / 9°",
+    note: "Rain on 2 of 5 days",
+    source: "Forecast",
+  };
+  const day = (n: number, glyph: "sun" | "rain" | "snow", month = "Oct") => ({
+    date: `2026-10-${20 + n}`,
+    label: `Mon ${month} ${20 + n}`,
+    parts: { weekday: "Mon", month, day: 20 + n },
+    spoken: `Monday ${20 + n} October: ${glyph}, high 14, low 9, 10% chance of rain`,
+    glyph,
+    high: 14,
+    low: 9,
+    rainPercent: 10,
+  });
+  const forecast = (days: number, more = 0) => ({
+    stopIndex: 0,
+    city: "Lisbon",
+    days: Array.from({ length: days }, (_, n) => day(n, (["sun", "rain", "snow"] as const)[n % 3])),
+    more,
+  });
+  const ready = (forecastValue?: ReturnType<typeof forecast> | null) => ({
+    phase: "ready" as const,
+    cells: [cell],
+    forecast: forecastValue,
+  });
+  const block = () => hero().querySelector(".hero-forecast") as HTMLElement | null;
+
+  it("renders no block without a forecast (typical-only, or the field absent)", () => {
+    setup({}, { weather: ready(null) });
+    expect(block()).toBeNull();
+    cleanup();
+    setup({}, { weather: ready(undefined) });
+    expect(block()).toBeNull();
+  });
+
+  it("sits right after the weather strip as its sibling, never inside a cell", () => {
+    setup({}, { weather: ready(forecast(3)) });
+    const strip = hero().querySelector(".weather-strip") as HTMLElement;
+    expect(strip.nextElementSibling).toBe(block());
+    expect(strip.contains(block())).toBe(false);
+    expect(strip.querySelector(".hero-days, .hero-day")).toBeNull();
+  });
+
+  it("is a labelled section: the Forecast tag, the city, then one list item per day", () => {
+    setup({}, { weather: ready(forecast(3)) });
+    const section = screen.getByRole("region", { name: "Forecast for Lisbon" });
+    expect(section).toBe(block());
+    expect(section.querySelector(".weather-source.forecast")?.textContent).toBe("Forecast");
+    expect(section.querySelector(".hero-forecast-head")?.textContent).toBe("ForecastLisbon");
+    expect(within(section).getAllByRole("listitem")).toHaveLength(3);
+    expect(section.querySelector(".hero-days-more")).toBeNull();
+  });
+
+  it("reads each day as one sentence and hides the compact visuals", () => {
+    setup({}, { weather: ready(forecast(2)) });
+    const first = within(block()!).getAllByRole("listitem")[0];
+    expect(first.querySelector(".sr-only")?.textContent).toBe(
+      "Monday 20 October: sun, high 14, low 9, 10% chance of rain",
+    );
+    for (const name of ["label", "glyph", "temps"]) {
+      expect(first.querySelector(`.hero-day-${name}`)?.getAttribute("aria-hidden")).toBe("true");
+    }
+    expect(first.getAttribute("aria-label")).toBeNull();
+    expect(first.querySelector(".hero-day-label")?.textContent).toBe("Mon Oct 20");
+    expect(first.querySelector(".hero-day-month")?.textContent).toBe("Oct ");
+    expect(first.querySelector(".hero-day-temps")?.textContent).toBe("14° / 9°");
+  });
+
+  it("draws the sun, rain and snow marks from the day glyph, not from colour", () => {
+    setup({}, { weather: ready(forecast(3)) });
+    const marks = [...block()!.querySelectorAll(".hero-day-glyph")].map((el) => el.textContent);
+    expect(marks).toEqual(["☀", "☂", "❄"]);
+  });
+
+  it("links to the trip page with the number of days left out, and no link at exactly 7", () => {
+    setup({}, { weather: ready(forecast(7, 5)) });
+    const link = screen.getByRole("link", {
+      name: "5 more forecast days for Lisbon on the trip page",
+    });
+    expect(link.textContent).toBe("+5 more days");
+    expect(link.getAttribute("href")).toMatch(/^\/trips\/.+/);
+    cleanup();
+    setup({}, { weather: ready(forecast(7, 1)) });
+    const one = screen.getByRole("link", {
+      name: "1 more forecast day for Lisbon on the trip page",
+    });
+    expect(one.textContent).toBe("+1 more day");
+    cleanup();
+    setup({}, { weather: ready(forecast(7, 0)) });
+    expect(screen.queryByRole("link", { name: /more forecast/ })).toBeNull();
+  });
+});

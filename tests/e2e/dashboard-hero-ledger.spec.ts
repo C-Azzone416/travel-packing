@@ -65,21 +65,28 @@ const overflow = (page: Page) =>
   });
 
 /** A weather strip built from the real markup (four stays); the seeded data has the strip off. */
-async function injectWeather(page: Page, note: string) {
-  await page.evaluate((text) => {
-    const strip = document.createElement("ul");
-    strip.className = "weather-strip";
-    strip.innerHTML = [1, 2, 3, 4]
-      .map(
-        (n) =>
-          `<li><div class="weather-cell-top"><span class="weather-glyph">☀</span><span class="weather-city">Stop ${n}</span>` +
-          `<span class="weather-dates">Oct 2${n} – Oct 2${n + 1}</span>` +
-          `<span class="weather-range">61–72°F <small>typical</small></span></div>` +
-          `<span class="weather-note">${text}</span></li>`,
-      )
-      .join("");
-    document.querySelector(".ledger-hero-top")!.after(strip);
-  }, note);
+async function injectWeather(
+  page: Page,
+  note: string,
+  cell: { city?: string; range?: string } = {},
+) {
+  await page.evaluate(
+    ([text, city, range]) => {
+      const strip = document.createElement("ul");
+      strip.className = "weather-strip";
+      strip.innerHTML = [1, 2, 3, 4]
+        .map(
+          (n) =>
+            `<li><div class="weather-cell-top"><span class="weather-glyph">☀</span><span class="weather-city">${city ?? `Stop ${n}`}</span>` +
+            `<span class="weather-dates">Oct 2${n} – Oct 2${n + 1}</span>` +
+            `<span class="weather-range">${range ?? "61–72°F"} <small>typical</small></span></div>` +
+            `<span class="weather-note">${text}</span></li>`,
+        )
+        .join("");
+      document.querySelector(".ledger-hero-top")!.after(strip);
+    },
+    [note, cell.city, cell.range] as const,
+  );
 }
 
 const onGrid = (value: number) => {
@@ -507,3 +514,143 @@ for (const width of [390, 320]) {
     expect(m.left.b - m.left.y, "left is one line").toBeLessThanOrEqual(ROW + 1);
   });
 }
+
+// ---- #305 (follow-ups to #290): pin the note spacing, no clipped counts, extremes in the weather cells ----
+
+/** Text-box measurements (page coordinates) of the first weather cell: Range rects ignore the stretched grid tracks. */
+function cellMetrics(page: Page) {
+  return page.evaluate(() => {
+    const textBox = (el: Element) => {
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const r = range.getBoundingClientRect();
+      return { top: r.top, bottom: r.bottom };
+    };
+    const cell = document.querySelector(".weather-strip li")!;
+    const top = cell.querySelector(".weather-cell-top")!.getBoundingClientRect();
+    return {
+      topBottom: top.bottom,
+      topHeight: top.height,
+      range: textBox(cell.querySelector(".weather-range")!),
+      note: textBox(cell.querySelector(".weather-note")!),
+    };
+  });
+}
+
+for (const width of WIDTHS) {
+  // The spare room of the 4-row block is spread across its rows (`align-content: stretch`). Reverting that to `start`
+  // leaves every row at its natural height and the spare ~22px collects as an empty band between the range line and the
+  // note (measured: the text gap is about 9px with stretch, about 31px with start).
+  test(`the note follows the range with no empty band at ${width}px`, async ({ page }) => {
+    await openHero(page, width);
+    await injectWeather(page, "Mild and dry");
+    const m = await cellMetrics(page);
+    expect(m.topHeight).toBeCloseTo(ROW * 4, 0);
+    const gap = m.note.top - m.range.bottom;
+    expect(gap, `range bottom to note top (${gap}px)`).toBeGreaterThan(0);
+    expect(gap, `range bottom to note top (${gap}px)`).toBeLessThanOrEqual(14);
+  });
+
+  // Counts that fit the spec's worst case are never clipped by the counts wrapper (`overflow: hidden` + `nowrap`).
+  test(`no count is clipped at the worst case at ${width}px`, async ({ page }) => {
+    await openHero(page, width);
+    await worstCase(page);
+    const info = await page.evaluate(() => {
+      const wrap = document.querySelector<HTMLElement>(".ledger-counts")!;
+      const box = wrap.getBoundingClientRect();
+      return {
+        scroll: wrap.scrollWidth - wrap.clientWidth,
+        counts: [...wrap.children].map((el) => {
+          const r = el.getBoundingClientRect();
+          return { left: r.left - box.left, right: box.right - r.right, width: r.width };
+        }),
+      };
+    });
+    expect(info.scroll, "counts scroll width exceeds its box").toBeLessThanOrEqual(0);
+    for (const count of info.counts) {
+      expect(count.left, "count starts inside the wrapper").toBeGreaterThanOrEqual(-0.5);
+      expect(count.right, "count ends inside the wrapper").toBeGreaterThanOrEqual(-0.5);
+    }
+  });
+
+  // 3-digit Fahrenheit and a long multi-word city (two lines in a narrow cell): the top block stays 4 rows, so the
+  // strip stays whole rows (a cell whose top block outgrew 4 rows would drift off the 28px grid).
+  test(`weather cells with 3-digit °F and a long city stay on the rows at ${width}px`, async ({
+    page,
+  }) => {
+    await openHero(page, width);
+    await injectWeather(page, "Mild and dry", {
+      city: "San Cristóbal de las Casas",
+      range: "104° / 88°",
+    });
+    await expectCellsClean(page, width, { grid: true });
+  });
+
+  // An unbroken 39-character city wraps inside its cell instead of sticking out of it (it used to overflow by up to
+  // 140px). Its extra lines can take the top block past 4 rows, so the strip is only checked for containment here: a
+  // string that long is not a real place name, and keeping it on the grid needs a design call (see #305).
+  test(`an unbroken 39-character city stays inside its weather cell at ${width}px`, async ({
+    page,
+  }) => {
+    await openHero(page, width);
+    await injectWeather(page, "Mild and dry", {
+      city: "Llanfairpwllgwyngyllgogerychwyrndrobwll",
+      range: "104° / 88°",
+    });
+    await expectCellsClean(page, width, { grid: false });
+  });
+}
+
+/** Every cell is whole rows tall, its text stays inside it, and nothing scrolls sideways. */
+async function expectCellsClean(page: Page, width: number, options: { grid: boolean }) {
+  const strip = await page.locator(".weather-strip").boundingBox();
+  if (options.grid) {
+    expect(
+      onGrid(strip!.height),
+      `strip height ${strip!.height} at ${width}px`,
+    ).toBeLessThanOrEqual(1);
+  }
+  const cells = await page.evaluate(() =>
+    [...document.querySelectorAll(".weather-strip li")].map((li) => {
+      const cell = li.getBoundingClientRect();
+      const top = li.querySelector(".weather-cell-top")!.getBoundingClientRect();
+      const inside = [...li.querySelectorAll(".weather-cell-top > *, .weather-note")].map((el) => {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const r = range.getBoundingClientRect();
+        return { left: r.left - cell.left, right: cell.right - r.right };
+      });
+      return { height: cell.height, topHeight: top.height, inside };
+    }),
+  );
+  for (const [at, cell] of cells.entries()) {
+    if (options.grid) {
+      expect(
+        onGrid(cell.height),
+        `cell ${at} height ${cell.height} at ${width}px`,
+      ).toBeLessThanOrEqual(1);
+      expect(
+        onGrid(cell.topHeight),
+        `cell ${at} top block ${cell.topHeight} at ${width}px`,
+      ).toBeLessThanOrEqual(1);
+    }
+    for (const text of cell.inside) {
+      expect(text.left, `cell ${at} text inside (left) at ${width}px`).toBeGreaterThanOrEqual(-0.5);
+      expect(text.right, `cell ${at} text inside (right) at ${width}px`).toBeGreaterThanOrEqual(
+        -0.5,
+      );
+    }
+  }
+  expect(await overflow(page), `overflow at ${width}px`).toEqual({ page: 0, hero: 0 });
+}
+
+// 200% browser zoom on a 1280px window is a 640 CSS px viewport (the hero's text is in px, so zoom is the viewport).
+test("weather cells hold at 200% browser zoom (a 640px viewport)", async ({ page }) => {
+  await openHero(page, 640);
+  await injectWeather(page, "Mild and dry", { range: "104° / 88°" });
+  await expectCellsClean(page, 640, { grid: true });
+  const rows = await rowBottoms(page);
+  for (const [name, bottom] of Object.entries(rows)) {
+    expect(onGrid(bottom), `${name} bottom ${bottom}`).toBeLessThanOrEqual(1);
+  }
+});
