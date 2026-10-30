@@ -131,6 +131,15 @@ describe("TripCard wording for past cards (spec #301)", () => {
     );
   });
 
+  it("a past, not Ready trip one item short of complete (14 of 15) says Packed 14 of 15, not All 15 packed", () => {
+    renderCard("archive", false, pastTrip(15, 14));
+    expect(within(article()).getByText("Packed 14 of 15")).toBeTruthy();
+    expect(article().textContent).not.toMatch(/All 15 packed/);
+    expect(progressFor(lisbon.destination).getAttribute("aria-valuetext")).toBe(
+      "Packed 14 of 15 (93%)",
+    );
+  });
+
   it("a Ready past trip at 15 of 15 says Marked Ready with the counts", () => {
     renderCard("archive", false, pastTrip(15, 15, { ready: true }));
     expect(within(article()).getByText("Marked Ready")).toBeTruthy();
