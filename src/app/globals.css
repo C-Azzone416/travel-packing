@@ -615,6 +615,12 @@ main {
   justify-items: center;
   pointer-events: none;
 }
+/* While a sheet is open a plain toast is held (#341): clipped from view, not display:none, so a screen reader still hears it. The
+   error region is not touched. ModalSheet sets the attribute; the provider pauses the timer. */
+body[data-sheet-open] .toast-region {
+  clip-path: inset(50%);
+  pointer-events: none;
+}
 .toast {
   display: flex;
   align-items: center;
