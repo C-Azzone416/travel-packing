@@ -232,7 +232,9 @@ describe("SaveStatusProvider", () => {
     expect(write).toHaveBeenCalledTimes(1);
     const dialog = screen.getByRole("dialog", { name: "Couldn’t save" });
     expect(
-      within(dialog).getByText("Your change is still on screen. Retry to save it."),
+      within(dialog).getByText("Your change is still on screen. Retry to save\u00a0it.", {
+        normalizer: (text) => text,
+      }),
     ).toBeTruthy();
     expect(within(dialog).queryByText(/hasn’t been saved|We’ll keep it on screen/)).toBeNull();
     await act(async () => {

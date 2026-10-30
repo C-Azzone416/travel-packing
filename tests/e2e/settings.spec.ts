@@ -7,6 +7,47 @@ import { expectAccessible } from "./helpers/a11y";
 // Settings and the truthful save states (#19), against the real app and database.
 const NOW = new Date("2026-10-16T12:00:00");
 
+/** The failed-save sheet's description at one width: at most three lines, inside the dialog, and "it." not alone on its last line. */
+async function expectSheetCopyFits(
+  page: import("@playwright/test").Page,
+  sheet: import("@playwright/test").Locator,
+  width: number,
+) {
+  await page.setViewportSize({ width, height: 800 });
+  const description = sheet.getByText("Your change is still on screen. Retry to save it.");
+  await expect(description).toBeVisible();
+  const layout = await description.evaluate((el) => {
+    const text = el.firstChild as Text;
+    const firstRectOf = (needle: string) => {
+      const start = text.data.lastIndexOf(needle);
+      const range = document.createRange();
+      range.setStart(text, start);
+      range.setEnd(text, start + needle.length);
+      return range.getClientRects()[0];
+    };
+    const all = document.createRange();
+    all.selectNodeContents(el);
+    const lineTops = new Set(Array.from(all.getClientRects(), (rect) => Math.round(rect.top)));
+    return {
+      lineCount: lineTops.size,
+      saveAndItShareLine:
+        Math.round(firstRectOf("save").top) === Math.round(firstRectOf("it.").top),
+    };
+  });
+  const box = await description.boundingBox();
+  const dialog = await sheet.boundingBox();
+  if (!box || !dialog) throw new Error("the sheet or its description has no layout box");
+  expect(layout.lineCount, `description lines at ${width}px`).toBeLessThanOrEqual(3);
+  expect(layout.saveAndItShareLine, `"it." wrapped away from "save" at ${width}px`).toBe(true);
+  expect(box.x).toBeGreaterThanOrEqual(dialog.x);
+  expect(box.y).toBeGreaterThanOrEqual(dialog.y);
+  expect(box.x + box.width).toBeLessThanOrEqual(dialog.x + dialog.width);
+  expect(box.y + box.height).toBeLessThanOrEqual(dialog.y + dialog.height);
+  if (width === 320) {
+    await sheet.screenshot({ path: "test-results/screenshots/settings-error-sheet-320.png" });
+  }
+}
+
 async function openSettings(page: import("@playwright/test").Page) {
   await page.clock.setFixedTime(NOW);
   await signInAsOwner(page);
@@ -135,7 +176,14 @@ test("a failed save shows Error everywhere, never claims Saved, and Retry recove
   // The chip explains before it does anything.
   await chip.click();
   const sheet = page.getByRole("dialog", { name: "Couldn’t save" });
-  await expect(sheet.getByText("Your change is still on screen. Retry to save it.")).toBeVisible();
+  await expect(sheet.getByText("Your change is still on screen. Retry to save it.")).toBeVisible();
+  // At 320 and 390 the description is at most three lines, sits inside the dialog, and never leaves "it." alone on its last
+  // line (the non-breaking space between "save" and "it." keeps them together).
+  const viewport = page.viewportSize();
+  for (const width of [320, 390]) {
+    await expectSheetCopyFits(page, sheet, width);
+  }
+  if (viewport) await page.setViewportSize(viewport);
   await page.screenshot({
     path: `test-results/screenshots/${testInfo.project.name}-settings-error-sheet.png`,
   });
