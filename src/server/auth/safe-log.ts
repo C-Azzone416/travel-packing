@@ -53,6 +53,14 @@ export type AuthEvent =
   | "forbidden"
   | "provider-error";
 
+export type AccountClosureProviderOutcome =
+  | "confirmed"
+  | "provider-rejected"
+  | "transport-error"
+  | "nonterminal-response"
+  | "unexpected-cookie-mutation"
+  | "early-error";
+
 export type AuthLogSink = (line: string) => void;
 
 const defaultSink: AuthLogSink = (line) => console.info(line);
@@ -76,6 +84,7 @@ export interface ProviderDetail {
 
 /** Provider codes that are useful for operations and known not to contain user input. Everything else is OTHER. */
 const SAFE_PROVIDER_CODES = new Set([
+  "CREDENTIAL_ACCOUNT_NOT_FOUND",
   "EMAIL_NOT_VERIFIED",
   "EMAIL_PASSWORD_DISABLED",
   "FAILED_TO_CREATE_SESSION",
@@ -83,6 +92,7 @@ const SAFE_PROVIDER_CODES = new Set([
   "INVALID_EMAIL",
   "INVALID_EMAIL_OR_PASSWORD",
   "INVALID_ORIGIN",
+  "INVALID_PASSWORD",
   "INVALID_OTP",
   "INVALID_REDIRECT_URL",
   "INVALID_TOKEN",
@@ -95,9 +105,12 @@ const SAFE_PROVIDER_CODES = new Set([
   "NETWORK_TLS",
   "PASSWORD_TOO_LONG",
   "PASSWORD_TOO_SHORT",
+  "SESSION_EXPIRED",
   "TOO_MANY_ATTEMPTS",
+  "UNAUTHORIZED",
   "USER_ALREADY_EXISTS",
   "USER_NOT_FOUND",
+  "UNEXPECTED_COOKIE_MUTATION",
 ]);
 const REFERENCE = /^[0-9a-f]{12}$/;
 
@@ -129,6 +142,48 @@ function safeDetail(detail: ProviderDetail | undefined): ProviderDetail {
 
 export function logAuthEvent(event: AuthEvent, detail?: ProviderDetail): void {
   sink(JSON.stringify({ scope: "auth", event, ...safeDetail(detail) }));
+}
+
+/**
+ * Preview-only account-closure observability. The shape is deliberately closed: no response body, message,
+ * identity, credential or request value can be supplied. Production emits nothing even if a caller invokes it.
+ */
+export function logAccountClosureProviderCall(
+  detail: {
+    outcome: AccountClosureProviderOutcome;
+    status?: number;
+    code?: string;
+    elapsedMs: number;
+  },
+  env: Record<string, string | undefined> = process.env,
+): void {
+  if (env.VERCEL_ENV !== "preview") return;
+  const provider = safeDetail(detail);
+  const code =
+    detail.outcome === "confirmed" || detail.outcome === "early-error"
+      ? provider.code
+      : provider.code === undefined || provider.code === "OTHER"
+        ? "UNKNOWN"
+        : provider.code;
+  const elapsedMs =
+    Number.isInteger(detail.elapsedMs) && detail.elapsedMs >= 0 && detail.elapsedMs <= 300_000
+      ? detail.elapsedMs
+      : undefined;
+  try {
+    sink(
+      JSON.stringify({
+        scope: "auth",
+        event: "account-closure-provider-call",
+        stage: "delete-user",
+        outcome: detail.outcome,
+        ...provider,
+        ...(code === undefined ? {} : { code }),
+        ...(elapsedMs === undefined ? {} : { elapsedMs }),
+      }),
+    );
+  } catch {
+    // Diagnostics must never change a destructive call's outcome.
+  }
 }
 
 /**

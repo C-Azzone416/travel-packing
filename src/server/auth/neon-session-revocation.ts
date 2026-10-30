@@ -8,6 +8,7 @@ import {
 } from "@neondatabase/auth/server";
 import { cookies, headers } from "next/headers";
 import type { NeonCallResult } from "./neon-adapter";
+import { logAccountClosureProviderCall, type AccountClosureProviderOutcome } from "./safe-log";
 
 const REVOCATION_PATH = "revoke-other-sessions";
 const DELETE_USER_PATH = "delete-user";
@@ -25,6 +26,7 @@ interface RevocationDeps {
     value: string,
     options: ReturnType<typeof parseSetCookies>[number],
   ) => Promise<void> | void;
+  now?: () => number;
 }
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -117,6 +119,20 @@ export function createNeonAccountClosureCalls(
   config: RevocationConfig,
   deps: RevocationDeps = {},
 ): NeonAccountClosureCalls {
+  const now = deps.now ?? Date.now;
+  const deleteDiagnostic = (
+    startedAt: number,
+    outcome: AccountClosureProviderOutcome,
+    status?: number,
+    code?: string,
+  ) => {
+    logAccountClosureProviderCall({
+      outcome,
+      status,
+      code,
+      elapsedMs: Math.max(0, Math.round(now() - startedAt)),
+    });
+  };
   return {
     async readSessionCookie() {
       if (deps.readCookie) return deps.readCookie(NEON_AUTH_SESSION_COOKIE_NAME);
@@ -131,19 +147,48 @@ export function createNeonAccountClosureCalls(
       return result;
     },
     async deleteUserWithSession(sessionCookie, password) {
-      const { response, data } = await proxyCall(
-        config,
-        DELETE_USER_PATH,
-        { password },
-        deps,
-        sessionCookie,
-      );
-      const result = boundedResponse(response, data);
-      const confirmed = record(data)?.success === true && record(data)?.message === "User deleted";
-      if (!result.error && confirmed && !(await applyConfirmedDeletionCookies(response, deps))) {
-        return { data: null, error: { status: 0, code: "UNEXPECTED_COOKIE_MUTATION" } };
+      const startedAt = now();
+      try {
+        const { response, data } = await proxyCall(
+          config,
+          DELETE_USER_PATH,
+          { password },
+          deps,
+          sessionCookie,
+        );
+        const result = boundedResponse(response, data);
+        if (result.error) {
+          const errorCode = typeof result.error.code === "string" ? result.error.code : "";
+          const transport = errorCode.startsWith("NETWORK_");
+          deleteDiagnostic(
+            startedAt,
+            transport ? "transport-error" : "provider-rejected",
+            response.status,
+            errorCode,
+          );
+          return result;
+        }
+        const confirmed =
+          record(data)?.success === true && record(data)?.message === "User deleted";
+        if (!confirmed) {
+          deleteDiagnostic(startedAt, "nonterminal-response", response.status);
+          return result;
+        }
+        if (!(await applyConfirmedDeletionCookies(response, deps))) {
+          deleteDiagnostic(
+            startedAt,
+            "unexpected-cookie-mutation",
+            response.status,
+            "UNEXPECTED_COOKIE_MUTATION",
+          );
+          return { data: null, error: { status: 0, code: "UNEXPECTED_COOKIE_MUTATION" } };
+        }
+        deleteDiagnostic(startedAt, "confirmed", response.status);
+        return result;
+      } catch (error) {
+        deleteDiagnostic(startedAt, "early-error");
+        throw error;
       }
-      return result;
     },
   };
 }
