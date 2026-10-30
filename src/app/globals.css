@@ -3174,6 +3174,14 @@ a.back {
   font-weight: 700;
   font-size: 15px;
 }
+/* An unbroken string (a very long place name) wraps inside its cell instead of sticking out of it (#305). */
+.weather-strip .weather-city,
+.weather-strip .weather-dates,
+.weather-strip .weather-range,
+.weather-strip .weather-note {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .weather-dates,
 .weather-note {
   color: var(--muted);
@@ -5077,5 +5085,96 @@ a.back {
   .weather-days,
   .weather-row-forecast .weather-typical-part {
     max-width: 520px;
+  }
+}
+
+/* Dashboard hero, daily forecast (#303 PR 2): a block under the weather strip, never inside a weather cell. Whole 28px
+   rows throughout (header 28, chips 84 each, "+N more" 28); no fixed heights, no padding above or below. At 721px and up
+   the days are 3-row chips in an auto-fill grid; at most 720px they are 28px rows (the #285 phone arrangement). */
+.hero-forecast {
+  font-size: 13px;
+  box-shadow: inset 0 -1px 0 var(--line);
+  background: var(--weather-surface);
+}
+.hero-forecast-head {
+  padding-inline: 14px;
+}
+.hero-days {
+  display: grid;
+  /* the chip minimum follows the text size, so three-digit Fahrenheit and larger text still fit one line */
+  grid-template-columns: repeat(auto-fill, minmax(max(80px, 6.5em), 1fr));
+  column-gap: 8px;
+  row-gap: 0;
+  margin: 0;
+  padding: 0 14px;
+  list-style: none;
+}
+.hero-day {
+  display: grid;
+  grid-template-rows: repeat(3, var(--ledger-row));
+  justify-items: center;
+  min-width: 0;
+  line-height: var(--ledger-row);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  /* inset hairlines: left and bottom, so two chip rows never double a line */
+  box-shadow:
+    inset 1px 0 0 var(--line),
+    inset 0 -1px 0 var(--line);
+}
+.hero-day-label,
+.hero-day-temps {
+  white-space: nowrap;
+}
+.hero-day-glyph {
+  color: var(--accent-2);
+  font-size: 16px;
+}
+/* The month is only in the phone row ("Fri Nov 6"); the chip reads "Fri 6". */
+.hero-day-month {
+  display: none;
+}
+.hero-days-more {
+  margin: 0;
+  padding-inline: 14px;
+  line-height: var(--ledger-row);
+}
+.hero-days-more a {
+  position: relative;
+  color: var(--link);
+  font-weight: 700;
+}
+/* The visual line stays 28px; the touch target is 44px tall. */
+.hero-days-more a::after {
+  content: "";
+  position: absolute;
+  inset: -8px 0;
+}
+@media (max-width: 720px) {
+  .hero-days {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .hero-day {
+    grid-template-columns: minmax(0, 1fr) 20px auto;
+    grid-template-rows: none;
+    align-items: center;
+    justify-items: stretch;
+    column-gap: 8px;
+    min-height: var(--ledger-row);
+    text-align: left;
+    box-shadow: inset 0 -1px 0 var(--line);
+  }
+  .hero-day-label {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .hero-day-month {
+    display: inline;
+  }
+  .hero-day-glyph {
+    text-align: center;
+  }
+  .hero-day-temps {
+    text-align: right;
   }
 }

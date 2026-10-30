@@ -342,3 +342,77 @@ describe("Field Ledger dashboard view models (#143)", () => {
     expect(weatherCells(stops, weather, "C")[0].range).toBe("20° / 10°");
   });
 });
+
+describe("heroForecast (#303)", () => {
+  const stop = (city: string, arrive: string, leave: string) => ({
+    location: { id: city, city, region: "", country: "", countryCode: "", label: city },
+    arrive,
+    leave,
+  });
+  const day = (stopIndex: number, date: string, over: Record<string, unknown> = {}) => ({
+    date,
+    stopIndex,
+    source: "forecast" as const,
+    highC: 20,
+    lowC: 10,
+    precipProbability: 0,
+    precipMm: 0,
+    snowCm: 0,
+    uvIndexMax: null,
+    sunshineHours: null,
+    ...over,
+  });
+  const dates = (count: number) =>
+    Array.from({ length: count }, (_, at) => `2030-05-${String(at + 1).padStart(2, "0")}`);
+  const stops = [stop("A", "2030-05-01", "2030-05-20"), stop("B", "2030-05-20", "2030-05-25")];
+
+  it("is null when no stay has a forecast day (typical-only trips get no block)", async () => {
+    const { heroForecast } = await import("./view");
+    const typical = [
+      {
+        stopIndex: 0,
+        status: "ok" as const,
+        days: [day(0, "2030-05-01", { source: "typical" as const })],
+      },
+    ];
+    expect(heroForecast(stops, typical, "C", "2030-05-01")).toBeNull();
+    expect(heroForecast(stops, [], "C", "2030-05-01")).toBeNull();
+    expect(
+      heroForecast(stops, [{ stopIndex: 0, status: "unavailable" as const, days: [] }], "C"),
+    ).toBeNull();
+  });
+
+  it("names the first stay that has forecast days, skipping stays without", async () => {
+    const { heroForecast } = await import("./view");
+    const weather = [
+      {
+        stopIndex: 0,
+        status: "ok" as const,
+        days: [day(0, "2030-05-01", { source: "typical" as const })],
+      },
+      { stopIndex: 1, status: "ok" as const, days: [day(1, "2030-05-21")] },
+    ];
+    const result = heroForecast(stops, weather, "F", "2030-05-21");
+    expect(result).toMatchObject({ stopIndex: 1, city: "B", more: 0 });
+    expect(result?.days).toHaveLength(1);
+    expect(result?.days[0]).toMatchObject({ label: "Today May 21", high: 68, low: 50 });
+  });
+
+  it("caps at 7 days and counts the rest, at exactly 7, 8 and 16 forecast days", async () => {
+    const { heroForecast, HERO_FORECAST_CAP } = await import("./view");
+    expect(HERO_FORECAST_CAP).toBe(7);
+    const forCount = (count: number) =>
+      heroForecast(
+        stops,
+        [{ stopIndex: 0, status: "ok" as const, days: dates(count).map((d) => day(0, d)) }],
+        "C",
+        "2030-05-01",
+      )!;
+    expect(forCount(7)).toMatchObject({ more: 0 });
+    expect(forCount(7).days).toHaveLength(7);
+    expect(forCount(8)).toMatchObject({ more: 1 });
+    expect(forCount(8).days).toHaveLength(7);
+    expect(forCount(16)).toMatchObject({ more: 9 });
+    expect(forCount(16).days.map((d) => d.date)).toEqual(dates(7));
+  });
+});

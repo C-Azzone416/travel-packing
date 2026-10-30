@@ -11,15 +11,57 @@ import { AddItemInline } from "@/features/trip/AddItemInline";
 import { QuickView } from "./QuickView";
 import type { NewCustomItem } from "./trips-source";
 import { RouteText } from "./RouteText";
-import type { DepartureView, TripCardView, WeatherCell } from "./view";
+import type { DepartureView, HeroForecast, TripCardView, WeatherCell } from "./view";
 
 export type HeroWeather =
   | { phase: "none" }
   | { phase: "loading" }
   | { phase: "unavailable" }
-  | { phase: "ready"; cells: WeatherCell[] };
+  | { phase: "ready"; cells: WeatherCell[]; forecast?: HeroForecast | null };
 
 const GLYPH: Record<WeatherCell["glyph"], string> = { sun: "☀", rain: "☂", snow: "❄" };
+
+/**
+ * The daily forecast under the weather strip (#303): the first stay with forecast days, up to 7 of them. Chips on a wide
+ * hero, 28px rows on a phone (CSS decides); a stay with more days links to the trip page for the rest.
+ */
+function HeroForecastBlock({ forecast, tripId }: { forecast: HeroForecast; tripId: string }) {
+  return (
+    <section className="hero-forecast" aria-label={`Forecast for ${forecast.city}`}>
+      <p className="weather-part-head hero-forecast-head">
+        <span className="weather-source forecast">Forecast</span>
+        <span>{forecast.city}</span>
+      </p>
+      <ol className="hero-days">
+        {forecast.days.map((day) => (
+          <li key={day.date} className="hero-day">
+            <span className="sr-only">{day.spoken}</span>
+            <span className="hero-day-label" aria-hidden="true">
+              {day.parts.weekday} <span className="hero-day-month">{day.parts.month} </span>
+              {day.parts.day}
+            </span>
+            <span className="hero-day-glyph" aria-hidden="true">
+              {GLYPH[day.glyph]}
+            </span>
+            <span className="hero-day-temps" aria-hidden="true">
+              {day.high}° / {day.low}°
+            </span>
+          </li>
+        ))}
+      </ol>
+      {forecast.more > 0 ? (
+        <p className="hero-days-more">
+          <Link
+            href={`/trips/${tripId}`}
+            aria-label={`${forecast.more} more forecast ${forecast.more === 1 ? "day" : "days"} for ${forecast.city} on the trip page`}
+          >
+            +{forecast.more} more {forecast.more === 1 ? "day" : "days"}
+          </Link>
+        </p>
+      ) : null}
+    </section>
+  );
+}
 
 export interface NextDepartureProps {
   trip: LifecycleTrip;
@@ -88,23 +130,28 @@ export function NextDeparture({
       </div>
 
       {weather.phase === "ready" && weather.cells.length > 0 ? (
-        <ul className="weather-strip" aria-label="Weather for each stay">
-          {weather.cells.map((cell) => (
-            <li key={cell.stopIndex}>
-              <div className="weather-cell-top">
-                <span className="weather-glyph" aria-hidden="true">
-                  {GLYPH[cell.glyph]}
-                </span>
-                <span className="weather-city">{cell.city}</span>
-                <span className="weather-dates">{cell.dates}</span>
-                <span className="weather-range">
-                  {cell.range} <small>{cell.source}</small>
-                </span>
-              </div>
-              <span className="weather-note">{cell.note}</span>
-            </li>
-          ))}
-        </ul>
+        <>
+          <ul className="weather-strip" aria-label="Weather for each stay">
+            {weather.cells.map((cell) => (
+              <li key={cell.stopIndex}>
+                <div className="weather-cell-top">
+                  <span className="weather-glyph" aria-hidden="true">
+                    {GLYPH[cell.glyph]}
+                  </span>
+                  <span className="weather-city">{cell.city}</span>
+                  <span className="weather-dates">{cell.dates}</span>
+                  <span className="weather-range">
+                    {cell.range} <small>{cell.source}</small>
+                  </span>
+                </div>
+                <span className="weather-note">{cell.note}</span>
+              </li>
+            ))}
+          </ul>
+          {weather.forecast ? (
+            <HeroForecastBlock forecast={weather.forecast} tripId={trip.id} />
+          ) : null}
+        </>
       ) : weather.phase === "unavailable" ? (
         <p className="weather-strip-note muted tiny">Weather is unavailable right now.</p>
       ) : null}

@@ -27,6 +27,7 @@ import {
   formatRange,
   journeysAheadLabel,
   tripCardView,
+  heroForecast,
   weatherCells,
   type TripListView,
 } from "./view";
@@ -96,6 +97,7 @@ export function TripsDashboard({ source, getToday = localToday }: TripsDashboard
         answer({
           phase: "ready",
           cells: weatherCells(heroTrip?.stops ?? [], result.stops, settings.temperatureUnit),
+          forecast: heroForecast(heroTrip?.stops ?? [], result.stops, settings.temperatureUnit),
         });
       } catch {
         answer({ phase: "unavailable" });

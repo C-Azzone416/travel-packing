@@ -6,6 +6,7 @@ import type { StopWeather } from "@/domain/weather/types";
 import {
   displayTemperature,
   weatherRowView,
+  type DayView,
   type WeatherRowView,
 } from "@/features/trip/weather-view";
 import type { TemperatureUnit } from "@/server/data/weather-store";
@@ -277,4 +278,38 @@ export function weatherCells(
     });
   });
   return cells;
+}
+
+/** The most forecast days the dashboard hero shows (#303); the rest are one "+N more days" link to the trip page. */
+export const HERO_FORECAST_CAP = 7;
+
+/** The hero's daily forecast block: the first stay that has any forecast day, its first 7 days, and how many more. */
+export interface HeroForecast {
+  stopIndex: number;
+  city: string;
+  days: DayView[];
+  /** Forecast days past the cap. */
+  more: number;
+}
+
+/** The first stay (trip order) with at least one forecast day, or null: typical-only trips get no block. */
+export function heroForecast(
+  stops: readonly TripStop[],
+  weather: readonly StopWeather[],
+  unit: TemperatureUnit,
+  today?: string,
+): HeroForecast | null {
+  for (const [index, stop] of stops.entries()) {
+    const found = weather.find((entry) => entry.stopIndex === index);
+    const row = found ? weatherRowView(stop, found, unit, today) : null;
+    if (row && row.forecastDays.length > 0) {
+      return {
+        stopIndex: index,
+        city: row.city,
+        days: row.forecastDays.slice(0, HERO_FORECAST_CAP),
+        more: row.forecastDays.length - Math.min(row.forecastDays.length, HERO_FORECAST_CAP),
+      };
+    }
+  }
+  return null;
 }
