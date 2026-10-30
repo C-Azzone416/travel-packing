@@ -38,6 +38,11 @@ const context = () => makeContext(ctx.db as unknown as Db, fake);
 const schema = z.object({ name: z.string().min(1) });
 
 describe("dataCallsPerMinute", () => {
+  it("pins the default allowance as the literal 300 (not just the constant)", () => {
+    expect(DATA_CALLS_PER_MINUTE).toBe(300);
+    expect(dataCallsPerMinute({})).toBe(300);
+  });
+
   it("uses DATA_CALLS_PER_MINUTE when it is a whole number in range, else the default", () => {
     expect(dataCallsPerMinute({ DATA_CALLS_PER_MINUTE: " 5000 " })).toBe(5000);
     for (const bad of [undefined, "", "0", "-1", "1.5", "abc", "100001", "1000000"]) {

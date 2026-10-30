@@ -2,7 +2,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ModalSheet } from "./ModalSheet";
 
 function Harness({
@@ -187,6 +187,45 @@ describe("ModalSheet", () => {
     expect(screen.getByRole("dialog")).toBeTruthy();
     unmount();
     expect(document.activeElement).toBe(document.body);
+  });
+
+  describe("the last control focused outside a dialog (no press, opened by code)", () => {
+    function CodeOpened({ open }: { open: boolean }) {
+      return (
+        <ModalSheet open={open} title="Rename" onClose={() => {}}>
+          <input aria-label="Name" autoFocus />
+        </ModalSheet>
+      );
+    }
+    let outside: HTMLButtonElement;
+    beforeEach(() => {
+      outside = document.createElement("button");
+      outside.textContent = "Outside opener";
+      document.body.append(outside);
+    });
+    afterEach(() => outside.remove());
+
+    it("returns focus to an outside control that was focused, though nothing pressed it", () => {
+      const view = render(<CodeOpened open={false} />);
+      outside.focus();
+      view.rerender(<CodeOpened open />);
+      // The sheet's autoFocus field took focus while mounting, so the opener is found only through lastOutsideFocus.
+      expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "Name" }));
+      view.rerender(<CodeOpened open={false} />);
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(document.activeElement).toBe(outside);
+      view.unmount();
+    });
+
+    it("does not refocus an outside control that has since left the page", () => {
+      const view = render(<CodeOpened open={false} />);
+      outside.focus();
+      view.rerender(<CodeOpened open />);
+      outside.remove();
+      view.rerender(<CodeOpened open={false} />);
+      expect(document.activeElement).toBe(document.body);
+      view.unmount();
+    });
   });
 
   it("copes with an opener that is not an HTML element (nothing to restore)", async () => {
