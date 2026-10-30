@@ -3804,8 +3804,8 @@ a.back {
     overscroll-behavior: contain;
     scrollbar-width: thin;
     scroll-padding: 8px;
-    padding: 4px; /* room so a focus outline is never clipped by the rail's own overflow */
-    margin: -4px; /* cancels the padding: the visible column does not move */
+    padding: 6px; /* room for the 3px focus ring plus its 3px offset, so the rail overflow never clips it */
+    margin: -6px; /* cancels the padding: the visible column does not move */
   }
 }
 @media (min-width: 900px) and (max-height: 760px) {

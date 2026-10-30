@@ -7,13 +7,23 @@ import { DEVICE } from "./helpers/device";
 // E2E_MUTANT_CSS injects CSS after load so a reviewer can prove each assertion can fail.
 const MUTANT_CSS = process.env.E2E_MUTANT_CSS;
 
-async function openTrip(page: Page, size: { width: number; height: number }) {
+async function openTrip(
+  page: Page,
+  size: { width: number; height: number },
+  trip: "San Diego" | "Lisbon" = "San Diego",
+) {
   await page.setViewportSize(size);
   await page.clock.setFixedTime(new Date("2026-10-16T12:00:00"));
   await signInAsOwner(page);
   await page.goto("/");
-  await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
-  await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
+  if (trip === "San Diego") {
+    await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
+  } else {
+    // Lisbon is seeded Ready, so its rail carries the Ready card between the sections nav and Trip math.
+    await page.getByRole("button", { name: /Past & archive/ }).click();
+    await page.getByRole("link", { name: "Review bag: Lisbon" }).click();
+  }
+  await expect(page.getByRole("heading", { name: trip, level: 1 })).toBeVisible();
   await expect(page.locator(".trip-layout .side .sections-panel")).toBeVisible();
   if (MUTANT_CSS) await page.addStyleTag({ content: MUTANT_CSS });
   const [height, inner] = await page.evaluate(() => [
@@ -173,3 +183,60 @@ for (const size of [
     },
   );
 }
+
+/** Tab until `done` says stop (or 40 presses), recording where focus lands relative to the bar and the rail. */
+async function tabThroughRail(page: Page, done: string) {
+  const stops: { name: string; belowBar: boolean; inRail: boolean; ringInside: boolean }[] = [];
+  // Start from the last control before the rail, so a handful of Tab presses cross into it.
+  await page.evaluate(() => {
+    const list = document.querySelector(".trip-layout > :not(.side)")!;
+    const all = list.querySelectorAll<HTMLElement>("a[href], button:not([disabled]), input");
+    all[all.length - 1].focus();
+  });
+  for (let i = 0; i < 40; i++) {
+    await page.keyboard.press("Tab");
+    const stop = await page.evaluate(() => {
+      const el = document.activeElement as HTMLElement;
+      const rail = document.querySelector(".trip-layout .side")!;
+      if (!rail.contains(el)) return null;
+      const r = el.getBoundingClientRect();
+      const box = rail.getBoundingClientRect();
+      const bar = document.querySelector(".topbar")!.getBoundingClientRect();
+      // The app focus ring is 3px wide with a 3px offset: 6px beyond the element on every side.
+      const ring = 6;
+      return {
+        name: (el.textContent ?? "").trim(),
+        belowBar: r.top >= bar.bottom,
+        inRail: r.top >= box.top && r.bottom <= box.bottom,
+        ringInside:
+          r.left - ring >= box.left &&
+          r.right + ring <= box.right &&
+          r.top - ring >= box.top &&
+          r.bottom + ring <= box.bottom,
+      };
+    });
+    if (!stop) continue;
+    stops.push(stop);
+    if (stop.name === done) break;
+  }
+  return stops;
+}
+
+test("the focus ring of a rail link is not clipped by the rail (#297)", async ({ page }) => {
+  await openTrip(page, { width: 1280, height: 800 });
+  const stops = await tabThroughRail(page, "Edit preferences");
+  expect(stops.length).toBeGreaterThan(3);
+  for (const s of stops) expect(s.ringInside, `ring of "${s.name}"`).toBe(true);
+});
+
+test("Tab through the rail with the Ready card keeps focus visible (#297)", async ({ page }) => {
+  await openTrip(page, { width: 1280, height: 800 }, "Lisbon");
+  await expect(page.locator(".trip-layout .side .ready-card")).toBeVisible();
+  const stops = await tabThroughRail(page, "Edit preferences");
+  expect(stops.map((s) => s.name)).toContain("Mark as not ready");
+  expect(stops[stops.length - 1].name).toBe("Edit preferences");
+  for (const s of stops) {
+    expect(s.belowBar, `"${s.name}" below the bar`).toBe(true);
+    expect(s.inRail, `"${s.name}" inside the rail`).toBe(true);
+  }
+});
