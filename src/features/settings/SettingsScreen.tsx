@@ -4,6 +4,7 @@ import { useEffect, useId, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { useSaveStatus } from "@/components/shell/SaveStatus";
+import { useSignOut } from "@/components/shell/use-sign-out";
 import { Switch } from "@/components/ui/Switch";
 import { useToast } from "@/components/ui/Toast";
 import {
@@ -66,6 +67,7 @@ export function SettingsScreen({
   closeAccount,
 }: SettingsScreenProps) {
   const { status, lastSavedAt, retry, track } = useSaveStatus();
+  const signOutAndClear = useSignOut(signOut);
   const toast = useToast();
   const unitsName = useId();
   const [weather, setWeather] = useState(initialWeather);
@@ -152,7 +154,7 @@ export function SettingsScreen({
               Signed in as <strong>{email}</strong>
             </p>
           ) : null}
-          <form action={signOut}>
+          <form action={signOutAndClear}>
             <Button type="submit" variant="secondary">
               Sign out
             </Button>
