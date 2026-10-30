@@ -417,9 +417,21 @@ describe("heroForecast (#303)", () => {
       { stopIndex: 1, status: "ok" as const, days: [day(1, "2030-05-21")] },
     ];
     const result = heroForecast(stops, weather, "F", "2030-05-21");
-    expect(result).toMatchObject({ stopIndex: 1, city: "B", more: 0 });
+    expect(result).toMatchObject({ city: "B", more: 0 });
     expect(result?.days).toHaveLength(1);
     expect(result?.days[0]).toMatchObject({ label: "Today May 21", high: 68, low: 50 });
+  });
+
+  it("picks the FIRST stay when two stays both have forecast days", async () => {
+    const { heroForecast } = await import("./view");
+    const weather = [
+      { stopIndex: 0, status: "ok" as const, days: [day(0, "2030-05-02")] },
+      { stopIndex: 1, status: "ok" as const, days: [day(1, "2030-05-21"), day(1, "2030-05-22")] },
+    ];
+    const result = heroForecast(stops, weather, "C", "2030-05-01");
+    expect(result).toMatchObject({ city: "A", more: 0 });
+    expect(result?.city).not.toBe("B");
+    expect(result?.days.map((d) => d.date)).toEqual(["2030-05-02"]);
   });
 
   it("caps at 7 days and counts the rest, at exactly 7, 8 and 16 forecast days", async () => {

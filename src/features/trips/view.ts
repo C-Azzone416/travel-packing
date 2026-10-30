@@ -288,7 +288,6 @@ export const HERO_FORECAST_CAP = 7;
 
 /** The hero's daily forecast block: the first stay that has any forecast day, its first 7 days, and how many more. */
 export interface HeroForecast {
-  stopIndex: number;
   city: string;
   days: DayView[];
   /** Forecast days past the cap. */
@@ -307,7 +306,6 @@ export function heroForecast(
     const row = found ? weatherRowView(stop, found, unit, today) : null;
     if (row && row.forecastDays.length > 0) {
       return {
-        stopIndex: index,
         city: row.city,
         days: row.forecastDays.slice(0, HERO_FORECAST_CAP),
         more: row.forecastDays.length - Math.min(row.forecastDays.length, HERO_FORECAST_CAP),
