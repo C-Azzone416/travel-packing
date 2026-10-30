@@ -132,10 +132,23 @@ describe.each<Entry>(["nav", "settings"])("sign-out warning from %s", (entry) =>
     expect(screen.queryByRole("button", { name: "Close dialog" })).toBeNull();
   });
 
-  it("counts waiting plus blocked, many reports", async () => {
-    const t = await setup({ entry, unsent: 10, blocked: 2 });
+  it("counts each report once: 2 waiting, 1 of them blocked, is 2 (not 3)", async () => {
+    const t = await setup({ entry, unsent: 2, blocked: 1 });
+    await t.user.click(signOutButton());
+    expect(await screen.findByText(many(2))).toBeTruthy();
+    expect(screen.queryByText(many(3))).toBeNull();
+  });
+
+  it("many reports", async () => {
+    const t = await setup({ entry, unsent: 12 });
     await t.user.click(signOutButton());
     expect(await screen.findByText(many(12))).toBeTruthy();
+  });
+
+  it("opens for blocked-only reports (a blocked row is also a waiting row)", async () => {
+    const t = await setup({ entry, unsent: 1, blocked: 1 });
+    await t.user.click(signOutButton());
+    expect(await screen.findByText(ONE)).toBeTruthy();
   });
 
   it("Stay signed in and Escape close without clearing, and focus returns to Sign out", async () => {
@@ -229,6 +242,19 @@ describe.each<Entry>(["nav", "settings"])("sign-out warning from %s", (entry) =>
     await t.user.click(screen.getByRole("button", { name: "Stay signed in" }));
     await t.user.click(signOutButton());
     expect(within(screen.getByRole("dialog")).getByRole("alert").textContent).toBe("");
+  });
+
+  it("Try again with the reports still inside their retry delay keeps the same count and stays signed in", async () => {
+    const t = await setup({ entry, unsent: 2, blocked: 1 });
+    t.left(2, 1); // the SDK skipped them (retry delay): start() resolves at once and the count is unchanged
+    await t.user.click(signOutButton());
+    await t.user.click(await screen.findByRole("button", { name: "Send now" }));
+    const again = await screen.findByRole("button", { name: "Try again" });
+    expect(screen.getByText(many(2))).toBeTruthy();
+    await t.user.click(again);
+    expect(await screen.findByRole("button", { name: "Try again" })).toBeTruthy();
+    expect(screen.getByText(many(2))).toBeTruthy();
+    expect(t.signOut).not.toHaveBeenCalled();
   });
 
   it("a rejected send is a partial failure", async () => {

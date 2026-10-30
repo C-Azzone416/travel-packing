@@ -102,14 +102,14 @@ export interface FeedbackAccessValue {
   clearLocal: () => Promise<void>;
   /**
    * "Send now" for the sign-out warning (#325): wakes the SDK's own delivery (it still honours each report's saved retry time, so
-   * nothing is re-implemented here) and resolves with how many reports are still on this device (waiting + blocked). Capped at 15 s;
+   * nothing is re-implemented here) and resolves with how many reports are still on this device (`unsentCount`). Capped at 15 s;
    * a failure, a missing outbox or the cap all resolve with the count still left, never reject.
    */
   flushNow: () => Promise<number>;
 }
 
-/** The unsent total every warning and count uses: waiting plus blocked. */
-export const unsentCount = (outbox: OutboxView) => outbox.waiting + outbox.blocked;
+/** The unsent total every warning and count uses. `waiting` is every row on the device and `blocked` is a SUBSET of it, so never add them. */
+export const unsentCount = (outbox: OutboxView) => outbox.waiting;
 /** How long "Send now" waits for delivery before it counts as a partial failure. */
 export const FLUSH_LIMIT_MS = 15_000;
 

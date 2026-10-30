@@ -631,7 +631,7 @@ describe("Settings section: disconnect and unsent reports", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Delete unsent reports" }));
     expect(
-      screen.getByText(/Delete 4 unsent reports from this device\? They won’t be sent/),
+      screen.getByText(/Delete 3 unsent reports from this device\? They won’t be sent/),
     ).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Keep them" }));
     expect(h.outbox.box.clear).not.toHaveBeenCalled();
