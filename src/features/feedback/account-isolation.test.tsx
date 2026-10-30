@@ -3,7 +3,9 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Nav } from "@/components/shell/Nav";
+import { SaveStatusProvider } from "@/components/shell/SaveStatus";
 import { ToastProvider } from "@/components/ui/Toast";
+import { SettingsScreen } from "@/features/settings/SettingsScreen";
 import {
   createFakeFeedbackServer,
   createMemoryIdb,
@@ -357,6 +359,53 @@ describe("sign-out", () => {
     });
     await userEvent.setup().click(await screen.findByRole("button", { name: "Sign out" }));
     await waitFor(() => expect(signOut).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe("Settings sign-out clears the same way as the nav (#327)", () => {
+  const settings = (signOut: () => Promise<void>) => (
+    <SettingsScreen
+      email="someone@example.test"
+      signOut={signOut}
+      initialWeather={{ weatherOptIn: false, temperatureUnit: "F" }}
+      updateWeather={async () => ({
+        ok: true as const,
+        settings: { weatherOptIn: false, temperatureUnit: "F" as const },
+      })}
+      initialAppearance="base"
+      updateAppearance={async (appearance) => ({ ok: true as const, appearance })}
+      accountClosureEnabled={false}
+      closeAccount={async () => ({ error: null, fieldErrors: {} })}
+    />
+  );
+
+  it("removes this account's outbox from the device BEFORE signOut is called", async () => {
+    const order: string[] = [];
+    const idb = createMemoryIdb([accountDatabaseName(OUTBOX_KEY_A)]);
+    const signOut = vi.fn(async () => {
+      const gone = !idb.present.has(accountDatabaseName(OUTBOX_KEY_A));
+      order.push(gone ? "signOut:gone" : "signOut:present");
+    });
+    const { outboxes } = mount({
+      idb,
+      ui: <SaveStatusProvider>{settings(signOut)}</SaveStatusProvider>,
+    });
+    const a = await waitFor(() => {
+      const box = outboxes.boxes.get(OUTBOX_KEY_A);
+      if (!box) throw new Error("no outbox");
+      return box;
+    });
+    await waitFor(() => expect(a.box.start).toHaveBeenCalled());
+    a.box.clear.mockImplementation(async () => {
+      order.push("cleared");
+      return (await import("@/test/fake-outbox")).OUTBOX_STATUS;
+    });
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "Sign out" }));
+    await waitFor(() => expect(signOut).toHaveBeenCalledTimes(1));
+    expect(order).toEqual(["cleared", "signOut:gone"]);
+    expect(a.box.stop).toHaveBeenCalled();
+    expect(idb.present.has(accountDatabaseName(OUTBOX_KEY_A))).toBe(false);
   });
 });
 
