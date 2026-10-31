@@ -53,9 +53,15 @@ describe("weather date helpers", () => {
     // Device UTC+10 is a day ahead of GMT: its 16th day is beyond what the provider forecasts.
     expect(isForecastable("2026-06-17", "2026-06-02", "2026-06-01")).toBe(false);
     expect(isForecastable("2026-06-16", "2026-06-02", "2026-06-01")).toBe(true);
-    // Device UTC-7 is a day behind GMT: its today is before the provider's first day.
-    expect(isForecastable("2026-06-01", "2026-06-01", "2026-06-02")).toBe(false);
-    expect(isForecastable("2026-06-02", "2026-06-01", "2026-06-02")).toBe(true);
+    // Device UTC-7 is a day behind GMT: the provider also serves GMT yesterday, which is the device's today.
+    expect(isForecastable("2026-06-01", "2026-06-01", "2026-06-02")).toBe(true);
+    expect(isForecastable("2026-06-16", "2026-06-01", "2026-06-02")).toBe(true);
+    expect(isForecastable("2026-06-17", "2026-06-01", "2026-06-02")).toBe(false);
+    // Never before the device's today, never more than a day before GMT, never unparseable.
+    expect(isForecastable("2026-05-31", "2026-06-01", "2026-06-02")).toBe(false);
+    expect(isForecastable("2026-06-01", "2026-06-03", "2026-06-03")).toBe(false);
+    expect(isForecastable("bad", "2026-06-01", "2026-06-01")).toBe(false);
+    expect(isForecastable("2026-06-01", "2026-06-01", "bad")).toBe(false);
   });
 
   it("believes a client date only if strict YYYY-MM-DD within one day of the server's GMT date", () => {

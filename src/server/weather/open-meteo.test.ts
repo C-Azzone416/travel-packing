@@ -152,12 +152,16 @@ describe("Open-Meteo forecast window and the device's local date (#361)", () => 
     };
   };
 
-  it("UTC-7 evening: the device is still on the 1st while GMT is the 2nd; the 1st is not forecast", async () => {
-    const { sources, status } = await sourceByDate("2026-06-02T03:00:00Z", "2026-06-01");
+  it("UTC-7 evening: the device is still on the 1st while GMT is the 2nd; the 1st is a forecast with real data", async () => {
+    const { sources, status, doFetch } = await sourceByDate("2026-06-02T03:00:00Z", "2026-06-01");
     expect(status).toBe("ok");
-    // Device window is 1-16 Jun but the provider's GMT window starts on the 2nd: the 1st falls back to typical.
-    expect(sources["2026-06-01"]).toBe("typical");
-    expect(sources["2026-06-02"]).toBe("forecast");
+    // Open-Meteo serves GMT yesterday, so the forecast request starts at the device's today, not at GMT today.
+    const forecastCall = doFetch.mock.calls
+      .map(([input]) => new URL(String(input)))
+      .find((url) => url.origin + url.pathname === OPEN_METEO_FORECAST_URL)!;
+    expect(forecastCall.searchParams.get("start_date")).toBe("2026-06-01");
+    expect(forecastCall.searchParams.get("end_date")).toBe("2026-06-16");
+    expect(sources["2026-06-01"]).toBe("forecast");
     expect(sources["2026-06-16"]).toBe("forecast");
     expect(sources["2026-06-17"]).toBe("typical");
   });
@@ -202,11 +206,13 @@ describe("Open-Meteo forecast window and the device's local date (#361)", () => 
     });
     const phoenix = await provider.getStopWeather(trip, { today: "2026-06-01" });
     const brisbane = await provider.getStopWeather(trip, { today: "2026-06-02" });
-    const split = (result: typeof phoenix) =>
-      result.days.filter((d) => d.source === "forecast").length;
-    // Device on the 1st: forecast 2-16 Jun (provider-clamped). Device on the 2nd: forecast 2-17 Jun.
-    expect(split(phoenix)).toBe(15);
-    expect(split(brisbane)).toBe(16);
+    const forecastDates = (result: typeof phoenix) =>
+      result.days.filter((d) => d.source === "forecast").map((d) => d.date);
+    // GMT is the 2nd. Device on the 1st: forecast 1-16 Jun. Device on the 2nd: forecast 2-17 Jun.
+    expect(forecastDates(phoenix)[0]).toBe("2026-06-01");
+    expect(forecastDates(phoenix).at(-1)).toBe("2026-06-16");
+    expect(forecastDates(brisbane)[0]).toBe("2026-06-02");
+    expect(forecastDates(brisbane).at(-1)).toBe("2026-06-17");
     expect(phoenix.days).toHaveLength(17);
     expect(brisbane.days).toHaveLength(17);
   });

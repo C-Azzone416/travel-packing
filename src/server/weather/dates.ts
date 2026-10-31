@@ -41,12 +41,17 @@ export function isForecastDay(value: string, today: string): boolean {
 }
 
 /**
- * Open-Meteo's forecast endpoint (requested with `timezone=GMT`) serves GMT today through the next 15 days.
- * A day is "forecast" only if it is inside the device's window AND inside the provider's GMT-anchored window;
- * anything else is typical, so a local-date shift can never claim a day the provider did not forecast.
+ * Open-Meteo's forecast endpoint (requested with `timezone=GMT`) returns GMT yesterday through GMT today + 15
+ * (probed live 2026-10-31: `start_date` = UTC yesterday returns data). A day is "forecast" only if it is inside the
+ * device's 16-day window AND inside that provider window, so a device a day behind GMT (UTC-7 evenings) keeps its
+ * own today as forecast, while a device a day ahead (UTC+10) loses its 16th day to typical.
  */
 export function isForecastable(value: string, today: string, utcToday: string): boolean {
-  return isForecastDay(value, today) && isForecastDay(value, utcToday);
+  const day = parseDay(value);
+  const anchor = parseDay(utcToday);
+  if (!day || !anchor) return false;
+  const fromUtc = (day.getTime() - anchor.getTime()) / DAY_MS;
+  return isForecastDay(value, today) && fromUtc >= -1 && fromUtc < 16;
 }
 
 /**
