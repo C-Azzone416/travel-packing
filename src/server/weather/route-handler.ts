@@ -29,6 +29,7 @@ export function createWeatherRoute({ getAuth, source, provider, limiter }: Weath
       session.userId,
       { source, provider, limiter },
       request.signal,
+      new URL(request.url).searchParams.get("today"),
     ),
   );
 

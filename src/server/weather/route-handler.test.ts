@@ -41,8 +41,13 @@ async function setup({
     provider,
     limiter: createRateLimiter({ limit, windowMs: 60_000, now: () => 0 }),
   });
-  const call = (tripId = TRIP_ID) =>
-    GET(new Request(`http://app.test/api/weather?tripId=${encodeURIComponent(tripId)}`));
+  const call = (tripId = TRIP_ID, today?: string) =>
+    GET(
+      new Request(
+        `http://app.test/api/weather?tripId=${encodeURIComponent(tripId)}` +
+          (today ? `&today=${encodeURIComponent(today)}` : ""),
+      ),
+    );
   return { source, provider, call };
 }
 
@@ -54,6 +59,41 @@ describe("GET /api/weather", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(await response.json()).toEqual({ weather: [] });
     expect(source.loadWeatherTrip).toHaveBeenCalledWith("owner_1", TRIP_ID);
+  });
+
+  it("forwards the device date query to the provider, bounded by the server's date (#361)", async () => {
+    const { source, provider, call } = await setup();
+    vi.mocked(source.loadWeatherTrip).mockResolvedValue({
+      optedIn: true,
+      stops: [
+        {
+          stopIndex: 0,
+          arrive: "2026-06-01",
+          leave: "2026-06-02",
+          includeLeave: true,
+          latitude: 1,
+          longitude: 2,
+        },
+      ],
+    });
+    vi.mocked(provider.getStopWeather).mockResolvedValue({
+      stopIndex: 0,
+      status: "unavailable",
+      days: [],
+    });
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-01T12:00:00Z"));
+    try {
+      expect((await call(TRIP_ID, "2026-06-02")).status).toBe(200);
+      expect((await call(TRIP_ID, "2026-07-02")).status).toBe(200);
+      expect((await call(TRIP_ID)).status).toBe(200);
+    } finally {
+      vi.useRealTimers();
+    }
+    const todays = vi
+      .mocked(provider.getStopWeather)
+      .mock.calls.map(([, options]) => options?.today);
+    expect(todays).toEqual(["2026-06-02", "2026-06-01", "2026-06-01"]);
   });
 
   it("refuses signed-out and non-owner sessions before loading data", async () => {
