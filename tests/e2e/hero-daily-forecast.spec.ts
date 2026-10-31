@@ -1,8 +1,27 @@
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { DEVICE } from "./helpers/device";
+import { expectAccessible } from "./helpers/a11y";
 import { createWeatherTrip, fake, type Stay } from "./helpers/forecast-trip";
+import {
+  F1,
+  F2,
+  F3,
+  F4,
+  F5,
+  F6,
+  F7,
+  F8,
+  F9,
+  F10,
+  F11,
+  expectBand,
+  expectNothingCovered,
+  measureBand,
+  type BandFacts,
+  type Fixture,
+} from "./helpers/hero-weather";
 import { OPEN_METEO_PORT } from "./support/ports";
 
 // #303 PR 2: the dashboard hero's daily forecast block, under the weather strip. Against the second app (Open-Meteo
@@ -14,6 +33,8 @@ test.use({ baseURL: `http://localhost:${OPEN_METEO_PORT}` });
 const ROW = 28;
 const CHIP = ROW * 3;
 const WIDTHS = [1280, 981, 721, 390, 320] as const;
+const SIX_WIDTHS = [1440, 1280, 981, 721, 390, 320] as const;
+const THREE_WIDTHS = [1280, 721, 390] as const;
 const onGrid = (value: number) => Math.min(value % ROW, ROW - (value % ROW));
 
 async function openHero(page: Page, stays: Stay[]) {
@@ -80,6 +101,7 @@ function measure(page: Page) {
       list: rect(list),
       more: more ? rect(more) : null,
       strip: rect(strip),
+      band: rect(document.querySelector(".hero-weather")!),
       status: rect(document.querySelector(".ledger-status")!),
       actions: rect(document.querySelector(".ledger-actions")!),
       days: Array.from(list.children).map((li) => ({
@@ -172,9 +194,12 @@ async function expectCleanBlock(page: Page, width: number, options: { days?: num
     expect(new Set(m.days.map((d) => Math.round(d.box.x))).size, `one column ${where}`).toBe(1);
   }
 
-  // placement: after the strip, a full row above the status block and the actions, never over them
-  expect(m.block.y, `block starts at the strip's end ${where}`).toBeCloseTo(m.strip.b, 0);
-  expect(m.status.y - m.block.b, `block to status gap ${where}`).toBeGreaterThanOrEqual(ROW - 0.5);
+  // placement: in the band beside the strip (two columns) or right after it, a full row above the status block and the
+  // actions, never over them
+  const beside = m.block.x >= m.strip.x + 1 && m.block.y < m.strip.b - 1;
+  if (beside) expect(m.block.y, `block beside the strip ${where}`).toBeCloseTo(m.strip.y, 0);
+  else expect(m.block.y, `block starts at the strip's end ${where}`).toBeCloseTo(m.strip.b, 0);
+  expect(m.status.y - m.band.b, `band to status gap ${where}`).toBeGreaterThanOrEqual(ROW - 0.5);
   expect(m.block.b, `block above the actions ${where}`).toBeLessThanOrEqual(m.actions.y + 0.5);
   expect(onGrid(height(m.strip)), `strip height ${height(m.strip)} ${where}`).toBeLessThanOrEqual(
     0.5,
@@ -235,14 +260,16 @@ test("a one-day stay is one chip or row", async ({ page }) => {
   }
 });
 
-test("a stay that straddles the window shows only forecast days, no typical text", async ({
+test("a stay that straddles the window has cards for forecast days only, and one Typical row", async ({
   page,
 }) => {
   await openHero(page, [{ leave: 11, back: 25 }]);
   const block = page.locator(".hero-forecast");
-  await expect(block.locator(".weather-source.typical")).toHaveCount(0);
-  await expect(block).not.toContainText(/typical/i);
+  // a Typical day is never a card: the only Typical tag is in the one text row
+  await expect(block.locator(".weather-source.typical")).toHaveCount(1);
+  await expect(block.locator(".hero-typical .weather-source.typical")).toHaveText("Typical");
   await expect(block.getByRole("listitem")).toHaveCount(5);
+  await expect(block.locator(".hero-forecast-head")).toContainText("London · 5 of 15 days");
   for (const width of [1280, 721, 390, 320]) {
     await setWidth(page, width);
     await expectCleanBlock(page, width, { days: 5 });
@@ -252,6 +279,12 @@ test("a stay that straddles the window shows only forecast days, no typical text
 test("an in-progress stay starts the block at Today", async ({ page }) => {
   await openHero(page, [{ leave: -4, back: 25 }]);
   await expect(page.locator(".hero-day").first()).toContainText("Today");
+  // typical days on both sides of the window: one row, no single range, the generic reason
+  await expect(page.locator(".hero-forecast-head")).toContainText("London · 16 of 30 days");
+  await expect(page.locator(".hero-typical-line")).toContainText(/^TypicalOther 14 days: High/);
+  await expect(page.locator(".hero-typical-note")).toHaveText(
+    "These days use the average of the last 5 years, not a forecast.",
+  );
   for (const width of [1280, 390]) {
     await setWidth(page, width);
     await expectCleanBlock(page, width, { days: 7 });
@@ -358,6 +391,310 @@ test("a weather note taller than 140px sits above the block and keeps it on the 
     expect(strip!.height, `a long note grows the strip at ${width}px`).toBeGreaterThan(140);
     await expectCleanBlock(page, width);
   }
+});
+
+// ---- #357 / #358: the weather band. Fixtures F1-F11 (tests/e2e/helpers/hero-weather.ts) at the widths design reviews ----
+
+/** The trip's hero with its weather band (an all-typical trip has a band but no forecast block). */
+async function openBand(page: Page, fixture: Fixture) {
+  await createWeatherTrip(page, fixture.stays);
+  await page.goto("/");
+  await expect(page.locator(".hero-weather")).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator(".weather-strip li")).toHaveCount(fixture.cellCount);
+}
+
+/** E3 / E4: the split the fixture is meant to produce, asserted before any layout. */
+async function expectContent(page: Page, fixture: Fixture) {
+  const label = fixture.name;
+  if (fixture.cards === 0) {
+    await expect(page.locator(".hero-forecast"), `${label}: no card block`).toHaveCount(0);
+  } else {
+    await expect(page.locator(".hero-day"), `${label}: cards`).toHaveCount(fixture.cards);
+  }
+  const more = page.locator(".hero-days-more a", { hasText: /more day/ });
+  if (fixture.more > 0) {
+    await expect(more, `${label}: +N more`).toHaveText(
+      `+${fixture.more} more ${fixture.more === 1 ? "day" : "days"}`,
+    );
+  } else {
+    await expect(more, `${label}: no +N more`).toHaveCount(0);
+  }
+  const typical = page.locator(".hero-typical");
+  if (fixture.typical > 0) {
+    await expect(typical, `${label}: Typical row`).toBeVisible();
+    await expect(typical.locator(".weather-source.typical")).toHaveText("Typical");
+    await expect(typical.locator(".hero-typical-line")).toContainText(
+      new RegExp(
+        `^TypicalOther ${fixture.typical} days · [A-Z][a-z]{2} \\d+(–\\d+)?: High -?\\d+° · Low -?\\d+° · `,
+      ),
+    );
+    await expect(typical.locator(".hero-typical-note")).toHaveText(
+      "Beyond the 16-day forecast, so these days use the average of the last 5 years.",
+    );
+    await expect(page.locator(".hero-forecast-head")).toContainText(/London · \d+ of \d+ days/);
+  } else {
+    await expect(typical, `${label}: no Typical row`).toHaveCount(0);
+    if (fixture.cards > 0) {
+      await expect(page.locator(".hero-forecast-head")).not.toContainText(/ of \d+ days/);
+    }
+  }
+  const foot = page.locator(".hero-weather-foot");
+  if (fixture.foot) {
+    await expect(foot, `${label}: footnote`).toHaveText(
+      "Typical weather is an average of the last 5 years, not a forecast.",
+    );
+  } else {
+    await expect(foot, `${label}: no footnote`).toHaveCount(0);
+  }
+  const other = page.getByRole("link", {
+    name: "Daily forecast for the other stays on the trip page",
+  });
+  await expect(other, `${label}: other-stays link`).toHaveCount(fixture.otherStays ? 1 : 0);
+  if (fixture.otherStays) {
+    await expect(other).toHaveText("Daily forecast for the other stays");
+    await expect(other).toHaveAttribute("href", /^\/trips\/.+/);
+  }
+  // each strip cell says where its figures come from; a mixed stay's cell is a forecast, a typical-only stay's is not
+  // (the tag is drawn in capitals by CSS, so read the underlying text)
+  const tags = await page.locator(".weather-strip .weather-range small").allTextContents();
+  expect(tags[0], `${label}: first cell tag`).toBe(fixture.cards > 0 ? "Forecast" : "Typical");
+}
+
+const MATRIX: [Fixture, readonly number[], boolean][] = [
+  [F1, SIX_WIDTHS, false],
+  [F2, SIX_WIDTHS, true],
+  [F3, SIX_WIDTHS, false],
+  [F5, SIX_WIDTHS, false],
+  [F6, SIX_WIDTHS, false],
+  [F8, SIX_WIDTHS, false],
+  [F9, SIX_WIDTHS, true],
+  [F4, THREE_WIDTHS, false],
+  [F7, THREE_WIDTHS, false],
+  [F10, THREE_WIDTHS, false],
+  [F11, THREE_WIDTHS, false],
+];
+for (const [fixture, widths, device] of MATRIX) {
+  test(
+    `${fixture.name}: one band of whole rows, no overlap, no overflow at ${widths.join(", ")}px`,
+    device ? { tag: DEVICE.tag } : {},
+    async ({ page }) => {
+      await openBand(page, fixture);
+      await expectContent(page, fixture);
+      for (const width of widths) {
+        await setWidth(page, width);
+        const m = await measureBand(page);
+        expectBand(m, fixture, width);
+        await expectNothingCovered(page, `${fixture.name} at ${width}px`);
+      }
+    },
+  );
+}
+
+// E2: the shapes the issue showed, pinned to numbers: at 1280 one stay is a summary column (at most 17em) and the days
+// beside it, and the ~70% empty area of the old full-width cell is gone.
+test("one stay at 1280px: the summary is a column and the days sit beside it (#358)", async ({
+  page,
+}) => {
+  await openBand(page, F1);
+  await setWidth(page, 1280);
+  const m = await measureBand(page);
+  const cell = m.cells[0].box;
+  expect(cell.r - cell.x).toBeLessThanOrEqual(17 * m.em + 1);
+  expect(m.forecast!.x).toBeGreaterThanOrEqual(cell.r - 1);
+  expect(m.forecast!.r - m.forecast!.x).toBeGreaterThan((m.band.r - m.band.x) * 0.6);
+  // the band is as tall as its taller side: the left cell is five rows, the right is a header plus one row of chips
+  expect(m.band.b - m.band.y).toBe(140);
+});
+
+// E5: the hero and the trip page count the same days, with the same figures and words.
+for (const fixture of [F2, F4]) {
+  test(`${fixture.name}: the hero and the trip page agree`, async ({ page }) => {
+    await openBand(page, fixture);
+    const cards = await page.locator(".hero-day").count();
+    const note = await page.locator(".weather-strip .weather-note").first().innerText();
+    const range = await page.locator(".weather-strip .weather-range").first().innerText();
+    const typicalLine = await page.locator(".hero-typical-line span").last().innerText();
+    await page
+      .getByRole("link", { name: /^(Continue|Keep) packing: London/ })
+      .first()
+      .click();
+    await page.waitForURL(/\/trips\/(?!new)[^/?#]+$/);
+    await expect(page.locator(".weather-row-forecast")).toBeVisible({ timeout: 20_000 });
+    const forecastHead = await page.locator(".weather-part-head").first().innerText();
+    const typicalHead = await page.locator(".weather-typical-part").innerText();
+    const panelDays = await page.locator(".weather-row-forecast .weather-day").count();
+    // the same days: as many cards as the panel's daily rows, and the note counts "forecast days" of that many
+    expect(cards).toBe(panelDays);
+    expect(note).toMatch(
+      new RegExp(`^(Mostly dry|Snow likely|Rain on \\d+ of ${panelDays} forecast days?)$`),
+    );
+    // the same figures: the cell's range and the panel's Forecast line
+    const [, high, low] = /^(-?\d+)° \/ (-?\d+)°/.exec(range) ?? [];
+    expect(forecastHead).toContain(`High ${high}° · Low ${low}°`);
+    const rain = /^Rain on (\d+) of/.exec(note);
+    if (rain) expect(forecastHead).toContain(`Rain on ${rain[1]} of ${panelDays} day`);
+    // the same words: the hero adds only the dates after the day count
+    expect(typicalHead.replace(/^Typical\s*/, "")).toBe(typicalLine.replace(/ · [^:]+:/, ":"));
+  });
+}
+
+// E10: Forecast and Typical differ by word and by shape, not colour alone, and both survive forced colours.
+test("Forecast and Typical tags differ by word and outline, and stay visible in forced colours", async ({
+  page,
+}) => {
+  await openBand(page, F2);
+  const tags = page.locator(".hero-forecast .weather-source");
+  const forecast = tags.filter({ hasText: /^Forecast$/ });
+  const typical = tags.filter({ hasText: /^Typical$/ });
+  await expect(forecast).toHaveCount(1);
+  await expect(typical).toHaveCount(1);
+  const border = (tag: typeof forecast) =>
+    tag.evaluate((el) => getComputedStyle(el).borderTopWidth);
+  expect(await border(forecast)).toBe("0px");
+  expect(await border(typical)).toBe("1px");
+  await page.emulateMedia({ forcedColors: "active", reducedMotion: "reduce" });
+  for (const tag of [forecast, typical]) {
+    await expect(tag).toBeVisible();
+    const color = await tag.evaluate((el) => getComputedStyle(el).color);
+    expect(color).not.toBe("rgba(0, 0, 0, 0)");
+    const box = (await tag.boundingBox())!;
+    expect(box.width).toBeGreaterThan(20);
+  }
+});
+
+// E11: the band's only tab stops are its two links, in reading order, and nothing is clipped when they take focus.
+test("keyboard: +N more, then the other-stays link, then the actions", async ({ page }) => {
+  await openBand(page, F11);
+  for (const width of [1280, 390]) {
+    await setWidth(page, width);
+    const start = await page.evaluate(() => {
+      const focusables = Array.from(
+        document.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), [tabindex="0"]'),
+      );
+      const band = document.querySelector(".hero-weather")!;
+      const before = focusables.filter(
+        (el) => band.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_PRECEDING,
+      );
+      const label = (el: Element) => el.getAttribute("aria-label") ?? (el as HTMLElement).innerText;
+      const actions = Array.from(
+        document.querySelectorAll<HTMLElement>(".ledger-actions a, .ledger-actions button"),
+      ).map(label);
+      const last = before[before.length - 1];
+      last.focus();
+      return { actions, inBand: band.querySelectorAll("a, button, [tabindex]").length };
+    });
+    expect(start.inBand, "only the two links are focusable in the band").toBe(2);
+    const seen: string[] = [];
+    for (let at = 0; at < 2 + start.actions.length; at++) {
+      await page.keyboard.press("Tab");
+      const focus = await page.evaluate(() => {
+        const el = document.activeElement as HTMLElement;
+        const r = el.getBoundingClientRect();
+        const hero = document.querySelector(".ledger-hero")!.getBoundingClientRect();
+        return {
+          label: el.getAttribute("aria-label") ?? el.innerText,
+          inside: r.left >= hero.left - 1 && r.right <= hero.right + 1 && r.top >= hero.top,
+        };
+      });
+      expect(focus.inside, `focused "${focus.label}" is not clipped at ${width}px`).toBe(true);
+      seen.push(focus.label);
+    }
+    expect(seen[0], `at ${width}px`).toMatch(/^1 more forecast day for London on the trip page$/);
+    expect(seen[1], `at ${width}px`).toBe("Daily forecast for the other stays on the trip page");
+    expect(seen.slice(2), `at ${width}px`).toEqual(start.actions);
+  }
+});
+
+// E12: axe on the hero with the band, mixed and multi-stop, desktop and phone width.
+for (const fixture of [F2, F9]) {
+  test(`${fixture.name}: no accessibility violations at 1280 and 390`, async ({ page }) => {
+    await openBand(page, fixture);
+    for (const width of [1280, 390]) {
+      await setWidth(page, width);
+      await expectAccessible(page, `${fixture.name} at ${width}px`, { include: ".ledger-hero" });
+    }
+  });
+}
+
+/** E8 at widths below the body's 320px minimum (that belongs to #332): only containment is asserted. */
+function expectContained(m: BandFacts, where: string) {
+  for (const item of m.inside) {
+    expect(item.box.x, `${item.name} inside the hero, ${where}`).toBeGreaterThanOrEqual(
+      m.hero.x - 1,
+    );
+    expect(item.box.r, `${item.name} inside the hero, ${where}`).toBeLessThanOrEqual(
+      m.padRight + 1,
+    );
+  }
+  expect(m.bandClipped, `band, ${where}`).toBeLessThanOrEqual(0);
+  expect(m.forecastClipped, `forecast, ${where}`).toBeLessThanOrEqual(0);
+  expect(m.typicalClipped, `typical row, ${where}`).toBeLessThanOrEqual(0);
+  expect(m.footClipped, `footnote, ${where}`).toBeLessThanOrEqual(0);
+  for (const [at, cell] of m.cells.entries()) {
+    expect(cell.clipped, `cell ${at}, ${where}`).toBeLessThanOrEqual(0);
+  }
+}
+for (const fixture of [F2, F7, F9]) {
+  test(`${fixture.name}: everything stays inside the hero at 195px`, async ({ page }) => {
+    await openBand(page, fixture);
+    await setWidth(page, 195);
+    expectContained(await measureBand(page), `${fixture.name} at 195px`);
+  });
+}
+
+// Test-only 200% text (root font 32px): the em thresholds drop the band to the stacked layouts, and the text wraps.
+async function applyLargeBandText(page: Page) {
+  await page.addStyleTag({
+    content:
+      "html { font-size: 32px !important; } " +
+      // (the cells' text is px in the app and does not scale; the block rows are forced up as the older 200% test does)
+      ".hero-forecast, .hero-typical p, .hero-weather-foot { font-size: 26px !important; }",
+  });
+  await expect
+    .poll(() =>
+      page.locator(".hero-weather").evaluate((el) => parseFloat(getComputedStyle(el).fontSize)),
+    )
+    .toBe(32);
+}
+for (const fixture of [F2, F9]) {
+  for (const width of [1280, 721, 390, 320]) {
+    test(`${fixture.name}: 200% text at ${width}px keeps the band on the rows and inside the hero`, async ({
+      page,
+    }) => {
+      await openBand(page, fixture);
+      await setWidth(page, width);
+      await applyLargeBandText(page);
+      expectBand(await measureBand(page), fixture, width);
+    });
+  }
+}
+
+// E13: opt-in screenshots for design's rendered review of the band:
+// HERO_WEATHER_SHOTS=<dir> npx playwright test hero-daily-forecast -g "band screenshots" --project=desktop
+const BAND_SHOTS = process.env.HERO_WEATHER_SHOTS;
+test("band screenshots for design review (opt-in)", async ({ page }) => {
+  test.skip(!BAND_SHOTS, "set HERO_WEATHER_SHOTS=<dir> to write screenshots");
+  test.setTimeout(300_000);
+  const dir = BAND_SHOTS as string;
+  mkdirSync(dir, { recursive: true });
+  const widthsSeen: Record<string, number> = {};
+  for (const fixture of [F1, F2, F3, F9]) {
+    await fake("/__weather-reset");
+    await fake("/__weather-set?variant=varied");
+    await page.context().clearCookies();
+    await openBand(page, fixture);
+    for (const width of SIX_WIDTHS) {
+      await setWidth(page, width);
+      await page
+        .locator(".ledger-hero")
+        .screenshot({ path: join(dir, `${fixture.name.split(" ")[0]}-${width}.png`) });
+      // the measured inner width of the hero's weather band, for the width table in the PR
+      widthsSeen[`${fixture.name.split(" ")[0]}-${width}`] = await page
+        .locator(".hero-weather")
+        .evaluate((el) => Math.round(el.getBoundingClientRect().width));
+    }
+  }
+  writeFileSync(join(dir, "band-widths.json"), JSON.stringify(widthsSeen, null, 1));
 });
 
 // Opt-in screenshots for design's rendered review: HERO_FORECAST_SHOTS=<dir> npx playwright test hero-daily-forecast

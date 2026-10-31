@@ -83,7 +83,15 @@ async function injectWeather(
             `<span class="weather-note">${text}</span></li>`,
         )
         .join("");
-      document.querySelector(".ledger-hero-top")!.after(strip);
+      // the real structure: the strip sits in the band's inner grid, inside the size container (#358)
+      const band = document.createElement("div");
+      band.className = "hero-weather";
+      band.dataset.stays = "4";
+      const inner = document.createElement("div");
+      inner.className = "hero-weather-band";
+      inner.append(strip);
+      band.append(inner);
+      document.querySelector(".ledger-hero-top")!.after(band);
     },
     [note, cell.city, cell.range] as const,
   );
@@ -415,14 +423,15 @@ for (const width of WIDTHS) {
     await openHero(page, width);
     await injectWeather(page, "Mild and dry");
     const short = await page.locator(".weather-strip").boundingBox();
-    // a one-line note keeps each cell at today's five rows (stacked below 721px: four cells)
+    // a one-line note keeps each stacked cell at five rows (phone: four cells); the wide stack's cells are whole rows
     const stays = width <= 720 ? 4 : 1;
-    expect(Math.round(short!.height), "one-line note").toBe(140 * stays);
+    if (width <= 720) expect(Math.round(short!.height), "one-line note").toBe(140 * 4);
+    else expect(onGrid(short!.height), `strip ${short!.height}`).toBeLessThanOrEqual(1);
     await page.evaluate((text) => {
       for (const note of document.querySelectorAll(".weather-note")) note.textContent = text;
     }, LONG_NOTE);
     const strip = await page.locator(".weather-strip").boundingBox();
-    expect(strip!.height).toBeGreaterThan(140 * stays);
+    expect(strip!.height).toBeGreaterThan(width <= 720 ? 140 * stays : short!.height);
     expect(onGrid(strip!.height), `strip height ${strip!.height}`).toBeLessThanOrEqual(1);
     for (const cell of await page.locator(".weather-strip li").all()) {
       const box = (await cell.boundingBox())!;
@@ -545,10 +554,19 @@ for (const width of WIDTHS) {
     await openHero(page, width);
     await injectWeather(page, "Mild and dry");
     const m = await cellMetrics(page);
-    expect(m.topHeight).toBeCloseTo(ROW * 4, 0);
     const gap = m.note.top - m.range.bottom;
-    expect(gap, `range bottom to note top (${gap}px)`).toBeGreaterThan(0);
-    expect(gap, `range bottom to note top (${gap}px)`).toBeLessThanOrEqual(14);
+    if (width <= 720) {
+      expect(m.topHeight).toBeCloseTo(ROW * 4, 0);
+      expect(gap, `range bottom to note top (${gap}px)`).toBeGreaterThan(0);
+      expect(gap, `range bottom to note top (${gap}px)`).toBeLessThanOrEqual(14);
+    } else {
+      // the wide stack (#358): identity left, range right, so the top block is whole rows (two when it fits) and the
+      // note is the very next row
+      expect(onGrid(m.topHeight), `top block ${m.topHeight}`).toBeLessThanOrEqual(1);
+      expect(m.topHeight).toBeGreaterThanOrEqual(ROW * 2 - 1);
+      expect(gap, `range bottom to note top (${gap}px)`).toBeGreaterThanOrEqual(0);
+      expect(gap, `range bottom to note top (${gap}px)`).toBeLessThanOrEqual(ROW * 2);
+    }
   });
 
   // Counts that fit the spec's worst case are never clipped by the counts wrapper (`overflow: hidden` + `nowrap`).

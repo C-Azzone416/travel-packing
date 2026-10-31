@@ -4,7 +4,9 @@ import { parseDate } from "@/domain/calc";
 import { daysBetween, type TripStop } from "@/domain/trip-stops";
 import type { StopWeather } from "@/domain/weather/types";
 import {
+  dayCount,
   displayTemperature,
+  typicalLine,
   weatherRowView,
   type DayView,
   type WeatherRowView,
@@ -254,30 +256,56 @@ export interface WeatherCell {
   source: string;
 }
 
-/** One compact cell per stay that has weather; a stay without it is simply left out (never a daily forecast). */
+/** The day glyph for a set of days, by the same snow-then-rain rule as a stay. */
+function glyphOf(days: readonly DayView[]): WeatherRowView["glyph"] {
+  return days.some((day) => day.glyph === "snow")
+    ? "snow"
+    : days.some((day) => day.glyph === "rain")
+      ? "rain"
+      : "sun";
+}
+
+/**
+ * One compact cell per stay that has weather; a stay without it is simply left out (never a daily forecast). A stay with
+ * any forecast day is summed up over those days only, so the cell, the daily cards and the trip page's Forecast line
+ * count the same days (#357); a stay with none shows its typical figures, tagged Typical.
+ */
 export function weatherCells(
   stops: readonly TripStop[],
   weather: readonly StopWeather[],
   unit: TemperatureUnit,
+  today?: string,
 ): WeatherCell[] {
   const cells: WeatherCell[] = [];
   stops.forEach((stop, index) => {
     const found = weather.find((entry) => entry.stopIndex === index);
-    const row = found ? weatherRowView(stop, found) : null;
+    const row = found ? weatherRowView(stop, found, unit, today) : null;
     if (!row) return;
+    const part = row.forecast ?? {
+      high: row.high,
+      low: row.low,
+      rainDays: row.rainDays,
+      totalDays: row.totalDays,
+    };
+    const glyph = row.forecast ? glyphOf(row.forecastDays) : row.glyph;
+    // "of 2 forecast days" only when the stay also has typical days; an all-forecast stay keeps "of 4 days"
+    const days =
+      row.forecast && row.typical
+        ? `${part.totalDays} forecast ${part.totalDays === 1 ? "day" : "days"}`
+        : dayCount(part.totalDays);
     cells.push({
       stopIndex: index,
       city: row.city,
       dates: row.dates,
-      glyph: row.glyph,
-      range: `${displayTemperature(row.high, unit)}° / ${displayTemperature(row.low, unit)}°`,
+      glyph,
+      range: `${displayTemperature(part.high, unit)}° / ${displayTemperature(part.low, unit)}°`,
       note:
-        row.glyph === "snow"
+        glyph === "snow"
           ? "Snow likely"
-          : row.rainDays > 0
-            ? `Rain on ${row.rainDays} of ${row.totalDays} days`
+          : part.rainDays > 0
+            ? `Rain on ${part.rainDays} of ${days}`
             : "Mostly dry",
-      source: row.source === "forecast" ? "Forecast" : "Typical",
+      source: row.forecast ? "Forecast" : "Typical",
     });
   });
   return cells;
@@ -292,7 +320,27 @@ export interface HeroForecast {
   days: DayView[];
   /** Forecast days past the cap. */
   more: number;
+  /** All the stay's forecast days, before the cap: `days.length + more`. */
+  forecastTotal: number;
+  /** All the stay's days: `forecastTotal` plus the typical days. */
+  totalDays: number;
+  /** The stay's typical days, if it has any (#357): shown as one text row, never as cards. */
+  typical: {
+    line: string;
+    range: string | null;
+    days: number;
+    /** Why these days are not a forecast. */
+    note: string;
+  } | null;
+  /** Another stay on the trip also has forecast days: a link to the trip page covers them. */
+  otherForecastStays: boolean;
 }
+
+const TYPICAL_NOTE = {
+  after: "Beyond the 16-day forecast, so these days use the average of the last 5 years.",
+  before: "Before today, so these days use the average of the last 5 years.",
+  split: "These days use the average of the last 5 years, not a forecast.",
+} as const;
 
 /** The first stay (trip order) with at least one forecast day, or null: typical-only trips get no block. */
 export function heroForecast(
@@ -301,16 +349,32 @@ export function heroForecast(
   unit: TemperatureUnit,
   today?: string,
 ): HeroForecast | null {
-  for (const [index, stop] of stops.entries()) {
+  const rows = stops.map((stop, index) => {
     const found = weather.find((entry) => entry.stopIndex === index);
-    const row = found ? weatherRowView(stop, found, unit, today) : null;
-    if (row && row.forecastDays.length > 0) {
-      return {
-        city: row.city,
-        days: row.forecastDays.slice(0, HERO_FORECAST_CAP),
-        more: row.forecastDays.length - Math.min(row.forecastDays.length, HERO_FORECAST_CAP),
-      };
-    }
-  }
-  return null;
+    return found ? weatherRowView(stop, found, unit, today) : null;
+  });
+  const at = rows.findIndex((row) => row !== null && row.forecastDays.length > 0);
+  const row = at === -1 ? null : rows[at];
+  if (!row) return null;
+  const forecastTotal = row.forecastDays.length;
+  const typical = row.typical;
+  return {
+    city: row.city,
+    days: row.forecastDays.slice(0, HERO_FORECAST_CAP),
+    more: forecastTotal - Math.min(forecastTotal, HERO_FORECAST_CAP),
+    forecastTotal,
+    totalDays: row.totalDays,
+    typical:
+      typical && row.typicalPlacement
+        ? {
+            line: typicalLine(typical, unit, row.typicalRange),
+            range: row.typicalRange,
+            days: typical.totalDays,
+            note: TYPICAL_NOTE[row.typicalPlacement],
+          }
+        : null,
+    otherForecastStays: rows.some(
+      (other, index) => index !== at && other !== null && other.forecastDays.length > 0,
+    ),
+  };
 }

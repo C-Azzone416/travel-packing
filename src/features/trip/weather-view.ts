@@ -46,6 +46,36 @@ export interface WeatherRowView {
   forecast: PartSummary | null;
   /** Summary over the typical days only (before or after the forecast window), or null when it has none. */
   typical: PartSummary | null;
+  /** "Nov 8–9" when the typical days are one unbroken run of dates, else null (#357). */
+  typicalRange: string | null;
+  /**
+   * Where the typical days sit: "after" the forecast window, "before" it (the trip has already started), or "split"
+   * (both sides, or with a gap). Null when the stay has no typical days.
+   */
+  typicalPlacement: "after" | "before" | "split" | null;
+}
+
+export const dayCount = (count: number) => (count === 1 ? "1 day" : `${count} days`);
+
+/** "Rain on 2 of 7 days", or the dry line when nothing is wet. */
+export function rainLine(part: PartSummary, dry: string): string {
+  return part.rainDays > 0 ? `Rain on ${part.rainDays} of ${dayCount(part.totalDays)}` : dry;
+}
+
+/**
+ * The typical days of a stay in one line, shared by the trip page and the dashboard hero so they print the same words
+ * (#357): "Other 2 days: High 18° · Low 11° · Rarely rains". The hero adds the dates right after the day count.
+ */
+export function typicalLine(
+  part: PartSummary,
+  unit: TemperatureUnit,
+  range?: string | null,
+): string {
+  return (
+    `Other ${dayCount(part.totalDays)}${range ? ` · ${range}` : ""}: ` +
+    `High ${displayTemperature(part.high, unit)}° · Low ${displayTemperature(part.low, unit)}° · ` +
+    rainLine(part, "Rarely rains")
+  );
 }
 
 export function displayTemperature(celsius: number, unit: TemperatureUnit): number {
@@ -126,6 +156,31 @@ function summarize(days: readonly DayWeather[]): PartSummary | null {
   };
 }
 
+const DAY_MS = 86_400_000;
+
+function isUnbrokenRun(dates: readonly string[]): boolean {
+  return dates.every(
+    (date, at) =>
+      at === 0 ||
+      Date.parse(`${date}T00:00:00.000Z`) - Date.parse(`${dates[at - 1]}T00:00:00.000Z`) === DAY_MS,
+  );
+}
+
+/** Where the typical days sit and, for one unbroken run, its dates. Typical days are always outside the forecast window. */
+function typicalWhere(
+  typicalDays: readonly DayWeather[],
+  forecastDays: readonly DayWeather[],
+): Pick<WeatherRowView, "typicalRange" | "typicalPlacement"> {
+  if (typicalDays.length === 0) return { typicalRange: null, typicalPlacement: null };
+  const dates = typicalDays.map((day) => day.date).sort();
+  if (!isUnbrokenRun(dates)) return { typicalRange: null, typicalPlacement: "split" };
+  const firstForecast = forecastDays.map((day) => day.date).sort()[0];
+  return {
+    typicalRange: defaultFormatRange(dates[0], dates[dates.length - 1]),
+    typicalPlacement: dates[0] < firstForecast ? "before" : "after",
+  };
+}
+
 export function weatherRowView(
   stop: TripStop,
   weather: StopWeather,
@@ -135,6 +190,7 @@ export function weatherRowView(
   if (weather.status !== "ok" || weather.days.length === 0) return null;
   const days = weather.days;
   const forecastDays = days.filter((day) => day.source === "forecast");
+  const typicalDays = days.filter((day) => day.source === "typical");
   const sources = new Set(days.map((day) => day.source));
   return {
     stopIndex: weather.stopIndex,
@@ -152,7 +208,8 @@ export function weatherRowView(
       .sort((a, b) => a.date.localeCompare(b.date))
       .map((day) => dayView(day, unit, today)),
     forecast: summarize(forecastDays),
-    typical: summarize(days.filter((day) => day.source === "typical")),
+    typical: summarize(typicalDays),
+    ...typicalWhere(typicalDays, forecastDays),
   };
 }
 

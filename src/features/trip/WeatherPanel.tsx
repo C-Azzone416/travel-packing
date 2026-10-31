@@ -9,7 +9,9 @@ import type { TemperatureUnit } from "@/server/data/weather-store";
 import {
   displayTemperature,
   hasCoordinates,
+  rainLine,
   todayUtc,
+  typicalLine,
   weatherRowView,
   type PartSummary,
   type WeatherRowView,
@@ -19,12 +21,6 @@ import {
 export const FORECAST_DAY_CAP = 7;
 
 const GLYPH_MARK = { sun: "☀", rain: "☂", snow: "❄" } as const;
-const dayCount = (count: number) => (count === 1 ? "1 day" : `${count} days`);
-
-/** "Rain on 2 of 7 days", or the dry line when nothing is wet. */
-function rainLine(part: PartSummary, dry: string) {
-  return part.rainDays > 0 ? `Rain on ${part.rainDays} of ${dayCount(part.totalDays)}` : dry;
-}
 
 /** A stay with at least one forecast day: a labelled Forecast section, a daily list, and a Typical summary. */
 function ForecastStay({ view, unit }: { view: WeatherRowView; unit: TemperatureUnit }) {
@@ -86,10 +82,7 @@ function ForecastStay({ view, unit }: { view: WeatherRowView; unit: TemperatureU
       {typical ? (
         <p className="weather-part-head weather-typical-part">
           <span className="weather-source typical">Typical</span>
-          <span>
-            Other {dayCount(typical.totalDays)}: High {displayTemperature(typical.high, unit)}° ·
-            Low {displayTemperature(typical.low, unit)}° · {rainLine(typical, "Rarely rains")}
-          </span>
+          <span>{typicalLine(typical, unit)}</span>
         </p>
       ) : null}
     </>

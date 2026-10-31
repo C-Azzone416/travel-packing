@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { renderInApp } from "@/test/providers";
 import { sampleLifecycleState } from "./fixtures";
 import { NextDeparture, type NextDepartureProps } from "./NextDeparture";
-import { departureView, tripCardView } from "./view";
+import { departureView, tripCardView, type HeroForecast } from "./view";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/",
@@ -192,13 +192,17 @@ describe("the daily forecast block (#303)", () => {
     low: 9,
     rainPercent: 10,
   });
-  const forecast = (days: number, more = 0) => ({
-    stopIndex: 0,
+  const forecast = (days: number, more = 0, over: Partial<HeroForecast> = {}): HeroForecast => ({
     city: "Lisbon",
     days: Array.from({ length: days }, (_, n) => day(n, (["sun", "rain", "snow"] as const)[n % 3])),
     more,
+    forecastTotal: days + more,
+    totalDays: days + more,
+    typical: null,
+    otherForecastStays: false,
+    ...over,
   });
-  const ready = (forecastValue?: ReturnType<typeof forecast> | null) => ({
+  const ready = (forecastValue?: HeroForecast | null) => ({
     phase: "ready" as const,
     cells: [cell],
     forecast: forecastValue,
@@ -268,5 +272,206 @@ describe("the daily forecast block (#303)", () => {
     cleanup();
     setup({}, { weather: ready(forecast(7, 0)) });
     expect(screen.queryByRole("link", { name: /more forecast/ })).toBeNull();
+  });
+});
+
+describe("the weather band: typical days and the other stays (#357, #358)", () => {
+  const cell = (over: Record<string, string | number> = {}) => ({
+    stopIndex: 0,
+    city: "Lisbon",
+    dates: "Oct 20 – Oct 24",
+    glyph: "sun" as const,
+    range: "14° / 9°",
+    note: "Mostly dry",
+    source: "Forecast",
+    ...over,
+  });
+  const day = (n: number) => ({
+    date: `2026-10-${20 + n}`,
+    label: `Mon Oct ${20 + n}`,
+    parts: { weekday: "Mon", month: "Oct", day: 20 + n },
+    spoken: `Monday ${20 + n} October: sunny, high 14, low 9, 10% chance of rain`,
+    glyph: "sun" as const,
+    high: 14,
+    low: 9,
+    rainPercent: 10,
+  });
+  const mixed = (over: Partial<HeroForecast> = {}): HeroForecast => ({
+    city: "Lisbon",
+    days: [day(0), day(1)],
+    more: 0,
+    forecastTotal: 2,
+    totalDays: 4,
+    typical: {
+      line: "Other 2 days · Oct 22–23: High 18° · Low 11° · Rarely rains",
+      range: "Oct 22–23",
+      days: 2,
+      note: "Beyond the 16-day forecast, so these days use the average of the last 5 years.",
+    },
+    otherForecastStays: false,
+    ...over,
+  });
+  const band = () => hero().querySelector(".hero-weather") as HTMLElement;
+  const FOOT = "Typical weather is an average of the last 5 years, not a forecast.";
+
+  it("wraps the strip and the block in one band that knows how many stays it has", () => {
+    setup({}, { weather: { phase: "ready", cells: [cell()], forecast: mixed() } });
+    expect(band().getAttribute("data-stays")).toBe("1");
+    const inner = band().firstElementChild as HTMLElement;
+    expect(inner.className).toBe("hero-weather-band");
+    expect([...inner.children].map((el) => el.className)).toEqual([
+      "weather-strip",
+      "hero-forecast",
+    ]);
+    cleanup();
+    setup(
+      {},
+      {
+        weather: { phase: "ready", cells: [cell(), cell({ stopIndex: 1, city: "Porto" })] },
+      },
+    );
+    expect(band().getAttribute("data-stays")).toBe("2");
+  });
+
+  it("names the forecast days out of all days only when the stay also has typical days", () => {
+    setup({}, { weather: { phase: "ready", cells: [cell()], forecast: mixed() } });
+    expect(hero().querySelector(".hero-forecast-head")?.textContent).toBe(
+      "ForecastLisbon · 2 of 4 days",
+    );
+    cleanup();
+    setup(
+      {},
+      {
+        weather: {
+          phase: "ready",
+          cells: [cell()],
+          forecast: mixed({ typical: null, totalDays: 2 }),
+        },
+      },
+    );
+    expect(hero().querySelector(".hero-forecast-head")?.textContent).toBe("ForecastLisbon");
+  });
+
+  it("puts the Typical row after the day list, as plain readable text with its reason", () => {
+    setup({}, { weather: { phase: "ready", cells: [cell()], forecast: mixed() } });
+    const section = hero().querySelector(".hero-forecast") as HTMLElement;
+    const row = section.querySelector(".hero-typical") as HTMLElement;
+    const list = section.querySelector(".hero-days") as HTMLElement;
+    expect(list.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(section.lastElementChild).toBe(row);
+    expect(row.querySelector(".weather-source.typical")?.textContent).toBe("Typical");
+    expect(row.textContent).toBe(
+      "TypicalOther 2 days · Oct 22–23: High 18° · Low 11° · Rarely rains" +
+        "Beyond the 16-day forecast, so these days use the average of the last 5 years.",
+    );
+    // read aloud: nothing in the row is hidden, and no card stands for a typical day
+    expect(row.querySelector("[aria-hidden]")).toBeNull();
+    expect(within(section).getAllByRole("listitem")).toHaveLength(2);
+    expect(row.querySelector("a, button")).toBeNull();
+  });
+
+  it("puts the Typical row after the +N more link", () => {
+    setup(
+      {},
+      {
+        weather: {
+          phase: "ready",
+          cells: [cell()],
+          forecast: mixed({ more: 3, forecastTotal: 5, totalDays: 7 }),
+        },
+      },
+    );
+    const section = hero().querySelector(".hero-forecast") as HTMLElement;
+    const more = section.querySelector(".hero-days-more") as HTMLElement;
+    const row = section.querySelector(".hero-typical") as HTMLElement;
+    expect(more.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("has no Typical row for an all-forecast stay", () => {
+    setup({}, { weather: { phase: "ready", cells: [cell()], forecast: mixed({ typical: null }) } });
+    expect(hero().querySelector(".hero-typical")).toBeNull();
+    expect(hero().textContent).not.toContain("Typical");
+  });
+
+  it("links to the other stays' forecast only when another stay has forecast days", () => {
+    setup(
+      {},
+      {
+        weather: {
+          phase: "ready",
+          cells: [cell(), cell({ stopIndex: 1, city: "Porto" })],
+          forecast: mixed({ typical: null, otherForecastStays: true }),
+        },
+      },
+    );
+    const link = screen.getByRole("link", {
+      name: "Daily forecast for the other stays on the trip page",
+    });
+    expect(link.textContent).toBe("Daily forecast for the other stays");
+    expect(link.getAttribute("href")).toMatch(/^\/trips\/.+/);
+    const section = hero().querySelector(".hero-forecast") as HTMLElement;
+    expect(section.lastElementChild).toBe(link.parentElement);
+    cleanup();
+    setup({}, { weather: { phase: "ready", cells: [cell()], forecast: mixed() } });
+    expect(screen.queryByRole("link", { name: /other stays/ })).toBeNull();
+  });
+
+  it("keeps +N more before the other-stays link", () => {
+    setup(
+      {},
+      {
+        weather: {
+          phase: "ready",
+          cells: [cell()],
+          forecast: mixed({ typical: null, more: 2, otherForecastStays: true }),
+        },
+      },
+    );
+    const links = within(hero().querySelector(".hero-forecast") as HTMLElement)
+      .getAllByRole("link")
+      .map((link) => link.textContent);
+    expect(links).toEqual(["+2 more days", "Daily forecast for the other stays"]);
+  });
+
+  it("shows the footnote for a typical-only stay, once, and no card block", () => {
+    setup({}, { weather: { phase: "ready", cells: [cell({ source: "Typical" })] } });
+    expect(hero().querySelector(".hero-forecast")).toBeNull();
+    expect(screen.getAllByText(FOOT)).toHaveLength(1);
+    const foot = hero().querySelector(".hero-weather-foot") as HTMLElement;
+    expect(foot.previousElementSibling?.className).toBe("weather-strip");
+  });
+
+  it("shows the footnote once when only a later stay is typical-only (block has no Typical row)", () => {
+    setup(
+      {},
+      {
+        weather: {
+          phase: "ready",
+          cells: [cell(), cell({ stopIndex: 1, city: "Porto", source: "Typical" })],
+          forecast: mixed({ typical: null }),
+        },
+      },
+    );
+    expect(screen.getAllByText(FOOT)).toHaveLength(1);
+    expect(hero().querySelector(".hero-weather-foot")?.previousElementSibling?.className).toBe(
+      "hero-forecast",
+    );
+  });
+
+  it("has no footnote when every stay is a forecast, or when the block's own Typical row explains it", () => {
+    setup({}, { weather: { phase: "ready", cells: [cell()], forecast: mixed({ typical: null }) } });
+    expect(screen.queryByText(FOOT)).toBeNull();
+    cleanup();
+    setup(
+      {},
+      {
+        weather: {
+          phase: "ready",
+          cells: [cell(), cell({ stopIndex: 1, source: "Typical" })],
+          forecast: mixed(),
+        },
+      },
+    );
+    expect(screen.queryByText(FOOT)).toBeNull();
   });
 });

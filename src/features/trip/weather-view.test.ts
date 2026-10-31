@@ -2,10 +2,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TripStop } from "@/domain/trip-stops";
 import type { DayWeather, StopWeather } from "@/domain/weather/types";
 import {
+  dayCount,
   dayView,
   displayTemperature,
   hasCoordinates,
+  rainLine,
   todayUtc,
+  typicalLine,
   weatherRowView,
 } from "./weather-view";
 
@@ -82,6 +85,8 @@ describe("weather view", () => {
       ],
       forecast: { high: 21, low: 9, rainDays: 1, totalDays: 1 },
       typical: { high: 25, low: 12, rainDays: 0, totalDays: 1 },
+      typicalRange: "Apr 4",
+      typicalPlacement: "after",
     });
   });
 
@@ -150,6 +155,49 @@ describe("weather view", () => {
       expect(v.typical).toMatchObject({ high: 28, totalDays: 2 });
     });
 
+    it("places an unbroken run of typical days after the window, before it, or split (#357)", () => {
+      const after = view([
+        at("2031-04-14"),
+        at("2031-04-15"),
+        at("2031-04-16", { source: "typical" }),
+        at("2031-04-17", { source: "typical" }),
+      ]);
+      expect(after).toMatchObject({ typicalRange: "Apr 16–17", typicalPlacement: "after" });
+      const before = view([
+        at("2031-03-30", { source: "typical" }),
+        at("2031-03-31", { source: "typical" }),
+        at("2031-04-01"),
+      ]);
+      expect(before).toMatchObject({ typicalRange: "Mar 30–31", typicalPlacement: "before" });
+      const single = view([at("2031-04-02"), at("2031-04-18", { source: "typical" })]);
+      expect(single).toMatchObject({ typicalRange: "Apr 18", typicalPlacement: "after" });
+      // across a month boundary, still one unbroken run
+      const month = view([
+        at("2031-04-02"),
+        at("2031-04-30", { source: "typical" }),
+        at("2031-05-01", { source: "typical" }),
+      ]);
+      expect(month).toMatchObject({ typicalRange: "Apr 30–May 1", typicalPlacement: "after" });
+      // both sides of the window, or a gap, have no single range
+      const both = view([
+        at("2031-03-31", { source: "typical" }),
+        at("2031-04-01"),
+        at("2031-04-20", { source: "typical" }),
+      ]);
+      expect(both).toMatchObject({ typicalRange: null, typicalPlacement: "split" });
+      const gap = view([
+        at("2031-04-02"),
+        at("2031-04-20", { source: "typical" }),
+        at("2031-04-22", { source: "typical" }),
+      ]);
+      expect(gap).toMatchObject({ typicalRange: null, typicalPlacement: "split" });
+      // no typical days: nothing to place
+      expect(view([at("2031-04-02")])).toMatchObject({
+        typicalRange: null,
+        typicalPlacement: null,
+      });
+    });
+
     it("a single forecast day is one row", () => {
       expect(view([at("2031-04-05")]).forecastDays).toHaveLength(1);
     });
@@ -210,5 +258,31 @@ describe("weather view", () => {
       expect(v.forecastDays[0].label.startsWith("Today")).toBe(true);
       expect(v.forecastDays[0].high).toBe(20);
     });
+  });
+});
+
+describe("the shared forecast words (#357)", () => {
+  const part = { high: 18, low: 11, rainDays: 0, totalDays: 2 };
+
+  it("counts days with the right plural", () => {
+    expect(dayCount(1)).toBe("1 day");
+    expect(dayCount(2)).toBe("2 days");
+  });
+
+  it("says how many days it rains, or the dry line when none", () => {
+    expect(rainLine({ ...part, rainDays: 1 }, "Rarely rains")).toBe("Rain on 1 of 2 days");
+    expect(rainLine({ ...part, rainDays: 1, totalDays: 1 }, "x")).toBe("Rain on 1 of 1 day");
+    expect(rainLine(part, "Rarely rains")).toBe("Rarely rains");
+  });
+
+  it("writes the typical line in the person's unit, with the dates only when given", () => {
+    expect(typicalLine(part, "C")).toBe("Other 2 days: High 18° · Low 11° · Rarely rains");
+    expect(typicalLine(part, "F")).toBe("Other 2 days: High 64° · Low 52° · Rarely rains");
+    expect(typicalLine({ ...part, rainDays: 1 }, "C", "Nov 8–9")).toBe(
+      "Other 2 days · Nov 8–9: High 18° · Low 11° · Rain on 1 of 2 days",
+    );
+    expect(typicalLine({ ...part, totalDays: 1 }, "C", null)).toBe(
+      "Other 1 day: High 18° · Low 11° · Rarely rains",
+    );
   });
 });
