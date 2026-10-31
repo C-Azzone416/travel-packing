@@ -60,6 +60,9 @@ describe("weather date helpers", () => {
     // Never before the device's today, never more than a day before GMT, never unparseable.
     expect(isForecastable("2026-05-31", "2026-06-01", "2026-06-02")).toBe(false);
     expect(isForecastable("2026-06-01", "2026-06-03", "2026-06-03")).toBe(false);
+    // A device date more than a day behind GMT never reaches the provider's GMT-1 floor.
+    expect(isForecastable("2026-06-01", "2026-06-01", "2026-06-03")).toBe(false);
+    expect(isForecastable("2026-06-02", "2026-06-01", "2026-06-03")).toBe(true);
     expect(isForecastable("bad", "2026-06-01", "2026-06-01")).toBe(false);
     expect(isForecastable("2026-06-01", "2026-06-01", "bad")).toBe(false);
   });

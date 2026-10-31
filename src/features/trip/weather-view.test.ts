@@ -12,6 +12,24 @@ import {
   weatherRowView,
 } from "./weather-view";
 
+// The test process cannot switch its own time zone, so a device in another zone is simulated: `localToday` reads the
+// calendar date in that zone for the (fake) clock instant, which is what a real device in that zone would report.
+const device = vi.hoisted(() => ({ zone: null as string | null }));
+vi.mock("@/lib/today", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/today")>();
+  return {
+    localToday: (now: Date = new Date()) =>
+      device.zone
+        ? new Intl.DateTimeFormat("en-CA", {
+            timeZone: device.zone,
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+          }).format(now)
+        : actual.localToday(now),
+  };
+});
+
 const stop: TripStop = {
   location: {
     id: "place-a",
@@ -41,7 +59,10 @@ const day = (over: Partial<DayWeather> = {}): DayWeather => ({
   ...over,
 });
 
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  device.zone = null;
+});
 
 describe("weather view", () => {
   it("converts and rounds display temperatures without changing engine units", () => {
@@ -242,28 +263,25 @@ describe("weather view", () => {
     });
 
     it.each([
-      ["America/Phoenix", "UTC-7"],
-      ["Australia/Brisbane", "UTC+10"],
-    ])("labels Today from the device's local date at local midnight in %s (%s)", (zone) => {
-      const previous = process.env.TZ;
-      process.env.TZ = zone;
-      try {
+      // [zone, offset, last second of the local 5th, first second of the local 6th]
+      ["America/Phoenix", "UTC-7", "2031-04-06T06:59:59Z", "2031-04-06T07:00:00Z"],
+      ["Australia/Brisbane", "UTC+10", "2031-04-05T13:59:59Z", "2031-04-05T14:00:00Z"],
+    ])(
+      "labels Today from the device's local date just before and after local midnight in %s (%s)",
+      (zone, _offset, before, after) => {
+        device.zone = zone;
         vi.useFakeTimers();
         const days = [at("2031-04-05"), at("2031-04-06")];
         const labels = () =>
           weatherRowView(stop, { stopIndex: 0, status: "ok", days })!.forecastDays.map(
             (d) => d.label,
           );
-        // The local wall clock reads 23:59 on 5 Apr, then 00:00 on 6 Apr, whatever the UTC date is.
-        vi.setSystemTime(new Date(2031, 3, 5, 23, 59, 59));
+        vi.setSystemTime(new Date(before));
         expect(labels()).toEqual(["Today Apr 5", "Sun Apr 6"]);
-        vi.setSystemTime(new Date(2031, 3, 6, 0, 0, 0));
+        vi.setSystemTime(new Date(after));
         expect(labels()).toEqual(["Sat Apr 5", "Today Apr 6"]);
-      } finally {
-        if (previous === undefined) delete process.env.TZ;
-        else process.env.TZ = previous;
-      }
-    });
+      },
+    );
 
     it("defaults to Celsius and the clock's today", () => {
       const v = weatherRowView(stop, { stopIndex: 0, status: "ok", days: [at(localToday())] })!;
