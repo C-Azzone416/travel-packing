@@ -1418,7 +1418,7 @@ input:disabled {
   background: var(--seafoam);
 }
 .weather-source.typical {
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   background: var(--bg);
 }
 .weather-mixed {
@@ -5335,6 +5335,10 @@ a.back {
 .hero-typical .weather-part-head {
   min-height: 0;
 }
+/* A segment of the typical line ("High 92° ·") is never cut: the line breaks only between segments. */
+.hero-seg {
+  white-space: nowrap;
+}
 .hero-typical-note {
   color: var(--muted);
 }
@@ -5360,6 +5364,10 @@ a.back {
       grid-template-columns: repeat(auto-fit, minmax(min(100%, 14em), 1fr));
       /* every cell draws its left and top hairline; the first column's and the first row's are clipped away */
       clip-path: inset(1px 0 0 1px);
+    }
+    /* four stays are a balanced 2 x 2, not 3 + 1 */
+    .hero-weather[data-stays="4"] .weather-strip {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
     .weather-strip li,
     .weather-strip li + li {
@@ -5437,6 +5445,12 @@ a.back {
     .hero-weather[data-stays="1"] .hero-weather-band:has(> .hero-forecast) .hero-days {
       grid-template-columns: repeat(auto-fill, minmax(max(88px, 6.5em), 8.5em));
       justify-content: start;
+    }
+    /* one to three days: wider chips, so the days fill more of the right column */
+    .hero-weather[data-stays="1"]
+      .hero-weather-band:has(> .hero-forecast)
+      .hero-days:is([data-count="1"], [data-count="2"], [data-count="3"]) {
+      grid-template-columns: repeat(auto-fill, minmax(max(88px, 6.5em), 12em));
     }
   }
 }

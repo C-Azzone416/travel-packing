@@ -513,7 +513,7 @@ for (const fixture of [F2, F4]) {
     const cards = await page.locator(".hero-day").count();
     const note = await page.locator(".weather-strip .weather-note").first().innerText();
     const range = await page.locator(".weather-strip .weather-range").first().innerText();
-    const typicalLine = await page.locator(".hero-typical-line span").last().innerText();
+    const typicalLine = await page.locator(".hero-typical-line > span").last().innerText();
     await page
       .getByRole("link", { name: /^(Continue|Keep) packing: London/ })
       .first()
@@ -552,6 +552,24 @@ test("Forecast and Typical tags differ by word and outline, and stay visible in 
     tag.evaluate((el) => getComputedStyle(el).borderTopWidth);
   expect(await border(forecast)).toBe("0px");
   expect(await border(typical)).toBe("1px");
+  // the outline is the strong line colour, not the faint hairline
+  const colors = await typical.evaluate((el) => {
+    const probe = (token: string) => {
+      const span = document.createElement("span");
+      span.style.cssText = `border:1px solid var(${token});position:absolute;visibility:hidden`;
+      document.body.append(span);
+      const color = getComputedStyle(span).borderTopColor;
+      span.remove();
+      return color;
+    };
+    return {
+      actual: getComputedStyle(el).borderTopColor,
+      strong: probe("--line-strong"),
+      faint: probe("--line"),
+    };
+  });
+  expect(colors.actual).toBe(colors.strong);
+  expect(colors.strong).not.toBe(colors.faint);
   await page.emulateMedia({ forcedColors: "active", reducedMotion: "reduce" });
   for (const tag of [forecast, typical]) {
     await expect(tag).toBeVisible();

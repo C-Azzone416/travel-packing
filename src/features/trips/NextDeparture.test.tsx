@@ -474,4 +474,20 @@ describe("the weather band: typical days and the other stays (#357, #358)", () =
     );
     expect(screen.queryByText(FOOT)).toBeNull();
   });
+
+  it("keeps each segment of the typical line whole, and the text reads the same", () => {
+    setup({}, { weather: { phase: "ready", cells: [cell()], forecast: mixed() } });
+    const segs = [...hero().querySelectorAll(".hero-typical-line .hero-seg")].map(
+      (el) => el.textContent,
+    );
+    expect(segs).toEqual(["Other 2 days ·", "Oct 22–23: High 18° ·", "Low 11° ·", "Rarely rains"]);
+    expect(hero().querySelector(".hero-typical-line span:last-child")?.textContent).toBe(
+      "Other 2 days · Oct 22–23: High 18° · Low 11° · Rarely rains",
+    );
+  });
+
+  it("tells the days list how many cards it has, so one to three can use wider chips", () => {
+    setup({}, { weather: { phase: "ready", cells: [cell()], forecast: mixed() } });
+    expect(hero().querySelector(".hero-days")?.getAttribute("data-count")).toBe("2");
+  });
 });

@@ -198,6 +198,7 @@ export function measureBand(page: Page) {
       scroll: { page: root.scrollWidth - root.clientWidth, hero: clipped(hero) },
       band: must(band),
       em: parseFloat(getComputedStyle(band).fontSize),
+      listEm: parseFloat(getComputedStyle(document.querySelector(".hero-days") ?? band).fontSize),
       stays: Number(band.dataset.stays),
       bandClipped: clipped(band),
       strip: must(band.querySelector(".weather-strip")),
@@ -220,6 +221,9 @@ export function measureBand(page: Page) {
         ? Array.from(typical.querySelectorAll("p")).map((line) => lines(line))
         : [],
       typicalTag: rect(document.querySelector(".hero-typical .weather-source")),
+      segmentLines: Array.from(document.querySelectorAll(".hero-typical .hero-seg")).map((seg) =>
+        lines(seg),
+      ),
       moreLinks: Array.from(document.querySelectorAll(".hero-days-more")).map(must),
       foot: rect(document.querySelector(".hero-weather-foot")),
       footClipped: (() => {
@@ -297,7 +301,17 @@ export function expectBand(
       0,
     );
     for (const chip of m.chips) {
-      expect(widthOf(chip), `chip is at most 8.5em, ${where}`).toBeLessThanOrEqual(8.5 * em + 0.5);
+      // one to three days get wider chips (12em) so they fill more of the column; four or more stay at 8.5em
+      // (the chips' em is the block's own 13px text, not the band's)
+      const max = m.chips.length <= 3 ? 12 : 8.5;
+      expect(widthOf(chip), `chip is at most ${max}em, ${where}`).toBeLessThanOrEqual(
+        max * m.listEm + 0.5,
+      );
+      if (m.chips.length <= 3) {
+        expect(widthOf(chip), `chip is 12em wide, ${where}`).toBeGreaterThanOrEqual(
+          12 * m.listEm - 1,
+        );
+      }
     }
   } else {
     if (m.forecast) {
@@ -313,7 +327,9 @@ export function expectBand(
     }
     if (mode === "wide") {
       // the cells are columns of at least 14em; a row of them when they fit, else they wrap
-      const perRow = Math.max(1, Math.floor(widthOf(m.band) / (MIN_CELL_EM * em)));
+      // four stays are a balanced 2 x 2
+      const fit = Math.max(1, Math.floor(widthOf(m.band) / (MIN_CELL_EM * em)));
+      const perRow = m.cells.length === 4 ? Math.min(2, fit) : fit;
       const firstRow = m.cells.filter((c) => Math.abs(c.box.y - m.cells[0].box.y) < 1).length;
       expect(firstRow, `cells in the first row, ${where}`).toBe(Math.min(m.cells.length, perRow));
       for (const c of m.cells) {
@@ -361,6 +377,11 @@ export function expectBand(
     grid(heightOf(m.typical), "typical row height");
     grid(m.typical.y - m.gridTop, "typical row top");
     expect(heightOf(m.typicalTag!), `Typical tag is one row, ${where}`).toBeCloseTo(ROW, 0);
+    // the line breaks only between its " · " segments: each segment is one line
+    expect(m.segmentLines.length, `typical segments, ${where}`).toBeGreaterThanOrEqual(3);
+    for (const [at, count] of m.segmentLines.entries()) {
+      expect(count, `typical segment ${at} is one line, ${where}`).toBe(1);
+    }
     // E9: the row is its two parts, each a whole number of 28px lines
     expect(m.typicalLines.length, `typical row has two parts, ${where}`).toBe(2);
     expect(

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { Button, buttonClassName } from "@/components/ui/Button";
 import { Stamps } from "@/components/stamp/Stamp";
 import { selectStamps } from "@/domain/stamps";
@@ -18,6 +18,20 @@ export type HeroWeather =
   | { phase: "loading" }
   | { phase: "unavailable" }
   | { phase: "ready"; cells: WeatherCell[]; forecast?: HeroForecast | null };
+
+/**
+ * The typical line with each " · " segment kept whole: it breaks between figures, never inside one ("High 92°" or
+ * "Rain on 2 of 2 days" is never cut). The text, read aloud or copied, is unchanged.
+ */
+function typicalSegments(line: string) {
+  const parts = line.split(" · ");
+  return parts.map((part, at) => (
+    <Fragment key={at}>
+      <span className="hero-seg">{at < parts.length - 1 ? `${part} ·` : part}</span>
+      {at < parts.length - 1 ? " " : null}
+    </Fragment>
+  ));
+}
 
 const GLYPH: Record<WeatherCell["glyph"], string> = { sun: "☀", rain: "☂", snow: "❄" };
 
@@ -36,7 +50,7 @@ function HeroForecastBlock({ forecast, tripId }: { forecast: HeroForecast; tripI
           {forecast.typical ? ` · ${forecast.forecastTotal} of ${forecast.totalDays} days` : ""}
         </span>
       </p>
-      <ol className="hero-days">
+      <ol className="hero-days" data-count={forecast.days.length}>
         {forecast.days.map((day) => (
           <li key={day.date} className="hero-day">
             <span className="sr-only">{day.spoken}</span>
@@ -67,7 +81,7 @@ function HeroForecastBlock({ forecast, tripId }: { forecast: HeroForecast; tripI
         <div className="hero-typical">
           <p className="weather-part-head hero-typical-line">
             <span className="weather-source typical">Typical</span>
-            <span>{forecast.typical.line}</span>
+            <span>{typicalSegments(forecast.typical.line)}</span>
           </p>
           <p className="hero-typical-note">{forecast.typical.note}</p>
         </div>
