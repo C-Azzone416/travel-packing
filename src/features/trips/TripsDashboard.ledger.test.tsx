@@ -226,7 +226,7 @@ describe("the hero's weather strip", () => {
     expect(within(cell).getByText("San Diego")).toBeTruthy();
     expect(cell.textContent).toContain("68° / 50°");
     expect(cell.textContent).toContain("Forecast");
-    expect(within(cell).getByText("Rain on 1 of 1 days")).toBeTruthy();
+    expect(within(cell).getByText("Rain on 1 of 1 day")).toBeTruthy();
   });
 
   it("adds the daily forecast block after the strip, in the person's unit (#303)", async () => {

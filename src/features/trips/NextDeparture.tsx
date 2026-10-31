@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { Button, buttonClassName } from "@/components/ui/Button";
 import { Stamps } from "@/components/stamp/Stamp";
 import { selectStamps } from "@/domain/stamps";
@@ -19,20 +19,38 @@ export type HeroWeather =
   | { phase: "unavailable" }
   | { phase: "ready"; cells: WeatherCell[]; forecast?: HeroForecast | null };
 
+/**
+ * The typical line with each " · " segment kept whole: it breaks between figures, never inside one ("High 92°" or
+ * "Rain on 2 of 2 days" is never cut). The text, read aloud or copied, is unchanged.
+ */
+function typicalSegments(line: string) {
+  const parts = line.split(" · ");
+  return parts.map((part, at) => (
+    <Fragment key={at}>
+      <span className="hero-seg">{at < parts.length - 1 ? `${part} ·` : part}</span>
+      {at < parts.length - 1 ? " " : null}
+    </Fragment>
+  ));
+}
+
 const GLYPH: Record<WeatherCell["glyph"], string> = { sun: "☀", rain: "☂", snow: "❄" };
 
 /**
  * The daily forecast under the weather strip (#303): the first stay with forecast days, up to 7 of them. Chips on a wide
- * hero, 28px rows on a phone (CSS decides); a stay with more days links to the trip page for the rest.
+ * hero, 28px rows on a phone (CSS decides); a stay with more days links to the trip page for the rest. A stay that also
+ * has typical days gets one text row for them (#357), never cards, so a card is always a real forecast.
  */
 function HeroForecastBlock({ forecast, tripId }: { forecast: HeroForecast; tripId: string }) {
   return (
     <section className="hero-forecast" aria-label={`Forecast for ${forecast.city}`}>
       <p className="weather-part-head hero-forecast-head">
         <span className="weather-source forecast">Forecast</span>
-        <span>{forecast.city}</span>
+        <span>
+          {forecast.city}
+          {forecast.typical ? ` · ${forecast.forecastTotal} of ${forecast.totalDays} days` : ""}
+        </span>
       </p>
-      <ol className="hero-days">
+      <ol className="hero-days" data-count={forecast.days.length}>
         {forecast.days.map((day) => (
           <li key={day.date} className="hero-day">
             <span className="sr-only">{day.spoken}</span>
@@ -56,6 +74,25 @@ function HeroForecastBlock({ forecast, tripId }: { forecast: HeroForecast; tripI
             aria-label={`${forecast.more} more forecast ${forecast.more === 1 ? "day" : "days"} for ${forecast.city} on the trip page`}
           >
             +{forecast.more} more {forecast.more === 1 ? "day" : "days"}
+          </Link>
+        </p>
+      ) : null}
+      {forecast.typical ? (
+        <div className="hero-typical">
+          <p className="weather-part-head hero-typical-line">
+            <span className="weather-source typical">Typical</span>
+            <span>{typicalSegments(forecast.typical.line)}</span>
+          </p>
+          <p className="hero-typical-note">{forecast.typical.note}</p>
+        </div>
+      ) : null}
+      {forecast.otherForecastStays ? (
+        <p className="hero-days-more hero-other-stays">
+          <Link
+            href={`/trips/${tripId}`}
+            aria-label="Daily forecast for the other stays on the trip page"
+          >
+            Daily forecast for the other stays
           </Link>
         </p>
       ) : null}
@@ -130,28 +167,36 @@ export function NextDeparture({
       </div>
 
       {weather.phase === "ready" && weather.cells.length > 0 ? (
-        <>
-          <ul className="weather-strip" aria-label="Weather for each stay">
-            {weather.cells.map((cell) => (
-              <li key={cell.stopIndex}>
-                <div className="weather-cell-top">
-                  <span className="weather-glyph" aria-hidden="true">
-                    {GLYPH[cell.glyph]}
-                  </span>
-                  <span className="weather-city">{cell.city}</span>
-                  <span className="weather-dates">{cell.dates}</span>
-                  <span className="weather-range">
-                    {cell.range} <small>{cell.source}</small>
-                  </span>
-                </div>
-                <span className="weather-note">{cell.note}</span>
-              </li>
-            ))}
-          </ul>
-          {weather.forecast ? (
-            <HeroForecastBlock forecast={weather.forecast} tripId={trip.id} />
-          ) : null}
-        </>
+        <div className="hero-weather" data-stays={weather.cells.length}>
+          <div className="hero-weather-band">
+            <ul className="weather-strip" aria-label="Weather for each stay">
+              {weather.cells.map((cell) => (
+                <li key={cell.stopIndex}>
+                  <div className="weather-cell-top">
+                    <span className="weather-glyph" aria-hidden="true">
+                      {GLYPH[cell.glyph]}
+                    </span>
+                    <span className="weather-city">{cell.city}</span>
+                    <span className="weather-dates">{cell.dates}</span>
+                    <span className="weather-range">
+                      {cell.range} <small>{cell.source}</small>
+                    </span>
+                  </div>
+                  <span className="weather-note">{cell.note}</span>
+                </li>
+              ))}
+            </ul>
+            {weather.forecast ? (
+              <HeroForecastBlock forecast={weather.forecast} tripId={trip.id} />
+            ) : null}
+            {weather.cells.some((cell) => cell.source === "Typical") &&
+            !weather.forecast?.typical ? (
+              <p className="hero-weather-foot">
+                Typical weather is an average of the last 5 years, not a forecast.
+              </p>
+            ) : null}
+          </div>
+        </div>
       ) : weather.phase === "unavailable" ? (
         <p className="weather-strip-note muted tiny">Weather is unavailable right now.</p>
       ) : null}

@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { TripStop } from "@/domain/trip-stops";
 import type { DayWeather, StopWeather } from "@/domain/weather/types";
+import { heroForecast } from "@/features/trips/view";
 import { FORECAST_DAY_CAP, WeatherPanel, type WeatherPanelProps } from "./WeatherPanel";
 
 // #303: stays with forecast days read day by day; a stay with none reads exactly as it always did.
@@ -327,5 +328,30 @@ describe("WeatherPanel daily forecast", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("the dashboard hero and the trip page say the same thing (#357)", () => {
+  it("print the same typical line, and the hero adds only the dates after the day count", () => {
+    const stop = stopFor("2031-04-15", "2031-04-18");
+    const days = [
+      ...run("2031-04-15", 2, "forecast"),
+      ...run("2031-04-17", 2, "typical", { highC: 25, lowC: 2, precipProbability: 0.9 }),
+    ];
+    renderStays([{ stop, days }], { today: "2031-04-15" });
+    const row = screen.getByText(/^Other 2 days: /);
+    const hero = heroForecast(
+      [stop],
+      [{ stopIndex: 0, status: "ok", days: days.map((entry) => ({ ...entry, stopIndex: 0 })) }],
+      "C",
+      "2031-04-15",
+    )!;
+    expect(hero.typical?.line).toBe(`Other 2 days · Apr 17–18: ${row.textContent!.slice(14)}`);
+    expect(hero.typical?.line.replace(" · Apr 17–18", "")).toBe(row.textContent);
+    // the forecast days the hero counts are the ones the panel's Forecast line counts
+    expect(hero.forecastTotal).toBe(2);
+    expect(
+      screen.getByText(/High 20° · Low 11° · Rain on 0 of 2 days|No rain expected/),
+    ).toBeTruthy();
   });
 });

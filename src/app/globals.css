@@ -1418,7 +1418,7 @@ input:disabled {
   background: var(--seafoam);
 }
 .weather-source.typical {
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   background: var(--bg);
 }
 .weather-mixed {
@@ -3171,9 +3171,6 @@ a.back {
 }
 .ledger-hero {
   --ledger-row: 28px;
-  /* A weather cell with a one-line note is 5 rows tall: 4 rows above the note, then the note (28px lines, so a long
-     note adds whole rows). */
-  --ledger-weather-height: calc(var(--ledger-row) * 5);
   position: relative;
   min-width: 0;
   padding: var(--ledger-row) 24px;
@@ -3256,24 +3253,33 @@ a.back {
   align-items: center;
   height: calc(var(--ledger-row) * 4);
 }
-.weather-strip {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(0, 1fr);
-  box-sizing: border-box;
-  min-height: var(--ledger-weather-height);
+/* The weather band (#358): the strip of stay cells and the daily-forecast block read as one band. .hero-weather is the
+   size container (its width is the hero's inner width) and owns the surface and the two hairlines; the band inside it
+   is what the container queries below lay out. Everything is whole 28px rows: no fixed heights, no padding above or
+   below. Stacked is the base (one cell per row, as on a phone); "wide stack" and "two column" are for a container of
+   30em / 40em and up, in em so larger text and browser zoom fall back to the stacked layouts. */
+.hero-weather {
+  container-type: inline-size;
   margin: var(--ledger-row) 0 0;
-  padding: 0;
-  list-style: none;
-  /* The two hairlines are inset shadows, not borders, so the strip is exactly its whole rows tall. */
+  /* The two hairlines are inset shadows, not borders, so the band is exactly its whole rows tall. */
   box-shadow:
     inset 0 1px 0 var(--line),
     inset 0 -1px 0 var(--line);
   background: var(--weather-surface);
 }
+.weather-strip {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
 .weather-strip li {
   padding: 0 14px;
   font-size: 13px;
+}
+.weather-strip li + li {
+  box-shadow: inset 0 1px 0 var(--line);
 }
 /* Everything above the note, padding included, is exactly 4 rows (measured: the content is about 90px); only the note
    grows, so the cell is always a whole number of rows. */
@@ -3288,9 +3294,6 @@ a.back {
 .weather-strip .weather-note {
   display: block;
   line-height: var(--ledger-row);
-}
-.weather-strip li + li {
-  border-left: 1px solid var(--line);
 }
 .weather-city {
   font-weight: 700;
@@ -3528,14 +3531,6 @@ a.back {
   }
   .ledger-hero h2 {
     font-size: 40px;
-  }
-  .weather-strip {
-    grid-auto-flow: row;
-    min-height: 0;
-  }
-  .weather-strip li + li {
-    border-left: 0;
-    box-shadow: inset 0 1px 0 var(--line);
   }
   .ledger-actions {
     min-height: calc(var(--ledger-row) * 4);
@@ -5241,8 +5236,8 @@ a.back {
    the days are 3-row chips in an auto-fill grid; at most 720px they are 28px rows (the #285 phone arrangement). */
 .hero-forecast {
   font-size: 13px;
-  box-shadow: inset 0 -1px 0 var(--line);
-  background: var(--weather-surface);
+  /* the one divider between the strip and the block (the band owns the outer hairlines) */
+  box-shadow: inset 0 1px 0 var(--line);
 }
 .hero-forecast-head {
   padding-inline: 14px;
@@ -5324,5 +5319,143 @@ a.back {
   }
   .hero-day-temps {
     text-align: right;
+  }
+}
+/* The typical days of a mixed stay (#357): one text row under the cards, never chips, so a chip is always a real forecast.
+   Two 28px lines (the figures, then why they are not a forecast); the text wraps in whole lines. */
+.hero-typical {
+  box-shadow: inset 0 1px 0 var(--line);
+}
+.hero-typical p {
+  margin: 0;
+  padding-inline: 14px;
+  line-height: var(--ledger-row);
+  overflow-wrap: anywhere;
+}
+.hero-typical .weather-part-head {
+  min-height: 0;
+}
+/* A segment of the typical line ("High 92° ·") is never cut at a normal size: the line breaks only between segments. An
+   inline-block is as wide as its text when that fits the line, and no wider than the line when it does not, so only a
+   segment longer than a whole line (larger text on a narrow screen) wraps inside itself instead of pushing the page sideways. */
+.hero-seg {
+  display: inline-block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+.hero-typical-note {
+  color: var(--muted);
+}
+/* The footnote under an all-typical band: the same words as the trip page's footnote. */
+.hero-weather-foot {
+  margin: 0;
+  padding-inline: 14px;
+  font-size: 13px;
+  line-height: var(--ledger-row);
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  box-shadow: inset 0 1px 0 var(--line);
+}
+.hero-other-stays {
+  font-size: 13px;
+  box-shadow: inset 0 1px 0 var(--line);
+}
+@media (min-width: 721px) {
+  /* WIDE STACK (container 30em and up): the cells side by side as columns (4 or more wrap to a second row), each cell
+     three rows (identity on the left, the range on the right, the note below), then the block full width below. */
+  @container (min-width: 30em) {
+    .hero-weather-band .weather-strip {
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 14em), 1fr));
+      /* every cell draws its left and top hairline; the first column's and the first row's are clipped away */
+      clip-path: inset(1px 0 0 1px);
+    }
+    /* four stays are a balanced 2 x 2, not 3 + 1 */
+    .hero-weather[data-stays="4"] .weather-strip {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .weather-strip li,
+    .weather-strip li + li {
+      box-shadow:
+        inset 1px 0 0 var(--line),
+        inset 0 1px 0 var(--line);
+    }
+    .weather-cell-top {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      column-gap: 8px;
+      gap: 0 8px;
+      min-height: 0;
+      padding-top: 0;
+      line-height: var(--ledger-row);
+    }
+    .weather-glyph {
+      order: 1;
+      line-height: var(--ledger-row);
+    }
+    .weather-city {
+      order: 2;
+      flex: 1 1 3.5em;
+      min-width: 0;
+    }
+    .weather-range {
+      order: 3;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      margin-left: auto;
+    }
+    .weather-dates {
+      order: 4;
+      flex: 0 0 100%;
+      min-width: 0;
+    }
+  }
+  /* TWO COLUMN (container 40em and up, one stay with a forecast block): the summary on the left, the days on the right, one band the width of
+     the hero. The forecast block's left edge is the divider. */
+  @container (min-width: 40em) {
+    .hero-weather[data-stays="1"] .hero-weather-band:has(> .hero-forecast) {
+      display: grid;
+      grid-template-columns: minmax(12.5em, 17em) minmax(0, 1fr);
+    }
+    .hero-weather[data-stays="1"] .hero-weather-band:has(> .hero-forecast) .weather-strip {
+      clip-path: none;
+    }
+    .hero-weather[data-stays="1"] .hero-weather-band:has(> .hero-forecast) .weather-strip li {
+      box-shadow: none;
+    }
+    /* the left column is the cell stacked (identity, range, note), not the wide-stack three-row cell */
+    .hero-weather[data-stays="1"] .hero-weather-band:has(> .hero-forecast) .weather-cell-top {
+      display: grid;
+      align-items: normal;
+      gap: 2px;
+      min-height: calc(var(--ledger-row) * 4);
+      padding-top: 12px;
+      line-height: inherit;
+    }
+    .hero-weather[data-stays="1"] .hero-weather-band:has(> .hero-forecast) .weather-cell-top > * {
+      order: 0;
+      margin-left: 0;
+    }
+    .hero-weather[data-stays="1"] .hero-weather-band:has(> .hero-forecast) .weather-glyph {
+      line-height: 1;
+    }
+    .hero-weather[data-stays="1"] .hero-weather-band:has(> .hero-forecast) .weather-range {
+      flex-wrap: nowrap;
+      justify-content: normal;
+    }
+    .hero-weather[data-stays="1"] .hero-weather-band:has(> .hero-forecast) > .hero-forecast {
+      box-shadow: inset 1px 0 0 var(--line);
+    }
+    .hero-weather[data-stays="1"] .hero-weather-band:has(> .hero-forecast) .hero-days {
+      grid-template-columns: repeat(auto-fill, minmax(max(88px, 6.5em), 8.5em));
+      justify-content: start;
+    }
+    /* one to three days: wider chips, so the days fill more of the right column */
+    .hero-weather[data-stays="1"]
+      .hero-weather-band:has(> .hero-forecast)
+      .hero-days:is([data-count="1"], [data-count="2"], [data-count="3"]) {
+      grid-template-columns: repeat(auto-fill, minmax(max(88px, 6.5em), 12em));
+    }
   }
 }

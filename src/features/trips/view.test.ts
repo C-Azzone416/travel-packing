@@ -452,3 +452,245 @@ describe("heroForecast (#303)", () => {
     expect(forCount(16).days.map((d) => d.date)).toEqual(dates(7));
   });
 });
+
+describe("weatherCells over a mixed stay (#357)", () => {
+  const stop = (city: string, arrive: string, leave: string) => ({
+    location: { id: city, city, region: "", country: "", countryCode: "", label: city },
+    arrive,
+    leave,
+  });
+  const day = (
+    date: string,
+    source: "forecast" | "typical",
+    over: Record<string, unknown> = {},
+  ) => ({
+    date,
+    stopIndex: 0,
+    source,
+    highC: 20,
+    lowC: 10,
+    precipProbability: 0,
+    precipMm: 0,
+    snowCm: 0,
+    uvIndexMax: null,
+    sunshineHours: null,
+    ...over,
+  });
+  const cellOf = async (days: ReturnType<typeof day>[], unit: "C" | "F" = "C") => {
+    const { weatherCells } = await import("./view");
+    return weatherCells(
+      [stop("A", "2030-05-14", "2030-05-17")],
+      [{ stopIndex: 0, status: "ok" as const, days }],
+      unit,
+      "2030-05-14",
+    )[0];
+  };
+
+  it("sums a 2 forecast + 2 typical stay over the forecast days only, tagged Forecast", async () => {
+    const cell = await cellOf([
+      day("2030-05-14", "forecast", { highC: 18, lowC: 11, precipProbability: 0.9 }),
+      day("2030-05-15", "forecast", { highC: 16, lowC: 9 }),
+      // the typical days are hotter, wetter and snowy: none of that may leak into the cell
+      day("2030-05-16", "typical", { highC: 30, lowC: 1, precipProbability: 0.9, snowCm: 5 }),
+      day("2030-05-17", "typical", { highC: 31, lowC: 0, precipProbability: 0.9 }),
+    ]);
+    expect(cell).toMatchObject({
+      range: "18° / 9°",
+      note: "Rain on 1 of 2 forecast days",
+      source: "Forecast",
+      glyph: "rain",
+    });
+  });
+
+  it("says Mostly dry, and one forecast day singular, for a mixed stay", async () => {
+    const dry = await cellOf([
+      day("2030-05-14", "forecast"),
+      day("2030-05-15", "typical", { precipProbability: 0.9 }),
+    ]);
+    expect(dry).toMatchObject({ note: "Mostly dry", glyph: "sun", source: "Forecast" });
+    const one = await cellOf([
+      day("2030-05-14", "forecast", { precipProbability: 0.5 }),
+      day("2030-05-15", "typical"),
+    ]);
+    expect(one.note).toBe("Rain on 1 of 1 forecast day");
+  });
+
+  it("keeps the all-days wording for an all-forecast stay", async () => {
+    const cell = await cellOf([
+      day("2030-05-14", "forecast", { precipProbability: 0.9 }),
+      day("2030-05-15", "forecast"),
+      day("2030-05-16", "forecast"),
+      day("2030-05-17", "forecast"),
+    ]);
+    expect(cell).toMatchObject({ note: "Rain on 1 of 4 days", source: "Forecast" });
+  });
+
+  it("snow in a forecast day wins over rain; snow only in typical days does not count", async () => {
+    const snowy = await cellOf([
+      day("2030-05-14", "forecast", { snowCm: 3, precipProbability: 0.9 }),
+      day("2030-05-15", "typical"),
+    ]);
+    expect(snowy).toMatchObject({ glyph: "snow", note: "Snow likely" });
+    const typicalSnow = await cellOf([
+      day("2030-05-14", "forecast"),
+      day("2030-05-15", "typical", { snowCm: 3 }),
+    ]);
+    expect(typicalSnow).toMatchObject({ glyph: "sun", note: "Mostly dry" });
+  });
+
+  it("an all-typical stay keeps the all-days figures, tagged Typical", async () => {
+    const cell = await cellOf(
+      [
+        day("2030-06-14", "typical", { highC: 22, precipProbability: 0.9 }),
+        day("2030-06-15", "typical", { lowC: 5 }),
+      ],
+      "F",
+    );
+    expect(cell).toMatchObject({
+      range: "72° / 41°",
+      note: "Rain on 1 of 2 days",
+      source: "Typical",
+    });
+  });
+});
+
+describe("heroForecast, typical days and other stays (#357)", () => {
+  const stop = (city: string, arrive: string, leave: string) => ({
+    location: { id: city, city, region: "", country: "", countryCode: "", label: city },
+    arrive,
+    leave,
+  });
+  const TODAY_ISO = "2030-05-01";
+  const dateAt = (offset: number) =>
+    new Date(Date.parse(`${TODAY_ISO}T00:00:00Z`) + offset * 86_400_000).toISOString().slice(0, 10);
+  /** One day per offset from "today"; the forecast window is offsets 0..15, as on the server. */
+  const days = (stopIndex: number, offsets: number[], over: Record<string, unknown> = {}) =>
+    offsets.map((offset) => ({
+      date: dateAt(offset),
+      stopIndex,
+      source: (offset >= 0 && offset < 16 ? "forecast" : "typical") as "forecast" | "typical",
+      highC: 18,
+      lowC: 11,
+      precipProbability: 0,
+      precipMm: 0,
+      snowCm: 0,
+      uvIndexMax: null,
+      sunshineHours: null,
+      ...over,
+    }));
+  const range = (from: number, to: number) =>
+    Array.from({ length: to - from + 1 }, (_, at) => from + at);
+  const build = async (offsets: number[]) => {
+    const { heroForecast } = await import("./view");
+    const stops = [stop("London", dateAt(offsets[0]), dateAt(offsets[offsets.length - 1]))];
+    return heroForecast(
+      stops,
+      [{ stopIndex: 0, status: "ok" as const, days: days(0, offsets) }],
+      "C",
+      TODAY_ISO,
+    );
+  };
+
+  // U1: every day of the stay is a card, behind "+N more", or in the typical row; and nothing is counted twice.
+  const cases: [string, number[], { cards: number; typical: number }][] = [
+    ["4 forecast days", range(2, 5), { cards: 4, typical: 0 }],
+    ["2 forecast + 2 typical", range(14, 17), { cards: 2, typical: 2 }],
+    ["1 forecast + 3 typical", range(15, 18), { cards: 1, typical: 3 }],
+    ["5 forecast days", range(2, 6), { cards: 5, typical: 0 }],
+    ["7 forecast days", range(2, 8), { cards: 7, typical: 0 }],
+    ["9 forecast days (cap 7, 2 more)", range(2, 10), { cards: 7, typical: 0 }],
+    ["typical BEFORE the forecast (trip under way)", range(-2, 1), { cards: 2, typical: 2 }],
+    ["typical on both sides (split)", range(-1, 17), { cards: 7, typical: 3 }],
+  ];
+  it.each(cases)("%s: cards + more + typical days = every day", async (_name, offsets, want) => {
+    const result = (await build(offsets))!;
+    expect(result.days).toHaveLength(want.cards);
+    expect(result.days.length + result.more + (result.typical?.days ?? 0)).toBe(result.totalDays);
+    expect(result.totalDays).toBe(offsets.length);
+    expect(result.forecastTotal).toBe(result.days.length + result.more);
+    expect(result.typical?.days ?? 0).toBe(want.typical);
+    expect(result.days.length).toBe(Math.min(result.forecastTotal, 7));
+  });
+
+  it("is null for an all-typical stay (0 forecast + 4 typical): no cards, nothing to count", async () => {
+    expect(await build(range(30, 33))).toBeNull();
+  });
+
+  it("the +N more count is forecastTotal - 7 at 7, 8 and 9 forecast days", async () => {
+    expect((await build(range(2, 8)))!.more).toBe(0);
+    expect((await build(range(2, 9)))!.more).toBe(1);
+    expect((await build(range(2, 10)))!.more).toBe(2);
+  });
+
+  it("writes the typical row for a trailing run with its dates and the beyond-the-window reason", async () => {
+    const result = (await build(range(14, 17)))!;
+    expect(result.typical).toEqual({
+      line: "Other 2 days · May 17–18: High 18° · Low 11° · Rarely rains",
+      range: "May 17–18",
+      days: 2,
+      note: "Beyond the 16-day forecast, so these days use the average of the last 5 years.",
+    });
+  });
+
+  it("uses the before-today reason for a leading run and the generic one when the run is split", async () => {
+    const leading = (await build(range(-2, 1)))!;
+    expect(leading.typical).toMatchObject({
+      range: "Apr 29–30",
+      note: "Before today, so these days use the average of the last 5 years.",
+    });
+    const split = (await build(range(-1, 17)))!;
+    expect(split.typical).toMatchObject({
+      range: null,
+      line: "Other 3 days: High 18° · Low 11° · Rarely rains",
+      note: "These days use the average of the last 5 years, not a forecast.",
+    });
+  });
+
+  it("has no typical row and no other-stays flag for an all-forecast single stay", async () => {
+    const result = (await build(range(2, 5)))!;
+    expect(result.typical).toBeNull();
+    expect(result.otherForecastStays).toBe(false);
+  });
+
+  it("flags another stay with forecast days, but not one that is typical-only or has no weather", async () => {
+    const { heroForecast } = await import("./view");
+    const stops = [
+      stop("A", dateAt(2), dateAt(4)),
+      stop("B", dateAt(4), dateAt(6)),
+      stop("C", dateAt(30), dateAt(31)),
+    ];
+    const weatherFor = (second: number[], third: number[]) => [
+      { stopIndex: 0, status: "ok" as const, days: days(0, range(2, 4)) },
+      { stopIndex: 1, status: "ok" as const, days: days(1, second) },
+      { stopIndex: 2, status: "ok" as const, days: days(2, third) },
+    ];
+    const both = heroForecast(stops, weatherFor(range(4, 6), range(30, 31)), "C", TODAY_ISO)!;
+    expect(both).toMatchObject({ city: "A", otherForecastStays: true });
+    const typicalOnly = heroForecast(
+      stops,
+      weatherFor(range(30, 31), range(30, 31)),
+      "C",
+      TODAY_ISO,
+    )!;
+    expect(typicalOnly.otherForecastStays).toBe(false);
+    const none = heroForecast(
+      stops,
+      [{ stopIndex: 0, status: "ok" as const, days: days(0, range(2, 4)) }],
+      "C",
+      TODAY_ISO,
+    )!;
+    expect(none.otherForecastStays).toBe(false);
+    // the block follows the first stay with forecast days; a later one counts as "other"
+    const later = heroForecast(
+      stops,
+      [
+        { stopIndex: 0, status: "ok" as const, days: days(0, range(30, 31)) },
+        { stopIndex: 1, status: "ok" as const, days: days(1, range(4, 6)) },
+        { stopIndex: 2, status: "ok" as const, days: days(2, range(8, 9)) },
+      ],
+      "C",
+      TODAY_ISO,
+    )!;
+    expect(later).toMatchObject({ city: "B", otherForecastStays: true });
+  });
+});
