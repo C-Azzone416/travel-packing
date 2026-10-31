@@ -88,7 +88,7 @@ export const F4: Fixture = {
 };
 export const F5: Fixture = {
   name: "F5 5 days",
-  stays: [{ leave: 2, back: 6 }],
+  stays: [{ leave: 3, back: 7 }],
   cards: 5,
   more: 0,
   typical: 0,
