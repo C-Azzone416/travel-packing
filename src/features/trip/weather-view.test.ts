@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TripStop } from "@/domain/trip-stops";
+import { localToday } from "@/lib/today";
 import type { DayWeather, StopWeather } from "@/domain/weather/types";
 import {
   dayCount,
@@ -7,7 +8,6 @@ import {
   displayTemperature,
   hasCoordinates,
   rainLine,
-  todayUtc,
   typicalLine,
   weatherRowView,
 } from "./weather-view";
@@ -241,20 +241,32 @@ describe("weather view", () => {
       );
     });
 
-    it("todayUtc is the UTC calendar date, not the local one (pins today's behaviour; #26 may change it)", () => {
-      vi.useFakeTimers();
-      // 23:30 on 5 Apr in a UTC-8 zone is 07:30 UTC on 6 Apr
-      vi.setSystemTime(new Date("2031-04-06T07:30:00Z"));
-      expect(todayUtc()).toBe("2031-04-06");
-      vi.setSystemTime(new Date("2031-04-05T23:59:59Z"));
-      expect(todayUtc()).toBe("2031-04-05");
-      vi.setSystemTime(new Date("2031-04-06T00:00:00Z"));
-      expect(todayUtc()).toBe("2031-04-06");
+    it.each([
+      ["America/Phoenix", "UTC-7"],
+      ["Australia/Brisbane", "UTC+10"],
+    ])("labels Today from the device's local date at local midnight in %s (%s)", (zone) => {
+      const previous = process.env.TZ;
+      process.env.TZ = zone;
+      try {
+        vi.useFakeTimers();
+        const days = [at("2031-04-05"), at("2031-04-06")];
+        const labels = () =>
+          weatherRowView(stop, { stopIndex: 0, status: "ok", days })!.forecastDays.map(
+            (d) => d.label,
+          );
+        // The local wall clock reads 23:59 on 5 Apr, then 00:00 on 6 Apr, whatever the UTC date is.
+        vi.setSystemTime(new Date(2031, 3, 5, 23, 59, 59));
+        expect(labels()).toEqual(["Today Apr 5", "Sun Apr 6"]);
+        vi.setSystemTime(new Date(2031, 3, 6, 0, 0, 0));
+        expect(labels()).toEqual(["Sat Apr 5", "Today Apr 6"]);
+      } finally {
+        if (previous === undefined) delete process.env.TZ;
+        else process.env.TZ = previous;
+      }
     });
 
     it("defaults to Celsius and the clock's today", () => {
-      expect(todayUtc()).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-      const v = weatherRowView(stop, { stopIndex: 0, status: "ok", days: [at(todayUtc())] })!;
+      const v = weatherRowView(stop, { stopIndex: 0, status: "ok", days: [at(localToday())] })!;
       expect(v.forecastDays[0].label.startsWith("Today")).toBe(true);
       expect(v.forecastDays[0].high).toBe(20);
     });

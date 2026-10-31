@@ -1,5 +1,6 @@
 import type { StopWeather } from "@/domain/weather/types";
 import type { RateLimiter } from "@/server/locations/rate-limit";
+import { resolveClientToday } from "./dates";
 import type { WeatherProvider, WeatherStopInput } from "./provider";
 import { unavailableStop } from "./provider";
 import { logWeatherEvent } from "./safe-log";
@@ -33,6 +34,7 @@ export async function handleWeatherRequest(
     limiter,
   }: { source: StopsSource; provider: WeatherProvider; limiter: RateLimiter },
   signal?: AbortSignal,
+  rawToday?: string | null,
 ): Promise<WeatherResponse> {
   if (!validTripId(rawTripId)) {
     logWeatherEvent("invalid-trip");
@@ -56,12 +58,13 @@ export async function handleWeatherRequest(
     logWeatherEvent("opted-out");
     return { status: 200, body: { weather: [] } };
   }
+  const today = resolveClientToday(rawToday, new Date());
   const weather = await Promise.all(
     trip.stops.map(async (stop) => {
       if (stop.latitude === undefined || stop.longitude === undefined)
         return unavailableStop(stop.stopIndex);
       try {
-        return await provider.getStopWeather(stop, { signal });
+        return await provider.getStopWeather(stop, { signal, today });
       } catch {
         logWeatherEvent("provider-error");
         return unavailableStop(stop.stopIndex);
