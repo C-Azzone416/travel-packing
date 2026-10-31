@@ -660,7 +660,60 @@ for (const fixture of [F2, F7, F9]) {
   });
 }
 
+// QA #359: a long typical segment ("Nov 14–Dec 2: High 104° ·": a cross-month run, 3-digit Fahrenheit) must be allowed to
+// wrap inside itself when it is wider than the line, or it pushes the page sideways at 320px with larger text. The days
+// are chosen from today's date so the run crosses a month end; leave 13 is used by no other fixture, so the app's
+// weather cache never serves this trip another test's numbers.
+function longTypicalFixture(): Fixture {
+  const dayAt = (offset: number) => new Date(Date.now() + offset * 86_400_000).getUTCDate();
+  let boundary = 18;
+  while (dayAt(boundary) !== 1) boundary++;
+  const back = boundary + 1;
+  return {
+    name: "FL long typical run, 3-digit F",
+    stays: [{ leave: 13, back }],
+    cards: 3,
+    more: 0,
+    typical: back - 15,
+    cellCount: 1,
+    otherStays: false,
+    foot: false,
+  };
+}
+async function openLongTypical(page: Page) {
+  await fake("/__weather-set?variant=scorching");
+  const fixture = longTypicalFixture();
+  await openBand(page, fixture);
+  const line = page.locator(".hero-typical-line > span").last();
+  await expect(line).toContainText(
+    /Other \d+ days · [A-Z][a-z]{2} \d+–[A-Z][a-z]{2} \d+: High 1\d\d° /,
+  );
+  return fixture;
+}
+test("a long typical segment wraps inside itself at 320px with 200% text: no sideways scroll", async ({
+  page,
+}) => {
+  const fixture = await openLongTypical(page);
+  await setWidth(page, 320);
+  await applyLargeBandText(page);
+  const m = await measureBand(page);
+  expect(m.scroll, "the page and the hero do not scroll sideways at 320px, 200% text").toEqual({
+    page: 0,
+    hero: 0,
+  });
+  expectBand(m, fixture, 320, { allowSegmentWrap: true });
+});
+test("a long typical segment stays inside the hero at 195px", async ({ page }) => {
+  await openLongTypical(page);
+  await setWidth(page, 195);
+  expectContained(await measureBand(page), "long typical segment at 195px");
+  await applyLargeBandText(page);
+  expectContained(await measureBand(page), "long typical segment at 195px, 200% text");
+});
+
 // Test-only 200% text (root font 32px): the em thresholds drop the band to the stacked layouts, and the text wraps.
+// It forces only the block rows (forecast, typical, footnote) to 26px, not the strip cells: the cells' text is px in the app
+// and does not scale with the text-size setting, so scaling it here would test a layout no one can reach.
 async function applyLargeBandText(page: Page) {
   await page.addStyleTag({
     content:
@@ -682,7 +735,8 @@ for (const fixture of [F2, F9]) {
       await openBand(page, fixture);
       await setWidth(page, width);
       await applyLargeBandText(page);
-      expectBand(await measureBand(page), fixture, width);
+      // a segment wider than the whole line may wrap inside itself at 200% text; it must never overflow
+      expectBand(await measureBand(page), fixture, width, { allowSegmentWrap: true });
     });
   }
 }

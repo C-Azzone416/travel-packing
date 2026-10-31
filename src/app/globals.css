@@ -5335,9 +5335,14 @@ a.back {
 .hero-typical .weather-part-head {
   min-height: 0;
 }
-/* A segment of the typical line ("High 92° ·") is never cut: the line breaks only between segments. */
+/* A segment of the typical line ("High 92° ·") is never cut at a normal size: the line breaks only between segments. An
+   inline-block is as wide as its text when that fits the line, and no wider than the line when it does not, so only a
+   segment longer than a whole line (larger text on a narrow screen) wraps inside itself instead of pushing the page sideways. */
 .hero-seg {
-  white-space: nowrap;
+  display: inline-block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  vertical-align: top;
 }
 .hero-typical-note {
   color: var(--muted);

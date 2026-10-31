@@ -257,6 +257,8 @@ export function modeOf(m: BandFacts): Mode {
 }
 
 export interface BandOptions {
+  /** A segment wider than the line may wrap inside itself (200% text on a narrow screen with a long date range). */
+  allowSegmentWrap?: boolean;
   /** The body's 320px minimum belongs to #332: below 320px only containment is asserted. */
   containmentOnly?: boolean;
 }
@@ -379,8 +381,10 @@ export function expectBand(
     expect(heightOf(m.typicalTag!), `Typical tag is one row, ${where}`).toBeCloseTo(ROW, 0);
     // the line breaks only between its " · " segments: each segment is one line
     expect(m.segmentLines.length, `typical segments, ${where}`).toBeGreaterThanOrEqual(3);
-    for (const [at, count] of m.segmentLines.entries()) {
-      expect(count, `typical segment ${at} is one line, ${where}`).toBe(1);
+    if (!options.allowSegmentWrap) {
+      for (const [at, count] of m.segmentLines.entries()) {
+        expect(count, `typical segment ${at} is one line, ${where}`).toBe(1);
+      }
     }
     // E9: the row is its two parts, each a whole number of 28px lines
     expect(m.typicalLines.length, `typical row has two parts, ${where}`).toBe(2);
