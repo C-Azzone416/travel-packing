@@ -4,6 +4,7 @@ import { useEffect, useId, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { useSaveStatus } from "@/components/shell/SaveStatus";
+import { useSignOut } from "@/components/shell/use-sign-out";
 import { Switch } from "@/components/ui/Switch";
 import { useToast } from "@/components/ui/Toast";
 import {
@@ -12,8 +13,11 @@ import {
   parseAppearance,
   type Appearance,
 } from "@/domain/appearance";
+import { FeedbackSettings } from "@/features/feedback/FeedbackSettings";
 import type { WeatherSettings } from "@/server/data/weather-store";
 import type { AppearanceResult } from "./appearance-actions";
+import { CloseAccountSheet } from "./CloseAccountSheet";
+import type { CloseAccountState } from "./close-account-state";
 import { ThemePicker } from "./ThemePicker";
 import type { WeatherSettingsResult } from "./weather-actions";
 
@@ -27,6 +31,9 @@ export interface SettingsScreenProps {
   /** The theme saved on the account (Base when none was chosen). */
   initialAppearance: Appearance;
   updateAppearance: (appearance: Appearance) => Promise<AppearanceResult>;
+  /** Server-side rollout decision. Missing or invalid configuration passes false and hides every closure entry point. */
+  accountClosureEnabled: boolean;
+  closeAccount: (previous: CloseAccountState, formData: FormData) => Promise<CloseAccountState>;
 }
 
 /** Show a theme now: the attribute drives the role tokens, the cookie lets the server render it before first paint. */
@@ -42,6 +49,16 @@ function shownAppearance(): Appearance {
 
 const TIME = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" });
 
+type SaveView = "failed" | "saving" | "saved" | "upToDate";
+
+// One card state per row of the design table (#298). Order matters: a failure or a pending write always wins.
+const SAVE_VIEW: Record<SaveView, { glyph: string; line: string }> = {
+  failed: { glyph: "!", line: "Not saved" },
+  saving: { glyph: "●", line: "Saving…" },
+  saved: { glyph: "✓", line: "Saved" },
+  upToDate: { glyph: "✓", line: "Up to date" },
+};
+
 /** "Last saved 3:42 PM". Shown only after a real write; before one there is nothing to report. */
 export function lastSavedText(savedAt: Date): string {
   return `Last saved ${TIME.format(savedAt)}`;
@@ -56,14 +73,18 @@ export function SettingsScreen({
   updateWeather,
   initialAppearance,
   updateAppearance,
+  accountClosureEnabled,
+  closeAccount,
 }: SettingsScreenProps) {
-  const { status, lastSavedAt, retry, track } = useSaveStatus();
+  const { status, lastSavedAt, retry, track, pending } = useSaveStatus();
+  const signOutGuard = useSignOut(signOut);
   const toast = useToast();
   const unitsName = useId();
   const [weather, setWeather] = useState(initialWeather);
   const [weatherError, setWeatherError] = useState(false);
   const [appearance, setAppearance] = useState(initialAppearance);
   const [appearanceError, setAppearanceError] = useState(false);
+  const [closingAccount, setClosingAccount] = useState(false);
 
   // The account's theme is the truth. If this device was showing another one (a new device, or a choice made
   // elsewhere), show the account's now and refresh the cookie. This never writes to the account.
@@ -114,6 +135,22 @@ export function SettingsScreen({
     });
   }
 
+  const view: SaveView =
+    status === "error"
+      ? "failed"
+      : status === "saving" || pending
+        ? "saving"
+        : status === "saved"
+          ? "saved"
+          : "upToDate";
+  // A detail line only where it says something: the failure, or the last real save once there is one.
+  const detail =
+    view === "failed"
+      ? "Your change is still on screen."
+      : view === "upToDate" && lastSavedAt
+        ? lastSavedText(lastSavedAt)
+        : null;
+
   return (
     <section className="screen">
       <div className="page-head settings-head">
@@ -138,35 +175,45 @@ export function SettingsScreen({
         <Card as="section" padded aria-labelledby="settings-account">
           <h2 id="settings-account">Account</h2>
           {email ? (
-            <p>
+            // The whole row is left out of any feedback screenshot before the picture is made, so no label is left dangling (#273, capture-exclusion.ts).
+            <p data-feedback-identity data-feedback-exclude="account-identity">
               Signed in as <strong>{email}</strong>
             </p>
           ) : null}
-          <form action={signOut}>
+          <form action={signOutGuard.action}>
             <Button type="submit" variant="secondary">
               Sign out
             </Button>
           </form>
+          {signOutGuard.sheet}
+          {accountClosureEnabled ? (
+            <div className="close-account-entry">
+              <h3>Close account</h3>
+              <p className="muted">
+                Permanently remove your account identity and Packed Smart content.
+              </p>
+              <Button variant="danger" onClick={() => setClosingAccount(true)}>
+                Close account
+              </Button>
+            </div>
+          ) : null}
         </Card>
         <Card as="section" padded aria-labelledby="settings-save">
           <h2 id="settings-save">Save status</h2>
-          {status === "error" ? (
-            <>
-              <p>Your last change hasn’t been saved. We’ll keep it on screen while you retry.</p>
-              <Button onClick={retry}>Retry</Button>
-            </>
-          ) : status === "saving" ? (
-            <p>Saving…</p>
-          ) : lastSavedAt ? (
-            <p>Everything you changed is saved.</p>
-          ) : (
-            <p>No changes yet this visit. Changes you make are saved as you go.</p>
-          )}
-          {lastSavedAt ? (
-            <p className="tiny muted" role="status">
-              {lastSavedText(lastSavedAt)}
-            </p>
-          ) : null}
+          <div className="save-status">
+            <div className="save-status-main">
+              <span className={`save-status-glyph save-status-glyph-${view}`} aria-hidden="true">
+                {SAVE_VIEW[view].glyph}
+              </span>
+              <div className="save-status-text">
+                <p className={`save-status-line save-status-line-${view}`}>
+                  {SAVE_VIEW[view].line}
+                </p>
+                {detail ? <p className="save-status-detail">{detail}</p> : null}
+              </div>
+            </div>
+            {view === "failed" ? <Button onClick={retry}>Retry</Button> : null}
+          </div>
         </Card>
         <Card as="section" padded aria-labelledby="settings-weather">
           <h2 id="settings-weather">Weather and units</h2>
@@ -204,7 +251,11 @@ export function SettingsScreen({
           ) : null}
           <p className="weather-credit tiny muted">Weather data by Open-Meteo.com</p>
         </Card>
+        <FeedbackSettings />
       </div>
+      {accountClosureEnabled && closingAccount ? (
+        <CloseAccountSheet action={closeAccount} onClose={() => setClosingAccount(false)} />
+      ) : null}
     </section>
   );
 }

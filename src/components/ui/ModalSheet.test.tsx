@@ -2,7 +2,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ModalSheet } from "./ModalSheet";
 
 function Harness({
@@ -67,6 +67,16 @@ describe("ModalSheet", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(document.activeElement).toBe(opener);
     expect(document.body.style.overflow).toBe("");
+  });
+
+  it("returns focus to the opener without scrolling the page", async () => {
+    render(<Harness />);
+    const opener = screen.getByRole("button", { name: "Open" });
+    const focus = vi.spyOn(opener, "focus");
+    await userEvent.click(opener);
+    await userEvent.keyboard("{Escape}");
+    expect(focus).toHaveBeenLastCalledWith({ preventScroll: true });
+    focus.mockRestore();
   });
 
   it("gives focus back to the pressed control when the browser never focused it (Safari does not focus a tapped button)", async () => {
@@ -177,6 +187,45 @@ describe("ModalSheet", () => {
     expect(screen.getByRole("dialog")).toBeTruthy();
     unmount();
     expect(document.activeElement).toBe(document.body);
+  });
+
+  describe("the last control focused outside a dialog (no press, opened by code)", () => {
+    function CodeOpened({ open }: { open: boolean }) {
+      return (
+        <ModalSheet open={open} title="Rename" onClose={() => {}}>
+          <input aria-label="Name" autoFocus />
+        </ModalSheet>
+      );
+    }
+    let outside: HTMLButtonElement;
+    beforeEach(() => {
+      outside = document.createElement("button");
+      outside.textContent = "Outside opener";
+      document.body.append(outside);
+    });
+    afterEach(() => outside.remove());
+
+    it("returns focus to an outside control that was focused, though nothing pressed it", () => {
+      const view = render(<CodeOpened open={false} />);
+      outside.focus();
+      view.rerender(<CodeOpened open />);
+      // The sheet's autoFocus field took focus while mounting, so the opener is found only through lastOutsideFocus.
+      expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "Name" }));
+      view.rerender(<CodeOpened open={false} />);
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(document.activeElement).toBe(outside);
+      view.unmount();
+    });
+
+    it("does not refocus an outside control that has since left the page", () => {
+      const view = render(<CodeOpened open={false} />);
+      outside.focus();
+      view.rerender(<CodeOpened open />);
+      outside.remove();
+      view.rerender(<CodeOpened open={false} />);
+      expect(document.activeElement).toBe(document.body);
+      view.unmount();
+    });
   });
 
   it("copes with an opener that is not an HTML element (nothing to restore)", async () => {
@@ -360,6 +409,54 @@ describe("ModalSheet", () => {
     });
   });
 
+  describe("headerAction (#296)", () => {
+    it("sits before the close button in one end group, and neither takes the initial focus", () => {
+      render(
+        <ModalSheet
+          open
+          showClose
+          title="Edit"
+          onClose={() => {}}
+          headerAction={<button>Extra</button>}
+        >
+          <input aria-label="Name" />
+        </ModalSheet>,
+      );
+      const end = document.querySelector(".modal-head-end") as HTMLElement;
+      const buttons = [...end.querySelectorAll("button")].map((node) => node.textContent);
+      expect(buttons).toEqual(["Extra", "×"]);
+      expect(document.activeElement).toBe(screen.getByLabelText("Name"));
+    });
+
+    it("keeps the Tab trap across the action and the close button", async () => {
+      render(
+        <ModalSheet
+          open
+          showClose
+          title="Edit"
+          onClose={() => {}}
+          headerAction={<button>Extra</button>}
+        >
+          <input aria-label="Name" />
+        </ModalSheet>,
+      );
+      await userEvent.tab({ shift: true }); // Name -> Close dialog (last before wrap is Name; shift goes to Close)
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: "Close dialog" }));
+      await userEvent.tab();
+      expect(document.activeElement).toBe(screen.getByLabelText("Name"));
+    });
+
+    it("without it the head is exactly as before: the close button directly in the head, no end group", () => {
+      render(
+        <ModalSheet open showClose title="Plain" onClose={() => {}}>
+          <input aria-label="Name" />
+        </ModalSheet>,
+      );
+      expect(document.querySelector(".modal-head-end")).toBeNull();
+      expect(document.querySelector(".modal-head > .modal-close")).not.toBeNull();
+    });
+  });
+
   it("starts on a control that asks to be first, such as a checked radio, instead of the first control", () => {
     render(
       <ModalSheet open title="Pick" onClose={() => {}}>
@@ -368,5 +465,59 @@ describe("ModalSheet", () => {
       </ModalSheet>,
     );
     expect(document.activeElement).toBe(screen.getByLabelText("Two"));
+  });
+});
+
+describe("data-sheet-open on <body> (#341)", () => {
+  it("is set while a sheet is open, in step with the scroll lock, and removed on close", () => {
+    const { rerender } = render(
+      <ModalSheet open={false} title="A" onClose={() => {}}>
+        x
+      </ModalSheet>,
+    );
+    expect(document.body.hasAttribute("data-sheet-open")).toBe(false);
+    rerender(
+      <ModalSheet open title="A" onClose={() => {}}>
+        x
+      </ModalSheet>,
+    );
+    expect(document.body.hasAttribute("data-sheet-open")).toBe(true);
+    expect(document.body.style.overflow).toBe("hidden");
+    rerender(
+      <ModalSheet open={false} title="A" onClose={() => {}}>
+        x
+      </ModalSheet>,
+    );
+    expect(document.body.hasAttribute("data-sheet-open")).toBe(false);
+    expect(document.body.style.overflow).toBe("");
+  });
+
+  it("stays set until the last of two sheets closes", () => {
+    const both = (a: boolean, b: boolean) => (
+      <>
+        <ModalSheet open={a} title="A" onClose={() => {}}>
+          x
+        </ModalSheet>
+        <ModalSheet open={b} title="B" onClose={() => {}}>
+          y
+        </ModalSheet>
+      </>
+    );
+    const { rerender } = render(both(true, true));
+    rerender(both(true, false));
+    expect(document.body.hasAttribute("data-sheet-open")).toBe(true);
+    rerender(both(false, false));
+    expect(document.body.hasAttribute("data-sheet-open")).toBe(false);
+  });
+
+  it("is removed when an open sheet unmounts", () => {
+    const { unmount } = render(
+      <ModalSheet open title="A" onClose={() => {}}>
+        x
+      </ModalSheet>,
+    );
+    expect(document.body.hasAttribute("data-sheet-open")).toBe(true);
+    unmount();
+    expect(document.body.hasAttribute("data-sheet-open")).toBe(false);
   });
 });

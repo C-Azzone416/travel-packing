@@ -57,7 +57,53 @@ describe("redactFields", () => {
     },
   );
 
-  it.each([...SENSITIVE_KEYS])("never keeps the value of the sensitive field %s", (key) => {
+  // The full policy, named. Deleting or adding a key in SENSITIVE_KEYS fails here until this list is updated on purpose.
+  const PINNED_SENSITIVE_KEYS = [
+    "email",
+    "password",
+    "token",
+    "secret",
+    "destination",
+    "location",
+    "place",
+    "query",
+    "name",
+    "items",
+    "item",
+    "label",
+    "city",
+    "start",
+    "end",
+    "date",
+    "latitude",
+    "longitude",
+    "trip",
+    "trips",
+    "staple",
+    "staples",
+    "names",
+    "labels",
+    "destinations",
+    "stop",
+    "stops",
+    "list",
+    "lists",
+    "stamp",
+    "category",
+    "categories",
+    "title",
+    "note",
+    "notes",
+    "address",
+    "country",
+    "region",
+  ];
+
+  it("pins exactly the named sensitive keys", () => {
+    expect([...SENSITIVE_KEYS].sort()).toEqual([...PINNED_SENSITIVE_KEYS].sort());
+  });
+
+  it.each(PINNED_SENSITIVE_KEYS)("never keeps the value of the sensitive field %s", (key) => {
     expect(redactFields({ [key]: "Lisbon" })).toEqual({ [key]: REDACTED });
   });
 

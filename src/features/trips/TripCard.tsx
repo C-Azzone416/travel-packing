@@ -23,6 +23,36 @@ export interface TripCardProps {
   onRemove: (id: string) => void;
 }
 
+/** Historical wording for a past trip: says what was packed, never what is left to do (spec #301). */
+function pastStatus(view: TripCardView): {
+  chip: string;
+  ready: boolean;
+  valueText: string;
+} {
+  if (view.total === 0) {
+    return { chip: "No items", ready: false, valueText: "No items packed (0%)" };
+  }
+  if (view.ready) {
+    return {
+      chip: "Marked Ready",
+      ready: true,
+      valueText: `Marked Ready, packed ${view.packed} of ${view.total} (${view.percent}%)`,
+    };
+  }
+  if (view.packed >= view.total) {
+    return {
+      chip: `All ${view.total} packed`,
+      ready: false,
+      valueText: `All ${view.total} packed (100%)`,
+    };
+  }
+  return {
+    chip: `Packed ${view.packed} of ${view.total}`,
+    ready: false,
+    valueText: `Packed ${view.packed} of ${view.total} (${view.percent}%)`,
+  };
+}
+
 export function TripCard({
   trip,
   view,
@@ -34,7 +64,12 @@ export function TripCard({
 }: TripCardProps) {
   const [quickOpen, setQuickOpen] = useState(false);
   const quickId = `quick-view-${trip.id}`;
-  const status = view.ready ? (
+  const past = view.past ? pastStatus(view) : null;
+  // A past trip is reviewed, not packed for: "Review bag" for every past trip (spec #301, separable).
+  const primaryLabel = view.ready || view.past ? "Review bag" : "Keep packing";
+  const status = past ? (
+    <StatusBadge status={past.ready ? "ready" : "remaining"}>{past.chip}</StatusBadge>
+  ) : view.ready ? (
     <StatusBadge status="ready">Ready to go</StatusBadge>
   ) : (
     <StatusBadge status="remaining">{view.remaining} left to pack</StatusBadge>
@@ -78,16 +113,22 @@ export function TripCard({
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={view.percent}
-          aria-valuetext={`${view.percent}% packed`}
+          aria-valuetext={past ? past.valueText : `${view.percent}% packed`}
         >
           <span style={{ width: `${view.percent}%` }} />
         </div>
-        <div className="progress-copy">
-          <span>
-            {view.packed} of {view.total} packed
-          </span>
-          <span>{view.percent}%</span>
-        </div>
+        {past ? (
+          <div className="progress-copy">
+            <span>{view.percent}% packed</span>
+          </div>
+        ) : (
+          <div className="progress-copy">
+            <span>
+              {view.packed} of {view.total} packed
+            </span>
+            <span>{view.percent}%</span>
+          </div>
+        )}
         <button
           className="quick-view-toggle"
           type="button"
@@ -105,9 +146,9 @@ export function TripCard({
           <Link
             className={buttonClassName({ small: true })}
             href={`/trips/${trip.id}`}
-            aria-label={`${view.ready ? "Review bag" : "Keep packing"}: ${view.destination}`}
+            aria-label={`${primaryLabel}: ${view.destination}`}
           >
-            {view.ready ? "Review bag" : "Keep packing"}
+            {primaryLabel}
           </Link>
           <Link
             className={buttonClassName({ variant: "secondary", small: true })}

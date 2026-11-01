@@ -1,0 +1,294 @@
+// The server's side of the Framebriar wire protocol (#259): redeem an invitation, refresh an access token, disconnect a family, and
+// deliver a report with its optional PNG. The destination is the one fixed, approved Framebriar address below; nothing a request
+// carries can change it, so there is nothing to point at an internal host (no SSRF). Every call has a timeout, a response size cap,
+// no redirects and no cookies, and every answer is validated before anything trusts it.
+// Credentials and invitations are arguments only: they are never logged, never put in an error, and never echoed.
+// Protocol facts (reviewed Framebriar v0.4.1 source, to be confirmed against the live service before release): refresh credentials do
+// not rotate and the family deadline is fixed; access tokens last at most an hour; a redemption retried with the same attempt id
+// inside Framebriar's idempotency window returns the same family.
+
+import {
+  logFeedbackUpstream,
+  type FeedbackLogSink,
+  type FeedbackUpstreamOutcome,
+  type FeedbackUpstreamPhase,
+} from "./safe-log";
+
+export const FRAMEBRIAR_ENDPOINT = "https://framebriar-masra91-poc.azurewebsites.net/api";
+export const GAME_ID = "travel-packing";
+const SCOPE_VERSION = 2;
+const TIMEOUT_MS = 8_000;
+const MEDIA_TIMEOUT_MS = 20_000;
+const MAX_RESPONSE_BYTES = 16 * 1024;
+const MAX_UPLOAD_TICKET_TTL_MS = 10 * 60 * 1000;
+const UPLOAD_TICKET = /^[A-Za-z0-9_-]{43}$/;
+
+export interface AccessGrant {
+  accessToken: string;
+  accessExpiresAt: number;
+  refreshToken: string;
+  refreshExpiresAt: number;
+}
+
+/**
+ * ok: Framebriar answered and the answer is well formed.
+ * rejected: Framebriar answered with a refusal (the status is a number from its answer; nothing else is kept).
+ * uncertain: no usable answer (network, timeout, 5xx, a malformed or oversized body). What the call did upstream is unknown.
+ */
+export type Outcome<T> =
+  | { kind: "ok"; value: T }
+  | { kind: "rejected"; status: number; retryAfterSeconds?: number }
+  | { kind: "uncertain" };
+
+export interface FramebriarClient {
+  redeem(input: { invitation: string; attemptId: string }): Promise<Outcome<AccessGrant>>;
+  refresh(refreshToken: string): Promise<Outcome<AccessGrant>>;
+  disconnect(refreshToken: string): Promise<Outcome<true>>;
+  submitReport(input: {
+    accessToken: string;
+    reportId: string;
+    report: string;
+    media: Uint8Array | null;
+  }): Promise<Outcome<{ id: string; gameId: string }>>;
+}
+
+interface ClientOptions {
+  fetchImpl?: typeof fetch;
+  now?: () => number;
+  timingNow?: () => number;
+  log?: FeedbackLogSink;
+}
+
+async function readCapped(response: Response): Promise<unknown | undefined> {
+  const reader = response.body?.getReader();
+  if (!reader) return undefined;
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_RESPONSE_BYTES) {
+      await reader.cancel().catch(() => undefined);
+      return undefined;
+    }
+    chunks.push(value);
+  }
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  } catch {
+    return undefined;
+  }
+}
+
+const isoMs = (value: unknown): number | null => {
+  if (typeof value !== "string" || value.length > 40) return null;
+  const at = Date.parse(value);
+  return Number.isFinite(at) ? at : null;
+};
+
+export function createFramebriarClient({
+  fetchImpl = fetch,
+  now = Date.now,
+  timingNow = () => performance.now(),
+  log,
+}: ClientOptions = {}): FramebriarClient {
+  const diagnostic = (
+    phase: FeedbackUpstreamPhase | undefined,
+    startedAt: number,
+    outcome: FeedbackUpstreamOutcome,
+    status?: number,
+  ) => {
+    if (phase === undefined) return;
+    logFeedbackUpstream(
+      {
+        phase,
+        outcome,
+        elapsedMs: timingNow() - startedAt,
+        ...(status === undefined ? {} : { status }),
+      },
+      log,
+    );
+  };
+
+  async function call<T>(
+    path: string,
+    init: { method: "POST" | "PUT"; headers: Record<string, string>; body: BodyInit },
+    parse: (body: unknown) => T | null,
+    timeoutMs = TIMEOUT_MS,
+    phase?: FeedbackUpstreamPhase,
+  ): Promise<Outcome<T>> {
+    const startedAt = timingNow();
+    let response: Response;
+    try {
+      response = await fetchImpl(`${FRAMEBRIAR_ENDPOINT}${path}`, {
+        ...init,
+        redirect: "error",
+        credentials: "omit",
+        cache: "no-store",
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+    } catch (error) {
+      diagnostic(
+        phase,
+        startedAt,
+        error instanceof DOMException && error.name === "TimeoutError" ? "timeout" : "network",
+      );
+      return { kind: "uncertain" };
+    }
+    if (response.status >= 500) {
+      diagnostic(phase, startedAt, "upstream", response.status);
+      return { kind: "uncertain" };
+    }
+    if (response.status < 200 || response.status >= 300) {
+      diagnostic(phase, startedAt, "refused", response.status);
+      const retry = Number(response.headers.get("retry-after"));
+      return {
+        kind: "rejected",
+        status: response.status,
+        ...(Number.isFinite(retry) && retry > 0 && retry <= 3600
+          ? { retryAfterSeconds: Math.ceil(retry) }
+          : {}),
+      };
+    }
+    const body = await readCapped(response).catch(() => undefined);
+    const value = body === undefined ? null : parse(body);
+    if (value === null) {
+      diagnostic(phase, startedAt, "invalid-response", response.status);
+      return { kind: "uncertain" };
+    }
+    diagnostic(phase, startedAt, "ok", response.status);
+    return { kind: "ok", value };
+  }
+
+  const json = (payload: unknown) => ({
+    headers: { "content-type": "application/json", accept: "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  function parseGrant(expectedRefresh?: string) {
+    return (body: unknown): AccessGrant | null => {
+      const grant = body as Record<string, unknown> | null;
+      if (typeof grant !== "object" || grant === null) return null;
+      if (grant.v !== 1 || grant.gameId !== GAME_ID || grant.scopeVersion !== SCOPE_VERSION)
+        return null;
+      const { token, refreshToken } = grant;
+      const accessExpiresAt = isoMs(grant.expiresAt);
+      const refreshExpiresAt = isoMs(grant.refreshExpiresAt);
+      if (typeof token !== "string" || token.length < 16 || token.length > 4096) return null;
+      if (
+        typeof refreshToken !== "string" ||
+        refreshToken.length < 16 ||
+        refreshToken.length > 4096
+      )
+        return null;
+      if (accessExpiresAt === null || refreshExpiresAt === null) return null;
+      // The family deadline is fixed and an access token never outlives it; a refresh must not rotate the credential.
+      if (refreshExpiresAt <= now() || accessExpiresAt > refreshExpiresAt) return null;
+      if (accessExpiresAt <= now() || accessExpiresAt - now() > 2 * 60 * 60 * 1000) return null;
+      if (expectedRefresh !== undefined && refreshToken !== expectedRefresh) return null;
+      return { accessToken: token, accessExpiresAt, refreshToken, refreshExpiresAt };
+    };
+  }
+
+  return {
+    redeem: ({ invitation, attemptId }) =>
+      call(
+        "/v1/access/redeem",
+        {
+          method: "POST",
+          ...json({ v: 1, gameId: GAME_ID, scopeVersion: SCOPE_VERSION, invitation, attemptId }),
+        },
+        parseGrant(),
+      ),
+    refresh: (refreshToken) =>
+      call(
+        "/v1/access/refresh",
+        {
+          method: "POST",
+          ...json({ v: 1, gameId: GAME_ID, scopeVersion: SCOPE_VERSION, refreshToken }),
+        },
+        parseGrant(refreshToken),
+      ),
+    disconnect: (refreshToken) =>
+      call(
+        "/v1/access/disconnect",
+        { method: "POST", ...json({ v: 1, gameId: GAME_ID, refreshToken }) },
+        (body) => ((body as { v?: unknown } | null)?.v === 1 ? true : null),
+      ),
+    async submitReport({ accessToken, reportId, report, media }) {
+      const authorization = { authorization: `Bearer ${accessToken}` };
+      const parseReadyReceipt = (body: unknown) => {
+        const receipt = body as Record<string, unknown> | null;
+        if (typeof receipt !== "object" || receipt === null) return null;
+        return receipt.id === reportId && receipt.status === "ready" && receipt.gameId === GAME_ID
+          ? { id: reportId, gameId: GAME_ID, status: "ready" as const }
+          : null;
+      };
+      const parsePreparedReceipt = (body: unknown) => {
+        const ready = parseReadyReceipt(body);
+        if (ready !== null) return ready;
+        const receipt = body as Record<string, unknown> | null;
+        if (typeof receipt !== "object" || receipt === null) return null;
+        const expiresAt = isoMs(receipt.expiresAt);
+        const current = now();
+        if (
+          receipt.id !== reportId ||
+          receipt.status !== "pending" ||
+          (receipt.gameId !== undefined && receipt.gameId !== GAME_ID) ||
+          typeof receipt.ticket !== "string" ||
+          !UPLOAD_TICKET.test(receipt.ticket) ||
+          expiresAt === null ||
+          expiresAt <= current ||
+          expiresAt - current > MAX_UPLOAD_TICKET_TTL_MS
+        )
+          return null;
+        return {
+          id: reportId,
+          status: "pending" as const,
+          ticket: receipt.ticket,
+          expiresAt,
+        };
+      };
+      const first = await call(
+        "/v1/reports",
+        {
+          method: "POST",
+          headers: {
+            ...authorization,
+            "content-type": "application/json",
+            accept: "application/json",
+          },
+          body: report,
+        },
+        parsePreparedReceipt,
+        TIMEOUT_MS,
+        "metadata",
+      );
+      if (first.kind !== "ok") return first;
+      const { id, status } = first.value;
+      if (status === "ready") return { kind: "ok", value: { id, gameId: GAME_ID } };
+      const { ticket } = first.value;
+      if (status !== "pending" || media === null || typeof ticket !== "string" || ticket === "")
+        return { kind: "uncertain" };
+      const uploaded = await call(
+        `/v1/reports/${encodeURIComponent(id)}/media`,
+        {
+          method: "PUT",
+          headers: {
+            ...authorization,
+            "content-type": "image/png",
+            "x-upload-ticket": ticket,
+            accept: "application/json",
+          },
+          body: Buffer.from(media),
+        },
+        parseReadyReceipt,
+        MEDIA_TIMEOUT_MS,
+        "media",
+      );
+      if (uploaded.kind !== "ok") return uploaded;
+      return { kind: "ok", value: { id: uploaded.value.id, gameId: uploaded.value.gameId } };
+    },
+  };
+}

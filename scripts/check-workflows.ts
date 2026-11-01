@@ -6,6 +6,7 @@ import { join } from "node:path";
 import {
   checkCiWorkflow,
   checkDeployWorkflow,
+  checkVercelConfig,
   dependabotProblems,
   checkVercelCliLock,
   unpinnedActions,
@@ -44,4 +45,8 @@ const dependabot = dependabotProblems(readFileSync(join(".github", "dependabot.y
 for (const problem of dependabot) console.error(`dependabot.yml: ${problem}`);
 if (dependabot.length) failed = true;
 else console.log("dependabot.yml: ok");
+const vercelConfig = checkVercelConfig(readFileSync("vercel.json", "utf8"));
+for (const problem of vercelConfig) console.error(`vercel.json: ${problem}`);
+if (vercelConfig.length) failed = true;
+else console.log("vercel.json: ok");
 process.exit(failed ? 1 : 0);

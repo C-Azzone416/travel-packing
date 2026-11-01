@@ -6,6 +6,7 @@ export interface FakeUser {
   email: string;
   password: string;
   userId: string;
+  identityCreatedAt?: number;
   /** False = right password but the address is not verified yet (sign-in reports `unverified`). Default true. */
   verified?: boolean;
   /** True = verified, right password, but the password was never set through an emailed link (#83): `unfinished`. */
@@ -26,6 +27,7 @@ export interface FakeAuth extends AuthProvider {
   signOutCalls: number;
   failNextGetSession: boolean;
   failNextSignOut: boolean;
+  blockedDeletionUserIds: Set<string>;
 }
 
 export function createFakeAuth(users: FakeUser[] = []): FakeAuth {
@@ -50,6 +52,7 @@ export function createFakeAuth(users: FakeUser[] = []): FakeAuth {
     signOutCalls: 0,
     failNextGetSession: false,
     failNextSignOut: false,
+    blockedDeletionUserIds: new Set(),
     async getSession() {
       if (fake.failNextGetSession) {
         fake.failNextGetSession = false;
@@ -71,8 +74,25 @@ export function createFakeAuth(users: FakeUser[] = []): FakeAuth {
         return { ok: false, unverified: true, diagnostic: { reason: "email-unverified" } };
       if (user.unfinished)
         return { ok: false, unfinished: true, diagnostic: { reason: "setup-pending" } };
-      fake.current = { userId: user.userId, email: user.email, issuedAt: Date.now() };
+      fake.current = {
+        userId: user.userId,
+        email: user.email,
+        identityCreatedAt: user.identityCreatedAt ?? 1,
+        issuedAt: Date.now(),
+      };
       return { ok: true, session: fake.current };
+    },
+    async beginAccountClosure(email, password) {
+      const signedIn = await fake.signInWithPassword(email, password);
+      if (!signedIn.ok) return signedIn;
+      return {
+        ok: true,
+        authorization: {
+          session: signedIn.session,
+          revokeOtherSessions: () => fake.revokeOtherSessions(),
+          deleteUser: (closurePassword) => fake.deleteUser(closurePassword),
+        },
+      };
     },
     async signOut() {
       fake.signOutCalls += 1;
@@ -81,6 +101,17 @@ export function createFakeAuth(users: FakeUser[] = []): FakeAuth {
         throw new Error("provider down for secret@example.test");
       }
       fake.current = null;
+    },
+    async revokeOtherSessions() {
+      return answer("revokeOtherSessions", []);
+    },
+    async deleteUser(password) {
+      const result = await answer("deleteUser", [password]);
+      if ((result as FlowResult).ok) fake.current = null;
+      return result as FlowResult<"invalid" | "unavailable">;
+    },
+    async isAccountDeletionBlocked(userId) {
+      return fake.blockedDeletionUserIds.has(userId);
     },
   };
   return fake;

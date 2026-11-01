@@ -3,6 +3,7 @@ import { OTHER_EMAIL, signIn, signInAsOwner } from "./helpers/auth";
 import { chooseFromMenu } from "./helpers/menu";
 import { expectAccessible } from "./helpers/a11y";
 import { DEVICE } from "./helpers/device";
+import { serverActionId } from "./helpers/server-action";
 
 // Axe checks (#21) for every screen and every dialog, at both viewports (the two Playwright projects). Each state is
 // reached the way a person reaches it, against the real e2e database.
@@ -222,14 +223,38 @@ test.describe("error states and toasts", DEVICE, () => {
 
   test("a failed save: the error chip, its sheet, and Settings in the error state", async ({
     page,
-  }) => {
+  }, testInfo) => {
     await openDashboard(page);
+    const feedback = page.getByRole("button", { name: "Send feedback" });
+    const wordmark = page.locator(".brand-button strong");
+    const feedbackBefore = await feedback.boundingBox();
+    const wordmarkBefore = await wordmark.boundingBox();
+    expect(feedbackBefore).not.toBeNull();
+    expect(wordmarkBefore).not.toBeNull();
     await page.route("**/*", (route) =>
       isAction(route.request()) ? route.abort("failed") : route.continue(),
     );
     await chooseFromMenu(page, "San Diego", "Archive");
     const chip = page.getByRole("button", { name: "Not saved, retry" });
     await expect(chip).toBeVisible();
+    const chipBox = await chip.boundingBox();
+    const feedbackAfter = await feedback.boundingBox();
+    const wordmarkAfter = await wordmark.boundingBox();
+    expect(chipBox?.height).toBeGreaterThanOrEqual(44);
+    expect(feedbackAfter?.x).toBe(feedbackBefore?.x);
+    expect(wordmarkAfter?.height).toBe(wordmarkBefore?.height);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+      ),
+    ).toBe(true);
+    if (testInfo.project.name === "phone") {
+      await expect(chip.locator(".sync-text-compact")).toBeVisible();
+      await expect(chip.locator(".sync-text")).toBeHidden();
+    } else {
+      await expect(chip.locator(".sync-text")).toBeVisible();
+      await expect(chip.locator(".sync-text-compact")).toBeHidden();
+    }
     await expectAccessible(page, "dashboard with the error chip");
     await chip.click();
     await expect(page.getByRole("dialog", { name: "Couldn’t save" })).toBeVisible();
@@ -373,12 +398,18 @@ test.describe("more states", DEVICE, () => {
     await expect(page.getByRole("region", { name: "Loading Staples setup" })).toBeVisible();
     await expectAccessible(page, "authenticated setup loading");
     release();
+    // The setup gate leaves its loading state exactly when the setup action answers, so the held page has finished with it.
+    await expect(page.getByRole("region", { name: "Loading Staples setup" })).toHaveCount(0);
     await page.unroute("**/*");
-    // Only the setup check fails: the non-blocking notice leaves the dashboard usable.
+    // Only the setup check fails: the non-blocking notice leaves the dashboard usable. It is matched by its action id, not as
+    // "the first POST to /": the dashboard's own actions go to the same path, and one of them arriving first took the abort (#256).
+    const setupAction = serverActionId(
+      "src/features/trips/trip-actions.ts",
+      "getStaplesSetupAction",
+    );
     let aborted = false;
     await page.route("**/*", (route) => {
-      const request = route.request();
-      if (!aborted && isAction(request) && new URL(request.url()).pathname === "/") {
+      if (!aborted && route.request().headers()["next-action"] === setupAction) {
         aborted = true;
         return route.abort("failed");
       }

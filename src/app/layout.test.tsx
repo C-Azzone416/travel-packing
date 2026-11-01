@@ -3,13 +3,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 let authScreen: string | null = null;
 let appearanceCookie: string | undefined;
+let anonymousCookie: string | undefined;
 vi.mock("next/headers", () => ({
   headers: async () => new Headers(authScreen ? { "x-auth-screen": authScreen } : {}),
   cookies: async () => ({
-    get: (name: string) =>
-      name === "appearance" && appearanceCookie !== undefined
-        ? { name, value: appearanceCookie }
-        : undefined,
+    get: (name: string) => {
+      const value =
+        name === "appearance"
+          ? appearanceCookie
+          : name === "anon-appearance"
+            ? anonymousCookie
+            : undefined;
+      return value !== undefined ? { name, value } : undefined;
+    },
   }),
 }));
 vi.mock("./fonts", () => ({ fontClassNames: "font-body font-display font-serif" }));
@@ -37,6 +43,7 @@ import RootLayout from "./layout";
 beforeEach(() => {
   authScreen = null;
   appearanceCookie = undefined;
+  anonymousCookie = undefined;
   savedAppearance = "base";
   session = null;
   getSession.mockClear();
@@ -92,11 +99,32 @@ describe("RootLayout", () => {
     expect(getSession).not.toHaveBeenCalled();
   });
 
-  it("sets data-appearance from the cookie before first paint; an unknown cookie is Base", async () => {
+  it("signed in: the account mirror sets data-appearance before first paint; an unknown mirror is Base", async () => {
+    session = { email: "owner@example.test" };
     appearanceCookie = "ocean";
     expect(await render()).toContain('data-appearance="ocean"');
     appearanceCookie = "neon";
     expect(await render()).toContain('data-appearance="base"');
+  });
+
+  it("signed out: the anonymous palette cookie themes the page; missing, unknown or newer-build values are Base", async () => {
+    anonymousCookie = "violet";
+    expect(await render()).toContain('data-appearance="violet"');
+    for (const bad of [undefined, "neon", "VIOLET", "violet; x=1", "ocean-v2", ""]) {
+      anonymousCookie = bad;
+      expect(await render()).toContain('data-appearance="base"');
+    }
+  });
+
+  it("signed out: the account mirror is ignored, and signed in the anonymous cookie is ignored", async () => {
+    appearanceCookie = "ocean";
+    anonymousCookie = "terracotta";
+    expect(await render()).toContain('data-appearance="terracotta"');
+    session = { email: "owner@example.test" };
+    expect(await render()).toContain('data-appearance="ocean"');
+    appearanceCookie = undefined;
+    savedAppearance = "violet";
+    expect(await render()).toContain('data-appearance="violet"');
   });
 
   it("with no cookie, uses the account's saved theme for a signed-in person and Base for everyone else", async () => {
@@ -109,7 +137,7 @@ describe("RootLayout", () => {
 
   it("themes the sign-in screens from the cookie too, and loads the three fonts", async () => {
     authScreen = "1";
-    appearanceCookie = "terracotta";
+    anonymousCookie = "terracotta";
     const html = await render();
     expect(html).toContain('data-appearance="terracotta"');
     expect(html).toContain("font-body font-display font-serif");

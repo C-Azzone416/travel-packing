@@ -14,7 +14,7 @@ export const PENDING_EMAIL_MAX_AGE_SECONDS = 30 * 60;
  * phone profile. NEXT_PUBLIC_E2E_BUILD is set by no deployed build (the deploy checks refuse it) and is replaced at build time, so
  * in a deployed build this is exactly `NODE_ENV === "production"`.
  */
-function secureCookie(): boolean {
+export function secureCookie(): boolean {
   return process.env.NODE_ENV === "production" && process.env.NEXT_PUBLIC_E2E_BUILD !== "1";
 }
 

@@ -13,6 +13,11 @@ vi.mock("@/server/db/app-db", () => ({
 }));
 vi.mock("next/headers", () => ({
   cookies: async () => ({ get: () => undefined, set: () => {}, delete: () => {} }),
+  headers: async () =>
+    new Headers({
+      cookie: "__Secure-neon-auth.session_token=runtime-wiring-session",
+      origin: "https://app.example.test",
+    }),
 }));
 const createNeonAuth = vi.fn();
 vi.mock("@neondatabase/auth/next/server", () => ({
@@ -40,7 +45,7 @@ afterAll(async () => {
   await ctx.client.close();
 });
 beforeEach(async () => {
-  await ctx.client.exec('TRUNCATE TABLE "account_setups"');
+  await ctx.client.exec('TRUNCATE TABLE "account_deletions", "account_setups"');
   resetAuthRuntime();
   createNeonAuth.mockReset();
   setAuthLogSink(() => {});
@@ -48,6 +53,7 @@ beforeEach(async () => {
 afterEach(() => {
   setAuthLogSink();
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
 });
 
 const stored = async () =>
@@ -72,7 +78,7 @@ describe("the runtime's setup store (Neon provider)", () => {
     createNeonAuth.mockReturnValue({
       getSession: async () => ({
         data: {
-          user: { id: "u1", email: OWNER, emailVerified: true },
+          user: { id: "u1", email: OWNER, emailVerified: true, createdAt: new Date(1) },
           session: { createdAt },
         },
       }),
@@ -87,6 +93,68 @@ describe("the runtime's setup store (Neon provider)", () => {
     createdAt = new Date(Date.now() + 60_000).toISOString();
     expect(await auth.provider.getSession()).toMatchObject({ email: OWNER });
   });
+
+  it("keeps a transient deletion fence after a runtime rebuild while raw auth remains available only for recovery", async () => {
+    createNeonAuth.mockReturnValue({
+      getSession: async () => ({
+        data: {
+          user: { id: "u1", email: OWNER, emailVerified: true, createdAt: new Date(1) },
+          session: { createdAt: new Date(Date.now() + 60_000).toISOString() },
+        },
+      }),
+    });
+    const auth = await getAuth(env);
+    await auth.setup.markComplete(OWNER);
+    await ctx.client.query(
+      "INSERT INTO account_deletions (user_id, identity_created_at, setup_email_digest) VALUES ($1, $2, $3)",
+      ["u1", new Date(1), "a".repeat(64)],
+    );
+    expect(await auth.provider.getSession()).toBeNull();
+    expect(await auth.deletionProvider.getSession()).toMatchObject({ userId: "u1", email: OWNER });
+
+    resetAuthRuntime();
+    const rebuilt = await getAuth(env);
+    expect(await rebuilt.provider.getSession()).toBeNull();
+    expect(await rebuilt.deletionProvider.getSession()).toMatchObject({ userId: "u1" });
+  });
+
+  it("wires account deletion to the contract-correct session revoker instead of the SDK mapping", async () => {
+    const sdkRevoker = vi.fn(async () => ({ data: { status: true }, error: null }));
+    createNeonAuth.mockReturnValue({ revokeOtherSessions: sdkRevoker });
+    const fetchMock = vi.fn(async () => Response.json({ status: true }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const auth = await getAuth(env);
+    await expect(auth.deletionProvider.revokeOtherSessions()).resolves.toEqual({ ok: true });
+
+    expect(sdkRevoker).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [url] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(new URL(url).pathname).toBe("/revoke-other-sessions");
+  });
+
+  it.each([
+    ["status false", () => Response.json({ status: false })],
+    ["an empty object", () => Response.json({})],
+    ["a non-JSON success", () => new Response("not-json", { status: 200 })],
+  ] as const)(
+    "keeps deletion fenced when the contract-correct endpoint returns %s",
+    async (_case, response) => {
+      const sdkRevoker = vi.fn(async () => ({ data: { status: true }, error: null }));
+      createNeonAuth.mockReturnValue({ revokeOtherSessions: sdkRevoker });
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => response()),
+      );
+
+      const auth = await getAuth(env);
+      await expect(auth.deletionProvider.revokeOtherSessions()).resolves.toEqual({
+        ok: false,
+        reason: "unavailable",
+      });
+      expect(sdkRevoker).not.toHaveBeenCalled();
+    },
+  );
 
   it("a link's seal and the digest key are separate keys derived from the same secret", async () => {
     createNeonAuth.mockReturnValue({});

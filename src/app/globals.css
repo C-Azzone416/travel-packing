@@ -34,6 +34,13 @@
   --muted-text: var(--muted);
 
   --shadow: 0 14px 40px var(--ledger-shadow);
+  /* Persistent chrome (#282): the sticky top bar and, on phones, the fixed tab bar. Every offset below (page padding,
+     scroll padding, toasts, sticky actions, the sections panel) is driven from these, never a literal. */
+  --safe-bottom: env(safe-area-inset-bottom, 0px); /* overridable in tests */
+  --topbar-h: 60px;
+  --tabbar-h: 56px;
+  --sticky-top: var(--topbar-h);
+  --sticky-bottom: calc(var(--tabbar-h) + var(--safe-bottom));
   font-family:
     var(--font-body),
     ui-sans-serif,
@@ -51,6 +58,8 @@
 }
 html {
   background: var(--bg);
+  scroll-padding-top: calc(var(--sticky-top) + 12px);
+  scroll-padding-bottom: calc(var(--sticky-bottom) + 12px);
 }
 body {
   margin: 0;
@@ -168,17 +177,25 @@ p {
 
 .app-shell {
   min-height: 100vh;
-  padding-bottom: 86px;
+  padding-bottom: calc(var(--sticky-bottom) + 30px);
 }
 /* The dark Field Ledger header (#143, #155, design's ruling on #155): ONE slim full-bleed bar, 68px (60 on phones):
    brand, the primary navigation inline (desktop), the status chip, then Sign out. On phones the same <nav> is the
    fixed tab bar at the bottom. Roles only. */
+/* Sticky at every width (#282): no JavaScript, no compacting, opaque. No transform, filter or backdrop-filter here or on
+   any ancestor (the Feedback screenshot clones <html> and shifts it), and no ancestor sets overflow. */
 .topbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
   background: var(--header);
   color: var(--header-ink);
+  box-shadow:
+    0 1px 0 color-mix(in srgb, var(--header-ink) 16%, var(--header)),
+    0 5px 10px -7px var(--ledger-shadow);
 }
 .topbar-inner {
-  height: 68px;
+  height: var(--topbar-h);
   display: flex;
   align-items: center;
   gap: 12px;
@@ -189,6 +206,7 @@ p {
   outline-color: var(--focus-on-header);
 }
 .brand-button {
+  min-width: 0;
   min-height: 44px;
   display: flex;
   align-items: center;
@@ -204,6 +222,7 @@ p {
   letter-spacing: -0.02em;
   font-size: 22px;
   font-weight: 800;
+  white-space: nowrap;
 }
 .brand-mark {
   flex: none;
@@ -233,8 +252,8 @@ p {
   }
 }
 
-/* The status chip: quiet text in the bar (design's #155 ruling). Still a persistent live region and a link to
-   Settings, 44px tall like every target. */
+/* The transient status chip is interactive while visible and remains a 44px target. Its live region is separate,
+   so quiet idle can remove the control without losing saving/error announcements. */
 .sync-chip {
   position: relative;
   flex: none;
@@ -259,18 +278,30 @@ p {
   font-size: 8px;
 }
 .sync-chip.error {
-  min-height: 32px;
+  min-height: 44px;
   padding: 0 12px;
-  border-radius: 999px;
-  background: var(--surface);
+  background: transparent;
   color: var(--danger);
   font-weight: 700;
+}
+.sync-chip.error::before {
+  position: absolute;
+  inset: 6px 0;
+  border-radius: 999px;
+  background: var(--surface);
+  content: "";
+}
+.sync-chip.error > * {
+  position: relative;
+}
+.sync-text-compact {
+  display: none;
 }
 .sync-icon {
   font-weight: 900;
 }
-@media (max-width: 720px) {
-  /* On a phone the idle chip is just the check (still a 44px target); the word stays for screen readers. */
+@media (max-width: 899px) {
+  /* Below 900px (phones, and the inline bar from 667 to 899) the brief success chip is just the check (still a 44px target); its name stays available. */
   .sync-chip {
     min-width: 44px;
     justify-content: center;
@@ -283,6 +314,12 @@ p {
     overflow: hidden;
     clip-path: inset(50%);
     white-space: nowrap;
+  }
+  .sync-chip.error .sync-text {
+    display: none;
+  }
+  .sync-chip.error .sync-text-compact {
+    display: inline;
   }
 }
 
@@ -313,14 +350,14 @@ main {
   /* Three links and Sign out: equal columns. */
   grid-auto-flow: column;
   grid-auto-columns: 1fr;
-  padding: 0 0 env(safe-area-inset-bottom);
+  padding: 0 0 var(--safe-bottom);
   border-top: 1px solid var(--line);
   background: var(--surface);
 }
 .bottom-nav a,
 .bottom-nav button {
   position: relative;
-  min-height: 56px;
+  min-height: var(--tabbar-h);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -343,6 +380,11 @@ main {
 }
 .nav-signout {
   display: grid;
+}
+/* The ring sits inside the full-bleed item so the screen edge never clips it. */
+.bottom-nav a:focus-visible,
+.bottom-nav button:focus-visible {
+  outline-offset: -5px;
 }
 .bottom-nav a[aria-current="page"] {
   color: var(--link);
@@ -499,6 +541,9 @@ main {
 .modal-head h2 {
   margin: 0;
 }
+.modal-head .modal-eyebrow {
+  margin: 0 0 4px;
+}
 .modal-close {
   flex: none;
   display: inline-grid;
@@ -514,6 +559,40 @@ main {
   line-height: 1;
   cursor: pointer;
 }
+.modal-head:has(.modal-head-end) > :first-child {
+  min-width: 0;
+}
+/* The head's controls when a sheet adds one beside the close button (#296): one row, 4px apart. */
+.modal-head-end {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: -6px -6px 0 0;
+}
+.modal-head-end .modal-close {
+  margin: 0;
+}
+.feedback-editor-entry {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 12px;
+  padding-right: 12px;
+}
+/* Below 400px the label goes; the accessible name stays, so the title keeps its room. */
+@media (max-width: 399px) {
+  .feedback-entry-label {
+    display: none;
+  }
+  .feedback-editor-entry {
+    width: 44px;
+    justify-content: center;
+    padding-left: 0;
+    padding-right: 0;
+  }
+}
 .modal-actions {
   display: flex;
   flex-wrap: wrap;
@@ -527,13 +606,19 @@ main {
   position: fixed;
   z-index: 90;
   left: 50%;
-  bottom: 84px;
+  bottom: calc(var(--sticky-bottom) + 12px);
   transform: translateX(-50%);
   width: max-content;
   max-width: calc(100% - 32px);
   display: grid;
   gap: 8px;
   justify-items: center;
+  pointer-events: none;
+}
+/* While a sheet is open a plain toast is held (#341): clipped from view, not display:none, so a screen reader still hears it. The
+   error region is not touched. ModalSheet sets the attribute; the provider pauses the timer. */
+body[data-sheet-open] .toast-region {
+  clip-path: inset(50%);
   pointer-events: none;
 }
 .toast {
@@ -595,9 +680,11 @@ main {
   }
 }
 
-@media (min-width: 721px) {
-  .app-shell {
-    padding-bottom: 30px;
+/* The inline-nav layout: 721px and wider, and short landscape screens at least 667px wide (#282). */
+@media (min-width: 721px), (max-height: 500px) and (min-width: 667px) {
+  :root {
+    --topbar-h: 68px;
+    --sticky-bottom: 0px;
   }
   /* Full-bleed bar: the brand circle sits 30px from the left edge, the right cluster 30px from the right (mockup). */
   .topbar-inner {
@@ -641,12 +728,15 @@ main {
   }
   /* The active underline sits on the bar's bottom edge, a mix that stays 3:1 on the header in every theme. */
   .bottom-nav a[aria-current="page"]::before {
-    inset: auto 0 -12px;
+    inset: auto 0 calc((var(--topbar-h) - 44px) / -2);
     height: 3px;
     background: color-mix(in srgb, var(--header-ink) 50%, var(--accent));
   }
-  .bottom-nav :focus-visible {
+  .bottom-nav :focus-visible,
+  .bottom-nav a:focus-visible,
+  .bottom-nav button:focus-visible {
     outline-color: var(--focus-on-header);
+    outline-offset: 3px;
   }
   /* Right side: Sign out, then the status chip at the far edge, which is also their order in the DOM (so focus order
      matches what is seen). */
@@ -654,10 +744,6 @@ main {
     order: 8;
     display: flex;
     margin-left: auto;
-  }
-  .topbar-inner > .sync-chip {
-    order: 9;
-    margin-left: 8px;
   }
   .nav-signout button {
     padding: 0 8px;
@@ -669,6 +755,74 @@ main {
   }
   .toast-region {
     bottom: 24px;
+  }
+}
+
+/* The inline bar between 667 and 899px (#282): brand, three links, Feedback, Sign out and any save chip must fit on one row
+   with nothing wrapped, squeezed or hidden, so the gutters, gaps and link padding tighten and the wordmark steps down.
+   The chip is already its compact form here (above). Labels never wrap at any width. */
+.bottom-nav a,
+.bottom-nav button {
+  white-space: nowrap;
+}
+@media (min-width: 721px) and (max-width: 899px),
+  (max-height: 500px) and (min-width: 667px) and (max-width: 899px) {
+  .topbar-inner {
+    gap: 4px;
+    padding-inline: 12px;
+  }
+  .brand-button {
+    margin-right: 0;
+    gap: 8px;
+  }
+  .brand-button strong {
+    font-size: 20px;
+  }
+  .bottom-nav a,
+  .bottom-nav button {
+    padding-inline: 8px;
+  }
+  .nav-signout button {
+    padding-inline: 6px;
+  }
+}
+
+/* Short viewports (#282). Height up to 500px: a 52px bar, and the focus ring (3px) fits the 4px above a 44px control. */
+@media (max-height: 500px) {
+  :root {
+    --topbar-h: 52px;
+  }
+  .topbar .brand-button:focus-visible,
+  .topbar .sync-chip:focus-visible,
+  .topbar .feedback-button:focus-visible {
+    outline-offset: 0;
+  }
+}
+@media (max-height: 500px) and (min-width: 667px) {
+  .topbar .bottom-nav a:focus-visible,
+  .topbar .bottom-nav button:focus-visible {
+    outline-offset: 0;
+  }
+}
+/* Narrow and short (a landscape phone under 667px, 400% zoom): a 48px tab bar with the icon beside the label. */
+@media (max-width: 666px) and (max-height: 500px) {
+  :root {
+    --tabbar-h: 48px;
+  }
+  .bottom-nav a,
+  .bottom-nav button {
+    flex-direction: row;
+    gap: 6px;
+  }
+}
+/* The one documented exception: under 400px tall two bars would cost over 40% of the screen, so the top bar scrolls
+   away (Feedback is one scroll up) and the tab bar stays. Nothing sticky sits at the top, so scroll padding drops to 0. */
+@media (max-width: 666px) and (max-height: 400px) {
+  :root {
+    --sticky-top: 0px;
+  }
+  .topbar {
+    position: static;
   }
 }
 
@@ -1264,7 +1418,7 @@ input:disabled {
   background: var(--seafoam);
 }
 .weather-source.typical {
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   background: var(--bg);
 }
 .weather-mixed {
@@ -2243,6 +2397,112 @@ input:disabled {
   margin: 0 0 8px;
   font-size: 18px;
 }
+/* Save status (#298): one row, the same height in every state, so nothing below it moves. */
+.save-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 4.5rem;
+}
+.save-status > .button {
+  flex: none;
+}
+.save-status-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+.save-status-glyph {
+  flex: none;
+  width: 20px;
+  text-align: center;
+  color: var(--muted);
+}
+.save-status-glyph-saving,
+.save-status-glyph-saved {
+  color: var(--ink);
+}
+.save-status-glyph-saved,
+.save-status-glyph-failed {
+  font-weight: 700;
+}
+.save-status-glyph-failed {
+  color: var(--danger);
+}
+.save-status-text {
+  flex: 1;
+  min-width: 0;
+}
+.save-status-line {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.save-status-line-failed {
+  font-weight: 700;
+  color: var(--danger);
+}
+.save-status-detail {
+  margin: 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+.close-account-entry {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+.close-account-entry h3,
+.close-account-entry p {
+  margin: 0 0 8px;
+}
+.close-account-form {
+  display: grid;
+  gap: 16px;
+}
+.close-account-form > p {
+  margin: 0;
+}
+@media (max-width: 480px) {
+  .modal:has(.close-account-form) .modal-actions {
+    flex-direction: column-reverse;
+  }
+  .modal:has(.close-account-form) .modal-actions .button {
+    width: 100%;
+  }
+}
+/* The sign-out warning (#325). Up to 659px (the bottom-sheet band) the three choices stack full width, Send now on top; from 660px
+   they are one right-aligned row that wraps to full-width stacks rather than overlap. The backdrop already covers the bottom nav
+   (z-index 50); the extra bottom padding keeps the footer clear of the phone's safe-area inset. */
+.sign-out-guard {
+  display: grid;
+  gap: 10px;
+}
+.sign-out-guard p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.modal-backdrop:has(.sign-out-guard) {
+  padding-bottom: max(18px, var(--safe-bottom));
+}
+.modal:has(.sign-out-guard) .modal-actions .button {
+  min-width: 0;
+  max-width: 100%;
+  text-align: center;
+  white-space: normal;
+}
+@media (max-width: 659px) {
+  .modal:has(.sign-out-guard) .modal-actions {
+    flex-direction: column-reverse;
+    gap: 10px;
+  }
+  .modal:has(.sign-out-guard) .modal-actions .button {
+    width: 100%;
+  }
+}
 .temperature-units {
   margin: 16px 0 0;
   padding: 0;
@@ -2846,10 +3106,6 @@ a.back {
 .sections-panel a:hover {
   text-decoration: underline;
 }
-.list-section,
-.toiletry-section {
-  scroll-margin-top: 84px;
-}
 
 @media (min-width: 721px) {
   .pack-row {
@@ -2914,9 +3170,10 @@ a.back {
   }
 }
 .ledger-hero {
+  --ledger-row: 28px;
   position: relative;
   min-width: 0;
-  padding: 24px;
+  padding: var(--ledger-row) 24px;
   border: 1px solid var(--line);
   border-top: 4px solid var(--accent);
   border-radius: var(--control-radius);
@@ -2924,9 +3181,9 @@ a.back {
     repeating-linear-gradient(
       to bottom,
       transparent 0,
-      transparent 27px,
-      var(--ledger-rule) 27px,
-      var(--ledger-rule) 28px
+      transparent calc(var(--ledger-row) - 1px),
+      var(--ledger-rule) calc(var(--ledger-row) - 1px),
+      var(--ledger-rule) var(--ledger-row)
     ),
     var(--surface);
   box-shadow: 0 8px 24px var(--ledger-shadow);
@@ -2947,42 +3204,108 @@ a.back {
   font-weight: 700;
   letter-spacing: 0.08em;
 }
-.ledger-hero h2 {
-  margin-bottom: 4px;
-  font-size: clamp(44px, 3.7vw, 56px);
-  line-height: 0.98;
-  letter-spacing: -0.04em;
-  overflow-wrap: anywhere;
+.ledger-hero .eyebrow {
+  margin: 0;
+  line-height: var(--ledger-row);
 }
-.ledger-dates {
-  margin: 8px 0 0;
+.ledger-hero h2 {
+  margin: 0;
+  font-size: clamp(44px, 3.7vw, 56px);
+  line-height: calc(var(--ledger-row) * 2);
+  letter-spacing: -0.04em;
+  /* Word boundaries first (balance); anywhere only as the last resort for an unbroken string, and it lets the grid shrink. */
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+/* Place or route, then dates and nights, one muted 14px line (rows of 28px). Each segment is a flex item that wraps
+   inside itself on word boundaries; the hairline before the dates is clipped by the wrapper when the dates start a line. */
+.ledger-meta {
+  margin: 0;
+  overflow: hidden;
   color: var(--muted);
+  font-size: 14px;
+  line-height: var(--ledger-row);
+  font-variant-numeric: tabular-nums;
+}
+.ledger-meta-line {
+  display: flex;
+  flex-wrap: wrap;
+  margin-left: -25px;
+}
+.ledger-meta-line > span {
+  position: relative;
+  min-width: 0;
+  margin-left: 25px;
+  overflow-wrap: break-word;
+}
+.ledger-meta-dates::before {
+  content: "";
+  position: absolute;
+  top: 6px;
+  left: -13px;
+  width: 1px;
+  height: 16px;
+  background: var(--line-strong);
 }
 .stamp-slot {
   flex: none;
+  display: flex;
+  align-items: center;
+  height: calc(var(--ledger-row) * 4);
+}
+/* The weather band (#358): the strip of stay cells and the daily-forecast block read as one band. .hero-weather is the
+   size container (its width is the hero's inner width) and owns the surface and the two hairlines; the band inside it
+   is what the container queries below lay out. Everything is whole 28px rows: no fixed heights, no padding above or
+   below. Stacked is the base (one cell per row, as on a phone); "wide stack" and "two column" are for a container of
+   30em / 40em and up, in em so larger text and browser zoom fall back to the stacked layouts. */
+.hero-weather {
+  container-type: inline-size;
+  margin: var(--ledger-row) 0 0;
+  /* The two hairlines are inset shadows, not borders, so the band is exactly its whole rows tall. */
+  box-shadow:
+    inset 0 1px 0 var(--line),
+    inset 0 -1px 0 var(--line);
+  background: var(--weather-surface);
 }
 .weather-strip {
   display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(0, 1fr);
-  margin: 20px 0 0;
+  grid-template-columns: minmax(0, 1fr);
+  margin: 0;
   padding: 0;
   list-style: none;
-  border-block: 1px solid var(--line);
-  background: var(--weather-surface);
 }
 .weather-strip li {
-  display: grid;
-  gap: 2px;
-  padding: 12px 14px;
+  padding: 0 14px;
   font-size: 13px;
 }
 .weather-strip li + li {
-  border-left: 1px solid var(--line);
+  box-shadow: inset 0 1px 0 var(--line);
+}
+/* Everything above the note, padding included, is exactly 4 rows (measured: the content is about 90px); only the note
+   grows, so the cell is always a whole number of rows. */
+.weather-cell-top {
+  display: grid;
+  align-content: stretch;
+  gap: 2px;
+  box-sizing: border-box;
+  min-height: calc(var(--ledger-row) * 4);
+  padding-top: 12px;
+}
+.weather-strip .weather-note {
+  display: block;
+  line-height: var(--ledger-row);
 }
 .weather-city {
   font-weight: 700;
   font-size: 15px;
+}
+/* An unbroken string (a very long place name) wraps inside its cell instead of sticking out of it (#305). */
+.weather-strip .weather-city,
+.weather-strip .weather-dates,
+.weather-strip .weather-range,
+.weather-strip .weather-note {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .weather-dates,
 .weather-note {
@@ -3000,43 +3323,103 @@ a.back {
   color: var(--accent-2);
 }
 .weather-strip-note {
-  margin: 16px 0 0;
+  margin: var(--ledger-row) 0 0;
+  line-height: var(--ledger-row);
 }
-.ledger-hero-bottom {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 24px;
-  margin-top: 24px;
+/* The status row: days to go, the track, the counts, on one baseline (2 rows) while they fit on one line. It wraps
+   in whole 28px rows when they do not (the counts drop to their own line first), and at most 440px wide it is the
+   phone arrangement: days (2 rows), the track (1 row), the counts (1 row, or one count per line). No fixed height. */
+.ledger-status {
+  container-type: inline-size;
+  margin-top: var(--ledger-row);
+}
+.ledger-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  align-content: flex-start;
+  column-gap: 24px;
 }
 .days-to-go {
+  flex: none;
   display: flex;
   align-items: baseline;
   gap: 8px;
-  line-height: 1;
+  white-space: nowrap;
 }
 .days-to-go strong {
   font-family: var(--font-display), var(--font-body), sans-serif;
   font-size: 44px;
   font-weight: 800;
+  line-height: calc(var(--ledger-row) * 2);
   letter-spacing: -0.04em;
   color: var(--ink);
 }
 .days-to-go span {
   color: var(--muted);
   font-size: 14px;
+  line-height: 20px;
 }
-.ledger-progress .progress-track span {
+.ledger-status .progress-track {
+  /* 6px bar in a whole 28px row when it sits on a line of its own (21px above, 1px below). */
+  flex: 1 1 96px;
+  min-width: 96px;
+  margin: 21px 0 1px;
+}
+.ledger-status .progress-track span {
   background: var(--progress);
 }
-.ledger-progress .progress-copy {
-  margin-bottom: 0;
-  font-size: 13px;
+/* The two counts never break inside themselves; they wrap between each other. The wrapper clips the dot that sits
+   left of the second count, so it shows only when both counts share a line and never starts a line. */
+.ledger-counts {
+  flex: 0 1 auto;
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 24px;
+  max-width: 100%;
+  margin-left: auto;
+  overflow: hidden;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: var(--ledger-row);
+  font-variant-numeric: tabular-nums;
+}
+.ledger-counts span {
+  position: relative;
+}
+.ledger-counts span + span::before {
+  content: "·";
+  position: absolute;
+  top: 0;
+  left: -16px;
+  width: 8px;
+  text-align: center;
+}
+@container (max-width: 440px) {
+  .ledger-status .days-to-go {
+    flex: 0 0 100%;
+  }
+  .ledger-status .progress-track {
+    flex: 0 0 100%;
+    min-width: 0;
+  }
+  .ledger-counts {
+    flex: 1 1 100%;
+    justify-content: space-between;
+    margin-left: 0;
+  }
+  .ledger-counts span + span::before {
+    content: none;
+  }
 }
 .ledger-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  align-content: center;
+  align-items: center;
+  gap: 12px 8px;
+  min-height: calc(var(--ledger-row) * 2);
 }
 .ledger-hero .quick-view {
   margin-top: 16px;
@@ -3125,25 +3508,14 @@ a.back {
   background: var(--selection-surface);
 }
 
-@media (max-width: 980px) {
-  .ledger-hero-bottom {
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-  .ledger-actions {
-    grid-column: 1 / -1;
-  }
-}
 @media (max-width: 720px) {
-  .topbar-inner {
-    height: 60px;
-  }
   /* The stamps sit under the title, as on the packing screen, so a two-stamp cluster never squeezes it. */
   .ledger-hero-top {
     flex-direction: column;
     gap: 0;
   }
   .stamp-slot {
-    margin-top: 14px;
+    justify-content: center;
   }
   .ledger-head {
     display: grid;
@@ -3155,21 +3527,13 @@ a.back {
     width: 100%;
   }
   .ledger-hero {
-    padding: 20px;
+    padding: var(--ledger-row) 20px;
   }
   .ledger-hero h2 {
     font-size: 40px;
   }
-  .weather-strip {
-    grid-auto-flow: row;
-  }
-  .weather-strip li + li {
-    border-left: 0;
-    border-top: 1px solid var(--line);
-  }
-  .ledger-hero-bottom {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 16px;
+  .ledger-actions {
+    min-height: calc(var(--ledger-row) * 4);
   }
   /* Continue packing takes the first row; Edit trip, Add item and the ⋯ share the next one. */
   .ledger-actions > .button:first-child {
@@ -3179,6 +3543,9 @@ a.back {
   .ledger-actions .add-item.hero > .button {
     flex: 1 1 0;
     min-width: 0;
+    height: 44px;
+    padding-inline: 8px;
+    white-space: nowrap;
   }
 }
 
@@ -3279,12 +3646,6 @@ a.back {
 .later-journeys li:first-child .later-journey {
   border-top: 0;
 }
-@media (max-width: 720px) {
-  .topbar-inner > .sync-chip {
-    margin-left: auto;
-  }
-}
-
 /* When there is no weather to show, the card collapses to one quiet 44px line (audit 24). */
 .weather-panel.weather-compact,
 .weather-panel.weather-off {
@@ -3482,6 +3843,15 @@ a.back {
 .sections-panel a {
   min-height: 44px;
   font-size: 16px;
+  padding-block: 8px;
+  line-height: 1.3;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  justify-content: flex-start;
+}
+.sections-panel li {
+  min-width: 0;
+  max-width: 100%;
 }
 .sections-panel p {
   margin: 8px 0 0;
@@ -3493,9 +3863,26 @@ a.back {
     column-gap: 32px;
     align-items: start;
   }
-  .sections-panel {
+  /* One sticky unit (#297): the whole rail sticks, nothing inside it does, so the nav can never cover Trip math. */
+  .trip-layout .side {
     position: sticky;
-    top: 84px;
+    top: calc(var(--sticky-top) + 12px);
+    z-index: 10;
+    align-self: stretch; /* the grid area is the full list height, so the sticky rail has travel */
+    max-height: calc(100vh - var(--sticky-top) - 24px);
+    max-height: calc(100dvh - var(--sticky-top) - 24px);
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scroll-padding: 8px;
+    padding: 6px; /* room for the 3px focus ring plus its 3px offset, so the rail overflow never clips it */
+    margin: -6px; /* cancels the padding: the visible column does not move */
+  }
+}
+@media (min-width: 900px) and (max-height: 760px) {
+  .trip-layout .side .sections-panel p {
+    display: none;
   }
 }
 @media (max-width: 899px) {
@@ -3516,7 +3903,7 @@ a.back {
     gap: 8px;
   }
   .sections-panel li a {
-    padding: 0 12px;
+    padding: 8px 12px;
     border: 1px solid var(--line-strong);
     border-radius: var(--control-radius);
   }
@@ -4360,7 +4747,7 @@ a.back {
 }
 .staples-setup-actions-shell {
   position: sticky;
-  bottom: 12px;
+  bottom: calc(var(--sticky-bottom) + 12px);
   margin-top: 20px;
   padding: 12px;
   border: 1px solid var(--line);
@@ -4409,11 +4796,666 @@ a.back {
   .staples-setup-actions {
     flex-direction: column-reverse;
   }
-  .staples-setup-actions-shell {
-    bottom: calc(56px + env(safe-area-inset-bottom) + 8px);
-  }
   .staples-reminder .button,
   .staples-setup-actions .button {
     width: 100%;
+  }
+}
+
+/* Feedback (#131) */
+.topbar-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+.feedback-button {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.topbar .feedback-button.secondary {
+  border-color: var(--header-muted);
+  background: transparent;
+  color: var(--header-ink);
+}
+.topbar .feedback-button.secondary:hover {
+  background: color-mix(in srgb, var(--header-ink) 12%, transparent);
+}
+.topbar .feedback-button.secondary:active {
+  background: color-mix(in srgb, var(--header-ink) 20%, transparent);
+}
+.topbar .feedback-button:focus-visible {
+  outline-color: var(--focus-on-header);
+}
+.feedback-button-label {
+  display: none;
+}
+@media (min-width: 900px) {
+  .feedback-button-label {
+    display: inline;
+  }
+}
+.feedback-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  width: min(100%, 1272px);
+  margin: 10px auto 8px;
+  padding: 10px 24px;
+  border: 1px solid color-mix(in srgb, var(--notice-ink) 28%, transparent);
+  border-radius: var(--control-radius);
+  background: var(--notice);
+  color: var(--notice-ink);
+}
+.feedback-notice p {
+  margin: 0;
+  flex: 1 1 240px;
+}
+.feedback-notice .button.secondary {
+  border-color: color-mix(in srgb, var(--notice-ink) 55%, transparent);
+  background: transparent;
+  color: var(--notice-ink);
+}
+.feedback-notice .button.secondary:hover {
+  background: color-mix(in srgb, var(--notice-ink) 10%, transparent);
+}
+.feedback-state,
+.feedback-form,
+.feedback-confirm {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+}
+.feedback-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Feedback report sheet (#132) */
+.field textarea {
+  width: 100%;
+  min-height: 112px;
+  max-height: 40vh;
+  border: 1px solid var(--line);
+  border-radius: var(--control-radius);
+  padding: 10px 14px;
+  background: var(--control-bg);
+  color: var(--ink);
+  font: inherit;
+  resize: vertical;
+}
+/* Settings card (#273): on a phone Send feedback has a row to itself, full width and 44px; on desktop it leads the row of actions. */
+.feedback-send-action {
+  min-height: 44px;
+}
+@media (max-width: 659px) {
+  .feedback-send-action {
+    flex: 1 1 100%;
+  }
+}
+.feedback-no-shot {
+  margin: 0;
+}
+.feedback-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  font-weight: 700;
+}
+.feedback-check input {
+  width: 22px;
+  height: 22px;
+  accent-color: var(--accent);
+}
+/* Feedback sheet with the screenshot editor (#266, design's spec). Like Edit Trip, the heading and the Cancel / Send footer stay in
+   view and only the body scrolls. --feedback-vh follows the VISUAL viewport (the software keyboard), set by the sheet while it is open. */
+:root {
+  --feedback-vh: 100dvh;
+}
+.modal:has(.feedback-form) {
+  display: flex;
+  flex-direction: column;
+  width: min(100%, 760px);
+  max-height: calc(var(--feedback-vh) - 36px);
+  overflow: hidden;
+}
+.modal:has(.feedback-form) .modal-head {
+  flex: none;
+}
+.modal .feedback-form {
+  flex: 1 1 auto;
+  align-content: start;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0 -21px;
+  padding: 0 21px;
+}
+.modal:has(.feedback-form) .modal-actions {
+  flex: none;
+  margin: 12px -21px -21px;
+  padding: 12px 21px;
+  border-top: 1px solid var(--line);
+  background: var(--paper);
+}
+.feedback-shot {
+  display: grid;
+  gap: 10px;
+  margin-top: 6px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.feedback-shot-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px 12px;
+}
+.shot-editor,
+.shot-tools {
+  display: grid;
+  gap: 8px;
+}
+.ink-picker {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.ink-swatch {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 2px;
+  min-height: 44px;
+  padding: 4px 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--control-radius);
+  background: var(--control-bg);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+/* Selection is a heavier border (inset, so nothing shifts), a tick and aria-checked: never colour alone. */
+.ink-swatch[aria-checked="true"] {
+  border-color: var(--ink);
+  box-shadow: inset 0 0 0 2px var(--ink);
+}
+.ink-swatch:focus-visible {
+  outline: 3px solid var(--accent-2);
+  outline-offset: 2px;
+}
+.ink-swatch[aria-disabled="true"] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.ink-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  /* The same two rings that sit under every stroke (a near-black line, then white), so the dot is seen on any background. */
+  box-shadow:
+    0 0 0 1.5px var(--ink-edge-halo),
+    0 0 0 2.5px var(--ink-edge-outer);
+}
+.ink-name {
+  font-size: 13px;
+  font-weight: 700;
+}
+.ink-check {
+  position: absolute;
+  top: 3px;
+  right: 7px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.shot-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.shot-actions .button {
+  min-height: 44px;
+  justify-content: center;
+}
+.shot-status {
+  margin: 0;
+}
+.shot-preview {
+  position: relative;
+  width: 100%;
+  height: min(60dvh, 480px);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--detail-surface);
+}
+.shot-image,
+.shot-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.shot-image {
+  pointer-events: none;
+  user-select: none;
+}
+/* Only the canvas stops the browser scrolling or zooming under a finger; the body around it still scrolls. */
+.shot-canvas {
+  touch-action: none;
+  cursor: crosshair;
+}
+@media (min-width: 660px) {
+  .shot-tools {
+    grid-template-columns: auto auto;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .ink-picker {
+    grid-template-columns: repeat(4, 88px);
+  }
+  .shot-actions {
+    display: flex;
+  }
+  .shot-preview {
+    height: min(46dvh, 420px);
+  }
+}
+.feedback-problem {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+}
+.feedback-result h3 {
+  margin: 0 0 6px;
+}
+.feedback-result p {
+  margin: 0;
+}
+
+/* A wordmark never wraps; under 360px the bar tightens (smaller wordmark and mark, narrower gutters) so the save chip and Feedback
+   still fit beside it with room to spare (#282). */
+@media (max-width: 359px) {
+  .topbar-inner {
+    gap: 6px;
+    padding-inline: 10px;
+  }
+  .brand-button {
+    gap: 8px;
+    padding-inline: 4px;
+  }
+  .brand-button strong {
+    font-size: 18px;
+  }
+  .brand-mark {
+    width: 24px;
+    height: 24px;
+  }
+  .topbar-end {
+    gap: 4px;
+  }
+}
+
+/* Trip weather, stays with forecast days (#303): a labelled Forecast section of 28px daily rows, then a Typical summary. */
+.weather-row.weather-row-forecast {
+  --ledger-row: 28px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  align-items: start;
+}
+.weather-row-forecast .weather-place h3,
+.weather-row-forecast .weather-place p {
+  overflow-wrap: anywhere;
+  line-height: var(--ledger-row);
+}
+.weather-row-forecast .weather-part {
+  display: grid;
+  min-width: 0;
+}
+.weather-part-head {
+  display: block;
+  min-height: var(--ledger-row);
+  margin: 0;
+  line-height: var(--ledger-row);
+  overflow-wrap: anywhere;
+}
+.weather-part-head .weather-source {
+  box-sizing: border-box;
+  margin-right: 8px;
+  vertical-align: top;
+  min-height: var(--ledger-row);
+  padding-block: 0;
+  /* two px shorter than the row: the Typical tag has a 1px border, and the tag as a whole must stay 28px */
+  line-height: calc(var(--ledger-row) - 2px);
+}
+.weather-row-forecast .weather-typical-part {
+  margin-top: 0;
+  box-shadow: inset 0 1px 0 var(--line);
+}
+.weather-days {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* The layout is decided per LIST, never per row, so every row of a stay shares the same columns and height:
+   one line when the list is wide enough, else two rows (label and glyph, then temperatures and rain), else three.
+   The breakpoints are in em, measured on the list, so larger text switches them just as a narrower column does.
+   The label never shrinks or breaks. */
+.weather-days {
+  container-type: inline-size;
+}
+.weather-day {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 20px 4.5em 4.5em;
+  align-items: center;
+  column-gap: 8px;
+  min-height: var(--ledger-row);
+  line-height: var(--ledger-row);
+  box-shadow: inset 0 -1px 0 var(--line);
+  font-variant-numeric: tabular-nums;
+}
+.weather-day-label {
+  white-space: nowrap;
+}
+.weather-day-glyph {
+  text-align: center;
+}
+.weather-day-temps {
+  text-align: right;
+  white-space: nowrap;
+}
+.weather-day-rain {
+  color: var(--muted-text);
+  text-align: right;
+  white-space: nowrap;
+}
+@container (max-width: 17.9em) {
+  .weather-day {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .weather-day-label {
+    grid-column: 1;
+  }
+  .weather-day-glyph {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+  }
+  .weather-day-temps {
+    grid-column: 1;
+    grid-row: 2;
+    text-align: left;
+  }
+  .weather-day-rain {
+    grid-column: 2;
+    grid-row: 2;
+  }
+}
+@container (max-width: 11em) {
+  .weather-day-temps {
+    grid-column: 1 / -1;
+    text-align: right;
+  }
+  .weather-day-rain {
+    grid-column: 1 / -1;
+    grid-row: 3;
+  }
+}
+.weather-days-toggle {
+  position: relative;
+  min-height: var(--ledger-row);
+  justify-self: start;
+  padding-block: 0;
+  line-height: var(--ledger-row);
+}
+/* The visual row stays 28px; the touch target is 44px tall. */
+.weather-days-toggle::after {
+  content: "";
+  position: absolute;
+  inset: -8px 0;
+}
+@media (min-width: 981px) {
+  .weather-days,
+  .weather-row-forecast .weather-typical-part {
+    max-width: 520px;
+  }
+}
+
+/* Dashboard hero, daily forecast (#303 PR 2): a block under the weather strip, never inside a weather cell. Whole 28px
+   rows throughout (header 28, chips 84 each, "+N more" 28); no fixed heights, no padding above or below. At 721px and up
+   the days are 3-row chips in an auto-fill grid; at most 720px they are 28px rows (the #285 phone arrangement). */
+.hero-forecast {
+  font-size: 13px;
+  /* the one divider between the strip and the block (the band owns the outer hairlines) */
+  box-shadow: inset 0 1px 0 var(--line);
+}
+.hero-forecast-head {
+  padding-inline: 14px;
+}
+.hero-days {
+  display: grid;
+  /* the chip minimum follows the text size, so three-digit Fahrenheit and larger text still fit one line */
+  grid-template-columns: repeat(auto-fill, minmax(max(80px, 6.5em), 1fr));
+  column-gap: 8px;
+  row-gap: 0;
+  margin: 0;
+  padding: 0 14px;
+  list-style: none;
+}
+.hero-day {
+  display: grid;
+  grid-template-rows: repeat(3, var(--ledger-row));
+  justify-items: center;
+  min-width: 0;
+  line-height: var(--ledger-row);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  /* inset hairlines: left and bottom, so two chip rows never double a line */
+  box-shadow:
+    inset 1px 0 0 var(--line),
+    inset 0 -1px 0 var(--line);
+}
+.hero-day-label,
+.hero-day-temps {
+  white-space: nowrap;
+}
+.hero-day-glyph {
+  color: var(--accent-2);
+  font-size: 16px;
+}
+/* The month is only in the phone row ("Fri Nov 6"); the chip reads "Fri 6". */
+.hero-day-month {
+  display: none;
+}
+.hero-days-more {
+  margin: 0;
+  padding-inline: 14px;
+  line-height: var(--ledger-row);
+}
+.hero-days-more a {
+  position: relative;
+  color: var(--link);
+  font-weight: 700;
+}
+/* The visual line stays 28px; the touch target is 44px tall. */
+.hero-days-more a::after {
+  content: "";
+  position: absolute;
+  inset: -8px 0;
+}
+@media (max-width: 720px) {
+  .hero-days {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .hero-day {
+    grid-template-columns: minmax(0, 1fr) 20px auto;
+    grid-template-rows: none;
+    align-items: center;
+    justify-items: stretch;
+    column-gap: 8px;
+    min-height: var(--ledger-row);
+    text-align: left;
+    box-shadow: inset 0 -1px 0 var(--line);
+  }
+  .hero-day-label {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .hero-day-month {
+    display: inline;
+  }
+  .hero-day-glyph {
+    text-align: center;
+  }
+  .hero-day-temps {
+    text-align: right;
+  }
+}
+/* The typical days of a mixed stay (#357): one text row under the cards, never chips, so a chip is always a real forecast.
+   Two 28px lines (the figures, then why they are not a forecast); the text wraps in whole lines. */
+.hero-typical {
+  box-shadow: inset 0 1px 0 var(--line);
+}
+.hero-typical p {
+  margin: 0;
+  padding-inline: 14px;
+  line-height: var(--ledger-row);
+  overflow-wrap: anywhere;
+}
+.hero-typical .weather-part-head {
+  min-height: 0;
+}
+/* A segment of the typical line ("High 92° ·") is never cut at a normal size: the line breaks only between segments. An
+   inline-block is as wide as its text when that fits the line, and no wider than the line when it does not, so only a
+   segment longer than a whole line (larger text on a narrow screen) wraps inside itself instead of pushing the page sideways. */
+.hero-seg {
+  display: inline-block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+.hero-typical-note {
+  color: var(--muted);
+}
+/* The footnote under an all-typical band: the same words as the trip page's footnote. */
+.hero-weather-foot {
+  margin: 0;
+  padding-inline: 14px;
+  font-size: 13px;
+  line-height: var(--ledger-row);
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  box-shadow: inset 0 1px 0 var(--line);
+}
+.hero-other-stays {
+  font-size: 13px;
+  box-shadow: inset 0 1px 0 var(--line);
+}
+@media (min-width: 721px) {
+  /* WIDE STACK (container 30em and up): the cells side by side as columns (4 or more wrap to a second row), each cell
+     three rows (identity on the left, the range on the right, the note below), then the block full width below. */
+  @container (min-width: 30em) {
+    .hero-weather-band .weather-strip {
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 14em), 1fr));
+      /* every cell draws its left and top hairline; the first column's and the first row's are clipped away */
+      clip-path: inset(1px 0 0 1px);
+    }
+    /* four stays are a balanced 2 x 2, not 3 + 1 */
+    .hero-weather[data-stays="4"] .weather-strip {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .weather-strip li,
+    .weather-strip li + li {
+      box-shadow:
+        inset 1px 0 0 var(--line),
+        inset 0 1px 0 var(--line);
+    }
+    .weather-cell-top {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      column-gap: 8px;
+      gap: 0 8px;
+      min-height: 0;
+      padding-top: 0;
+      line-height: var(--ledger-row);
+    }
+    .weather-glyph {
+      order: 1;
+      line-height: var(--ledger-row);
+    }
+    .weather-city {
+      order: 2;
+      flex: 1 1 3.5em;
+      min-width: 0;
+    }
+    .weather-range {
+      order: 3;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      margin-left: auto;
+    }
+    .weather-dates {
+      order: 4;
+      flex: 0 0 100%;
+      min-width: 0;
+    }
+  }
+  /* TWO COLUMN (container 40em and up, one stay with a forecast block): the summary on the left, the days on the right, one band the width of
+     the hero. The forecast block's left edge is the divider. */
+  @container (min-width: 40em) {
+    .hero-weather[data-stays="1"] .hero-weather-band:has(> .hero-forecast) {
+      display: grid;
+      grid-template-columns: minmax(12.5em, 17em) minmax(0, 1fr);
+    }
+    .hero-weather[data-stays="1"] .hero-weather-band:has(> .hero-forecast) .weather-strip {
+      clip-path: none;
+    }
+    .hero-weather[data-stays="1"] .hero-weather-band:has(> .hero-forecast) .weather-strip li {
+      box-shadow: none;
+    }
+    /* the left column is the cell stacked (identity, range, note), not the wide-stack three-row cell */
+    .hero-weather[data-stays="1"] .hero-weather-band:has(> .hero-forecast) .weather-cell-top {
+      display: grid;
+      align-items: normal;
+      gap: 2px;
+      min-height: calc(var(--ledger-row) * 4);
+      padding-top: 12px;
+      line-height: inherit;
+    }
+    .hero-weather[data-stays="1"] .hero-weather-band:has(> .hero-forecast) .weather-cell-top > * {
+      order: 0;
+      margin-left: 0;
+    }
+    .hero-weather[data-stays="1"] .hero-weather-band:has(> .hero-forecast) .weather-glyph {
+      line-height: 1;
+    }
+    .hero-weather[data-stays="1"] .hero-weather-band:has(> .hero-forecast) .weather-range {
+      flex-wrap: nowrap;
+      justify-content: normal;
+    }
+    .hero-weather[data-stays="1"] .hero-weather-band:has(> .hero-forecast) > .hero-forecast {
+      box-shadow: inset 1px 0 0 var(--line);
+    }
+    .hero-weather[data-stays="1"] .hero-weather-band:has(> .hero-forecast) .hero-days {
+      grid-template-columns: repeat(auto-fill, minmax(max(88px, 6.5em), 8.5em));
+      justify-content: start;
+    }
+    /* one to three days: wider chips, so the days fill more of the right column */
+    .hero-weather[data-stays="1"]
+      .hero-weather-band:has(> .hero-forecast)
+      .hero-days:is([data-count="1"], [data-count="2"], [data-count="3"]) {
+      grid-template-columns: repeat(auto-fill, minmax(max(88px, 6.5em), 12em));
+    }
   }
 }

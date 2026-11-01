@@ -7,13 +7,21 @@ import {
   SETUP_COMPLETE_EMAILS,
 } from "./tests/e2e/helpers/auth";
 import { E2E_DATABASE_URL } from "./tests/e2e/helpers/database";
-import { E2E_DB_PORT, FAKE_GEOCODER_PORT, OPEN_METEO_PORT, PORT } from "./tests/e2e/support/ports";
+import {
+  E2E_DB_PORT,
+  FAKE_FRAMEBRIAR_PORT,
+  FAKE_GEOCODER_PORT,
+  OPEN_METEO_PORT,
+  PORT,
+} from "./tests/e2e/support/ports";
 
 const e2eEnv = {
   // Compiles the e2e-only modules into THIS build only. Deployed builds never set it, so the code is absent.
   NEXT_PUBLIC_E2E_BUILD: "1",
   AUTH_E2E_FAKE: "1",
   AUTH_E2E_PASSWORD: E2E_PASSWORD,
+  // Synthetic-only destructive coverage. Hosted Preview/Production remain off unless explicitly enabled later.
+  CLOSE_ACCOUNT_ENABLED: "1",
   // Server-side session tokens for the fake sign-in (ignored by git via test-results/).
   AUTH_E2E_STATE_DIR: join(process.cwd(), "test-results", "e2e-sessions"),
   // The app reads and writes a real Postgres (the PGlite socket server below), not a stand-in.
@@ -29,6 +37,13 @@ const e2eEnv = {
   AUTH_FLOW_MIN_MS: "0",
   // Every e2e test signs up from one address; production keeps the default of 10 sign-ups an hour per caller.
   AUTH_FLOW_CALLERS_PER_HOUR: "10000",
+  // The app's server talks to Framebriar for feedback (#259); in e2e that is the local fake service started below (#260).
+  E2E_FRAMEBRIAR_PORT: String(FAKE_FRAMEBRIAR_PORT),
+  // A synthetic, test-only key ring so server enrollment is available; the value is built here, never written down, and holds nothing real.
+  FRAMEBRIAR_CREDENTIAL_KEYS: JSON.stringify({
+    current: "e2e1",
+    keys: { e2e1: Buffer.alloc(32, 7).toString("base64") },
+  }),
 };
 
 // CI builds the e2e variant once (the `e2e-build` job) and hands it to each browser job, which sets E2E_PREBUILT=1 to start
@@ -69,6 +84,15 @@ export default defineConfig({
       timeout: 180_000,
       // Synthetic, e2e-only sign-in and database driver; the server refuses both on any Vercel deployment.
       env: e2eEnv,
+    },
+    // The fake Framebriar service (#260): the app's server sends its Framebriar calls here in e2e, and the feedback specs steer it
+    // over its control endpoints (tests/e2e/helpers/feedback.ts). Loopback only, synthetic data only.
+    {
+      command: "npx tsx tests/e2e/support/fake-framebriar-server.ts",
+      url: `http://127.0.0.1:${FAKE_FRAMEBRIAR_PORT}/__control/health`,
+      reuseExistingServer: false,
+      timeout: 60_000,
+      env: { E2E_FRAMEBRIAR_PORT: String(FAKE_FRAMEBRIAR_PORT) },
     },
     // A local stand-in for Open-Meteo's geocoder, and a second copy of the app in Open-Meteo mode that talks
     // to it (tests/e2e/support). No real network is used.

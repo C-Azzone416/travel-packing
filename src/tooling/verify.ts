@@ -69,11 +69,28 @@ export const VERIFY_STEPS: readonly VerifyStep[] = [
     quick: true,
     failureReport: UNIT_REPORT,
   },
-  { id: "build", label: "Production build", command: npm("build"), quick: false },
+  {
+    id: "build:production",
+    label: "Production build",
+    command: npm("build:production"),
+    quick: false,
+  },
   {
     id: "check:no-e2e-in-build",
     label: "No e2e code in the build",
     command: npm("check:no-e2e-in-build"),
+    quick: false,
+  },
+  {
+    id: "check:no-capture-in-build",
+    label: "No screenshot capture in the production build",
+    command: npm("check:no-capture-in-build"),
+    quick: false,
+  },
+  {
+    id: "check:no-feedback-in-build",
+    label: "No Preview feedback in the production build",
+    command: npm("check:no-feedback-in-build"),
     quick: false,
   },
   {
@@ -90,9 +107,40 @@ export const VERIFY_STEPS: readonly VerifyStep[] = [
     quick: false,
   },
   {
+    id: "check:no-capture-in-build",
+    label: "No screenshot capture in the webpack build",
+    command: npm("check:no-capture-in-build"),
+    quick: false,
+  },
+  {
+    id: "check:no-feedback-in-build",
+    label: "No Preview feedback in the webpack build",
+    command: npm("check:no-feedback-in-build"),
+    quick: false,
+  },
+  {
     id: "check:client-bundle",
     label: "Webpack client bundle scan",
     command: npm("check:client-bundle"),
+    quick: false,
+  },
+  // What the Preview deploy scans, made offline with the locked CLI (CI's build job does the same, last: it replaces `.next`).
+  {
+    id: "build:preview-output",
+    label: "Preview build output (offline vercel build)",
+    command: npm("build:preview-output"),
+    quick: false,
+  },
+  {
+    id: "check:preview-feedback-in-build",
+    label: "Preview output carries the feedback UI, SDK and server code",
+    command: [...npm("check:preview-feedback-in-build"), "--", ".vercel/output", ".next"],
+    quick: false,
+  },
+  {
+    id: "check:no-e2e-in-build",
+    label: "No e2e code in the Preview output",
+    command: npm("check:no-e2e-in-build"),
     quick: false,
   },
   // CI builds the e2e variant once and hands it to the phone and desktop jobs; locally the same two steps run in order.

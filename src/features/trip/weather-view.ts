@@ -3,6 +3,31 @@ import { defaultFormatRange, WEATHER_RULES } from "@/domain/weather/recommend";
 import type { DayWeather, StopWeather, WeatherSource } from "@/domain/weather/types";
 import type { TemperatureUnit } from "@/server/data/weather-store";
 
+export type Glyph = "sun" | "rain" | "snow";
+
+/** One forecast day, ready to draw. Temperatures are already in the person's unit. */
+export interface DayView {
+  date: string;
+  /** "Fri Nov 6", or "Today Oct 28" (month first, like the stay dates). */
+  label: string;
+  /** The label's parts, so the dashboard chip can show "Fri 6" and the phone row "Fri Nov 6" (#303). */
+  parts: { weekday: string; month: string; day: number };
+  /** The full sentence for screen readers: "Friday 6 November: sunny, high 18, low 11, 10% chance of rain". */
+  spoken: string;
+  glyph: Glyph;
+  high: number;
+  low: number;
+  rainPercent: number;
+}
+
+/** High, low and wet days over one kind of day, in Celsius (the panel converts for display). */
+export interface PartSummary {
+  high: number;
+  low: number;
+  rainDays: number;
+  totalDays: number;
+}
+
 export interface WeatherRowView {
   stopIndex: number;
   city: string;
@@ -14,7 +39,43 @@ export interface WeatherRowView {
   low: number;
   rainDays: number;
   totalDays: number;
-  glyph: "sun" | "rain" | "snow";
+  glyph: Glyph;
+  /** Forecast days only, chronological (#303). Empty for a typical-only stay. */
+  forecastDays: DayView[];
+  /** Summary over the forecast days only, or null when the stay has none. */
+  forecast: PartSummary | null;
+  /** Summary over the typical days only (before or after the forecast window), or null when it has none. */
+  typical: PartSummary | null;
+  /** "Nov 8–9" when the typical days are one unbroken run of dates, else null (#357). */
+  typicalRange: string | null;
+  /**
+   * Where the typical days sit: "after" the forecast window, "before" it (the trip has already started), or "split"
+   * (both sides, or with a gap). Null when the stay has no typical days.
+   */
+  typicalPlacement: "after" | "before" | "split" | null;
+}
+
+export const dayCount = (count: number) => (count === 1 ? "1 day" : `${count} days`);
+
+/** "Rain on 2 of 7 days", or the dry line when nothing is wet. */
+export function rainLine(part: PartSummary, dry: string): string {
+  return part.rainDays > 0 ? `Rain on ${part.rainDays} of ${dayCount(part.totalDays)}` : dry;
+}
+
+/**
+ * The typical days of a stay in one line, shared by the trip page and the dashboard hero so they print the same words
+ * (#357): "Other 2 days: High 18° · Low 11° · Rarely rains". The hero adds the dates right after the day count.
+ */
+export function typicalLine(
+  part: PartSummary,
+  unit: TemperatureUnit,
+  range?: string | null,
+): string {
+  return (
+    `Other ${dayCount(part.totalDays)}${range ? ` · ${range}` : ""}: ` +
+    `High ${displayTemperature(part.high, unit)}° · Low ${displayTemperature(part.low, unit)}° · ` +
+    rainLine(part, "Rarely rains")
+  );
 }
 
 export function displayTemperature(celsius: number, unit: TemperatureUnit): number {
@@ -26,15 +87,110 @@ function dominantSource(days: readonly DayWeather[]): WeatherSource {
   return forecast >= days.length / 2 ? "forecast" : "typical";
 }
 
-function weatherGlyph(days: readonly DayWeather[]): WeatherRowView["glyph"] {
+function weatherGlyph(days: readonly DayWeather[]): Glyph {
   if (days.some((day) => day.snowCm >= 1)) return "snow";
   if (days.some((day) => day.precipProbability >= WEATHER_RULES.rainProbability)) return "rain";
   return "sun";
 }
 
-export function weatherRowView(stop: TripStop, weather: StopWeather): WeatherRowView | null {
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+/**
+ * Today as a calendar date in UTC, the same clock the server uses to choose forecast days. Late in the evening in the
+ * Americas this is already tomorrow's date. #26 (Caroline's timezone decision) may change this; a test pins it for now.
+ */
+export const todayUtc = (): string => new Date().toISOString().slice(0, 10);
+
+const GLYPH_WORD: Record<Glyph, string> = {
+  sun: "sunny",
+  rain: "rain likely",
+  snow: "snow likely",
+};
+
+/** One day through the same rules as the stay glyph. The date is read as UTC so no timezone can shift it. */
+export function dayView(day: DayWeather, unit: TemperatureUnit, today: string): DayView {
+  const at = new Date(`${day.date}T00:00:00.000Z`);
+  const weekday = WEEKDAYS[at.getUTCDay()];
+  const month = MONTHS[at.getUTCMonth()];
+  const date = at.getUTCDate();
+  const glyph = weatherGlyph([day]);
+  const high = displayTemperature(day.highC, unit);
+  const low = displayTemperature(day.lowC, unit);
+  const rainPercent = Math.round(day.precipProbability * 100);
+  const shortWeekday = day.date === today ? "Today" : weekday.slice(0, 3);
+  return {
+    date: day.date,
+    label: `${shortWeekday} ${month.slice(0, 3)} ${date}`,
+    parts: { weekday: shortWeekday, month: month.slice(0, 3), day: date },
+    spoken:
+      `${weekday} ${date} ${month}: ${GLYPH_WORD[glyph]}, high ${high}, low ${low}, ` +
+      `${rainPercent}% chance of rain`,
+    glyph,
+    high,
+    low,
+    rainPercent,
+  };
+}
+
+function summarize(days: readonly DayWeather[]): PartSummary | null {
+  if (days.length === 0) return null;
+  return {
+    high: Math.max(...days.map((day) => day.highC)),
+    low: Math.min(...days.map((day) => day.lowC)),
+    rainDays: days.filter((day) => day.precipProbability >= WEATHER_RULES.rainProbability).length,
+    totalDays: days.length,
+  };
+}
+
+const DAY_MS = 86_400_000;
+
+function isUnbrokenRun(dates: readonly string[]): boolean {
+  return dates.every(
+    (date, at) =>
+      at === 0 ||
+      Date.parse(`${date}T00:00:00.000Z`) - Date.parse(`${dates[at - 1]}T00:00:00.000Z`) === DAY_MS,
+  );
+}
+
+/** Where the typical days sit and, for one unbroken run, its dates. Typical days are always outside the forecast window. */
+function typicalWhere(
+  typicalDays: readonly DayWeather[],
+  forecastDays: readonly DayWeather[],
+): Pick<WeatherRowView, "typicalRange" | "typicalPlacement"> {
+  if (typicalDays.length === 0) return { typicalRange: null, typicalPlacement: null };
+  const dates = typicalDays.map((day) => day.date).sort();
+  if (!isUnbrokenRun(dates)) return { typicalRange: null, typicalPlacement: "split" };
+  const firstForecast = forecastDays.map((day) => day.date).sort()[0];
+  return {
+    typicalRange: defaultFormatRange(dates[0], dates[dates.length - 1]),
+    typicalPlacement: dates[0] < firstForecast ? "before" : "after",
+  };
+}
+
+export function weatherRowView(
+  stop: TripStop,
+  weather: StopWeather,
+  unit: TemperatureUnit = "C",
+  today: string = todayUtc(),
+): WeatherRowView | null {
   if (weather.status !== "ok" || weather.days.length === 0) return null;
   const days = weather.days;
+  const forecastDays = days.filter((day) => day.source === "forecast");
+  const typicalDays = days.filter((day) => day.source === "typical");
   const sources = new Set(days.map((day) => day.source));
   return {
     stopIndex: weather.stopIndex,
@@ -48,6 +204,12 @@ export function weatherRowView(stop: TripStop, weather: StopWeather): WeatherRow
     rainDays: days.filter((day) => day.precipProbability >= WEATHER_RULES.rainProbability).length,
     totalDays: days.length,
     glyph: weatherGlyph(days),
+    forecastDays: [...forecastDays]
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map((day) => dayView(day, unit, today)),
+    forecast: summarize(forecastDays),
+    typical: summarize(typicalDays),
+    ...typicalWhere(typicalDays, forecastDays),
   };
 }
 

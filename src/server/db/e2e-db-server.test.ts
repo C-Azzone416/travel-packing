@@ -8,7 +8,13 @@ import {
 } from "../data/__fixtures__/seed";
 import * as service from "../data/service";
 import { sampleTripId } from "../seed/sample-data";
-import { closeE2eDb, createE2eDb, e2eDatabaseEnabled, E2E_DB_DRIVER_MARKER } from "./e2e-driver";
+import {
+  closeE2eDb,
+  createE2eDb,
+  createSharedE2eDb,
+  e2eDatabaseEnabled,
+  E2E_DB_DRIVER_MARKER,
+} from "./e2e-driver";
 import { createDbSetupStore, setupDigestKey } from "../auth/account-setup";
 import { startE2eDbServer, type E2eDbServer } from "./e2e-db-server";
 import type { Db } from "./retention";
@@ -133,11 +139,21 @@ describe("startE2eDbServer guard", () => {
 });
 
 describe("e2e-driver", () => {
-  it("needs an explicit URL and is never enabled on Vercel", () => {
-    expect(e2eDatabaseEnabled({ E2E_DATABASE_URL: "postgres://x" })).toBe(true);
+  it("reuses the process-wide pool for the same URL", () => {
+    const first = createSharedE2eDb(server.url);
+    const second = createSharedE2eDb(server.url);
+    opened.push(first);
+    expect(second).toBe(first);
+  });
+
+  it("needs the exact e2e build opt-in and an explicit URL, and is never enabled on Vercel", () => {
+    const enabled = { NEXT_PUBLIC_E2E_BUILD: "1", E2E_DATABASE_URL: "postgres://x" };
+    expect(e2eDatabaseEnabled(enabled)).toBe(true);
     expect(e2eDatabaseEnabled({})).toBe(false);
-    expect(e2eDatabaseEnabled({ E2E_DATABASE_URL: "  " })).toBe(false);
-    expect(e2eDatabaseEnabled({ E2E_DATABASE_URL: "postgres://x", VERCEL: "1" })).toBe(false);
+    expect(e2eDatabaseEnabled({ E2E_DATABASE_URL: "postgres://x" })).toBe(false);
+    expect(e2eDatabaseEnabled({ ...enabled, NEXT_PUBLIC_E2E_BUILD: "true" })).toBe(false);
+    expect(e2eDatabaseEnabled({ ...enabled, E2E_DATABASE_URL: "  " })).toBe(false);
+    expect(e2eDatabaseEnabled({ ...enabled, VERCEL: "1" })).toBe(false);
   });
 
   it("carries a marker the build check can find", () => {

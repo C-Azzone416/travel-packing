@@ -592,7 +592,8 @@ async function buildNewTrip(
 
 /**
  * The stops the browser named, with each place resolved server-side (the same place id is looked up once) and the
- * route checked. Resolved before any database write, so a slow lookup never holds a transaction open.
+ * route checked. Resolution happens before the trip write, but the owner-identity transaction intentionally remains open
+ * around the whole authorized operation so account deletion cannot race an old request into a reused provider identity.
  */
 async function resolveStops(
   context: DataContext,

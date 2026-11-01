@@ -132,10 +132,12 @@ describe("WeatherPanel", () => {
     const input = props({ changesCount: 2 });
     render(<WeatherPanel {...input} />);
     expect(screen.getByRole("list", { name: "Weather by stop" }).children).toHaveLength(2);
-    expect(screen.getByText("High 86° · Low 68°")).toBeTruthy();
-    expect(screen.getByText("Typical for these dates")).toBeTruthy();
-    expect(screen.getByText("Rain on 3 of 3 days")).toBeTruthy();
-    expect(screen.getByText("Later days are typical for these dates.")).toBeTruthy();
+    expect(screen.getByText("High 86° · Low 68° · No rain expected")).toBeTruthy();
+    // Cool City has two typical days and one forecast day: a Forecast section and a separate Typical summary.
+    expect(screen.getByText("High 55° · Low 36° · Rain on 1 of 1 day")).toBeTruthy();
+    expect(screen.getByText("Other 2 days: High 57° · Low 37° · Rain on 2 of 2 days")).toBeTruthy();
+    expect(screen.queryByText("Later days are typical for these dates.")).toBeNull();
+    expect(screen.queryByText("Typical for these dates")).toBeNull();
     expect(screen.getByText("2 weather changes to review")).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: "Review changes" }));
     await userEvent.click(screen.getByRole("button", { name: "Refresh weather" }));
@@ -188,7 +190,7 @@ describe("WeatherPanel", () => {
   it("words the review count in the singular, and keeps Celsius unlabelled by a unit letter", () => {
     render(<WeatherPanel {...props({ changesCount: 1, unit: "C" })} />);
     expect(screen.getByText("1 weather change to review")).toBeTruthy();
-    expect(screen.getByText("High 30° · Low 20°")).toBeTruthy();
+    expect(screen.getByText("High 30° · Low 20° · No rain expected")).toBeTruthy();
     expect(screen.getByLabelText("Weather in degrees Celsius")).toBeTruthy();
   });
 
@@ -210,8 +212,10 @@ describe("WeatherPanel", () => {
     render(<WeatherPanel {...props({ stops: one, state: { kind: "ready", stops: rows } })} />);
     expect(screen.getByText(/1 night$/)).toBeTruthy();
     expect(screen.getByText("Rarely rains")).toBeTruthy();
-    expect(screen.getByText("Rain on 1 of 1 days")).toBeTruthy();
-    expect(screen.getByText("High 28° · Low 18°")).toBeTruthy();
+    // The typical-only stay keeps today's exact summary row; the forecast stays get the new sections.
+    expect(screen.getByText("Typical for these dates")).toBeTruthy();
+    expect(screen.getByText("High 86° · Low 68° · Rain on 1 of 1 day")).toBeTruthy();
+    expect(screen.getByText("High 28° · Low 18° · No rain expected")).toBeTruthy();
     expect(document.body.textContent).toContain("❄");
     expect(document.body.textContent).toContain("☂");
     expect(document.body.textContent).toContain("☀");
@@ -228,7 +232,7 @@ describe("WeatherPanel", () => {
         })}
       />,
     );
-    expect(screen.getByText("No rain expected")).toBeTruthy();
+    expect(screen.getByText("High 86° · Low 68° · No rain expected")).toBeTruthy();
   });
 
   it("a stop without coordinates says so; a stop the provider missed offers Try again", async () => {

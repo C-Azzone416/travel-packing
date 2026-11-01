@@ -63,6 +63,7 @@ describe("screens", () => {
     expect(html).toContain("<h1>Settings</h1>");
     expect(html).toContain("owner@example.test");
     expect(html).toContain("Sign out");
+    expect(html).not.toContain("Close account");
   });
 
   it("Trips renders the dashboard, starting in its loading state", () => {

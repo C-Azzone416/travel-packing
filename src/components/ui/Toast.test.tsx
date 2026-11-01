@@ -2,6 +2,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ModalSheet } from "./ModalSheet";
 import { ACTION_TOAST_MS, TOAST_MS, ToastProvider, useToast, type ToastApi } from "./Toast";
 
 let api: ToastApi;
@@ -169,5 +170,132 @@ describe("ToastProvider", () => {
     expect(screen.getByText("Couldn't save")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
     expect(screen.queryByText("Couldn't save")).toBeNull();
+  });
+
+  describe("held while a sheet is open (#341)", () => {
+    function Sheets({ a, b = false }: { a: boolean; b?: boolean }) {
+      return (
+        <>
+          <ModalSheet open={a} title="First sheet" onClose={() => {}}>
+            <button>One</button>
+          </ModalSheet>
+          <ModalSheet open={b} title="Second sheet" onClose={() => {}}>
+            <button>Two</button>
+          </ModalSheet>
+        </>
+      );
+    }
+    function setupSheets() {
+      const view = render(
+        <ToastProvider>
+          <Capture onApi={capture} />
+          <Sheets a={false} />
+        </ToastProvider>,
+      );
+      const set = (a: boolean, b = false) =>
+        view.rerender(
+          <ToastProvider>
+            <Capture onApi={capture} />
+            <Sheets a={a} b={b} />
+          </ToastProvider>,
+        );
+      return set;
+    }
+    const flush = () => act(async () => {});
+
+    it("keeps a toast that arrives behind a sheet (still in the DOM) and does not expire it", async () => {
+      const set = setupSheets();
+      set(true);
+      await flush();
+      expect(document.body.hasAttribute("data-sheet-open")).toBe(true);
+      act(() => api.show("Hello"));
+      expect(screen.getByRole("status", { hidden: true }).textContent).toContain("Hello");
+      advance(20_000);
+      expect(screen.getByText("Hello")).toBeTruthy();
+    });
+
+    it("gives the full 4s after the sheet closes", async () => {
+      const set = setupSheets();
+      set(true);
+      await flush();
+      act(() => api.show("Hello"));
+      advance(20_000);
+      set(false);
+      await flush();
+      expect(document.body.hasAttribute("data-sheet-open")).toBe(false);
+      advance(TOAST_MS - 1);
+      expect(screen.getByText("Hello")).toBeTruthy();
+      advance(1);
+      expect(screen.queryByText("Hello")).toBeNull();
+    });
+
+    it("pauses a toast already showing when a sheet opens, then restarts its time", async () => {
+      const set = setupSheets();
+      act(() => api.show("Early"));
+      advance(TOAST_MS - 500);
+      set(true);
+      await flush();
+      advance(20_000);
+      expect(screen.getByText("Early")).toBeTruthy();
+      set(false);
+      await flush();
+      advance(TOAST_MS - 1);
+      expect(screen.getByText("Early")).toBeTruthy();
+      advance(1);
+      expect(screen.queryByText("Early")).toBeNull();
+    });
+
+    it("lets a newer toast replace a held one", async () => {
+      const set = setupSheets();
+      set(true);
+      await flush();
+      act(() => api.show("Old"));
+      act(() => api.show("New"));
+      expect(screen.queryByText("Old")).toBeNull();
+      expect(screen.getByText("New")).toBeTruthy();
+      set(false);
+      await flush();
+      advance(TOAST_MS);
+      expect(screen.queryByText("New")).toBeNull();
+    });
+
+    it("holds until both of two stacked sheets are closed", async () => {
+      const set = setupSheets();
+      set(true, true);
+      await flush();
+      act(() => api.show("Stacked"));
+      set(true, false);
+      await flush();
+      expect(document.body.hasAttribute("data-sheet-open")).toBe(true);
+      advance(20_000);
+      expect(screen.getByText("Stacked")).toBeTruthy();
+      set(false, false);
+      await flush();
+      advance(TOAST_MS);
+      expect(screen.queryByText("Stacked")).toBeNull();
+    });
+
+    it("starts the 8s of an action toast after the sheet closes", async () => {
+      const set = setupSheets();
+      set(true);
+      await flush();
+      act(() => api.show("Trip removed", { action: { label: "Undo", onAction: () => {} } }));
+      advance(20_000);
+      expect(screen.getByText("Trip removed")).toBeTruthy();
+      set(false);
+      await flush();
+      advance(ACTION_TOAST_MS - 1);
+      expect(screen.getByText("Trip removed")).toBeTruthy();
+      advance(1);
+      expect(screen.queryByText("Trip removed")).toBeNull();
+    });
+
+    it("never hides the error banner", async () => {
+      const set = setupSheets();
+      set(true);
+      await flush();
+      act(() => api.error("Couldn't save"));
+      expect(screen.getByRole("alert", { hidden: true }).textContent).toContain("Couldn't save");
+    });
   });
 });

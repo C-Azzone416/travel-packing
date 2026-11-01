@@ -1,14 +1,16 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import {
+  accountClosureMode,
   checkDeployEnv,
   checkMigrationTarget,
   hostOf,
   parseBuildEnvFile,
   parseEnvFile,
+  packageCredentialProblems,
   productionHost,
   PRODUCTION_HOST_FORMAT,
   REQUIRED,
@@ -30,6 +32,26 @@ const production = {
   DATABASE_URL: `postgres://u:p@${PROD_HOST.replace("ep-prod-1", "ep-prod-1-pooler")}/db`,
   DATABASE_URL_UNPOOLED: `postgres://u:p@${PROD_HOST}/db`,
 };
+
+describe("checkDeployEnv: screenshots (#130)", () => {
+  it("fails a production environment that switches screenshots on, naming the variable only", () => {
+    const problems = checkDeployEnv(
+      "production",
+      { ...production, FEEDBACK_SCREENSHOTS: "1" },
+      PROD_HOST,
+    );
+    expect(problems).toEqual([expect.stringContaining("FEEDBACK_SCREENSHOTS must be unset or 0")]);
+  });
+
+  it("accepts production with screenshots off, and a preview with them on", () => {
+    expect(
+      checkDeployEnv("production", { ...production, FEEDBACK_SCREENSHOTS: "0" }, PROD_HOST),
+    ).toEqual([]);
+    expect(checkDeployEnv("preview", { ...good, FEEDBACK_SCREENSHOTS: "1" }, PROD_HOST)).toEqual(
+      [],
+    );
+  });
+});
 
 describe("checkDeployEnv", () => {
   it("accepts a complete preview environment on its own database", () => {
@@ -115,8 +137,13 @@ describe("checkDeployEnv", () => {
   it.each([
     "NEXT_PUBLIC_E2E_BUILD",
     "E2E_DATABASE_URL",
+    "E2E_FRAMEBRIAR_PORT",
     "SEED_DATABASE_URL",
     "OPEN_METEO_GEOCODING_URL",
+    "NODE_AUTH_TOKEN",
+    "NPM_AUTH_TOKEN",
+    "NPM_TOKEN",
+    "FRAMEBRIAR_PACKAGES_TOKEN",
   ])("refuses %s in both environments, naming it but not its value", (name) => {
     for (const target of ["preview", "production"] as const) {
       const problems = checkDeployEnv(
@@ -221,6 +248,46 @@ describe("checkDeployEnv", () => {
     const env = { ...good, DATABASE_URL: `postgres://u:p@x-${PROD_HOST}/db` };
     expect(checkDeployEnv("preview", env, PROD_HOST)).toEqual([]);
   });
+});
+
+describe("checkDeployEnv: account-closure rollout", () => {
+  it("derives the smoke contract from the exact runtime switch", () => {
+    expect(accountClosureMode({})).toBe("disabled");
+    expect(accountClosureMode({ CLOSE_ACCOUNT_ENABLED: "" })).toBe("disabled");
+    expect(accountClosureMode({ CLOSE_ACCOUNT_ENABLED: "1" })).toBe("enabled");
+    expect(accountClosureMode({ CLOSE_ACCOUNT_ENABLED: "true" })).toBe("disabled");
+  });
+
+  it("accepts either rollout state in Preview and rejects malformed values", () => {
+    expect(checkDeployEnv("preview", good, PROD_HOST)).toEqual([]);
+    expect(checkDeployEnv("preview", { ...good, CLOSE_ACCOUNT_ENABLED: "1" }, PROD_HOST)).toEqual(
+      [],
+    );
+    expect(
+      checkDeployEnv("preview", { ...good, CLOSE_ACCOUNT_ENABLED: "true" }, PROD_HOST),
+    ).toEqual(["CLOSE_ACCOUNT_ENABLED must be unset or the exact value 1"]);
+  });
+
+  it("keeps Production disabled even if its Vercel configuration is changed", () => {
+    expect(
+      checkDeployEnv("production", { ...production, CLOSE_ACCOUNT_ENABLED: "1" }, PROD_HOST),
+    ).toEqual(["CLOSE_ACCOUNT_ENABLED must not be enabled in production"]);
+  });
+});
+
+describe("packageCredentialProblems", () => {
+  it("accepts a credential-free build environment", () => {
+    expect(packageCredentialProblems({ VERCEL_ENV: "preview" })).toEqual([]);
+  });
+
+  it.each(["NODE_AUTH_TOKEN", "NPM_AUTH_TOKEN", "NPM_TOKEN", "FRAMEBRIAR_PACKAGES_TOKEN"])(
+    "rejects %s by name without echoing its value",
+    (name) => {
+      const problems = packageCredentialProblems({ [name]: "sentinel-do-not-print" });
+      expect(problems).toEqual([`${name} must not be present during the application build`]);
+      expect(problems.join()).not.toContain("sentinel-do-not-print");
+    },
+  );
 });
 
 describe("hostOf", () => {
@@ -566,11 +633,15 @@ describe("scripts/check-deploy-env.ts reads both targets exactly as vercel build
       `${prefix}LOCATION_PROVIDER="open-meteo"`,
     ].join("\n");
 
-  function run(target: string, text: string, host: string) {
+  function run(target: string, text: string, host: string, output?: string) {
     const file = join(dir, `${target}.env`);
     writeFileSync(file, text);
     return spawnSync(tsx, [script, target, file], {
-      env: { PATH: process.env.PATH, PRODUCTION_DB_HOST: host } as unknown as NodeJS.ProcessEnv,
+      env: {
+        PATH: process.env.PATH,
+        PRODUCTION_DB_HOST: host,
+        ...(output ? { GITHUB_OUTPUT: output } : {}),
+      } as unknown as NodeJS.ProcessEnv,
       encoding: "utf8",
     });
   }
@@ -586,6 +657,27 @@ describe("scripts/check-deploy-env.ts reads both targets exactly as vercel build
     );
     expect(result.status).toBe(0);
     expect(result.stdout).toBe(`deploy env: ok for ${target}\n`);
+  });
+
+  it("writes only the derived account-closure mode to the workflow output", () => {
+    for (const [switchLine, expected] of [
+      ["", "disabled"],
+      ["\nCLOSE_ACCOUNT_ENABLED=1", "enabled"],
+    ] as const) {
+      const output = join(dir, `output-${expected}.txt`);
+      const result = run(
+        "preview",
+        `${envFile(
+          "",
+          "postgres://u:p@ep-prev-1.x.test/db",
+          "postgres://u:p@ep-prev-1.x.test/db",
+        )}${switchLine}`,
+        PROD_HOST,
+        output,
+      );
+      expect(result.status).toBe(0);
+      expect(readFileSync(output, "utf8")).toBe(`account_closure=${expected}\n`);
+    }
   });
 
   it.each(["preview", "production"])(

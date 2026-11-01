@@ -3,7 +3,12 @@
 // file. Prints variable names and a keyed allowlist fingerprint only, never a value. TARGET must be preview or production.
 import { chmodSync, readFileSync, writeFileSync } from "node:fs";
 import { describeAllowlist } from "../src/server/auth/allowlist-fingerprint";
-import { INJECTED_SECRETS, injectSecrets } from "../src/tooling/preview-secrets";
+import {
+  FRAMEBRIAR_KEYS_SECRET,
+  INJECTED_SECRETS,
+  applyFramebriarKeys,
+  injectSecrets,
+} from "../src/tooling/preview-secrets";
 
 const file = process.argv[2];
 if (!file) {
@@ -22,9 +27,14 @@ try {
     for (const problem of result.problems) console.error(`${target} secrets: ${problem}`);
     process.exit(1);
   }
-  writeFileSync(file, result.text);
+  // Optional and Preview-only: it can never fail the deploy, and a missing or invalid ring just leaves enrollment unavailable.
+  const keys = applyFramebriarKeys(result.text, process.env, target);
+  writeFileSync(file, keys.text);
   chmodSync(file, 0o600);
   console.log(`${target} secrets: injected ${INJECTED_SECRETS.join(", ")} (values not shown)`);
+  console.log(
+    `${target} secrets: ${FRAMEBRIAR_KEYS_SECRET} ${keys.state}${keys.state === "injected" ? "" : " (account feedback enrollment stays unavailable)"}`,
+  );
   const allowlist = describeAllowlist(
     process.env.OWNER_EMAIL_ALLOWLIST,
     process.env.NEON_AUTH_COOKIE_SECRET ?? "",

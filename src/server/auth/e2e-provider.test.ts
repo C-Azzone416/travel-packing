@@ -66,7 +66,12 @@ describe("createE2eAuthProvider", () => {
   it("signs in with the synthetic password and keeps an unguessable token, not the email, in the cookie", async () => {
     expect(await provider.signInWithPassword(OWNER, env.AUTH_E2E_PASSWORD)).toEqual({
       ok: true,
-      session: { userId: `e2e-${OWNER}`, email: OWNER, issuedAt: expect.any(Number) },
+      session: {
+        userId: `e2e-${OWNER}`,
+        email: OWNER,
+        issuedAt: expect.any(Number),
+        identityCreatedAt: 1,
+      },
     });
     const token = jar.get(E2E_COOKIE) ?? "";
     expect(token).toMatch(/^[0-9a-f]{64}$/);
@@ -200,6 +205,80 @@ describe("createE2eAuthProvider", () => {
       await expect(provider.signOut()).resolves.toBeUndefined();
       jar.set(E2E_COOKIE, "../../x");
       await expect(provider.signOut()).resolves.toBeUndefined();
+      expect(jar.has(E2E_COOKIE)).toBe(false);
+    });
+  });
+
+  describe("account deletion", () => {
+    it("binds closure revocation and deletion to the newly minted session", async () => {
+      await provider.signInWithPassword(OWNER, env.AUTH_E2E_PASSWORD);
+      const old = jar.get(E2E_COOKIE) ?? "";
+      const begun = await provider.beginAccountClosure(OWNER, env.AUTH_E2E_PASSWORD);
+      expect(begun.ok).toBe(true);
+      if (!begun.ok) throw new Error("synthetic closure sign-in failed");
+      const fresh = jar.get(E2E_COOKIE) ?? "";
+      expect(fresh).not.toBe(old);
+
+      await expect(begun.authorization.revokeOtherSessions()).resolves.toEqual({ ok: true });
+      expect(existsSync(join(dir, old))).toBe(false);
+      expect(existsSync(join(dir, fresh))).toBe(true);
+      await expect(begun.authorization.deleteUser(env.AUTH_E2E_PASSWORD)).resolves.toEqual({
+        ok: true,
+      });
+      expect(existsSync(join(dir, fresh))).toBe(false);
+      expect(jar.has(E2E_COOKIE)).toBe(false);
+    });
+
+    it("refuses closure for a wrong password or an unverified account", async () => {
+      await expect(provider.beginAccountClosure(OWNER, "wrong-password")).resolves.toEqual({
+        ok: false,
+      });
+      await provider.signUp("unverified@example.test", "synthetic-password");
+      await expect(
+        provider.beginAccountClosure("unverified@example.test", "synthetic-password"),
+      ).resolves.toEqual({ ok: false });
+    });
+
+    it("fails closed if the bound fresh session disappears", async () => {
+      const begun = await provider.beginAccountClosure(OWNER, env.AUTH_E2E_PASSWORD);
+      expect(begun.ok).toBe(true);
+      if (!begun.ok) throw new Error("synthetic closure sign-in failed");
+      const fresh = jar.get(E2E_COOKIE) ?? "";
+      rmSync(join(dir, fresh), { force: true });
+
+      await expect(begun.authorization.revokeOtherSessions()).resolves.toEqual({
+        ok: false,
+        reason: "unavailable",
+      });
+      await expect(begun.authorization.deleteUser(env.AUTH_E2E_PASSWORD)).resolves.toEqual({
+        ok: false,
+        reason: "invalid",
+      });
+    });
+
+    it("revokes every other session while preserving the current one", async () => {
+      await provider.signInWithPassword(OWNER, env.AUTH_E2E_PASSWORD);
+      const first = jar.get(E2E_COOKIE) ?? "";
+      await provider.signInWithPassword(OWNER, env.AUTH_E2E_PASSWORD);
+      const current = jar.get(E2E_COOKIE) ?? "";
+      expect(existsSync(join(dir, first))).toBe(true);
+      expect(existsSync(join(dir, current))).toBe(true);
+      expect(await provider.revokeOtherSessions()).toEqual({ ok: true });
+      expect(existsSync(join(dir, first))).toBe(false);
+      expect(existsSync(join(dir, current))).toBe(true);
+      expect(await provider.getSession()).toMatchObject({ email: OWNER });
+    });
+
+    it("requires the password, removes the identity and every session, and clears the cookie", async () => {
+      await provider.signInWithPassword(OWNER, env.AUTH_E2E_PASSWORD);
+      const token = jar.get(E2E_COOKIE) ?? "";
+      expect(await provider.deleteUser("wrong-password")).toEqual({
+        ok: false,
+        reason: "invalid",
+      });
+      expect(existsSync(join(dir, token))).toBe(true);
+      expect(await provider.deleteUser(env.AUTH_E2E_PASSWORD)).toEqual({ ok: true });
+      expect(existsSync(join(dir, token))).toBe(false);
       expect(jar.has(E2E_COOKIE)).toBe(false);
     });
   });

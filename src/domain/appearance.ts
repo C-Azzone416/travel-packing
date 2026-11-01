@@ -10,6 +10,18 @@ export const APPEARANCE_COOKIE = "appearance";
 /** One year, in seconds. */
 export const APPEARANCE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
+/**
+ * The anonymous palette cookie (#283): what signed-out pages (sign-in, sign-up, verify, reset, ...) are themed with.
+ * It holds ONLY a palette id, never an email, user or account id or session reference. It is httpOnly (only the server
+ * reads it), SameSite=Lax, Secure in hosted builds, Path=/, and lives 1 year (Max-Age 31536000, Caroline's decision of
+ * 2026-10-28). Sign-out keeps it; setting an account theme or signing in refreshes it from the account; permanent
+ * account deletion clears it. It never influences authentication or authorization, and its value is never written
+ * into an account.
+ */
+export const ANONYMOUS_APPEARANCE_COOKIE = "anon-appearance";
+/** 1 year, in seconds (31536000). */
+export const ANONYMOUS_APPEARANCE_COOKIE_MAX_AGE = 31536000;
+
 export function isAppearance(value: unknown): value is Appearance {
   return typeof value === "string" && (APPEARANCES as readonly string[]).includes(value);
 }

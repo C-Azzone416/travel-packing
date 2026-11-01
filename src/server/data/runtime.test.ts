@@ -10,8 +10,9 @@ vi.mock("../auth/auth-runtime", () => ({ getAuth: async () => auth }));
 const createE2eDb = vi.fn((url: string) => ({ e2eDbFor: url }));
 vi.mock("@/server/db/e2e-driver", () => ({
   e2eDatabaseEnabled: (env: Record<string, string | undefined>) =>
-    Boolean(env.E2E_DATABASE_URL?.trim()) && !env.VERCEL,
+    env.NEXT_PUBLIC_E2E_BUILD === "1" && Boolean(env.E2E_DATABASE_URL?.trim()) && !env.VERCEL,
   createE2eDb: (url: string) => createE2eDb(url),
+  createSharedE2eDb: (url: string) => createE2eDb(url),
 }));
 
 import { curatedResolver } from "../locations/resolver";

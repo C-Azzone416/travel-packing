@@ -1,5 +1,6 @@
 // Post-deploy smoke test: every public auth page answers 200 to a signed-out visitor (no owner session needed, so it
-// works on the first preview, before any account exists), and a protected page sends a signed-out visitor to sign-in.
+// works on the first preview, before any account exists), except account closure. Its explicit deployment contract pins
+// disabled to a Settings redirect and enabled to a sign-in redirect. A protected page sends a signed-out visitor to sign-in.
 // Redirects are not followed, so a bounce is seen as a bounce. A passing check prints the path and status only. A failing
 // one also prints what tells a platform error from an app error: the x-vercel-error and x-vercel-id response headers and
 // the first 200 characters of the body. Request headers, the bypass secret and the Location header are never printed.
@@ -14,6 +15,11 @@ type Fetch = (
 export interface SmokeOptions {
   /** Sent as x-vercel-protection-bypass when the preview sits behind Vercel deployment protection. */
   bypassSecret?: string;
+  /**
+   * The rollout state this deployment is required to expose. Disabled stays the default so Production and ad-hoc
+   * invocations continue to fail closed. Preview opts into enabled explicitly in its reviewed workflow steps.
+   */
+  accountClosure?: "disabled" | "enabled";
 }
 
 export interface SmokeResult {
@@ -24,6 +30,17 @@ export interface SmokeResult {
 }
 
 const REDIRECTS = new Set([301, 302, 303, 307, 308]);
+
+function isSameOriginRedirect(response: Response, base: string, pathname: string): boolean {
+  if (!REDIRECTS.has(response.status)) return false;
+  const location = response.headers.get("location") ?? "";
+  try {
+    const target = new URL(location, base);
+    return target.origin === new URL(base).origin && target.pathname === pathname;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Is this Vercel Authentication (deployment protection) answering instead of the app? It answers a protected address with a 401
@@ -78,7 +95,7 @@ async function diagnostics(response: Response, bypassSecret?: string): Promise<s
 export async function smokeTest(
   baseUrl: string,
   fetchImpl: Fetch,
-  { bypassSecret }: SmokeOptions = {},
+  { bypassSecret, accountClosure = "disabled" }: SmokeOptions = {},
 ): Promise<SmokeResult> {
   const base = baseUrl.replace(/\/+$/, "");
   const headers: Record<string, string> = bypassSecret
@@ -111,20 +128,31 @@ export async function smokeTest(
     }
   }
 
-  // The list the request gate uses, so a sign-up page (#27) is checked as soon as it becomes public.
+  // The list the request gate uses, so a sign-up page (#27) is checked as soon as it becomes public. Account closure is
+  // intentionally different: each target names the rollout state it requires. Neither state accepts a public 200, and an
+  // enabled target fails if it accidentally deploys with the kill switch off (or vice versa).
   for (const path of PUBLIC_PATHS) {
+    if (path === "/close-account") {
+      if (accountClosure === "enabled") {
+        await check(
+          path,
+          "expected a redirect to /sign-in while account closure is enabled",
+          (response) => response.status === 307 && isSameOriginRedirect(response, base, "/sign-in"),
+        );
+        continue;
+      }
+      await check(
+        path,
+        "expected a redirect to /settings while account closure is disabled",
+        (response) => response.status === 307 && isSameOriginRedirect(response, base, "/settings"),
+      );
+      continue;
+    }
     await check(path, "expected 200", (response) => response.status === 200);
   }
   // A signed-out visitor to / is redirected to /sign-in ON THIS SITE: a redirect elsewhere that happens to end in /sign-in is not it.
-  await check("/", "expected a redirect to /sign-in when signed out", (response) => {
-    if (!REDIRECTS.has(response.status)) return false;
-    const location = response.headers.get("location") ?? "";
-    try {
-      const target = new URL(location, base);
-      return target.host === new URL(base).host && target.pathname === "/sign-in";
-    } catch {
-      return false;
-    }
-  });
+  await check("/", "expected a redirect to /sign-in when signed out", (response) =>
+    isSameOriginRedirect(response, base, "/sign-in"),
+  );
   return { ok, lines, vercelAuthentication };
 }

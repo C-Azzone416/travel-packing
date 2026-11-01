@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { cookies, headers } from "next/headers";
 import type { ReactNode } from "react";
 import { APPEARANCE_COOKIE } from "@/domain/appearance";
+import { readAnonymousAppearance } from "@/features/settings/anonymous-appearance";
 import { appearanceForRequest } from "@/features/settings/saved-appearance";
 import { AppShell } from "@/components/shell/AppShell";
 import { signOutAction } from "@/app/sign-in/actions";
@@ -48,6 +49,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   const appearance = await appearanceForRequest(
     (await cookies()).get(APPEARANCE_COOKIE)?.value,
     email !== null,
+    await readAnonymousAppearance(),
   );
   return (
     <html lang="en" data-appearance={appearance} className={fontClassNames}>

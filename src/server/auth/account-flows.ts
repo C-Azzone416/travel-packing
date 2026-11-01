@@ -305,7 +305,22 @@ export async function resetOwnerPassword(
     logAuthEvent("password-reset-failed");
     return { status: "invalid-link" };
   }
-  const result = await auth.provider.resetPassword(token, newPassword as string);
+  // Open the app-signed address before calling the provider so a valid setup/reset flow can hold the same opaque-email
+  // database lock as account deletion across token consumption and the setup-row write. Without that serialization, a
+  // reset that paused after provider success could recreate account_setups after confirmed closure.
+  const address = auth.seals.open(sealedAddress, auth.allowlist);
+  const canCompleteSetup = Boolean(address && isAllowed(auth.allowlist, address));
+  let result: Awaited<ReturnType<SetupAuth["provider"]["resetPassword"]>>;
+  try {
+    result = canCompleteSetup
+      ? await auth.setup.resetPasswordAndMarkComplete(address!, () =>
+          auth.provider.resetPassword(token, newPassword as string),
+        )
+      : await auth.provider.resetPassword(token, newPassword as string);
+  } catch {
+    logAuthEvent("provider-error");
+    return { status: "unavailable" };
+  }
   if (!result.ok) {
     if (result.reason === "unavailable") return { status: "unavailable" };
     logAuthEvent("password-reset-failed");
@@ -321,15 +336,7 @@ export async function resetOwnerPassword(
   // it is only ever emailed to the address it names, and only allowlisted addresses are ever recorded. Without a good seal
   // (an old link, including one in the shape used before #210) the password still changes, but the account stays "not set up"
   // until a new link is used.
-  const address = auth.seals.open(sealedAddress, auth.allowlist);
-  if (address && isAllowed(auth.allowlist, address)) {
-    try {
-      await auth.setup.markComplete(address);
-      logAuthEvent("account-setup-completed");
-    } catch {
-      logAuthEvent("provider-error");
-    }
-  }
+  if (canCompleteSetup) logAuthEvent("account-setup-completed");
   logAuthEvent("password-reset-succeeded");
   return { status: "ok" };
 }

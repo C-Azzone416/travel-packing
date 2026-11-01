@@ -9,6 +9,7 @@ import {
   isPublicPath,
   SIGN_IN_PATH,
 } from "./proxy-handler";
+import { CLOSE_ACCOUNT_COMPLETE_PATH, CLOSE_ACCOUNT_PATH } from "./public-paths";
 
 const OWNER = { userId: "u1", email: "owner@example.test" };
 const OTHER = { userId: "u2", email: "intruder@example.test" };
@@ -45,6 +46,10 @@ describe("isPublicPath", () => {
     [`${SIGN_IN_PATH}/`, true],
     [ACCESS_DENIED_PATH, true],
     [`${ACCESS_DENIED_PATH}/`, true],
+    [CLOSE_ACCOUNT_PATH, true],
+    [`${CLOSE_ACCOUNT_PATH}/`, true],
+    [CLOSE_ACCOUNT_COMPLETE_PATH, true],
+    [`${CLOSE_ACCOUNT_COMPLETE_PATH}/`, true],
     ["/", false],
     ["/sign-in/extra", false],
     ["/api/sign-in", false],
@@ -73,12 +78,15 @@ describe("signed out", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
   });
 
-  it.each([SIGN_IN_PATH, ACCESS_DENIED_PATH])("public page %s is reachable", async (path) => {
-    const response = await run(path);
-    expect(response.status).toBe(200);
-    expect(response.headers.get("location")).toBeNull();
-    expect(response.headers.get("cache-control")).toBe("no-store");
-  });
+  it.each([SIGN_IN_PATH, ACCESS_DENIED_PATH, CLOSE_ACCOUNT_PATH, CLOSE_ACCOUNT_COMPLETE_PATH])(
+    "public page %s is reachable",
+    async (path) => {
+      const response = await run(path);
+      expect(response.status).toBe(200);
+      expect(response.headers.get("location")).toBeNull();
+      expect(response.headers.get("cache-control")).toBe("no-store");
+    },
+  );
 });
 
 describe("non-allowlisted user", () => {
@@ -152,9 +160,12 @@ describe("auth-screen marker (so the layout can drop the app chrome)", () => {
     });
   const runRequest = (req: NextRequest) => handleRequest(req, { provider: fake, allowlist });
 
-  it.each([SIGN_IN_PATH, ACCESS_DENIED_PATH])("is set on the public screen %s", async (path) => {
-    expect(forwarded(await run(path))).toBe("1");
-  });
+  it.each([SIGN_IN_PATH, ACCESS_DENIED_PATH, CLOSE_ACCOUNT_PATH, CLOSE_ACCOUNT_COMPLETE_PATH])(
+    "is set on the public screen %s",
+    async (path) => {
+      expect(forwarded(await run(path))).toBe("1");
+    },
+  );
 
   it("is not set on app pages for an allowlisted owner", async () => {
     fake.current = OWNER;

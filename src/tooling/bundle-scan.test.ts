@@ -39,6 +39,8 @@ describe("scanFiles", () => {
     // Built at run time so this file is not itself a secret-shaped string (gitleaks scans the repository).
     ["an AWS access key id", ["AKIA", "ABCDEFGHIJKLMNOP"].join("")],
     ["a GitHub token", `ghp_${"a".repeat(36)}`],
+    ["a fine-grained GitHub token", `github_pat_${"c".repeat(40)}`],
+    ["an npm access token", `npm_${"d".repeat(36)}`],
     ["a Stripe-style secret key", `sk_live_${"b".repeat(20)}`],
   ])("fails an injected secret value: %s", (problem, text) => {
     const findings = scanFiles([{ path: "leak.js", text: `var s="${text}";` }]);

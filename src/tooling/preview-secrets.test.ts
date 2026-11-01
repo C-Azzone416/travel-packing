@@ -5,7 +5,14 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { describeAllowlist } from "../server/auth/allowlist-fingerprint";
 import { checkDeployEnv, parseBuildEnvFile, REDACTION_MARKER } from "./deploy-env";
-import { formatEnvLine, INJECTED_SECRETS, injectSecrets, readBack } from "./preview-secrets";
+import {
+  FRAMEBRIAR_KEYS_SECRET,
+  applyFramebriarKeys,
+  formatEnvLine,
+  INJECTED_SECRETS,
+  injectSecrets,
+  readBack,
+} from "./preview-secrets";
 
 // The reader `vercel build` uses (Vercel CLI 64.5.0 bundles dotenv@4.0.0), copied verbatim as an independent oracle so
 // these tests do not just agree with our own parseEnvFile.
@@ -244,6 +251,7 @@ describe("the script", () => {
       );
       expect(result.stdout).toBe(
         `${target} secrets: injected DATABASE_URL, DATABASE_URL_UNPOOLED, OWNER_EMAIL_ALLOWLIST, NEON_AUTH_COOKIE_SECRET (values not shown)\n` +
+          `${target} secrets: FRAMEBRIAR_CREDENTIAL_KEYS omitted (account feedback enrollment stays unavailable)\n` +
           `${target} secrets: allowlist ${expectedPrint.entries} entries (${expectedPrint.malformed} malformed), fingerprint ${expectedPrint.fingerprint}\n`,
       );
       expect(result.stdout).toMatch(
@@ -286,4 +294,102 @@ describe("the script", () => {
     });
     expect(usage.status).toBe(2);
   });
+});
+
+describe("applyFramebriarKeys (the optional, Preview-only key ring, #259)", () => {
+  const RING = JSON.stringify({
+    current: "k1",
+    keys: { k1: Buffer.alloc(32, 7).toString("base64") },
+  });
+  const withMarker = `${PULLED}${FRAMEBRIAR_KEYS_SECRET}="${REDACTION_MARKER}"\n`;
+
+  it("writes a valid ring to a Preview file, and the build's reader sees exactly it", () => {
+    const { text, state } = applyFramebriarKeys(
+      PULLED,
+      { [FRAMEBRIAR_KEYS_SECRET]: RING },
+      "preview",
+    );
+    expect(state).toBe("injected");
+    expect(dotenv4Parse(text)[FRAMEBRIAR_KEYS_SECRET]).toBe(RING);
+    // Everything else is untouched.
+    expect(text.startsWith(PULLED.trimEnd())).toBe(true);
+  });
+
+  it.each([
+    ["not set", undefined],
+    ["empty", ""],
+    ["blank", "   "],
+  ])("when it is %s the file carries none (and the deploy goes on)", (_name, value) => {
+    const { text, state } = applyFramebriarKeys(
+      withMarker,
+      { [FRAMEBRIAR_KEYS_SECRET]: value },
+      "preview",
+    );
+    expect(state).toBe("omitted");
+    expect(text).not.toContain(FRAMEBRIAR_KEYS_SECRET);
+    expect(text).not.toContain("[SENSITIVE]".repeat(2));
+    expect(text).toBe(PULLED);
+  });
+
+  it.each([
+    ["not JSON", "k1:abc"],
+    ["a ring with a short key", JSON.stringify({ current: "k1", keys: { k1: "c2hvcnQ=" } })],
+    [
+      "a value with a newline escape the reader would change",
+      JSON.stringify({ current: "k1", keys: { k1: "a\\nb" } }),
+    ],
+  ])("drops %s instead of failing the deploy", (_name, value) => {
+    const { text, state } = applyFramebriarKeys(
+      withMarker,
+      { [FRAMEBRIAR_KEYS_SECRET]: value },
+      "preview",
+    );
+    expect(state).toBe("invalid");
+    expect(text).not.toContain(FRAMEBRIAR_KEYS_SECRET);
+  });
+
+  it("never writes it for Production, even when the variable is set", () => {
+    const { text, state } = applyFramebriarKeys(
+      withMarker,
+      { [FRAMEBRIAR_KEYS_SECRET]: RING },
+      "production",
+    );
+    expect(state).toBe("omitted");
+    expect(text).not.toContain(FRAMEBRIAR_KEYS_SECRET);
+    expect(text).not.toContain("k1");
+  });
+
+  it("replaces an existing assignment rather than duplicating it, and keeps CRLF files CRLF", () => {
+    const crlf = withMarker.replace(/\n/g, "\r\n");
+    const { text } = applyFramebriarKeys(crlf, { [FRAMEBRIAR_KEYS_SECRET]: RING }, "preview");
+    expect(text.match(new RegExp(`${FRAMEBRIAR_KEYS_SECRET}=`, "g"))).toHaveLength(1);
+    expect(text).toContain("\r\n");
+    expect(text.replace(/\r\n/g, "")).not.toMatch(/\n/);
+  });
+
+  it("the deploy script reports the state without ever printing the value", () => {
+    const dir = mkdtempSync(join(tmpdir(), "inject-keys-"));
+    try {
+      const file = join(dir, ".env.preview.local");
+      writeFileSync(file, PULLED);
+      const run = (extra: Record<string, string>) =>
+        spawnSync("npx", ["tsx", "scripts/inject-deploy-secrets.ts", file], {
+          cwd: process.cwd(),
+          env: { ...process.env, TARGET: "preview", ...SECRETS, ...extra },
+          encoding: "utf8",
+        });
+      const injected = run({ [FRAMEBRIAR_KEYS_SECRET]: RING });
+      expect(injected.status).toBe(0);
+      expect(injected.stdout).toContain(`${FRAMEBRIAR_KEYS_SECRET} injected`);
+      expect(injected.stdout + injected.stderr).not.toContain(RING);
+      expect(readFileSync(file, "utf8")).toContain(FRAMEBRIAR_KEYS_SECRET);
+      writeFileSync(file, PULLED);
+      const omitted = run({ [FRAMEBRIAR_KEYS_SECRET]: "" });
+      expect(omitted.status).toBe(0);
+      expect(omitted.stdout).toContain(`${FRAMEBRIAR_KEYS_SECRET} omitted`);
+      expect(readFileSync(file, "utf8")).not.toContain(FRAMEBRIAR_KEYS_SECRET);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 60_000);
 });

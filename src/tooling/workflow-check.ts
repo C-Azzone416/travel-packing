@@ -92,7 +92,8 @@ export const ALIAS_SMOKE_STEP = [
   "if: env.TARGET == 'preview' && steps.alias_head.outputs.assign == 'true'",
   "env:",
   "VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
-  'run: npx tsx scripts/smoke-test.ts "https://${PREVIEW_ALIAS}"',
+  "ACCOUNT_CLOSURE_MODE: ${{ steps.deploy_env.outputs.account_closure }}",
+  'run: npx tsx scripts/smoke-test.ts "https://${PREVIEW_ALIAS}" --account-closure="$ACCOUNT_CLOSURE_MODE"',
 ];
 /** The Production steps (#207), exactly as reviewed: the alias is proven to be THIS deployment before it is smoke-tested, and the smoke test never gets the bypass secret. */
 export const PROD_ALIAS_STEP = [
@@ -106,7 +107,9 @@ export const PROD_ALIAS_STEP = [
 export const PROD_SMOKE_STEP = [
   "- name: Production alias smoke test",
   "if: env.TARGET == 'production'",
-  'run: npx tsx scripts/smoke-test.ts "https://${PRODUCTION_ALIAS}"',
+  "env:",
+  "ACCOUNT_CLOSURE_MODE: ${{ steps.deploy_env.outputs.account_closure }}",
+  'run: npx tsx scripts/smoke-test.ts "https://${PRODUCTION_ALIAS}" --account-closure="$ACCOUNT_CLOSURE_MODE"',
 ];
 /** The deployment-URL smoke test is for Previews only: a production deployment's generated address is behind Vercel Authentication. */
 export const DEPLOY_SMOKE_STEP = [
@@ -115,7 +118,16 @@ export const DEPLOY_SMOKE_STEP = [
   "env:",
   "DEPLOY_URL: ${{ steps.deploy.outputs.url }}",
   "VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
-  'run: npx tsx scripts/smoke-test.ts "$DEPLOY_URL"',
+  "ACCOUNT_CLOSURE_MODE: ${{ steps.deploy_env.outputs.account_closure }}",
+  'run: npx tsx scripts/smoke-test.ts "$DEPLOY_URL" --account-closure="$ACCOUNT_CLOSURE_MODE"',
+];
+/** The smoke mode comes only from the pulled-and-validated target environment, never a hard-coded target assumption. */
+export const DEPLOY_ENV_STEP = [
+  "- name: Check the deploy environment (names only, no values)",
+  "id: deploy_env",
+  "env:",
+  "PRODUCTION_DB_HOST: ${{ secrets.PRODUCTION_DB_HOST }}",
+  'run: npx tsx scripts/check-deploy-env.ts "$TARGET" ".vercel/.env.${TARGET}.local"',
 ];
 /** The locked Vercel CLI install (#208): reproducible from its own lockfile, scripts off, then put on the PATH. */
 export const CLI_INSTALL_STEP = [
@@ -134,6 +146,28 @@ export const CLEANUP_STEP = [
   "DEPLOY_URL: ${{ steps.deploy.outputs.url }}",
   'run: npx tsx scripts/cleanup-previews.ts "$DEPLOY_URL" "$PREVIEW_ALIAS"',
 ];
+
+/** Repo-owned Vercel settings that keep dependency fetching separate from compilation. */
+export function checkVercelConfig(text: string): string[] {
+  let config: unknown;
+  try {
+    config = JSON.parse(text);
+  } catch {
+    return ["vercel.json is not valid JSON"];
+  }
+  if (!config || typeof config !== "object" || Array.isArray(config)) {
+    return ["vercel.json must be an object"];
+  }
+  const object = config as Record<string, unknown>;
+  const problems: string[] = [];
+  if (object.framework !== "nextjs") problems.push("vercel.json must pin the Next.js framework");
+  if (object.installCommand !== "") {
+    problems.push(
+      "vercel.json must set installCommand to the empty string so vercel build cannot fetch dependencies",
+    );
+  }
+  return problems;
+}
 
 /** What must be true of `.github/workflows/deploy-vercel.yml`. Returns the broken rules (empty when fine). */
 export function checkDeployWorkflow(workflow: string): string[] {
@@ -162,6 +196,102 @@ export function checkDeployWorkflow(workflow: string): string[] {
   if (!/scripts\/require-ci\.ts/.test(requireCi))
     problems.push("the CI check must run scripts/require-ci.ts");
 
+  // The private SDK is fetched with the repository's expiring read-only package token. The gate remains dependency- and
+  // secret-free; the credential reaches only npm's fetch-only application install. Dependency lifecycle scripts run in
+  // a later credential-free step, and Vercel's second install is disabled in vercel.json.
+  const permissionBlock = /^permissions:\n((?: {2}.*\n)*)/m.exec(workflow)?.[1] ?? "";
+  if (/^ {2}packages:\s*/m.test(permissionBlock))
+    problems.push("the deploy workflow must not grant the repository token package access");
+  if (stepsOf(jobBody(workflow, "gate") ?? "", "run: npm ci\n").length !== 0)
+    problems.push("the release gate must not install dependencies or receive the package secret");
+  const installs = stepsOf(jobBody(workflow, "deploy") ?? "", "run: npm ci --ignore-scripts\n");
+  if (
+    installs.length !== 1 ||
+    !/NODE_AUTH_TOKEN:\s*\$\{\{\s*secrets\.FRAMEBRIAR_PACKAGES_TOKEN\s*\}\}/.test(installs[0])
+  )
+    problems.push("the deploy job must give the Framebriar secret only to its root npm ci step");
+  const installScripts = stepsOf(
+    jobBody(workflow, "deploy") ?? "",
+    "Run install scripts without package credential",
+  );
+  if (
+    installScripts.length !== 1 ||
+    !/run:\s*npm rebuild esbuild unrs-resolver && node scripts\/install-hooks\.mjs/.test(
+      installScripts[0],
+    ) ||
+    /NODE_AUTH_TOKEN|FRAMEBRIAR_PACKAGES_TOKEN/.test(installScripts[0])
+  ) {
+    problems.push(
+      "dependency lifecycle scripts must run once, after install, without package credentials",
+    );
+  }
+  const buildStep = stepsOf(jobBody(workflow, "deploy") ?? "", "- name: Build")[0] ?? "";
+  if (/NODE_AUTH_TOKEN|FRAMEBRIAR_PACKAGES_TOKEN/.test(buildStep))
+    problems.push(
+      "vercel build and everything it launches must not receive the package credential",
+    );
+  if (!/npx tsx scripts\/check-package-credentials\.ts/.test(buildStep))
+    problems.push("vercel build must fail closed when a package credential is present");
+  const previewFeedback = stepsOf(
+    jobBody(workflow, "deploy") ?? "",
+    "Preview contains feedback UI and browser SDK",
+  );
+  if (
+    previewFeedback.length !== 1 ||
+    !/if:\s*env\.TARGET == 'preview'/.test(previewFeedback[0]) ||
+    !/run:\s*npm run check:preview-feedback-in-build -- \.vercel\/output \.next\s*$/m.test(
+      previewFeedback[0],
+    )
+  ) {
+    problems.push("the exact Vercel Preview artifact must prove feedback UI and SDK are present");
+  }
+  for (const [name, command, message] of [
+    [
+      "Production contains no feedback UI or browser SDK",
+      "check:no-feedback-in-build",
+      "the exact Vercel Production artifact must prove feedback UI and SDK are absent",
+    ],
+    [
+      "Production contains no screenshot capture",
+      "check:no-capture-in-build",
+      "the exact Vercel Production artifact must prove screenshot capture is absent",
+    ],
+  ] as const) {
+    const steps = stepsOf(jobBody(workflow, "deploy") ?? "", name);
+    if (
+      steps.length !== 1 ||
+      !/if:\s*env\.TARGET == 'production'/.test(steps[0]) ||
+      !new RegExp(
+        `run: npm run ${command} -- \\.vercel/output${command === "check:no-feedback-in-build" ? " \\.next" : ""}\\s*$`,
+        "m",
+      ).test(steps[0])
+    ) {
+      problems.push(message);
+    }
+  }
+  const buildIndex = workflow.indexOf("      - name: Build\n");
+  const deployIndex = workflow.indexOf("      - name: Deploy\n");
+  for (const check of [
+    "Preview contains feedback UI and browser SDK",
+    "Production contains no feedback UI or browser SDK",
+    "Production contains no screenshot capture",
+  ]) {
+    const index = workflow.indexOf(`      - name: ${check}\n`);
+    if (!(index > buildIndex && index < deployIndex)) {
+      problems.push(`${check} must run after build and before deploy`);
+    }
+  }
+  if (count(/NODE_AUTH_TOKEN:/g) !== 1)
+    problems.push("NODE_AUTH_TOKEN may appear only on the deploy root fetch-only install");
+  const cliInstall =
+    stepsOf(jobBody(workflow, "deploy") ?? "", "Install the locked Vercel CLI")[0] ?? "";
+  if (/NODE_AUTH_TOKEN/.test(cliInstall))
+    problems.push("the independently locked Vercel CLI install must not receive the package token");
+
+  // A production build never captures screenshots (#130): the switch is forced off on the build line itself.
+  if (!/FEEDBACK_SCREENSHOTS=0 vercel build --prod/.test(workflow))
+    problems.push("the production build must set FEEDBACK_SCREENSHOTS=0");
+
   // The gate decides the target and holds no secret and no environment.
   const gate = jobBody(workflow, "gate");
   if (!gate) problems.push("the gate job is missing");
@@ -169,8 +299,8 @@ export function checkDeployWorkflow(workflow: string): string[] {
     if (/secrets\./.test(gate)) problems.push("the gate job must not read any secret");
     if (/^\s+environment:/m.test(gate))
       problems.push("the gate job must not use a GitHub environment");
-    if (!/scripts\/release-gate\.ts/.test(gate))
-      problems.push("the gate job must run the release gate");
+    if (!/node --experimental-strip-types scripts\/release-gate\.ts/.test(gate))
+      problems.push("the gate job must run the dependency-free release gate");
     if (/run:[^\n]*\$\{\{\s*(?:github|inputs)\./.test(gate)) {
       problems.push(
         "the gate job must pass context through env, never interpolate it into a shell command",
@@ -247,6 +377,7 @@ export function checkDeployWorkflow(workflow: string): string[] {
     ["Prove the Production alias", PROD_ALIAS_STEP, "Production alias proof"],
     ["Production alias smoke test", PROD_SMOKE_STEP, "Production alias smoke test"],
     ["Smoke test", DEPLOY_SMOKE_STEP, "deployment smoke test"],
+    ["Check the deploy environment", DEPLOY_ENV_STEP, "deployment environment check"],
     ["Install the locked Vercel CLI", CLI_INSTALL_STEP, "locked Vercel CLI install"],
     ["Put the locked Vercel CLI on the PATH", CLI_PATH_STEP, "Vercel CLI PATH"],
     ["Delete superseded Preview deployments", CLEANUP_STEP, "Preview cleanup"],
@@ -375,13 +506,25 @@ export function checkDeployWorkflow(workflow: string): string[] {
         problems.push(`${name} must be injected from secrets.${name}`);
       }
     }
+    if (
+      !/^\s+FRAMEBRIAR_CREDENTIAL_KEYS:\s*\$\{\{\s*secrets\.FRAMEBRIAR_CREDENTIAL_KEYS\s*\}\}\s*$/m.test(
+        injection,
+      )
+    ) {
+      problems.push("FRAMEBRIAR_CREDENTIAL_KEYS must be passed to the injection step from secrets");
+    }
     const values = [...injection.matchAll(/^\s+[A-Z_]+:\s*(.+)$/gm)].map((match) => match[1]);
     if (values.some((value) => !/^\$\{\{\s*secrets\.[A-Z_]+\s*\}\}$/.test(value.trim()))) {
       problems.push("the secret injection may take values from secrets.* only");
     }
   }
   // Those four secret names are read in that one step and nowhere else (the migration URL is the one reuse).
-  for (const name of ["DATABASE_URL", "OWNER_EMAIL_ALLOWLIST", "NEON_AUTH_COOKIE_SECRET"]) {
+  for (const name of [
+    "DATABASE_URL",
+    "OWNER_EMAIL_ALLOWLIST",
+    "NEON_AUTH_COOKIE_SECRET",
+    "FRAMEBRIAR_CREDENTIAL_KEYS",
+  ]) {
     if (count(new RegExp(`secrets\\.${name}\\b`, "g")) > 1) {
       problems.push(`secrets.${name} must be read only by the secret injection step`);
     }
@@ -559,6 +702,37 @@ export function checkCiWorkflow(workflow: string): string[] {
   if (/^\s*workflow_dispatch:/m.test(workflow.slice(0, jobsStart)))
     problems.push("ci.yml must not be dispatchable by hand");
 
+  const permissionBlock =
+    /^permissions:\n((?: {2}.*\n)*)/m.exec(workflow.slice(0, jobsStart))?.[1] ?? "";
+  if (/^ {2}packages:\s*/m.test(permissionBlock))
+    problems.push("ci must not grant the repository token package access");
+  const trustedPackageToken =
+    /NODE_AUTH_TOKEN:\s*\$\{\{\s*\(github\.event_name != 'pull_request' \|\| github\.event\.pull_request\.head\.repo\.full_name == github\.repository\) && secrets\.FRAMEBRIAR_PACKAGES_TOKEN \|\| ''\s*\}\}/;
+  for (const name of ["mode", "checks", "unit", "build", "e2e-build", "e2e"] as const) {
+    const installs = stepsOf(body(name) ?? "", "run: npm ci --ignore-scripts\n");
+    if (installs.length !== 1 || !trustedPackageToken.test(installs[0]))
+      problems.push(
+        `${name}'s fetch-only root install must receive the package token only for pushes and same-repository pull requests`,
+      );
+    const scripts = stepsOf(body(name) ?? "", "Run install scripts without package credential");
+    if (
+      scripts.length !== 1 ||
+      !/run:\s*npm rebuild esbuild unrs-resolver && node scripts\/install-hooks\.mjs/.test(
+        scripts[0],
+      ) ||
+      /NODE_AUTH_TOKEN|FRAMEBRIAR_PACKAGES_TOKEN/.test(scripts[0])
+    ) {
+      problems.push(
+        `${name}'s dependency lifecycle scripts must run once without package credentials`,
+      );
+    }
+  }
+  if ((workflow.match(/secrets\.FRAMEBRIAR_PACKAGES_TOKEN/g) ?? []).length !== 6)
+    problems.push("the Framebriar package secret may appear only on the six trusted root installs");
+  for (const name of ["mode", "checks", "deploy"] as const)
+    if (/^ {6}packages:\s*/m.test(body(name) ?? ""))
+      problems.push(`${name}'s explicit permissions must not grant package access`);
+
   const concurrency = /^concurrency:\n((?: {2}.*\n)*)/m.exec(workflow)?.[1] ?? "";
   if (
     !/cancel-in-progress:\s*\$\{\{\s*github\.event_name == 'pull_request'\s*\}\}/.test(concurrency)
@@ -571,8 +745,8 @@ export function checkCiWorkflow(workflow: string): string[] {
     const job = body(name) ?? "";
     if (!/^ {4}timeout-minutes:\s*\d+/m.test(job))
       problems.push(`the ${name} job needs a timeout-minutes`);
-    if (/secrets\.(?!GITHUB_TOKEN\b)/.test(job))
-      problems.push(`the ${name} job must read no secret but GITHUB_TOKEN`);
+    if (/secrets\.(?!GITHUB_TOKEN\b|FRAMEBRIAR_PACKAGES_TOKEN\b)/.test(job))
+      problems.push(`the ${name} job must read no secret but GITHUB_TOKEN or the package token`);
     if (/secrets:\s*inherit/.test(job)) problems.push(`the ${name} job must not inherit secrets`);
     if (/continue-on-error/.test(job))
       problems.push(`the ${name} job must not use continue-on-error`);
@@ -625,7 +799,35 @@ export function checkCiWorkflow(workflow: string): string[] {
   };
   requireStep("unit", "npm run test:coverage", "the unit job must run the coverage tests");
   requireStep("build", "npm run build:webpack", "the build job must run the webpack build");
-  for (const needle of ["npm run build\n", "check:no-e2e-in-build", "check:client-bundle"]) {
+  // What the deploy scans is made and scanned here too, so a pull request cannot merge what the Preview deploy would refuse.
+  const buildJob = body("build") ?? "";
+  const offline = buildJob.indexOf("npm run build:preview-output");
+  const previewScan = buildJob.indexOf(
+    "npm run check:preview-feedback-in-build -- .vercel/output .next",
+  );
+  if (
+    !buildJob.includes("npm ci --prefix tools/vercel-cli --ignore-scripts") ||
+    offline < 0 ||
+    previewScan < offline ||
+    offline < buildJob.indexOf("npm run build:webpack")
+  ) {
+    problems.push(
+      "the build job must make the Preview output offline with the locked Vercel CLI (after the production builds) and run check:preview-feedback-in-build on .vercel/output and .next",
+    );
+  }
+  // The Preview build gets the e2e stubs too, and only a check on that build proves it (the production-build check does not).
+  if (!buildJob.includes("npm run check:no-e2e-in-build", offline < 0 ? 0 : offline)) {
+    problems.push(
+      "the build job must run check:no-e2e-in-build on the Preview output, after build:preview-output",
+    );
+  }
+  for (const needle of [
+    "npm run build:production\n",
+    "check:no-e2e-in-build",
+    "check:no-capture-in-build",
+    "check:no-feedback-in-build",
+    "check:client-bundle",
+  ]) {
     requireStep("build", needle, `the build job is missing ${needle.trim()}`);
   }
 
@@ -661,9 +863,16 @@ export function checkCiWorkflow(workflow: string): string[] {
     );
   if (
     !/BROWSER:\s*\$\{\{\s*matrix\.browser\s*\}\}/.test(e2e) ||
-    !/npx playwright install --with-deps "\$BROWSER"/.test(e2e)
+    !/npx playwright install-deps "\$BROWSER"/.test(e2e) ||
+    !/npx playwright install "\$BROWSER"/.test(e2e)
   )
     problems.push("each e2e job must install its own browser (matrix.browser)");
+  if (
+    !/for attempt in 1 2/.test(e2e) ||
+    !/timeout --kill-after=30s 5m npx playwright install-deps/.test(e2e) ||
+    !/Playwright dependency install timed out/.test(e2e)
+  )
+    problems.push("the Playwright dependency install needs one bounded timeout retry");
   if (!/key:\s*playwright-[^\n]*matrix\.browser/.test(e2e))
     problems.push("the Playwright cache key must include the browser");
   if (!/fail-fast:\s*false/.test(e2e))
@@ -674,6 +883,8 @@ export function checkCiWorkflow(workflow: string): string[] {
     problems.push("the e2e job must download the e2e build");
   if (!/E2E_PREBUILT:\s*"1"/.test(e2e))
     problems.push("the e2e job must start the downloaded build (E2E_PREBUILT)");
+  if (!/FEEDBACK_DESIGN_SHOTS:\s*test-results\/feedback-design/.test(e2e))
+    problems.push("the e2e job must preserve the feedback design matrix in its artifact");
   if (!/npm run test:e2e -- --project="\$E2E_PROJECT"/.test(e2e))
     problems.push("the e2e job must run npm run test:e2e for its own project");
   if (/--shard|workers/.test(e2e))

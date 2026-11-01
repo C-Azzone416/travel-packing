@@ -2,6 +2,7 @@
 // Secrets below are therefore injected, right after the pull and before the check and build, from the selected GitHub
 // environment's secrets. Nothing here ever returns, logs or throws a value: every message names the variable alone.
 
+import { parseKeyRing } from "../server/feedback/key-ring";
 import { parseBuildEnvFile } from "./deploy-env";
 
 type Env = Record<string, string | undefined>;
@@ -86,4 +87,41 @@ function assigns(line: string, name: string): boolean {
 export function readBack(text: string): Env {
   const parsed = parseBuildEnvFile(text);
   return Object.fromEntries(INJECTED_SECRETS.map((name) => [name, parsed[name]]));
+}
+
+/** The Preview-only secret that seals server-held Framebriar credentials (#259). Optional: the deploy never depends on it. */
+export const FRAMEBRIAR_KEYS_SECRET = "FRAMEBRIAR_CREDENTIAL_KEYS";
+
+export type OptionalKeysState =
+  /** A valid key ring was written to the file. */
+  | "injected"
+  /** Not set (the usual state until Caroline adds it), or this is not a Preview: the file carries none, enrollment is unavailable. */
+  | "omitted"
+  /** Set but not a valid key ring, or not writable to the file: left out, enrollment is unavailable. The deploy goes on. */
+  | "invalid";
+
+/**
+ * Applies FRAMEBRIAR_CREDENTIAL_KEYS to the pulled env file after the required secrets. Unlike them it can never fail the deploy:
+ * a missing, empty, malformed or unwritable ring is simply removed from the file (so the redaction marker `vercel pull` writes in
+ * place of a Vercel Secret is never read as a ring), and enrollment fails closed at runtime. It is only ever written for Preview;
+ * a Production file never carries it. Nothing returned here holds the value.
+ */
+export function applyFramebriarKeys(
+  fileText: string,
+  env: Env,
+  target: "preview" | "production",
+): { text: string; state: OptionalKeysState } {
+  const eol = fileText.includes("\r\n") ? "\r\n" : "\n";
+  const kept = fileText.split(/\r?\n/).filter((line) => !assigns(line, FRAMEBRIAR_KEYS_SECRET));
+  while (kept.length > 0 && kept[kept.length - 1] === "") kept.pop();
+  const value = env[FRAMEBRIAR_KEYS_SECRET];
+  const provided = value !== undefined && value.trim() !== "";
+  const state: OptionalKeysState =
+    target !== "preview" || !provided
+      ? "omitted"
+      : parseKeyRing(value) && unwritable(value) === null
+        ? "injected"
+        : "invalid";
+  if (state === "injected") kept.push(formatEnvLine(FRAMEBRIAR_KEYS_SECRET, value as string));
+  return { text: `${kept.join(eol)}${eol}`, state };
 }

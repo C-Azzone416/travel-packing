@@ -16,5 +16,5 @@ export async function createMigratedDb() {
 
 /** Remove every row (users cascade to everything). Keeps the schema and migration bookkeeping. */
 export async function resetData(client: PGlite): Promise<void> {
-  await client.exec('TRUNCATE TABLE "users" CASCADE');
+  await client.exec('TRUNCATE TABLE "account_deletions", "users" CASCADE');
 }

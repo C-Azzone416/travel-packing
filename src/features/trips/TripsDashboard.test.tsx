@@ -68,7 +68,7 @@ describe("loading and errors", () => {
     expect(screen.queryByRole("region", { name: "Loading trips" })).toBeNull();
   });
 
-  it("a slow initial load leaves the chip on Saved and announces nothing about saving", async () => {
+  it("a slow initial load keeps the chip quiet and announces nothing about saving", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {
       const gate = deferred<LifecycleState>();
@@ -77,20 +77,20 @@ describe("loading and errors", () => {
         <TripsDashboard source={{ ...base, load: () => gate.promise }} getToday={TODAY} />,
       );
       act(() => vi.advanceTimersByTime(5000));
-      expect(screen.getByRole("link", { name: "Saved" })).toBeTruthy();
-      expect(screen.getByRole("status", { name: "Save status" }).textContent).toBe("Saved");
+      expect(screen.queryByRole("link", { name: "Saved" })).toBeNull();
+      expect(screen.getByRole("status", { name: "Save status" }).textContent).toBe("");
       expect(screen.queryByText("Saving…")).toBeNull();
       // findBy* polls on setTimeout, which is faked here, so flush with act and query synchronously.
       await act(async () => gate.resolve(await base.load()));
       await act(async () => {});
       expect(screen.getByRole("heading", { name: "San Diego" })).toBeTruthy();
-      expect(screen.getByRole("link", { name: "Saved" })).toBeTruthy();
+      expect(screen.queryByRole("link", { name: "Saved" })).toBeNull();
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it("after a failed load, the chip's Retry with a slow load never says or announces Saving, ends on Saved, and the trips render", async () => {
+  it("after a failed load, Retry with a slow load never says Saving and returns to quiet idle", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {
       const gate = deferred<LifecycleState>();
@@ -122,8 +122,8 @@ describe("loading and errors", () => {
       await act(async () => gate.resolve(await base.load()));
       await act(async () => {});
       expect(screen.getByRole("heading", { name: "San Diego" })).toBeTruthy();
-      expect(screen.getByRole("link", { name: "Saved" })).toBeTruthy();
-      expect(screen.getByRole("status", { name: "Save status" }).textContent).toBe("Saved");
+      expect(screen.queryByRole("link", { name: "Saved" })).toBeNull();
+      expect(screen.getByRole("status", { name: "Save status" }).textContent).toBe("");
     } finally {
       vi.useRealTimers();
     }
@@ -142,7 +142,7 @@ describe("loading and errors", () => {
     await user.click(screen.getByRole("button", { name: "Try again" }));
     await ready();
     expect(load).toHaveBeenCalledTimes(2);
-    expect(screen.getByRole("link", { name: "Saved" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Saved" })).toBeNull();
   });
 
   it("the chip's Retry also reloads after a failed load", async () => {
@@ -302,7 +302,8 @@ describe("past & archive view", () => {
     expect(screen.queryByRole("heading", { name: "Your travel ledger" })).toBeNull();
     const lisbon = card("Lisbon");
     expect(within(lisbon).getByText("Past trip")).toBeTruthy();
-    expect(within(lisbon).getByText("Ready to go")).toBeTruthy();
+    expect(within(lisbon).getByText("Marked Ready")).toBeTruthy();
+    expect(within(lisbon).queryByText("Ready to go")).toBeNull();
     expect(within(lisbon).queryByText(/Simulated/)).toBeNull();
     expect(within(lisbon).getByRole("link", { name: "Review bag: Lisbon" })).toBeTruthy();
     expect(within(lisbon).queryByRole("button", { name: /Archive|Restore/ })).toBeNull();
@@ -555,7 +556,7 @@ describe("quick view", () => {
     expect(JSON.stringify(base.snapshot())).toBe(beforeJson);
     for (const spy of Object.values(writes)) expect(spy).not.toHaveBeenCalled();
     expect(progress.textContent).toBe("6 of 32 packed");
-    expect(screen.getByRole("link", { name: "Saved" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Saved" })).toBeNull();
   });
 
   it("announces the result count politely, with singular wording", async () => {

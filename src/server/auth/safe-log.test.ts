@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createAuthReference, logAllowlistLoaded, logAuthEvent, setAuthLogSink } from "./safe-log";
+import {
+  createAuthReference,
+  logAccountClosureProviderCall,
+  logAllowlistLoaded,
+  logAuthEvent,
+  setAuthLogSink,
+} from "./safe-log";
 
 afterEach(() => {
   setAuthLogSink();
@@ -131,5 +137,79 @@ describe("logAllowlistLoaded", () => {
       });
       expect(line).not.toContain("owner");
     }
+  });
+});
+
+describe("logAccountClosureProviderCall", () => {
+  it("emits only a bounded Preview diagnostic", () => {
+    const lines: string[] = [];
+    setAuthLogSink((line) => lines.push(line));
+
+    logAccountClosureProviderCall(
+      { outcome: "provider-rejected", status: 400, code: "INVALID_PASSWORD", elapsedMs: 17 },
+      { VERCEL_ENV: "preview" },
+    );
+
+    expect(JSON.parse(lines[0])).toEqual({
+      scope: "auth",
+      event: "account-closure-provider-call",
+      stage: "delete-user",
+      outcome: "provider-rejected",
+      status: 400,
+      code: "INVALID_PASSWORD",
+      elapsedMs: 17,
+    });
+  });
+
+  it.each([undefined, "production", "development"])(
+    "emits nothing outside Preview: %s",
+    (vercelEnv) => {
+      const lines: string[] = [];
+      setAuthLogSink((line) => lines.push(line));
+      logAccountClosureProviderCall(
+        { outcome: "early-error", elapsedMs: 1 },
+        { VERCEL_ENV: vercelEnv },
+      );
+      expect(lines).toEqual([]);
+    },
+  );
+
+  it("drops impossible status/timing and replaces a hostile code without serializing extra fields", () => {
+    const lines: string[] = [];
+    setAuthLogSink((line) => lines.push(line));
+    logAccountClosureProviderCall(
+      {
+        outcome: "provider-rejected",
+        status: 999,
+        code: "owner@example.test synthetic-password raw-token",
+        elapsedMs: 900_000,
+        body: { password: "synthetic-password" },
+      } as never,
+      { VERCEL_ENV: "preview" },
+    );
+
+    expect(JSON.parse(lines[0])).toEqual({
+      scope: "auth",
+      event: "account-closure-provider-call",
+      stage: "delete-user",
+      outcome: "provider-rejected",
+      code: "UNKNOWN",
+    });
+    expect(lines[0]).not.toContain("owner");
+    expect(lines[0]).not.toContain("password");
+    expect(lines[0]).not.toContain("token");
+  });
+
+  it("never changes account-closure behavior when the diagnostic sink fails", () => {
+    setAuthLogSink(() => {
+      throw new Error("synthetic logging failure");
+    });
+
+    expect(() =>
+      logAccountClosureProviderCall(
+        { outcome: "provider-rejected", status: 500, elapsedMs: 1 },
+        { VERCEL_ENV: "preview" },
+      ),
+    ).not.toThrow();
   });
 });

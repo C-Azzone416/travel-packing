@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { ModalSheet } from "@/components/ui/ModalSheet";
 import { Switch } from "@/components/ui/Switch";
 import { calculateSuggestions } from "@/domain/calc";
+import { FeedbackEditorEntry } from "@/features/feedback/FeedbackEditorEntry";
 import { curatedLocationProvider } from "@/domain/location-provider";
 import { previewRecalculation, type RecalcPreview } from "@/domain/recalc-preview";
 import type { Trip, TripConfig } from "@/domain/trip";
@@ -254,6 +255,7 @@ export function EditTripSheet({
     <ModalSheet
       open
       showClose
+      headerAction={<FeedbackEditorEntry busy={busy} />}
       title="Edit trip"
       description="Route, dates and packing preferences for this trip."
       onClose={requestClose}

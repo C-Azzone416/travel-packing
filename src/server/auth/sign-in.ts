@@ -3,7 +3,7 @@
 import { cleanEmail } from "./account-flows";
 import { isAllowed, type Allowlist } from "./allowlist";
 import { logAuthEvent, type AuthEvent } from "./safe-log";
-import type { AuthProvider, ProviderRejection, SignInDiagnostic } from "./types";
+import type { AuthProvider, AuthSession, ProviderRejection, SignInDiagnostic } from "./types";
 
 /**
  * - invalid: bad credentials or missing fields (the UI shows one generic message)
@@ -11,15 +11,19 @@ import type { AuthProvider, ProviderRejection, SignInDiagnostic } from "./types"
  * - unverified: the password was right but the address is not verified yet; the caller sends a new code. No session exists.
  * - unfinished: the password was right and the address verified, but the password was never set through an emailed link
  *   (#83); the caller sends that link. No session exists.
+ * - deletion-pending: credentials were verified for a fenced identity; only the isolated deletion retry may use its session.
  * - ok: allowlisted owner, session established
  */
-export type SignInOutcome = "ok" | "invalid" | "denied" | "unverified" | "unfinished";
+export type SignInOutcome =
+  "ok" | "invalid" | "denied" | "unverified" | "unfinished" | "deletion-pending";
 
 export async function signInOwner(
   auth: { provider: AuthProvider; allowlist: Allowlist },
   email: unknown,
   password: unknown,
   reference?: string,
+  /** Called only for an allowlisted, signed-in owner, with the provider session (e.g. to refresh the palette cookie). */
+  onSignedIn?: (session: AuthSession) => Promise<void>,
 ): Promise<SignInOutcome> {
   const log = (event: AuthEvent, rejection?: ProviderRejection) =>
     logAuthEvent(event, { ...rejection, reference });
@@ -30,6 +34,10 @@ export async function signInOwner(
   }
   const result = await auth.provider.signInWithPassword(normalizedEmail, password);
   if (!result.ok) {
+    if (result.deletionPending) {
+      log("sign-in-failed");
+      return "deletion-pending";
+    }
     if (result.unfinished) {
       log(
         result.diagnostic?.reason === "setup-unavailable"
@@ -57,6 +65,13 @@ export async function signInOwner(
     return "denied";
   }
   log("sign-in-succeeded");
+  if (onSignedIn) {
+    try {
+      await onSignedIn(result.session);
+    } catch {
+      // A convenience hook must never fail a sign-in that already succeeded.
+    }
+  }
   return "ok";
 }
 

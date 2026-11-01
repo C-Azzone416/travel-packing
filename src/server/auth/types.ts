@@ -1,10 +1,12 @@
 // Auth contract the app depends on. The managed provider (Neon Auth / Better Auth) sits behind it, so unit
-// tests use a fake and make no network calls. The provider works on the ambient request: cookies are read and
-// written by the adapter (Next.js server context), never handled by app code.
+// tests use a fake and make no network calls. Ordinary calls use the ambient Next.js request context. Account closure
+// instead carries a server-only opaque capability so its destructive calls remain bound to the fresh reauthentication.
 
 export interface AuthSession {
   userId: string;
   email: string;
+  /** When the provider identity was created (ms since epoch). Binds destructive recovery to one identity incarnation. */
+  identityCreatedAt?: number;
   /**
    * When the provider created this session (ms since the epoch), if it says. The setup gate (#83) refuses a session made
    * before the account's password was set through a link, so one minted with a pre-registered password stays dead.
@@ -24,6 +26,7 @@ export type SignInFailureReason =
   | "provider-rejected"
   | "provider-response-invalid"
   | "session-not-created"
+  | "account-deletion-pending"
   | "setup-pending"
   | "setup-unavailable";
 
@@ -45,8 +48,24 @@ export type SignInResult =
       ok: false;
       unverified?: true;
       unfinished?: true;
+      /** The password was right, but this identity is fenced while provider deletion is retried. */
+      deletionPending?: true;
       diagnostic?: SignInDiagnostic;
     };
+
+/**
+ * A server-only, short-lived capability created by password reauthentication for account closure. Its methods are bound
+ * to the session minted by that exact sign-in, so destructive provider calls cannot accidentally fall back to the older
+ * cookie on the incoming request. Implementations must not expose or serialize the underlying provider credential.
+ */
+export interface AccountClosureAuthorization {
+  session: AuthSession;
+  revokeOtherSessions(): Promise<FlowResult<"unavailable">>;
+  deleteUser(password: string): Promise<FlowResult<"invalid" | "unavailable">>;
+}
+
+export type AccountClosureSignInResult =
+  { ok: true; authorization: AccountClosureAuthorization } | Exclude<SignInResult, { ok: true }>;
 
 /**
  * Why a sign-up, code, or reset step failed, in terms the UI may show. Deliberately small: nothing here says whether an
@@ -76,6 +95,8 @@ export interface AuthProvider {
   getSession(): Promise<AuthSession | null>;
   /** Email + password sign-in. A failure never says which part was wrong. */
   signInWithPassword(email: string, password: string): Promise<SignInResult>;
+  /** Reauthenticate and bind the whole account-closure sequence to the newly minted provider session. */
+  beginAccountClosure(email: string, password: string): Promise<AccountClosureSignInResult>;
   /**
    * Create an UNVERIFIED account and send it a verification code. A taken address is reported as success (the
    * provider sends nothing), so the result never reveals whether an address is already registered.
@@ -103,4 +124,10 @@ export interface AuthProvider {
   ): Promise<FlowResult<"weak-password" | "invalid" | "too-many" | "unavailable">>;
   /** End the current session (clears the session cookie). Safe to call when signed out. */
   signOut(): Promise<void>;
+  /** Revoke every session except the current request's session. */
+  revokeOtherSessions(): Promise<FlowResult<"unavailable">>;
+  /** Permanently delete the current provider identity after verifying its current password. */
+  deleteUser(password: string): Promise<FlowResult<"invalid" | "unavailable">>;
+  /** True once app-data deletion has begun for this provider user id. Failures must reject access. */
+  isAccountDeletionBlocked(userId: string): Promise<boolean>;
 }

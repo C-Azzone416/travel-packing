@@ -19,6 +19,13 @@ export async function resetOwnerData(ownerId: string): Promise<void> {
   try {
     const db = drizzle(pool, { schema }) as unknown as Db;
     await db.delete(schema.trips).where(eq(schema.trips.ownerId, ownerId));
+    // Feedback starts not connected for every test (#260): the server-held enrollment and any unfinished redemption go too.
+    await db
+      .delete(schema.framebriarEnrollments)
+      .where(eq(schema.framebriarEnrollments.ownerId, ownerId));
+    await db
+      .delete(schema.framebriarRedemptions)
+      .where(eq(schema.framebriarRedemptions.ownerId, ownerId));
     // Saved lists (#167) start empty for every test too.
     await db.delete(schema.savedLists).where(eq(schema.savedLists.ownerId, ownerId));
     // Weather starts opted out, in Fahrenheit, and the theme unchosen (Base), for every test (both live on the user).

@@ -4,10 +4,12 @@
 //   3. run the handler, scoped to that owner
 //   4. map failures to a typed Result (no stack traces, no data, no database text)
 
+import { eq } from "drizzle-orm";
 import { ZodError, type ZodType } from "zod";
 import { authorizeOwner } from "../auth/guard";
 import { createRateLimiter, type RateLimiter } from "../locations/rate-limit";
 import type { DataContext } from "./context";
+import { lockAccountDeletion } from "../auth/account-deletion-lock";
 import { fail, ok, type Result } from "./result";
 import { logDataEvent } from "./safe-log";
 import * as schema from "../db/schema";
@@ -58,9 +60,44 @@ export function setDataRateLimiter(next?: RateLimiter): void {
   limiter = next ?? defaultLimiter();
 }
 
-/** The app-side owner row every other row references. Safe to call repeatedly. */
-async function ensureUser(db: Db, ownerId: string): Promise<void> {
-  await db.insert(schema.users).values({ id: ownerId }).onConflictDoNothing();
+/**
+ * Run one owner operation while holding the identity advisory lock. The handler must stay inside this transaction: if the
+ * lock were released first, an old request could pause, deletion could finish, the provider could reuse the id, and the old
+ * handler could resume against the replacement identity's rows.
+ */
+async function runForOwner<Output>(
+  db: Db,
+  ownerId: string,
+  stillAuthorized: () => Promise<boolean>,
+  handler: (scope: OwnerScope) => Promise<Output>,
+): Promise<{ authorized: false } | { authorized: true; data: Output }> {
+  return db.transaction(async (transaction) => {
+    // Deletion takes the same lock before inserting its fence. If it started first, this transaction waits for the
+    // commit and then sees the fence; if provisioning started first, deletion runs after this transaction and removes
+    // the owner plus any writes that could have raced it.
+    await lockAccountDeletion(transaction, ownerId);
+    // The first session read happened before this lock. If provider deletion completed while this request waited, only a
+    // fresh authoritative read here can prevent the now-stale request from recreating the owner after the fence is cleared.
+    if (!(await stillAuthorized())) return { authorized: false as const };
+    const fence = await transaction
+      .select({ userId: schema.accountDeletions.userId })
+      .from(schema.accountDeletions)
+      .where(eq(schema.accountDeletions.userId, ownerId))
+      .limit(1);
+    if (fence.length > 0) return { authorized: false as const };
+
+    await transaction.insert(schema.users).values({ id: ownerId }).onConflictDoNothing();
+    const rows = await transaction
+      .select({ id: schema.users.id })
+      .from(schema.users)
+      .where(eq(schema.users.id, ownerId))
+      .limit(1);
+    if (rows.length !== 1) return { authorized: false as const };
+    return {
+      authorized: true as const,
+      data: await handler({ db: transaction as unknown as Db, ownerId }),
+    };
+  });
 }
 
 export async function run<Input, Output>(
@@ -88,8 +125,25 @@ export async function run<Input, Output>(
   }
 
   try {
-    await ensureUser(context.db, decision.session.userId);
-    return ok(await handler({ db: context.db, ownerId: decision.session.userId }, parsed.data));
+    const execution = await runForOwner(
+      context.db,
+      decision.session.userId,
+      async () => {
+        const current = await authorizeOwner(
+          context.auth.deletionProvider ?? context.auth.provider,
+          context.auth.allowlist,
+        );
+        return (
+          current.status === "ok" &&
+          current.session.userId === decision.session.userId &&
+          current.session.identityCreatedAt !== undefined &&
+          current.session.identityCreatedAt === decision.session.identityCreatedAt
+        );
+      },
+      (scope) => handler(scope, parsed.data),
+    );
+    if (!execution.authorized) refuse(fail("UNAUTHENTICATED"));
+    return ok(execution.data);
   } catch (error) {
     if (error instanceof Refusal) {
       logDataEvent(`error:${error.result.ok ? "INTERNAL" : error.result.error.code}`);

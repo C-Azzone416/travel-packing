@@ -6,6 +6,11 @@ is released by hand, never by a push (see [Production release gate](#production-
 integration is not used: the `Deploy to Vercel` workflow (`.github/workflows/deploy-vercel.yml`, triggered only by that call and
 by a manual run) builds with a pinned Vercel CLI and deploys the prebuilt output.
 
+Both supported routes—the Preview call after a green `develop` CI run and the manual Production dispatch—first populate
+`node_modules` in GitHub Actions. A direct Vercel dashboard/Git build is intentionally unsupported: `vercel.json` disables
+Vercel's install step so package credentials never reach its builder. Re-enable that integration only with a separately
+reviewed credential-isolation design; otherwise it will fail closed because dependencies are absent.
+
 ## What each run does
 
 0. The `gate` job (no secrets, no environment) decides the target, or fails the run: see
@@ -15,9 +20,10 @@ by a manual run) builds with a pinned Vercel CLI and deploys the prebuilt output
    (`scripts/require-ci.ts`): the latest `ci` run on the typed commit must be complete and green, or the run stops.
    The same check is available to anyone before a merge: `npm run ci:gate -- <pr number or full sha>`.
 2. `vercel pull` for the target, then the five build settings that decide which builder `vercel build` uses (framework, build command,
-   output directory, root directory, install command; settings only, never the ids) are printed to the log. The repo's `vercel.json` names the framework (`nextjs`) so the repo, not the dashboard, decides the builder. The four write-only Vercel Secrets are then written into the pulled file from the selected GitHub environment (see [Deploy secrets](#deploy-secrets)). Then `scripts/check-deploy-env.ts` checks the
+   output directory, root directory, install command; settings only, never the ids) are printed to the log. The repo's `vercel.json` names the framework (`nextjs`) and sets the install command to the empty string: the dedicated root install already populated `node_modules`, so the Vercel/Next compilation cannot run a second package install. The four write-only Vercel Secrets are then written into the pulled file from the selected GitHub environment (see [Deploy secrets](#deploy-secrets)). Then `scripts/check-deploy-env.ts` checks the
    file the build will use. It prints variable **names** only, and fails when:
    - any test-only variable is present (`NEXT_PUBLIC_E2E_BUILD`, anything starting with `AUTH_E2E_`, `E2E_DATABASE_URL`, `SEED_DATABASE_URL`, `OPEN_METEO_GEOCODING_URL`);
+   - any package-auth variable is present (`NODE_AUTH_TOKEN`, `NPM_AUTH_TOKEN`, `NPM_TOKEN`, `FRAMEBRIAR_PACKAGES_TOKEN`);
    - a required variable is missing, or `NEON_AUTH_COOKIE_SECRET` is shorter than the 32 characters sign-in needs;
    - any required variable is still Vercel's redaction marker (`[SENSITIVE]`, what `vercel pull` writes
      for a Secret it cannot read), or either database URL is not a `postgres://` / `postgresql://` URL with a host, or
@@ -29,7 +35,10 @@ by a manual run) builds with a pinned Vercel CLI and deploys the prebuilt output
      `DATABASE_URL_UNPOOLED` point at the production database host.
 3. `vercel build`, then `scripts/check-build-output.ts` (the output must contain server functions: an output without them deploys "fine" and
    answers every request with a 404), then `npm run check:no-e2e-in-build` (the fake sign-in, the e2e driver and the sample fixtures must
-   not be in the output).
+   not be in the output). Target-specific scans inspect this exact Vercel artifact before upload: Preview must contain the
+   Framebriar UI and every browser SDK module the app uses; Production must contain neither feedback UI/SDK nor screenshot
+   capture. These scans read `.vercel/output`, the directory the following deploy step uploads, rather than an intermediate
+   `.next` tree. A target whose build-time gate was misread therefore fails closed before deploy.
 4. A second check (`scripts/check-migration-target.ts`) looks at the GitHub environment's `DATABASE_URL_UNPOOLED`, the secret
    the migrate and seed steps actually use: in a preview run it must NOT be `PRODUCTION_DB_HOST`, in a production run it
    MUST be. Then migrations run as their own logged step over the **direct** connection (`npm run db:migrate:remote`).
@@ -60,6 +69,11 @@ by a manual run) builds with a pinned Vercel CLI and deploys the prebuilt output
 
 The Vercel CLI is installed from its own lockfile, `tools/vercel-cli` (the exact version, every transitive and its integrity hash; `npm ci --prefix tools/vercel-cli --ignore-scripts`, then on the PATH; never a global install or `npx`), and `VERCEL_CLI_VERSION` in the workflow must equal the locked version: see [tools/vercel-cli/README.md](../tools/vercel-cli/README.md) for how to upgrade it. `@neondatabase/auth` is pinned to an exact
 version in `package.json`. Bump either in a PR.
+
+The application install fetches the private Framebriar SDK with the expiring, read-only
+`FRAMEBRIAR_PACKAGES_TOKEN` repository secret. That step uses `npm ci --ignore-scripts`; a separate credential-free step runs
+only the pinned `esbuild` and `unrs-resolver` lifecycle scripts required by the toolchain. `vercel build` skips dependency installation and receives no package credential. The secret is
+stored only in GitHub Actions, never Vercel, and the production-capable `VERCEL_TOKEN` is not exposed to install or build.
 
 ## Things to know
 
@@ -114,6 +128,8 @@ GitHub **environment `preview`**:
 - secret `DATABASE_URL_UNPOOLED` — the **preview** Neon branch's direct connection string;
 - secrets `DATABASE_URL` (the preview branch's pooled connection string), `OWNER_EMAIL_ALLOWLIST` and
   `NEON_AUTH_COOKIE_SECRET` (the same values as the Vercel Preview Secrets, see [Deploy secrets](#deploy-secrets));
+- secret `FRAMEBRIAR_CREDENTIAL_KEYS` (optional, #259) — the key ring that seals server-held Framebriar credentials, the same value as the Vercel Preview
+  Secret. The deploy never fails without it: feedback enrollment is simply unavailable. Generation and rotation: [framebriar-enrollment.md](framebriar-enrollment.md);
 - variable `PREVIEW_DB_HOST` — that preview database's host name (the seed allowlist);
 - **secret** `PREVIEW_SEED_OWNER_ID` — the Better Auth user id of the preview owner whose account should see the sample trips. **Leave it unset for the first run** ([First preview bootstrap](#first-preview-bootstrap)); set it after the owner has signed up and verified;
 - secret `VERCEL_AUTOMATION_BYPASS_SECRET` — only if Vercel deployment protection is on for previews.
@@ -130,18 +146,22 @@ add them as a second lock, not a replacement.)
 
 Vercel project environment variables, per environment (Preview and Production get different values):
 
-| Name                      | Preview                      | Production            |
-| ------------------------- | ---------------------------- | --------------------- |
-| `DATABASE_URL`            | preview Neon branch (pooled) | production (pooled)   |
-| `DATABASE_URL_UNPOOLED`   | preview Neon branch (direct) | production (direct)   |
-| `NEON_AUTH_BASE_URL`      | preview auth                 | production auth       |
-| `NEON_AUTH_COOKIE_SECRET` | its own random value         | its own random value  |
-| `OWNER_EMAIL_ALLOWLIST`   | preview owner(s)             | Caroline              |
-| `LOCATION_PROVIDER`       | `open-meteo` (required)      | unset or `open-meteo` |
-| `WEATHER_PROVIDER`        | `open-meteo`                 | `open-meteo`          |
+| Name                         | Preview                                                                   | Production            |
+| ---------------------------- | ------------------------------------------------------------------------- | --------------------- |
+| `DATABASE_URL`               | preview Neon branch (pooled)                                              | production (pooled)   |
+| `DATABASE_URL_UNPOOLED`      | preview Neon branch (direct)                                              | production (direct)   |
+| `NEON_AUTH_BASE_URL`         | preview auth                                                              | production auth       |
+| `NEON_AUTH_COOKIE_SECRET`    | its own random value                                                      | its own random value  |
+| `OWNER_EMAIL_ALLOWLIST`      | preview owner(s)                                                          | Caroline              |
+| `CLOSE_ACCOUNT_ENABLED`      | exact `1` for the explicitly approved owner-only destructive Preview test | unset                 |
+| `LOCATION_PROVIDER`          | `open-meteo` (required)                                                   | unset or `open-meteo` |
+| `WEATHER_PROVIDER`           | `open-meteo`                                                              | `open-meteo`          |
+| `FRAMEBRIAR_CREDENTIAL_KEYS` | optional Secret, see [framebriar-enrollment.md](framebriar-enrollment.md) | never set             |
 
 Never set `NEXT_PUBLIC_E2E_BUILD`, `AUTH_E2E_*`, `E2E_DATABASE_URL` or `OPEN_METEO_GEOCODING_URL` in Vercel or GitHub. Never expose the
-production `DATABASE_URL` to the Preview environment.
+production `DATABASE_URL` to the Preview environment. `CLOSE_ACCOUNT_ENABLED` remains absent from Production. Preview's explicit `1`
+is limited to the owner-only destructive verification described in [account-deletion.md](account-deletion.md); general rollout remains
+a separate release decision after its remaining gates.
 
 ## The stable Preview address (#96)
 

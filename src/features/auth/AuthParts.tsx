@@ -113,6 +113,7 @@ export function PasswordField({
   autoComplete,
   error,
   hint,
+  modalAutoFocus = false,
 }: {
   id: string;
   name?: string;
@@ -120,6 +121,8 @@ export function PasswordField({
   autoComplete: "new-password" | "current-password";
   error?: string;
   hint?: string;
+  /** Ask ModalSheet to place initial focus on this input when the field is inside a dialog. */
+  modalAutoFocus?: boolean;
 }) {
   const [shown, setShown] = useState(false);
   const describedBy = [error ? `${id}-error` : "", hint ? `${id}-hint` : ""]
@@ -136,6 +139,7 @@ export function PasswordField({
           autoComplete={autoComplete}
           aria-invalid={error ? true : undefined}
           aria-describedby={describedBy || undefined}
+          data-modal-autofocus={modalAutoFocus ? "" : undefined}
           required
         />
         <PasswordToggle shown={shown} onToggle={() => setShown((current) => !current)} />

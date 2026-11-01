@@ -36,6 +36,16 @@ export async function authorizeOwner(
     }
     return { status: "forbidden" };
   }
+  try {
+    if (await provider.isAccountDeletionBlocked(session.userId)) {
+      logAuthEvent("unauthenticated");
+      return { status: "unauthenticated" };
+    }
+  } catch {
+    // A fence lookup failure must never reopen an account whose deletion may already have started.
+    logAuthEvent("provider-error");
+    return { status: "unauthenticated" };
+  }
   return { status: "ok", session };
 }
 
