@@ -322,6 +322,18 @@ test(
         }
         await expectRowSound(row, expected, state, name !== "30 per day custom");
       }
+      if (width <= 320) {
+        // A custom row has no checkbox: its name keeps a readable column and the category badge wraps below it.
+        const customName = (await custom.locator(".staple-name strong").boundingBox())!;
+        const category = (await custom.locator(".staple-name .unit-badge").boundingBox())!;
+        expect(customName.width, `custom name width at ${label}`).toBeGreaterThanOrEqual(
+          width === 320 ? 80 : 40,
+        );
+        expect(
+          category.y,
+          `custom category badge sits under the name at ${label}`,
+        ).toBeGreaterThanOrEqual(customName.y + customName.height - 3);
+      }
       const unselected = rowOf(page, "Socks");
       await expect(unselected.locator(".staples-setup-rule"), `Socks at ${label}`).toHaveCount(0);
       await expect(unselected.getByRole("button", { name: /^Edit/ })).toHaveCount(0);

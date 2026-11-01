@@ -4731,10 +4731,10 @@ a.back {
       "rule edit";
     row-gap: 4px;
   }
-  .staples-setup .staple-name {
+  .staples-setup .staples-suggestion-check {
     flex-wrap: nowrap;
   }
-  .staples-setup .staple-name strong {
+  .staples-setup .staples-suggestion-check strong {
     min-width: 0;
     overflow-wrap: anywhere;
   }
