@@ -35,7 +35,7 @@ This repository neither provisions nor configures Blob storage; runtime service 
 ## Preview build and exact-origin boundary
 
 The real feature modules are compiled into Preview, `next dev` and the synthetic e2e build. `next.config.ts` replaces every
-app entry point (`FeedbackAccess`, `FeedbackButton`, `FeedbackNotice`, `FeedbackSettings`) with one inert module in Production
+app entry point (`FeedbackAccess`, `FeedbackReportHost`, `FeedbackNotice`, `FeedbackSettings`) with one inert module in Production
 and ordinary non-development builds, for both Turbopack and webpack. `npm run check:no-feedback-in-build` proves the UI plus
 the access, outbox and local-report SDK chunks are absent after both production builds;
 `npm run check:preview-feedback-in-build` proves they are present after either Preview build.

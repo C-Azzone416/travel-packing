@@ -50,7 +50,11 @@ export const FEEDBACK_ONLY_MODULES: readonly { specifier: string; stub: string }
     stub: "./src/features/feedback/feedback.disabled.tsx",
   },
   {
-    specifier: "@/features/feedback/FeedbackButton",
+    specifier: "@/features/feedback/FeedbackTabItem",
+    stub: "./src/features/feedback/feedback.disabled.tsx",
+  },
+  {
+    specifier: "@/features/feedback/FeedbackReportHost",
     stub: "./src/features/feedback/feedback.disabled.tsx",
   },
   {
