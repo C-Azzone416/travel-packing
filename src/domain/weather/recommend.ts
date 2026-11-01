@@ -1,6 +1,5 @@
 import { parseDate } from "../calc/dates";
 import { dailyDaysFor } from "../calc/daily-days";
-import { RETURN_OFF_POLICY, type ReturnOffPolicy } from "../calc/return-policy";
 import type { CalcConfig, Suggestion } from "../calc/suggestions";
 import type { ThemeId } from "../themes";
 import { TOILETRY_GROUP_ID } from "../toiletry-bag";
@@ -78,7 +77,6 @@ export interface RecommendInput {
   dayStopNames: readonly string[];
   config: CalcConfig;
   theme?: ThemeId;
-  returnPolicy?: ReturnOffPolicy;
   /** Injectable so copy and tests do not depend on locale. */
   formatRange?: RangeFormatter;
 }
@@ -253,21 +251,20 @@ function bottomsFor(looks: number, laundry: boolean): number {
 export function recommendPacking(input: RecommendInput): WeatherRecommendation {
   const { config } = input;
   const formatRange = input.formatRange ?? defaultFormatRange;
-  const policy = input.returnPolicy ?? RETURN_OFF_POLICY;
   const dates = tripDates(config.start, config.end);
   const weather = tripWeather(input.days, dates);
   const laundry = Boolean(config.laundry);
 
   const returnOutfit = config.returnOutfit !== false;
-  const dailyDays = dailyDaysFor(dates.length, returnOutfit, policy);
+  const dailyDays = dailyDaysFor(dates.length, returnOutfit);
   // Nice occasions are in addition to everyday outfits (#205), so they do not reduce the everyday looks.
   const everydayLooks = dailyDays;
 
   if (weather.length === 0) return { clothing: legacyClothing(everydayLooks, laundry), extras: [] };
 
   const byDate = new Map(weather.map((day) => [day.date, day]));
-  const returnDayExcluded = returnOutfit || policy === "exclude-return-day";
-  const dailyDates = dates.slice(1, dates.length - (returnDayExcluded ? 1 : 0));
+  // The arrival day counts (the travel outfit is worn, not packed); only a covered return day is left out. A day trip has none.
+  const dailyDates = dates.length <= 1 ? [] : returnOutfit ? dates.slice(0, -1) : dates;
   const counts = LOOKS.map(
     (look) => dailyDates.filter((date) => lookFor(byDate.get(date)?.highC ?? null) === look).length,
   );

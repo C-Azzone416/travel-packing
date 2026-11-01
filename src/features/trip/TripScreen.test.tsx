@@ -143,8 +143,8 @@ describe("loading and states", () => {
     expect(screen.queryByText("Ready", { selector: ".status-pill" })).toBeNull();
     expect(screen.getByRole("link", { name: "All trips" }).getAttribute("href")).toBe("/");
     const bar = screen.getByRole("progressbar", { name: "Packing progress" });
-    expect(bar.getAttribute("aria-valuenow")).toBe("19"); // 6 of 32 (#205: San Diego has one more everyday top and bottom)
-    expect(bar.getAttribute("aria-valuetext")).toBe("19% packed");
+    expect(bar.getAttribute("aria-valuenow")).toBe("18"); // 6 of 33 (#295: the arrival day adds one top, underwear and socks)
+    expect(bar.getAttribute("aria-valuetext")).toBe("18% packed");
     expect(screen.queryByText(/sample/i)).toBeNull();
   });
 
@@ -315,7 +315,7 @@ describe("packing", () => {
         .getByRole("button", { name: "Packed, mark Everyday tops unpacked" })
         .hasAttribute("aria-pressed"),
     ).toBe(false);
-    expect(live().textContent).toBe("Everyday tops 3 of 3 packed");
+    expect(live().textContent).toBe("Everyday tops 4 of 4 packed");
     await user.click(
       within(row("tops")).getByRole("button", { name: "Packed, mark Everyday tops unpacked" }),
     );
@@ -425,10 +425,10 @@ describe("packing", () => {
     expect(screen.getByRole("button", { name: "Not saved, retry" })).toBeTruthy();
     // The row keeps showing what the user did, and nothing was stored.
     expect(itemOf(source, "tops").packed).toBe(1);
-    expect(within(row("tops")).getByText("3 of 3 packed")).toBeTruthy();
+    expect(within(row("tops")).getByText("4 of 4 packed")).toBeTruthy();
     fail = false;
     await user.click(within(row("tops")).getByRole("button", { name: "Not saved · Retry" }));
-    await waitFor(() => expect(itemOf(source, "tops").packed).toBe(3));
+    await waitFor(() => expect(itemOf(source, "tops").packed).toBe(4));
     expect(within(row("tops")).queryByRole("button", { name: "Not saved · Retry" })).toBeNull();
     expect(screen.getByRole("link", { name: "Saved" })).toBeTruthy();
   });
@@ -941,8 +941,54 @@ describe("preferences and Ready", () => {
     setup();
     await ready();
     expect(
-      screen.getByText("5 days away − 1 worn − 1 for home = 3 days of everyday clothes."),
+      screen.getByText(
+        "5 days away − 1 for home = 4 days of everyday clothes. Your travel outfit is worn, not packed.",
+      ),
     ).toBeTruthy();
+  });
+
+  it("a day trip says there are no everyday clothes to pack, and keeps no equation", async () => {
+    const state = sampleLifecycleState();
+    state.trips[0] = {
+      ...state.trips[0],
+      start: "2026-10-23",
+      end: "2026-10-23",
+      days: 1,
+      dailyDays: 0,
+    };
+    const base = createMemoryTripsSource(state, { now: () => 1 });
+    renderInApp(
+      <TripsSourceProvider source={base}>
+        <TripScreen tripId="san-diego" />
+      </TripsSourceProvider>,
+    );
+    await ready();
+    expect(
+      screen.getByText(
+        "A day trip: you wear one outfit all day, so there are no everyday clothes to pack.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/days away/)).toBeNull();
+  });
+
+  it("a trip counted with the earlier rule shows the stale note instead of wrong arithmetic, and Edit preferences is still there", async () => {
+    const state = sampleLifecycleState();
+    // Saved before #295: a 5-day trip with the return outfit on stored 3 everyday days; today's rule gives 4.
+    state.trips[0] = { ...state.trips[0], dailyDays: 3 };
+    const base = createMemoryTripsSource(state, { now: () => 1 });
+    renderInApp(
+      <TripsSourceProvider source={base}>
+        <TripScreen tripId="san-diego" />
+      </TripsSourceProvider>,
+    );
+    await ready();
+    expect(
+      screen.getByText(
+        "This list was counted with the earlier rule. Edit preferences to update it.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/days away/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Edit preferences" })).toBeTruthy();
   });
 
   it("a trip with no confirmed location has no place line, and its header art is still its theme", async () => {
@@ -1018,7 +1064,7 @@ describe("how long things take", () => {
     fireEvent.click(within(row("tops")).getByRole("button", { name: "Pack all Everyday tops" }));
     await flush();
     expect(setPacked).toHaveBeenCalledTimes(1);
-    expect(setPacked).toHaveBeenCalledWith("tops", 3);
+    expect(setPacked).toHaveBeenCalledWith("tops", 4);
     fireEvent.click(
       within(row("tops")).getByRole("button", { name: "Packed, mark Everyday tops unpacked" }),
     );
@@ -1556,11 +1602,11 @@ describe("accessible names of a packing row", () => {
     expect(toothbrush.getAttribute("aria-label")).toBeNull();
   });
 
-  it("the packed count is readable, not hidden: '1 of 3 packed'", async () => {
+  it("the packed count is readable, not hidden: '1 of 4 packed'", async () => {
     setup();
     await ready();
-    expect(within(row("tops")).getByRole("img", { name: "1 of 3 packed" }).textContent).toBe(
-      "1 of 3 packed",
+    expect(within(row("tops")).getByRole("img", { name: "1 of 4 packed" }).textContent).toBe(
+      "1 of 4 packed",
     );
   });
 });
@@ -1730,7 +1776,7 @@ describe("Ready is never revoked silently", () => {
     const { user } = setup("san-diego");
     await ready();
     await user.click(within(row("tops")).getByRole("button", { name: "Pack all Everyday tops" }));
-    await waitFor(() => expect(screen.getByText("Everyday tops 3 of 3 packed")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Everyday tops 4 of 4 packed")).toBeTruthy());
     expect(screen.queryByText(/No longer ready/)).toBeNull();
   });
 });

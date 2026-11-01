@@ -373,15 +373,15 @@ The deterministic calculator is [`dist/core.js`](/Users/cazzone/Documents/Codex/
 - `tripDays` is inclusive: Nov 12 through Nov 16 is 5 days.
 - Reversed or missing return dates normalize to the departure date.
 - Same-day trips are valid.
-- `dailyDays = max(0, tripDays - 2)`.
-- The two excluded days are the outbound-worn day and the return-travel day.
+- `dailyDays = tripDays <= 1 ? 0 : tripDays - (returnOutfit ? 1 : 0)` (decided #295, 2026-10-31).
+- The travel outfit is worn on the way there, so it is not packed and takes no day away. The only excluded day is the return day, and only when the dedicated return outfit covers it. A same-day trip packs no everyday clothes.
 
 ### Everyday and nice clothing
 
 ```text
 niceCount = niceAttire ? max(1, occasionCount) : 0
 niceLooks = reuseNice ? min(niceCount, 1) : niceCount
-everydayLooks = max(0, dailyDays - niceCount)
+everydayLooks = dailyDays   # nice looks are additional (#205)
 
 everyday tops = laundry ? ceil(everydayLooks / 2) : everydayLooks
 everyday bottoms = everydayLooks == 0
@@ -412,7 +412,7 @@ These are not merged with everyday items and do not assume reuse.
 
 ### Important unresolved calculation point
 
-The builder lets the user turn the return outfit off, but `dailyDays` remains `tripDays - 2` even when it is off. The UI summary changes the displayed return-set count to zero, while everyday quantities still exclude the return day. Before production, explicitly decide whether turning off the dedicated return set means reuse on return day or whether everyday quantities should add that day back; then align calculation, copy behavior, tests, and copy.
+Closed (#25, #205, #295). With the dedicated return outfit on it covers the return day, so `dailyDays = tripDays - 1`; with it off the return day gets an everyday outfit, so `dailyDays = tripDays`. The travel outfit is worn, not packed, and is only mentioned in the Trip math copy. Saved trips keep their old counts until their preferences are next saved (the list then shows an "earlier rule" note).
 
 ### Staples merge
 
@@ -649,7 +649,7 @@ The final status direction uses green Ready and apricot items-left badges. The h
 8. **No export/recovery.** There is no JSON/CSV/PDF export, import, snapshot, backup, restore, or audit log.
 9. **No production delete semantics.** Recently deleted is only an in-memory undo buffer.
 10. **No timezone policy.** Date math uses UTC parsing and a fixed date string.
-11. **Return-outfit-off ambiguity.** The calculator still excludes return day when the dedicated return set is disabled.
+11. **Return-outfit-off ambiguity.** Resolved in #295: with the return outfit off, the return day is packed like any other day.
 12. **Accessibility is not formally audited.** The prototype includes labels, keyboard-focus styles, semantic buttons, live toast status, responsive layouts, and reduced-motion support, but no screen-reader or WCAG audit is recorded.
 13. **No sensitive-data controls.** The wireframe warns against real sensitive travel details but does not technically prevent entry.
 14. **No production image policy.** Current art is generated and local; long-term sourcing, licensing records, caching, and per-destination coverage are undecided.
@@ -664,7 +664,7 @@ The web delivery, Neon backend, Vercel hosting, and initial email/password metho
 - Encryption, logging, analytics, retention, and deletion policies for dates and destinations.
 - Weather provider, geocoding provider, request minimization, caching, and consent.
 - Timezone rules for departure/return and current-date classification.
-- Whether return-outfit-off means reuse or adds return day to everyday counts.
+- (Resolved, #295) Return-outfit-off adds the return day to the everyday counts.
 - How much destination art coverage production needs and whether art is generated, curated, or provider-sourced.
 - Whether/when any sharing or additional travelers should exist.
 

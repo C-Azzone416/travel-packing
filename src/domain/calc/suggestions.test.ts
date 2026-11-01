@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  calculateSuggestions,
-  dailyDaysFor,
-  RETURN_OFF_POLICY,
-  type CalcConfig,
-} from "./suggestions";
+import { calculateSuggestions, dailyDaysFor, type CalcConfig } from "./suggestions";
 
 const off: CalcConfig = {
   start: "2026-11-12",
@@ -29,10 +24,10 @@ const range = (days: number): Pick<CalcConfig, "start" | "end"> => ({
 describe("trip length with every option off", () => {
   it.each([
     [1, {}],
-    [2, { sleepwear: 1 }],
-    [3, { tops: 1, bottoms: 1, underwear: 1, socks: 1, sleepwear: 1 }],
-    [5, { tops: 3, bottoms: 2, underwear: 3, socks: 3, sleepwear: 1 }],
-    [10, { tops: 8, bottoms: 4, underwear: 8, socks: 8, sleepwear: 1 }],
+    [2, { tops: 1, bottoms: 1, underwear: 1, socks: 1, sleepwear: 1 }],
+    [3, { tops: 2, bottoms: 1, underwear: 2, socks: 2, sleepwear: 1 }],
+    [5, { tops: 4, bottoms: 2, underwear: 4, socks: 4, sleepwear: 1 }],
+    [10, { tops: 9, bottoms: 5, underwear: 9, socks: 9, sleepwear: 1 }],
   ])("%i days", (days, expected) => {
     expect(qtys(range(days))).toEqual(expected);
   });
@@ -51,48 +46,58 @@ describe("laundry and spare", () => {
     expect(qtys({ laundry: true })).toEqual({
       tops: 2,
       bottoms: 1,
-      underwear: 3,
-      socks: 3,
-      sleepwear: 1,
-    });
-  });
-
-  it("spare adds one underwear and one sock", () => {
-    expect(qtys({ spare: true })).toEqual({
-      tops: 3,
-      bottoms: 2,
       underwear: 4,
       socks: 4,
       sleepwear: 1,
     });
   });
 
+  it("spare adds one underwear and one sock", () => {
+    expect(qtys({ spare: true })).toEqual({
+      tops: 4,
+      bottoms: 2,
+      underwear: 5,
+      socks: 5,
+      sleepwear: 1,
+    });
+  });
+
   it("8 days with laundry off and on", () => {
-    expect(qtys(range(8))).toMatchObject({ tops: 6, bottoms: 3 });
-    expect(qtys({ ...range(8), laundry: true })).toMatchObject({ tops: 3, bottoms: 2 });
+    expect(qtys(range(8))).toMatchObject({ tops: 7, bottoms: 4 });
+    expect(qtys({ ...range(8), laundry: true })).toMatchObject({ tops: 4, bottoms: 2 });
   });
 
-  it.each([1, 2])("spare still packs one underwear and socks on a %i-day trip", (days) => {
-    const result = qtys({ ...range(days), spare: true });
-    expect(result.underwear).toBe(1);
-    expect(result.socks).toBe(1);
+  it.each([
+    [1, 1],
+    [2, 2],
+  ])(
+    "spare packs one more underwear and socks than the everyday days on a %i-day trip",
+    (days, expected) => {
+      const result = qtys({ ...range(days), spare: true });
+      expect(result.underwear).toBe(expected);
+      expect(result.socks).toBe(expected);
+    },
+  );
+
+  it("laundry on a day trip yields no tops or bottoms", () => {
+    expect(qtys({ ...range(1), laundry: true })).toEqual({});
   });
 
-  it("laundry with no everyday looks yields no tops or bottoms", () => {
-    expect(qtys({ ...range(2), laundry: true })).toEqual({ sleepwear: 1 });
+  it("laundry on an overnight trip still packs one top and one bottom", () => {
+    expect(qtys({ ...range(2), laundry: true })).toMatchObject({ tops: 1, bottoms: 1 });
   });
 });
 
 describe("nice attire", () => {
   const ten = range(10);
   // Nice occasions are IN ADDITION to everyday outfits (#205): the everyday counts never move with the occasion count. A 10-day
-  // trip with the return outfit on has 8 everyday days: 8 tops, 4 bottoms, whatever the occasions.
+  // trip with the return outfit on has 9 everyday days: 9 tops, 5 bottoms, whatever the occasions.
   const occasions = [1, 2, 3, 4, 5, 6, 7, 8] as const;
 
   it.each(occasions)("occasionCount %i on a 10-day trip without reuse", (n) => {
     const result = qtys({ ...ten, niceAttire: true, occasionCount: n });
-    expect(result.tops).toBe(8);
-    expect(result.bottoms).toBe(4);
+    expect(result.tops).toBe(9);
+    expect(result.bottoms).toBe(5);
     expect(result["nice-top"]).toBe(n);
     expect(result["nice-bottom"]).toBe(n);
     expect(result["nice-shoes"]).toBe(1);
@@ -106,15 +111,15 @@ describe("nice attire", () => {
       const result = qtys({ ...ten, niceAttire: true, occasionCount: n, reuseNice: true });
       expect(result["nice-top"]).toBe(1);
       expect(result["nice-bottom"]).toBe(1);
-      expect(result.tops).toBe(8);
-      expect(result.bottoms).toBe(4);
+      expect(result.tops).toBe(9);
+      expect(result.bottoms).toBe(5);
     },
   );
 
   it("occasions never take everyday tops and bottoms away, however many there are", () => {
-    // A 5-day trip has 3 everyday days. Five occasions used to leave none; now they sit on top.
+    // A 5-day trip has 4 everyday days. Five occasions used to leave none; now they sit on top.
     const result = qtys({ niceAttire: true, occasionCount: 5 });
-    expect(result.tops).toBe(3);
+    expect(result.tops).toBe(4);
     expect(result.bottoms).toBe(2);
     expect(result["nice-top"]).toBe(5);
     expect(qtys({ niceAttire: true, occasionCount: 5, reuseNice: true })["nice-top"]).toBe(1);
@@ -147,62 +152,96 @@ describe("nice attire", () => {
   });
 });
 
-describe("the return outfit and the checkout day (#25, #205)", () => {
+describe("the arrival day and the return outfit (#25, #205, #295)", () => {
   const four = { ...off, start: "2026-11-01", end: "2026-11-04" };
 
-  it("is decided: with the return outfit off the checkout day gets an everyday look", () => {
-    expect(RETURN_OFF_POLICY).toBe("add-return-day-back");
-    expect(calculateSuggestions({ ...off, returnOutfit: false }).dailyDays).toBe(4);
-    expect(calculateSuggestions({ ...off, returnOutfit: true }).dailyDays).toBe(3);
+  it("the travel outfit is worn, not packed: every trip day needs an everyday outfit, less the return day when covered", () => {
+    expect(calculateSuggestions({ ...off, returnOutfit: false }).dailyDays).toBe(5);
+    expect(calculateSuggestions({ ...off, returnOutfit: true }).dailyDays).toBe(4);
     // Left out, the return outfit is on.
-    expect(calculateSuggestions(off).dailyDays).toBe(3);
+    expect(calculateSuggestions(off).dailyDays).toBe(4);
   });
 
-  // Caroline's worked examples: 4 days, laundry off, the outbound outfit worn on day 1.
-  it("example 1: Nice off, return outfit off -> 3 everyday tops (days 2, 3 and checkout day 4)", () => {
+  // The worked examples on #295: 4 days, laundry off. Arrival day 1 now gets an everyday outfit.
+  it("example 1: Nice off, return outfit off -> 4 everyday tops (days 1 to 4)", () => {
     const result = qtys({ ...four, returnOutfit: false });
+    expect(result.tops).toBe(4);
+    expect(result.underwear).toBe(4);
+    expect(result.socks).toBe(4);
+  });
+
+  it("example 2: Nice off, return outfit on -> 3 everyday tops (plus the return outfit, which staples add)", () => {
+    const result = qtys({ ...four, returnOutfit: true });
     expect(result.tops).toBe(3);
     expect(result.underwear).toBe(3);
-    expect(result.socks).toBe(3);
   });
 
-  it("example 2: Nice off, return outfit on -> 2 everyday tops (plus the return outfit, which staples add)", () => {
-    const result = qtys({ ...four, returnOutfit: true });
-    expect(result.tops).toBe(2);
-    expect(result.underwear).toBe(2);
-  });
-
-  it("example 3: Nice on, 1 occasion, return outfit off -> 3 everyday tops plus 1 nice-attire set (additive)", () => {
+  it("example 3: Nice on, 1 occasion, return outfit off -> 4 everyday tops plus 1 nice-attire set (additive)", () => {
     const result = qtys({ ...four, returnOutfit: false, niceAttire: true, occasionCount: 1 });
-    expect(result.tops).toBe(3);
+    expect(result.tops).toBe(4);
     expect(result["nice-top"]).toBe(1);
     expect(result["nice-bottom"]).toBe(1);
   });
 
   it("the same with laundry on: tops are halved and bottoms quartered from the everyday days", () => {
     expect(qtys({ ...four, returnOutfit: false, laundry: true })).toMatchObject({
-      tops: 2, // ceil(3 / 2)
-      bottoms: 1, // ceil(3 / 4)
-      underwear: 3,
+      tops: 2, // ceil(4 / 2)
+      bottoms: 1, // ceil(4 / 4)
+      underwear: 4,
     });
     expect(qtys({ ...four, returnOutfit: true, laundry: true })).toMatchObject({
-      tops: 1, // ceil(2 / 2)
+      tops: 2, // ceil(3 / 2)
       bottoms: 1,
-      underwear: 2,
+      underwear: 3,
     });
   });
 
-  it("a longer trip: 10 days -> 9 everyday days with the return outfit off, 8 with it on", () => {
+  // Table-driven from the worked examples on #295: [days, return outfit, laundry, dailyDays, tops, bottoms].
+  it.each([
+    [2, true, false, 1, 1, 1],
+    [2, false, false, 2, 2, 1],
+    [3, true, false, 2, 2, 1],
+    [3, false, false, 3, 3, 2],
+    [7, true, true, 6, 3, 2],
+    [7, true, false, 6, 6, 3],
+    [7, false, false, 7, 7, 4],
+  ])(
+    "%i days, return outfit %s, laundry %s: %i everyday days -> %i tops, %i bottoms",
+    (days, returnOutfit, laundry, dailyDays, tops, bottoms) => {
+      const config = { ...range(days), returnOutfit, laundry };
+      const result = qtys(config);
+      expect(calculateSuggestions({ ...off, ...config }).dailyDays).toBe(dailyDays);
+      expect(result).toMatchObject({ tops, bottoms, underwear: dailyDays, socks: dailyDays });
+    },
+  );
+
+  it("a week with 2 dinners: nice outfits sit on top of the 6 everyday; reuse collapses them to one", () => {
+    const dinners = { ...range(7), returnOutfit: true, niceAttire: true, occasionCount: 2 };
+    expect(qtys(dinners)).toMatchObject({ tops: 6, "nice-top": 2, "nice-bottom": 2 });
+    expect(qtys({ ...dinners, reuseNice: true })).toMatchObject({
+      tops: 6,
+      "nice-top": 1,
+      "nice-bottom": 1,
+    });
+  });
+
+  it("a day trip packs no tops, bottoms, underwear or socks, with the return outfit on or off", () => {
+    for (const returnOutfit of [true, false]) {
+      expect(qtys({ ...range(1), returnOutfit })).toEqual({});
+    }
+  });
+
+  it("a longer trip: 10 days -> 10 everyday days with the return outfit off, 9 with it on", () => {
     const ten = range(10);
     expect(qtys({ ...ten, returnOutfit: false })).toMatchObject({
+      tops: 10,
+      bottoms: 5,
+      underwear: 10,
+    });
+    expect(qtys({ ...ten, returnOutfit: true })).toMatchObject({
       tops: 9,
       bottoms: 5,
       underwear: 9,
-    });
-    expect(qtys({ ...ten, returnOutfit: true })).toMatchObject({
-      tops: 8,
-      bottoms: 4,
-      underwear: 8,
     });
     expect(qtys({ ...ten, returnOutfit: false, laundry: true })).toMatchObject({
       tops: 5,
@@ -210,28 +249,26 @@ describe("the return outfit and the checkout day (#25, #205)", () => {
     });
   });
 
-  it("spare adds one underwear and one sock on top of the checkout day's", () => {
+  it("spare adds one underwear and one sock on top of the everyday days", () => {
     const result = qtys({ ...four, returnOutfit: false, spare: true });
-    expect(result.underwear).toBe(4);
-    expect(result.socks).toBe(4);
+    expect(result.underwear).toBe(5);
+    expect(result.socks).toBe(5);
+    expect(result.tops).toBe(4);
   });
 
-  it("a one- or two-day trip has no everyday days either way", () => {
-    for (const days of [1, 2]) {
-      expect(calculateSuggestions({ ...off, ...range(days), returnOutfit: true }).dailyDays).toBe(
-        0,
-      );
+  it("a day trip has no everyday days either way; an overnight has one or two", () => {
+    for (const returnOutfit of [true, false]) {
+      expect(calculateSuggestions({ ...off, ...range(1), returnOutfit }).dailyDays).toBe(0);
     }
-    expect(calculateSuggestions({ ...off, ...range(1), returnOutfit: false }).dailyDays).toBe(0);
-    expect(calculateSuggestions({ ...off, ...range(2), returnOutfit: false }).dailyDays).toBe(1);
+    expect(calculateSuggestions({ ...off, ...range(2), returnOutfit: true }).dailyDays).toBe(1);
+    expect(calculateSuggestions({ ...off, ...range(2), returnOutfit: false }).dailyDays).toBe(2);
   });
 
-  it("dailyDaysFor follows the policy, with the two policies still available to callers", () => {
-    expect(dailyDaysFor(5, true, "add-return-day-back")).toBe(3);
-    expect(dailyDaysFor(5, false, "add-return-day-back")).toBe(4);
-    expect(dailyDaysFor(5, false, "exclude-return-day")).toBe(3);
-    expect(dailyDaysFor(1, false, "add-return-day-back")).toBe(0);
-    expect(dailyDaysFor(0, false, "add-return-day-back")).toBe(0);
+  it("dailyDaysFor is the single formula behind it", () => {
+    expect(dailyDaysFor(5, true)).toBe(4);
+    expect(dailyDaysFor(5, false)).toBe(5);
+    expect(dailyDaysFor(1, false)).toBe(0);
+    expect(dailyDaysFor(0, false)).toBe(0);
   });
 
   it('uses the single semantic category "Clothing" for every everyday clothing row (never "Clothes")', () => {

@@ -1229,7 +1229,7 @@ describe("trip lifecycle", () => {
         start: "2030-03-15",
         end: "2030-03-20",
         days: 6,
-        dailyDays: 4,
+        dailyDays: 5,
         ready: false,
         toiletryBagPacked: false,
         archived: false,
@@ -1263,11 +1263,11 @@ describe("trip lifecycle", () => {
       expect(trip.config).toMatchObject({ laundry: false, niceAttire: false });
       expect(item(trip, "nice-top")).toBeUndefined();
       expect(item(trip, "nice-shoes")).toBeUndefined();
-      expect(item(trip, "tops")?.qty).toBe(2);
+      expect(item(trip, "tops")?.qty).toBe(3);
       const reloaded = data(await service.getTrip(context(), { tripId: trip.id }));
       expect(reloaded.config).toMatchObject({ laundry: false, niceAttire: false });
       expect(item(reloaded, "nice-top")).toBeUndefined();
-      expect(item(reloaded, "tops")?.qty).toBe(2);
+      expect(item(reloaded, "tops")?.qty).toBe(3);
     });
 
     it("explicit fixed Staples apply once even when the matching trip option is off", async () => {

@@ -76,8 +76,8 @@ test(
 
     // Upcoming, unchanged: San Diego is the next departure (the hero), which still says what is left and
     // links to "Continue packing".
-    await expect(progressbar(page, "San Diego")).toHaveAttribute("aria-valuetext", "19% packed");
-    await expect(page.getByText("26 left", { exact: true })).toBeVisible();
+    await expect(progressbar(page, "San Diego")).toHaveAttribute("aria-valuetext", "18% packed");
+    await expect(page.getByText("27 left", { exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: "Continue packing: San Diego" })).toBeVisible();
 
     // Past, seeded Ready: Marked Ready with the counts.

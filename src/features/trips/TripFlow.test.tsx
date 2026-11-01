@@ -287,6 +287,14 @@ describe("trip theme", () => {
   });
 });
 
+/** The live calculation card's tiles as [label, value] pairs. */
+const tiles = () =>
+  Array.from(document.querySelectorAll(".count-summary > div")).map((tile) => [
+    tile.querySelector("span")?.textContent,
+    tile.querySelector("strong")?.textContent,
+  ]);
+const callout = () => document.querySelector(".callout")?.textContent;
+
 describe("step 2: shape the list", () => {
   it("shows the live calculation from the draft and updates everything the moment a preference changes", async () => {
     const { user } = setup();
@@ -295,11 +303,20 @@ describe("step 2: shape the list", () => {
     expect(
       screen.getByText("Lisbon, Lisbon District, Portugal · Nov 12 – Nov 16 · 5 days"),
     ).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "3 days of everyday clothes" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "4 days of everyday clothes" })).toBeTruthy();
+    // #295: the travel outfit is worn, not packed. 5 days away, 1 set aside for the trip home, 4 everyday.
+    expect(tiles()).toEqual([
+      ["Days away", "5"],
+      ["Everyday outfits", "4"],
+      ["Set aside for the trip home", "1"],
+    ]);
+    expect(callout()).toBe(
+      "How we count: Your travel outfit is what you wear on the way there. It's worn, not packed. The trip home gets its own set, packed separately. 5 days away − 1 for home = 4 days of everyday clothes.",
+    );
     expect(screen.queryByText(/Simulated/)).toBeNull();
     const row = (name: string) =>
       screen.getByText(name, { selector: "strong" }).closest(".review-row") as HTMLElement;
-    expect(row("Everyday tops").textContent).toContain("3");
+    expect(row("Everyday tops").textContent).toContain("4");
     expect(screen.getByRole("switch", { name: "Dedicated return travel outfit" })).toHaveProperty(
       "checked",
       true,
@@ -314,13 +331,15 @@ describe("step 2: shape the list", () => {
         "Adds planned occasion looks on top of your everyday outfits, plus optional Dress shoes.",
       ),
     ).toBeTruthy();
-    expect(row("Everyday tops").textContent).toContain("3");
+    expect(row("Everyday tops").textContent).toContain("4");
     await user.click(screen.getByRole("switch", { name: "Laundry access" }));
     expect(screen.getByRole("status", { name: "List changes" }).textContent).toBe(
       "Everyday tops: 2, Everyday bottoms: 1",
     );
+    // The spare is on by default: 4 everyday days + 1 spare, then 4 once it is off.
+    expect(row("Underwear").textContent).toContain("5");
     await user.click(screen.getByRole("switch", { name: "One spare underwear + socks" }));
-    expect(row("Underwear").textContent).toContain("3");
+    expect(row("Underwear").textContent).toContain("4");
   });
 
   it("only enables occasions and reuse with Nice outfits, and keeps occasions between 1 and 8", async () => {
@@ -351,7 +370,7 @@ describe("step 2: shape the list", () => {
     expect(reuse.checked).toBe(false);
   });
 
-  it("return outfit off: the checkout day needs an everyday look, and the third tile drops to 0 set aside for the trip home", async () => {
+  it("return outfit off: the return day is an everyday day, and the third tile drops to 0 set aside for the trip home", async () => {
     const { user } = setup();
     await toShapeStep(user);
     expect(
@@ -361,12 +380,19 @@ describe("step 2: shape the list", () => {
     ).toBeTruthy();
     await user.click(screen.getByRole("switch", { name: "Dedicated return travel outfit" }));
     expect(screen.getByText("Your return day is packed like any other day.")).toBeTruthy();
-    // The third tile keeps its label and drops to 0: nothing is set aside, the return day is an everyday day.
-    const setAside = screen.getByText("Set aside for the trip home")
-      .previousElementSibling as HTMLElement;
-    expect(setAside.textContent).toBe("0");
-    expect(screen.getByText(/5 days away − 1 worn = 4 days of everyday clothes\./)).toBeTruthy();
+    expect(tiles()).toEqual([
+      ["Days away", "5"],
+      ["Everyday outfits", "5"],
+      ["Set aside for the trip home", "0"],
+    ]);
+    expect(callout()).toBe(
+      "How we count: Your travel outfit is what you wear on the way there. It's worn, not packed. With no separate return outfit, your return day is packed like any other day. 5 days away, none held back for home = 5 days of everyday clothes.",
+    );
+    expect(screen.getByRole("heading", { name: "5 days of everyday clothes" })).toBeTruthy();
+    // Turning it back on restores all three at once.
+    await user.click(screen.getByRole("switch", { name: "Dedicated return travel outfit" }));
     expect(screen.getByRole("heading", { name: "4 days of everyday clothes" })).toBeTruthy();
+    expect(callout()).toContain("5 days away − 1 for home = 4 days of everyday clothes.");
   });
 
   it("Edit trip details goes back with everything kept", async () => {
