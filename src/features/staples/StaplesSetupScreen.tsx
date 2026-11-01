@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { STAPLE_SUGGESTIONS, type StaplesSetup } from "@/domain/staples-setup";
 import type { Staple } from "@/domain/trip";
 import { StapleEditor } from "./StapleEditor";
-import { SECTIONS, sectionOf } from "./staples-view";
+import { SECTIONS, sectionOf, unitLabel } from "./staples-view";
 
 export interface StaplesSetupScreenProps {
   setup: StaplesSetup;
@@ -27,6 +27,7 @@ export function StaplesSetupScreen({
 }: StaplesSetupScreenProps) {
   const [staples, setStaples] = useState<Staple[]>(setup.staples);
   const [editing, setEditing] = useState<Editing>(null);
+  const [announcement, setAnnouncement] = useState("");
   const selected = useMemo(() => new Set(staples.map((staple) => staple.id)), [staples]);
   const target = editing?.staple ?? null;
 
@@ -44,6 +45,7 @@ export function StaplesSetupScreen({
         ? current.map((entry) => (entry.id === staple.id ? staple : entry))
         : [...current, staple],
     );
+    setAnnouncement(`${staple.name}: ${unitLabel(staple)}.`);
     setEditing(null);
   }
 
@@ -68,6 +70,10 @@ export function StaplesSetupScreen({
         </Button>
       </div>
 
+      <p className="sr-only" role="status" aria-label="Staples setup updates">
+        {announcement}
+      </p>
+
       <div className="staple-categories">
         {SECTIONS.map((section) => {
           const suggestions = STAPLE_SUGGESTIONS.filter((entry) => entry.category === section);
@@ -86,6 +92,7 @@ export function StaplesSetupScreen({
                       <input
                         type="checkbox"
                         checked={selected.has(staple.id)}
+                        aria-describedby={current ? `setup-rule-${staple.id}` : undefined}
                         onChange={() => toggle(staple)}
                         disabled={busy}
                       />
@@ -95,9 +102,23 @@ export function StaplesSetupScreen({
                       <strong>{current?.name ?? staple.name}</strong>
                     </label>
                     {current ? (
-                      <Button small variant="ghost" onClick={() => setEditing({ staple: current })}>
-                        Edit
-                      </Button>
+                      <>
+                        <span
+                          className="unit-badge staples-setup-rule"
+                          id={`setup-rule-${staple.id}`}
+                        >
+                          {unitLabel(current)}
+                        </span>
+                        <Button
+                          small
+                          variant="ghost"
+                          className="staples-setup-edit"
+                          aria-label={`Edit ${current.name}, ${unitLabel(current)}`}
+                          onClick={() => setEditing({ staple: current })}
+                        >
+                          Edit
+                        </Button>
+                      </>
                     ) : null}
                   </div>
                 );
@@ -120,7 +141,19 @@ export function StaplesSetupScreen({
                   <strong>{staple.name}</strong>
                   <span className="unit-badge">{sectionOf(staple)}</span>
                 </div>
-                <Button small variant="ghost" onClick={() => setEditing({ staple })}>
+                <span
+                  className="unit-badge staples-setup-rule staples-setup-rule-custom"
+                  id={`setup-rule-${staple.id}`}
+                >
+                  {unitLabel(staple)}
+                </span>
+                <Button
+                  small
+                  variant="ghost"
+                  className="staples-setup-edit"
+                  aria-label={`Edit ${staple.name}, ${unitLabel(staple)}`}
+                  onClick={() => setEditing({ staple })}
+                >
                   Edit
                 </Button>
               </div>

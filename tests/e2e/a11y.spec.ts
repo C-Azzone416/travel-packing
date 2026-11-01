@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { OTHER_EMAIL, signIn, signInAsOwner } from "./helpers/auth";
+import { OTHER_EMAIL, setupEmailFor, signIn, signInAsOwner } from "./helpers/auth";
+import { resetStaplesSetup } from "./helpers/database";
 import { chooseFromMenu } from "./helpers/menu";
 import { expectAccessible } from "./helpers/a11y";
 import { DEVICE } from "./helpers/device";
@@ -215,6 +216,17 @@ test.describe("review, settings and staples", DEVICE, () => {
       .click();
     await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
     await expectAccessible(page, "settings");
+  });
+
+  test("Staples setup with rule summaries on the selected rows", async ({ page }, testInfo) => {
+    const email = setupEmailFor(testInfo.project.name);
+    await resetStaplesSetup(`e2e-${email}`);
+    await signIn(page, email);
+    await expect(page.getByRole("heading", { name: "Build your Staples" })).toBeVisible();
+    await page.getByRole("checkbox", { name: "Toothbrush" }).check();
+    await page.getByRole("checkbox", { name: "Underwear" }).check();
+    await expect(page.getByRole("button", { name: "Edit Underwear, 1 per day" })).toBeVisible();
+    await expectAccessible(page, "staples setup with rules");
   });
 });
 
