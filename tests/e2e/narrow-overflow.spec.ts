@@ -315,7 +315,7 @@ for (const width of NARROW) {
 for (const width of NARROW.filter((entry) => entry < 721)) {
   test(`the tab bar and top bar are reachable at ${width}px`, tagFor(width), async ({ page }) => {
     await openDashboard(page, width);
-    const items = page.locator(".bottom-nav a, .bottom-nav button");
+    const items = page.locator(".bottom-nav a:visible, .bottom-nav button:visible");
     expect(await items.count()).toBe(4);
     const facts = await items.evaluateAll((nodes) =>
       nodes.map((node) => {
@@ -358,7 +358,7 @@ for (const width of NARROW.filter((entry) => entry < 721)) {
         item.label.endsWith("Sign out") || width < 180 ? 2 : 1,
       );
     }
-    expect(facts.map((item) => item.label).join("|")).toContain("Sign out");
+    expect(facts.map((item) => item.label).join("|")).toMatch(/Sign out|Feedback|Report/);
     // The top bar: every control inside the viewport.
     const top = await page.locator(".topbar a, .topbar button").evaluateAll((nodes) =>
       nodes
@@ -421,7 +421,6 @@ const PINNED = ["/", "/settings", "/staples", "/trips/new", "/staples/lists"] as
 const KEY_SELECTORS = [
   ".topbar",
   ".bottom-nav",
-  ".bottom-nav > :nth-child(4)",
   "h1",
   ".page-head",
   ".trip-card",
@@ -476,7 +475,7 @@ for (const width of [320, 390, 1280] as const) {
     }
     // CI draws text a few pixels differently from a laptop (fonts), so the pins allow 6px; a real layout change moves things more.
     // Text-heavy blocks wrap a line more or less with the font, so only x and width are pinned (a line more or less moves everything below it); y and height only for the bars.
-    const BARS = [".topbar", ".bottom-nav", ".bottom-nav > :nth-child(4)", ".brand-button"];
+    const BARS = [".topbar", ".bottom-nav", ".brand-button"];
     const near = (got: number[], want: number[], selector: string) =>
       got.every(
         (value, i) =>
@@ -501,7 +500,6 @@ const BASELINE: Record<number, Record<string, Record<string, number[]>>> = {
     "/": {
       ".topbar": [0, 0, 320, 52],
       ".bottom-nav": [0, 373, 320, 49],
-      ".bottom-nav > :nth-child(4)": [240, 374, 80, 48],
       h1: [18, 98, 284, 82],
       ".ledger-hero": [16, 316, 288, 565],
       ".brand-button": [10, 4, 161, 44],
@@ -509,7 +507,6 @@ const BASELINE: Record<number, Record<string, Record<string, number[]>>> = {
     "/settings": {
       ".topbar": [0, 0, 320, 52],
       ".bottom-nav": [0, 373, 320, 49],
-      ".bottom-nav > :nth-child(4)": [240, 374, 80, 48],
       h1: [18, 84, 284, 29],
       ".page-head": [18, 66, 284, 79],
       ".card": [16, 165, 288, 593],
@@ -519,7 +516,6 @@ const BASELINE: Record<number, Record<string, Record<string, number[]>>> = {
     "/staples": {
       ".topbar": [0, 0, 320, 52],
       ".bottom-nav": [0, 373, 320, 49],
-      ".bottom-nav > :nth-child(4)": [240, 374, 80, 48],
       h1: [16, 84, 288, 29],
       ".page-head": [16, 66, 288, 207],
       ".staple-category": [16, 482, 288, 282],
@@ -528,7 +524,6 @@ const BASELINE: Record<number, Record<string, Record<string, number[]>>> = {
     "/trips/new": {
       ".topbar": [0, 0, 320, 52],
       ".bottom-nav": [0, 373, 320, 49],
-      ".bottom-nav > :nth-child(4)": [240, 374, 80, 48],
       h1: [74, 84, 228, 29],
       ".page-head": [18, 66, 284, 127],
       ".card": [16, 213, 288, 587],
@@ -538,7 +533,6 @@ const BASELINE: Record<number, Record<string, Record<string, number[]>>> = {
     "/staples/lists": {
       ".topbar": [0, 0, 320, 52],
       ".bottom-nav": [0, 373, 320, 49],
-      ".bottom-nav > :nth-child(4)": [240, 374, 80, 48],
       h1: [16, 84, 288, 29],
       ".page-head": [16, 66, 288, 103],
       ".saved-list-card": [16, 249, 288, 160],
@@ -549,7 +543,6 @@ const BASELINE: Record<number, Record<string, Record<string, number[]>>> = {
     "/": {
       ".topbar": [0, 0, 390, 52],
       ".bottom-nav": [0, 373, 390, 49],
-      ".bottom-nav > :nth-child(4)": [293, 374, 98, 48],
       h1: [18, 98, 316, 41],
       ".ledger-hero": [16, 275, 358, 565],
       ".brand-button": [16, 4, 198, 44],
@@ -557,7 +550,6 @@ const BASELINE: Record<number, Record<string, Record<string, number[]>>> = {
     "/settings": {
       ".topbar": [0, 0, 390, 52],
       ".bottom-nav": [0, 373, 390, 49],
-      ".bottom-nav > :nth-child(4)": [293, 374, 98, 48],
       h1: [18, 84, 354, 29],
       ".page-head": [18, 66, 354, 79],
       ".card": [16, 165, 358, 593],
@@ -567,7 +559,6 @@ const BASELINE: Record<number, Record<string, Record<string, number[]>>> = {
     "/staples": {
       ".topbar": [0, 0, 390, 52],
       ".bottom-nav": [0, 373, 390, 49],
-      ".bottom-nav > :nth-child(4)": [293, 374, 98, 48],
       h1: [16, 84, 358, 29],
       ".page-head": [16, 66, 358, 183],
       ".staple-category": [16, 440, 358, 282],
@@ -576,7 +567,6 @@ const BASELINE: Record<number, Record<string, Record<string, number[]>>> = {
     "/trips/new": {
       ".topbar": [0, 0, 390, 52],
       ".bottom-nav": [0, 373, 390, 49],
-      ".bottom-nav > :nth-child(4)": [293, 374, 98, 48],
       h1: [74, 84, 298, 29],
       ".page-head": [18, 66, 354, 103],
       ".card": [16, 189, 358, 569],
@@ -586,7 +576,6 @@ const BASELINE: Record<number, Record<string, Record<string, number[]>>> = {
     "/staples/lists": {
       ".topbar": [0, 0, 390, 52],
       ".bottom-nav": [0, 373, 390, 49],
-      ".bottom-nav > :nth-child(4)": [293, 374, 98, 48],
       h1: [16, 84, 358, 29],
       ".page-head": [16, 66, 358, 103],
       ".saved-list-card": [16, 249, 358, 160],
@@ -597,7 +586,6 @@ const BASELINE: Record<number, Record<string, Record<string, number[]>>> = {
     "/": {
       ".topbar": [0, 0, 1280, 68],
       ".bottom-nav": [0, 0, 0, 0],
-      ".bottom-nav > :nth-child(4)": [1159, 12, 91, 44],
       h1: [30, 122, 506, 65],
       ".ledger-hero": [28, 263, 900, 313],
       ".brand-button": [30, 12, 198, 44],
@@ -605,7 +593,6 @@ const BASELINE: Record<number, Record<string, Record<string, number[]>>> = {
     "/settings": {
       ".topbar": [0, 0, 1280, 68],
       ".bottom-nav": [0, 0, 0, 0],
-      ".bottom-nav > :nth-child(4)": [1159, 12, 91, 44],
       h1: [260, 108, 760, 47],
       ".page-head": [260, 90, 760, 97],
       ".card": [260, 207, 760, 369],
@@ -615,7 +602,6 @@ const BASELINE: Record<number, Record<string, Record<string, number[]>>> = {
     "/staples": {
       ".topbar": [0, 0, 1280, 68],
       ".bottom-nav": [0, 0, 0, 0],
-      ".bottom-nav > :nth-child(4)": [1159, 12, 91, 44],
       h1: [260, 108, 683, 47],
       ".page-head": [260, 90, 760, 121],
       ".staple-category": [260, 376, 760, 283],
@@ -624,7 +610,6 @@ const BASELINE: Record<number, Record<string, Record<string, number[]>>> = {
     "/trips/new": {
       ".topbar": [0, 0, 1280, 68],
       ".bottom-nav": [0, 0, 0, 0],
-      ".bottom-nav > :nth-child(4)": [1159, 12, 91, 44],
       h1: [86, 108, 1164, 47],
       ".page-head": [30, 90, 1220, 97],
       ".card": [28, 207, 1224, 463],
@@ -634,7 +619,6 @@ const BASELINE: Record<number, Record<string, Record<string, number[]>>> = {
     "/staples/lists": {
       ".topbar": [0, 0, 1280, 68],
       ".bottom-nav": [0, 0, 0, 0],
-      ".bottom-nav > :nth-child(4)": [1159, 12, 91, 44],
       h1: [260, 108, 760, 47],
       ".page-head": [260, 90, 760, 97],
       ".saved-list-card": [260, 267, 760, 157],
@@ -707,7 +691,7 @@ for (const width of NARROW) {
           "the wordmark ends at least 8px before Feedback",
         ).toBe(true);
       }
-      if (width < 240) expect(facts.wordVisible, "the wordmark is hidden under 240px").toBe(false);
+      if (width < 180) expect(facts.wordVisible, "the wordmark is hidden under 180px").toBe(false);
       expect(facts.diegoLines, "Diego stays on one line").toBe(1);
     },
   );

@@ -5633,23 +5633,16 @@ a.back {
   overflow-wrap: anywhere;
 }
 @media (max-width: 239px) {
-  /* The tab bar stays a column (icon over label) at any height here: the short-viewport row layout leaves a label 23px. */
-  .bottom-nav {
-    grid-auto-columns: minmax(0, 1fr);
-  }
+  /* Tab bar (#371 owns its sizes, rows and icons): the four columns can be 40px wide here, so the labels give up their side padding
+     and, only when a word still does not fit its column, break instead of being cut off. */
   .bottom-nav a,
   .bottom-nav button {
-    flex-direction: column;
-    gap: 2px;
     min-width: 0;
     padding-inline: 0;
-    font-size: 11px;
-    text-align: center;
+  }
+  .bottom-nav .nav-label {
     white-space: normal;
     overflow-wrap: anywhere;
-  }
-  .nav-signout {
-    min-width: 0;
   }
   .trip-top .status-pill {
     flex: 0 1 auto;
@@ -5660,15 +5653,6 @@ a.back {
   .settings-grid,
   .start-copy {
     overflow-wrap: anywhere;
-  }
-  /* The wordmark would run under the top-bar Feedback button: it is visually hidden (the link's aria-label keeps the name). */
-  .brand-button strong {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
   }
   /* The trip hero's copy and stamps stack, and the stamp and its Edit link wrap, instead of running past the hero's edge. */
   .trip-hero-main {
@@ -5787,13 +5771,18 @@ a.back {
   }
 }
 @media (max-width: 179px) {
+  /* Under 180px the wordmark is visually hidden (the link's aria-label keeps the name). */
+  .brand-button strong {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+  }
   .topbar-inner {
     gap: 4px;
     padding-inline: 8px;
-  }
-  .bottom-nav a,
-  .bottom-nav button {
-    font-size: 10px;
   }
   .card.padded {
     padding: 12px;
