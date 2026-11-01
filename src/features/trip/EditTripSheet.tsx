@@ -13,7 +13,7 @@ import type { DraftStop } from "@/domain/trip-lifecycle";
 import type { TripStop } from "@/domain/trip-stops";
 import { useLocationProvider } from "@/features/trips/LocationProviderContext";
 import { StopList } from "@/features/trips/StopList";
-import { tripMathLine } from "@/features/trips/count-copy";
+import { countedWithEarlierRule, tripMathLine } from "@/features/trips/count-copy";
 import {
   clampOccasions,
   MAX_OCCASIONS,
@@ -102,6 +102,8 @@ export function EditTripSheet({
   const routeDirty = !sameStops(routeDraft, trip.stops);
   const prefsDirty = !sameConfig(prefs, trip.config);
   const dirty = routeDirty || prefsDirty;
+  // A trip saved under the earlier counting rule can be brought up to date with unchanged preferences (#295, lazy recalculation).
+  const canReview = prefsDirty || countedWithEarlierRule(trip);
 
   const preview: RecalcPreview | null = useMemo(
     () => (step === "review" ? previewRecalculation(trip, prefs, calculateSuggestions) : null),
@@ -225,13 +227,13 @@ export function EditTripSheet({
     </>
   ) : (
     <>
-      <Button disabled={!prefsDirty} onClick={review} aria-describedby={`${ids}-nochange`}>
+      <Button disabled={!canReview} onClick={review} aria-describedby={`${ids}-nochange`}>
         Review changes
       </Button>
       <Button variant="secondary" onClick={requestClose}>
         Cancel
       </Button>
-      {prefsDirty ? null : (
+      {canReview ? null : (
         <span id={`${ids}-nochange`} className="tiny muted edit-trip-nochange">
           No changes to apply
         </span>

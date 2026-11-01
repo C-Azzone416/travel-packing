@@ -1,12 +1,7 @@
 // Pure helpers for the create/copy flow. A draft lives only in component state: nothing is
 // persisted until the explicit Save, so cancelling can never leave a trace.
 
-import {
-  normalizeTripDates,
-  RETURN_OFF_POLICY,
-  type ReturnOffPolicy,
-  type Suggestions,
-} from "@/domain/calc";
+import { normalizeTripDates, type Suggestions } from "@/domain/calc";
 import {
   startCopyDraft,
   startDraft,
@@ -112,11 +107,9 @@ export const NICE_OUTFITS_DESCRIPTION =
 export const NICE_OFF_HINT = "Turn on Nice outfits to set occasions.";
 
 /** Helper text under the return-outfit switch. The "off" wording must match what the calculator does (#25). */
-export function returnOutfitHelp(on: boolean, policy: ReturnOffPolicy = RETURN_OFF_POLICY): string {
+export function returnOutfitHelp(on: boolean): string {
   if (on) {
     return "A fresh top, bottoms, underwear and socks for the trip home. It replaces one everyday outfit, for your return day.";
   }
-  return policy === "add-return-day-back"
-    ? "Your return day is packed like any other day."
-    : "No separate return outfit. Your return day is not added to the everyday count.";
+  return "Your return day is packed like any other day.";
 }

@@ -209,7 +209,7 @@ describe("saveDraft", () => {
       start: "2030-05-01",
       end: "2030-05-06",
       days: 6,
-      dailyDays: 4,
+      dailyDays: 5,
       copiedFrom: null,
       archived: false,
       ready: false,
@@ -245,7 +245,7 @@ describe("buildTrip", () => {
     ).toEqual(["return-top", "return-bottoms", "return-underwear", "return-socks"]);
     expect(trip.items.filter((entry) => entry.section === "packlast")).toEqual([]);
     expect(byId(trip, "sunglasses")).toBeUndefined();
-    expect(byId(trip, "underwear")?.qty).toBe(7);
+    expect(byId(trip, "underwear")?.qty).toBe(8);
     expect(byId(trip, "nice-makeup")).toBeUndefined();
     expect(trip.items.every((entry) => entry.packed === 0)).toBe(true);
     expect(trip.items.every((entry) => entry.qty >= 1)).toBe(true);

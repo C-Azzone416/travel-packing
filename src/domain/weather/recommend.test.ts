@@ -108,19 +108,19 @@ describe("allocateLargestRemainder", () => {
 describe("clothing breakdown", () => {
   it("hot trip is all short-sleeve and shorts", () => {
     const r = recommend(withHigh(30));
-    expect(qty(r)).toEqual({ "tops-short": 6, "bottoms-shorts": 3 });
+    expect(qty(r)).toEqual({ "tops-short": 7, "bottoms-shorts": 4 });
   });
   it("warm below 24 is short-sleeve with pants; at 24 shorts", () => {
-    expect(qty(recommend(withHigh(23.9)))).toEqual({ "tops-short": 6, "bottoms-pants": 3 });
-    expect(qty(recommend(withHigh(24)))).toEqual({ "tops-short": 6, "bottoms-shorts": 3 });
+    expect(qty(recommend(withHigh(23.9)))).toEqual({ "tops-short": 7, "bottoms-pants": 4 });
+    expect(qty(recommend(withHigh(24)))).toEqual({ "tops-short": 7, "bottoms-shorts": 4 });
   });
   it("cool and cold are long-sleeve with pants", () => {
-    expect(qty(recommend(withHigh(15)))).toEqual({ "tops-long": 6, "bottoms-pants": 3 });
-    expect(qty(recommend(withHigh(5)))).toEqual({ "tops-long": 6, "bottoms-pants": 3 });
+    expect(qty(recommend(withHigh(15)))).toEqual({ "tops-long": 7, "bottoms-pants": 4 });
+    expect(qty(recommend(withHigh(5)))).toEqual({ "tops-long": 7, "bottoms-pants": 4 });
   });
   it("laundry halves tops and quarters bottoms per type", () => {
     const r = recommend(withHigh(30), { laundry: true });
-    expect(qty(r)).toEqual({ "tops-short": 3, "bottoms-shorts": 2 });
+    expect(qty(r)).toEqual({ "tops-short": 4, "bottoms-shorts": 2 });
   });
   it("totals equal the legacy everydayLooks across niceAttire, return outfit and spare", () => {
     const mixed = dates(8).map((d, i) => day(d, { highC: [30, 30, 22, 22, 10, 10, 10, 10][i] }));
@@ -138,50 +138,63 @@ describe("clothing breakdown", () => {
       expect(tops).toBe(legacy);
     }
   });
-  it("return outfit off counts the return day (the decided policy, #25)", () => {
+  it("return outfit off counts the return day and the arrival day (the decided policy, #25, #295)", () => {
     // Day 8 is cold: with no return outfit it needs an everyday look, so the cold tops and pants appear.
     const days = dates(8).map((d) => day(d, { highC: d === "2026-10-08" ? 0 : 30 }));
     expect(qty(recommend(days, { returnOutfit: false }))).toEqual({
-      "tops-short": 6,
+      "tops-short": 7,
       "tops-long": 1,
-      "bottoms-shorts": 3,
+      "bottoms-shorts": 4,
       "bottoms-pants": 1,
     });
+  });
+  it("return outfit on leaves the return day out: a cold return day adds nothing", () => {
+    const days = dates(8).map((d) => day(d, { highC: d === "2026-10-08" ? 0 : 30 }));
+    expect(qty(recommend(days))).toEqual({ "tops-short": 7, "bottoms-shorts": 4 });
   });
   it("Nice occasions never take everyday looks away (#205)", () => {
     const days = dates(8).map((d) => day(d, { highC: 30 }));
     const plain = qty(recommend(days));
     expect(qty(recommend(days, { niceAttire: true, occasionCount: 3 }))).toEqual(plain);
   });
-  it("the exclude-return-day policy, still selectable, leaves the return day out", () => {
-    const days = dates(8).map((d) => day(d, { highC: d === "2026-10-08" ? 0 : 30 }));
-    const r = recommendPacking({
-      days,
-      dayStopNames: [],
-      config: { ...base, returnOutfit: false },
-      returnPolicy: "exclude-return-day",
-    });
-    expect(qty(r)).toEqual({ "tops-short": 6, "bottoms-shorts": 3 });
-  });
-  it("departure day never counts", () => {
+  it("the arrival day counts: the travel outfit is worn, not packed (#295)", () => {
     const days = dates(8).map((d) => day(d, { highC: d === "2026-10-01" ? 0 : 30 }));
-    expect(qty(recommend(days))).toEqual({ "tops-short": 6, "bottoms-shorts": 3 });
+    expect(qty(recommend(days))).toEqual({
+      "tops-short": 6,
+      "tops-long": 1,
+      "bottoms-shorts": 3,
+      "bottoms-pants": 1,
+    });
+  });
+  it("the split lines add up to the everyday count for every trip length and return state", () => {
+    for (const returnOutfit of [true, false]) {
+      for (let length = 2; length <= 12; length++) {
+        const config = { returnOutfit, end: `2026-10-${String(length).padStart(2, "0")}` };
+        const days = dates(length).map((d, i) => day(d, { highC: [30, 22, 10][i % 3] }));
+        const tops = recommend(days, config).clothing.filter((l) => l.id.startsWith("tops"));
+        expect(tops.reduce((total, l) => total + l.qty, 0)).toBe(
+          calculateSuggestions({ ...base, ...config }).dailyDays,
+        );
+      }
+    }
   });
   it("days missing weather count as cool", () => {
     const partial = dates(8)
       .slice(0, 4)
       .map((d) => day(d, { highC: 30 }));
-    // daily days Oct 2..7: Oct 2,3,4 hot, Oct 5,6,7 unknown -> cool
+    // daily days Oct 1..7: Oct 1,2,3,4 hot, Oct 5,6,7 unknown -> cool
     expect(qty(recommend(partial))).toEqual({
-      "tops-short": 3,
+      "tops-short": 4,
       "tops-long": 3,
       "bottoms-shorts": 2,
       "bottoms-pants": 2,
     });
   });
-  it("no everyday looks yields no clothing lines", () => {
-    const r = recommend([day("2026-10-01")], { end: "2026-10-02" });
-    expect(r.clothing).toEqual([]);
+  it("a day trip yields no clothing lines, with the return outfit on or off", () => {
+    for (const returnOutfit of [true, false]) {
+      const r = recommend([day("2026-10-01")], { end: "2026-10-01", returnOutfit });
+      expect(r.clothing).toEqual([]);
+    }
   });
   it("lines carry semanticId and a reason with stop and dates", () => {
     const r = recommend(withHigh(30));
@@ -203,12 +216,12 @@ describe("clothing breakdown", () => {
 });
 
 describe("laundry quantities per garment type", () => {
-  // Oct 1-10 with the return outfit on: 8 everyday looks (departure and return days dropped).
+  // Oct 1-10 with the return outfit on: 9 everyday looks (only the return day dropped; the travel outfit is worn, not packed).
   const trip = (highs: (index: number) => number) =>
     dates(10).map((d, i) => day(d, { highC: highs(i) }));
   const longTrip = { end: "2026-10-10", laundry: true };
 
-  it("all cold, 8 looks: tops halve, bottoms quarter", () => {
+  it("all cold, 9 looks: tops halve, bottoms quarter", () => {
     expect(
       qty(
         recommend(
@@ -216,24 +229,24 @@ describe("laundry quantities per garment type", () => {
           longTrip,
         ),
       ),
-    ).toEqual({ "tops-long": 4, "bottoms-pants": 2 });
+    ).toEqual({ "tops-long": 5, "bottoms-pants": 3 });
   });
-  it("all cold, 9 looks: tops round up from a half", () => {
+  it("all cold, 10 looks: tops are exactly half", () => {
     const nine = { end: "2026-10-11", laundry: true };
     const days = dates(11).map((d) => day(d, { highC: 5 }));
     expect(qty(recommend(days, nine))).toEqual({ "tops-long": 5, "bottoms-pants": 3 });
   });
-  it("mixed hot and cold, 8 looks: each type uses its own count", () => {
-    // Daily days Oct 2-9: 4 hot (shorts) then 4 cold (pants).
+  it("mixed hot and cold, 9 looks: each type uses its own count", () => {
+    // Daily days Oct 1-9: 5 hot (shorts) then 4 cold (pants).
     const days = trip((i) => (i < 5 ? 30 : 5));
     expect(qty(recommend(days, longTrip))).toEqual({
-      "tops-short": 2,
+      "tops-short": 3,
       "tops-long": 2,
-      "bottoms-shorts": 1,
+      "bottoms-shorts": 2,
       "bottoms-pants": 1,
     });
   });
-  it("uneven split, 8 looks: 5 hot and 3 cold", () => {
+  it("uneven split, 9 looks: 6 hot and 3 cold", () => {
     const days = trip((i) => (i < 6 ? 30 : 5));
     expect(qty(recommend(days, longTrip))).toEqual({
       "tops-short": 3,
@@ -254,14 +267,14 @@ describe("fallback with no usable weather", () => {
   it("recommendPacking returns today's Everyday lines and no extras", () => {
     const r = recommend([]);
     expect(r.clothing).toEqual([
-      { id: "tops", name: "Everyday tops", category: "Clothing", qty: 6 },
-      { id: "bottoms", name: "Everyday bottoms", category: "Clothing", qty: 3 },
+      { id: "tops", name: "Everyday tops", category: "Clothing", qty: 7 },
+      { id: "bottoms", name: "Everyday bottoms", category: "Clothing", qty: 4 },
     ]);
     expect(r.extras).toEqual([]);
   });
   it("legacy fallback honours laundry", () => {
     const r = recommend([], { laundry: true });
-    expect(r.clothing.map((l) => l.qty)).toEqual([3, 2]);
+    expect(r.clothing.map((l) => l.qty)).toEqual([4, 2]);
   });
   it("weather outside the trip is unusable", () => {
     expect(hasUsableWeather([day("2027-01-01")], base)).toBe(false);
@@ -401,7 +414,7 @@ describe("mixed trip example", () => {
 
   it("splits clothing between warm and cool stops", () => {
     expect(qty(r)).toEqual({
-      "tops-short": 3,
+      "tops-short": 4,
       "tops-long": 3,
       "bottoms-shorts": 2,
       "bottoms-pants": 2,

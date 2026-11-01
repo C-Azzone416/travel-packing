@@ -333,7 +333,7 @@ describe("＋ Add item on the hero (#147)", () => {
     expect(added).toMatchObject({ category: "Tech", qty: 2, packed: 0 });
     expect(await screen.findByText("Camera added to Tech")).toBeTruthy();
     // The hero's progress reflects two more to pack.
-    expect(screen.getByText(/of 34 packed/)).toBeTruthy();
+    expect(screen.getByText(/of 35 packed/)).toBeTruthy();
   });
 
   it("never doubles an item already on the list; Edit quantity goes to that item's editor on the trip screen", async () => {
