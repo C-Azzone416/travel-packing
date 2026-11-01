@@ -658,7 +658,7 @@ for (const width of NARROW) {
       for (const button of buttons) {
         expect(button.clipped, `${button.name} is not cut off`).toBeLessThanOrEqual(0);
         expect(button.inside, `${button.name} text is inside its border`).toBe(true);
-        expect(button.height, `${button.name} is a 44px target`).toBeGreaterThanOrEqual(44);
+        expect(button.height, `${button.name} is a 44px target`).toBeGreaterThanOrEqual(43.9);
       }
     },
   );

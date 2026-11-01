@@ -5585,6 +5585,15 @@ a.back {
     overflow: hidden;
     clip: rect(0, 0, 0, 0);
   }
+  /* The trip hero's copy and stamps stack, and the stamp and its Edit link wrap, instead of running past the hero's edge. */
+  .trip-hero-main {
+    flex-wrap: wrap;
+  }
+  .hero-stamps {
+    flex: 0 1 auto;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
   /* Hero actions: each button takes a whole row so its label is never cut off. */
   .ledger-actions > .button:not(:first-child),
   .ledger-actions .add-item.hero,
