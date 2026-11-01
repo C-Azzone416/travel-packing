@@ -5,6 +5,8 @@ import { expect, type Page } from "@playwright/test";
 const SHOTS = process.env.SCREENSHOTS;
 
 export interface Facts {
+  /** Short words (up to 14 letters) that wrap inside the word, e.g. "Bathroo/m": only measured under 240px. */
+  broken: string[];
   scroll: number;
   offenders: string[];
 }
@@ -50,6 +52,53 @@ export async function measure(page: Page): Promise<Facts> {
         }
         if (!clipped) out.push(el);
       }
+      const broken: string[] = [];
+      if (width < 240) {
+        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+        for (
+          let node = walker.nextNode() as Text | null;
+          node;
+          node = walker.nextNode() as Text | null
+        ) {
+          const parent = node.parentElement;
+          if (!parent || parent.closest(".bottom-nav, script, style, [aria-hidden='true'] svg"))
+            continue;
+          const style = getComputedStyle(parent);
+          if (style.display === "none" || style.visibility === "hidden" || style.clip !== "auto")
+            continue;
+          const box = parent.getBoundingClientRect();
+          if (box.width <= 1 || box.height <= 1) continue;
+          for (const match of node.data.matchAll(
+            /(?<=^|\s)[\p{L}\p{N}°]{3,14}(?=[\s.,:;!?)·]|$)/gu,
+          )) {
+            const range = document.createRange();
+            range.setStart(node, match.index!);
+            range.setEnd(node, match.index! + match[0].length);
+            const tops = new Set(
+              Array.from(range.getClientRects(), (rect) => Math.round(rect.top)),
+            );
+            if (tops.size > 1) {
+              // Only a word that would have fitted on a line of its own counts: a longer one has to break somewhere.
+              const natural = Array.from(range.getClientRects()).reduce(
+                (sum, rect) => sum + rect.width,
+                0,
+              );
+              let block: Element = parent;
+              while (block.parentElement && getComputedStyle(block).display.startsWith("inline"))
+                block = block.parentElement;
+              const blockStyle = getComputedStyle(block);
+              const room =
+                block.clientWidth -
+                parseFloat(blockStyle.paddingLeft) -
+                parseFloat(blockStyle.paddingRight);
+              if (natural <= room + 1)
+                broken.push(
+                  `"${match[0]}" in ${parent.tagName.toLowerCase()}.${String(parent.getAttribute("class") ?? "").split(" ")[0]}`,
+                );
+            }
+          }
+        }
+      }
       const scroll = document.documentElement.scrollWidth - width;
       if (scroll > 0 && out.length === 0) {
         // Something makes the page scroll but is not "visible and outside" by the rules above (zero-size, clipped...): name it.
@@ -66,6 +115,7 @@ export async function measure(page: Page): Promise<Facts> {
       const deepest = out.filter((el) => !out.some((other) => other !== el && el.contains(other)));
       return {
         scroll,
+        broken: broken.slice(0, 12),
         offenders: deepest.slice(0, 8).map((el) => {
           const name = (node: Element) =>
             `${node.tagName.toLowerCase()}.${String(node.getAttribute("class") ?? "").split(" ")[0]}`;
@@ -94,5 +144,6 @@ export async function expectFits(page: Page, label: string, shot?: string) {
   }
   const facts = await measure(page);
   expect.soft(facts.scroll, `${label}: page scrolls sideways`).toBeLessThanOrEqual(0);
+  expect.soft(facts.broken, `${label}: words broken inside the word`).toEqual([]);
   expect.soft(facts.offenders, `${label}: elements outside the viewport`).toEqual([]);
 }

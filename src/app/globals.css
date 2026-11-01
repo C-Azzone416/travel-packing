@@ -5619,13 +5619,86 @@ a.back {
   .staple-category-head .category-count {
     white-space: normal;
   }
-  /* A day row at 200% zoom plus large text: the temperatures may wrap instead of leaving the hero. */
+  /* Hero forecast day: the date gets a row of its own, then the icon and the temperatures. Words never break inside. */
   .hero-day {
-    grid-template-columns: minmax(0, 1fr) 20px minmax(0, auto);
+    grid-template-columns: 20px minmax(0, 1fr);
+    grid-template-areas:
+      "label label"
+      "glyph temps";
+    column-gap: 8px;
+    min-height: calc(var(--ledger-row) * 2);
+  }
+  .hero-day-label {
+    grid-area: label;
+    white-space: normal;
+    overflow-wrap: break-word;
+  }
+  .hero-day-glyph {
+    grid-area: glyph;
   }
   .hero-day-temps {
-    white-space: normal;
-    overflow-wrap: anywhere;
+    grid-area: temps;
+    white-space: nowrap;
+  }
+  .weather-source {
+    white-space: nowrap;
+  }
+  /* The "Forecast" label wraps below the temperatures rather than breaking inside the word. */
+  .weather-range {
+    flex-wrap: wrap;
+  }
+  .weather-range small {
+    flex: none;
+    white-space: nowrap;
+  }
+  /* Settings theme cards: the swatches sit above the name and description, which take the whole width. */
+  .appearance-option {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .appearance-copy {
+    width: 100%;
+    overflow-wrap: break-word;
+  }
+  /* Staples rows: the name takes its own row, then the rule badge and the edit button. */
+  .staple-row {
+    grid-template-columns: minmax(0, 1fr) 44px;
+    grid-template-areas:
+      "name name"
+      "badge edit";
+  }
+  .staple-row .staple-name {
+    grid-area: name;
+  }
+  .staple-row .unit-badge {
+    grid-area: badge;
+    justify-self: start;
+  }
+  .staple-row .icon-button {
+    grid-area: edit;
+  }
+  /* Settings rows: the switch drops under its label, and the °F / °C choices stack. */
+  .toggle-row {
+    flex-wrap: wrap;
+  }
+  .toggle-row > :first-child {
+    flex: 1 1 8em;
+    min-width: 0;
+  }
+  .temperature-unit-options {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  /* The trip hero: its copy, meta line and Edit stamp wrap instead of being cut off. */
+  .trip-hero-copy,
+  .trip-hero-copy > *,
+  .hero-stamps > * {
+    min-width: 0;
+    overflow-wrap: break-word;
+  }
+  .confirmed-location strong,
+  .confirmed-location small {
+    overflow-wrap: break-word;
   }
 }
 @media (max-width: 179px) {
@@ -5639,6 +5712,9 @@ a.back {
   }
   .card.padded {
     padding: 12px;
+  }
+  .staple-category-head h2 {
+    font-size: 24px;
   }
   .theme-grid {
     grid-template-columns: minmax(0, 1fr);

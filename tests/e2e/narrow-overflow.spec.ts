@@ -126,6 +126,22 @@ for (const width of [...NARROW, ...UNCHANGED]) {
       .locator(".trip-hero")
       .evaluate((el) => el.scrollWidth - el.clientWidth);
     expect(tripHero, `the trip hero's content is not cut off at ${width}px`).toBeLessThanOrEqual(0);
+    // No text in the hero runs past its right edge (the hero clips what does).
+    const pastEdge = await page.locator(".trip-hero").evaluate((hero) => {
+      const edge =
+        hero.getBoundingClientRect().right - parseFloat(getComputedStyle(hero).borderRightWidth);
+      const out: string[] = [];
+      const walker = document.createTreeWalker(hero, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        if (!(node.textContent ?? "").trim() || node.parentElement?.closest(".sr-only")) continue;
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        if (range.getBoundingClientRect().right > edge + 0.5)
+          out.push((node.textContent ?? "").trim().slice(0, 30));
+      }
+      return out;
+    });
+    expect(pastEdge, `trip hero text past its edge at ${width}px`).toEqual([]);
     const id = new URL(page.url()).pathname.split("/").pop();
     await visit(page, `/trips/${id}/review`, width);
     await page.goto("/trips/nope");
@@ -695,4 +711,59 @@ for (const width of NARROW) {
       expect(facts.diegoLines, "Diego stays on one line").toBe(1);
     },
   );
+}
+
+for (const width of NARROW) {
+  test(
+    `Staples row names are whole and clear of their badge at ${width}px`,
+    tagFor(width),
+    async ({ page }) => {
+      await openDashboard(page, width);
+      await page.goto("/staples");
+      await expect(page.locator(".staple-category").first()).toBeVisible();
+      const rows = await page.locator(".staple-row").evaluateAll((nodes) =>
+        nodes.map((node) => {
+          const name = node.querySelector(".staple-name strong")!;
+          const badge = node.querySelector(".unit-badge")!;
+          const a = name.getBoundingClientRect();
+          const b = badge.getBoundingClientRect();
+          return {
+            label: name.textContent,
+            clipped: name.scrollWidth - name.clientWidth,
+            apart:
+              a.right <= b.left + 0.5 ||
+              b.right <= a.left + 0.5 ||
+              a.bottom <= b.top + 0.5 ||
+              b.bottom <= a.top + 0.5,
+          };
+        }),
+      );
+      expect(rows.length).toBeGreaterThan(5);
+      for (const row of rows) {
+        expect(row.clipped, `${row.label} is not cut off`).toBeLessThanOrEqual(0);
+        expect(row.apart, `${row.label} and its badge do not overlap`).toBe(true);
+      }
+    },
+  );
+
+  test(`Settings theme cards read whole words at ${width}px`, tagFor(width), async ({ page }) => {
+    await openDashboard(page, width);
+    await page.goto("/settings");
+    await expect(page.locator(".appearance-option").first()).toBeVisible();
+    const cards = await page.locator(".appearance-option").evaluateAll((nodes) =>
+      nodes.map((node) => {
+        const copy = node.querySelector(".appearance-copy")!;
+        const swatches = node.querySelector(".appearance-swatches")!;
+        return {
+          copyWidth: copy.getBoundingClientRect().width,
+          cardWidth: node.getBoundingClientRect().width,
+          above: swatches.getBoundingClientRect().bottom <= copy.getBoundingClientRect().top + 0.5,
+        };
+      }),
+    );
+    for (const card of cards) {
+      expect(card.above, "swatches sit above the text").toBe(true);
+      expect(card.copyWidth, "the text has most of the card").toBeGreaterThan(card.cardWidth * 0.6);
+    }
+  });
 }
