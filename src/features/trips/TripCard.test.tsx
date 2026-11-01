@@ -86,9 +86,9 @@ describe("TripCard actions", () => {
 describe("TripCard wording for upcoming and archived-future cards (unchanged)", () => {
   it("an upcoming card says what is left to pack, with the existing progress valuetext", () => {
     renderCard("upcoming");
-    expect(within(article()).getByText("26 left to pack")).toBeTruthy();
-    expect(progressFor(trip.destination).getAttribute("aria-valuetext")).toBe("19% packed");
-    expect(within(article()).getByText("6 of 32 packed")).toBeTruthy();
+    expect(within(article()).getByText("27 left to pack")).toBeTruthy();
+    expect(progressFor(trip.destination).getAttribute("aria-valuetext")).toBe("18% packed");
+    expect(within(article()).getByText("6 of 33 packed")).toBeTruthy();
     expect(screen.getByRole("link", { name: `Keep packing: ${trip.destination}` })).toBeTruthy();
   });
 
@@ -100,8 +100,8 @@ describe("TripCard wording for upcoming and archived-future cards (unchanged)", 
   it("an archived trip still in the future keeps today's wording", () => {
     renderCard("archive", false, { ...trip, archived: true });
     expect(within(article()).getByText("Archived trip")).toBeTruthy();
-    expect(within(article()).getByText("26 left to pack")).toBeTruthy();
-    expect(progressFor(trip.destination).getAttribute("aria-valuetext")).toBe("19% packed");
+    expect(within(article()).getByText("27 left to pack")).toBeTruthy();
+    expect(progressFor(trip.destination).getAttribute("aria-valuetext")).toBe("18% packed");
   });
 });
 

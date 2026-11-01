@@ -44,8 +44,6 @@ export interface Suggestions {
   items: Suggestion[];
 }
 
-export { RETURN_OFF_POLICY, type ReturnOffPolicy } from "./return-policy";
-
 export { dailyDaysFor };
 
 export function calculateSuggestions(config: CalcConfig, weather?: WeatherInput): Suggestions {

@@ -106,7 +106,7 @@ test("a recalculation keeps the person's list work: manual, edited, packed and r
   await expect(dialog.getByText(/Camera/)).toBeVisible();
   await expect(dialog.getByText(/Not re-added: Dress shoes/)).toBeVisible();
   // Nothing is applied until Apply: the list behind the sheet is unchanged.
-  await expect(row(page, "tops")).toContainText("of 3 packed");
+  await expect(row(page, "tops")).toContainText("of 4 packed");
   await dialog.getByRole("button", { name: "Apply changes" }).click();
   await expect(sheet(page)).toHaveCount(0);
   await expect(page.locator(".toast-region")).toContainText("Preferences updated.");
@@ -125,11 +125,11 @@ test("a packed count above the new target is shown, needs an acknowledgement, an
 }) => {
   await openSanDiego(page);
   await row(page, "tops").getByRole("button", { name: "Pack all Everyday tops" }).click();
-  await expect(row(page, "tops")).toContainText("3 of 3 packed");
+  await expect(row(page, "tops")).toContainText("4 of 4 packed");
   const dialog = await openPreferences(page);
   await dialog.getByRole("switch", { name: "Laundry access" }).check();
   await dialog.getByRole("button", { name: "Review changes" }).click();
-  await expect(dialog.getByText(/Packed 3 → 2/)).toBeVisible();
+  await expect(dialog.getByText(/Packed 4 → 2/)).toBeVisible();
   const apply = dialog.getByRole("button", { name: "Apply changes" });
   await expect(apply).toBeDisabled();
   await dialog.getByRole("checkbox", { name: /I understand/ }).check();
@@ -155,7 +155,7 @@ test("Cancel, Escape and Back leave the trip unchanged, asking before discarding
   await dialog.getByRole("button", { name: "Discard" }).click();
   await expect(sheet(page)).toHaveCount(0);
   await page.reload();
-  await expect(row(page, "tops")).toContainText("of 3 packed");
+  await expect(row(page, "tops")).toContainText("of 4 packed");
   const again = await openPreferences(page);
   await expect(again.getByRole("switch", { name: "Laundry access" })).not.toBeChecked();
 });

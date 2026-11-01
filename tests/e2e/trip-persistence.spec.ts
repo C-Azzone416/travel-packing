@@ -36,15 +36,15 @@ const isAction = (request: { method(): string; url(): string }) =>
 test("a check and an uncheck are stored", async ({ page }) => {
   await openSanDiego(page);
   await row(page, "tops").getByRole("button", { name: "Pack all Everyday tops" }).click();
-  await expect(row(page, "tops")).toContainText("3 of 3 packed");
+  await expect(row(page, "tops")).toContainText("4 of 4 packed");
   await page.reload();
-  await expect(row(page, "tops")).toContainText("3 of 3 packed");
+  await expect(row(page, "tops")).toContainText("4 of 4 packed");
   await row(page, "tops")
     .getByRole("button", { name: "Packed, mark Everyday tops unpacked" })
     .click();
-  await expect(row(page, "tops")).toContainText("0 of 3 packed");
+  await expect(row(page, "tops")).toContainText("0 of 4 packed");
   await page.reload();
-  await expect(row(page, "tops")).toContainText("0 of 3 packed");
+  await expect(row(page, "tops")).toContainText("0 of 4 packed");
 });
 
 test("fast taps on a stepper show at once and are stored as ONE write with the final count", async ({

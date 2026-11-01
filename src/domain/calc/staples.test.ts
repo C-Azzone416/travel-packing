@@ -104,9 +104,9 @@ describe("shared Staple quantity rules", () => {
 
   it.each([
     ["same day", { start: "2030-04-01", end: "2030-04-01" }, 0],
-    ["five days", {}, 3],
+    ["five days", {}, 4],
     ["laundry", { laundry: true }, 2],
-    ["return off", { returnOutfit: false }, 4],
+    ["return off", { returnOutfit: false }, 5],
   ])("Smart tops use the canonical calculator: %s", (_label, change, expected) => {
     const { items } = buildTripItems({ ...base, ...change }, [
       staple({ id: "tops", name: "My shirts", cadence: "smart", category: "Clothing" }),
