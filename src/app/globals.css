@@ -4741,7 +4741,8 @@ a.back {
   .staples-setup-rule {
     justify-self: start;
     text-align: left;
-    margin-left: 54px;
+    /* The checkbox glyph (28px) and the label gap (10px) put the name at 38px; the badge text starts after its 8px padding. */
+    margin-left: calc(28px + 10px - 8px);
     white-space: normal;
     overflow-wrap: anywhere;
   }

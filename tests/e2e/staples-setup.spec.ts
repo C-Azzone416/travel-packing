@@ -226,7 +226,7 @@ test("checkbox and Edit names carry the item and its rule", DEVICE, async ({ pag
 type Layout = "inline" | "stacked" | "either";
 
 /** The badge and Edit sit inside the row without overlapping, Edit is a full touch target, nothing is clipped or scrolls. */
-async function expectRowSound(row: Locator, layout: Layout, label: string) {
+async function expectRowSound(row: Locator, layout: Layout, label: string, alignText = false) {
   const name = row.locator(".staple-name strong");
   const badge = row.locator(".staples-setup-rule");
   const edit = row.getByRole("button", { name: /^Edit / });
@@ -255,6 +255,14 @@ async function expectRowSound(row: Locator, layout: Layout, label: string) {
   const clipped = await badge.evaluate((el) => el.scrollWidth > el.clientWidth + 1);
   expect(clipped, `${label}: badge text is whole`).toBe(false);
   if (layout === "stacked") {
+    if (alignText) {
+      // The badge TEXT (box + its own padding) starts where the name text starts.
+      const padding = await badge.evaluate((el) => parseFloat(getComputedStyle(el).paddingLeft));
+      expect(
+        Math.abs(badgeBox!.x + padding - nameBox!.x),
+        `${label}: badge text lines up with the name text`,
+      ).toBeLessThanOrEqual(3);
+    }
     expect(badgeBox!.y, `${label}: badge sits under the name`).toBeGreaterThanOrEqual(
       nameBox!.y + nameBox!.height - 3,
     );
@@ -312,7 +320,7 @@ test(
           expect(badgeHeight, `${state}: badge on one line`).toBeLessThan(40);
           continue;
         }
-        await expectRowSound(row, expected, state);
+        await expectRowSound(row, expected, state, name !== "30 per day custom");
       }
       const unselected = rowOf(page, "Socks");
       await expect(unselected.locator(".staples-setup-rule"), `Socks at ${label}`).toHaveCount(0);
