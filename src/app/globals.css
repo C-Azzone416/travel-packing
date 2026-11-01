@@ -5707,7 +5707,8 @@ a.back {
   }
   .hero-day-temps {
     grid-area: temps;
-    white-space: nowrap;
+    white-space: normal;
+    overflow-wrap: break-word;
   }
   .weather-source {
     white-space: nowrap;
