@@ -5538,6 +5538,14 @@ a.back {
   .start-copy {
     overflow-wrap: anywhere;
   }
+  /* A day row at 200% zoom plus large text: the temperatures may wrap instead of leaving the hero. */
+  .hero-day {
+    grid-template-columns: minmax(0, 1fr) 20px minmax(0, auto);
+  }
+  .hero-day-temps {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
 }
 @media (max-width: 179px) {
   /* The mark stays; the name stays in the accessible name (the link's aria-label). */

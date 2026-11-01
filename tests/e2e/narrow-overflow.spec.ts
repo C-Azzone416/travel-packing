@@ -44,7 +44,11 @@ const slug = (text: string) =>
     .replace(/^-|-$/g, "");
 
 async function visit(page: Page, path: string, width: number) {
-  await page.goto(path);
+  // Another spec's account closure can redirect /sign-in to ?notice=account-closed mid-navigation; either page is measured.
+  await page.goto(path).catch((error: Error) => {
+    if (!error.message.includes("interrupted by another navigation")) throw error;
+  });
+  await page.waitForLoadState("load");
   await expect(page.locator("h1").first()).toBeVisible();
   await expectFits(page, `${path} at ${width}px`, `${width}-${slug(path)}`);
 }
@@ -65,7 +69,7 @@ for (const width of [...NARROW, ...UNCHANGED]) {
       await visit(page, path, width);
     }
     // "Show password" sits in the field's row: the row, the field and the toggle all stay inside the viewport.
-    await page.goto("/sign-in");
+    await visit(page, "/sign-in", width);
     const toggle = page.getByRole("button", { name: /Show password/ });
     await toggle.click();
     const field = (await page.getByLabel("Password", { exact: true }).boundingBox())!;
@@ -425,7 +429,20 @@ for (const width of [320, 390, 1280] as const) {
       appendFileSync(process.env.CAPTURE_RECTS, `${JSON.stringify({ width, seen })}\n`);
       return;
     }
-    expect(seen).toEqual(BASELINE[width]);
+    // CI draws text a few pixels differently from a laptop (fonts), so the pins allow 6px; a real layout change moves things more.
+    const near = (got: number[], want: number[]) =>
+      got.every((value, i) => Math.abs(value - want[i]) <= 6);
+    for (const [path, rects] of Object.entries(BASELINE[width])) {
+      expect(Object.keys(seen[path]).sort(), `${path} elements at ${width}px`).toEqual(
+        Object.keys(rects).sort(),
+      );
+      for (const [selector, want] of Object.entries(rects)) {
+        expect(
+          near(seen[path][selector], want),
+          `${path} ${selector} at ${width}px: ${seen[path][selector]} vs ${want}`,
+        ).toBe(true);
+      }
+    }
   });
 }
 
