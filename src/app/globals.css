@@ -5662,20 +5662,20 @@ a.back {
     overflow-wrap: break-word;
   }
   /* Staples rows: the name takes its own row, then the rule badge and the edit button. */
-  .staple-row {
+  .staple-row:not(.staples-setup .staple-row) {
     grid-template-columns: minmax(0, 1fr) 44px;
     grid-template-areas:
       "name name"
       "badge edit";
   }
-  .staple-row .staple-name {
+  .staple-row:not(.staples-setup .staple-row) .staple-name {
     grid-area: name;
   }
-  .staple-row .unit-badge {
+  .staple-row:not(.staples-setup .staple-row) .unit-badge {
     grid-area: badge;
     justify-self: start;
   }
-  .staple-row .icon-button {
+  .staple-row:not(.staples-setup .staple-row) .icon-button {
     grid-area: edit;
   }
   /* Settings rows: the switch drops under its label, and the °F / °C choices stack. */
