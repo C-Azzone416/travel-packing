@@ -63,7 +63,6 @@ html {
 }
 body {
   margin: 0;
-  min-width: 320px;
   background: var(--bg);
   color: var(--ink);
 }
@@ -839,13 +838,18 @@ body[data-sheet-open] .toast-region {
 }
 .page-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
   margin: 6px 2px 20px;
 }
 .head-copy {
-  flex: 1;
+  flex: 1 1 10em;
+  min-width: 0;
+}
+.page-head h1 {
+  overflow-wrap: anywhere;
 }
 .head-copy p {
   margin-bottom: 0;
@@ -871,6 +875,17 @@ body[data-sheet-open] .toast-region {
   display: flex;
   justify-content: space-between;
   gap: 12px;
+}
+/* A title is never truncated: a long unbroken word wraps inside the card, and below 360px the chip stacks under it (#332). */
+.trip-top > :first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 359px) {
+  .trip-top {
+    flex-direction: column;
+    gap: 8px;
+  }
 }
 .trip-top .status-pill {
   align-self: flex-start;
@@ -1175,6 +1190,7 @@ body[data-sheet-open] .toast-region {
 }
 .two-col {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
 }
 /* Group labels (legends) are the same size and weight as field labels. */
@@ -1190,6 +1206,12 @@ label.field {
   color: var(--ink);
   font-size: 13px;
   font-weight: 800;
+}
+input,
+select,
+textarea {
+  min-width: 0;
+  max-width: 100%;
 }
 input,
 select {
@@ -1560,6 +1582,7 @@ input:disabled {
    at least 5px, and the helper must not touch the results list. */
 .location-picker {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
 }
 .location-picker > p,
@@ -1620,6 +1643,7 @@ input:disabled {
 }
 .confirmed-location {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
   margin-top: 8px;
@@ -1642,6 +1666,8 @@ input:disabled {
 }
 .confirmed-location > div {
   flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .confirmed-location strong,
 .confirmed-location small {
@@ -1697,6 +1723,7 @@ input:disabled {
 /* A group: 29px Bricolage heading, the muted "2 of 6 complete" at the right, a hairline rule under (audit 8). */
 .list-section-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
@@ -1714,7 +1741,6 @@ input:disabled {
 .list-section-count {
   color: var(--muted);
   font-size: 13px;
-  white-space: nowrap;
 }
 .list-section-sub {
   margin: 6px 0 0;
@@ -1829,6 +1855,7 @@ input:disabled {
 }
 .bag-placement {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -2029,6 +2056,7 @@ input:disabled {
 /* A flat Ledger card: the hairline from .card plus the 4px accent rule, like Settings and the hero (no blurred shadow). */
 .auth-card {
   width: 100%;
+  min-width: 0;
   border-top: 4px solid var(--accent);
 }
 .auth-card h1 {
@@ -2382,6 +2410,7 @@ input:disabled {
 /* Settings (#19) */
 .settings-grid {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
   max-width: 760px;
   margin-inline: auto;
@@ -2716,18 +2745,22 @@ a.back {
 }
 .stop-list {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
 }
 .stop-card {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
 }
 .stop-card [role="group"] {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
 }
 .stop-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
 }
@@ -2735,6 +2768,7 @@ a.back {
 .stop-head h3 {
   margin: 0;
   flex: 1;
+  min-width: 0;
   font-size: 16px;
 }
 .stop-number {
@@ -2749,6 +2783,7 @@ a.back {
 }
 .stop-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
 }
 .stop-actions .icon-button {
@@ -2899,7 +2934,7 @@ a.back {
 }
 .theme-options {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   margin: 16px 0;
 }
@@ -2967,6 +3002,8 @@ a.back {
   display: grid;
   flex: 1;
   gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .appearance-copy strong {
   font-size: 17px;
@@ -3830,6 +3867,7 @@ a.back {
 }
 .trip-layout {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
 }
 .side {
@@ -4114,6 +4152,7 @@ a.back {
 }
 .saved-lists {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   margin: 0;
   padding: 0;
@@ -4184,6 +4223,7 @@ a.back {
 }
 .list-item-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   min-height: 66px;
@@ -4191,7 +4231,9 @@ a.back {
   border-bottom: 1px solid var(--line);
 }
 .list-item-row .staple-name {
-  flex: 1;
+  flex: 1 1 8em;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 /* ---- Save as a list (#169, design §1). Role tokens only. */
@@ -4304,12 +4346,14 @@ a.back {
    button and the preview, all inside it. */
 .start-options {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   max-width: 720px;
 }
 .start-entry {
   position: relative;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   border: 1px solid var(--line-strong);
   border-radius: var(--control-radius);
   background: var(--control-bg);
@@ -5457,5 +5501,87 @@ a.back {
       .hero-days:is([data-count="1"], [data-count="2"], [data-count="3"]) {
       grid-template-columns: repeat(auto-fill, minmax(max(88px, 6.5em), 12em));
     }
+  }
+}
+
+/* ---- Narrow phones (#332). 195px is about 200% zoom of a 390px phone; 160px is 250%+ of a 400px one. These sit last so they
+   override the base rules at equal specificity. 195px (under 240) needs the tab bar and chip rules; 160px (under 180) the rest. ---- */
+[data-feedback-identity] strong {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 239px) {
+  /* The tab bar stays a column (icon over label) at any height here: the short-viewport row layout leaves a label 23px. */
+  .bottom-nav {
+    grid-auto-columns: minmax(0, 1fr);
+  }
+  .bottom-nav a,
+  .bottom-nav button {
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    padding-inline: 0;
+    font-size: 11px;
+    text-align: center;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .nav-signout {
+    min-width: 0;
+  }
+  .trip-top .status-pill {
+    flex: 0 1 auto;
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .settings-grid,
+  .start-copy {
+    overflow-wrap: anywhere;
+  }
+}
+@media (max-width: 179px) {
+  /* The mark stays; the name stays in the accessible name (the link's aria-label). */
+  .brand-button strong {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+  }
+  .topbar-inner {
+    gap: 4px;
+    padding-inline: 8px;
+  }
+  .bottom-nav a,
+  .bottom-nav button {
+    font-size: 10px;
+  }
+  .card.padded {
+    padding: 12px;
+  }
+  .theme-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .start-option {
+    gap: 8px;
+    padding-inline: 8px;
+  }
+  .trip-hero {
+    padding-inline: 8px;
+  }
+  .trip-hero-main {
+    flex-wrap: wrap;
+  }
+  .trip-hero h1 {
+    overflow-wrap: anywhere;
+  }
+  .password-row input {
+    padding-right: 12px;
+  }
+  .password-toggle {
+    position: static;
+    display: block;
+    margin-left: auto;
   }
 }
