@@ -14,8 +14,19 @@ export function useClosureFeedback(): ClosureFeedback {
   return NO_CLOSURE_FEEDBACK;
 }
 
-export function FeedbackButton() {
+// The report sheet's host (#293): nothing in a hosted build.
+export function FeedbackReportHost() {
   return null;
+}
+
+// The Feedback item itself (copy and markup): nothing in a hosted build.
+export function FeedbackTabItem(_props: { disabled: boolean; onOpen: () => void }) {
+  return null;
+}
+
+// The phone tab bar's 4th slot (#293). Always off here, so it stays Sign out and no Feedback markup or copy is in the output.
+export function useFeedbackTab(): { enabled: boolean; disabled: boolean; open: () => void } {
+  return { enabled: false, disabled: true, open: () => undefined };
 }
 
 export function FeedbackNotice() {

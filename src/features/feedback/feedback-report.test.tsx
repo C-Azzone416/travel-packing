@@ -10,9 +10,12 @@ import {
   FeedbackAccessProvider,
   outboxView,
   saveFailure,
+  useFeedbackAccess,
+  useFeedbackTab,
   type CreateOutbox,
 } from "./FeedbackAccess";
-import { FeedbackButton } from "./FeedbackButton";
+import { FeedbackReportHost } from "./FeedbackReportHost";
+import { FeedbackTabHarness as FeedbackButton } from "@/test/feedback-tab";
 import { FeedbackSettings } from "./FeedbackSettings";
 import { EDITOR_COPY } from "./ScreenshotEditor";
 import { COPY, SCREENSHOT_SEND_LIMIT_BYTES, SHOT_PROBLEM_COPY } from "./FeedbackSheet";
@@ -79,7 +82,7 @@ function mount(
 /** The status route is asked again on pageshow; this is how a test makes the server's new answer reach the page. */
 const refresh = () => act(async () => void window.dispatchEvent(new Event("pageshow")));
 
-const feedbackButton = () => screen.getByRole("button", { name: "Send feedback" });
+const feedbackButton = () => screen.getByRole("button", { name: "Send feedback report" });
 const png = () => new Blob([new Uint8Array(64)], { type: "image/png" });
 
 async function openSheet(user: ReturnType<typeof userEvent.setup>) {
@@ -115,11 +118,17 @@ describe("the entry point", () => {
     "/reset-password",
     "/finish-setup",
     "/access-denied",
-  ])("is not offered on %s", async (path) => {
+  ])("stays in the bar but is disabled on %s, and nothing opens", async (path) => {
     pathname = path;
     mount();
     await Promise.resolve();
-    expect(screen.queryByRole("button", { name: "Send feedback" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Send feedback report" })).toHaveProperty(
+      "disabled",
+      true,
+    );
+    await userEvent.setup().click(feedbackButton());
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(capture.take).not.toHaveBeenCalled();
   });
 });
 
@@ -1078,13 +1087,13 @@ describe("the Send feedback action in the Settings card (#273)", () => {
 
   const cardAction = () =>
     screen
-      .getAllByRole("button", { name: "Send feedback" })
+      .queryAllByRole("button", { name: "Send feedback" })
       .find((button) => button.classList.contains("feedback-send-action"));
 
-  it("is in the card when connected, before Disconnect, next to the header button with the same name", async () => {
+  it("is in the card when connected, before Disconnect, next to the tab-bar Feedback item", async () => {
     mountBoth();
     await waitFor(() => expect(cardAction()).toBeTruthy());
-    expect(screen.getAllByRole("button", { name: "Send feedback" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: /^Send feedback/ })).toHaveLength(2);
     const row = cardAction()!.parentElement!;
     expect([...row.querySelectorAll("button")].map((button) => button.textContent)).toEqual([
       "Send feedback",
@@ -1105,10 +1114,7 @@ describe("the Send feedback action in the Settings card (#273)", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(document.activeElement).toBe(cardAction());
 
-    const header = screen
-      .getAllByRole("button", { name: "Send feedback" })
-      .find((button) => button.classList.contains("feedback-button"))!;
-    await user.click(header);
+    await user.click(screen.getByRole("button", { name: "Send feedback report" }));
     await screen.findByRole("dialog", { name: "Send feedback" });
     expect(capture.take).toHaveBeenCalledTimes(2);
   });
@@ -1117,7 +1123,7 @@ describe("the Send feedback action in the Settings card (#273)", () => {
     mountBoth("not-connected");
     await waitFor(() => expect(screen.getByLabelText("Invitation")).toBeTruthy());
     expect(cardAction()).toBeUndefined();
-    const buttons = screen.getAllByRole("button", { name: "Send feedback" });
+    const buttons = screen.getAllByRole("button", { name: /^Send feedback/ });
     expect(buttons).toHaveLength(1);
     expect(buttons[0]).toHaveProperty("disabled", true);
   });
@@ -1126,5 +1132,100 @@ describe("the Send feedback action in the Settings card (#273)", () => {
     mountBoth(status);
     await waitFor(() => expect(screen.getByText("Expired")).toBeTruthy());
     expect(cardAction()).toBeUndefined();
+  });
+});
+
+describe("the report host and the Feedback tab (#293)", () => {
+  /** What the tab bar and the Settings row call: the provider's `openReport`, and what `useFeedbackTab` reports. */
+  const probe: { open: () => void; tab: ReturnType<typeof useFeedbackTab> | null } = {
+    open: () => undefined,
+    tab: null,
+  };
+  function Probe() {
+    probe.open = useFeedbackAccess().openReport;
+    probe.tab = useFeedbackTab();
+    return null;
+  }
+  function mountHost(options: Parameters<typeof mount>[0] = {}) {
+    const server = serverStub(options.server);
+    const outbox = options.outbox ?? outboxStub();
+    render(
+      <ToastProvider>
+        <FeedbackAccessProvider {...providerProps(server, outbox.create)}>
+          <Probe />
+          <FeedbackReportHost />
+        </FeedbackAccessProvider>
+      </ToastProvider>,
+    );
+    return { server, outbox };
+  }
+  const ready = () => waitFor(() => expect(probe.tab?.disabled).toBe(false));
+
+  it("renders no button of its own; the report opens through openReport", async () => {
+    mountHost();
+    await ready();
+    expect(screen.queryByRole("button")).toBeNull();
+    act(() => probe.open());
+    expect(await screen.findByRole("dialog", { name: "Send feedback" })).toBeTruthy();
+  });
+
+  it("takes the picture BEFORE the sheet mounts, and a second press while it is being taken is ignored", async () => {
+    let finish: (blob: Blob) => void = () => undefined;
+    capture.take.mockReset();
+    capture.take.mockReturnValue(new Promise<Blob>((resolve) => (finish = resolve)));
+    mountHost();
+    await ready();
+    act(() => probe.open());
+    act(() => probe.open());
+    await waitFor(() => expect(capture.take).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await act(async () => finish(png()));
+    expect(await screen.findByRole("dialog", { name: "Send feedback" })).toBeTruthy();
+    expect(capture.take).toHaveBeenCalledTimes(1);
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+  });
+
+  it("does nothing on a screen where nothing may be captured", async () => {
+    pathname = "/sign-in";
+    const { server } = mountHost();
+    await waitFor(() => expect(server.count("status")).toBe(1));
+    await waitFor(() => expect(probe.tab?.enabled).toBe(true));
+    act(() => probe.open());
+    await Promise.resolve();
+    expect(capture.take).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("does nothing until the person is connected", async () => {
+    mountHost({ server: { status: "not-connected" } });
+    await waitFor(() => expect(probe.tab?.enabled).toBe(true));
+    expect(probe.tab?.disabled).toBe(true);
+    act(() => probe.open());
+    await Promise.resolve();
+    expect(capture.take).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("useFeedbackTab: enabled while feedback is available, disabled on a blocked screen, open is openReport", async () => {
+    mountHost();
+    await ready();
+    expect(probe.tab).toMatchObject({ enabled: true, disabled: false, open: probe.open });
+  });
+
+  it("useFeedbackTab is disabled, but still enabled, on a blocked screen", async () => {
+    pathname = "/close-account";
+    const { server } = mountHost();
+    await waitFor(() => expect(server.count("status")).toBe(1));
+    await waitFor(() => expect(probe.tab?.enabled).toBe(true));
+    expect(probe.tab?.disabled).toBe(true);
+  });
+
+  it("useFeedbackTab outside a provider is off", () => {
+    function Alone() {
+      const tab = useFeedbackTab();
+      return <p>{String(tab.enabled)}</p>;
+    }
+    render(<Alone />);
+    expect(screen.getByText("false")).toBeTruthy();
   });
 });

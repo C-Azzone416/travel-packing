@@ -347,39 +347,89 @@ main {
   right: 0;
   bottom: 0;
   display: grid;
-  /* Three links and Sign out: equal columns. */
+  /* Three links and a 4th slot (Feedback, or Sign out where feedback is off): four equal columns either way (#293). */
   grid-auto-flow: column;
   grid-auto-columns: 1fr;
   padding: 0 0 var(--safe-bottom);
   border-top: 1px solid var(--line);
   background: var(--surface);
+  /* The bar's own width decides whether the 4th label reads "Feedback" or "Report" (see .nav-label-short below). */
+  container: nav / inline-size;
 }
 .bottom-nav a,
 .bottom-nav button {
   position: relative;
+  min-width: 0;
   min-height: var(--tabbar-h);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
+  gap: 2px;
+  padding: 8px 4px;
   border: 0;
   border-radius: 0;
   background: none;
   color: var(--muted);
   font: inherit;
-  font-size: 12px;
   font-weight: 600;
   text-decoration: none;
   cursor: pointer;
 }
-.bottom-nav a span,
-.bottom-nav button span {
-  font-size: 20px;
-  line-height: 1;
+/* Icons (#300): one 24px grid, the size comes from here. Labels grow with the text size but stop at 17px (about 142%), so four
+   labels still fit a 320px bar at 200% text; they never wrap or hide. */
+.bottom-nav .nav-glyph {
+  display: flex;
+  line-height: 0;
+}
+.bottom-nav .nav-icon {
+  width: 24px;
+  height: 24px;
+}
+.bottom-nav .nav-label {
+  font-size: clamp(12px, 0.75rem, 17px);
+  line-height: 1.2;
+}
+.bottom-nav .nav-label-short {
+  display: none;
+}
+/* "Feedback" only while it fits the slot (4.6 x the font size + 8px padding, four slots across): below that, "Report". */
+@container nav (max-width: min(16rem, 345px)) {
+  .bottom-nav .nav-label-long {
+    display: none;
+  }
+  .bottom-nav .nav-label-short {
+    display: inline;
+  }
 }
 .nav-signout {
   display: grid;
+}
+.nav-signout-wide {
+  display: none;
+}
+/* The divider before the 4th slot (Feedback or Sign out). */
+.nav-signout::before,
+.nav-feedback::before {
+  content: "";
+  position: absolute;
+  inset: 14px auto 14px 0;
+  width: 1px;
+  background: var(--line);
+}
+.nav-signout {
+  position: relative;
+}
+.bottom-nav button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.bottom-nav a[aria-current="page"] [data-fill] {
+  fill: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.bottom-nav a:active,
+.bottom-nav button:active:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
 }
 /* The ring sits inside the full-bleed item so the screen edge never clips it. */
 .bottom-nav a:focus-visible,
@@ -698,6 +748,7 @@ body[data-sheet-open] .toast-region {
      status chip and Sign out go to the right. The nav box dissolves so its children share the bar's row. */
   .bottom-nav {
     display: contents;
+    container-type: normal;
   }
   .brand-button {
     margin-right: 20px;
@@ -718,8 +769,28 @@ body[data-sheet-open] .toast-region {
   .bottom-nav button:hover {
     color: var(--header-ink);
   }
-  .bottom-nav a span,
-  .bottom-nav button span {
+  .bottom-nav a:active,
+  .bottom-nav button:active:not(:disabled) {
+    background: none;
+  }
+  /* Links are text only here; Feedback and Sign out keep a 16px icon. */
+  .bottom-nav .nav-glyph {
+    display: none;
+  }
+  .bottom-nav .nav-signout .nav-glyph,
+  .bottom-nav .nav-feedback .nav-glyph {
+    display: flex;
+  }
+  .bottom-nav .nav-icon {
+    width: 16px;
+    height: 16px;
+  }
+  .bottom-nav .nav-label {
+    font-size: inherit;
+    line-height: inherit;
+  }
+  .nav-signout::before,
+  .nav-feedback::before {
     display: none;
   }
   .bottom-nav a[aria-current="page"] {
@@ -749,9 +820,32 @@ body[data-sheet-open] .toast-region {
     padding: 0 8px;
     font-size: 14px;
   }
-  .nav-signout button span {
+  /* Feedback and Sign out both live in the header (#293): Feedback then Sign out at the right edge. The save chip (in .topbar-end, order 0) stays to their left, so it appearing
+     never moves them (a11y.spec "a failed save" pins Feedback's x). The phone
+     slot's Sign out (not rendered with Feedback on) and the wide-only copy are the same control. */
+  .bottom-nav .nav-feedback {
+    order: 7;
+    margin-left: auto;
+    padding: 0 14px;
+    border: 1px solid var(--header-muted);
+    color: var(--header-ink);
+    font-size: 15px;
+  }
+  .bottom-nav .nav-feedback:hover {
+    background: color-mix(in srgb, var(--header-ink) 12%, transparent);
+  }
+  .bottom-nav .nav-feedback:active:not(:disabled) {
+    background: color-mix(in srgb, var(--header-ink) 20%, transparent);
+  }
+  .bottom-nav .nav-feedback .nav-label-short {
+    display: none;
+  }
+  .bottom-nav .nav-feedback .nav-label-long {
     display: inline;
-    font-size: 16px;
+  }
+  .nav-signout.nav-signout-wide {
+    display: flex;
+    margin-left: 0;
   }
   .toast-region {
     bottom: 24px;
@@ -785,6 +879,15 @@ body[data-sheet-open] .toast-region {
   .nav-signout button {
     padding-inline: 6px;
   }
+  /* Icon-only Feedback (44x44) until there is room for its word at 900px; the aria-label is unchanged. */
+  .bottom-nav .nav-feedback {
+    width: 44px;
+    padding: 0;
+    justify-content: center;
+  }
+  .bottom-nav .nav-feedback .nav-label {
+    display: none;
+  }
 }
 
 /* Short viewports (#282). Height up to 500px: a 52px bar, and the focus ring (3px) fits the 4px above a 44px control. */
@@ -793,8 +896,7 @@ body[data-sheet-open] .toast-region {
     --topbar-h: 52px;
   }
   .topbar .brand-button:focus-visible,
-  .topbar .sync-chip:focus-visible,
-  .topbar .feedback-button:focus-visible {
+  .topbar .sync-chip:focus-visible {
     outline-offset: 0;
   }
 }
@@ -813,10 +915,21 @@ body[data-sheet-open] .toast-region {
   .bottom-nav button {
     flex-direction: row;
     gap: 6px;
+    padding: 0 2px;
+  }
+  .bottom-nav .nav-icon {
+    width: 20px;
+    height: 20px;
+  }
+}
+/* A 320px-wide bar this short is already tight: the icons go, never the labels. */
+@media (max-width: 359px) and (max-height: 500px) {
+  .bottom-nav .nav-glyph {
+    display: none;
   }
 }
 /* The one documented exception: under 400px tall two bars would cost over 40% of the screen, so the top bar scrolls
-   away (Feedback is one scroll up) and the tab bar stays. Nothing sticky sits at the top, so scroll padding drops to 0. */
+   away (Feedback is in the tab bar, so it stays reachable) and the tab bar stays. Nothing sticky sits at the top, so scroll padding drops to 0. */
 @media (max-width: 666px) and (max-height: 400px) {
   :root {
     --sticky-top: 0px;
@@ -4848,34 +4961,6 @@ a.back {
   align-items: center;
   gap: 8px;
   flex: none;
-}
-.feedback-button {
-  min-height: 44px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.topbar .feedback-button.secondary {
-  border-color: var(--header-muted);
-  background: transparent;
-  color: var(--header-ink);
-}
-.topbar .feedback-button.secondary:hover {
-  background: color-mix(in srgb, var(--header-ink) 12%, transparent);
-}
-.topbar .feedback-button.secondary:active {
-  background: color-mix(in srgb, var(--header-ink) 20%, transparent);
-}
-.topbar .feedback-button:focus-visible {
-  outline-color: var(--focus-on-header);
-}
-.feedback-button-label {
-  display: none;
-}
-@media (min-width: 900px) {
-  .feedback-button-label {
-    display: inline;
-  }
 }
 .feedback-notice {
   display: flex;
