@@ -65,6 +65,7 @@ for (const width of [...NARROW, ...UNCHANGED]) {
       `/reset-password?token=${"a".repeat(48)}`,
       "/access-denied",
       "/close-account/complete",
+      "/finish-setup",
     ]) {
       await visit(page, path, width);
     }
@@ -121,6 +122,10 @@ for (const width of [...NARROW, ...UNCHANGED]) {
     await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
     await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
     await expectFits(page, `trip at ${width}px`, `${width}-trip`);
+    const tripHero = await page
+      .locator(".trip-hero")
+      .evaluate((el) => el.scrollWidth - el.clientWidth);
+    expect(tripHero, `the trip hero's content is not cut off at ${width}px`).toBeLessThanOrEqual(0);
     const id = new URL(page.url()).pathname.split("/").pop();
     await visit(page, `/trips/${id}/review`, width);
     await page.goto("/trips/nope");
@@ -171,6 +176,30 @@ for (const width of NARROW) {
     await signIn(page, email);
     await expect(page.getByRole("heading", { name: "Build your Staples" })).toBeVisible();
     await expectFits(page, `staples setup at ${width}px`, `${width}-staples-setup`);
+    // Each section heading and its "Suggestions" tag never overlap (the tag drops under the heading when they do not fit).
+    const heads = await page.locator(".staple-category-head").evaluateAll((nodes) =>
+      nodes.map((node) => {
+        const box = (el: Element | null) => el!.getBoundingClientRect().toJSON();
+        const title = node.querySelector("h2")!;
+        const range = document.createRange();
+        range.selectNodeContents(title);
+        return {
+          name: title.textContent,
+          title: box(title),
+          text: range.getBoundingClientRect().toJSON(),
+          tag: box(node.querySelector(".category-count")),
+        };
+      }),
+    );
+    expect(heads.length).toBeGreaterThan(1);
+    for (const head of heads) {
+      const apart =
+        head.text.right <= head.tag.left + 0.5 ||
+        head.tag.right <= head.text.left + 0.5 ||
+        head.text.bottom <= head.tag.top + 0.5 ||
+        head.tag.bottom <= head.text.top + 0.5;
+      expect(apart, `${head.name} and Suggestions do not overlap at ${width}px`).toBe(true);
+    }
   });
 }
 
@@ -430,15 +459,20 @@ for (const width of [320, 390, 1280] as const) {
       return;
     }
     // CI draws text a few pixels differently from a laptop (fonts), so the pins allow 6px; a real layout change moves things more.
-    const near = (got: number[], want: number[]) =>
-      got.every((value, i) => Math.abs(value - want[i]) <= 6);
+    // Text-heavy blocks wrap a line more or less with the font, so only x, y and width are pinned; height only for bars of fixed height.
+    const FIXED_HEIGHT = [".topbar", ".bottom-nav", ".bottom-nav > :nth-child(4)"];
+    const near = (got: number[], want: number[], selector: string) =>
+      got.every(
+        (value, i) =>
+          (i === 3 && !FIXED_HEIGHT.includes(selector)) || Math.abs(value - want[i]) <= 6,
+      );
     for (const [path, rects] of Object.entries(BASELINE[width])) {
       expect(Object.keys(seen[path]).sort(), `${path} elements at ${width}px`).toEqual(
         Object.keys(rects).sort(),
       );
       for (const [selector, want] of Object.entries(rects)) {
         expect(
-          near(seen[path][selector], want),
+          near(seen[path][selector], want, selector),
           `${path} ${selector} at ${width}px: ${seen[path][selector]} vs ${want}`,
         ).toBe(true);
       }
@@ -592,3 +626,73 @@ const BASELINE: Record<number, Record<string, Record<string, number[]>>> = {
     },
   },
 };
+
+for (const width of NARROW) {
+  test(
+    `the hero actions keep their whole labels at ${width}px`,
+    tagFor(width),
+    async ({ page }) => {
+      await openDashboard(page, width);
+      const buttons = await page
+        .locator(".ledger-hero .ledger-actions .button")
+        .evaluateAll((nodes) =>
+          nodes.map((node) => {
+            const rect = node.getBoundingClientRect();
+            const range = document.createRange();
+            range.selectNodeContents(node);
+            const text = range.getBoundingClientRect();
+            return {
+              name: (node.textContent ?? "").trim(),
+              clipped: node.scrollWidth - node.clientWidth,
+              height: rect.height,
+              inside: text.left >= rect.left - 0.5 && text.right <= rect.right + 0.5,
+            };
+          }),
+        );
+      // The hero clips its overflow by design, so nothing may be cut off inside it (the sweep exempts clipped ancestors).
+      const hero = await page
+        .locator(".ledger-hero")
+        .evaluate((el) => el.scrollWidth - el.clientWidth);
+      expect(hero, "the hero's content is not cut off").toBeLessThanOrEqual(0);
+      expect(buttons.length).toBeGreaterThanOrEqual(3);
+      for (const button of buttons) {
+        expect(button.clipped, `${button.name} is not cut off`).toBeLessThanOrEqual(0);
+        expect(button.inside, `${button.name} text is inside its border`).toBe(true);
+        expect(button.height, `${button.name} is a 44px target`).toBeGreaterThanOrEqual(44);
+      }
+    },
+  );
+
+  test(
+    `the wordmark never runs under Feedback, and a city is not broken mid-word, at ${width}px`,
+    tagFor(width),
+    async ({ page }) => {
+      await openDashboard(page, width);
+      const facts = await page.evaluate(() => {
+        const box = (el: Element | null) => el?.getBoundingClientRect().toJSON();
+        const word = document.querySelector(".brand-button strong");
+        const feedback = document.querySelector(".topbar .feedback-button");
+        const city = document.querySelector(".ledger-hero h2")!;
+        const text = city.firstChild as Text;
+        const diego = document.createRange();
+        const at = text.data.indexOf("Diego");
+        diego.setStart(text, at);
+        diego.setEnd(text, at + 5);
+        return {
+          word: box(word ?? null),
+          wordVisible: !!word && getComputedStyle(word).clip === "auto",
+          feedback: box(feedback ?? null),
+          diegoLines: new Set(Array.from(diego.getClientRects(), (r) => Math.round(r.top))).size,
+        };
+      });
+      if (facts.wordVisible && facts.word && facts.feedback) {
+        expect(
+          facts.word.right <= facts.feedback.left - 8 || facts.word.left >= facts.feedback.right,
+          "the wordmark ends at least 8px before Feedback",
+        ).toBe(true);
+      }
+      if (width < 240) expect(facts.wordVisible, "the wordmark is hidden under 240px").toBe(false);
+      expect(facts.diegoLines, "Diego stays on one line").toBe(1);
+    },
+  );
+}
