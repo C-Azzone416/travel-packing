@@ -459,12 +459,12 @@ for (const width of [320, 390, 1280] as const) {
       return;
     }
     // CI draws text a few pixels differently from a laptop (fonts), so the pins allow 6px; a real layout change moves things more.
-    // Text-heavy blocks wrap a line more or less with the font, so only x, y and width are pinned; height only for bars of fixed height.
-    const FIXED_HEIGHT = [".topbar", ".bottom-nav", ".bottom-nav > :nth-child(4)"];
+    // Text-heavy blocks wrap a line more or less with the font, so only x and width are pinned (a line more or less moves everything below it); y and height only for the bars.
+    const BARS = [".topbar", ".bottom-nav", ".bottom-nav > :nth-child(4)", ".brand-button"];
     const near = (got: number[], want: number[], selector: string) =>
       got.every(
         (value, i) =>
-          (i === 3 && !FIXED_HEIGHT.includes(selector)) || Math.abs(value - want[i]) <= 6,
+          ((i === 1 || i === 3) && !BARS.includes(selector)) || Math.abs(value - want[i]) <= 6,
       );
     for (const [path, rects] of Object.entries(BASELINE[width])) {
       expect(Object.keys(seen[path]).sort(), `${path} elements at ${width}px`).toEqual(
