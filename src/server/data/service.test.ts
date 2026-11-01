@@ -1032,6 +1032,60 @@ describe("staples", () => {
     expect(versions.rows).toEqual([{ version: 1 }]);
   });
 
+  it("persists the catalog rules and keeps a customized quantity on a later setup save (#355)", async () => {
+    const toothbrush = {
+      semanticId: "toothbrush",
+      name: "Toothbrush",
+      category: "Bathroom",
+      qty: 1,
+      cadence: "per trip" as const,
+      packLast: true,
+      groupId: "toiletry-bag",
+    };
+    const underwear = {
+      semanticId: "underwear",
+      name: "Underwear",
+      category: "Clothing",
+      qty: 1,
+      cadence: "per day" as const,
+      packLast: false,
+    };
+    const first = data(
+      await service.saveStaplesSetup(context(), { staples: [toothbrush, underwear] }),
+    );
+    expect(first.staples).toEqual([
+      expect.objectContaining({
+        id: "toothbrush",
+        qty: 1,
+        cadence: "per trip",
+        packLast: true,
+        groupId: "toiletry-bag",
+      }),
+      expect.objectContaining({ id: "underwear", qty: 1, cadence: "per day" }),
+    ]);
+
+    const second = data(
+      await service.saveStaplesSetup(context(), {
+        staples: [
+          toothbrush,
+          { ...underwear, qty: 3 },
+          {
+            semanticId: "socks",
+            name: "Socks",
+            category: "Clothing",
+            qty: 1,
+            cadence: "per day" as const,
+            packLast: false,
+          },
+        ],
+      }),
+    );
+    const byId = Object.fromEntries(second.staples.map((entry) => [entry.id, entry]));
+    expect(byId.underwear).toMatchObject({ qty: 3, cadence: "per day" });
+    expect(byId.toothbrush).toMatchObject({ qty: 1, cadence: "per trip", packLast: true });
+    expect(byId.socks).toMatchObject({ qty: 1, cadence: "per day" });
+  });
+
   it("rolls setup state and list back together when the list write fails", async () => {
     data(
       await service.upsertStaple(context(), {

@@ -4752,6 +4752,46 @@ a.back {
   align-items: center;
   gap: 10px;
 }
+.staples-setup .staple-row {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-areas: "name rule edit";
+}
+.staples-setup .staple-name {
+  grid-area: name;
+}
+.staples-setup-rule {
+  grid-area: rule;
+}
+.staples-setup-edit {
+  grid-area: edit;
+}
+@media (max-width: 359px) {
+  .staples-setup .staple-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "name edit"
+      "rule edit";
+    row-gap: 4px;
+  }
+  .staples-setup .staples-suggestion-check {
+    flex-wrap: nowrap;
+  }
+  .staples-setup .staples-suggestion-check strong {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .staples-setup-rule {
+    justify-self: start;
+    text-align: left;
+    /* The checkbox glyph (28px) and the label gap (10px) put the name at 38px; the badge text starts after its 8px padding. */
+    margin-left: calc(28px + 10px - 8px);
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .staples-setup-rule.staples-setup-rule-custom {
+    margin-left: 0;
+  }
+}
 .staples-suggestion-check {
   position: relative;
   min-height: 44px;
