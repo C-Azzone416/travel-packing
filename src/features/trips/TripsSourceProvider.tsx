@@ -47,6 +47,7 @@ import {
 import { fetchTripWeather } from "./weather-client";
 import { previewWeatherAction } from "./weather-preview-action";
 import type { TripStop } from "@/domain/trip-stops";
+import { localToday } from "@/lib/today";
 
 const TripsSourceContext = createContext<TripsSource | null>(null);
 
@@ -121,6 +122,7 @@ export function TripsSourceProvider({
                   ? {}
                   : { longitude: stop.location.longitude }),
               })),
+              localToday(),
             ),
           createTripWithReview: createTripWithWeatherAction,
           listSuggestions: listWeatherSuggestionsAction,

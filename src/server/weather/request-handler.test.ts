@@ -55,7 +55,7 @@ function setup({ optedIn = true, limit = 10 }: { optedIn?: boolean; limit?: numb
   const limiter = createRateLimiter({ limit, windowMs: 60_000, now: () => 0 });
   const call = (tripId: string | null = TRIP_ID, ownerId = "owner_1") =>
     handleWeatherRequest(tripId, ownerId, { source, provider, limiter });
-  return { source, provider, call };
+  return { source, provider, limiter, call };
 }
 
 describe("handleWeatherRequest", () => {
@@ -71,8 +71,37 @@ describe("handleWeatherRequest", () => {
     expect(provider.getStopWeather).toHaveBeenCalledTimes(1);
     expect(provider.getStopWeather).toHaveBeenCalledWith(
       mappedStop,
-      expect.objectContaining({ signal: undefined }),
+      expect.objectContaining({
+        signal: undefined,
+        today: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      }),
     );
+  });
+
+  it("passes the device's local date to the provider only when it is within a day of the server's date (#361)", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-01T12:00:00Z"));
+    try {
+      const askWith = async (rawToday: string | null | undefined) => {
+        const { provider, source, limiter } = setup();
+        await handleWeatherRequest(
+          TRIP_ID,
+          "owner_1",
+          { source, provider, limiter },
+          undefined,
+          rawToday,
+        );
+        return vi.mocked(provider.getStopWeather).mock.calls[0][1];
+      };
+      expect(await askWith("2026-05-31")).toMatchObject({ today: "2026-05-31" });
+      expect(await askWith("2026-06-02")).toMatchObject({ today: "2026-06-02" });
+      expect(await askWith("2026-06-04")).toMatchObject({ today: "2026-06-01" });
+      expect(await askWith("junk")).toMatchObject({ today: "2026-06-01" });
+      expect(await askWith(null)).toMatchObject({ today: "2026-06-01" });
+      expect(await askWith(undefined)).toMatchObject({ today: "2026-06-01" });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("does no provider work until the owner opts in", async () => {

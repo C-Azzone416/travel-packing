@@ -7,7 +7,7 @@ import { ACCESS_DENIED_PATH, SIGN_IN_PATH } from "@/server/auth/proxy-handler";
 import { AuthFailure, requireOwner } from "@/server/auth/guard";
 import { getDataContext } from "@/server/data/runtime";
 import { readWeatherSettings } from "@/server/data/weather-store";
-import { stopDays } from "@/server/weather/dates";
+import { resolveClientToday, stopDays } from "@/server/weather/dates";
 import { selectWeatherProvider } from "@/server/weather/provider-config";
 import { createWeatherRateLimiter } from "@/server/weather/rate-limit";
 import { unavailableStop, type WeatherStopInput } from "@/server/weather/provider";
@@ -34,6 +34,7 @@ const limiter = createWeatherRateLimiter();
  */
 export async function previewWeatherAction(
   rawStops: WeatherStopInput[],
+  rawToday?: string,
 ): Promise<WeatherFetchResult> {
   const parsed = previewInput.safeParse(rawStops);
   if (!parsed.success) return { kind: "unavailable" };
@@ -47,13 +48,14 @@ export async function previewWeatherAction(
     if (!limiter.consume(session.userId).ok) return { kind: "unavailable" };
 
     const provider = selectWeatherProvider();
+    const today = resolveClientToday(rawToday, new Date());
     const stops: StopWeather[] = await Promise.all(
       parsed.data.map(async (stop) => {
         if (stop.latitude === undefined || stop.longitude === undefined) {
           return unavailableStop(stop.stopIndex);
         }
         try {
-          return await provider.getStopWeather(stop);
+          return await provider.getStopWeather(stop, { today });
         } catch {
           return unavailableStop(stop.stopIndex);
         }
