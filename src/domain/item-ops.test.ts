@@ -577,8 +577,8 @@ describe("recalculateSuggestions", () => {
     );
     trip = setPacked(trip, "tops", 3).trip;
     const next = checked(recalculateSuggestions(trip, { ...CONFIG, laundry: true }, suggest));
-    // (#205: the 2 occasions no longer take everyday days away, so 6 everyday days with laundry on is 3 tops, not 2.)
-    expect(byId(next, "tops")).toMatchObject({ qty: 3, packed: 3 });
+    // (#205: the 2 occasions no longer take everyday days away; #295: 7 everyday days with laundry on is 4 tops.)
+    expect(byId(next, "tops")).toMatchObject({ qty: 4, packed: 3 });
     expect(byId(next, "sleepwear")).toMatchObject({ name: "Pajamas", qty: 2, userEdited: true });
     expect(next.config.laundry).toBe(true);
     expect(trip.config.laundry).toBe(false);
@@ -632,14 +632,14 @@ describe("recalculateSuggestions", () => {
       name: "My shirts",
       category: "Other essentials",
       section: "packlast",
-      qty: 3,
+      qty: 4,
       packed: 3,
       stapleCadence: "smart",
     });
   });
 
   it("turning the return outfit off adds the checkout day to unedited everyday counts, and leaves edits, progress, manual items and removed suggestions alone (#205)", () => {
-    // 8 days (2030-03-01..08), return outfit on: 6 everyday days. Edit the tops, pack some underwear, add a manual item, and
+    // 8 days (2030-03-01..08), return outfit on: 7 everyday days. Edit the tops, pack some underwear, add a manual item, and
     // remove the optional dress shoes.
     let trip = okTrip(
       editItem(makeTrip(), STAPLES, "tops", {
@@ -662,10 +662,10 @@ describe("recalculateSuggestions", () => {
     const next = checked(
       recalculateSuggestions(trip, { ...trip.config, returnOutfit: false }, suggest),
     );
-    expect(next.dailyDays).toBe(7);
+    expect(next.dailyDays).toBe(8);
     // Unedited everyday counts gain the checkout day; the packed 4 survive.
-    expect(byId(next, "underwear")).toMatchObject({ qty: 7, packed: 4 });
-    expect(byId(next, "socks")?.qty).toBe(7);
+    expect(byId(next, "underwear")).toMatchObject({ qty: 8, packed: 4 });
+    expect(byId(next, "socks")?.qty).toBe(8);
     // The edited tops keep the person's 9, flagged as theirs.
     expect(byId(next, "tops")).toMatchObject({ qty: 9, userEdited: true });
     // The manual item, the return-outfit rows' presence rules and the suppressed shoes are untouched.
@@ -679,7 +679,7 @@ describe("recalculateSuggestions", () => {
   it("updates days and dailyDays and keeps non-calculated items", () => {
     const trip = makeTrip();
     const next = checked(recalculateSuggestions({ ...trip, end: "2030-03-04" }, CONFIG, suggest));
-    expect(next).toMatchObject({ days: 4, dailyDays: 2 });
+    expect(next).toMatchObject({ days: 4, dailyDays: 3 });
     for (const id of [
       "sunglasses",
       "return-top",

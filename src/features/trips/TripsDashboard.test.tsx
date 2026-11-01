@@ -198,11 +198,11 @@ describe("upcoming view", () => {
     expect(within(sanDiego).getByText(/Oct 23 – Oct 27 · 4 nights/)).toBeTruthy();
     // The card carries no weather copy (the old simulated "Close forecast" label is gone).
     expect(within(sanDiego).queryByText(/forecast|Simulated/i)).toBeNull();
-    expect(within(sanDiego).getByText("26 left")).toBeTruthy();
-    expect(within(sanDiego).getByText("6 of 32 packed")).toBeTruthy();
+    expect(within(sanDiego).getByText("27 left")).toBeTruthy();
+    expect(within(sanDiego).getByText("6 of 33 packed")).toBeTruthy();
     const bar = within(sanDiego).getByRole("progressbar", { name: "San Diego packing progress" });
-    expect(bar.getAttribute("aria-valuenow")).toBe("19");
-    expect(bar.getAttribute("aria-valuetext")).toBe("19% packed");
+    expect(bar.getAttribute("aria-valuenow")).toBe("18");
+    expect(bar.getAttribute("aria-valuetext")).toBe("18% packed");
     expect(
       within(sanDiego)
         .getByRole("link", { name: "Continue packing: San Diego" })
@@ -526,7 +526,7 @@ describe("quick view", () => {
     await ready();
     const before = base.snapshot();
     const beforeJson = JSON.stringify(before);
-    const progress = within(card("San Diego")).getByText("6 of 32 packed");
+    const progress = within(card("San Diego")).getByText("6 of 33 packed");
 
     await choose(user, "San Diego", "Quick view");
     const quick = document.getElementById("quick-view-san-diego") as HTMLElement;
@@ -555,7 +555,7 @@ describe("quick view", () => {
     expect(base.snapshot()).toBe(before);
     expect(JSON.stringify(base.snapshot())).toBe(beforeJson);
     for (const spy of Object.values(writes)) expect(spy).not.toHaveBeenCalled();
-    expect(progress.textContent).toBe("6 of 32 packed");
+    expect(progress.textContent).toBe("6 of 33 packed");
     expect(screen.queryByRole("link", { name: "Saved" })).toBeNull();
   });
 

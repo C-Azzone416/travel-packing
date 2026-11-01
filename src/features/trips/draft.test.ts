@@ -169,21 +169,9 @@ describe("returnOutfitHelp", () => {
     expect(returnOutfitHelp(true)).toBe(
       "A fresh top, bottoms, underwear and socks for the trip home. It replaces one everyday outfit, for your return day.",
     );
-    expect(returnOutfitHelp(true, "add-return-day-back")).toBe(
-      "A fresh top, bottoms, underwear and socks for the trip home. It replaces one everyday outfit, for your return day.",
-    );
   });
 
-  it("when off, matches what the calculator actually does under each policy (#25)", () => {
-    expect(returnOutfitHelp(false, "exclude-return-day")).toBe(
-      "No separate return outfit. Your return day is not added to the everyday count.",
-    );
-    expect(returnOutfitHelp(false, "add-return-day-back")).toBe(
-      "Your return day is packed like any other day.",
-    );
-  });
-
-  it("defaults to the policy currently in force", () => {
-    expect(returnOutfitHelp(false)).toBe(returnOutfitHelp(false, "add-return-day-back"));
+  it("when off, says the return day is packed like any other day (#25, #295)", () => {
+    expect(returnOutfitHelp(false)).toBe("Your return day is packed like any other day.");
   });
 });

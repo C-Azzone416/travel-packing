@@ -168,6 +168,54 @@ describe("EditTripSheet: the Packing preferences tab", () => {
     await user.click(toggle(dialog(), "Laundry access"));
     expect(review.disabled).toBe(true);
   });
+
+  it("How we count switches between the two #295 equations as the return outfit is toggled", async () => {
+    const { user, dialog } = setup();
+    const line = () => within(dialog()).getByText(/How we count:/).parentElement?.textContent ?? "";
+    expect(line()).toBe(
+      "How we count: 5 days away − 1 for home = 4 days of everyday clothes. Your travel outfit is worn, not packed.",
+    );
+    await user.click(toggle(dialog(), "Dedicated return travel outfit"));
+    expect(line()).toBe(
+      "How we count: 5 days away, none held back for home = 5 days of everyday clothes. Your travel outfit is worn, not packed.",
+    );
+  });
+
+  describe("a trip counted with the earlier rule (#295)", () => {
+    // Saved before the arrival-day rule: 5 days with the return outfit on stored 3 everyday days; today's rule gives 4.
+    const stale = (): Trip => ({ ...base(), dailyDays: 3 });
+
+    it("Review changes is reachable with unchanged preferences, and applies them (lazy recalculation)", async () => {
+      const { user, dialog, trip, onApplyPreferences, onClose } = setup({ trip: stale() });
+      const review = within(dialog()).getByRole("button", {
+        name: "Review changes",
+      }) as HTMLButtonElement;
+      expect(review.disabled).toBe(false);
+      expect(within(dialog()).queryByText("No changes to apply")).toBeNull();
+      await user.click(review);
+      await user.click(within(dialog()).getByRole("button", { name: "Apply changes" }));
+      await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+      expect(onApplyPreferences).toHaveBeenCalledWith(trip.config, trip.updatedAt);
+    });
+
+    it("opening and cancelling it still asks nothing: no unsaved changes are claimed", async () => {
+      const { user, onClose } = setup({ trip: stale() });
+      await user.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(onClose).toHaveBeenCalledTimes(1);
+      expect(screen.queryByText("Discard your changes?")).toBeNull();
+    });
+
+    it("a trip already on today's rule keeps Review changes off", () => {
+      setup();
+      expect(
+        (
+          within(screen.getByRole("dialog", { name: "Edit trip" })).getByRole("button", {
+            name: "Review changes",
+          }) as HTMLButtonElement
+        ).disabled,
+      ).toBe(true);
+    });
+  });
 });
 
 describe("EditTripSheet: cancel, Escape and × change nothing", () => {

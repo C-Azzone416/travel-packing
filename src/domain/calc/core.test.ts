@@ -1,5 +1,6 @@
 // Ported 1:1 from reference/prototype/tests/core.test.mjs (doc §19): same
-// inputs, same expectations. Do not edit these to fit refactors.
+// inputs, same expectations. Do not edit these to fit refactors. The one deliberate exception is the everyday-outfit counts
+// (dailyDays, underwear, socks): #295 stopped taking the arrival day away, so those expectations moved up by one.
 import { describe, expect, it } from "vitest";
 import {
   calculateSuggestions,
@@ -41,15 +42,15 @@ describe("prototype core assertions", () => {
       reuseNice: false,
     });
     expect(base.days).toBe(5);
-    expect(base.dailyDays).toBe(3);
+    expect(base.dailyDays).toBe(4);
     expect(
       base.items.find((item) => item.id === "underwear")?.qty,
       "return underwear is not counted here",
-    ).toBe(3);
+    ).toBe(4);
     expect(
       base.items.find((item) => item.id === "socks")?.qty,
       "return socks are not counted here",
-    ).toBe(3);
+    ).toBe(4);
     expect(
       base.items.some((item) => item.id === "nice-shoes"),
       "nice companion suggestions stay off with the toggle",
@@ -65,8 +66,8 @@ describe("prototype core assertions", () => {
       reuseNice: true,
     });
     const find = (id: string) => withSpareAndLaundry.items.find((item) => item.id === id);
-    expect(withSpareAndLaundry.dailyDays).toBe(5);
-    expect(find("underwear")?.qty).toBe(6);
+    expect(withSpareAndLaundry.dailyDays).toBe(6);
+    expect(find("underwear")?.qty).toBe(7);
     expect(
       find("nice-top")?.qty,
       "nice-attire reuse collapses multiple occasions to one look",

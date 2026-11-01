@@ -28,7 +28,7 @@ describe("setStops (memory source)", () => {
       start: "2026-10-23",
       end: "2026-11-01",
       days: 10,
-      dailyDays: 8,
+      dailyDays: 9,
       destination: "San Diego → Lisbon",
     });
     expect(change.trip.location?.city).toBe("San Diego");
@@ -45,12 +45,15 @@ describe("setStops (memory source)", () => {
       stop("pt-lisbon", "2026-10-26", "2026-11-01"),
     ];
     const on = source();
-    expect((await on.setStops("san-diego", route)).trip).toMatchObject({ days: 10, dailyDays: 8 });
+    expect((await on.setStops("san-diego", route)).trip).toMatchObject({ days: 10, dailyDays: 9 });
     const off = source();
     const trip = await off.getTrip("san-diego");
     await off.updatePreferences("san-diego", { ...trip.config, returnOutfit: false });
-    // The checkout day needs an everyday look when there is no return outfit.
-    expect((await off.setStops("san-diego", route)).trip).toMatchObject({ days: 10, dailyDays: 9 });
+    // Every day needs an everyday look when there is no return outfit (#295).
+    expect((await off.setStops("san-diego", route)).trip).toMatchObject({
+      days: 10,
+      dailyDays: 10,
+    });
   });
 
   it("keeps a title the person edited, and leaves other trips alone", async () => {
