@@ -23,7 +23,7 @@ test(
 
     // Not connected: the field is a password input, the card has no Send feedback (no dead control), and the header button is dimmed.
     await expect(page.locator(".feedback-send-action")).toHaveCount(0);
-    await expect(page.locator(".feedback-button")).toBeDisabled();
+    await expect(page.locator(".nav-feedback")).toBeDisabled();
     await expect(page.getByLabel("Invitation")).toHaveAttribute("type", "password");
     await expectAccessible(page, "Settings, feedback not connected");
 

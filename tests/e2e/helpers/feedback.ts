@@ -167,7 +167,7 @@ export async function goToTrips(page: Page) {
   // The header button is on Settings too now (#273), so it is not proof of arrival: wait for the Trips screen itself, where the only
   // "Send feedback" is the header's (Settings has an action of its own with the same name).
   await page.waitForURL((url) => url.pathname === "/");
-  await expect(page.locator(".feedback-button")).toBeVisible();
+  await expect(page.locator(".nav-feedback")).toBeVisible();
   await expect(page.locator(".feedback-send-action")).toHaveCount(0);
 }
 
@@ -183,7 +183,7 @@ export async function connectedOnTrips(page: Page) {
   await openSettings(page);
   await connectFeedback(page);
   await goToTrips(page);
-  await expect(page.locator(".feedback-button")).toBeEnabled();
+  await expect(page.locator(".nav-feedback")).toBeEnabled();
 }
 
 export async function openSettingsFromNav(page: Page) {
@@ -191,9 +191,22 @@ export async function openSettingsFromNav(page: Page) {
   await expect(page.getByRole("heading", { name: "Send feedback to the developer" })).toBeVisible();
 }
 
-/** The "Sign out" item in the main navigation. */
+/**
+ * Press Sign out. From 721px the header holds it beside Feedback; on a phone the tab bar's 4th slot is Feedback (#293), so Sign out
+ * is the row in Settings (the same guard, the same unsent-feedback warning).
+ */
+export async function pressSignOut(page: Page) {
+  if ((page.viewportSize()?.width ?? 0) >= 721) {
+    await nav(page).getByRole("button", { name: "Sign out" }).click();
+    return;
+  }
+  await nav(page).getByRole("link", { name: "Settings" }).click();
+  await page.getByRole("main").getByRole("button", { name: "Sign out" }).click();
+}
+
+/** Sign out, with nothing unsent. */
 export async function signOut(page: Page) {
-  await nav(page).getByRole("button", { name: "Sign out" }).click();
+  await pressSignOut(page);
   await expect(page).toHaveURL(/\/sign-in$/);
 }
 
@@ -202,7 +215,7 @@ export async function signOut(page: Page) {
  * deletes the report from this device exactly as a plain sign-out did before the warning existed.
  */
 export async function signOutDiscardingUnsent(page: Page) {
-  await nav(page).getByRole("button", { name: "Sign out" }).click();
+  await pressSignOut(page);
   await page
     .getByRole("dialog", { name: "Feedback hasn’t sent yet" })
     .getByRole("button", { name: "Sign out anyway" })
@@ -217,3 +230,15 @@ export const accountOutboxDatabases = (page: Page) =>
       .map((database) => database.name ?? "")
       .filter((name) => name.startsWith("framebriar-v1-acct-")),
   );
+
+/**
+ * Feedback is off for this person, as in a build without it: the enrollment answer is 401, so the app treats the feedback session as
+ * ended and the tab bar's 4th slot is Sign out (#293). Call before the page loads.
+ */
+export async function feedbackOff(page: Page) {
+  await page.route("**/api/feedback/enrollment", (route) =>
+    route.request().method() === "GET"
+      ? route.fulfill({ status: 401, contentType: "application/json", body: "{}" })
+      : route.fallback(),
+  );
+}

@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import {
   createContext,
   useCallback,
@@ -22,7 +23,7 @@ import {
 import { feedbackE2eBuild, feedbackRuntimeEnabled, PREVIEW_FEEDBACK_ORIGIN } from "./availability";
 import { feedbackBuildSha } from "./build-sha";
 import { registerAccountClosureFeedbackCleanup } from "./account-closure-cleanup";
-import type { reportContext } from "./capture-policy";
+import { captureBlocked, type reportContext } from "./capture-policy";
 import { createProxySend, REPORTS_PATH } from "./delivery";
 import {
   disconnectEnrollment,
@@ -94,7 +95,7 @@ export interface FeedbackAccessValue {
    * Does nothing when no sheet is mounted. The sheet itself decides whether anything may be captured.
    */
   openReport: () => void;
-  /** The header button's sheet registers itself here for `openReport`. Returns the unregister. */
+  /** The report host's sheet registers itself here for `openReport`. Returns the unregister. */
   registerReportOpener: (open: () => void) => () => void;
   /** Deletes this account's unsent reports from this device. Sign-out does it itself; this is the explicit "clear" in Settings. */
   clearUnsent: () => Promise<void>;
@@ -155,6 +156,21 @@ export function useFeedbackAccess(): FeedbackAccessValue {
 /** For the Sign out button: clear this account's unsent feedback from the device first. A no-op where feedback is not built in. */
 export function useFeedbackSignOut(): () => Promise<void> {
   return useContext(FeedbackAccessContext).clearLocal;
+}
+
+/**
+ * The phone tab bar's Feedback item (#293). `enabled` is the one "feedback is on for this person" boolean (the production invite gate,
+ * later, changes how `available` is worked out and nothing in the nav); `disabled` keeps the item in place but inert while nothing can
+ * be sent or the screen may not be captured. Hosted builds alias this file to feedback.disabled.tsx, whose version is always off.
+ */
+export function useFeedbackTab(): { enabled: boolean; disabled: boolean; open: () => void } {
+  const { available, status, openReport } = useContext(FeedbackAccessContext);
+  const pathname = usePathname();
+  return {
+    enabled: available,
+    disabled: !status?.canCapture || captureBlocked(pathname),
+    open: openReport,
+  };
 }
 
 const loadLocalExport = () => import("@masra91/framebriar/browser/local-export");

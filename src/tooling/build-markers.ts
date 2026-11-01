@@ -55,6 +55,12 @@ export const FRAMEBRIAR_MARKERS: readonly BuildMarker[] = [
     text: "Send feedback to the developer",
     source: "src/features/feedback/FeedbackSettings.tsx",
   },
+  // The Feedback tab (#293): its accessible name and label are in a module Production replaces with a stub.
+  {
+    name: "the Feedback tab in the tab bar",
+    text: "Send feedback report",
+    source: "src/features/feedback/FeedbackTabItem.tsx",
+  },
   {
     name: "the Feedback entry in the trip editor",
     text: "data-feedback-editor-entry",
