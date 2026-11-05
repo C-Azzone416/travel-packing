@@ -14,6 +14,7 @@ import {
   WEATHER_STATUSES,
 } from "../db/schema";
 import { supportsSmartQuantity } from "../../domain/calc";
+import { CUBES, canCarryLaundryFlag } from "../../domain/cubes";
 
 export const tripId = z.uuid();
 /** The six built-in themes, and nothing else: an unknown value is INVALID_INPUT (#48). */
@@ -186,8 +187,17 @@ export const stapleInput = z
     cadence: z.enum(STAPLE_CADENCES),
     packLast: z.boolean(),
     groupId: z.literal(TOILETRY_GROUP).optional(),
+    laundryHalves: z.boolean().optional(),
+    cube: z.enum(CUBES).optional(),
   })
   .superRefine((value, ctx) => {
+    if (value.laundryHalves && !canCarryLaundryFlag(value.semanticId)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["laundryHalves"],
+        message: "Underwear and socks are always one per day",
+      });
+    }
     if (
       value.cadence === "smart" &&
       (!supportsSmartQuantity(value.semanticId) ||

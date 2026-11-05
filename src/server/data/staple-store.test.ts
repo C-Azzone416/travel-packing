@@ -44,6 +44,7 @@ describe("saveStaples", () => {
     qty: 1,
     cadence: "per trip",
     packLast: false,
+    cube: "misc",
   };
 
   it("inserts new staples at version 1", async () => {
@@ -110,6 +111,80 @@ describe("saveStaples", () => {
     ).rejects.toBeInstanceOf(Refusal);
   });
 
+  it("round-trips the laundry flag, a per-night cadence and the cube", async () => {
+    const lens: Staple = {
+      ...base,
+      id: "lens",
+      name: "Lens",
+      cadence: "per night",
+      laundryHalves: true,
+      cube: "toiletries",
+    };
+    await saveStaples(db(), OWNER.userId, [lens]);
+    expect(await listStaples(db(), OWNER.userId)).toEqual([lens]);
+    await saveStaples(db(), OWNER.userId, [{ ...lens, laundryHalves: false }]);
+    const [saved] = await listStaples(db(), OWNER.userId);
+    expect(saved.laundryHalves).toBeUndefined();
+    expect((await versions())[0].version).toBe(2);
+    await saveStaples(db(), OWNER.userId, [{ ...lens, laundryHalves: false, cube: "tech" }]);
+    expect((await listStaples(db(), OWNER.userId))[0].cube).toBe("tech");
+  });
+
+  it("derives the cube from the category when none is given", async () => {
+    const { cube: _unused, ...withoutCube } = base;
+    void _unused;
+    await saveStaples(db(), OWNER.userId, [
+      { ...withoutCube, id: "passport", name: "Passport", category: "Other essentials" },
+    ]);
+    expect((await listStaples(db(), OWNER.userId))[0].cube).toBe("documents");
+  });
+
+  it.each(["underwear", "socks"])("refuses the laundry flag on %s", async (id) => {
+    await expect(
+      saveStaples(db(), OWNER.userId, [
+        { ...base, id, name: id, category: "Clothing", cadence: "per day", laundryHalves: true },
+      ]),
+    ).rejects.toBeInstanceOf(Refusal);
+    expect(await listStaples(db(), OWNER.userId)).toEqual([]);
+  });
+
+  it("round-trips the laundry flag, a per-night cadence and the cube", async () => {
+    const lens: Staple = {
+      ...base,
+      id: "lens",
+      name: "Lens",
+      cadence: "per night",
+      laundryHalves: true,
+      cube: "toiletries",
+    };
+    await saveStaples(db(), OWNER.userId, [lens]);
+    expect(await listStaples(db(), OWNER.userId)).toEqual([lens]);
+    await saveStaples(db(), OWNER.userId, [{ ...lens, laundryHalves: false }]);
+    const [saved] = await listStaples(db(), OWNER.userId);
+    expect(saved.laundryHalves).toBeUndefined();
+    expect((await versions())[0].version).toBe(2);
+    await saveStaples(db(), OWNER.userId, [{ ...lens, laundryHalves: false, cube: "tech" }]);
+    expect((await listStaples(db(), OWNER.userId))[0].cube).toBe("tech");
+  });
+
+  it("derives the cube from the category when none is given", async () => {
+    const { cube: _unused, ...withoutCube } = base;
+    void _unused;
+    await saveStaples(db(), OWNER.userId, [
+      { ...withoutCube, id: "passport", name: "Passport", category: "Other essentials" },
+    ]);
+    expect((await listStaples(db(), OWNER.userId))[0].cube).toBe("documents");
+  });
+
+  it.each(["underwear", "socks"])("refuses the laundry flag on %s", async (id) => {
+    await expect(
+      saveStaples(db(), OWNER.userId, [
+        { ...base, id, name: id, category: "Clothing", cadence: "per day", laundryHalves: true },
+      ]),
+    ).rejects.toBeInstanceOf(Refusal);
+    expect(await listStaples(db(), OWNER.userId)).toEqual([]);
+  });
+
   it("rejects two raw ids that resolve to one canonical identity", async () => {
     await expect(
       saveStaples(db(), OWNER.userId, [
@@ -128,6 +203,7 @@ describe("saveStaples", () => {
       qty: 1,
       cadence: "per day",
       packLast: false,
+      cube: "clothing",
     };
 
     it.each([

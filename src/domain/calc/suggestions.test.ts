@@ -35,6 +35,7 @@ describe("trip length with every option off", () => {
   it("returns no items and zero days for reversed dates", () => {
     expect(calculateSuggestions({ ...off, start: "2026-11-16", end: "2026-11-12" })).toEqual({
       days: 0,
+      nights: 0,
       dailyDays: 0,
       items: [],
     });

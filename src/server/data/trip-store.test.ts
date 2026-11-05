@@ -39,6 +39,88 @@ function canonical<T>(value: T): T {
   );
 }
 
+describe("cubes, Staple snapshots and Morning of (#378)", () => {
+  it("stores each item's cube, derived from its category when none was set", async () => {
+    const trip = makeStoredTrip();
+    trip.items = [
+      { id: "tops", name: "Tops", category: "Clothing", qty: 2, packed: 1, section: "main" },
+      {
+        id: "passport",
+        name: "Passport",
+        category: "Other essentials",
+        qty: 1,
+        packed: 0,
+        section: "main",
+      },
+      {
+        id: "chargers",
+        name: "Chargers",
+        category: "Tech",
+        qty: 1,
+        packed: 0,
+        section: "packlast",
+        cube: "misc",
+      },
+    ];
+    await seedOwner(db(), OWNER.userId);
+    await insertTrip(db(), OWNER.userId, trip);
+    const loaded = await loadTrip(db(), OWNER.userId, trip.id);
+    expect(loaded?.items.map((item) => [item.id, item.cube, item.packed])).toEqual([
+      ["tops", "clothing", 1],
+      ["passport", "documents", 0],
+      ["chargers", "misc", 0],
+    ]);
+  });
+
+  it("moving an item to another cube is saved and changes nothing else", async () => {
+    const trip = makeStoredTrip();
+    await seedOwner(db(), OWNER.userId);
+    await insertTrip(db(), OWNER.userId, trip);
+    const target = trip.items[0];
+    const moved = {
+      ...trip,
+      items: trip.items.map((e) => (e === target ? { ...e, cube: "misc" as const } : e)),
+    };
+    expect(await saveTrip(db(), OWNER.userId, moved)).toBe(true);
+    const loaded = await loadTrip(db(), OWNER.userId, trip.id);
+    expect(loaded?.items[0]).toMatchObject({ id: target.id, cube: "misc", qty: target.qty });
+  });
+
+  it("stores the Staple rule snapshot and the Morning of flags", async () => {
+    const trip = makeStoredTrip({ morningOfCubes: ["tech", "documents"] });
+    trip.items = [
+      {
+        id: "lens",
+        name: "Lens",
+        category: "Bathroom",
+        qty: 6,
+        packed: 0,
+        section: "main",
+        stapleCadence: "per night",
+        stapleQty: 3,
+        laundryHalves: true,
+      },
+    ];
+    await seedOwner(db(), OWNER.userId);
+    await insertTrip(db(), OWNER.userId, trip);
+    const loaded = await loadTrip(db(), OWNER.userId, trip.id);
+    expect(loaded?.items[0]).toMatchObject({
+      stapleCadence: "per night",
+      stapleQty: 3,
+      laundryHalves: true,
+    });
+    expect(loaded?.morningOfCubes).toEqual(["tech", "documents"]);
+  });
+
+  it("defaults Morning of to Toiletries", async () => {
+    const trip = makeStoredTrip();
+    delete trip.morningOfCubes;
+    await seedOwner(db(), OWNER.userId);
+    await insertTrip(db(), OWNER.userId, trip);
+    expect((await loadTrip(db(), OWNER.userId, trip.id))?.morningOfCubes).toEqual(["toiletries"]);
+  });
+});
+
 describe("the structured place (#47)", () => {
   const LONDON: StoredPlace = {
     provider: "open-meteo",
@@ -170,6 +252,7 @@ describe("round trip", () => {
     trip.items = trip.items.map((item, index) => ({ ...item, packed: index % 2 ? item.qty : 0 }));
     trip.suggestionMemory = { "nice-shoes": { ...trip.items[0], name: "Remembered" } };
     trip.suppressedSuggestions = { "nice-makeup": true };
+    trip.morningOfCubes = ["toiletries", "tech"];
     trip.weather = { status: "accepted", label: "Close forecast", suggestion: "Compact umbrella" };
     await seedOwner(db(), OWNER.userId);
     await insertTrip(db(), OWNER.userId, trip);

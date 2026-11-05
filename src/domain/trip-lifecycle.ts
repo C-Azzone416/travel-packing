@@ -4,6 +4,7 @@
 // Date normalization, the forecast label, and the item list come from the calculator module
 // (src/domain/calc). Only the id generator and "today" are injected: the domain has no hidden clock.
 
+import { DEFAULT_MORNING_OF_CUBES } from "./cubes";
 import { buildTripItems, forecastLabel, normalizeTripDates, parseDate } from "./calc";
 import type { StampLabels } from "./stamps";
 import { DEFAULT_THEME, type ThemeId } from "./themes";
@@ -279,6 +280,7 @@ export function buildTrip(
     days: built.days,
     dailyDays: built.dailyDays,
     items,
+    morningOfCubes: [...DEFAULT_MORNING_OF_CUBES],
     suggestionMemory: {},
     suppressedSuggestions: {},
     toiletryBagPacked: false,

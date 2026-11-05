@@ -1,8 +1,13 @@
+import { canCarryLaundryFlag, cubeForItem, type Cube } from "../cubes";
 import { canonicalItemId } from "../item-identity";
 import { TOILETRY_GROUP_ID } from "../toiletry-bag";
 import { calculateSuggestions, type CalcConfig, type WeatherInput } from "./suggestions";
 
-export type StapleCadence = "per day" | "per trip" | "smart";
+/**
+ * How a Staple scales. "smart" is legacy (#378): old trip snapshots and the occasion-driven Nice attire Staples keep it,
+ * everything else was migrated to "per day" plus the laundry flag.
+ */
+export type StapleCadence = "per day" | "per trip" | "smart" | "per night";
 export type ItemSection = "main" | "packlast" | "return";
 
 export interface Staple {
@@ -13,6 +18,10 @@ export interface Staple {
   category: string;
   packLast: boolean;
   groupId?: string;
+  /** "↻ Fewer with laundry": halves the quantity, rounding up, when the trip has laundry. Never on underwear or socks. */
+  laundryHalves?: boolean;
+  /** Where the Staple lives in the suitcase. Absent: the cube its category implies. */
+  cube?: Cube;
 }
 
 export interface TripItem {
@@ -26,6 +35,11 @@ export interface TripItem {
   groupId?: string | null;
   /** Saved with the trip so preference recalculation never reads later account defaults. */
   stapleCadence?: StapleCadence;
+  /** The Staple's per-unit quantity and effective laundry flag, saved with the row so a recalculation can re-derive it. */
+  stapleQty?: number;
+  laundryHalves?: boolean;
+  /** The suitcase cube. Absent: the cube the category implies (`itemCube`). A person can move an item to another cube. */
+  cube?: Cube;
 }
 
 export interface TripItems {
@@ -146,7 +160,49 @@ function newItem(
   qty: number,
   section: ItemSection,
 ): TripItem {
-  return { id, name, category, qty, packed: 0, section };
+  return { id, name, category, qty, packed: 0, section, cube: cubeForItem({ id, name, category }) };
+}
+
+/** What a trip offers a Staple's cadence: the day counts the calculator already uses, and the trip's preferences. */
+export interface StapleQuantityContext {
+  days: number;
+  nights: number;
+  dailyDays: number;
+  laundry: boolean;
+  spare: boolean;
+}
+
+/** Clothing families whose "per day" means everyday outfits (#295), the same count the old Smart quantities used. */
+const OUTFIT_FAMILY_IDS: ReadonlySet<string> = new Set(["tops", "bottoms", "underwear", "socks"]);
+
+/**
+ * The quantity a non-Smart Staple resolves to on a trip. "per day" is the trip's days (travel days included, #222), except
+ * the everyday-outfit families, which use the everyday-outfit count (days - 1 with a return outfit) and, for underwear and
+ * socks, one spare when the trip has one. "per night" is the nights. The laundry flag halves the result, rounding up
+ * (5 -> 3, 11 -> 6) when the trip has laundry; underwear and socks never halve, whatever the flag says.
+ */
+export function stapleQuantity(
+  staple: Pick<Staple, "id" | "qty" | "cadence" | "laundryHalves">,
+  context: StapleQuantityContext,
+): number {
+  const identity = canonicalItemId(staple.id);
+  let qty: number;
+  if (staple.cadence === "per night") qty = context.nights * staple.qty;
+  else if (staple.cadence === "per day") {
+    qty = (OUTFIT_FAMILY_IDS.has(identity) ? context.dailyDays : context.days) * staple.qty;
+  } else qty = staple.qty;
+  if (staple.laundryHalves && context.laundry && canCarryLaundryFlag(staple.id)) {
+    qty = Math.ceil(qty / 2);
+  }
+  if (staple.cadence === "per day" && !canCarryLaundryFlag(staple.id) && context.spare) qty += 1;
+  return qty;
+}
+
+export function stapleContext(
+  config: Pick<CalcConfig, "laundry" | "spare">,
+  counts: { days: number; nights: number; dailyDays: number },
+): StapleQuantityContext {
+  return { ...counts, laundry: Boolean(config.laundry), spare: Boolean(config.spare) };
 }
 
 function returnOutfitItems(): TripItem[] {
@@ -199,12 +255,9 @@ export function buildTripItems(
     // create duplicate ids or turn the return row into an ordinary packing row.
     if (items.some((entry) => entry.section === "return" && entry.id === staple.id)) continue;
 
+    const context = stapleContext(config, computed);
     const qty =
-      staple.cadence === "per day"
-        ? computed.days * staple.qty
-        : staple.cadence === "smart"
-          ? smartQuantity(staple, config)
-          : staple.qty;
+      staple.cadence === "smart" ? smartQuantity(staple, config) : stapleQuantity(staple, context);
 
     const weatherVariants = WEATHER_VARIANTS[identity];
     if (weatherVariants) {
@@ -225,6 +278,13 @@ export function buildTripItems(
       section: staple.packLast ? ("packlast" as const) : ("main" as const),
       groupId: staple.groupId ?? null,
       stapleCadence: staple.cadence,
+      cube: staple.cube ?? cubeForItem(staple),
+      ...(staple.cadence === "smart"
+        ? {}
+        : {
+            stapleQty: staple.qty,
+            laundryHalves: Boolean(staple.laundryHalves) && canCarryLaundryFlag(staple.id),
+          }),
     };
     if (existing) Object.assign(existing, values);
     else items.push({ ...values, packed: 0 });

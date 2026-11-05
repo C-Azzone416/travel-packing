@@ -277,7 +277,7 @@ describe("buildTrip", () => {
     expect(byId(trip, "floss")).toMatchObject({ section: "main", groupId: TOILETRY_GROUP_ID });
   });
 
-  it("spare does not change per-day Staples", () => {
+  it("spare adds one to per-day underwear and socks only (#378)", () => {
     const socks: Staple[] = [
       {
         id: "socks",
@@ -289,7 +289,7 @@ describe("buildTrip", () => {
       },
     ];
     expect(byId(savedTrip({}, socks), "socks")?.qty).toBe(8);
-    expect(byId(savedTrip({}, socks, { ...CONFIG, spare: false }), "socks")?.qty).toBe(8);
+    expect(byId(savedTrip({}, socks, { ...CONFIG, spare: false }), "socks")?.qty).toBe(7);
   });
 
   it("does not infer identity or placement from display names", () => {

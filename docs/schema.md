@@ -57,8 +57,17 @@ database refusing to store a cross-owner link.
 
 - `trip_items` has **no foreign key to `staples`**. Editing or deleting a staple never touches a trip row
   (tested). The `semantic_id` ("underwear", "weather-umbrella", ...) is plain text copied at trip creation.
-  `staple_cadence` snapshots the rule (`per trip`, `per day`, or `smart`) only for rows generated from a Staple,
-  so later preference recalculation never imports current account defaults into an existing trip.
+  `staple_cadence` snapshots the rule (`per trip`, `per day`, `per night`, or legacy `smart`) only for rows generated
+  from a Staple, with `staple_qty` (the per-unit quantity) and `laundry_halves` (the effective "fewer with laundry"
+  flag) so a recalculation re-derives the row without reading later account defaults. `smart` stays in the enum for
+  old trip snapshots and the occasion-driven Nice attire / sleepwear Staples (#378).
+- **Cubes (#378).** `item_cube` (`clothing`, `toiletries`, `tech`, `documents`, `misc`, `weather`) groups a list.
+  `staples.cube` and `trip_items.cube` hold it (default `misc` for raw inserts; the app always writes the real one;
+  migration 0014 backfilled from category, see `src/domain/cubes.ts`). Categories stay for compatibility. "Morning of"
+  is `trip_preferences.morning_of_cubes` (default `{toiletries}`); a cube holding a Pack last item reads as flagged.
+  `staples.laundry_halves` halves a quantity, rounding up, when the trip has laundry; the check
+  `staples_laundry_not_underwear_socks` keeps it off underwear and socks. Later migrations must not use the
+  `per night` enum value in the same transaction as 0014 (`ALTER TYPE ... ADD VALUE`); the migrator runs each file in one.
 - `trip_items.id` is a per-trip immutable uuid. `(trip_id, semantic_id)` is unique, so two items with similar
   names (everyday vs return underwear) never merge: they have different semantic ids.
 - `staples` is unique on `(owner_id, semantic_id)` and carries `version`, bumped by the data layer on each edit.
@@ -75,21 +84,21 @@ so quantity edits succeed instead of failing the cascade.
 
 ## Constraints
 
-| Rule                                   | Where                                                                                      |
-| -------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `qty >= 1`                             | `staples_qty_positive`, `saved_list_items_qty_positive`, `trip_items_qty_positive`         |
-| `0 <= packed <= qty`                   | `trip_item_progress_packed_range`                                                          |
-| `occasion_count` 1..8                  | `trip_preferences_occasion_count_range`                                                    |
-| `end_date >= start_date`               | `trips_dates_ordered`                                                                      |
-| Stamp label overrides (#151)           | `trips_stamp_label_1_format`, `trips_stamp_label_2_format`: null or exactly 3 of `A-Z0-9`  |
-| `days >= 1`, `0 <= daily_days <= days` | `trips_days_positive`, `trips_daily_days_range`                                            |
-| Non-blank names / destination          | `*_not_blank`                                                                              |
-| `group_id` is null or `toiletry-bag`   | `staples_group_known`, `trip_items_group_known`                                            |
-| Stop `leave_date >= arrive_date`       | `trip_stops_dates_ordered` (a night per stop on multi-stop trips: `validateStops`)         |
-| Stop place rules                       | `trip_stops_*` mirror the `trips_*` location checks                                        |
-| Temperature unit `F` or `C`            | `users_temperature_unit_known`                                                             |
-| Enums                                  | `item_section`, `staple_cadence`, `staples_setup_state`, `weather_status`, `item_category` |
-| Non-null owner on every row            | `owner_id NOT NULL` + FK to `users`                                                        |
+| Rule                                   | Where                                                                                                   |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `qty >= 1`                             | `staples_qty_positive`, `saved_list_items_qty_positive`, `trip_items_qty_positive`                      |
+| `0 <= packed <= qty`                   | `trip_item_progress_packed_range`                                                                       |
+| `occasion_count` 1..8                  | `trip_preferences_occasion_count_range`                                                                 |
+| `end_date >= start_date`               | `trips_dates_ordered`                                                                                   |
+| Stamp label overrides (#151)           | `trips_stamp_label_1_format`, `trips_stamp_label_2_format`: null or exactly 3 of `A-Z0-9`               |
+| `days >= 1`, `0 <= daily_days <= days` | `trips_days_positive`, `trips_daily_days_range`                                                         |
+| Non-blank names / destination          | `*_not_blank`                                                                                           |
+| `group_id` is null or `toiletry-bag`   | `staples_group_known`, `trip_items_group_known`                                                         |
+| Stop `leave_date >= arrive_date`       | `trip_stops_dates_ordered` (a night per stop on multi-stop trips: `validateStops`)                      |
+| Stop place rules                       | `trip_stops_*` mirror the `trips_*` location checks                                                     |
+| Temperature unit `F` or `C`            | `users_temperature_unit_known`                                                                          |
+| Enums                                  | `item_section`, `staple_cadence`, `staples_setup_state`, `weather_status`, `item_category`, `item_cube` |
+| Non-null owner on every row            | `owner_id NOT NULL` + FK to `users`                                                                     |
 
 `item_category` lists the strings the domain uses. The semantic category for everyday clothing is the single value
 `Clothing` (the plan's name); the prototype's calculator label `Clothes` was normalized to it (PM decision), and a
