@@ -18,10 +18,11 @@ beforeEach(() => {
 });
 
 describe("nav items", () => {
-  it("has exactly Trips, Staples and Settings", () => {
+  it("has exactly Trips, Staples, Stamps and Settings", () => {
     expect(NAV_ITEMS.map((i) => [i.label, i.href])).toEqual([
       ["Trips", "/"],
       ["Staples", "/staples"],
+      ["Stamps", "/stamps"],
       ["Settings", "/settings"],
     ]);
   });
@@ -31,8 +32,10 @@ describe("nav items", () => {
     ["/trips/abc", "Trips"],
     ["/staples", "Staples"],
     ["/staples/new", "Staples"],
+    ["/stamps", "Stamps"],
     ["/settings", "Settings"],
     ["/stapleshop", undefined],
+    ["/stampsy", undefined],
     ["/elsewhere", undefined],
   ])("%s activates %s", (path, expected) => {
     const active = NAV_ITEMS.filter((item) => isActive(item, path)).map((i) => i.label);
@@ -41,11 +44,12 @@ describe("nav items", () => {
 });
 
 describe("Nav", () => {
-  it("is a labelled landmark with three links and marks the current page", () => {
+  it("is a labelled landmark with four links and marks the current page", () => {
     pathname = "/staples";
     render(<Nav />);
     const nav = screen.getByRole("navigation", { name: "Primary navigation" });
-    expect(nav.querySelectorAll("a")).toHaveLength(3);
+    expect(nav.querySelectorAll("a")).toHaveLength(4);
+    expect(nav.querySelectorAll('a[aria-current="page"]')).toHaveLength(1);
     expect(screen.getByRole("link", { name: /Staples/ }).getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("link", { name: /Trips/ }).getAttribute("aria-current")).toBeNull();
     expect(screen.getByRole("link", { name: /Settings/ }).getAttribute("href")).toBe("/settings");
@@ -62,7 +66,7 @@ describe("Nav Sign out (#117)", () => {
     const signOut = vi.fn(async () => undefined);
     render(<Nav signOut={signOut} email="owner@example.test" />);
     const nav = screen.getByRole("navigation", { name: "Primary navigation" });
-    expect(nav.querySelectorAll("a")).toHaveLength(3);
+    expect(nav.querySelectorAll("a")).toHaveLength(4);
     const button = screen.getByRole("button", { name: "Sign out" });
     // Last in the nav, so the links come first in the tab order.
     expect(nav.lastElementChild?.contains(button)).toBe(true);
@@ -210,9 +214,10 @@ describe("AppShell", () => {
     // Brand and navigation are before main; idle does not add a meaningless status control.
     const inBar = [...banner.querySelectorAll<HTMLElement>("a, button")];
     expect(inBar[0].getAttribute("aria-label")).toBe("Packed Smart: go to trips");
-    expect(inBar.slice(1, 4).map((node) => node.textContent?.trim())).toEqual([
+    expect(inBar.slice(1, 5).map((node) => node.textContent?.trim())).toEqual([
       expect.stringContaining("Trips"),
       expect.stringContaining("Staples"),
+      expect.stringContaining("Stamps"),
       expect.stringContaining("Settings"),
     ]);
     expect(screen.queryByRole("link", { name: "Saved" })).toBeNull();
@@ -224,6 +229,14 @@ describe("AppShell", () => {
     render(<AppShell>x</AppShell>);
     expect(screen.getByRole("link", { name: /go to trips/i }).getAttribute("href")).toBe("/");
     expect(screen.queryByRole("link", { name: "Saved" })).toBeNull();
+  });
+
+  it("draws the brand as a dark tile holding the suitcase icon, beside the wordmark", () => {
+    render(<AppShell>x</AppShell>);
+    const brand = screen.getByRole("link", { name: /go to trips/i });
+    expect(brand.className).toBe("shell-brand");
+    expect(brand.querySelector(".shell-brand-mark svg.nav-icon")).not.toBeNull();
+    expect(brand.querySelector("strong")?.textContent).toBe("Packed Smart");
   });
 
   it("provides toasts to its children", () => {

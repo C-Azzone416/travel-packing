@@ -206,13 +206,13 @@ test("the hero leads with the next departure; Edit trip opens the route sheet", 
   await expect(hero.getByText("days to go")).toBeVisible();
   await expect(hero.getByRole("img", { name: /departure stamp$|route stamps$/ })).toBeVisible();
   await expect(hero.getByRole("link", { name: "Continue packing: San Diego" })).toBeVisible();
-  // The header is the dark role token, not a hard-coded colour.
+  // The header bar is the paper palette token (the laptop bar; on a phone the header sits on the page colour), not a hard-coded colour.
   const headerBackground = await page
-    .locator("header.topbar")
+    .locator("header.topbar .topbar-inner")
     .evaluate((node) => getComputedStyle(node).backgroundColor);
   const headerToken = await page.evaluate(() => {
     const probe = document.createElement("div");
-    probe.style.background = "var(--header)";
+    probe.style.background = "var(--paper)";
     document.body.appendChild(probe);
     const color = getComputedStyle(probe).backgroundColor;
     probe.remove();

@@ -18,6 +18,7 @@ import {
 import "./scheme-tokens.css";
 import "./type-scale.css";
 import "./globals.css";
+import "./shell.css";
 
 // Screens set their own title; the template yields "Trips · Packed Smart".
 export const metadata: Metadata = {

@@ -201,3 +201,15 @@ describe("no colour literals outside the token file", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe("Fraunces numerals and the shell page frame (#383)", () => {
+  it("sets lining numerals on the root, so every Fraunces role inherits them", () => {
+    expect(stripCssComments(typeScaleCss)).toMatch(
+      /:root\s*\{[^}]*font-variant-numeric:\s*lining-nums/,
+    );
+  });
+
+  it("body has no min-width (it made every page overflow at 195px)", () => {
+    expect(stripCssComments(globalsCss)).not.toMatch(/(^|\n)body\s*\{[^}]*min-width/);
+  });
+});
