@@ -65,6 +65,7 @@ for (const theme of THEMES) {
       await shot(page, `pk-l-${tag}`);
       await review.click();
       await expect(review).toHaveAttribute("aria-expanded", "true");
+      await expect(page.getByText(/not on your list until you add them/)).toBeVisible();
       await shot(page, `pk-l-rev-${tag}`);
       await review.click();
       await page.getByRole("button", { name: "Edit list" }).click();

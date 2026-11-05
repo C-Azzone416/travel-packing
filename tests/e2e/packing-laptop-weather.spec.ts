@@ -52,9 +52,16 @@ test("a city with suggestions is outlined; the rows are not counted until added;
   await expect(page.getByText(/\d+ new to review/)).toBeVisible();
   const counted = await total(page);
   const review = card.getByRole("button", { name: /\d+ to review/ });
+  // The other stop's card keeps its own height when this one opens its rows (it is not stretched to match).
+  const neighbour = page
+    .getByRole("article")
+    .filter({ hasNot: page.getByRole("button", { name: /to review/ }) });
+  const closedHeight = (await neighbour.first().boundingBox())?.height ?? 0;
+  expect(closedHeight).toBeGreaterThan(0);
   await review.click();
   await expect(review).toHaveAttribute("aria-expanded", "true");
   await expect(card.getByText(/not on your list until you add them/)).toBeVisible();
+  expect((await neighbour.first().boundingBox())?.height).toBe(closedHeight);
   // Nothing was counted, and there is no weather cube yet.
   expect(await total(page)).toBe(counted);
   await expect(

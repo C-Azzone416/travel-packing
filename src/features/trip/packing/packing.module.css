@@ -184,6 +184,8 @@
 .cards {
   display: flex;
   flex-wrap: wrap;
+  /* A card that opens its review rows grows alone; its neighbour keeps its own height. */
+  align-items: flex-start;
   gap: 12px;
   min-width: 0;
 }

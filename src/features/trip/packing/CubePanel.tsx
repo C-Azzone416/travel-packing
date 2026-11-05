@@ -361,7 +361,10 @@ export function CubePanel({
 
       {editing ? (
         <div className={styles.editFooter}>
-          <AddRow cube={view.cube} label={view.label} onAdd={onAdd} onEditItem={onEditItem} />
+          {/* The Toiletries cube adds through the Bathroom form in its bag step: one add control, not two. */}
+          {extra ? null : (
+            <AddRow cube={view.cube} label={view.label} onAdd={onAdd} onEditItem={onEditItem} />
+          )}
           <div className={styles.morningRow}>
             <label className={styles.morningLabel} htmlFor={switchId}>
               <strong>Morning of</strong>
