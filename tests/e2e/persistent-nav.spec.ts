@@ -250,8 +250,10 @@ for (const viewport of [WIDE[0], PHONE[0]]) {
       await page.locator("main").focus();
       let stops = 0;
       let seenMain = false;
+      let farthest = 0;
       for (let i = 0; i < 80; i += 1) {
         await page.keyboard.press("Tab");
+        farthest = Math.max(farthest, await page.evaluate(() => scrollY));
         const at = await inMain();
         if (!at) {
           // Tab has left the last stop of a short page (focus went to the browser); another press would wrap to the top.
@@ -264,7 +266,9 @@ for (const viewport of [WIDE[0], PHONE[0]]) {
         expect(at.bottom).toBeLessThanOrEqual(band.bottom + 0.5);
       }
       expect(stops).toBeGreaterThan(5); // WebKit's native Tab order skips some buttons
-      expect(await page.evaluate(() => scrollY)).toBeGreaterThan(150);
+      // The farthest scroll, not the final one: on Staples the last stops are the sticky Preview panel, which is always on
+      // screen, so the page may scroll back up while focus moves into it. On Settings the two are the same.
+      expect(farthest).toBeGreaterThan(150);
 
       // Backward from the bottom: elements above the viewport are scrolled in from the top edge, the case scroll-padding fixes.
       await scrollToBottom(page);
