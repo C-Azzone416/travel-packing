@@ -1,6 +1,7 @@
 /* Shared by the Suitcase primitives (#381). `.hit` grows the tap area of a control that is shorter than 44px on a phone
-   without changing how it looks: the invisible ::after reaches --hit-pad past the top and bottom edge. Controls in a
-   row are 8px apart or more, so two grown areas never overlap. */
+   without changing how it looks: the invisible ::after reaches --hit-pad past the top and bottom edge. Two grown areas
+   never overlap while the space between stacked controls is at least twice the pad: PillGroup keeps a 10px row gap for the
+   5px pill pad, the stamps pill pad is 3px, a row chip's pad is 5px (so give chips a 10px gap), an editor chip's is 3px. */
 .hit {
   position: relative;
 }

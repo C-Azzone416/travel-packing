@@ -126,6 +126,7 @@ export interface PillTabsProps {
 export function PillTabs({ label, items, value, onChange, idBase, className }: PillTabsProps) {
   const generated = useId();
   const base = idBase ?? generated;
+  const hasSelection = items.some((item) => item.id === value);
   const refs = useRef<Array<HTMLButtonElement | null>>([]);
 
   function onKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number) {
@@ -154,6 +155,8 @@ export function PillTabs({ label, items, value, onChange, idBase, className }: P
     <div role="tablist" aria-label={label} className={cx(styles.tabs, className)}>
       {items.map((item, index) => {
         const selected = item.id === value;
+        // A value that matches no tab must not leave the list out of the tab order: the first tab is the way in.
+        const tabbable = selected || (!hasSelection && index === 0);
         return (
           <button
             key={item.id}
@@ -165,7 +168,7 @@ export function PillTabs({ label, items, value, onChange, idBase, className }: P
             id={`${base}-tab-${item.id}`}
             aria-selected={selected}
             aria-controls={`${base}-panel-${item.id}`}
-            tabIndex={selected ? 0 : -1}
+            tabIndex={tabbable ? 0 : -1}
             className={cx(styles.tab, shared.ring, selected && styles.tabActive)}
             onClick={() => onChange(item.id)}
             onKeyDown={(event) => onKeyDown(event, index)}
