@@ -95,7 +95,7 @@ function Gallery() {
               <span className="g-hero-sub">&amp; Porto</span>
             </div>
             <div className="g-row">
-              <CountdownBadge days={12} />
+              <CountdownBadge days={12} /> <CountdownBadge days={12} toGo />
               <span className="g-lede">flight · 10 nights · 2 cities</span>
             </div>
           </LuggageTag>

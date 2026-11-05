@@ -71,6 +71,7 @@ body {
   font-size: 32px;
   line-height: 1;
   letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
 }
 .g-hero-sub {
   font-family: var(--font-display);
@@ -181,4 +182,9 @@ body {
   border-radius: 12px;
   background: var(--dark);
   color: var(--onDark);
+}
+@media (max-width: 239px) {
+  .g-hero-name {
+    font-size: 26px;
+  }
 }

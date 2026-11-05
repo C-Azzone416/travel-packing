@@ -4951,6 +4951,9 @@ a.back {
 }
 .hero-days-more a {
   position: relative;
+  /* The bold link and the regular paragraph are two faces with different metrics; top-aligning keeps the line box at
+     exactly --ledger-row instead of a half pixel taller in WebKit. */
+  vertical-align: top;
   color: var(--link);
   font-weight: 700;
 }

@@ -1,6 +1,6 @@
 /* Chip (#381; spec on #376 part 2 section 5). */
 .chip {
-  --hit-pad: 7px;
+  --hit-pad: 5px;
   box-sizing: border-box;
   display: inline-flex;
   align-items: center;
@@ -26,7 +26,7 @@
   background: var(--tint);
 }
 .editor {
-  --hit-pad: 4px;
+  --hit-pad: 3px;
   height: 37px;
   padding: 0 20px;
   font-size: 17px;

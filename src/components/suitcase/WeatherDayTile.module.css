@@ -74,12 +74,13 @@
 /* ---- Compact tile (Home) ---- */
 .compact {
   border-radius: 12px;
-  padding: 8px 6px;
+  padding: 8px 4px;
   background: color-mix(in srgb, var(--paper) 45%, transparent);
   font-size: 16px;
 }
 .compact .day {
-  font-size: 16px;
+  font-size: 15px;
+  white-space: nowrap;
 }
 .compact .temps {
   font-size: 14px;
@@ -114,6 +115,7 @@
     display: inline;
   }
   .compact {
+    padding-inline: 6px;
     min-height: 69px;
   }
 }

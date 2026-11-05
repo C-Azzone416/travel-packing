@@ -7,6 +7,7 @@ import { Switch } from "@/components/ui/Switch";
 import { TOILETRY_GROUP_ID } from "@/domain/toiletry-bag";
 import type { Staple } from "@/domain/trip";
 import { supportsSmartQuantity } from "@/domain/calc";
+import { cubeForItem } from "@/domain/cubes";
 import {
   categoryFor,
   findDuplicate,
@@ -77,6 +78,9 @@ export function StapleEditor({
       category: categoryFor(staple?.category ?? null, section),
       packLast,
       ...(placement === "toiletry" ? { groupId: TOILETRY_GROUP_ID } : {}),
+      // The laundry flag and cube are kept as they were; their controls arrive with the Staples redesign (#384).
+      ...(staple?.laundryHalves && cadence !== "smart" ? { laundryHalves: true } : {}),
+      ...(staple?.cube && staple.cube !== cubeForItem(staple) ? { cube: staple.cube } : {}),
     });
   }
 
@@ -176,7 +180,7 @@ export function StapleEditor({
           <fieldset className="scope-choice">
             <legend>How the quantity works</legend>
             <div className="choice-stack">
-              {(["per trip", "per day", "smart"] as const).map((value) => (
+              {(["per trip", "per day", "per night", "smart"] as const).map((value) => (
                 <label className="choice" key={value}>
                   <input
                     type="radio"
@@ -190,18 +194,24 @@ export function StapleEditor({
                     <strong>
                       {value === "per day"
                         ? "Per day"
-                        : value === "per trip"
-                          ? "Fixed per trip"
-                          : "Smart"}
+                        : value === "per night"
+                          ? "Per night"
+                          : value === "per trip"
+                            ? "Fixed per trip"
+                            : "Smart"}
                     </strong>
                     <small>
                       {value === "per day"
-                        ? "Multiplies by every calendar day, including travel days. Laundry does not change it."
-                        : value === "per trip"
-                          ? "The same amount on every trip."
-                          : smartSupported
-                            ? "Uses the shared clothing rules, including trip preferences."
-                            : "Available only for supported clothing staples."}
+                        ? staple?.laundryHalves
+                          ? "Multiplies by every calendar day, including travel days. Halves (rounding up) when the trip has laundry."
+                          : "Multiplies by every calendar day, including travel days. Laundry does not change it."
+                        : value === "per night"
+                          ? "Multiplies by the nights away, one fewer than the days."
+                          : value === "per trip"
+                            ? "The same amount on every trip."
+                            : smartSupported
+                              ? "Uses the shared clothing rules, including trip preferences."
+                              : "Available only for supported clothing staples."}
                     </small>
                   </span>
                 </label>

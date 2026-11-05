@@ -5,3 +5,8 @@ export function dailyDaysFor(days: number, returnOutfit: boolean): number {
   if (days <= 1) return 0;
   return days - (returnOutfit ? 1 : 0);
 }
+
+/** Nights away from home: one fewer than the trip days, never below zero (#378). */
+export function nightsFor(days: number): number {
+  return Math.max(0, days - 1);
+}

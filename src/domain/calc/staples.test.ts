@@ -89,11 +89,13 @@ describe("shared Staple quantity rules", () => {
 
   it.each([
     ["underwear", "per trip", 2],
-    ["underwear", "per day", 10],
+    ["underwear", "per day", 9],
     ["socks", "per trip", 2],
-    ["socks", "per day", 10],
+    ["socks", "per day", 9],
   ] as const)(
-    "%s with %s cadence keeps its exact quantity when trip spares are enabled",
+    // Underwear and socks per day are the everyday outfits (days - 1 with the return outfit, #295) times the quantity,
+    // plus the trip's one spare (#378); a per-trip quantity is never touched by the spare.
+    "%s with %s cadence: everyday outfits plus one spare when trip spares are enabled",
     (id, cadence, expected) => {
       const { items } = buildTripItems({ ...base, spare: true }, [
         staple({ id, name: id, qty: 2, cadence, category: "Clothing" }),

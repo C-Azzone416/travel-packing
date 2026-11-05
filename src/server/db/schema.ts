@@ -11,6 +11,7 @@
 import { sql } from "drizzle-orm";
 import { THEME_IDS } from "../../domain/themes";
 import { STAPLES_SETUP_STATES } from "../../domain/staples-setup";
+import { CUBES, NEVER_LAUNDRY_IDS } from "../../domain/cubes";
 export { STAPLES_SETUP_STATES } from "../../domain/staples-setup";
 import {
   boolean,
@@ -31,7 +32,9 @@ import {
 } from "drizzle-orm/pg-core";
 
 export const ITEM_SECTIONS = ["main", "return", "packlast"] as const;
-export const STAPLE_CADENCES = ["per day", "per trip", "smart"] as const;
+/** "smart" stays for old trip snapshots and the occasion-driven Nice attire staples; see docs/schema.md (#378). */
+export const STAPLE_CADENCES = ["per day", "per trip", "smart", "per night"] as const;
+export { CUBES };
 export const TEMPERATURE_UNITS = ["F", "C"] as const;
 export const WEATHER_STATUSES = ["pending", "accepted", "skipped"] as const;
 /** Category strings the domain uses. "Clothing" is the single semantic name (the prototype's "Clothes" was normalized to it). */
@@ -54,6 +57,8 @@ export const itemSection = pgEnum("item_section", ITEM_SECTIONS);
 export const stapleCadence = pgEnum("staple_cadence", STAPLE_CADENCES);
 export const weatherStatus = pgEnum("weather_status", WEATHER_STATUSES);
 export const itemCategory = pgEnum("item_category", ITEM_CATEGORIES);
+/** The suitcase cubes that group a trip's list (#378). Categories stay for compatibility; cubes drive grouping. */
+export const itemCube = pgEnum("item_cube", CUBES);
 export const staplesSetupState = pgEnum("staples_setup_state", STAPLES_SETUP_STATES);
 /** The six built-in trip theme images (#48), shared with the domain so the two can never drift apart. */
 export const tripTheme = pgEnum("trip_theme", THEME_IDS);
@@ -131,6 +136,9 @@ export const staples = pgTable(
     category: itemCategory("category").notNull(),
     qty: integer("qty").notNull(),
     cadence: stapleCadence("cadence").notNull(),
+    /** "↻ Fewer with laundry": halves the quantity, rounding up, when the trip has laundry. */
+    laundryHalves: boolean("laundry_halves").notNull().default(false),
+    cube: itemCube("cube").notNull().default("misc"),
     packLast: boolean("pack_last").notNull().default(false),
     groupId: text("group_id"),
     version: integer("version").notNull().default(1),
@@ -141,6 +149,10 @@ export const staples = pgTable(
     unique("staples_owner_semantic_unique").on(table.ownerId, table.semanticId),
     check("staples_qty_positive", sql`${table.qty} >= 1`),
     check("staples_version_positive", sql`${table.version} >= 1`),
+    check(
+      "staples_laundry_not_underwear_socks",
+      sql`not ${table.laundryHalves} or ${table.semanticId} not in (${sql.raw(NEVER_LAUNDRY_IDS.map((id) => `'${id}'`).join(", "))})`,
+    ),
     check("staples_name_not_blank", sql`btrim(${table.name}) <> ''`),
     check(
       "staples_group_known",
@@ -358,6 +370,11 @@ export const tripPreferences = pgTable(
     occasionCount: integer("occasion_count").notNull().default(1),
     reuseNice: boolean("reuse_nice").notNull().default(false),
     returnOutfit: boolean("return_outfit").notNull().default(true),
+    /** Cubes whose items are packed the morning of departure. Toiletries is on by default (the toiletry bag). */
+    morningOfCubes: itemCube("morning_of_cubes")
+      .array()
+      .notNull()
+      .default(sql`'{toiletries}'::item_cube[]`),
     /** Remembered copies of calculated items across Nice outfits off/on (domain: suggestionMemory). */
     suggestionMemory: jsonb("suggestion_memory")
       .notNull()
@@ -398,6 +415,10 @@ export const tripItems = pgTable(
     userEdited: boolean("user_edited").notNull().default(false),
     /** A copied rule snapshot for Staple-derived rows. Null means a generic or manual trip item. */
     stapleCadence: stapleCadence("staple_cadence"),
+    /** Snapshot of the Staple's per-unit quantity and ↻ flag, so recalculation can re-derive a Staple row. */
+    stapleQty: integer("staple_qty"),
+    laundryHalves: boolean("laundry_halves").notNull().default(false),
+    cube: itemCube("cube").notNull().default("misc"),
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: createdAt(),
   },
@@ -411,6 +432,10 @@ export const tripItems = pgTable(
     // Target of the progress table's composite key, which carries qty so packed <= qty is a plain CHECK.
     unique("trip_items_progress_key").on(table.id, table.tripId, table.ownerId, table.qty),
     check("trip_items_qty_positive", sql`${table.qty} >= 1`),
+    check(
+      "trip_items_staple_qty_positive",
+      sql`${table.stapleQty} is null or ${table.stapleQty} >= 1`,
+    ),
     check("trip_items_name_not_blank", sql`btrim(${table.name}) <> ''`),
     check(
       "trip_items_group_known",

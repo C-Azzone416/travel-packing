@@ -99,11 +99,15 @@ describe("WeatherDayTile", () => {
     expect(css).toMatch(/\.compact \{[^}]*color-mix\(in srgb, var\(--paper\) 45%, transparent\)/);
   });
 
+  it("the compact day label stays on one line (Sun 22 and Mon 23 no longer wrap at 390)", () => {
+    expect(css).toMatch(/\.compact \.day \{[^}]*font-size: 15px;\s*white-space: nowrap/);
+  });
+
   it("keeps the spec sizes: forecast padding 9 6 radius 12 on a laptop, 6 2 radius 10 on a phone", () => {
     expect(css).toMatch(/\.forecast \{[^}]*border-radius: 10px;\s*padding: 6px 2px/);
     expect(css).toMatch(
       /@media \(min-width: 1024px\)[\s\S]*padding: 9px 6px;\s*border-radius: 12px/,
     );
-    expect(css).toMatch(/\.compact \{[^}]*border-radius: 12px;\s*padding: 8px 6px/);
+    expect(css).toMatch(/\.compact \{[^}]*border-radius: 12px;\s*padding: 8px 4px/);
   });
 });
