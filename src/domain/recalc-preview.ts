@@ -8,7 +8,7 @@
 // count, when the preference does; a suppressed optional suggestion is not re-added; Ready is revoked; the bag placement resets
 // only when the Bathroom contents change.
 
-import { CALCULATED_ITEM_IDS, recalculateSuggestions } from "./item-ops";
+import { CALCULATED_ITEM_IDS, isStapleRederived, recalculateSuggestions } from "./item-ops";
 import { toiletryItems } from "./toiletry-bag";
 import type { SuggestFn, Trip, TripConfig } from "./trip";
 
@@ -110,7 +110,7 @@ export function previewRecalculation<T extends Trip>(
       });
       continue;
     }
-    if (!CALCULATED_ITEM_IDS.has(old.id)) {
+    if (!CALCULATED_ITEM_IDS.has(old.id) && !isStapleRederived(old)) {
       stays.push({ id: old.id, name: old.name, why: "added by you" });
       continue;
     }

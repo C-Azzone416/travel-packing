@@ -11,6 +11,9 @@ import {
   type RejectionReason,
 } from "./readiness";
 import { TOILETRY_GROUP_ID, toiletryItems } from "./toiletry-bag";
+import { stapleContext, stapleQuantity } from "./calc/staples";
+import { nightsFor } from "./calc/daily-days";
+import { CUBES, DEFAULT_MORNING_OF_CUBES, isCube, itemCube, type Cube } from "./cubes";
 import { canonicalItemId } from "./item-identity";
 import { duplicateKey } from "./saved-lists";
 import type { ItemSection, Scope, Staple, SuggestFn, Trip, TripConfig, TripItem } from "./trip";
@@ -44,7 +47,7 @@ export const OPTIONAL_NICE_IDS: ReadonlySet<string> = new Set([
 
 export const WEATHER_UMBRELLA_ID = "weather-umbrella";
 
-export type ItemOpRejection = RejectionReason | "EMPTY_NAME" | "INVALID_TIMING";
+export type ItemOpRejection = RejectionReason | "EMPTY_NAME" | "INVALID_TIMING" | "INVALID_CUBE";
 
 export type ItemOpResult<T> =
   | { ok: true; trip: T; staples: Staple[] }
@@ -73,7 +76,11 @@ function rejected<T>(trip: T, staples: Staple[], reason: ItemOpRejection): ItemO
  */
 function stapleQtyFor(existing: Staple, tripQty: number, tripDays: number): number {
   if (existing.cadence === "per trip") return tripQty;
-  if (existing.cadence === "smart") return existing.qty;
+  // These store the per-unit amount as is: Smart and per-night have no day count to divide by here, and a laundry-halved
+  // quantity is not the per-day amount (laundry never changes the stored rule, #222).
+  if (existing.cadence === "smart" || existing.cadence === "per night" || existing.laundryHalves) {
+    return existing.qty;
+  }
   return tripDays > 0 ? Math.max(1, Math.round(tripQty / tripDays)) : existing.qty;
 }
 
@@ -92,7 +99,7 @@ export function rememberPreview(
   tripDays: number,
 ): RememberPreview {
   const staple = staples.find((entry) => entry.id === itemId);
-  if (!staple || staple.cadence !== "per day") return null;
+  if (!staple || staple.cadence !== "per day" || staple.laundryHalves) return null;
   if (tripDays <= 0) return { kind: "no-packing-days" };
   return { kind: "per-day", perDay: stapleQtyFor(staple, tripQty, tripDays) };
 }
@@ -199,6 +206,16 @@ function toiletrySignature(trip: Trip): string {
     .join("|");
 }
 
+/** A Staple-derived row the recalculation re-derives: it has a saved per-unit quantity and was not edited by hand. */
+export function isStapleRederived(entry: TripItem): boolean {
+  return (
+    entry.stapleQty !== undefined &&
+    entry.stapleCadence !== undefined &&
+    entry.stapleCadence !== "smart" &&
+    !entry.userEdited
+  );
+}
+
 /**
  * Recalculate suggestions after a preference change, merging with user edits (prototype
  * `reconcileTripSuggestions`). Also used for Nice outfits off/on: edits and progress survive through
@@ -223,7 +240,27 @@ export function recalculateSuggestions<T extends Trip>(
   }
 
   const calculated = suggest({ ...nextConfig, start: trip.start, end: trip.end });
-  const nonCalculated = oldItems.filter((entry) => !isRecalculable(entry));
+  // A Staple row re-derives from its saved per-unit quantity, cadence and laundry flag unless the person edited it (#378).
+  const context = stapleContext(nextConfig, {
+    days: calculated.days,
+    nights: nightsFor(calculated.days),
+    dailyDays: calculated.dailyDays,
+  });
+  const nonCalculated = oldItems
+    .filter((entry) => !isRecalculable(entry))
+    .flatMap((entry): TripItem[] => {
+      if (!isStapleRederived(entry)) return [entry];
+      const qty = stapleQuantity(
+        {
+          id: entry.id,
+          qty: entry.stapleQty!,
+          cadence: entry.stapleCadence!,
+          laundryHalves: entry.laundryHalves,
+        },
+        context,
+      );
+      return qty > 0 ? [{ ...entry, qty, packed: Math.min(entry.packed, qty) }] : [];
+    });
   // A list already split by weather keeps its split clothing: recalculating must not add Everyday tops and
   // bottoms beside it. The weather review offers new counts for the split lines instead (epic #107 §4).
   const weatherClothing = oldItems.some((entry) => WEATHER_CLOTHING_IDS.has(entry.id));
@@ -271,6 +308,7 @@ export function recalculateSuggestions<T extends Trip>(
       merged.packed = Math.min(source.packed || 0, merged.qty);
       if (template.optional || source.optional) merged.optional = true;
       else delete merged.optional;
+      if (source.cube) merged.cube = source.cube;
       const groupId = source.groupId ?? template.groupId;
       if (groupId) merged.groupId = groupId;
       else delete merged.groupId;
@@ -472,4 +510,45 @@ export function findIdentityViolations(trip: Pick<Trip, "items">): string[] {
   if (trip.items.filter((entry) => /\bchargers?\b/i.test(entry.name)).length > 1)
     violations.push("split Chargers");
   return violations;
+}
+
+// ---------------------------------------------------------------- cubes (#378)
+
+export type MoveCubeResult<T> =
+  { ok: true; trip: T } | { ok: false; reason: "ITEM_NOT_FOUND" | "INVALID_CUBE"; trip: T };
+
+/**
+ * Move an item to another cube. Only the cube changes: name, quantity, packed count, timing and Ready are untouched,
+ * and a recalculation keeps the cube the person chose.
+ */
+export function moveItemToCube<T extends Trip>(
+  trip: T,
+  itemId: string,
+  cube: string,
+): MoveCubeResult<T> {
+  if (!isCube(cube)) return { ok: false, reason: "INVALID_CUBE", trip };
+  if (!trip.items.some((entry) => entry.id === itemId)) {
+    return { ok: false, reason: "ITEM_NOT_FOUND", trip };
+  }
+  return {
+    ok: true,
+    trip: { ...trip, items: trip.items.map((e) => (e.id === itemId ? { ...e, cube } : e)) },
+  };
+}
+
+/**
+ * Turn a cube's "Morning of" flag on or off (the saved flag; a cube holding a Pack last item reads as flagged
+ * regardless, see `morningOfCubesFor`).
+ */
+export function setMorningOf<T extends Trip>(trip: T, cube: Cube, on: boolean): T {
+  const saved = new Set<Cube>(trip.morningOfCubes ?? DEFAULT_MORNING_OF_CUBES);
+  if (on) saved.add(cube);
+  else saved.delete(cube);
+  return { ...trip, morningOfCubes: CUBES.filter((entry) => saved.has(entry)) };
+}
+
+/** The cubes holding at least one item, in cube order. */
+export function cubesInUse(trip: Trip): Cube[] {
+  const used = new Set(trip.items.map((entry) => itemCube(entry)));
+  return CUBES.filter((cube) => used.has(cube));
 }
