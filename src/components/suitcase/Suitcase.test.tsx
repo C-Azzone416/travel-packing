@@ -147,6 +147,29 @@ describe("CountdownBadge", () => {
     expect(screen.getByText("12 days")).toBeTruthy();
   });
 
+  it("the toGo form is a Fraunces numeral plus 'days to go' (singular for 1, plain Today for 0)", () => {
+    const { container, rerender } = render(<CountdownBadge days={12} toGo />);
+    expect(container.textContent).toBe("12 days to go");
+    expect(container.querySelector("[data-countdown]")?.getAttribute("data-countdown")).toBe(
+      "to-go",
+    );
+    expect(container.querySelector("[class*=numeral]")?.textContent).toBe("12");
+    rerender(<CountdownBadge days={1} toGo />);
+    expect(container.textContent).toBe("1 day to go");
+    rerender(<CountdownBadge days={0} toGo />);
+    expect(container.textContent).toBe("Today");
+    const text = css("CountdownBadge.module.css");
+    expect(text).toMatch(
+      /\.numeral \{[^}]*font-family: var\(--font-display\)[^}]*font-weight: 800/,
+    );
+  });
+
+  it("never runs past its tag: it wraps at 239px and below", () => {
+    const text = css("CountdownBadge.module.css");
+    expect(text).toMatch(/max-width: 100%/);
+    expect(text).toMatch(/max-width: 239px\) \{\s*\.badge \{\s*white-space: normal/);
+  });
+
   it("uses the accent fill and --onDark text", () => {
     const text = css("CountdownBadge.module.css");
     expect(text).toContain("background: var(--accent)");

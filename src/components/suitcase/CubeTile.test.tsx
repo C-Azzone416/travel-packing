@@ -110,8 +110,18 @@ describe("CubeTile", () => {
     );
   });
 
-  it("keeps the spec tile measurements: laptop padding 16 radius 16 bar 8, phone padding 10 12 radius 12 bar 6", () => {
-    expect(css).toMatch(/\.tile \{[^}]*padding: 10px 12px;[^}]*border-radius: 12px/);
+  it("the phone tile name is 15px so Documents fits the 80px inner width at 390", () => {
+    expect(css).toMatch(/\.tile \.name \{[^}]*font-size: 15px/);
+    expect(css).toMatch(/min-width: 1024px\)[\s\S]*\.tile \.name \{\s*font-size: 16px/);
+  });
+
+  it("a tile name breaks mid-word only as a last resort: break-word on phones, anywhere only at 239px and below", () => {
+    expect(css).toMatch(/\.tile \.name \{[^}]*overflow-wrap: break-word/);
+    expect(css).toMatch(/max-width: 239px\) \{\s*\.tile \.name \{\s*overflow-wrap: anywhere/);
+  });
+
+  it("keeps the spec tile measurements: laptop padding 16 radius 16 bar 8, phone padding 10 8 radius 12 bar 6", () => {
+    expect(css).toMatch(/\.tile \{[^}]*padding: 10px 8px;[^}]*border-radius: 12px/);
     expect(css).toMatch(/@media \(min-width: 1024px\)[\s\S]*padding: 16px;\s*border-radius: 16px/);
     expect(css).toMatch(/\.bar \{[^}]*height: 6px/);
     expect(css).toMatch(/\.tile \.bar \{\s*height: 8px/);

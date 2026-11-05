@@ -223,6 +223,19 @@ describe("PillTabs (Home four-pill row)", () => {
     expect(screen.getAllByRole("tab")[0].id).toMatch(/-tab-pack$/);
   });
 
+  it("labels never break mid-word: nowrap, a fluid size, 2px side padding, and one column at 239px and below", () => {
+    const text = css("Pill.module.css");
+    expect(text).toMatch(
+      /\.tabLabel \{[^}]*white-space: nowrap[^}]*font-size: clamp\(14px, 4vw, 16px\)/,
+    );
+    expect(text).toMatch(/\.tabSub \{[^}]*white-space: nowrap/);
+    expect(text).not.toMatch(/\.tabLabel \{[^}]*overflow-wrap/);
+    expect(text).toMatch(/\.tab \{[^}]*padding: 4px 2px/);
+    expect(text).toMatch(
+      /max-width: 239px\) \{\s*\.tabs \{\s*grid-template-columns: minmax\(0, 1fr\)/,
+    );
+  });
+
   it("is four columns, two at 359px and below, with a 48px minimum height and 24px radius", () => {
     const text = css("Pill.module.css");
     expect(text).toMatch(

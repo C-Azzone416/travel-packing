@@ -50,7 +50,7 @@
   grid-template-areas: "name" "count" "bar";
   row-gap: 4px;
   min-width: 0;
-  padding: 10px 12px;
+  padding: 10px 8px;
   border: 2px solid transparent;
   border-radius: 12px;
   background: var(--paper);
@@ -60,9 +60,9 @@
 .tile .name {
   grid-area: name;
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   font-family: var(--font-body);
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
   line-height: 1.2;
 }
@@ -240,8 +240,8 @@
 
 /* Narrow phones: the tile name may wrap and the count never overflows. */
 @media (max-width: 239px) {
-  .tile {
-    padding-inline: 10px;
+  .tile .name {
+    overflow-wrap: anywhere;
   }
 }
 
