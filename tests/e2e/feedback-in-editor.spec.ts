@@ -419,6 +419,10 @@ test(
     await page.evaluate(
       () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
     );
+    // The layout swap and the zoomed reflow can take more than two frames on a slow runner: wait for the page to settle.
+    await expect
+      .poll(async () => (await headMetrics(page)).pageOverflow, { timeout: 5000 })
+      .toBe(false);
     const zoomed = await headMetrics(page);
     expect(overlaps(zoomed.entry, zoomed.close), "entry and × at 200%").toBe(false);
     expect(overlaps(zoomed.entry, zoomed.title), "entry and title at 200%").toBe(false);
