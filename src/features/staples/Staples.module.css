@@ -355,6 +355,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   align-content: start;
+  grid-auto-rows: max-content;
   gap: 8px;
   flex: 1 1 auto;
   min-width: 0;
@@ -420,9 +421,11 @@
 }
 .laundryRow {
   box-sizing: border-box;
-  display: flex;
+  /* A grid, not a flex row: a button that is a flex container sized its height from one line of text, so a pill whose label
+     wraps at 195px let the label spill out of it. */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   width: 100%;
   min-height: 52px;
@@ -444,7 +447,7 @@
   flex: none;
 }
 .laundryRow > span:first-child {
-  display: inline-flex;
+  display: flex;
   flex: 1 1 0;
   align-items: center;
   gap: 8px;
@@ -796,8 +799,16 @@
 
 @media (max-width: 359px) {
   .laundryRow {
-    gap: 8px;
+    gap: 6px;
+    padding: 8px 14px;
     border-radius: 26px;
+    font-size: 15px;
+  }
+  .laundryRow > span:first-child {
+    gap: 6px;
+  }
+  .laundryRow svg {
+    display: none;
   }
   .head {
     grid-template-columns: minmax(0, 1fr);

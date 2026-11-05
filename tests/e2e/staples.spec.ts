@@ -331,6 +331,10 @@ test("the phone dock keeps to its drawn height, and the sheet keeps Remove and D
     const [pillBox, stateBox] = [(await pill.boundingBox())!, (await state.boundingBox())!];
     expect(pillBox.x + pillBox.width - (stateBox.x + stateBox.width)).toBeLessThan(30);
     expect(stateBox.y).toBeGreaterThan(pillBox.y - 1);
+    // The label wraps inside the pill, which grows to hold it (it used to spill out of a 52px pill at 195).
+    const label = (await pill.locator("span").first().boundingBox())!;
+    expect(label.y).toBeGreaterThanOrEqual(pillBox.y);
+    expect(label.y + label.height).toBeLessThanOrEqual(pillBox.y + pillBox.height);
     await sheet.getByRole("button", { name: "Done" }).scrollIntoViewIfNeeded();
     await sheet.getByRole("button", { name: "Done" }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
