@@ -5,13 +5,20 @@
 // (src/domain/calc). Only the id generator and "today" are injected: the domain has no hidden clock.
 
 import { DEFAULT_MORNING_OF_CUBES } from "./cubes";
-import { buildTripItems, forecastLabel, normalizeTripDates, parseDate } from "./calc";
+import {
+  FORECAST_WINDOW_DAYS,
+  buildTripItems,
+  forecastLabel,
+  normalizeTripDates,
+  parseDate,
+} from "./calc";
 import type { StampLabels } from "./stamps";
 import { DEFAULT_THEME, type ThemeId } from "./themes";
 import { TOILETRY_GROUP_ID } from "./toiletry-bag";
 import type { TravelMode, TripOrigin } from "./trip-route";
 import type { Staple, Trip, TripConfig, TripItem } from "./trip";
 import {
+  addDays,
   daysBetween,
   routeLabel,
   shiftStops,
@@ -363,6 +370,34 @@ export function classifyTrip(
 ): TripClassification {
   if (trip.archived) return "archived";
   return isPastTrip(trip, today) ? "past" : "upcoming";
+}
+
+/**
+ * Where a trip is in time (Suitcase P3, #408). One function for every screen:
+ * - `far`: the first day is beyond the forecast window (more than 15 days out), so there is no forecast yet;
+ * - `soon`: 1 to 15 days out;
+ * - `leaving`: the start day (a day trip is `leaving` and then `past`, never `during`);
+ * - `during`: after the start day, up to and including the end day;
+ * - `past`: the day after the end date (the same rule as `isPastTrip`, #26).
+ * `today` is the device-local date (`localToday`). A trip with an unparseable start or `today` is `soon` (the neutral
+ * treatment, no Usual weather); an unparseable or earlier end counts as the start day.
+ */
+export type TripPhase = "far" | "soon" | "leaving" | "during" | "past";
+
+export function tripPhase(trip: Pick<LifecycleTrip, "start" | "end">, today: string): TripPhase {
+  if (!parseDate(trip.start) || !parseDate(today)) return "soon";
+  const toStart = daysBetween(today, trip.start);
+  if (toStart >= FORECAST_WINDOW_DAYS) return "far";
+  if (toStart > 0) return "soon";
+  if (toStart === 0) return "leaving";
+  const lastDay =
+    daysBetween(trip.start, trip.end) > 0 && parseDate(trip.end) ? trip.end : trip.start;
+  return daysBetween(lastDay, today) > 0 ? "past" : "during";
+}
+
+/** The day the forecast reaches the trip's first day: start minus 15 days. Null when the start is not a date. */
+export function forecastOpensOn(start: string): string | null {
+  return parseDate(start) ? addDays(start, 1 - FORECAST_WINDOW_DAYS) : null;
 }
 
 export function upcomingTrips(trips: LifecycleTrip[], today: string): LifecycleTrip[] {

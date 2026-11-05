@@ -1,5 +1,8 @@
 const MS_PER_DAY = 86_400_000;
 
+/** The forecast window: today plus the next 15 days (16 days). The weather code and the trip phase share it (#408). */
+export const FORECAST_WINDOW_DAYS = 16;
+
 export type ForecastLabel = "Close forecast" | "Seasonal outlook";
 
 export interface NormalizedDates {
