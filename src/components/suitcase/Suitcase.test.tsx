@@ -147,7 +147,7 @@ describe("CountdownBadge", () => {
     expect(screen.getByText("12 days")).toBeTruthy();
   });
 
-  it("the toGo form is a Fraunces numeral plus 'days to go' (singular for 1, plain Today for 0)", () => {
+  it("the toGo form is a Fraunces numeral plus 'days to go' (singular for 1, Leaves today for 0)", () => {
     const { container, rerender } = render(<CountdownBadge days={12} toGo />);
     expect(container.textContent).toBe("12 days to go");
     expect(container.querySelector("[data-countdown]")?.getAttribute("data-countdown")).toBe(
@@ -157,7 +157,7 @@ describe("CountdownBadge", () => {
     rerender(<CountdownBadge days={1} toGo />);
     expect(container.textContent).toBe("1 day to go");
     rerender(<CountdownBadge days={0} toGo />);
-    expect(container.textContent).toBe("Today");
+    expect(container.textContent).toBe("Leaves today");
     const text = css("CountdownBadge.module.css");
     expect(text).toMatch(
       /\.numeral \{[^}]*font-family: var\(--font-display\)[^}]*font-weight: 800/,

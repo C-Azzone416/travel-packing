@@ -208,3 +208,11 @@ export function tripRoutePoints(trip: {
   }
   return points.some((point) => point.kind === "stop") ? points : [];
 }
+
+/** A short stable string for a set of map points, so a map drawn earlier can be checked against the trip as it is now. */
+export function routeSignature(
+  points: readonly RoutePoint[],
+  mode: TravelMode | null | undefined,
+): string {
+  return JSON.stringify([mode ?? "other", points.map((p) => [p.kind, p.lat, p.lng, p.label])]);
+}

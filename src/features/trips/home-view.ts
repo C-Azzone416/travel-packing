@@ -11,11 +11,14 @@ import {
   weatherCubeLabel,
   type Cube,
 } from "@/domain/cubes";
-import type { LifecycleTrip } from "@/domain/trip-lifecycle";
+import type { LifecycleTrip, TripPhase } from "@/domain/trip-lifecycle";
+import { packingButtonLabel } from "@/lib/trip-phase-copy";
+import type { UsualWeatherRow } from "@/components/ui/UsualWeather";
 import { routeTextShort, stopsOrDestination, tripDisplayName } from "@/domain/trip-route";
 import { daysBetween, type TripStop } from "@/domain/trip-stops";
 import type { StopWeather } from "@/domain/weather/types";
 import { WEATHER_RULES } from "@/domain/weather/recommend";
+import { defaultFormatRange } from "@/domain/weather/recommend";
 import { displayTemperature, weatherRowView } from "@/features/trip/weather-view";
 import type { TemperatureUnit } from "@/server/data/weather-store";
 
@@ -79,7 +82,9 @@ function conditionWord(label: string): string | null {
 }
 
 function joinNames(names: readonly string[]): string {
-  return names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} & ${names[names.length - 1]}`;
+  return names.length <= 1
+    ? (names[0] ?? "")
+    : `${names.slice(0, -1).join(", ")} & ${names[names.length - 1]}`;
 }
 
 /** "added for Porto rain", "added for Lisbon & Porto rain", "added for 3 cities" (spec section 5). */
@@ -110,14 +115,17 @@ export function cubeSummaries(
     const total = items.reduce((sum, item) => sum + item.qty, 0);
     if (total === 0) return [];
     const packed = items.reduce((sum, item) => sum + Math.min(item.packed, item.qty), 0);
-    const name = cube === "weather" ? weatherCubeLabel(items.map((item) => item.id)) : CUBE_LABELS[cube];
+    const name =
+      cube === "weather" ? weatherCubeLabel(items.map((item) => item.id)) : CUBE_LABELS[cube];
 
     // Notes in priority order: weather, passport, 3.4 oz; the first two are shown (spec section 5).
     const notes: string[] = [];
     if (cube === "weather") notes.push(weatherNote(name, weather.cities));
     if (cube === "documents" && international === true) {
       const passport = items.find((item) => canonicalItemId(item.id) === "passport");
-      notes.push(passport ? (passport.packed >= passport.qty ? "passport ✓" : "passport") : "add passport");
+      notes.push(
+        passport ? (passport.packed >= passport.qty ? "passport ✓" : "passport") : "add passport",
+      );
     }
     if (cube === "toiletries" && flying) notes.push("under 3.4 oz");
 
@@ -155,13 +163,12 @@ export function firstOpenCube(cubes: readonly CubeSummary[]): Cube | null {
 }
 
 /**
- * The suitcase button. "Start packing" while nothing is packed, "Continue packing" after (#393, every phase).
- * A Ready trip keeps "Review bag" (Caroline's ruling on #338).
- * TODO(#408): tripPhase `during` reads "Open list" (#410); the all-packed state is #411.
+ * The suitcase button: Start / Continue packing / Open list (src/lib/trip-phase-copy). A Ready trip keeps "Review bag"
+ * (Caroline's ruling on #338); the all-packed state is #411.
  */
-export function packingButtonLabel(totals: BagTotals, ready: boolean): string {
+export function suitcaseButtonLabel(totals: BagTotals, ready: boolean, phase: TripPhase): string {
   if (ready) return "Review bag";
-  return totals.packed === 0 ? "Start packing" : "Continue packing";
+  return packingButtonLabel(totals.packed, phase);
 }
 
 /** Packing for a trip, optionally with one cube open (the Packing screen reads `?cube=`, #385). */
@@ -174,7 +181,9 @@ export function packingHref(tripId: string, cube?: Cube | null): string {
 const WEEKDAY = new Intl.DateTimeFormat("en", { weekday: "short", timeZone: "UTC" });
 const MONTH = new Intl.DateTimeFormat("en", { month: "short", timeZone: "UTC" });
 
-function dateParts(value: string): { weekday: string; day: number; month: string; year: number } | null {
+function dateParts(
+  value: string,
+): { weekday: string; day: number; month: string; year: number } | null {
   const date = parseDate(value);
   if (!date) return null;
   return {
@@ -195,17 +204,27 @@ export function tagDates(trip: Pick<LifecycleTrip, "start" | "end">, today: stri
   if (!from || !to) return "Choose dates";
   const year = to.year === (dateParts(today)?.year ?? to.year) ? "" : ` ${to.year}`;
   if (trip.start === trip.end) return `${from.weekday} ${from.day} ${from.month}${year}`;
-  const left = from.month === to.month ? `${from.weekday} ${from.day}` : `${from.weekday} ${from.day} ${from.month}`;
+  const left =
+    from.month === to.month
+      ? `${from.weekday} ${from.day}`
+      : `${from.weekday} ${from.day} ${from.month}`;
   return `${left} – ${to.weekday} ${to.day} ${to.month}${year}`;
 }
 
 /** The hero's two lines: the name, and "& Porto" under it when an unnamed trip has several cities. */
-export function heroName(trip: LifecycleTrip): { title: string; subtitle: string | null; size: "xl" | "l" | "m" } {
+export function heroName(trip: LifecycleTrip): {
+  title: string;
+  subtitle: string | null;
+  size: "xl" | "l" | "m";
+} {
   const full = tripDisplayName(trip);
   const named = (trip.name ?? "").trim() !== "";
   const cities = stopsOrDestination(trip)
     .map((stop) => stop.location.city.trim())
-    .filter((city, at, all) => city !== "" && all.findIndex((c) => c.toLowerCase() === city.toLowerCase()) === at);
+    .filter(
+      (city, at, all) =>
+        city !== "" && all.findIndex((c) => c.toLowerCase() === city.toLowerCase()) === at,
+    );
   const split = !named && cities.length > 1;
   const title = split ? cities[0] : full;
   // Long names step down so a 72px heading never runs off the tag.
@@ -301,7 +320,12 @@ export function cityWeather(
     const row = found ? weatherRowView(stop, found, unit, today) : null;
     if (!row) return;
     const forecast = row.forecastDays;
-    const part = row.forecast ?? { high: row.high, low: row.low, rainDays: row.rainDays, totalDays: row.totalDays };
+    const part = row.forecast ?? {
+      high: row.high,
+      low: row.low,
+      rainDays: row.rainDays,
+      totalDays: row.totalDays,
+    };
     const rainy = forecast.filter((day) => day.rainPercent >= RAIN_PERCENT);
     const snowy = forecast.some((day) => day.glyph === "snow");
     const condition = snowy ? "snow" : rainy.length > 0 ? "rain" : null;
@@ -350,4 +374,31 @@ export function alertCities(rows: readonly CityWeather[]): string[] {
 export function alertHeading(label: string | null, condition: "rain" | "snow" | null): string {
   const word = (label && conditionWord(label)) ?? condition;
   return word ? word.charAt(0).toUpperCase() + word.slice(1) : "Weather";
+}
+
+/** Usual-weather rows for a trip whose forecast has not opened: every stop's averages, never day tiles. */
+export function usualRows(
+  stops: readonly TripStop[],
+  weather: readonly StopWeather[] | null,
+  unit: TemperatureUnit,
+  today: string,
+): UsualWeatherRow[] {
+  return stops.map((stop, index) => {
+    const base = {
+      id: String(index),
+      city: stop.location.city,
+      dates: defaultFormatRange(stop.arrive, stop.leave),
+    };
+    const found = weather?.find((entry) => entry.stopIndex === index);
+    const row = found ? weatherRowView(stop, found, unit, today) : null;
+    if (!row) return { ...base, unavailable: weather !== null };
+    return {
+      ...base,
+      line:
+        row.rainDays > 0
+          ? `about ${row.rainDays} rainy ${row.rainDays === 1 ? "day" : "days"}`
+          : "rarely rains",
+      range: `${displayTemperature(row.high, unit)}° / ${displayTemperature(row.low, unit)}°`,
+    };
+  });
 }
