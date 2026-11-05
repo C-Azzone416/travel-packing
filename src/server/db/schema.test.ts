@@ -3,6 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createMigratedDb, resetData } from "./__fixtures__/db";
 import { buildTripItems, calculateSuggestions, SYNTHETIC_STAPLES } from "../../domain/calc";
 import { THEME_IDS } from "../../domain/themes";
+import { TRAVEL_MODES } from "../../domain/trip-route";
 import * as schema from "./schema";
 
 let ctx: Awaited<ReturnType<typeof createMigratedDb>>;
@@ -581,6 +582,7 @@ describe("drizzle schema matches the migrated database", () => {
       { typname: "item_section", labels: [...schema.ITEM_SECTIONS] },
       { typname: "staple_cadence", labels: [...schema.STAPLE_CADENCES] },
       { typname: "staples_setup_state", labels: [...schema.STAPLES_SETUP_STATES] },
+      { typname: "travel_mode", labels: [...TRAVEL_MODES] },
       { typname: "trip_theme", labels: [...THEME_IDS] },
       { typname: "weather_status", labels: [...schema.WEATHER_STATUSES] },
     ]);
