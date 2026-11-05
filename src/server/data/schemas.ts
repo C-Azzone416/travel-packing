@@ -68,7 +68,13 @@ export const addItemInput = z.object({
   name,
   category: z.enum(ADDABLE_CATEGORIES),
   neededQty: qty,
+  /** Packing's "Edit list" puts the new item straight into the open cube. */
+  cube: z.enum(CUBES).optional(),
 });
+/** Move one item to another cube (#385). Only the cube changes. */
+export const moveItemToCubeInput = z.object({ tripId, itemId, cube: z.enum(CUBES) });
+/** Turn a cube's "Morning of" flag on or off for one trip (#385). */
+export const setMorningOfInput = z.object({ tripId, cube: z.enum(CUBES), on: z.boolean() });
 // ---------------------------------------------------------------- saved lists (#167)
 const savedListId = z.uuid();
 const savedListName = z.string().trim().min(1).max(60);

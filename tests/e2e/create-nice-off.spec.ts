@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { legacyPackingLayout } from "./helpers/device";
 import { signInAsOwner } from "./helpers/auth";
 import { chooseFromMenu } from "./helpers/menu";
 
@@ -32,6 +33,7 @@ async function expectNoNiceAttire(page: Page) {
 test("Nice outfits off on a new trip: no nice-attire items after save and reload", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   test.setTimeout(60_000);
   await page.clock.setFixedTime(NOW);
   await signInAsOwner(page);
@@ -80,6 +82,7 @@ test("Nice outfits turned on keeps the nice-attire items (the control for the te
 test("copy: Nice outfits turned off on the copy's Shape step is what is saved", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   test.setTimeout(60_000);
   await page.clock.setFixedTime(NOW);
   await signInAsOwner(page);

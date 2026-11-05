@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
 import { chooseFromMenu } from "./helpers/menu";
-import { DEVICE } from "./helpers/device";
+import { DEVICE, legacyPackingLayout } from "./helpers/device";
 import { reviewAndApply } from "./helpers/preferences";
 
 // Parity with the approved prototype's browser test (reference/prototype/tests/browser.test.mjs), on the production app
@@ -117,6 +117,7 @@ test("staples: four sections in order, the Bathroom note, Pack last as a badge o
 test("packing screen: the return travel outfit, Laptop under Pack last, no umbrella before the weather review, and a Pack last Bathroom item only in Toiletries", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await openSanDiego(page);
   await expect(page.getByRole("heading", { name: /Return travel outfit/ })).toBeVisible();
   const packLast = page.locator("#block-packlast");
@@ -132,6 +133,7 @@ test("packing screen: the return travel outfit, Laptop under Pack last, no umbre
 test("Nice outfits: switching off hides generic Nice clothing, switching back on restores edits and progress without personal assumptions", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await openSanDiego(page);
   await expect(row(page, "nice-shoes")).toHaveCount(1);
   await expect(row(page, "nice-makeup")).toHaveCount(0);
@@ -160,6 +162,7 @@ test("Nice outfits: switching off hides generic Nice clothing, switching back on
 });
 
 test("a removed optional item stays removed through later recalculations", async ({ page }) => {
+  await legacyPackingLayout(page);
   await openSanDiego(page);
   await row(page, "nice-shoes").locator(".item-body").click();
   await page
@@ -180,6 +183,7 @@ test("a removed optional item stays removed through later recalculations", async
 test("copy: a remembered Bathroom item travels to the copy, with nothing checked, no assumed Makeup, and the source unchanged", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await openSanDiego(page);
   // Remember a new Bathroom staple from this trip.
   await page.getByRole("button", { name: "＋ Add a Bathroom item" }).click();
@@ -213,6 +217,7 @@ test("copy: a remembered Bathroom item travels to the copy, with nothing checked
 });
 
 test("a tour of every screen raises no uncaught browser errors", DEVICE, async ({ page }) => {
+  await legacyPackingLayout(page);
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await openSanDiego(page);

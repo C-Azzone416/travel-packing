@@ -1,6 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { ownerEmailFor } from "./helpers/auth";
-import { DEVICE } from "./helpers/device";
+import { DEVICE, legacyPackingLayout } from "./helpers/device";
 import {
   connectedOnTrips,
   fakeFramebriar,
@@ -148,6 +148,7 @@ test(
   "the editor header has a Feedback entry on every tab and step; the page's own button stays out of reach",
   DEVICE,
   async ({ page }) => {
+    await legacyPackingLayout(page);
     await openEditor(page);
     await expect(entry(page)).toHaveCount(1);
     expect(await page.locator(".nav-feedback").evaluate((node) => !!node.closest("[inert]"))).toBe(
@@ -169,8 +170,9 @@ test(
   "pressing Feedback: the picture shows the visible editor (not blank, not blurred away), the sheet is on top, the editor is untouched after Cancel",
   DEVICE,
   async ({ page }) => {
+    await legacyPackingLayout(page);
     await rememberPictures(page);
-    await openEditor(page, { width: 1280, height: 520 });
+    await openEditor(page, { width: 1000, height: 520 });
     await editor(page).getByRole("switch", { name: "Laundry access" }).click();
     await scrollEditorBody(page, 100);
     const before = await editorState(page);
@@ -265,6 +267,7 @@ test(
 test("keyboard: Enter opens it, Tab stays inside each sheet, Escape closes only Feedback, then the editor's own Escape guard", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await openEditor(page);
   await editor(page).getByRole("switch", { name: "Laundry access" }).click();
   await entry(page).focus();
@@ -299,6 +302,7 @@ test("keyboard: Enter opens it, Tab stays inside each sheet, Escape closes only 
 test("a press outside the Feedback sheet does not close the editor or send anything; Send saves exactly one report", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await openEditor(page);
   const reports = watchReports(page);
   await entry(page).click();
@@ -324,6 +328,7 @@ test("a press outside the Feedback sheet does not close the editor or send anyth
 test("not connected: the entry is there but disabled and not tabbable; the editor is unaffected", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await forgetFeedbackEnrollment(`e2e-${ownerEmailFor(test.info().project.name)}`);
   await openSettings(page);
   await goToTrips(page);
@@ -378,6 +383,7 @@ test(
   "the head holds title, description, Feedback and × on one row without overlap at 320, 390, 721, 768 and 1280, connected or not, and at 200% zoom",
   DEVICE,
   async ({ page }) => {
+    await legacyPackingLayout(page);
     await openEditor(page);
     const widths = [320, 390, 721, 768, 1280];
     for (const width of widths) {
@@ -423,6 +429,7 @@ test(
 test("disconnected, the head is the same shape at 320 and 1280 (the disabled entry takes the same room)", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await forgetFeedbackEnrollment(`e2e-${ownerEmailFor(test.info().project.name)}`);
   await openSettings(page);
   await goToTrips(page);

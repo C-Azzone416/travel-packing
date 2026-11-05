@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { expectAccessible } from "./helpers/a11y";
 import { ownerEmailFor, signInAsOwner } from "./helpers/auth";
 import { markTripReady } from "./helpers/database";
-import { DEVICE } from "./helpers/device";
+import { DEVICE, legacyPackingLayout } from "./helpers/device";
 import { FAKE_GEOCODER_PORT, OPEN_METEO_PORT } from "./support/ports";
 
 // Weather for every stop (epic #107, #113). The app runs a second time with LOCATION_PROVIDER=open-meteo and
@@ -61,6 +61,7 @@ async function createWeatherTrip(page: Page) {
 test("opt in while shaping a 2-stop trip: weather-based lines with reasons, saved, and shown per stop", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await newTrip(page);
   await fillTwoStops(page);
   // Nothing is asked of the weather service until the person says yes.
@@ -132,6 +133,7 @@ test("opt in while shaping a 2-stop trip: weather-based lines with reasons, save
 test("a changed forecast offers itemized changes; accepting some revokes Ready, skipping one sticks across a reload", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await createWeatherTrip(page);
   // The same trip, a day later, with a dry forecast: a new request and a different answer.
   await fake("/__weather-set?variant=dry");
@@ -197,6 +199,7 @@ test("opting out sends no weather request and keeps the Everyday tops and bottom
 test("settings: turning weather on and switching to °C shows Celsius on the trip", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await createWeatherTrip(page);
   await expect(page.locator(".weather-row").nth(0)).toContainText("High 86° · Low 68°");
   await page.goto("/settings");
@@ -208,6 +211,7 @@ test("settings: turning weather on and switching to °C shows Celsius on the tri
 });
 
 test("a provider failure shows Unavailable and leaves the list as it was", async ({ page }) => {
+  await legacyPackingLayout(page);
   await createWeatherTrip(page);
   const before = await page.locator("[data-item-id]").count();
   await fake("/__weather-set?fail=1");
@@ -227,6 +231,7 @@ test(
   "a11y: the opt-in prompt, the weather panel and the review sheet",
   DEVICE,
   async ({ page }) => {
+    await legacyPackingLayout(page);
     // Creates a trip, saves it, edits its route and runs axe on four screens: more than 30 s on a slow phone runner.
     test.slow();
     await newTrip(page);

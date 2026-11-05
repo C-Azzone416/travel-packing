@@ -1,0 +1,757 @@
+/* Packing, laptop (#385; spec on #376 part 2 and part 3 section 1.3). This view is only rendered at >= 1024px, so these are
+   laptop values. Colours are the palette tokens (--ink, --muted, --paper, --paper2, --dark ...) and nothing else. */
+.page {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+  max-width: 1200px;
+  margin-inline: auto;
+}
+
+/* ---- Header ---- */
+.header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: "title progress" "actions actions";
+  align-items: end;
+  gap: 14px 28px;
+  min-width: 0;
+}
+.titleZone {
+  grid-area: title;
+  min-width: 0;
+}
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.back span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.back:hover {
+  text-decoration: underline;
+}
+.back:focus-visible,
+.linkButton:focus-visible {
+  outline: 3px solid var(--info);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.title {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: var(--fs-page-title, 40px);
+  font-weight: var(--fw-heading-xl, 800);
+  line-height: var(--lh-page-title, 1.05);
+  letter-spacing: var(--tracking-title, -0.01em);
+}
+.progressZone {
+  grid-area: progress;
+  min-width: 0;
+  max-width: 420px;
+  padding-bottom: 6px;
+}
+.progressTop {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.progressLine {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+}
+.bigNumber {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: var(--fw-heading-xl, 800);
+  line-height: 1;
+}
+.toGo {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.track {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--tint);
+}
+.track span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--dark);
+}
+.actions {
+  grid-area: actions;
+  display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.action {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 20px;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.actionOn {
+  background: var(--dark);
+  color: var(--onDark);
+}
+.actionOff {
+  border-color: var(--tint);
+  background: var(--paper);
+  color: var(--ink);
+}
+.action:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+.action:focus-visible {
+  outline: 3px solid var(--info);
+  outline-offset: 2px;
+}
+@media (min-width: 1180px) {
+  .header {
+    grid-template-columns: minmax(0, 22%) minmax(0, 380px) minmax(0, 1fr);
+    grid-template-areas: "title progress actions";
+  }
+  .actions {
+    align-self: end;
+    padding-bottom: 4px;
+  }
+}
+
+/* ---- Forecast ---- */
+.forecast {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.forecastHead {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+}
+.forecastTitle {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: var(--fs-section-s, 22px);
+  font-weight: var(--fw-heading, 700);
+  line-height: var(--lh-section, 1.15);
+}
+.forecastStatus {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+}
+.cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  min-width: 0;
+}
+.city {
+  box-sizing: border-box;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  flex: var(--days, 1) 1 340px;
+  min-width: 0;
+  padding: 14px;
+  border: 2px solid var(--line);
+  border-radius: 14px;
+  background: var(--paper2);
+}
+.cityAlert {
+  border-color: var(--accent);
+}
+.cityHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.cityName {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: var(--fw-heading, 700);
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+.cityName:focus-visible {
+  outline: 3px solid var(--info);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.cityDates {
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 14px;
+  white-space: nowrap;
+}
+.citySpacer {
+  flex: 1 1 0;
+}
+.noChanges {
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 14px;
+  white-space: nowrap;
+}
+.review {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 31px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--onDark);
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.review:focus-visible,
+.add:focus-visible,
+.dismiss:focus-visible {
+  outline: 3px solid var(--info);
+  outline-offset: 2px;
+}
+.reviewDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--onDark);
+}
+.days {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.days > li {
+  display: flex;
+  min-width: 0;
+}
+.days > li > * {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.cityNote {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.35;
+}
+.usual {
+  padding: 10px 12px;
+  border: 2px dashed var(--line);
+  border-radius: 12px;
+}
+.linkButton {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.reviewRegion[hidden] {
+  display: none;
+}
+.reviewHeading {
+  margin: 0 0 8px;
+  color: var(--accent);
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+}
+.suggestions {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 11px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.suggestions > li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: var(--paper);
+  color: var(--ink);
+}
+.suggestionText {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: 0 6px;
+  min-width: 0;
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.3;
+}
+.suggestionText strong {
+  font-weight: 700;
+}
+.suggestionTo {
+  color: var(--muted);
+}
+.add {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 33px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--dark);
+  color: var(--onDark);
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.dismiss {
+  min-width: 44px;
+  min-height: 33px;
+  padding: 0 8px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.add:disabled,
+.dismiss:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+/* ---- Suitcase: rail and open cube ---- */
+.suitcase {
+  min-width: 0;
+}
+.case {
+  display: grid;
+  grid-template-columns: clamp(220px, 25vw, 300px) minmax(0, 1fr);
+  gap: 14px;
+  min-height: 552px;
+  min-width: 0;
+}
+.rail {
+  min-width: 0;
+  padding: 4px 0 4px 4px;
+}
+.rail ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.panel {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  padding: 22px;
+  border-radius: 20px;
+  background: var(--paper2);
+  color: var(--ink);
+  container-type: inline-size;
+}
+.panelHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+}
+.panelTitleRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+  min-width: 0;
+}
+.panelTitle {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-cube-title, 30px);
+  font-weight: var(--fw-heading-xl, 800);
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+.panelTitle:focus-visible {
+  outline: 3px solid var(--info);
+  outline-offset: 4px;
+  border-radius: 6px;
+}
+.panelCount {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+}
+.panelPills {
+  justify-content: flex-end;
+}
+
+/* Two columns, filled top to bottom (the second column continues the first); one column when the panel is narrow. */
+.list {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(var(--rows, 1), auto);
+  column-gap: 28px;
+  align-content: start;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.listEditing {
+  grid-auto-flow: row;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: none;
+}
+@container (max-width: 519px) {
+  .list {
+    grid-auto-flow: row;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+  }
+}
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  min-width: 0;
+  min-height: 47px;
+  border-top: 1px solid var(--line2);
+}
+.rowLabel {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 44px;
+  cursor: pointer;
+}
+.box {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  accent-color: var(--dark);
+  cursor: pointer;
+}
+.box:focus-visible {
+  outline: 3px solid var(--info);
+  outline-offset: 2px;
+}
+.name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--font-body);
+  font-size: var(--fs-body, 17px);
+  font-weight: 500;
+  line-height: 1.3;
+}
+.qty {
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: var(--fs-micro, 13px);
+  white-space: nowrap;
+}
+.partial {
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: var(--fs-micro, 13px);
+  white-space: nowrap;
+}
+.laundryMark {
+  margin-inline-start: 0;
+}
+/* A packed row: the name and the quantity are struck through (1px, in the text colour) and muted. The ↻ icon is not text. */
+.packed .name,
+.packed .qty {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+.rowError {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.footer {
+  margin: auto 0 0;
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+/* ---- Edit list ---- */
+.editRow {
+  flex-wrap: nowrap;
+  gap: 10px;
+}
+.editName {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.editName:focus-visible,
+.move:focus-visible,
+.remove:focus-visible,
+.addInput:focus-visible,
+.addButton:focus-visible,
+.switch:focus-visible {
+  outline: 3px solid var(--info);
+  outline-offset: 2px;
+}
+.move {
+  flex: 0 1 150px;
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px;
+  border: 2px solid var(--tint);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+}
+.remove {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.editFooter {
+  display: grid;
+  gap: 12px;
+  margin-top: auto;
+}
+.addRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.addField {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+.addInput {
+  box-sizing: border-box;
+  width: 100%;
+  height: 43px;
+  padding: 0 18px;
+  border: 2px solid var(--tint);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+}
+.addInput::placeholder {
+  color: var(--muted);
+}
+.addButton {
+  height: 43px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--dark);
+  color: var(--onDark);
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.addButton:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+.addMessage {
+  flex: 1 1 100%;
+  margin: 0;
+  color: var(--accent);
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+}
+.morningRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px;
+  border-radius: 16px;
+  background: var(--paper);
+}
+.morningLabel {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--muted);
+}
+.morningLabel strong {
+  color: var(--ink);
+  font-size: 17px;
+  font-weight: 600;
+}
+.switch {
+  appearance: none;
+  position: relative;
+  flex: none;
+  width: 42px;
+  height: 24px;
+  margin: 0;
+  border-radius: 12px;
+  background: var(--line);
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--paper);
+  transition: transform 120ms ease;
+}
+.switch:checked {
+  background: var(--good);
+}
+.switch:checked::after {
+  transform: translateX(18px);
+}
+.switch:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* ---- Under the suitcase ---- */
+.below {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+.below :global(.packing-tools) :global(.link-button) {
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  margin-top: 0;
+  text-decoration: underline;
+}
+.below :global(.packing-tools) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 20px;
+}
+.bag {
+  display: grid;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .switch,
+  .switch::after {
+    transition: none;
+  }
+}

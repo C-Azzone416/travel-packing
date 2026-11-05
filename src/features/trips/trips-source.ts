@@ -3,14 +3,17 @@
 // (togglePackedItem, editTripItem, ...), and each returns the changed trip plus the domain's signals.
 
 import { calculateSuggestions, SYNTHETIC_STAPLES, tripDays } from "@/domain/calc";
+import type { Cube } from "@/domain/cubes";
 import {
   acceptWeather,
   addCustomItem,
   addToiletryItem,
   editItem,
+  moveItemToCube,
   recalculateSuggestions,
   removeTripItem,
   reviewWeatherAgain,
+  setMorningOf,
   skipWeather,
   type ItemEdit,
   type ItemOpResult,
@@ -63,6 +66,8 @@ export interface NewCustomItem {
   name: string;
   category: string;
   neededQty: number;
+  /** Put it straight into this cube (Packing's "Edit list"). Absent: the cube the category implies. */
+  cube?: Cube;
 }
 
 /** The owner's saved lists, for the create flow's "Start from a saved list" step (#170). Absent on sources without them. */
@@ -103,6 +108,10 @@ export interface TripsSource {
   editItem(tripId: string, itemId: string, edit: ItemEdit): Promise<TripChange>;
   removeItem(tripId: string, itemId: string, scope: Scope): Promise<TripChange>;
   addToiletryItem(tripId: string, input: NewToiletryItem): Promise<TripChange>;
+  /** Move one item to another cube (#385). Only the cube changes; packed counts and Ready are untouched. */
+  moveItemToCube(tripId: string, itemId: string, cube: Cube): Promise<TripChange>;
+  /** Flag or unflag a cube "Morning of" for this trip (#385). */
+  setMorningOf(tripId: string, cube: Cube, on: boolean): Promise<TripChange>;
   /**
    * Add a custom item of any addable category (#147). Rejects with message EXISTS when the trip already has it
    * (same normalised name and category; nothing is added), or INVALID_INPUT / NOT_FOUND / the error code.
@@ -313,6 +322,17 @@ export function createMemoryTripsSource(
       itemOp(id, (trip, owned) => removeTripItem(trip, owned, itemId, scope)),
     addToiletryItem: (id, input) =>
       itemOp(id, (trip, owned) => addToiletryItem(trip, owned, { ...input, id: newId() })),
+    moveItemToCube: (id, itemId, cube) =>
+      direct(id, (trip) => {
+        const moved = moveItemToCube(trip, itemId, cube);
+        if (!moved.ok) {
+          throw new TripsSourceError(
+            moved.reason === "ITEM_NOT_FOUND" ? "NOT_FOUND" : "INVALID_INPUT",
+          );
+        }
+        return moved.trip;
+      }),
+    setMorningOf: (id, cube, on) => direct(id, (trip) => setMorningOf(trip, cube, on)),
     addItem: (id, input) =>
       direct(id, (trip) => {
         const added = addCustomItem(trip, {
@@ -320,6 +340,7 @@ export function createMemoryTripsSource(
           name: input.name,
           category: input.category,
           neededQty: input.neededQty,
+          ...(input.cube ? { cube: input.cube } : {}),
         });
         if (!added.ok) {
           throw new TripsSourceError(added.reason === "EXISTS" ? "EXISTS" : "INVALID_INPUT");

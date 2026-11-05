@@ -9,9 +9,11 @@ import {
   addCustomItem,
   addToiletryItem,
   editItem,
+  moveItemToCube,
   recalculateSuggestions,
   removeTripItem,
   reviewWeatherAgain,
+  setMorningOf,
   skipWeather,
   type ItemOpResult,
 } from "../../domain/item-ops";
@@ -265,6 +267,7 @@ export function addItemToTrip(context: DataContext, input: unknown) {
       name: request.name,
       category: request.category,
       neededQty: request.neededQty,
+      ...(request.cube ? { cube: request.cube } : {}),
     });
     if (!added.ok) {
       const invalid: Record<string, string> = {
@@ -272,6 +275,7 @@ export function addItemToTrip(context: DataContext, input: unknown) {
         NAME_TOO_LONG: "name",
         INVALID_CATEGORY: "category",
         INVALID_QTY: "neededQty",
+        INVALID_CUBE: "cube",
       };
       const field = invalid[added.reason];
       if (field) refuse(fail("INVALID_INPUT", { fields: [field] }));
@@ -279,6 +283,22 @@ export function addItemToTrip(context: DataContext, input: unknown) {
     }
     return { trip: added.trip };
   });
+}
+
+/** Move one item to another cube (#385). An unknown cube name is INVALID_INPUT; a missing item is NOT_FOUND. */
+export function moveItemInTrip(context: DataContext, input: unknown) {
+  return mutateTrip(context, inputs.moveItemToCubeInput, input, (trip, { itemId, cube }) => {
+    const moved = moveItemToCube(trip, itemId, cube);
+    if (!moved.ok) refuse(fail("NOT_FOUND", { reason: moved.reason }));
+    return { trip: moved.trip };
+  });
+}
+
+/** Flag or unflag a cube "Morning of" for one trip (#385). */
+export function setTripMorningOf(context: DataContext, input: unknown) {
+  return mutateTrip(context, inputs.setMorningOfInput, input, (trip, { cube, on }) => ({
+    trip: setMorningOf(trip, cube, on),
+  }));
 }
 
 /**

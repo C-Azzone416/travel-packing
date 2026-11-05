@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
-import { DEVICE } from "./helpers/device";
+import { DEVICE, legacyPackingLayout } from "./helpers/device";
 
 // The Staples screen against a REAL Postgres (#18): what it shows after a reload is what was stored. Each test starts
 // from this project's freshly seeded owner (the default staples, San Diego partly packed, Lisbon Ready).
@@ -54,6 +54,7 @@ async function underwearQty(page: Page, tripName: string): Promise<number> {
 test("edit a staple: existing trips are unchanged, and the next new trip uses the new value", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await openStaples(page);
   await page.goto("/");
   await newTrip(page, /Paris/, "2026-12-04", "2026-12-08", 1);

@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { ownerEmailFor, signInAsOwner } from "./helpers/auth";
 import { seedSavedList } from "./helpers/database";
-import { DEVICE } from "./helpers/device";
+import { DEVICE, legacyPackingLayout } from "./helpers/device";
 
 // Saved lists (#167), against the real database: the Staples | Saved lists tab, the lists page, rename, delete and the
 // list editor. Lists are made from a trip's packing screen in a later mission, so these tests seed them directly.
@@ -205,6 +205,7 @@ async function openSanDiego(page: Page) {
 test("Save as a list: name it, untick an item, save, follow the link, and the list holds name, category and quantity only", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await openSanDiego(page);
   const trip = page.url();
   await page.getByRole("button", { name: "Save as a list" }).click();
@@ -239,6 +240,7 @@ test("Save as a list: name it, untick an item, save, follow the link, and the li
 test("Save as a list: a taken name is refused, and two matching rows go through the duplicate prompt (keep both is two rows)", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await openSanDiego(page);
   // Make two rows that read the same: rename Sunglasses to Everyday glasses (same category), for this trip only.
   await page
@@ -288,6 +290,7 @@ test(
   "Save as a list: 44px targets, keyboard, and nothing scrolls sideways on a phone",
   DEVICE,
   async ({ page }) => {
+    await legacyPackingLayout(page);
     await openSanDiego(page);
     await page.getByRole("button", { name: "Save as a list" }).focus();
     await page.keyboard.press("Enter");

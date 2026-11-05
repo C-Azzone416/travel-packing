@@ -847,6 +847,86 @@ describe("item operations", () => {
   });
 });
 
+describe("cubes: add into a cube, move, Morning of (#385)", () => {
+  it("adds an item into the cube it is given and persists it", async () => {
+    const trip = await seedTrip(db(), OWNER.userId);
+    const result = data(
+      await service.addItemToTrip(context(), {
+        tripId: trip.id,
+        name: "Pillow",
+        category: "Accessories",
+        neededQty: 1,
+        cube: "tech",
+      }),
+    );
+    const added = result.trip.items.find((entry) => entry.name === "Pillow")!;
+    expect(added.cube).toBe("tech");
+    const stored = await loadTrip(db(), OWNER.userId, trip.id);
+    expect(stored?.items.find((entry) => entry.id === added.id)?.cube).toBe("tech");
+  });
+
+  it("names the cube field when it is not one", async () => {
+    const trip = await seedTrip(db(), OWNER.userId);
+    const result = await service.addItemToTrip(context(), {
+      tripId: trip.id,
+      name: "Pillow",
+      category: "Accessories",
+      neededQty: 1,
+      cube: "attic",
+    });
+    expect(errorOf(result)?.code).toBe("INVALID_INPUT");
+  });
+
+  it("moves an item to another cube without touching its packed count or Ready", async () => {
+    const trip = await seedTrip(db(), OWNER.userId, { ready: true });
+    const item = trip.items[0];
+    const result = data(
+      await service.moveItemInTrip(context(), { tripId: trip.id, itemId: item.id, cube: "tech" }),
+    );
+    const moved = result.trip.items.find((entry) => entry.id === item.id)!;
+    expect(moved.cube).toBe("tech");
+    expect(moved.packed).toBe(item.packed);
+    expect(result.trip.ready).toBe(true);
+    const stored = await loadTrip(db(), OWNER.userId, trip.id);
+    expect(stored?.items.find((entry) => entry.id === item.id)?.cube).toBe("tech");
+  });
+
+  it("says NOT_FOUND for a missing item, INVALID_INPUT for a bad cube, NOT_FOUND for another trip", async () => {
+    const trip = await seedTrip(db(), OWNER.userId);
+    const missing = await service.moveItemInTrip(context(), {
+      tripId: trip.id,
+      itemId: "nope",
+      cube: "tech",
+    });
+    expect(errorOf(missing)?.code).toBe("NOT_FOUND");
+    const bad = await service.moveItemInTrip(context(), {
+      tripId: trip.id,
+      itemId: trip.items[0].id,
+      cube: "attic",
+    });
+    expect(errorOf(bad)?.code).toBe("INVALID_INPUT");
+    const other = await service.moveItemInTrip(context(), {
+      tripId: newUuid(),
+      itemId: "x",
+      cube: "tech",
+    });
+    expect(errorOf(other)?.code).toBe("NOT_FOUND");
+  });
+
+  it("flags and unflags a cube Morning of, and saves it", async () => {
+    const trip = await seedTrip(db(), OWNER.userId);
+    const on = data(
+      await service.setTripMorningOf(context(), { tripId: trip.id, cube: "tech", on: true }),
+    );
+    expect(on.trip.morningOfCubes).toContain("tech");
+    expect((await loadTrip(db(), OWNER.userId, trip.id))?.morningOfCubes).toContain("tech");
+    const off = data(
+      await service.setTripMorningOf(context(), { tripId: trip.id, cube: "tech", on: false }),
+    );
+    expect(off.trip.morningOfCubes).not.toContain("tech");
+  });
+});
+
 describe("addItemToTrip (#147)", () => {
   const camera = { name: "Camera", category: "Tech", neededQty: 2 };
 

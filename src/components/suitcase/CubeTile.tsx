@@ -127,6 +127,8 @@ export interface CubeRailItemProps extends CubeProgress {
   selected?: boolean;
   onSelect?: () => void;
   className?: string;
+  /** The id of the panel this item opens (aria-controls). */
+  controls?: string;
 }
 
 // A cube in the Packing rail on the dark suitcase (spec part 2 section 2). The selected item is a paper card.
@@ -140,6 +142,7 @@ export function CubeRailItem({
   selected = false,
   onSelect,
   className,
+  controls,
 }: CubeRailItemProps) {
   return (
     <button
@@ -151,7 +154,8 @@ export function CubeRailItem({
         isComplete(packed, total) && !alert && styles.railComplete,
         className,
       )}
-      aria-pressed={selected}
+      aria-current={selected ? "true" : undefined}
+      aria-controls={controls}
       onClick={onSelect}
       data-cube-state={alert ? "alert" : "normal"}
     >

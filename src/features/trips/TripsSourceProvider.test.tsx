@@ -48,6 +48,8 @@ const actions = vi.hoisted(() => {
         "editItemAction",
         "removeItemAction",
         "addToiletryItemAction",
+        "moveItemToCubeAction",
+        "setMorningOfAction",
         "addItemAction",
         "saveAsListAction",
         "confirmBagPlacementAction",
@@ -218,6 +220,18 @@ describe("TripsSourceProvider", () => {
         (s) => s.addToiletryItem("t", toiletry),
         () => actions.commands.addToiletryItemAction,
         ["t", toiletry],
+      ],
+      [
+        "moveItemToCube",
+        (s) => s.moveItemToCube("t", "i", "tech"),
+        () => actions.commands.moveItemToCubeAction,
+        ["t", "i", "tech"],
+      ],
+      [
+        "setMorningOf",
+        (s) => s.setMorningOf("t", "tech", true),
+        () => actions.commands.setMorningOfAction,
+        ["t", "tech", true],
       ],
       [
         "addItem",

@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
-import { DEVICE } from "./helpers/device";
+import { DEVICE, legacyPackingLayout } from "./helpers/device";
 
 // Field Ledger polish (#160): small layout facts that only a rendered page can show.
 test.beforeEach(async ({ page }) => {
@@ -72,6 +72,7 @@ test("Staples: a group's count shares the heading's row", async ({ page }) => {
 test("packing: the back link leaves a visible space between the arrow and its text", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await page.goto("/");
   await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
   await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
