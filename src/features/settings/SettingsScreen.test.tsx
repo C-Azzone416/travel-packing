@@ -65,7 +65,7 @@ function setup(
           signOut={signOut}
           initialWeather={{ weatherOptIn: false, temperatureUnit: "F" }}
           updateWeather={update}
-          initialAppearance="base"
+          initialAppearance="ocean"
           updateAppearance={async (appearance) => ({ ok: true as const, appearance })}
           accountClosureEnabled={accountClosureEnabled}
           closeAccount={closeAccount}

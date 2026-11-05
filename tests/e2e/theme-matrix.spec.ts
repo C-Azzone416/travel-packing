@@ -5,15 +5,14 @@ import { expectAccessible } from "./helpers/a11y";
 
 // Cross-theme regression and a11y matrix (#145, trimmed in #181; #139 spec §6 and §8(d)). Rendered colour contrast (axe) and
 // the focus-ring colour are checked on the dashboard, the packing screen and Settings in every theme at 1280, and in one
-// non-Base theme at 390 (the layout is the same in every theme; the width only changes where things sit). Horizontal overflow
-// and the keyboard paths do not depend on colour, so they run once, in Base. The computed token contrast is asserted in
+// non-Ocean theme at 390 (the layout is the same in every theme; the width only changes where things sit). Horizontal overflow
+// and the keyboard paths do not depend on colour, so they run once, in Ocean. The computed token contrast is asserted in
 // src/app/tokens.test.ts, and choosing a theme on Settings in settings.spec.ts. One browser project runs it (Chromium).
 const NOW = new Date("2026-10-16T12:00:00");
 const THEMES = [
-  { id: "base", radio: /Base palette/ },
-  { id: "ocean", radio: /Deep Ocean/ },
-  { id: "terracotta", radio: /Terracotta/ },
-  { id: "violet", radio: /Ink Violet/ },
+  { id: "ocean", radio: /Ocean/ },
+  { id: "evergreen", radio: /Evergreen/ },
+  { id: "dusk", radio: /Dusk/ },
 ] as const;
 const SHOTS = process.env.THEME_MATRIX_SHOTS; // a folder: write a screenshot of every cell there, for design review
 
@@ -21,7 +20,7 @@ type Theme = (typeof THEMES)[number];
 
 /**
  * Sign in showing the theme without going through Settings: the `appearance` cookie themes every page, and the account's
- * theme is set too because the Settings screen shows the account's (it would put Base back otherwise).
+ * theme is set too because the Settings screen shows the account's (it would put Ocean back otherwise).
  */
 async function signInWithTheme(page: Page, theme: Theme) {
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -75,7 +74,9 @@ async function ringColours(page: Page): Promise<string[]> {
 // Contrast and ring colour: one sign-in per (theme, width), the three screens visited in turn.
 const CELLS = [
   ...THEMES.map((theme) => ({ theme, width: 1280 })),
-  { theme: THEMES[1], width: 390 }, // one non-Base theme at a phone width
+  { theme: THEMES[1], width: 390 }, // one non-Ocean theme at a phone width
+  // For design review (THEME_MATRIX_SHOTS set): the other schemes at a phone width too, so every scheme has both widths.
+  ...(SHOTS ? [THEMES[0], THEMES[2]].map((theme) => ({ theme, width: 390 })) : []),
 ];
 for (const { theme, width } of CELLS) {
   test(`${theme.id} at ${width}px: dashboard, packing and Settings have no axe violation and a visible focus ring`, async ({
@@ -86,7 +87,7 @@ for (const { theme, width } of CELLS) {
     for (const [name, open] of Object.entries(SCREENS)) {
       await test.step(name, async () => {
         await open(page);
-        await expect(page.locator("html")).toHaveAttribute("data-appearance", theme.id);
+        await expect(page.locator("html")).toHaveAttribute("data-scheme", theme.id);
         await expectAccessible(page, `${theme.id} ${width} ${name}`);
 
         // Keyboard focus: each of the first stops draws a solid ring of 2px or more in the theme's ring colour.
@@ -121,8 +122,8 @@ for (const { theme, width } of CELLS) {
   });
 }
 
-// Nothing scrolls sideways, on any of the three screens at either width (layout, not colour: Base is enough).
-test("base: nothing scrolls sideways on the dashboard, packing and Settings at 390 and 1280", async ({
+// Nothing scrolls sideways, on any of the three screens at either width (layout, not colour: Ocean is enough).
+test("ocean: nothing scrolls sideways on the dashboard, packing and Settings at 390 and 1280", async ({
   page,
 }) => {
   await signInWithTheme(page, THEMES[0]);
@@ -146,7 +147,7 @@ test("the Theme radiogroup and a packing row work from the keyboard", async ({ p
   const next = THEMES[1];
   await page.getByRole("radio", { name: theme.radio }).focus();
   await page.keyboard.press("ArrowDown");
-  await expect(page.locator("html")).toHaveAttribute("data-appearance", next.id);
+  await expect(page.locator("html")).toHaveAttribute("data-scheme", next.id);
   await expect(page.getByRole("radio", { name: next.radio })).toBeChecked();
 
   // Packing: a row is packed and edited with Enter alone, and Escape returns focus to the row.

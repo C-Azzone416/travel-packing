@@ -14,10 +14,11 @@ import {
 // Rendered review matrix for #223. It is opt-in so the ordinary suite proves behavior without writing a large
 // evidence archive. STAPLES_SHOTS=<folder> captures every requested synthetic state at both review widths.
 const SHOTS = process.env.STAPLES_SHOTS;
-const THEMES: readonly Appearance[] = ["base", "ocean", "terracotta", "violet"];
+const THEMES: readonly Appearance[] = ["ocean", "evergreen", "dusk"];
 const CELLS = THEMES.flatMap((theme) => [1280, 390].map((width) => ({ theme, width })));
 
-const alternateTheme = (theme: Appearance): Appearance => (theme === "base" ? "ocean" : "base");
+const alternateTheme = (theme: Appearance): Appearance =>
+  theme === "ocean" ? "evergreen" : "ocean";
 
 async function chooseThemeThroughSettings(page: Page, theme: Appearance) {
   await page
@@ -25,7 +26,7 @@ async function chooseThemeThroughSettings(page: Page, theme: Appearance) {
     .getByRole("link", { name: "Settings" })
     .click();
   await page.getByRole("radio", { name: new RegExp(appearanceName(theme)) }).check();
-  await expect(page.locator("html")).toHaveAttribute("data-appearance", theme);
+  await expect(page.locator("html")).toHaveAttribute("data-scheme", theme);
   await expect(page.getByText(`Current theme: ${appearanceName(theme)}`)).toBeVisible();
   await expect(page.getByText(/^Last saved /)).toBeVisible();
 }

@@ -11,7 +11,7 @@ export interface ThemePickerProps {
 /**
  * The Theme radiogroup (#139 §4). Native radio inputs, each in a label whose text names the theme, so the accessible
  * name comes from the words and the arrow keys, Space and focus all work with no script. The swatch trio (accent,
- * second accent, surface) is drawn from the theme's own tokens through data-theme-preview and is decorative.
+ * second accent, surface) is drawn from the theme's own tokens through data-scheme and is decorative.
  */
 export function ThemePicker({ value, onChange }: ThemePickerProps) {
   const name = useId();
@@ -27,7 +27,7 @@ export function ThemePicker({ value, onChange }: ThemePickerProps) {
               checked={value === option.id}
               onChange={() => onChange(option.id)}
             />
-            <span className="appearance-swatches" data-theme-preview={option.id} aria-hidden="true">
+            <span className="appearance-swatches" data-scheme={option.id} aria-hidden="true">
               <i />
               <i />
               <i />

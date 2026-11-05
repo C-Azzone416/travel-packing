@@ -57,8 +57,8 @@ test("keyboard focus is clearly visible", async ({ page }) => {
     const style = getComputedStyle(document.activeElement as Element);
     return { width: style.outlineWidth, style: style.outlineStyle, color: style.outlineColor };
   });
-  // The second Tab lands on the brand link in the dark header: --focus-on-header (Base #fff9eb).
-  expect(outline).toEqual({ width: "3px", style: "solid", color: "rgb(255, 249, 235)" });
+  // The second Tab lands on the brand link in the dark header: --focus-on-header (Ocean #fff8eb).
+  expect(outline).toEqual({ width: "3px", style: "solid", color: "rgb(255, 248, 235)" });
 });
 
 test("touch targets are at least 44px", DEVICE, async ({ page }) => {

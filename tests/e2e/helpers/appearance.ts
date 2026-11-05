@@ -1,11 +1,10 @@
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 
-/** The four palettes: the id, the Settings radio's name and the accent colour the role tokens give it. */
+/** The three schemes: the id, the Settings radio's name and the --accent colour the scheme gives it. */
 export const PALETTES = [
-  { id: "base", radio: /Base palette/, accent: "#a64a39" },
-  { id: "ocean", radio: /Deep Ocean/, accent: "#2d6674" },
-  { id: "terracotta", radio: /Terracotta/, accent: "#ad513b" },
-  { id: "violet", radio: /Ink Violet/, accent: "#66546f" },
+  { id: "ocean", radio: /Ocean/, accent: "#b66c4d" },
+  { id: "evergreen", radio: /Evergreen/, accent: "#c0612f" },
+  { id: "dusk", radio: /Dusk/, accent: "#e06c55" },
 ] as const;
 export type Palette = (typeof PALETTES)[number];
 
@@ -22,7 +21,7 @@ export async function chooseTheme(page: Page, context: BrowserContext, palette: 
   await page.goto("/settings");
   await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
   await page.getByRole("radio", { name: palette.radio }).check();
-  await expect(page.locator("html")).toHaveAttribute("data-appearance", palette.id);
+  await expect(page.locator("html")).toHaveAttribute("data-scheme", palette.id);
   // The anonymous cookie is httpOnly and only the server action sets it, so seeing it proves the save completed.
   await expect.poll(async () => (await anonymousCookie(context))?.value).toBe(palette.id);
 }
@@ -34,9 +33,9 @@ export async function signOutFromSettings(page: Page) {
   await expect(page).toHaveURL(/\/sign-in/);
 }
 
-/** Choose a palette in Settings, then sign out. Base is chosen by first moving off it, so a real save happens. */
+/** Choose a palette in Settings, then sign out. Ocean (the default) is chosen by first moving off it, so a real save happens. */
 export async function chooseThemeAndSignOut(page: Page, context: BrowserContext, palette: Palette) {
-  if (palette.id === "base") await chooseTheme(page, context, PALETTES[1]);
+  if (palette.id === "ocean") await chooseTheme(page, context, PALETTES[1]);
   await chooseTheme(page, context, palette);
   await signOutFromSettings(page);
 }

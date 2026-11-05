@@ -30,7 +30,7 @@ function mount(email: string | null = EMAIL) {
             ok: true as const,
             settings: { weatherOptIn: false, temperatureUnit: "F" as const },
           })}
-          initialAppearance="base"
+          initialAppearance="ocean"
           updateAppearance={async (appearance) => ({ ok: true as const, appearance })}
           accountClosureEnabled
           closeAccount={async () => ({ error: null, fieldErrors: {} })}

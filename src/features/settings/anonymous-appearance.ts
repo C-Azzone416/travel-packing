@@ -4,21 +4,22 @@
 import { cookies } from "next/headers";
 import {
   ANONYMOUS_APPEARANCE_COOKIE,
+  APPEARANCES,
   ANONYMOUS_APPEARANCE_COOKIE_MAX_AGE,
-  isAppearance,
+  migrateAppearance,
   type Appearance,
 } from "@/domain/appearance";
 import { secureCookie } from "@/server/auth/pending-email";
 
-/** The remembered palette, or undefined when absent, malformed, unknown or from a newer build (all mean Base). */
+/** The remembered palette, or undefined when absent, malformed, unknown or from a newer build (all mean Ocean). A legacy id is mapped. */
 export async function readAnonymousAppearance(): Promise<Appearance | undefined> {
   const value = (await cookies()).get(ANONYMOUS_APPEARANCE_COOKIE)?.value;
-  return isAppearance(value) ? value : undefined;
+  return migrateAppearance(value);
 }
 
 /** Remember a palette id for signed-out pages. Only a validated id is ever written. */
 export async function rememberAnonymousAppearance(appearance: Appearance): Promise<void> {
-  if (!isAppearance(appearance)) return;
+  if (!(APPEARANCES as readonly string[]).includes(appearance)) return;
   (await cookies()).set(ANONYMOUS_APPEARANCE_COOKIE, appearance, {
     httpOnly: true,
     sameSite: "lax",

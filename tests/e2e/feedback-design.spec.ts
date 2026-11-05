@@ -8,7 +8,7 @@ import { chooseFromMenu } from "./helpers/menu";
 import { DEVICE } from "./helpers/device";
 import { serverActionId } from "./helpers/server-action";
 
-const THEMES = ["base", "ocean", "terracotta", "violet"] as const;
+const THEMES = ["ocean", "evergreen", "dusk"] as const;
 const WIDTHS = [390, 1280] as const;
 const SHOTS = process.env.FEEDBACK_DESIGN_SHOTS;
 
@@ -43,7 +43,7 @@ for (const theme of THEMES) {
       await useTheme(page, theme);
 
       await page.goto("/settings");
-      await expect(page.locator("html")).toHaveAttribute("data-appearance", theme);
+      await expect(page.locator("html")).toHaveAttribute("data-scheme", theme);
       const invitation = page.getByLabel("Invitation");
       await expect(invitation.locator("xpath=..")).toHaveClass(/\bfield\b/);
       await connectFeedback(page);
