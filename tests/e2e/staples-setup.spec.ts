@@ -162,7 +162,10 @@ test(
 
     for (const reload of [false, true]) {
       if (reload) await page.reload();
-      await page.getByRole("link", { name: "Staples" }).click();
+      await page
+        .getByRole("navigation", { name: "Primary navigation" })
+        .getByRole("link", { name: "Staples" })
+        .click();
       await expect(page.locator('[data-staple-id="toothbrush"]')).toContainText("1 per trip");
       await expect(page.locator('[data-staple-id="underwear"]')).toContainText("1 per day");
     }
