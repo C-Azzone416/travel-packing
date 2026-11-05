@@ -31,3 +31,20 @@ and 58% down, shown with `object-position: 72% 58%`. Existing Lagoon & Linen tok
 | `outdoors.svg`   | `outdoors`   | 2026-10-17 | Hand-built SVG, by hand | Three layered peaks with snow caps, pines, tent, trail                             | Original, no third-party content |
 | `theme_park.svg` | `theme_park` | 2026-10-17 | Hand-built SVG, by hand | Ferris wheel, coaster track, bunting, striped tent                                 | Original, no third-party content |
 | `home.svg`       | `home`       | 2026-10-17 | Hand-built SVG, by hand | House with lit windows and chimney, trees, string lights, picnic blanket, lanterns | Original, no third-party content |
+
+## Route map geography (#382)
+
+The route map (`src/components/route-map/`) draws real geography from bundled data. No tiles, no network calls at
+runtime, no API keys. The data is read and turned into SVG on the server only (`server-only`), so none of it is in the
+browser bundle.
+
+| Package / file                       | Version | Licence   | What it is                                                                           |
+| ------------------------------------ | ------- | --------- | ------------------------------------------------------------------------------------ |
+| `world-atlas` `countries-50m.json`   | 2.0.2   | ISC       | Natural Earth 1:50m countries and land, as TopoJSON. Natural Earth is public domain. |
+| `us-atlas` `states-10m.json`         | 3.0.1   | ISC       | US state boundaries (US Census cartographic boundaries, public domain), as TopoJSON. |
+| `d3-geo` (+ `d3-array`, `internmap`) | 3.1.2   | ISC       | Projection and path generation (Mercator), server-side only.                         |
+| `topojson-client` (+ `commander`)    | 3.1.0   | ISC / MIT | TopoJSON to GeoJSON and border meshes, server-side only.                             |
+
+Countries use the 1:50m file rather than 1:110m: at 1:110m a short trip (Lisbon to Porto, a Caribbean hop) draws as a
+blob. The 740 KB file is only ever read on the server. Sample renders for review come from
+`npx tsx scripts/route-map-samples.tsx` (dev tooling, not part of any build).
