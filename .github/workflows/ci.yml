@@ -33,7 +33,8 @@ jobs:
   # quick (draft pull request), full, or reused (identical files already fully validated). Fails safe to full. Every
   # heavy job waits for this one, so they can never disagree about the mode.
   mode:
-    runs-on: ubuntu-latest
+    # #397: pinned; ubuntu-latest (Ubuntu 26) lacks libicudata.so.74 for Playwright WebKit. Unpin after a Playwright bump supports Ubuntu 26.
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read
@@ -69,7 +70,7 @@ jobs:
 
   # Fast static checks. They run in every mode and start at once (they do not wait for the mode).
   checks:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: read
@@ -140,7 +141,7 @@ jobs:
   unit:
     needs: mode
     if: needs.mode.outputs.mode == 'full'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -190,7 +191,7 @@ jobs:
   build:
     needs: mode
     if: needs.mode.outputs.mode == 'full'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -269,7 +270,7 @@ jobs:
   e2e-build:
     needs: mode
     if: needs.mode.outputs.mode == 'full'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -308,7 +309,7 @@ jobs:
     name: e2e (${{ matrix.project }})
     needs: [mode, e2e-build]
     if: needs.mode.outputs.mode == 'full'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -412,7 +413,7 @@ jobs:
   ci:
     needs: [mode, checks, unit, build, e2e-build, e2e]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Every job must have succeeded
