@@ -1,3 +1,5 @@
+import { FORECAST_WINDOW_DAYS } from "@/domain/calc";
+
 const DAY_MS = 86_400_000;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -37,7 +39,7 @@ export function isForecastDay(value: string, today: string): boolean {
   const start = parseDay(today);
   if (!day || !start) return false;
   const distance = (day.getTime() - start.getTime()) / DAY_MS;
-  return distance >= 0 && distance < 16;
+  return distance >= 0 && distance < FORECAST_WINDOW_DAYS;
 }
 
 /**
@@ -51,7 +53,7 @@ export function isForecastable(value: string, today: string, utcToday: string): 
   const anchor = parseDay(utcToday);
   if (!day || !anchor) return false;
   const fromUtc = (day.getTime() - anchor.getTime()) / DAY_MS;
-  return isForecastDay(value, today) && fromUtc >= -1 && fromUtc < 16;
+  return isForecastDay(value, today) && fromUtc >= -1 && fromUtc < FORECAST_WINDOW_DAYS;
 }
 
 /**
