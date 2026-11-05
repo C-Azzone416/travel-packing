@@ -29,7 +29,7 @@ test(
         screen.label === "Trips"
           ? "Your travel ledger"
           : screen.label === "Staples"
-            ? "Every trip starts here"
+            ? "Staples"
             : screen.label;
       await expect(page.getByRole("heading", { name: heading, level: 1 })).toBeVisible();
       await expect(nav.getByRole("link", { name: screen.label })).toHaveAttribute(

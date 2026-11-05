@@ -61,7 +61,6 @@ html {
 }
 body {
   margin: 0;
-  min-width: 320px;
   background: var(--bg);
   color: var(--ink);
 }
@@ -1116,8 +1115,7 @@ body[data-sheet-open] .toast-region {
   flex-wrap: wrap;
   gap: 5px;
 }
-.timing-tag,
-.placement-tag {
+.timing-tag {
   display: inline-flex;
   align-items: center;
   padding: 3px 5px;
@@ -1882,8 +1880,7 @@ input:disabled {
   margin-top: 0;
 }
 /* The "Pack last" badge never touches the name before it (design: 6 to 8 px). */
-.timing-tag,
-.placement-tag {
+.timing-tag {
   margin-left: 7px;
 }
 .qty-stepper {
@@ -2347,20 +2344,6 @@ input:disabled {
   grid-template-columns: minmax(0, 1fr);
   gap: 14px;
 }
-.staples-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 12px 0;
-  border: 0;
-  border-bottom: 1px solid var(--line-strong);
-}
-.staples-toolbar p {
-  margin: 0;
-  color: var(--muted-text);
-  font-size: 12px;
-}
 .staple-categories {
   display: grid;
   gap: 12px;
@@ -2446,15 +2429,6 @@ input:disabled {
   background: white;
   cursor: pointer;
 }
-.staples-note {
-  margin-top: 2px;
-}
-.staple-empty {
-  margin: 0;
-  padding: 14px 4px;
-  color: var(--muted-text);
-  font-size: 14px;
-}
 .skeleton-row {
   height: 44px;
   margin: 10px 0;
@@ -2464,12 +2438,6 @@ input:disabled {
 @media (max-width: 659px) {
   .staples-page-head {
     align-items: flex-end;
-  }
-  .staples-toolbar {
-    display: block;
-  }
-  .staples-toolbar .quick-filters {
-    margin: 0 0 8px;
   }
   .staple-category {
     padding: 15px 0 4px;

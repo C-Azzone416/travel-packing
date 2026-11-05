@@ -46,9 +46,7 @@ test("the Staples | Saved lists switcher moves between the two pages, and the na
   ).toHaveAttribute("aria-current", "page");
   await expect(page).toHaveTitle(/Saved lists/);
   await tabs.getByRole("link", { name: "Staples" }).click();
-  await expect(
-    page.getByRole("heading", { name: "Every trip starts here", level: 1 }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Staples", level: 1 })).toBeVisible();
 });
 
 test("shows a card per list with its count, last change and categories, newest first; no Add button", async ({

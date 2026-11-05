@@ -50,7 +50,7 @@ describe("screens", () => {
         </SaveStatusProvider>
       </ToastProvider>,
     );
-    expect(html).toContain("<h1>Every trip starts here</h1>");
+    expect(html).toMatch(/<h1[^>]*>Staples<\/h1>/);
     expect(html).toContain('aria-label="Loading staples"');
   });
 

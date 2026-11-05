@@ -68,19 +68,15 @@ test(
     );
     await page.getByRole("link", { name: "Staples" }).click();
     const underwear = page.locator('[data-staple-id="underwear"]');
-    await expect(underwear).toContainText("1 smart");
+    // Smart keeps its legacy label; a toiletry-bag item is filed in the Toiletries cube.
+    await expect(underwear).toContainText("smart");
     await expect(underwear).toContainText("Pack last");
-    await expect(underwear).toContainText("Toiletry bag");
+    await expect(
+      page.getByRole("region", { name: "Toiletries" }).locator('[data-staple-id="underwear"]'),
+    ).toBeVisible();
 
-    await underwear.getByRole("button", { name: "Edit Underwear" }).click();
-    await page
-      .getByRole("dialog", { name: "Edit staple" })
-      .getByRole("button", { name: "Remove" })
-      .click();
-    await page
-      .getByRole("dialog", { name: "Remove Underwear?" })
-      .getByRole("button", { name: "Remove staple" })
-      .click();
+    await underwear.getByRole("button", { name: /^Underwear/ }).click();
+    await page.getByRole("button", { name: "Remove", exact: true }).click();
     await expect(underwear).toHaveCount(0);
   },
 );
@@ -166,8 +162,8 @@ test(
         .getByRole("navigation", { name: "Primary navigation" })
         .getByRole("link", { name: "Staples" })
         .click();
-      await expect(page.locator('[data-staple-id="toothbrush"]')).toContainText("1 per trip");
-      await expect(page.locator('[data-staple-id="underwear"]')).toContainText("1 per day");
+      await expect(page.locator('[data-staple-id="toothbrush"]')).toContainText("per trip");
+      await expect(page.locator('[data-staple-id="underwear"]')).toContainText("× 5");
     }
   },
 );
@@ -195,8 +191,8 @@ test(
     await page.getByRole("button", { name: "Save 2 Staples" }).click();
     await expect(page.getByRole("heading", { name: "Your travel ledger" })).toBeVisible();
     await page.getByRole("link", { name: "Staples" }).click();
-    await expect(page.locator('[data-staple-id="underwear"]')).toContainText("3 per day");
-    await expect(page.locator('[data-staple-id="toothbrush"]')).toContainText("1 per trip");
+    await expect(page.locator('[data-staple-id="underwear"]')).toContainText("× 15");
+    await expect(page.locator('[data-staple-id="toothbrush"]')).toContainText("per trip");
   },
 );
 
