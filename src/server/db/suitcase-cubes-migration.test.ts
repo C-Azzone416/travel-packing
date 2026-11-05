@@ -4,6 +4,7 @@
 
 import { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { buildTripItems, type Staple } from "../../domain/calc";
 import { cubeForItem } from "../../domain/cubes";
 import { MIGRATIONS_DIR } from "./__fixtures__/db";
 import { loadMigrations, migrateDown, migrateUp } from "./migrator";
@@ -44,6 +45,7 @@ const FIXTURES: Fixture[] = [
   { id: "id-card", name: "ID", category: "Other essentials" },
   { id: "sunglasses", name: "Sunglasses", category: "Other essentials" },
   { id: "neck-pillow", name: "Neck pillow", category: "Other essentials" },
+  { id: "guide-book", name: "Guide book", category: "Other essentials" },
   { id: "sun-hat", name: "Sun hat", category: "Accessories" },
   { id: "scarf", name: "Scarf", category: "Accessories" },
   { id: "weather-umbrella", name: "Compact umbrella", category: "Weather suggestion" },
@@ -122,6 +124,7 @@ describe("0014_suitcase_cubes_laundry", () => {
       "id-card": "documents",
       sunglasses: "misc",
       "neck-pillow": "misc",
+      "guide-book": "misc",
       "sun-hat": "weather",
       scarf: "misc",
       "weather-umbrella": "weather",
@@ -188,6 +191,66 @@ describe("0014_suitcase_cubes_laundry", () => {
       { semantic_id: "tops", cadence: "per day", laundry_halves: true },
       { semantic_id: "underwear", cadence: "per day", laundry_halves: false },
     ]);
+  });
+
+  it("resets converted Smart rows to qty 1 and keeps every other quantity", async () => {
+    await migrateUp(client, BEFORE);
+    await client.exec(`INSERT INTO users (id) VALUES ('owner-a')`);
+    const seeded = `
+      ('owner-a', 'tops', 'Tops', 'Clothing', 3, 'smart'),
+      ('owner-a', 'underwear', 'Underwear', 'Clothing', 2, 'smart'),
+      ('owner-a', 'socks', 'Socks', 'Clothing', 4, 'smart'),
+      ('owner-a', 'bottoms', 'Bottoms', 'Clothing', 5, 'smart'),
+      ('owner-a', 'medicine', 'Medication', 'Bathroom', 6, 'per day'),
+      ('owner-a', 'chargers', 'Chargers', 'Tech', 7, 'per trip')`;
+    await client.exec(
+      `INSERT INTO staples (owner_id, semantic_id, name, category, qty, cadence) VALUES ${seeded}`,
+    );
+    const toStaples = (list: Record<string, unknown>[]): Staple[] =>
+      list.map((row) => ({
+        id: row.semantic_id as string,
+        name: row.name as string,
+        category: row.category as string,
+        qty: row.qty as number,
+        cadence: row.cadence as Staple["cadence"],
+        packLast: false,
+        ...(row.laundry_halves ? { laundryHalves: true } : {}),
+      }));
+    const oldStaples = toStaples(
+      await rows(`SELECT semantic_id, name, category, qty, cadence FROM staples`),
+    );
+    await migrateUp(client, THROUGH);
+    expect(await rows(`SELECT semantic_id, qty FROM staples ORDER BY semantic_id`)).toEqual([
+      { semantic_id: "bottoms", qty: 5 },
+      { semantic_id: "chargers", qty: 7 },
+      { semantic_id: "medicine", qty: 6 },
+      { semantic_id: "socks", qty: 1 },
+      { semantic_id: "tops", qty: 1 },
+      { semantic_id: "underwear", qty: 1 },
+    ]);
+    const newStaples = toStaples(
+      await rows(`SELECT semantic_id, name, category, qty, cadence, laundry_halves FROM staples`),
+    );
+    // The same sample trips come out the same for the converted rows as they did with Smart.
+    for (const laundry of [false, true]) {
+      for (const spare of [false, true]) {
+        const config = {
+          start: "2030-03-01",
+          end: "2030-03-08",
+          laundry,
+          spare,
+          returnOutfit: true,
+        };
+        const qtyOf = (list: Staple[], id: string) =>
+          buildTripItems(config, list).items.find((i) => i.id === id && i.section !== "return")!
+            .qty;
+        for (const id of ["tops", "underwear", "socks"]) {
+          expect(qtyOf(newStaples, id), `${id} laundry=${laundry} spare=${spare}`).toBe(
+            qtyOf(oldStaples, id),
+          );
+        }
+      }
+    }
   });
 
   it("leaves Smart snapshots on existing trips alone", async () => {

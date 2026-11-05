@@ -1,3 +1,4 @@
+-- The up migration reset converted Smart rows to qty 1; Smart ignores the stored quantity, so down leaves qty as it is.
 -- Lossy by nature: "per night" rows become "per day", and tops that carried the laundry flag go back to Smart.
 -- Underwear and socks that were Smart before the up migration stay "per day" (their old cadence is not recorded).
 UPDATE "staples" SET "cadence" = 'smart' WHERE "laundry_halves" AND "semantic_id" IN ('tops') AND "cadence" = 'per day';--> statement-breakpoint

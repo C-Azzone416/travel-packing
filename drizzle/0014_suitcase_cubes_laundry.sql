@@ -35,5 +35,6 @@ UPDATE "trip_items" SET "cube" = (CASE
   ELSE 'misc' END)::"item_cube";--> statement-breakpoint
 -- Data: Smart staples become "per day" plus the laundry flag; underwear and socks never carry it. Sleepwear and the Nice
 -- attire staples and bottoms stay Smart (they follow the trip's occasions, which no day count reproduces). Trip rows are untouched.
-UPDATE "staples" SET "cadence" = 'per day', "laundry_halves" = ("semantic_id" NOT IN ('underwear', 'socks'))
+-- Smart ignored the stored quantity but per day multiplies it, so the converted rows are reset to 1 (all other rows keep theirs).
+UPDATE "staples" SET "cadence" = 'per day', "qty" = 1, "laundry_halves" = ("semantic_id" NOT IN ('underwear', 'socks'))
   WHERE "cadence" = 'smart' AND "semantic_id" IN ('tops', 'underwear', 'socks');

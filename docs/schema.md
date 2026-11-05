@@ -66,7 +66,8 @@ database refusing to store a cross-owner link.
   migration 0014 backfilled from category, see `src/domain/cubes.ts`). Categories stay for compatibility. "Morning of"
   is `trip_preferences.morning_of_cubes` (default `{toiletries}`); a cube holding a Pack last item reads as flagged.
   `staples.laundry_halves` halves a quantity, rounding up, when the trip has laundry; the check
-  `staples_laundry_not_underwear_socks` keeps it off underwear and socks.
+  `staples_laundry_not_underwear_socks` keeps it off underwear and socks. Later migrations must not use the
+  `per night` enum value in the same transaction as 0014 (`ALTER TYPE ... ADD VALUE`); the migrator runs each file in one.
 - `trip_items.id` is a per-trip immutable uuid. `(trip_id, semantic_id)` is unique, so two items with similar
   names (everyday vs return underwear) never merge: they have different semantic ids.
 - `staples` is unique on `(owner_id, semantic_id)` and carries `version`, bumped by the data layer on each edit.
