@@ -6,11 +6,11 @@ import { Card } from "@/components/ui/Card";
 import type { TripStop } from "@/domain/trip-stops";
 import type { StopWeather } from "@/domain/weather/types";
 import type { TemperatureUnit } from "@/server/data/weather-store";
+import { localToday } from "@/lib/today";
 import {
   displayTemperature,
   hasCoordinates,
   rainLine,
-  todayUtc,
   typicalLine,
   weatherRowView,
   type PartSummary,
@@ -177,7 +177,7 @@ export function WeatherPanel({
   onRefresh,
   onReview,
 }: WeatherPanelProps) {
-  const dayToday = today ?? todayUtc();
+  const dayToday = today ?? localToday();
   const customOnly = stops.every((stop) => !hasCoordinates(stop));
 
   if (state.kind === "prompt") {

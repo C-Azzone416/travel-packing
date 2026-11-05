@@ -148,8 +148,8 @@ describe("previewRecalculation: untouched suggestions update, and say how", () =
     const trip = makeTrip();
     const preview = previewRecalculation(trip, { ...CONFIG, laundry: true }, suggest);
     expect(preview.updated).toEqual([
-      { id: "tops", name: "Everyday tops", fromQty: 6, toQty: 3 },
-      { id: "bottoms", name: "Everyday bottoms", fromQty: 3, toQty: 2 },
+      { id: "tops", name: "Everyday tops", fromQty: 7, toQty: 4 },
+      { id: "bottoms", name: "Everyday bottoms", fromQty: 4, toQty: 2 },
     ]);
     expect(preview.packedReduced).toEqual([]);
     expect(preview.needsAcknowledgement).toBe(false);
@@ -157,28 +157,28 @@ describe("previewRecalculation: untouched suggestions update, and say how", () =
 
   it("a packed count above the new target is lowered to it, shown, and needs an acknowledgement", () => {
     let trip = makeTrip();
-    trip = pack(trip, "tops", 5);
+    trip = pack(trip, "tops", 6);
     const preview = previewRecalculation(trip, { ...CONFIG, laundry: true }, suggest);
     expect(preview.updated[0]).toEqual({
       id: "tops",
       name: "Everyday tops",
-      fromQty: 6,
-      toQty: 3,
-      packedFrom: 5,
-      packedTo: 3,
+      fromQty: 7,
+      toQty: 4,
+      packedFrom: 6,
+      packedTo: 4,
     });
-    expect(preview.packedReduced).toEqual([{ id: "tops", name: "Everyday tops", from: 5, to: 3 }]);
+    expect(preview.packedReduced).toEqual([{ id: "tops", name: "Everyday tops", from: 6, to: 4 }]);
     expect(preview.needsAcknowledgement).toBe(true);
-    expect(find(preview.next, "tops")?.packed).toBe(3);
+    expect(find(preview.next, "tops")?.packed).toBe(4);
   });
 
   it("a packed count at or under the new target is kept, and nothing else lowers one", () => {
     let trip = makeTrip();
     trip = pack(trip, "tops", 2);
-    trip = pack(trip, "underwear", 6);
+    trip = pack(trip, "underwear", 7);
     const preview = previewRecalculation(trip, { ...CONFIG, laundry: true }, suggest);
     expect(find(preview.next, "tops")?.packed).toBe(2);
-    expect(find(preview.next, "underwear")?.packed).toBe(6);
+    expect(find(preview.next, "underwear")?.packed).toBe(7);
     expect(preview.packedReduced).toEqual([]);
   });
 
@@ -186,8 +186,8 @@ describe("previewRecalculation: untouched suggestions update, and say how", () =
     const trip = makeTrip();
     const preview = previewRecalculation(trip, { ...CONFIG, returnOutfit: false }, suggest);
     expect(preview.updated.find((line) => line.id === "underwear")).toMatchObject({
-      fromQty: 6,
-      toQty: 7,
+      fromQty: 7,
+      toQty: 8,
     });
     expect(preview.packedReduced).toEqual([]);
   });
@@ -317,5 +317,121 @@ describe("previewRecalculation: Ready and the toiletry bag", () => {
     );
     expect(preview.bathroomChanges).toEqual([]);
     expect(preview.bagWillReset).toBe(false);
+  });
+});
+
+// #295: a trip saved before the arrival-day rule keeps its old counts until its preferences are next saved (lazy recalculation).
+describe("a trip saved under the earlier counting rule (#295)", () => {
+  const OLD_CONFIG: TripConfig = {
+    laundry: false,
+    spare: false,
+    niceAttire: false,
+    occasionCount: 1,
+    reuseNice: false,
+    returnOutfit: true,
+  };
+  /** A 5-day trip as the old rule saved it: 3 everyday days (days - 2), so 3 tops, 2 bottoms, 3 underwear, 3 socks. */
+  function legacyTrip(over: Partial<Trip> = {}): Trip {
+    const line = (id: string, name: string, qty: number): TripItem => ({
+      id,
+      name,
+      category: "Clothing",
+      qty,
+      packed: 0,
+      section: "main",
+    });
+    return {
+      ...makeTrip({}, OLD_CONFIG),
+      start: "2030-03-01",
+      end: "2030-03-05",
+      days: 5,
+      dailyDays: 3,
+      items: [
+        line("tops", "Everyday tops", 3),
+        line("bottoms", "Everyday bottoms", 2),
+        line("underwear", "Underwear", 3),
+        line("socks", "Socks", 3),
+        line("sleepwear", "Sleepwear", 1),
+        manual("custom-camera", "Camera", 1),
+      ],
+      ...over,
+    };
+  }
+
+  it("the same preferences now add one set of tops, bottoms, underwear and socks, and nothing is lowered", () => {
+    const preview = previewRecalculation(legacyTrip(), { ...OLD_CONFIG }, suggest);
+    expect(preview.configChanged).toBe(false);
+    // Bottoms stay at 2: ceil(4 / 2) equals ceil(3 / 2).
+    expect(preview.updated).toEqual([
+      { id: "tops", name: "Everyday tops", fromQty: 3, toQty: 4 },
+      { id: "underwear", name: "Underwear", fromQty: 3, toQty: 4 },
+      { id: "socks", name: "Socks", fromQty: 3, toQty: 4 },
+    ]);
+    expect(preview.packedReduced).toEqual([]);
+    expect(preview.needsAcknowledgement).toBe(false);
+  });
+
+  it("with the return outfit off the arrival and return days both gain an outfit", () => {
+    const preview = previewRecalculation(
+      legacyTrip(),
+      { ...OLD_CONFIG, returnOutfit: false },
+      suggest,
+    );
+    expect(preview.next.dailyDays).toBe(5);
+    expect(find(preview.next, "tops")?.qty).toBe(5);
+    expect(find(preview.next, "bottoms")?.qty).toBe(3);
+    expect(find(preview.next, "underwear")?.qty).toBe(5);
+  });
+
+  it("packed counts stay, a user-edited quantity is kept, and the manual item is untouched", () => {
+    let trip = legacyTrip();
+    trip = pack(trip, "underwear", 3);
+    const edited = editItem(trip, NO_STAPLES, "tops", {
+      name: "Linen tops",
+      qty: 6,
+      timing: "main",
+      scope: "this-trip",
+    });
+    if (!edited.ok) throw new Error(edited.reason);
+    const preview = previewRecalculation(edited.trip, { ...OLD_CONFIG }, suggest);
+    expect(find(preview.next, "underwear")).toMatchObject({ qty: 4, packed: 3 });
+    expect(find(preview.next, "tops")).toMatchObject({
+      name: "Linen tops",
+      qty: 6,
+      userEdited: true,
+    });
+    expect(find(preview.next, "custom-camera")).toEqual(find(trip, "custom-camera"));
+  });
+
+  it("a suppressed optional suggestion stays suppressed", () => {
+    const trip = legacyTrip({ suppressedSuggestions: { "nice-shoes": true } });
+    const preview = previewRecalculation(trip, { ...OLD_CONFIG, niceAttire: true }, suggest);
+    expect(find(preview.next, "nice-shoes")).toBeUndefined();
+    expect(preview.suppressed).toEqual([{ id: "nice-shoes", name: "Dress shoes" }]);
+    // The untouched everyday lines still take the new count beside it.
+    expect(find(preview.next, "tops")?.qty).toBe(4);
+  });
+
+  it("a weather-split list is not given Everyday tops or bottoms beside its lines", () => {
+    const base = legacyTrip();
+    const split = {
+      ...base,
+      items: [
+        ...base.items.filter((entry) => entry.id !== "tops" && entry.id !== "bottoms"),
+        { ...manual("tops-short", "Short-sleeve tops", 3), category: "Clothing" },
+      ],
+    };
+    const preview = previewRecalculation(split, { ...OLD_CONFIG }, suggest);
+    expect(find(preview.next, "tops")).toBeUndefined();
+    expect(find(preview.next, "tops-short")?.qty).toBe(3);
+    // The untouched everyday lines still take the new count beside it.
+    expect(find(preview.next, "underwear")?.qty).toBe(4);
+  });
+
+  it("Ready is revoked", () => {
+    const preview = previewRecalculation(legacyTrip({ ready: true }), { ...OLD_CONFIG }, suggest);
+    expect(preview.readyWillRevoke).toBe(true);
+    expect(preview.next.ready).toBe(false);
+    expect(find(preview.next, "tops")?.qty).toBe(4);
   });
 });

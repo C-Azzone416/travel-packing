@@ -117,7 +117,11 @@ test("create: pick, set dates, shape, save -> the trip is on the dashboard with 
   await pick(page, "lon", /England/);
   await setDates(page, "2026-11-12", "2026-11-16");
   await page.getByRole("button", { name: "Continue to packing preferences" }).click();
-  await expect(page.getByRole("heading", { name: "3 days of everyday clothes" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "4 days of everyday clothes" })).toBeVisible();
+  // #295: the travel outfit is worn, not packed, and the card says so.
+  await expect(page.locator(".callout").filter({ hasText: "How we count" })).toContainText(
+    "worn, not packed",
+  );
 
   await page.getByRole("switch", { name: "Laundry access" }).check();
   await expect(page.getByRole("status", { name: "List changes" })).toContainText("Everyday tops");

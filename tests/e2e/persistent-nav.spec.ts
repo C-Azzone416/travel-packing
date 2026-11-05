@@ -95,8 +95,8 @@ function coverage(page: Page) {
         [...document.querySelectorAll(".bottom-nav a")].find((a) =>
           a.textContent?.includes("Settings"),
         ) ?? null,
-      signOut: document.querySelector(".bottom-nav button"),
-      feedback: document.querySelector(".feedback-button"),
+      signOut: document.querySelector(".nav-signout button"),
+      feedback: document.querySelector(".nav-feedback"),
     };
     return Object.entries(controls).map(([name, element]) => {
       if (!element) return { name, present: false, top: 0, onTop: false, inViewport: false };
@@ -144,6 +144,8 @@ for (const size of [...WIDE, ...PHONE]) {
         // 1. The bar is pinned at the top of the viewport and nothing covers any persistent control.
         expect((await page.locator(".topbar").boundingBox())!.y).toBe(0);
         for (const control of await coverage(page)) {
+          // On a phone the 4th slot is Feedback and Sign out is a Settings row (#293); the header holds both from 721px.
+          if (fixedNav && control.name === "signOut") continue;
           expect(control.present, `${control.name} present`).toBe(true);
           expect(control.inViewport, `${control.name} inside the viewport`).toBe(true);
           expect(control.onTop, `${control.name} is not covered`).toBe(true);
@@ -493,8 +495,8 @@ function barProblems(page: Page) {
         `link ${e.textContent}`,
         e,
       ]),
-      ["sign out", document.querySelector(".bottom-nav button")],
-      ["feedback", document.querySelector(".feedback-button")],
+      ["sign out", document.querySelector(".nav-signout button")],
+      ["feedback", document.querySelector(".nav-feedback")],
       ["chip", document.querySelector(".sync-chip")],
     ];
     const boxes: [string, DOMRect][] = [];
@@ -603,9 +605,10 @@ test("short viewports keep the persistent chrome small or let the bar scroll awa
         const barRect = bar.getBoundingClientRect();
         const navRect = nav.getBoundingClientRect();
         const inline = getComputedStyle(nav).display === "contents";
-        const links = [...document.querySelectorAll(".bottom-nav a, .bottom-nav button")].map((e) =>
-          e.getBoundingClientRect(),
-        );
+        // Only the drawn controls: the wide-screen Sign out is display:none on a phone (#293).
+        const links = [...document.querySelectorAll(".bottom-nav a, .bottom-nav button")]
+          .map((e) => e.getBoundingClientRect())
+          .filter((r) => r.width > 0);
         return {
           barHeight: barRect.height,
           position: getComputedStyle(bar).position,

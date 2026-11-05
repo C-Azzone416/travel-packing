@@ -133,6 +133,91 @@ describe("Open-Meteo forecast", () => {
   });
 });
 
+describe("Open-Meteo forecast window and the device's local date (#361)", () => {
+  // Trip 1 Jun - 17 Jun, one stop including its last day: 17 days straddling every boundary.
+  const trip = { ...stop, arrive: "2026-06-01", leave: "2026-06-17", includeLeave: true };
+  const sourceByDate = async (now: string, today?: string) => {
+    const doFetch = vi.fn<typeof fetch>(async (input) =>
+      json(dailyBody(datesFrom(new URL(String(input))))),
+    );
+    const provider = createOpenMeteoWeatherProvider({
+      fetch: doFetch,
+      now: () => new Date(now),
+    });
+    const result = await provider.getStopWeather(trip, today ? { today } : {});
+    return {
+      doFetch,
+      sources: Object.fromEntries(result.days.map((day) => [day.date, day.source])),
+      status: result.status,
+    };
+  };
+
+  it("UTC-7 evening: the device is still on the 1st while GMT is the 2nd; the 1st is a forecast with real data", async () => {
+    const { sources, status, doFetch } = await sourceByDate("2026-06-02T03:00:00Z", "2026-06-01");
+    expect(status).toBe("ok");
+    // Open-Meteo serves GMT yesterday, so the forecast request starts at the device's today, not at GMT today.
+    const forecastCall = doFetch.mock.calls
+      .map(([input]) => new URL(String(input)))
+      .find((url) => url.origin + url.pathname === OPEN_METEO_FORECAST_URL)!;
+    expect(forecastCall.searchParams.get("start_date")).toBe("2026-06-01");
+    expect(forecastCall.searchParams.get("end_date")).toBe("2026-06-16");
+    expect(sources["2026-06-01"]).toBe("forecast");
+    expect(sources["2026-06-16"]).toBe("forecast");
+    expect(sources["2026-06-17"]).toBe("typical");
+  });
+
+  it("UTC-7 just after local midnight: the device and GMT agree again", async () => {
+    const { sources } = await sourceByDate("2026-06-02T07:00:01Z", "2026-06-02");
+    expect(sources["2026-06-01"]).toBe("typical");
+    expect(sources["2026-06-02"]).toBe("forecast");
+    expect(sources["2026-06-17"]).toBe("forecast");
+  });
+
+  it("UTC+10 morning: the device is already on the 2nd while GMT is the 1st; a day the provider has not forecast is typical", async () => {
+    const { sources, status } = await sourceByDate("2026-06-01T20:00:00Z", "2026-06-02");
+    expect(status).toBe("ok");
+    // GMT window 1-16 Jun, device window 2-17 Jun: the 1st is before the device's today, the 17th is beyond the provider.
+    expect(sources["2026-06-01"]).toBe("typical");
+    expect(sources["2026-06-02"]).toBe("forecast");
+    expect(sources["2026-06-16"]).toBe("forecast");
+    expect(sources["2026-06-17"]).toBe("typical");
+  });
+
+  it("UTC+10 just before local midnight: the device is still on the 1st", async () => {
+    const { sources } = await sourceByDate("2026-06-01T13:59:59Z", "2026-06-01");
+    expect(sources["2026-06-01"]).toBe("forecast");
+    expect(sources["2026-06-16"]).toBe("forecast");
+    expect(sources["2026-06-17"]).toBe("typical");
+  });
+
+  it("falls back to the server's GMT date when no device date is given", async () => {
+    const { sources } = await sourceByDate("2026-06-01T20:00:00Z");
+    expect(sources["2026-06-01"]).toBe("forecast");
+    expect(sources["2026-06-17"]).toBe("typical");
+  });
+
+  it("two zones sharing one provider (and its memory cache) each get their own split", async () => {
+    const doFetch = vi.fn<typeof fetch>(async (input) =>
+      json(dailyBody(datesFrom(new URL(String(input))))),
+    );
+    const provider = createOpenMeteoWeatherProvider({
+      fetch: doFetch,
+      now: () => new Date("2026-06-02T03:00:00Z"),
+    });
+    const phoenix = await provider.getStopWeather(trip, { today: "2026-06-01" });
+    const brisbane = await provider.getStopWeather(trip, { today: "2026-06-02" });
+    const forecastDates = (result: typeof phoenix) =>
+      result.days.filter((d) => d.source === "forecast").map((d) => d.date);
+    // GMT is the 2nd. Device on the 1st: forecast 1-16 Jun. Device on the 2nd: forecast 2-17 Jun.
+    expect(forecastDates(phoenix)[0]).toBe("2026-06-01");
+    expect(forecastDates(phoenix).at(-1)).toBe("2026-06-16");
+    expect(forecastDates(brisbane)[0]).toBe("2026-06-02");
+    expect(forecastDates(brisbane).at(-1)).toBe("2026-06-17");
+    expect(phoenix.days).toHaveLength(17);
+    expect(brisbane.days).toHaveLength(17);
+  });
+});
+
 describe("Open-Meteo span cap", () => {
   it("answers a stop longer than the cap as unavailable without asking the provider or building its days", async () => {
     const doFetch = vi.fn<typeof fetch>();

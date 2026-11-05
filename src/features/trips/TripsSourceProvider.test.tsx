@@ -308,6 +308,8 @@ describe("TripsSourceProvider", () => {
       );
       actions.previewWeatherAction.mockClear();
       const place = { id: "x", city: "A", region: "", country: "", countryCode: "", label: "A" };
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(2030, 3, 20, 23, 30));
       await captured.weather!.previewDraft([
         {
           location: { ...place, latitude: 1.5, longitude: 2.5, city: "Secret name" },
@@ -316,17 +318,21 @@ describe("TripsSourceProvider", () => {
         },
         { location: place, arrive: "2030-05-03", leave: "2030-05-05" },
       ]);
-      expect(actions.previewWeatherAction).toHaveBeenCalledWith([
-        {
-          stopIndex: 0,
-          arrive: "2030-05-01",
-          leave: "2030-05-03",
-          includeLeave: false,
-          latitude: 1.5,
-          longitude: 2.5,
-        },
-        { stopIndex: 1, arrive: "2030-05-03", leave: "2030-05-05", includeLeave: true },
-      ]);
+      expect(actions.previewWeatherAction).toHaveBeenCalledWith(
+        [
+          {
+            stopIndex: 0,
+            arrive: "2030-05-01",
+            leave: "2030-05-03",
+            includeLeave: false,
+            latitude: 1.5,
+            longitude: 2.5,
+          },
+          { stopIndex: 1, arrive: "2030-05-03", leave: "2030-05-05", includeLeave: true },
+        ],
+        "2030-04-20",
+      );
+      vi.useRealTimers();
     });
 
     it("reads the owner's saved lists through the list and get actions, and turns a refusal into an error (#170)", async () => {

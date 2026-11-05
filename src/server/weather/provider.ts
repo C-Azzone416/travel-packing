@@ -12,7 +12,11 @@ export interface WeatherStopInput {
 }
 
 export interface WeatherProvider {
-  getStopWeather(stop: WeatherStopInput, options?: { signal?: AbortSignal }): Promise<StopWeather>;
+  /** `today` is the device's local date, already validated by `resolveClientToday`; it defaults to the server's GMT date. */
+  getStopWeather(
+    stop: WeatherStopInput,
+    options?: { signal?: AbortSignal; today?: string },
+  ): Promise<StopWeather>;
 }
 
 export const unavailableStop = (stopIndex: number): StopWeather => ({

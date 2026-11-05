@@ -150,9 +150,9 @@ test(
   async ({ page }) => {
     await openEditor(page);
     await expect(entry(page)).toHaveCount(1);
-    expect(
-      await page.locator(".feedback-button").evaluate((node) => !!node.closest("[inert]")),
-    ).toBe(true);
+    expect(await page.locator(".nav-feedback").evaluate((node) => !!node.closest("[inert]"))).toBe(
+      true,
+    );
     await editor(page).getByRole("tab", { name: "Route & dates" }).click();
     await expect(entry(page)).toBeVisible();
     await editor(page).getByRole("tab", { name: "Packing preferences" }).click();

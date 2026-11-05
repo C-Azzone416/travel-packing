@@ -40,6 +40,34 @@ export function isForecastDay(value: string, today: string): boolean {
   return distance >= 0 && distance < 16;
 }
 
+/**
+ * Open-Meteo's forecast endpoint (requested with `timezone=GMT`) returns GMT yesterday through GMT today + 15
+ * (probed live 2026-10-31: `start_date` = UTC yesterday returns data). A day is "forecast" only if it is inside the
+ * device's 16-day window AND inside that provider window, so a device a day behind GMT (UTC-7 evenings) keeps its
+ * own today as forecast, while a device a day ahead (UTC+10) loses its 16th day to typical.
+ */
+export function isForecastable(value: string, today: string, utcToday: string): boolean {
+  const day = parseDay(value);
+  const anchor = parseDay(utcToday);
+  if (!day || !anchor) return false;
+  const fromUtc = (day.getTime() - anchor.getTime()) / DAY_MS;
+  return isForecastDay(value, today) && fromUtc >= -1 && fromUtc < 16;
+}
+
+/**
+ * The device's local date as the client reported it. Only a strict `YYYY-MM-DD` within one day of the server's GMT
+ * date is believed (no timezone is more than a day away); anything else falls back to the server date.
+ * The value is used for nothing but the forecast/typical split.
+ */
+export function resolveClientToday(raw: string | null | undefined, serverNow: Date): string {
+  const server = formatDay(serverNow);
+  if (typeof raw !== "string") return server;
+  const claimed = parseDay(raw);
+  const anchor = parseDay(server);
+  if (!claimed || !anchor) return server;
+  return Math.abs(claimed.getTime() - anchor.getTime()) <= DAY_MS ? raw : server;
+}
+
 export const monthDay = (value: string): string => value.slice(5);
 
 export function sameCalendarDay(year: number, value: string): string | null {

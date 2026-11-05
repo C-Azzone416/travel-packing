@@ -277,7 +277,7 @@ describe("setTripStops", () => {
       start: "2030-05-02",
       end: "2030-05-05",
       days: 4,
-      dailyDays: 2,
+      dailyDays: 3,
       locationId: "beta",
     });
     expect(await ctx.client.query(`SELECT count(*)::int AS n FROM trip_stops`)).toMatchObject({
@@ -286,14 +286,14 @@ describe("setTripStops", () => {
     expect(data(await service.getTrip(context(), { tripId: trip.id }))).toEqual(next);
   });
 
-  it("keeps dailyDays in step with the return outfit after a route edit (#205): days - 1 when it is off, days - 2 when on", async () => {
+  it("keeps dailyDays in step with the return outfit after a route edit (#205): days when it is off, days - 1 when on", async () => {
     const stops = [
       { location: { id: "beta" }, arrive: "2030-05-02", leave: "2030-05-04" },
       { location: { id: "alpha" }, arrive: "2030-05-04", leave: "2030-05-07" },
     ];
     for (const [returnOutfit, dailyDays] of [
-      [false, 5],
-      [true, 4],
+      [false, 6],
+      [true, 5],
     ] as const) {
       const trip = data(await create({ config: { ...CONFIG, returnOutfit } }));
       const next = data(await service.setTripStops(context(), { tripId: trip.id, stops }));

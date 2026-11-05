@@ -7,6 +7,24 @@ import type { DayWeather, StopWeather } from "@/domain/weather/types";
 import { heroForecast } from "@/features/trips/view";
 import { FORECAST_DAY_CAP, WeatherPanel, type WeatherPanelProps } from "./WeatherPanel";
 
+// The test process cannot switch its own time zone, so a device in another zone is simulated: `localToday` reads the
+// calendar date in that zone for the (fake) clock instant, which is what a real device in that zone would report.
+const device = vi.hoisted(() => ({ zone: null as string | null }));
+vi.mock("@/lib/today", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/today")>();
+  return {
+    localToday: (now: Date = new Date()) =>
+      device.zone
+        ? new Intl.DateTimeFormat("en-CA", {
+            timeZone: device.zone,
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+          }).format(now)
+        : actual.localToday(now),
+  };
+});
+
 // #303: stays with forecast days read day by day; a stay with none reads exactly as it always did.
 const TODAY = "2031-04-01";
 
@@ -329,6 +347,33 @@ describe("WeatherPanel daily forecast", () => {
       vi.useRealTimers();
     }
   });
+
+  // #361: TripScreen renders the panel without a `today` prop, so this default is what the trip page uses.
+  it.each([
+    // [zone, offset, clock instant, the local date there]
+    ["America/Phoenix", "UTC-7", "2031-04-03T05:00:00Z", "Apr 2"],
+    ["Australia/Brisbane", "UTC+10", "2031-04-02T20:00:00Z", "Apr 3"],
+  ])(
+    "labels Today from the device's local date in %s (%s) when no date is passed",
+    (zone, _offset, instant, label) => {
+      device.zone = zone;
+      vi.useFakeTimers();
+      try {
+        vi.setSystemTime(new Date(instant));
+        renderStays(
+          [{ stop: stopFor("2031-04-02", "2031-04-05"), days: run("2031-04-02", 3, "forecast") }],
+          { today: undefined },
+        );
+        const labels = [...document.querySelectorAll(".weather-day-label")].map(
+          (el) => el.textContent,
+        );
+        expect(labels.filter((text) => text?.startsWith("Today"))).toEqual([`Today ${label}`]);
+      } finally {
+        vi.useRealTimers();
+        device.zone = null;
+      }
+    },
+  );
 });
 
 describe("the dashboard hero and the trip page say the same thing (#357)", () => {

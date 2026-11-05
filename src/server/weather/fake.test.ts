@@ -37,6 +37,33 @@ describe("fake weather provider", () => {
     );
   });
 
+  it("splits forecast from typical by the device date, clamped to the provider's GMT window (#361)", async () => {
+    // GMT is the 1st; a UTC+10 device is already on the 2nd. Its 17th day is beyond what is forecast.
+    const provider = createFakeWeatherProvider(now);
+    const result = await provider.getStopWeather(
+      { ...base, arrive: "2026-06-01", leave: "2026-06-17", includeLeave: true },
+      { today: "2026-06-02" },
+    );
+    const sources = Object.fromEntries(result.days.map((day) => [day.date, day.source]));
+    expect(sources["2026-06-01"]).toBe("typical");
+    expect(sources["2026-06-02"]).toBe("forecast");
+    expect(sources["2026-06-16"]).toBe("forecast");
+    expect(sources["2026-06-17"]).toBe("typical");
+  });
+
+  it("keeps the device's own today a forecast when the device is a day behind GMT (#361)", async () => {
+    // GMT is the 2nd; a UTC-7 device is still on the 1st, and the provider serves GMT yesterday.
+    const provider = createFakeWeatherProvider(() => new Date("2026-06-02T03:00:00Z"));
+    const result = await provider.getStopWeather(
+      { ...base, arrive: "2026-06-01", leave: "2026-06-17", includeLeave: true },
+      { today: "2026-06-01" },
+    );
+    const sources = Object.fromEntries(result.days.map((day) => [day.date, day.source]));
+    expect(sources["2026-06-01"]).toBe("forecast");
+    expect(sources["2026-06-16"]).toBe("forecast");
+    expect(sources["2026-06-17"]).toBe("typical");
+  });
+
   it("fails closed for either missing coordinate or malformed dates", async () => {
     const provider = createFakeWeatherProvider(now);
     for (const input of [
