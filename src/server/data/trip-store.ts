@@ -8,6 +8,7 @@ import { DEFAULT_MORNING_OF_CUBES, itemCube } from "../../domain/cubes";
 import type { StampLabels } from "../../domain/stamps";
 import type { ThemeId } from "../../domain/themes";
 import type { Trip, TripConfig, TripItem } from "../../domain/trip";
+import type { TravelMode, TripOrigin } from "../../domain/trip-route";
 import {
   tripDatesFromStops,
   validateStops,
@@ -18,6 +19,7 @@ import type { Db } from "../db/retention";
 import * as schema from "../db/schema";
 import { airportCodeFor } from "../airports/airport-code";
 import { ITEM_CATEGORIES } from "../db/schema";
+import { originFromRow, originToColumns } from "./place-columns";
 import { fail } from "./result";
 import { refuse } from "./run";
 
@@ -49,6 +51,15 @@ export interface StoredTrip extends Trip {
   theme: ThemeId;
   /** The owner's stamp label overrides (#151); absent reads as automatic. Loading always sets it. */
   stampLabels?: StampLabels;
+  /**
+   * Where the trip starts from (#379); null = none. Optional so callers that never set one are unaffected, and an absent
+   * value leaves the stored one alone on save; loading always sets it.
+   */
+  origin?: TripOrigin | null;
+  /** Fly / Drive / Train or other; null = never chosen (every trip from before #379). Same optional rule as `origin`. */
+  travelMode?: TravelMode | null;
+  /** The owner's own name for the trip; null = show the stops. Same optional rule as `origin`. */
+  name?: string | null;
   deletedAt: Date | null;
 }
 
@@ -315,6 +326,9 @@ function toStoredTrip(
     theme: row.theme,
     updatedAt: row.updatedAt.toISOString(),
     stampLabels: [row.stampLabel1, row.stampLabel2],
+    origin: originFromRow(row),
+    travelMode: row.travelMode,
+    name: row.name,
     deletedAt: row.deletedAt,
   };
 }
@@ -363,6 +377,9 @@ export async function insertTrip(db: Db, ownerId: string, given: StoredTrip): Pr
       theme: trip.theme,
       stampLabel1: trip.stampLabels?.[0] ?? null,
       stampLabel2: trip.stampLabels?.[1] ?? null,
+      ...(trip.origin === undefined ? {} : originToColumns(trip.origin?.location ?? null)),
+      travelMode: trip.travelMode ?? null,
+      name: trip.name ?? null,
     });
     await writeChildren(tx as Db, ownerId, trip);
   });
@@ -402,6 +419,9 @@ export async function saveTripAt(
         ...(trip.stampLabels
           ? { stampLabel1: trip.stampLabels[0], stampLabel2: trip.stampLabels[1] }
           : {}),
+        ...(trip.origin === undefined ? {} : originToColumns(trip.origin?.location ?? null)),
+        ...(trip.travelMode === undefined ? {} : { travelMode: trip.travelMode }),
+        ...(trip.name === undefined ? {} : { name: trip.name }),
         updatedAt: savedAt,
       })
       .where(

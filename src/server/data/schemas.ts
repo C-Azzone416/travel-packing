@@ -6,6 +6,7 @@ import { ADDABLE_CATEGORIES } from "../../domain/item-ops";
 import { APPEARANCES } from "../../domain/appearance";
 import { THEME_IDS } from "../../domain/themes";
 import { MAX_STOPS } from "../../domain/trip-stops";
+import { MAX_TRIP_NAME_LENGTH, TRAVEL_MODES } from "../../domain/trip-route";
 import {
   ITEM_CATEGORIES,
   STAPLE_CADENCES,
@@ -148,9 +149,24 @@ const routeFields = {
   stops: stopsSelection.optional(),
 };
 
+/** Fly / Drive / Train or other (#379). null clears the choice. */
+export const travelMode = z.enum(TRAVEL_MODES);
+/** The owner's own trip name: trimmed, at most 60 characters. Blank is allowed and stored as no name (the stops are shown). */
+export const tripName = z.string().trim().max(MAX_TRIP_NAME_LENGTH);
+/**
+ * The optional trip fields (#379). `origin` is a place id like a stop's (resolved server-side, never trusted); left out it
+ * defaults to the account's home city, null means no origin. `travelMode` and `name` left out mean none (a copy keeps the source's mode).
+ */
+const travelFields = {
+  origin: locationSelection.nullable().optional(),
+  travelMode: travelMode.nullable().optional(),
+  name: tripName.nullable().optional(),
+};
+
 export const createTripInput = z
   .object({
     ...routeFields,
+    ...travelFields,
     config: tripConfig,
     /** Travel when left out. */
     theme: theme.optional(),
@@ -162,6 +178,7 @@ export const copyTripInput = z
   .object({
     sourceId: tripId,
     ...routeFields,
+    ...travelFields,
     /** The preferences chosen on the copy's Shape step. The source trip's own when left out. */
     config: tripConfig.optional(),
     /** The source trip's theme when left out. */
@@ -170,6 +187,16 @@ export const copyTripInput = z
   .superRefine(oneRouteForm);
 /** Replace the stops of a saved trip. */
 export const setStopsInput = z.object({ tripId, stops: stopsSelection });
+/** Change a saved trip's origin, travel mode and/or name; a field left out is unchanged, null clears it. At least one is required. */
+export const updateTripTravelInput = z
+  .object({ tripId, ...travelFields })
+  .superRefine((value, ctx) => {
+    if (value.origin === undefined && value.travelMode === undefined && value.name === undefined) {
+      ctx.addIssue({ code: "custom", path: ["origin"], message: "Nothing to change" });
+    }
+  });
+/** The account's home city: a place id (resolved server-side), or null to clear it. */
+export const setHomeCityInput = z.object({ location: locationSelection.nullable() });
 export const setThemeInput = z.object({ tripId, theme });
 /** Both stamp slots at once (#151): the typed text, or null for automatic. The service trims, upper-cases and validates. */
 export const setStampLabelsInput = z.object({
@@ -272,6 +299,7 @@ export const createTripWithWeatherInput = z
     mode: z.enum(["create", "copy"]),
     sourceId: tripId.nullable(),
     ...routeFields,
+    ...travelFields,
     config: tripConfig,
     theme,
     accepted: z.array(weatherAcceptedChange).max(20),
