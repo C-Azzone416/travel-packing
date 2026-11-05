@@ -204,10 +204,10 @@ main {
   .bottom-nav a[aria-current="page"] [data-fill] {
     fill: color-mix(in srgb, var(--onDark) 25%, transparent);
   }
-  /* Labels grow with the text size but stop at 17px (about 113%), so four labels still fit a 320px bar at 200% text; they never
+  /* Labels grow with the text size but stop at 16px (about 107%), so four labels still fit a 320px bar at 200% text; they never
      wrap or hide. */
   .bottom-nav .nav-label {
-    font-size: clamp(13px, 0.9375rem, 17px);
+    font-size: clamp(13px, 0.9375rem, 16px);
     line-height: 1.2;
   }
   .bottom-nav .nav-label-short {
