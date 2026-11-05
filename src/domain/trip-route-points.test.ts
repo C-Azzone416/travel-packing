@@ -50,7 +50,7 @@ describe("stopsOrDestination", () => {
 describe("tripRoutePoints", () => {
   it("is the origin as home, then each stop, using curated coordinates for curated places", () => {
     const points = tripRoutePoints({
-      origin: { location: place("us-wa-seattle", "Seattle"), airportCode: "SEA" },
+      origin: { location: place("us-il-chicago", "Chicago"), airportCode: "ORD" },
       stops: [
         at("pt-lisbon", "Lisbon", "LIS"),
         at("nowhere", "Porto", "OPO", { latitude: 41.15, longitude: -8.61 }),
@@ -59,7 +59,7 @@ describe("tripRoutePoints", () => {
       end: "2030-05-08",
     });
     expect(points.map((p) => [p.kind, p.label, p.code])).toEqual([
-      ["home", "Seattle", "SEA"],
+      ["home", "Chicago", "ORD"],
       ["stop", "Lisbon", "LIS"],
       ["stop", "Porto", "OPO"],
     ]);
@@ -89,7 +89,7 @@ describe("tripRoutePoints", () => {
     ).toEqual(["Lisbon"]);
     expect(
       tripRoutePoints({
-        origin: { location: place("us-wa-seattle", "Seattle") },
+        origin: { location: place("us-il-chicago", "Chicago") },
         stops: [at("unknown-place", "Nowhere")],
         start: "a",
         end: "b",

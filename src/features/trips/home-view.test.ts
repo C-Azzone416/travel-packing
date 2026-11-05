@@ -63,7 +63,7 @@ function trip(overrides: Partial<LifecycleTrip> = {}): LifecycleTrip {
     start: "2027-03-14",
     end: "2027-03-24",
     stops: [stop("Lisbon"), stop("Porto")],
-    origin: { location: place("home", "Seattle", "US"), airportCode: "SEA" },
+    origin: { location: place("home", "Chicago", "US"), airportCode: "ORD" },
     travelMode: "fly",
     name: null,
     items: [
@@ -167,7 +167,7 @@ describe("weatherNote", () => {
 describe("isInternational", () => {
   const base = { start: "a", end: "b", location: null };
   it("compares the stops' countries with the home country, and never guesses", () => {
-    const home = { location: place("h", "Seattle", "us") };
+    const home = { location: place("h", "Chicago", "us") };
     expect(isInternational({ ...base, origin: home, stops: [stop("Lisbon", "PT")] })).toBe(true);
     expect(isInternational({ ...base, origin: home, stops: [stop("Denver", "US")] })).toBe(false);
     expect(isInternational({ ...base, origin: null, stops: [stop("Lisbon", "PT")] })).toBeNull();
@@ -250,7 +250,7 @@ describe("tag text", () => {
       trip({ start: "2026-04-02", stops: [stop("Denver", "US")] }),
       "2026-03-01",
     );
-    expect(row).toEqual({ id: "t1", date: "02 APR", name: "Denver", route: "SEA → Denver" });
+    expect(row).toEqual({ id: "t1", date: "02 APR", name: "Denver", route: "ORD → Denver" });
     expect(upcomingRow(trip({ start: "2027-04-02" }), "2026-03-01").date).toBe("02 APR 2027");
     expect(upcomingRow(trip({ start: "" }), "2026-03-01").date).toBe("");
   });

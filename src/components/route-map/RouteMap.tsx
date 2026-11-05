@@ -96,7 +96,7 @@ export function RouteMap({
               style={{
                 fill: "var(--info)",
                 opacity: 0.7,
-                fontFamily: 'var(--font-body), system-ui, sans-serif',
+                fontFamily: "var(--font-body), system-ui, sans-serif",
                 fontWeight: 700,
                 fontStyle: "italic",
                 fontSize: m.ocean.fontSize,

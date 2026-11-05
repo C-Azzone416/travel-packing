@@ -43,7 +43,7 @@ function trip(extra: Partial<LifecycleTrip> = {}): LifecycleTrip {
     start: "2027-03-14",
     end: "2027-03-24",
     stops: [stop("Lisbon"), stop("Porto")],
-    origin: { location: place("Seattle", "US"), airportCode: "SEA" },
+    origin: { location: place("Chicago", "US"), airportCode: "ORD" },
     travelMode: "fly",
     name: null,
     ready: false,
@@ -86,7 +86,7 @@ function setup(props: Partial<HomeLaptopProps> = {}) {
       later={[]}
       today="2027-03-02"
       weather={{ phase: "none" }}
-      map={<svg role="img" aria-label="Route map: Seattle to Lisbon" />}
+      map={<svg role="img" aria-label="Route map: Chicago to Lisbon" />}
       busy={false}
       {...handlers}
       {...props}
@@ -104,7 +104,7 @@ describe("HomeLaptop", () => {
       "Lisbon & Porto",
       "Upcoming trips",
     ]);
-    expect(screen.getByRole("img", { name: "Route map: Seattle to Lisbon" })).toBeTruthy();
+    expect(screen.getByRole("img", { name: "Route map: Chicago to Lisbon" })).toBeTruthy();
     expect(screen.getByRole("region", { name: /In the bag/ })).toBeTruthy();
     expect(screen.getByRole("region", { name: /Lisbon/ })).toBeTruthy();
   });
@@ -113,7 +113,7 @@ describe("HomeLaptop", () => {
     setup({ map: null });
     expect(
       screen.getByText(
-        "SEA → LIS → OPO → SEA · flight · 10 nights · 2 cities"
+        "ORD → LIS → OPO → ORD · flight · 10 nights · 2 cities"
           .replace("LIS", "Lisbon")
           .replace("OPO", "Porto"),
       ),
@@ -265,7 +265,7 @@ describe("HomeLaptop", () => {
     const row = screen.getByRole("link", { name: /Rockies long weekend/ });
     expect(row.getAttribute("href")).toBe("/trips/t2");
     expect(row.textContent).toContain("02 APR 2027");
-    expect(row.textContent).toContain("SEA → Denver");
+    expect(row.textContent).toContain("ORD → Denver");
     expect(screen.getByRole("link", { name: "Past & archive" }).getAttribute("href")).toBe(
       "/stamps",
     );

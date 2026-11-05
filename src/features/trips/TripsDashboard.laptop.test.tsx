@@ -121,7 +121,7 @@ describe("TripsDashboard at laptop width", () => {
       ...base,
       weather: {
         getSettings: async () => ({ weatherOptIn: false, temperatureUnit: "F" }),
-      } as TripsSource["weather"],
+      } as unknown as TripsSource["weather"],
     };
     setup(off);
     expect(await screen.findByTestId("weather-off")).toBeTruthy();
@@ -156,7 +156,7 @@ describe("TripsDashboard at laptop width", () => {
             },
           ],
         }),
-      } as TripsSource["weather"],
+      } as unknown as TripsSource["weather"],
     };
     setup(source);
     const button = await screen.findByRole("button", { name: /San Diego · 59°\/50°/ });

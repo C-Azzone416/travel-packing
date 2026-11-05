@@ -71,9 +71,7 @@ describe("screens", () => {
     const html = renderToStaticMarkup(
       <ToastProvider>
         <SaveStatusProvider>
-          <TripsSourceProvider>
-            {await TripsPage()}
-          </TripsSourceProvider>
+          <TripsSourceProvider>{await TripsPage()}</TripsSourceProvider>
         </SaveStatusProvider>
       </ToastProvider>,
     );
