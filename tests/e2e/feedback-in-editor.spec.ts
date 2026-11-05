@@ -172,7 +172,11 @@ test(
   async ({ page }) => {
     await legacyPackingLayout(page);
     await rememberPictures(page);
-    await openEditor(page, { width: 1000, height: 520 });
+    // Desktop: just under the laptop view (#385); the phone project keeps the 1280px it always used.
+    await openEditor(page, {
+      width: test.info().project.name === "desktop" ? 1000 : 1280,
+      height: 520,
+    });
     await editor(page).getByRole("switch", { name: "Laundry access" }).click();
     await scrollEditorBody(page, 100);
     const before = await editorState(page);
@@ -409,6 +413,10 @@ test(
     // 200% zoom of text: the same checks on the narrowest phone width with the root font doubled.
     await page.setViewportSize({ width: 320, height: 640 });
     await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+    // Crossing 1024px swaps the trip screen's layout (#385): let it redraw before measuring.
+    await page.evaluate(
+      () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
+    );
     const zoomed = await headMetrics(page);
     expect(overlaps(zoomed.entry, zoomed.close), "entry and × at 200%").toBe(false);
     expect(overlaps(zoomed.entry, zoomed.title), "entry and title at 200%").toBe(false);
