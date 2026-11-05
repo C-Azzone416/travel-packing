@@ -61,6 +61,7 @@ html {
 }
 body {
   margin: 0;
+  min-width: 320px;
   background: var(--bg);
   color: var(--ink);
 }

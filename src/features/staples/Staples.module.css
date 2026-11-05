@@ -1,5 +1,10 @@
 /* The Staples screen (#384; spec on #376 part 3 section 1.5 and part 2). Phone first; the laptop layout starts at 1024px,
    the one breakpoint of the redesign. Colours are the scheme tokens only. */
+/* The app's body keeps a 320px minimum (the app-wide fix is #332). Staples must not scroll sideways down to 195px, so while
+   it is on screen the minimum is lifted. */
+:global(body):has(.screen) {
+  min-width: 0;
+}
 .screen {
   display: grid;
   gap: 14px;
@@ -21,7 +26,6 @@
   font-weight: var(--fw-heading-xl);
   letter-spacing: var(--tracking-title);
   color: var(--ink);
-  overflow-wrap: anywhere;
 }
 .headCount {
   margin: 0;
@@ -398,7 +402,7 @@
   width: 100%;
   min-height: 52px;
   margin-top: 8px;
-  padding: 0 18px;
+  padding: 8px 18px;
   border: 2px solid var(--tint);
   border-radius: 999px;
   background: var(--paper);
@@ -407,6 +411,9 @@
   font-size: 17px;
   font-weight: 600;
   cursor: pointer;
+}
+.laundryRow svg {
+  flex: none;
 }
 .laundryRow > span:first-child {
   display: inline-flex;
@@ -427,6 +434,7 @@
 }
 .sheetActions {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   width: 100%;
 }
@@ -447,7 +455,7 @@
   color: var(--accent);
 }
 .sheetDone {
-  flex: 1 1 auto;
+  flex: 1 1 100px;
   border: 0;
   background: var(--dark);
   color: var(--onDark);
@@ -737,6 +745,9 @@
 }
 
 @media (max-width: 359px) {
+  .head {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .addSelect {
     display: none;
   }

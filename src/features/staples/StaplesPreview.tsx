@@ -42,7 +42,7 @@ export function StaplesPreview({
   const sliderId = useId();
   const switchId = useId();
   const bodyId = useId();
-  const shortScreen = useMediaQuery("(max-height: 699px)");
+  const shortScreen = useMediaQuery("(max-height: 699px), (max-width: 359px)");
   // The dock starts collapsed on a short screen so the list stays usable; a tap on its title toggles it.
   const [expandedByUser, setExpandedByUser] = useState<boolean | null>(null);
   const expanded = laptop || (expandedByUser ?? !shortScreen);
