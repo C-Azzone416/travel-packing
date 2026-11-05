@@ -352,6 +352,8 @@ export function upsertStaple(context: DataContext, input: unknown): Promise<Resu
         cadence: request.cadence,
         packLast: request.packLast,
         ...(request.groupId ? { groupId: request.groupId } : {}),
+        ...(request.laundryHalves ? { laundryHalves: true } : {}),
+        ...(request.cube ? { cube: request.cube } : {}),
       };
       const exists = current.some((entry) => entry.id === staple.id);
       await saveStaples(
@@ -375,6 +377,8 @@ function fromSetupInput(request: {
     cadence: Staple["cadence"];
     packLast: boolean;
     groupId?: "toiletry-bag";
+    laundryHalves?: boolean;
+    cube?: Staple["cube"];
   }>;
 }): Staple[] {
   return request.staples.map((entry) => ({
@@ -385,6 +389,8 @@ function fromSetupInput(request: {
     cadence: entry.cadence,
     packLast: entry.packLast,
     ...(entry.groupId ? { groupId: entry.groupId } : {}),
+    ...(entry.laundryHalves ? { laundryHalves: true } : {}),
+    ...(entry.cube ? { cube: entry.cube } : {}),
   }));
 }
 
