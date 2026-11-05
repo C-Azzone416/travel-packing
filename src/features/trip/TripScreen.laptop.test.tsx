@@ -400,10 +400,10 @@ describe("Edit list", () => {
     await ready();
     await user.click(rail().getByRole("button", { name: /Toiletries/ }));
     await edit(user);
-    await user.type(within(panel()).getByPlaceholderText("+ Add an item"), "Floss");
-    await user.click(within(panel()).getByRole("button", { name: "Add" }));
-    const dialog = await screen.findByRole("dialog");
-    expect((within(dialog).getByDisplayValue("Floss") as HTMLInputElement).value).toBe("Floss");
+    // One add control here: the Bathroom one. The generic "Add an item" row is not shown beside it.
+    expect(within(panel()).queryByPlaceholderText("+ Add an item")).toBeNull();
+    await user.click(within(panel()).getByRole("button", { name: /Add a Bathroom item/ }));
+    expect(await screen.findByRole("dialog")).toBeTruthy();
   });
 
   it("moves an item to another cube, which gains it, and announces it", async () => {
