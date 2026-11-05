@@ -9,6 +9,7 @@ import { buildTripItems, forecastLabel, normalizeTripDates, parseDate } from "./
 import type { StampLabels } from "./stamps";
 import { DEFAULT_THEME, type ThemeId } from "./themes";
 import { TOILETRY_GROUP_ID } from "./toiletry-bag";
+import type { TravelMode, TripOrigin } from "./trip-route";
 import type { Staple, Trip, TripConfig, TripItem } from "./trip";
 import {
   daysBetween,
@@ -31,6 +32,12 @@ export interface LifecycleTrip extends Trip {
   theme: ThemeId;
   /** The owner's stamp label overrides (#151); absent or [null, null] = automatic. A new or copied trip never has them. */
   stampLabels?: StampLabels;
+  /** Where the trip starts from and returns to (#379); absent or null = none (every trip from before it). */
+  origin?: TripOrigin | null;
+  /** Fly / Drive / Train or other; absent or null = never chosen. */
+  travelMode?: TravelMode | null;
+  /** The owner's own name for the trip; absent or null = show the stops (`tripDisplayName`). */
+  name?: string | null;
 }
 
 /** A stop being drafted: its place is unconfirmed until the person picks one. */
