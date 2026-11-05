@@ -34,12 +34,12 @@ async function setPreference(page: Page, name: string, on: boolean) {
   await reviewAndApply(page, dialog);
 }
 
-test("home: the headline, three navigation items, one upcoming trip with a 'left to pack' badge, and history kept apart", async ({
+test("home: the headline, four navigation items (Stamps joins the laptop menu), one upcoming trip with a 'left to pack' badge, and history kept apart", async ({
   page,
 }) => {
   await openDashboard(page);
   await expect(page.getByRole("heading", { name: "Your travel ledger", level: 1 })).toBeVisible();
-  await expect(nav(page).getByRole("link")).toHaveCount(3);
+  await expect(nav(page).getByRole("link")).toHaveCount(4);
   await expect(page.getByRole("article")).toHaveCount(1);
   await expect(page.getByRole("article")).toContainText(/\d+ left/);
   await page.getByRole("button", { name: /Past & archive/ }).click();

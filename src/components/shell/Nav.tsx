@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useFeedbackTab } from "@/features/feedback/FeedbackAccess";
 import { FeedbackTabItem } from "@/features/feedback/FeedbackTabItem";
+import { NavPill } from "@/components/suitcase";
 import { NavIcon } from "./NavIcon";
 import { isActive, NAV_ITEMS } from "./nav-items";
 import { useSignOut } from "./use-sign-out";
@@ -15,8 +15,10 @@ export interface NavProps {
   email?: string | null;
 }
 
-// Fixed bottom bar on phones, inline in the header from 721px (CSS only). Phones have four slots: the three links, then Feedback
-// when feedback is on for this person (#293), otherwise Sign out (which also lives in Settings). From 721px the header keeps both.
+// One <nav>, two layouts (CSS only, one switch at 1024px, #383). Below it: the floating tab bar at the bottom, with four slots (the
+// three phone links, then Feedback when feedback is on for this person (#293), otherwise Sign out, which also lives in Settings).
+// From 1024px: the nav box dissolves into the top menu, so the pills (Trips, Staples, Stamps, Settings) sit beside the brand and
+// Feedback and Sign out sit at the right edge, both always.
 export function Nav({ signOut, email }: NavProps = {}) {
   const pathname = usePathname();
   const signOutGuard = useSignOut(signOut);
@@ -37,14 +39,15 @@ export function Nav({ signOut, email }: NavProps = {}) {
   return (
     <nav className="bottom-nav" aria-label="Primary navigation">
       {NAV_ITEMS.map((item) => (
-        <Link
+        <NavPill
           key={item.href}
           href={item.href}
-          aria-current={isActive(item, pathname) ? "page" : undefined}
+          active={isActive(item, pathname)}
+          className={item.laptopOnly ? "nav-link nav-laptop-only" : "nav-link"}
         >
-          <NavIcon name={item.icon} />
+          {item.icon ? <NavIcon name={item.icon} /> : null}
           <span className="nav-label">{item.label}</span>
-        </Link>
+        </NavPill>
       ))}
       {signedIn && feedback.enabled ? (
         <>

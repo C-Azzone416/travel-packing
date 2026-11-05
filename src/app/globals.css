@@ -35,10 +35,10 @@
   /* Persistent chrome (#282): the sticky top bar and, on phones, the fixed tab bar. Every offset below (page padding,
      scroll padding, toasts, sticky actions, the sections panel) is driven from these, never a literal. */
   --safe-bottom: env(safe-area-inset-bottom, 0px); /* overridable in tests */
-  --topbar-h: 60px;
-  --tabbar-h: 56px;
+  --topbar-h: 56px;
+  --tabbar-h: 60px;
   --sticky-top: var(--topbar-h);
-  --sticky-bottom: calc(var(--tabbar-h) + var(--safe-bottom));
+  --sticky-bottom: calc(var(--tabbar-h) + 8px + var(--safe-bottom));
   font-family:
     var(--font-body),
     ui-sans-serif,
@@ -61,7 +61,6 @@ html {
 }
 body {
   margin: 0;
-  min-width: 320px;
   background: var(--bg);
   color: var(--ink);
 }
@@ -173,36 +172,6 @@ p {
   letter-spacing: 0.01em;
 }
 
-.app-shell {
-  min-height: 100vh;
-  padding-bottom: calc(var(--sticky-bottom) + 30px);
-}
-/* The dark Field Ledger header (#143, #155, design's ruling on #155): ONE slim full-bleed bar, 68px (60 on phones):
-   brand, the primary navigation inline (desktop), the status chip, then Sign out. On phones the same <nav> is the
-   fixed tab bar at the bottom. Roles only. */
-/* Sticky at every width (#282): no JavaScript, no compacting, opaque. No transform, filter or backdrop-filter here or on
-   any ancestor (the Feedback screenshot clones <html> and shifts it), and no ancestor sets overflow. */
-.topbar {
-  position: sticky;
-  top: 0;
-  z-index: 40;
-  background: var(--header);
-  color: var(--header-ink);
-  box-shadow:
-    0 1px 0 color-mix(in srgb, var(--header-ink) 16%, var(--header)),
-    0 5px 10px -7px var(--ledger-shadow);
-}
-.topbar-inner {
-  height: var(--topbar-h);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 0 16px;
-}
-.topbar .brand-button:focus-visible,
-.topbar .sync-chip:focus-visible {
-  outline-color: var(--focus-on-header);
-}
 .brand-button {
   min-width: 0;
   min-height: 44px;
@@ -250,83 +219,6 @@ p {
   }
 }
 
-/* The transient status chip is interactive while visible and remains a 44px target. Its live region is separate,
-   so quiet idle can remove the control without losing saving/error announcements. */
-.sync-chip {
-  position: relative;
-  flex: none;
-  white-space: nowrap;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 44px;
-  padding: 0 4px;
-  border: 0;
-  background: transparent;
-  color: var(--header-muted);
-  font-size: 13px;
-  font-weight: 600;
-  text-decoration: none;
-  cursor: pointer;
-}
-.sync-chip.saving {
-  color: var(--header-ink);
-}
-.sync-chip.saving .sync-icon {
-  font-size: 8px;
-}
-.sync-chip.error {
-  min-height: 44px;
-  padding: 0 12px;
-  background: transparent;
-  color: var(--danger);
-  font-weight: 700;
-}
-.sync-chip.error::before {
-  position: absolute;
-  inset: 6px 0;
-  border-radius: 999px;
-  background: var(--surface);
-  content: "";
-}
-.sync-chip.error > * {
-  position: relative;
-}
-.sync-text-compact {
-  display: none;
-}
-.sync-icon {
-  font-weight: 900;
-}
-@media (max-width: 899px) {
-  /* Below 900px (phones, and the inline bar from 667 to 899) the brief success chip is just the check (still a 44px target); its name stays available. */
-  .sync-chip {
-    min-width: 44px;
-    justify-content: center;
-  }
-  .sync-chip.saved .sync-text {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-  .sync-chip.error .sync-text {
-    display: none;
-  }
-  .sync-chip.error .sync-text-compact {
-    display: inline;
-  }
-}
-
-/* Content column 1224px (mockup), 24px gutters below that. */
-main {
-  width: min(100%, 1272px);
-  margin: 0 auto;
-  padding: 8px 16px 36px;
-}
 .screen {
   animation: rise 0.2s ease-out;
 }
@@ -335,115 +227,6 @@ main {
     opacity: 0.2;
     transform: translateY(4px);
   }
-}
-
-/* The tab bar (phones, <=720px): fixed to the bottom, a light --surface bar with four equal items. */
-.bottom-nav {
-  position: fixed;
-  z-index: 20;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  display: grid;
-  /* Three links and a 4th slot (Feedback, or Sign out where feedback is off): four equal columns either way (#293). */
-  grid-auto-flow: column;
-  grid-auto-columns: 1fr;
-  padding: 0 0 var(--safe-bottom);
-  border-top: 1px solid var(--line);
-  background: var(--surface);
-  /* The bar's own width decides whether the 4th label reads "Feedback" or "Report" (see .nav-label-short below). */
-  container: nav / inline-size;
-}
-.bottom-nav a,
-.bottom-nav button {
-  position: relative;
-  min-width: 0;
-  min-height: var(--tabbar-h);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  padding: 8px 4px;
-  border: 0;
-  border-radius: 0;
-  background: none;
-  color: var(--muted);
-  font: inherit;
-  font-weight: 600;
-  text-decoration: none;
-  cursor: pointer;
-}
-/* Icons (#300): one 24px grid, the size comes from here. Labels grow with the text size but stop at 17px (about 142%), so four
-   labels still fit a 320px bar at 200% text; they never wrap or hide. */
-.bottom-nav .nav-glyph {
-  display: flex;
-  line-height: 0;
-}
-.bottom-nav .nav-icon {
-  width: 24px;
-  height: 24px;
-}
-.bottom-nav .nav-label {
-  font-size: clamp(12px, 0.75rem, 17px);
-  line-height: 1.2;
-}
-.bottom-nav .nav-label-short {
-  display: none;
-}
-/* "Feedback" only while it fits the slot (4.6 x the font size + 8px padding, four slots across): below that, "Report". */
-@container nav (max-width: min(16rem, 345px)) {
-  .bottom-nav .nav-label-long {
-    display: none;
-  }
-  .bottom-nav .nav-label-short {
-    display: inline;
-  }
-}
-.nav-signout {
-  display: grid;
-}
-.nav-signout-wide {
-  display: none;
-}
-/* The divider before the 4th slot (Feedback or Sign out). */
-.nav-signout::before,
-.nav-feedback::before {
-  content: "";
-  position: absolute;
-  inset: 14px auto 14px 0;
-  width: 1px;
-  background: var(--line);
-}
-.nav-signout {
-  position: relative;
-}
-.bottom-nav button:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-.bottom-nav a[aria-current="page"] [data-fill] {
-  fill: color-mix(in srgb, var(--dark) 16%, transparent);
-}
-.bottom-nav a:active,
-.bottom-nav button:active:not(:disabled) {
-  background: color-mix(in srgb, var(--dark) 12%, var(--surface));
-}
-/* The ring sits inside the full-bleed item so the screen edge never clips it. */
-.bottom-nav a:focus-visible,
-.bottom-nav button:focus-visible {
-  outline-offset: -5px;
-}
-.bottom-nav a[aria-current="page"] {
-  color: var(--link);
-  font-weight: 700;
-}
-.bottom-nav a[aria-current="page"]::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto;
-  height: 3px;
-  background: var(--dark);
 }
 
 .actions {
@@ -720,220 +503,8 @@ body[data-sheet-open] .toast-region {
 }
 
 @media (min-width: 660px) {
-  main {
-    padding: 16px 24px 44px;
-  }
   .modal-backdrop {
     align-items: center;
-  }
-}
-
-/* The inline-nav layout: 721px and wider, and short landscape screens at least 667px wide (#282). */
-@media (min-width: 721px), (max-height: 500px) and (min-width: 667px) {
-  :root {
-    --topbar-h: 68px;
-    --sticky-bottom: 0px;
-  }
-  /* Full-bleed bar: the brand circle sits 30px from the left edge, the right cluster 30px from the right (mockup). */
-  .topbar-inner {
-    gap: 8px;
-    padding-inline: 30px;
-  }
-  main {
-    padding-inline: 24px;
-  }
-  /* The primary navigation sits inline in the bar (no left rail, no bottom bar): the links follow the brand, the
-     status chip and Sign out go to the right. The nav box dissolves so its children share the bar's row. */
-  .bottom-nav {
-    display: contents;
-    container-type: normal;
-  }
-  .brand-button {
-    margin-right: 20px;
-  }
-  .bottom-nav a,
-  .bottom-nav button {
-    position: relative;
-    min-height: 44px;
-    flex-direction: row;
-    gap: 6px;
-    padding: 0 14px;
-    border-radius: var(--control-radius);
-    color: var(--header-muted);
-    font-size: 15px;
-    font-weight: 600;
-  }
-  .bottom-nav a:hover,
-  .bottom-nav button:hover {
-    color: var(--header-ink);
-  }
-  .bottom-nav a:active,
-  .bottom-nav button:active:not(:disabled) {
-    background: none;
-  }
-  /* Links are text only here; Feedback and Sign out keep a 16px icon. */
-  .bottom-nav .nav-glyph {
-    display: none;
-  }
-  .bottom-nav .nav-signout .nav-glyph,
-  .bottom-nav .nav-feedback .nav-glyph {
-    display: flex;
-  }
-  .bottom-nav .nav-icon {
-    width: 16px;
-    height: 16px;
-  }
-  .bottom-nav .nav-label {
-    font-size: inherit;
-    line-height: inherit;
-  }
-  .nav-signout::before,
-  .nav-feedback::before {
-    display: none;
-  }
-  .bottom-nav a[aria-current="page"] {
-    color: var(--header-ink);
-    font-weight: 700;
-  }
-  /* The active underline sits on the bar's bottom edge, a mix that stays 3:1 on the header in every theme. */
-  .bottom-nav a[aria-current="page"]::before {
-    inset: auto 0 calc((var(--topbar-h) - 44px) / -2);
-    height: 3px;
-    background: color-mix(in srgb, var(--header-ink) 50%, var(--dark));
-  }
-  .bottom-nav :focus-visible,
-  .bottom-nav a:focus-visible,
-  .bottom-nav button:focus-visible {
-    outline-color: var(--focus-on-header);
-    outline-offset: 3px;
-  }
-  /* Right side: Sign out, then the status chip at the far edge, which is also their order in the DOM (so focus order
-     matches what is seen). */
-  .nav-signout {
-    order: 8;
-    display: flex;
-    margin-left: auto;
-  }
-  .nav-signout button {
-    padding: 0 8px;
-    font-size: 14px;
-  }
-  /* Feedback and Sign out both live in the header (#293): Feedback then Sign out at the right edge. The save chip (in .topbar-end, order 0) stays to their left, so it appearing
-     never moves them (a11y.spec "a failed save" pins Feedback's x). The phone
-     slot's Sign out (not rendered with Feedback on) and the wide-only copy are the same control. */
-  .bottom-nav .nav-feedback {
-    order: 7;
-    margin-left: auto;
-    padding: 0 14px;
-    border: 1px solid var(--header-muted);
-    color: var(--header-ink);
-    font-size: 15px;
-  }
-  .bottom-nav .nav-feedback:hover {
-    background: color-mix(in srgb, var(--header-ink) 12%, transparent);
-  }
-  .bottom-nav .nav-feedback:active:not(:disabled) {
-    background: color-mix(in srgb, var(--header-ink) 20%, transparent);
-  }
-  .bottom-nav .nav-feedback .nav-label-short {
-    display: none;
-  }
-  .bottom-nav .nav-feedback .nav-label-long {
-    display: inline;
-  }
-  .nav-signout.nav-signout-wide {
-    display: flex;
-    margin-left: 0;
-  }
-  .toast-region {
-    bottom: 24px;
-  }
-}
-
-/* The inline bar between 667 and 899px (#282): brand, three links, Feedback, Sign out and any save chip must fit on one row
-   with nothing wrapped, squeezed or hidden, so the gutters, gaps and link padding tighten and the wordmark steps down.
-   The chip is already its compact form here (above). Labels never wrap at any width. */
-.bottom-nav a,
-.bottom-nav button {
-  white-space: nowrap;
-}
-@media (min-width: 721px) and (max-width: 899px),
-  (max-height: 500px) and (min-width: 667px) and (max-width: 899px) {
-  .topbar-inner {
-    gap: 4px;
-    padding-inline: 12px;
-  }
-  .brand-button {
-    margin-right: 0;
-    gap: 8px;
-  }
-  .brand-button strong {
-    font-size: 20px;
-  }
-  .bottom-nav a,
-  .bottom-nav button {
-    padding-inline: 8px;
-  }
-  .nav-signout button {
-    padding-inline: 6px;
-  }
-  /* Icon-only Feedback (44x44) until there is room for its word at 900px; the aria-label is unchanged. */
-  .bottom-nav .nav-feedback {
-    width: 44px;
-    padding: 0;
-    justify-content: center;
-  }
-  .bottom-nav .nav-feedback .nav-label {
-    display: none;
-  }
-}
-
-/* Short viewports (#282). Height up to 500px: a 52px bar, and the focus ring (3px) fits the 4px above a 44px control. */
-@media (max-height: 500px) {
-  :root {
-    --topbar-h: 52px;
-  }
-  .topbar .brand-button:focus-visible,
-  .topbar .sync-chip:focus-visible {
-    outline-offset: 0;
-  }
-}
-@media (max-height: 500px) and (min-width: 667px) {
-  .topbar .bottom-nav a:focus-visible,
-  .topbar .bottom-nav button:focus-visible {
-    outline-offset: 0;
-  }
-}
-/* Narrow and short (a landscape phone under 667px, 400% zoom): a 48px tab bar with the icon beside the label. */
-@media (max-width: 666px) and (max-height: 500px) {
-  :root {
-    --tabbar-h: 48px;
-  }
-  .bottom-nav a,
-  .bottom-nav button {
-    flex-direction: row;
-    gap: 6px;
-    padding: 0 2px;
-  }
-  .bottom-nav .nav-icon {
-    width: 20px;
-    height: 20px;
-  }
-}
-/* A 320px-wide bar this short is already tight: the icons go, never the labels. */
-@media (max-width: 359px) and (max-height: 500px) {
-  .bottom-nav .nav-glyph {
-    display: none;
-  }
-}
-/* The one documented exception: under 400px tall two bars would cost over 40% of the screen, so the top bar scrolls
-   away (Feedback is in the tab bar, so it stays reachable) and the tab bar stays. Nothing sticky sits at the top, so scroll padding drops to 0. */
-@media (max-width: 666px) and (max-height: 400px) {
-  :root {
-    --sticky-top: 0px;
-  }
-  .topbar {
-    position: static;
   }
 }
 
@@ -4956,12 +4527,6 @@ a.back {
 }
 
 /* Feedback (#131) */
-.topbar-end {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: none;
-}
 .feedback-notice {
   display: flex;
   align-items: center;
@@ -5204,29 +4769,6 @@ a.back {
 }
 .feedback-result p {
   margin: 0;
-}
-
-/* A wordmark never wraps; under 360px the bar tightens (smaller wordmark and mark, narrower gutters) so the save chip and Feedback
-   still fit beside it with room to spare (#282). */
-@media (max-width: 359px) {
-  .topbar-inner {
-    gap: 6px;
-    padding-inline: 10px;
-  }
-  .brand-button {
-    gap: 8px;
-    padding-inline: 4px;
-  }
-  .brand-button strong {
-    font-size: 18px;
-  }
-  .brand-mark {
-    width: 24px;
-    height: 24px;
-  }
-  .topbar-end {
-    gap: 4px;
-  }
 }
 
 /* Trip weather, stays with forecast days (#303): a labelled Forecast section of 28px daily rows, then a Typical summary. */

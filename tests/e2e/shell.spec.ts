@@ -16,9 +16,10 @@ const SCREENS = [
 test(
   "navigation reaches all three screens with titles, current state and focus on main",
   DEVICE,
-  async ({ page }) => {
+  async ({ page }, testInfo) => {
     const nav = page.getByRole("navigation", { name: "Primary navigation" });
-    await expect(nav.getByRole("link")).toHaveCount(3);
+    // Phone tabs: Trips, Staples, Settings. The laptop top menu adds Stamps (#383).
+    await expect(nav.getByRole("link")).toHaveCount(testInfo.project.name === "phone" ? 3 : 4);
     // Start on Trips, so every click below is a real route change.
     for (const screen of [...SCREENS.slice(1), SCREENS[0]]) {
       await nav.getByRole("link", { name: screen.label }).click();
@@ -57,21 +58,26 @@ test("keyboard focus is clearly visible", async ({ page }) => {
     const style = getComputedStyle(document.activeElement as Element);
     return { width: style.outlineWidth, style: style.outlineStyle, color: style.outlineColor };
   });
-  // The second Tab lands on the brand link in the dark header: --focus-on-header (Ocean #fff8eb).
-  expect(outline).toEqual({ width: "3px", style: "solid", color: "rgb(255, 248, 235)" });
+  // The second Tab lands on the brand link in the paper header: the redesign's --info ring (Ocean #3b7f91).
+  expect(outline).toEqual({ width: "3px", style: "solid", color: "rgb(59, 127, 145)" });
 });
 
-test("touch targets are at least 44px", DEVICE, async ({ page }) => {
-  const targets = [
-    page.getByRole("link", { name: /go to trips/i }),
-    ...(await page.getByRole("navigation").getByRole("link").all()),
-  ];
-  for (const target of targets) {
-    const box = await target.boundingBox();
-    expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
-    expect(box?.width ?? 0).toBeGreaterThanOrEqual(44);
-  }
-});
+test(
+  "touch targets are at least 44px on a phone; the laptop pills are 40px (#383)",
+  DEVICE,
+  async ({ page }, testInfo) => {
+    const phone = testInfo.project.name === "phone";
+    const targets = [
+      page.getByRole("link", { name: /go to trips/i }),
+      ...(await page.getByRole("navigation").getByRole("link").all()),
+    ];
+    for (const target of targets) {
+      const box = await target.boundingBox();
+      expect(box?.height ?? 0).toBeGreaterThanOrEqual(phone ? 44 : 40);
+      expect(box?.width ?? 0).toBeGreaterThanOrEqual(phone ? 44 : 40);
+    }
+  },
+);
 
 test("no horizontal scroll at 320px", DEVICE, async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 640 });
@@ -85,38 +91,42 @@ test("no horizontal scroll at 320px", DEVICE, async ({ page }) => {
 });
 
 test(
-  "navigation is a bottom bar on phones and inline in the slim dark header on desktop",
+  "navigation is a floating bottom bar on phones and a paper top menu on a laptop",
   DEVICE,
   async ({ page }, testInfo) => {
     const viewport = page.viewportSize()!;
+    const nav = page.getByRole("navigation", { name: "Primary navigation" });
     if (testInfo.project.name === "phone") {
-      const box = await page.getByRole("navigation", { name: "Primary navigation" }).boundingBox();
-      expect(box!.y + box!.height).toBeGreaterThan(viewport.height - 24);
-      expect(box!.width).toBeGreaterThan(viewport.width / 2);
+      const box = (await nav.boundingBox())!;
+      // Floats 8px above the bottom edge (plus the safe area), 12px in from each side.
+      expect(box.y + box.height).toBeGreaterThan(viewport.height - 24);
+      expect(box.y + box.height).toBeLessThanOrEqual(viewport.height - 8 + 0.5);
+      expect(Math.round(box.x)).toBe(12);
+      expect(Math.round(box.height)).toBe(60);
     } else {
-      // One slim bar (#155): the links sit inside the 68px header, in one row, with no rail beside the page.
-      const header = (await page.locator("header.topbar").boundingBox())!;
-      expect(Math.round(header.height)).toBe(68);
-      const links = await page
-        .getByRole("navigation", { name: "Primary navigation" })
-        .getByRole("link")
-        .all();
+      // The floating paper bar (#383): 64px high, 20px from the top, with the pills in one row inside it.
+      const bar = (await page.locator(".topbar-inner").boundingBox())!;
+      expect(Math.round(bar.height)).toBe(64);
+      expect(Math.round(bar.y)).toBe(20);
+      const links = await nav.getByRole("link").all();
       for (const link of links) {
         const box = (await link.boundingBox())!;
-        expect(box.y).toBeGreaterThanOrEqual(header.y);
-        expect(box.y + box.height).toBeLessThanOrEqual(header.y + header.height + 1);
+        expect(box.y).toBeGreaterThanOrEqual(bar.y);
+        expect(box.y + box.height).toBeLessThanOrEqual(bar.y + bar.height + 1);
+        expect(Math.round(box.height)).toBe(40);
       }
       const tops = await Promise.all(links.map(async (link) => (await link.boundingBox())!.y));
       expect(new Set(tops.map(Math.round)).size).toBe(1);
-      // Nothing is pinned to the left edge below the bar, and main starts under the bar.
+      // Nothing is pinned to the left edge below the bar, and main starts under it with 26px of padding.
       const main = (await page.locator("main").boundingBox())!;
-      expect(main.y).toBeGreaterThanOrEqual(header.y + header.height);
-      const current = page
-        .getByRole("navigation", { name: "Primary navigation" })
-        .locator('a[aria-current="page"]');
-      // The current page carries a 3px underline (the ::before), on top of its bold, brighter text.
-      expect(await current.evaluate((node) => getComputedStyle(node, "::before").height)).toBe(
-        "3px",
+      expect(Math.round(main.y - (bar.y + bar.height))).toBe(0);
+      expect(await page.locator("main").evaluate((n) => getComputedStyle(n).paddingTop)).toBe(
+        "26px",
+      );
+      // The current page is a dark pill.
+      const current = nav.locator('a[aria-current="page"]');
+      expect(await current.evaluate((node) => getComputedStyle(node).backgroundColor)).toBe(
+        "rgb(20, 43, 59)",
       );
     }
   },

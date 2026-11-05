@@ -67,3 +67,9 @@
     --fs-body: 17px;
   }
 }
+
+/* Fraunces numerals are lining figures everywhere (spec part 1, "7 days to go" never old-style). Set once on the root so every
+   Fraunces role inherits it; DM Sans figures are already lining, so nothing else changes. */
+:root {
+  font-variant-numeric: lining-nums;
+}
