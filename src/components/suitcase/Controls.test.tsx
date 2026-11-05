@@ -218,6 +218,35 @@ describe("PillTabs (Home four-pill row)", () => {
     expect(document.activeElement).toBe(screen.getAllByRole("tab")[0]);
   });
 
+  it("a value that matches no tab leaves the first tab tabbable, with none selected", () => {
+    render(<PillTabs label="x" items={TABS} value="nope" onChange={() => undefined} />);
+    const tabs = screen.getAllByRole("tab");
+    expect(tabs.map((tab) => tab.getAttribute("tabindex"))).toEqual(["0", "-1", "-1", "-1"]);
+    expect(tabs.map((tab) => tab.getAttribute("aria-selected"))).toEqual([
+      "false",
+      "false",
+      "false",
+      "false",
+    ]);
+  });
+
+  it("a matching value is the only tab in the tab order", () => {
+    render(<PillTabs label="x" items={TABS} value="future" onChange={() => undefined} />);
+    expect(screen.getAllByRole("tab").map((tab) => tab.getAttribute("tabindex"))).toEqual([
+      "-1",
+      "-1",
+      "0",
+      "-1",
+    ]);
+  });
+
+  it("tap-area pads never overlap: group row gap 10 for the 5px pill pad, chip pads 5 and 3", () => {
+    expect(css("Pill.module.css")).toMatch(/\.group \{[^}]*gap: 10px 8px/);
+    expect(css("Chip.module.css")).toMatch(/\.chip \{\s*--hit-pad: 5px/);
+    expect(css("Chip.module.css")).toMatch(/\.editor \{\s*--hit-pad: 3px/);
+    expect(css("shared.module.css")).not.toContain("8px apart or more");
+  });
+
   it("falls back to a generated id base", () => {
     render(<PillTabs label="x" items={TABS} value="pack" onChange={() => undefined} />);
     expect(screen.getAllByRole("tab")[0].id).toMatch(/-tab-pack$/);
