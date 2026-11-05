@@ -244,7 +244,7 @@ test.describe("error states and toasts", DEVICE, () => {
   }, testInfo) => {
     await openDashboard(page);
     const feedback = page.getByRole("button", { name: "Send feedback" });
-    const wordmark = page.locator(".brand-button strong");
+    const wordmark = page.locator(".shell-brand strong");
     const feedbackBefore = await feedback.boundingBox();
     const wordmarkBefore = await wordmark.boundingBox();
     expect(feedbackBefore).not.toBeNull();

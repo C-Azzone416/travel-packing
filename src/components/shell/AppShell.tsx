@@ -9,6 +9,7 @@ import { providerEnabled } from "@/server/locations/provider-config";
 import { TripsSourceProvider } from "@/features/trips/TripsSourceProvider";
 import { StaplesSetupGate, type StaplesSetupActions } from "@/features/staples/StaplesSetupGate";
 import { Nav } from "./Nav";
+import { NavIcon } from "./NavIcon";
 import { PreviewBanner } from "./PreviewBanner";
 import { RouteFocus } from "./RouteFocus";
 import { ConnectedSaveChip, SaveStatusProvider } from "./SaveStatus";
@@ -36,8 +37,10 @@ export function AppShell({ children, signOut, email, setupActions }: AppShellPro
               <div className="app-shell">
                 <header className="topbar">
                   <div className="topbar-inner">
-                    <Link className="brand-button" href="/" aria-label="Packed Smart: go to trips">
-                      <span className="brand-mark" aria-hidden="true" />
+                    <Link className="shell-brand" href="/" aria-label="Packed Smart: go to trips">
+                      <span className="shell-brand-mark" aria-hidden="true">
+                        <NavIcon name="trips" />
+                      </span>
                       <strong>Packed Smart</strong>
                     </Link>
                     <Nav signOut={signOut} email={email} />
