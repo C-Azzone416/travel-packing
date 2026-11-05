@@ -294,3 +294,45 @@ test("screenshots of the staples screen", DEVICE, async ({ page }, testInfo) => 
   await page.getByRole("button", { name: "Add staple" }).click();
   await shot("duplicate", false);
 });
+
+// Design's re-check of #384: the phone dock is drawn about 125px tall (st-p-ocean), and the staple sheet keeps Remove and Done
+// on screen at 195×844 and 390×640 (its fields scroll inside it).
+test("the phone dock keeps to its drawn height, and the sheet keeps Remove and Done on screen", async ({
+  page,
+}) => {
+  await page.clock.setFixedTime(NOW);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await signInAsOwner(page);
+  await page.goto("/staples");
+  await expect(section(page, "Clothing")).toBeVisible();
+  const dock = page.getByRole("complementary", { name: "Preview" });
+  await expect(page.getByRole("button", { name: /^Preview:/ })).toHaveAttribute(
+    "aria-expanded",
+    "true",
+  );
+  expect((await dock.boundingBox())!.height).toBeLessThanOrEqual(130);
+
+  for (const size of [
+    { width: 195, height: 844 },
+    { width: 390, height: 640 },
+  ]) {
+    await page.setViewportSize(size);
+    await rowButton(page, "sleepwear", "Sleepwear").click();
+    const sheet = page.getByRole("dialog", { name: "Sleepwear" });
+    await expect(sheet).toBeVisible();
+    for (const name of ["Remove", "Done"]) {
+      const box = (await sheet.getByRole("button", { name, exact: true }).boundingBox())!;
+      expect(box.y).toBeGreaterThanOrEqual(0);
+      expect(box.y + box.height).toBeLessThanOrEqual(size.height);
+    }
+    // The laundry pill keeps "On"/"Off" on its right edge, even at 195.
+    const pill = sheet.getByRole("switch", { name: "Fewer with laundry" });
+    const state = pill.locator("span").last();
+    const [pillBox, stateBox] = [(await pill.boundingBox())!, (await state.boundingBox())!];
+    expect(pillBox.x + pillBox.width - (stateBox.x + stateBox.width)).toBeLessThan(30);
+    expect(stateBox.y).toBeGreaterThan(pillBox.y - 1);
+    await sheet.getByRole("button", { name: "Done" }).scrollIntoViewIfNeeded();
+    await sheet.getByRole("button", { name: "Done" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  }
+});

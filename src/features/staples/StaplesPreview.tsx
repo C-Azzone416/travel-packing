@@ -103,7 +103,7 @@ export function StaplesPreview({
             <span className={styles.bigUnit}>{summary.total === 1 ? "item" : "items"}</span>
           </span>
         </div>
-        <div id={bodyId} hidden={!expanded}>
+        <div id={bodyId} className={styles.dockBody} hidden={!expanded}>
           {controls}
           <p className={styles.note}>{laundryNote(laundry, summary.saves)}</p>
         </div>
