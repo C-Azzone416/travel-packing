@@ -33,8 +33,11 @@ const signOut = async () => undefined;
 const email = "owner@example.test";
 
 describe("nav items and icons (#300)", () => {
-  it("has three entries with icon keys, and no font glyph is left in the shell", () => {
-    expect(NAV_ITEMS.map((item) => item.icon)).toEqual(["trips", "staples", "settings"]);
+  it("has four entries (Stamps is the laptop-only one, with no icon), and no font glyph is left in the shell", () => {
+    expect(NAV_ITEMS.map((item) => item.icon)).toEqual(["trips", "staples", undefined, "settings"]);
+    expect(NAV_ITEMS.filter((item) => item.laptopOnly).map((item) => item.label)).toEqual([
+      "Stamps",
+    ]);
     const dir = join(process.cwd(), "src/components/shell");
     for (const file of readdirSync(dir).filter((name) => /\.tsx?$/.test(name))) {
       if (file.endsWith(".test.tsx")) continue;
@@ -46,7 +49,7 @@ describe("nav items and icons (#300)", () => {
     tab.state = { enabled: true, disabled: false, open: vi.fn() };
     render(<Nav signOut={signOut} email={email} />);
     const icons = document.querySelectorAll("nav svg");
-    // Trips, Staples, Settings, Feedback, and the wide-only Sign out.
+    // Trips, Staples, Settings, Feedback, and the laptop-only Sign out (Stamps has no icon).
     expect(icons).toHaveLength(5);
     for (const icon of icons) {
       expect(icon.getAttribute("aria-hidden")).toBe("true");
@@ -60,13 +63,21 @@ describe("nav items and icons (#300)", () => {
     }
   });
 
-  it("the link names are exactly Trips, Staples and Settings", () => {
+  it("the link names are Trips, Staples, Stamps and Settings, in that order", () => {
     render(<Nav />);
     expect(screen.getAllByRole("link").map((link) => link.textContent)).toEqual([
       "Trips",
       "Staples",
+      "Stamps",
       "Settings",
     ]);
+    // Only Stamps is left off the phone tab bar.
+    expect(
+      screen
+        .getAllByRole("link")
+        .filter((link) => link.classList.contains("nav-laptop-only"))
+        .map((link) => link.textContent),
+    ).toEqual(["Stamps"]);
   });
 });
 
@@ -88,11 +99,17 @@ describe("the 4th slot with Feedback on (#293)", () => {
     expect(short?.getAttribute("aria-hidden")).toBe("true");
     await userEvent.click(feedback);
     expect(open).toHaveBeenCalledTimes(1);
-    // DOM order: links, Feedback, then the copy of Sign out that only shows from 721px.
-    expect([...nav.children].map((child) => child.tagName + "." + child.className)).toEqual([
-      "A.",
-      "A.",
-      "A.",
+    // DOM order: the four links, Feedback, then the copy of Sign out that only shows from 1024px.
+    expect(
+      [...nav.children].map(
+        (child) =>
+          child.tagName + (child.className.includes("nav-link") ? ".link" : "." + child.className),
+      ),
+    ).toEqual([
+      "A.link",
+      "A.link",
+      "A.link",
+      "A.link",
       "BUTTON.nav-feedback",
       "FORM.nav-signout nav-signout-wide",
     ]);
@@ -112,6 +129,7 @@ describe("the 4th slot with Feedback on (#293)", () => {
     render(<Nav />);
     expect(screen.queryByRole("button")).toBeNull();
     expect(document.querySelectorAll("nav svg.nav-icon")).toHaveLength(3);
+    expect(document.querySelectorAll("nav a")).toHaveLength(4);
   });
 });
 
@@ -119,12 +137,12 @@ describe("the 4th slot with Feedback off (production)", () => {
   it("is Sign out, in the same place, with no Feedback markup", () => {
     render(<Nav signOut={signOut} email={email} />);
     const nav = screen.getByRole("navigation", { name: "Primary navigation" });
-    expect([...nav.children].map((child) => child.tagName + "." + child.className)).toEqual([
-      "A.",
-      "A.",
-      "A.",
-      "FORM.nav-signout",
-    ]);
+    expect(
+      [...nav.children].map(
+        (child) =>
+          child.tagName + (child.className.includes("nav-link") ? ".link" : "." + child.className),
+      ),
+    ).toEqual(["A.link", "A.link", "A.link", "A.link", "FORM.nav-signout"]);
     expect(screen.getByRole("button", { name: "Sign out" }).getAttribute("title")).toBe(
       `Signed in as ${email}`,
     );

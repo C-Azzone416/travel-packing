@@ -5,7 +5,7 @@ import { DEVICE } from "./helpers/device";
 import { feedbackOff } from "./helpers/feedback";
 
 // Sign out in the main navigation (#117, #293). Where feedback is off (production) it is the 4th tab on a phone, after Settings;
-// where feedback is on, the 4th tab is Feedback and Sign out is the Settings row on a phone. From 721px the header holds it either way.
+// where feedback is on, the 4th tab is Feedback and Sign out is the Settings row on a phone. From 1024px the header holds it either way.
 test(
   "feedback off: Sign out is the 4th tab, one tap ends the session",
   DEVICE,
@@ -22,12 +22,16 @@ test(
       `Signed in as ${ownerEmailFor(testInfo.project.name)}`,
     );
     // Four items, never the current page, the same hit size as the links.
-    await expect(nav.getByRole("link")).toHaveCount(3);
+    const phone = testInfo.project.name === "phone";
+    await expect(nav.getByRole("link")).toHaveCount(phone ? 3 : 4);
     await expect(signOut).not.toHaveAttribute("aria-current", /.+/);
     const box = await signOut.boundingBox();
     expect(Math.round(box!.height)).toBeGreaterThanOrEqual(44);
-    const link = await nav.getByRole("link", { name: "Settings" }).boundingBox();
-    expect(Math.round(box!.height)).toBe(Math.round(link!.height));
+    if (phone) {
+      // On a phone the tab and the link are the same 48px pill; on a laptop Sign out is a text link in the bar.
+      const link = await nav.getByRole("link", { name: "Settings" }).boundingBox();
+      expect(Math.round(box!.height)).toBe(Math.round(link!.height));
+    }
     await expectAccessible(page, "dashboard with Sign out as the 4th tab");
 
     await signOut.click();
@@ -54,7 +58,7 @@ test(
   },
 );
 
-test("from 721px the header holds Sign out, one tap ends the session", async ({ page }) => {
+test("from 1024px the header holds Sign out, one tap ends the session", async ({ page }) => {
   await signInAsOwner(page);
   await page.setViewportSize({ width: 1280, height: 800 });
   const nav = page.getByRole("navigation", { name: "Primary navigation" });
