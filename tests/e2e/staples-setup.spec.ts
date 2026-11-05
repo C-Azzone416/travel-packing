@@ -263,8 +263,10 @@ async function expectRowSound(row: Locator, layout: Layout, label: string, align
         `${label}: badge text lines up with the name text`,
       ).toBeLessThanOrEqual(3);
     }
+    // The name is an inline box, so its rect is the font's content area (ascent + descent), not the line-height. DM Sans's
+    // is taller than the Barlow this was written for (1.30em vs 1.20em: about 2.5px at 390@200% text), hence 6, not 3.
     expect(badgeBox!.y, `${label}: badge sits under the name`).toBeGreaterThanOrEqual(
-      nameBox!.y + nameBox!.height - 3,
+      nameBox!.y + nameBox!.height - 6,
     );
   } else if (layout === "inline") {
     expect(badgeBox!.y, `${label}: badge shares the name line`).toBeLessThan(
