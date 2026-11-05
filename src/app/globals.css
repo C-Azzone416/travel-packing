@@ -5486,6 +5486,14 @@ a.back {
   font-size: 13px;
   box-shadow: inset 0 1px 0 var(--line);
 }
+/* DM Sans runs wider than the Barlow this line was sized for: keep "Daily forecast for the other stays" on one row at 320px. */
+@media (max-width: 360px) {
+  .hero-other-stays {
+    padding-inline: 10px;
+    font-size: 12px;
+    letter-spacing: -0.01em;
+  }
+}
 @media (min-width: 721px) {
   /* WIDE STACK (container 30em and up): the cells side by side as columns (4 or more wrap to a second row), each cell
      three rows (identity on the left, the range on the right, the note below), then the block full width below. */
