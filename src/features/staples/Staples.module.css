@@ -258,7 +258,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 10px;
+  gap: 10px;
   min-width: 0;
 }
 .cubeSelect {
@@ -345,7 +345,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
 }
 /* A native radio as a chip: the input stays focusable and operable, the label is the chip. */

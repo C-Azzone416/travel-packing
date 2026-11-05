@@ -73,7 +73,7 @@ test("edit a staple count: existing trips are unchanged, and the next new trip u
   await expect(section(page, "Clothing")).toBeVisible();
   await rowButton(page, "underwear", "Underwear").click();
   const editor = editorOf(page, "Underwear");
-  await saved(page, () => editor.getByRole("button", { name: "More" }).click());
+  await saved(page, () => editor.getByRole("button", { name: /^More / }).click());
   // The row shows what the 4-night preview trip gets: 2 per day over 5 days.
   await expect(staple(page, "underwear")).toContainText("× 10");
   await page.reload();
@@ -257,7 +257,7 @@ test(
       await rowButton(page, "sleepwear", "Sleepwear").click();
       const sheet = page.getByRole("dialog", { name: "Sleepwear" });
       await expect(sheet.getByRole("radio", { name: "Clothing" })).toBeChecked();
-      await saved(page, () => sheet.getByRole("button", { name: "More" }).click());
+      await saved(page, () => sheet.getByRole("button", { name: /^More / }).click());
       await saved(page, () => sheet.getByRole("button", { name: "per night" }).click());
       await sheet.getByRole("button", { name: "Done" }).click();
       await expect(page.getByRole("dialog")).toHaveCount(0);

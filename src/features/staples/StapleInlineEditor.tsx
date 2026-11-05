@@ -53,6 +53,7 @@ export function StapleInlineEditor({ staple, onChange, onRemove, onClose }: Stap
       <div className={styles.editorRow}>
         <Stepper
           label={`Quantity for ${staple.name}`}
+          itemName={staple.name}
           value={staple.qty}
           onChange={(qty) => onChange({ ...staple, qty })}
         />

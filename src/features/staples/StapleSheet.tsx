@@ -63,6 +63,7 @@ export function StapleSheet({ staple, onChange, onRemove, onClose }: StapleEdito
           <Stepper
             size="sheet"
             label={`Quantity for ${staple.name}`}
+            itemName={staple.name}
             value={staple.qty}
             onChange={(qty) => onChange({ ...staple, qty })}
           />

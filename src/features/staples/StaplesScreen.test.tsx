@@ -250,7 +250,9 @@ describe("laptop: the inline editor", () => {
     expect(screen.queryByRole("group", { name: "Edit Underwear" })).toBeNull();
     await user.click(underwear);
     const group = screen.getByRole("group", { name: "Edit Underwear" });
-    within(group).getByRole("button", { name: "More" }).focus();
+    within(group)
+      .getByRole("button", { name: /^More / })
+      .focus();
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("group", { name: "Edit Underwear" })).toBeNull();
     await waitFor(() => expect(document.activeElement).toBe(underwear));
@@ -268,7 +270,7 @@ describe("laptop: the inline editor", () => {
     const tripsBefore = JSON.stringify(source.snapshot().trips);
     await user.click(within(rowFor("last-laptop")).getByRole("button", { name: /^Laptop/ }));
     const group = screen.getByRole("group", { name: "Edit Laptop" });
-    await user.click(within(group).getByRole("button", { name: "More" }));
+    await user.click(within(group).getByRole("button", { name: /^More / }));
     // The editor shows it at once; the list is stored only after the server answers.
     expect(within(group).getByRole("status").textContent).toBe("2");
     expect(source.staplesSnapshot().find((s) => s.id === "last-laptop")!.qty).toBe(1);
@@ -296,7 +298,7 @@ describe("laptop: the inline editor", () => {
     await loaded();
     await user.click(within(rowFor("last-laptop")).getByRole("button", { name: /^Laptop/ }));
     const more = within(screen.getByRole("group", { name: "Edit Laptop" })).getByRole("button", {
-      name: "More",
+      name: /^More /,
     });
     await user.click(more);
     await user.click(more);
@@ -429,7 +431,7 @@ describe("laptop: the inline editor", () => {
     });
     await loaded();
     await user.click(within(rowFor("last-laptop")).getByRole("button", { name: /^Laptop/ }));
-    await user.click(screen.getByRole("button", { name: "More" }));
+    await user.click(screen.getByRole("button", { name: /^More / }));
     expect(await screen.findByRole("button", { name: /not saved/i })).toBeTruthy();
     await waitFor(() => expect(within(rowFor("last-laptop")).getByText("× 1")).toBeTruthy());
   });
@@ -526,7 +528,7 @@ describe("phone", () => {
     ).toEqual(["clothing", "toiletries", "tech", "documents", "misc"]);
     expect(within(cubes).getByRole("radio", { name: "Clothing" })).toHaveProperty("checked", true);
     await user.click(within(cubes).getByRole("radio", { name: "Tech" }));
-    await user.click(within(dialog).getByRole("button", { name: "More" }));
+    await user.click(within(dialog).getByRole("button", { name: /^More / }));
     await user.click(within(dialog).getByRole("button", { name: "per night" }));
     const laundry = within(dialog).getByRole("switch", { name: "Fewer with laundry" });
     expect(laundry.textContent).toContain("On");
