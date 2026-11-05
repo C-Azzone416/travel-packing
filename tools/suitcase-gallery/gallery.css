@@ -1,0 +1,190 @@
+/* Layout for the Suitcase gallery only (#381). The primitives style themselves; this places them the way the screens will. */
+@font-face {
+  font-family: "DM Sans";
+  src: url("../../src/app/font-files/dm-sans-latin.woff2") format("woff2");
+  font-weight: 400 700;
+}
+@font-face {
+  font-family: "Fraunces";
+  src: url("../../src/app/font-files/fraunces-latin.woff2") format("woff2");
+  font-weight: 700 800;
+}
+:root {
+  --font-body: "DM Sans", sans-serif;
+  --font-display: "Fraunces", serif;
+}
+html,
+body {
+  background: var(--page);
+  color: var(--ink);
+  font-family: var(--font-body);
+}
+body {
+  min-width: 0;
+  margin: 0;
+}
+.g-page {
+  box-sizing: border-box;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 12px 12px 40px;
+}
+@media (min-width: 1024px) {
+  .g-page {
+    padding-inline: 40px;
+  }
+}
+.g-section {
+  margin-bottom: 28px;
+  min-width: 0;
+}
+.g-eyebrow {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.g-chip-eyebrow {
+  display: inline-block;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--tint);
+  color: var(--ink);
+  text-transform: none;
+  overflow-wrap: anywhere;
+}
+.g-gap {
+  height: 12px;
+}
+.g-hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin: 8px 0 10px;
+}
+.g-hero-name {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 32px;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+.g-hero-sub {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 20px;
+}
+.g-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.g-wrap {
+  flex-wrap: wrap;
+}
+.g-lede {
+  color: var(--muted);
+  font-size: 15px;
+}
+.g-mini-date {
+  display: inline-block;
+  width: 56px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.g-mini-name {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 20px;
+  overflow-wrap: anywhere;
+}
+.g-cubes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.g-days {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(56px, 1fr));
+  gap: 4px;
+}
+@media (min-width: 1024px) {
+  .g-cubes {
+    gap: 10px;
+  }
+  .g-days {
+    grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+    gap: 6px;
+  }
+}
+@media (max-width: 359px) {
+  .g-cubes {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 239px) {
+  .g-cubes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.g-dark {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  padding: 4px;
+}
+.g-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.g-panel {
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--paper);
+}
+@media (min-width: 1024px) {
+  .g-dark {
+    grid-template-columns: 300px minmax(0, 1fr);
+    min-height: 300px;
+  }
+}
+.g-scroll {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding: 4px;
+}
+.g-scroll > * {
+  flex: none;
+}
+.g-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.g-item {
+  margin: 0 0 6px;
+  font-size: 18px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.g-on-dark {
+  display: inline-block;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: var(--dark);
+  color: var(--onDark);
+}
+@media (max-width: 239px) {
+  .g-hero-name {
+    font-size: 26px;
+  }
+}
