@@ -207,7 +207,7 @@ main {
   /* Labels grow with the text size but stop at 16px (about 107%), so four labels still fit a 320px bar at 200% text; they never
      wrap or hide. */
   .bottom-nav .nav-label {
-    font-size: clamp(13px, 0.9375rem, 16px);
+    font-size: clamp(13px, 0.9375rem, min(16px, 4.4vw));
     line-height: 1.2;
   }
   .bottom-nav .nav-label-short {
