@@ -66,6 +66,9 @@ import { curatedResolver } from "../locations/resolver";
 import { round2 } from "../locations/open-meteo";
 import type { Appearance } from "../../domain/appearance";
 import { readAppearance, writeAppearance } from "./appearance-store";
+import { readHomeCity, writeHomeCity } from "./home-store";
+import { normalisePlace } from "./place-columns";
+import { normaliseTripName, type TravelMode, type TripOrigin } from "../../domain/trip-route";
 import {
   categoryCounts,
   findListItemDuplicate,
@@ -587,10 +590,54 @@ async function saveNewTrip(
   scope: OwnerScope,
   context: DataContext,
   draft: TripDraft,
+  travel: TravelRequest,
+  inheritedMode: TravelMode | null = null,
 ): Promise<StoredTrip> {
-  const trip = await buildNewTrip(scope, context, draft);
+  const trip = await withTravel(
+    scope,
+    context,
+    await buildNewTrip(scope, context, draft),
+    travel,
+    inheritedMode,
+  );
   await insertTrip(scope.db, scope.ownerId, trip);
   return (await loadTrip(scope.db, scope.ownerId, trip.id)) ?? refuse(fail("INTERNAL"));
+}
+
+interface TravelRequest {
+  origin?: { id: string } | null;
+  travelMode?: TravelMode | null;
+  name?: string | null;
+}
+
+/**
+ * The origin of a new trip (#379): the place the browser named (resolved server-side), nothing when it sent null, and the
+ * account's home city when it sent nothing. The trip keeps its own copy: changing home later never moves an existing trip.
+ */
+async function resolveOrigin(
+  scope: OwnerScope,
+  context: DataContext,
+  origin: TravelRequest["origin"],
+): Promise<TripOrigin | null> {
+  if (origin === null) return null;
+  if (origin === undefined) return readHomeCity(scope.db, scope.ownerId);
+  return normalisePlace(await resolveLocation(context, origin.id));
+}
+
+/** A new trip's origin, travel mode and name. `inheritedMode` is what a copy takes from its source when none is given. */
+async function withTravel(
+  scope: OwnerScope,
+  context: DataContext,
+  trip: StoredTrip,
+  travel: TravelRequest,
+  inheritedMode: TravelMode | null,
+): Promise<StoredTrip> {
+  return {
+    ...trip,
+    origin: await resolveOrigin(scope, context, travel.origin),
+    travelMode: travel.travelMode === undefined ? inheritedMode : travel.travelMode,
+    name: normaliseTripName(travel.name),
+  };
 }
 
 /** Build a fresh stored snapshot without inserting it, for atomic compound creates. */
@@ -665,6 +712,7 @@ export function createTrip(context: DataContext, input: unknown): Promise<Result
       scope,
       context,
       request.savedListId ? setDraftSavedList(draft, request.savedListId) : draft,
+      request,
     );
   });
 }
@@ -691,6 +739,8 @@ export function copyTrip(context: DataContext, input: unknown): Promise<Result<S
       scope,
       context,
       request.theme ? setDraftTheme(configured, request.theme) : configured,
+      request,
+      source.travelMode ?? null,
     );
   });
 }
@@ -718,7 +768,10 @@ export function createTripWithWeatherReview(
     return scope.db.transaction(async (tx) => {
       const txScope: OwnerScope = { db: tx as OwnerScope["db"], ownerId: scope.ownerId };
       const base = await buildNewTrip(txScope, context, draft);
-      const trip = applyWeatherChanges(base, request.accepted);
+      const trip = applyWeatherChanges(
+        await withTravel(txScope, context, base, request, copied?.travelMode ?? null),
+        request.accepted,
+      );
       await insertTrip(txScope.db, txScope.ownerId, trip);
       for (const decision of request.accepted) {
         await writeWeatherSuggestion(txScope.db, txScope.ownerId, trip.id, {
@@ -766,6 +819,32 @@ export function setTripStops(context: DataContext, input: unknown) {
           current.stampLabels?.[0] ?? null,
           automaticStamps(stops).length < 2 ? null : (current.stampLabels?.[1] ?? null),
         ],
+      };
+      if (!(await saveTrip(txScope.db, txScope.ownerId, next))) refuse(fail("NOT_FOUND"));
+      return mustLoad(txScope, request.tripId);
+    });
+  });
+}
+
+/**
+ * Change a saved trip's origin, travel mode and/or name (#379). A field left out is unchanged; null clears it (no origin, no
+ * mode, no name: the stops are shown). The origin is a place id resolved server-side. Another owner's trip is NOT_FOUND.
+ */
+export function updateTripTravel(context: DataContext, input: unknown) {
+  return run(context, inputs.updateTripTravelInput, input, async (scope, request) => {
+    const origin =
+      request.origin === undefined || request.origin === null
+        ? request.origin
+        : normalisePlace(await resolveLocation(context, request.origin.id));
+    return scope.db.transaction(async (tx) => {
+      const txScope: OwnerScope = { db: tx as OwnerScope["db"], ownerId: scope.ownerId };
+      if (!(await lockTrip(txScope.db, txScope.ownerId, request.tripId))) refuse(fail("NOT_FOUND"));
+      const current = await mustLoad(txScope, request.tripId);
+      const next: StoredTrip = {
+        ...current,
+        ...(origin === undefined ? {} : { origin }),
+        ...(request.travelMode === undefined ? {} : { travelMode: request.travelMode }),
+        ...(request.name === undefined ? {} : { name: normaliseTripName(request.name) }),
       };
       if (!(await saveTrip(txScope.db, txScope.ownerId, next))) refuse(fail("NOT_FOUND"));
       return mustLoad(txScope, request.tripId);
@@ -850,6 +929,31 @@ export function updateAppearance(
   return run(context, inputs.appearanceInput, input, (scope, { appearance }) =>
     writeAppearance(scope.db, scope.ownerId, appearance),
   );
+}
+
+// ---------------------------------------------------------------- home city (#379)
+
+/** The account's home city (the default "From" for new trips), or null. Owner-only; never logged. */
+export function getHomeCity(context: DataContext): Promise<Result<TripOrigin | null>> {
+  return run(context, inputs.none, {}, (scope) => readHomeCity(scope.db, scope.ownerId));
+}
+
+/** Set the one home city from a place id (resolved server-side), or clear it with `location: null`. Trips already made keep their own origin. */
+export function setHomeCity(
+  context: DataContext,
+  input: unknown,
+): Promise<Result<TripOrigin | null>> {
+  return run(context, inputs.setHomeCityInput, input, async (scope, { location }) =>
+    writeHomeCity(
+      scope.db,
+      scope.ownerId,
+      location ? await resolveLocation(context, location.id) : null,
+    ),
+  );
+}
+
+export function clearHomeCity(context: DataContext): Promise<Result<TripOrigin | null>> {
+  return run(context, inputs.none, {}, (scope) => writeHomeCity(scope.db, scope.ownerId, null));
 }
 
 // ---------------------------------------------------------------- weather settings and suggestion status

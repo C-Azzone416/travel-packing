@@ -36,7 +36,11 @@ async function seed(owner: string, digest: string, n: number) {
   const item = `10000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
   const list = `20000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
   const listItem = `30000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
-  await context.client.query("INSERT INTO users (id) VALUES ($1)", [owner]);
+  // The home city and the trip origin are city-level places (#379); they must go with the account.
+  await context.client.query("INSERT INTO users (id, home_city) VALUES ($1, $2)", [
+    owner,
+    `Home of ${owner}`,
+  ]);
   await context.client.query("INSERT INTO account_setups (email_digest) VALUES ($1)", [digest]);
   await context.client.query(
     `INSERT INTO staples (owner_id, semantic_id, name, category, qty, cadence)
@@ -54,9 +58,9 @@ async function seed(owner: string, digest: string, n: number) {
     [listItem, list, owner, `list-item-${n}`],
   );
   await context.client.query(
-    `INSERT INTO trips (id, owner_id, destination, start_date, end_date, days, daily_days, archived, deleted_at)
-     VALUES ($1, $2, 'Synthetic City', '2030-01-01', '2030-01-02', 2, 2, true, now())`,
-    [trip, owner],
+    `INSERT INTO trips (id, owner_id, destination, start_date, end_date, days, daily_days, archived, deleted_at, origin_city, travel_mode, name)
+     VALUES ($1, $2, 'Synthetic City', '2030-01-01', '2030-01-02', 2, 2, true, now(), $3, 'fly', $4)`,
+    [trip, owner, `Origin of ${owner}`, `Name of ${owner}`],
   );
   await context.client.query(
     `INSERT INTO trip_stops (trip_id, owner_id, position, city, arrive_date, leave_date)
@@ -112,6 +116,13 @@ describe("beginAccountDeletion", () => {
     ]);
     expect((await context.client.query("SELECT email_digest FROM account_setups")).rows).toEqual([
       { email_digest: OTHER_DIGEST },
+    ]);
+    // City-level home and origin places: gone for the deleted owner, untouched for the other.
+    expect((await context.client.query("SELECT home_city FROM users")).rows).toEqual([
+      { home_city: `Home of ${OTHER}` },
+    ]);
+    expect((await context.client.query("SELECT origin_city, name FROM trips")).rows).toEqual([
+      { origin_city: `Origin of ${OTHER}`, name: `Name of ${OTHER}` },
     ]);
     for (const table of [
       "staples",
