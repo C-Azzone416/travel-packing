@@ -256,30 +256,30 @@ test("the Theme choice applies at once and persists across reload, navigation an
     page.evaluate(() =>
       getComputedStyle(document.documentElement).getPropertyValue("--accent").trim(),
     );
-  await expect(html).toHaveAttribute("data-appearance", "base");
-  expect(await accent()).toBe("#a64a39");
+  await expect(html).toHaveAttribute("data-scheme", "ocean");
+  expect(await accent()).toBe("#b66c4d");
 
-  await page.getByRole("radio", { name: /Deep Ocean/ }).check();
-  await expect(html).toHaveAttribute("data-appearance", "ocean");
-  expect(await accent()).toBe("#2d6674");
-  await expect(page.getByText("Current theme: Deep Ocean")).toBeVisible();
+  await page.getByRole("radio", { name: /Evergreen/ }).check();
+  await expect(html).toHaveAttribute("data-scheme", "evergreen");
+  expect(await accent()).toBe("#c0612f");
+  await expect(page.getByText("Current theme: Evergreen")).toBeVisible();
   // Saved for real: wait for the "Last saved" proof before leaving.
   await expect(page.getByText(/^Last saved /)).toBeVisible();
 
   await page.reload();
-  await expect(html).toHaveAttribute("data-appearance", "ocean");
-  await expect(page.getByRole("radio", { name: /Deep Ocean/ })).toBeChecked();
+  await expect(html).toHaveAttribute("data-scheme", "evergreen");
+  await expect(page.getByRole("radio", { name: /Evergreen/ })).toBeChecked();
 
   await page
     .getByRole("navigation", { name: "Primary navigation" })
     .getByRole("link", { name: "Staples" })
     .click();
-  await expect(html).toHaveAttribute("data-appearance", "ocean");
+  await expect(html).toHaveAttribute("data-scheme", "evergreen");
 
   // A new device has the session but no cookie mirror: the account's choice still wins.
   const cookies = await context.cookies();
   await context.clearCookies({ name: "appearance" });
   expect((await context.cookies()).length).toBe(cookies.length - 1);
   await page.goto("/settings");
-  await expect(html).toHaveAttribute("data-appearance", "ocean");
+  await expect(html).toHaveAttribute("data-scheme", "evergreen");
 });

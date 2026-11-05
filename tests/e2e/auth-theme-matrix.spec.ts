@@ -12,7 +12,7 @@ import { nextNewcomerSlot, resetAccount } from "./helpers/inbox";
 // theme. Axe runs in every theme at 1280 and in one theme at 390 (the layout is the same in each; the width only changes where
 // things sit), as in theme-matrix.spec.ts. AUTH_SHOTS=<folder> writes a screenshot of every cell, in all eight (theme, width) pairs,
 // for design's rendered review. One browser project runs it (Chromium); the phone width is a viewport, not WebKit.
-const THEMES = ["base", "ocean", "terracotta", "violet"] as const;
+const THEMES = ["ocean", "evergreen", "dusk"] as const;
 const SHOTS = process.env.AUTH_SHOTS;
 const BAR_HEIGHT = { 1280: 68, 390: 60 } as const;
 // Only the shape of a link token matters here (the page shows the form for any well-formed one); built like the other specs do.
@@ -44,7 +44,7 @@ for (const { theme, width, axe } of CELLS) {
     await chooseThemeAndSignOut(page, page.context(), palette);
 
     const check = async (name: string) => {
-      await expect(page.locator("html")).toHaveAttribute("data-appearance", theme);
+      await expect(page.locator("html")).toHaveAttribute("data-scheme", theme);
       // The brand-only bar: circle and wordmark, no link, no navigation, the app header's height.
       const bar = page.locator("header.auth-brandbar");
       await expect(bar).toBeVisible();

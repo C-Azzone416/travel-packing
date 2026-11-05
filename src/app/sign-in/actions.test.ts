@@ -346,7 +346,7 @@ describe("signOutAction", () => {
   it("still deletes the mirror and the pending email, and still redirects, when the anonymous copy throws (#289)", async () => {
     jar.set("appearance", "ocean");
     jar.set("cw-pending-email", "previous@example.test");
-    jar.set("anon-appearance", "violet");
+    jar.set("anon-appearance", "dusk");
     fake.current = { userId: "u1", email: "owner@example.test" };
     failAnonymousWrite = true;
     try {
@@ -357,16 +357,25 @@ describe("signOutAction", () => {
     expect(fake.current).toBeNull();
     expect(jar.has("appearance")).toBe(false);
     expect(jar.has("cw-pending-email")).toBe(false);
-    expect([...jar.entries()]).toEqual([["anon-appearance", "violet"]]);
+    expect([...jar.entries()]).toEqual([["anon-appearance", "dusk"]]);
+  });
+
+  it("stores an old mirror id under its new name (terracotta becomes evergreen)", async () => {
+    jar.set("appearance", "terracotta");
+    await expect(signOutAction()).rejects.toThrow("NEXT_REDIRECT:/sign-in");
+    expect(jar.get("anon-appearance")).toBe("evergreen");
+    jar.set("appearance", "violet");
+    await expect(signOutAction()).rejects.toThrow("NEXT_REDIRECT:/sign-in");
+    expect(jar.get("anon-appearance")).toBe("dusk");
   });
 
   it("keeps the existing anonymous cookie when there is no mirror, and never stores an invalid mirror", async () => {
-    jar.set("anon-appearance", "violet");
+    jar.set("anon-appearance", "dusk");
     await expect(signOutAction()).rejects.toThrow("NEXT_REDIRECT:/sign-in");
-    expect(jar.get("anon-appearance")).toBe("violet");
+    expect(jar.get("anon-appearance")).toBe("dusk");
     jar.set("appearance", "neon");
     await expect(signOutAction()).rejects.toThrow("NEXT_REDIRECT:/sign-in");
-    expect(jar.get("anon-appearance")).toBe("violet");
+    expect(jar.get("anon-appearance")).toBe("dusk");
     expect(jar.has("appearance")).toBe(false);
   });
 });
@@ -377,16 +386,16 @@ describe("the anonymous palette cookie across sign-in (#283)", () => {
     expect(signInAction({ error: null }, form(email, password))).rejects.toThrow("NEXT_REDIRECT:/");
 
   it("each account's saved palette refreshes the anonymous cookie: A then B", async () => {
-    saved.set("u1", "terracotta");
-    saved.set("u6", "violet");
+    saved.set("u1", "evergreen");
+    saved.set("u6", "dusk");
     await signIn("owner@example.test", "pw-owner");
-    expect(jar.get("anon-appearance")).toBe("terracotta");
+    expect(jar.get("anon-appearance")).toBe("evergreen");
     await expect(signOutAction()).rejects.toThrow("NEXT_REDIRECT:/sign-in");
-    expect(jar.get("anon-appearance")).toBe("terracotta");
+    expect(jar.get("anon-appearance")).toBe("evergreen");
     await signIn("second@example.test", "pw-second");
-    expect(jar.get("anon-appearance")).toBe("violet");
+    expect(jar.get("anon-appearance")).toBe("dusk");
     await expect(signOutAction()).rejects.toThrow("NEXT_REDIRECT:/sign-in");
-    expect(jar.get("anon-appearance")).toBe("violet");
+    expect(jar.get("anon-appearance")).toBe("dusk");
   });
 
   it("the anonymous value never reaches the account: sign-in only reads the account", async () => {
@@ -407,7 +416,7 @@ describe("the anonymous palette cookie across sign-in (#283)", () => {
   });
 
   it("a failed or denied sign-in leaves the anonymous cookie alone", async () => {
-    saved.set("u2", "violet");
+    saved.set("u2", "dusk");
     jar.set("anon-appearance", "ocean");
     await expect(
       signInAction({ error: null }, form("intruder@example.test", "pw-intruder")),
@@ -417,9 +426,9 @@ describe("the anonymous palette cookie across sign-in (#283)", () => {
   });
 
   it("the cookie value is only ever a palette id", async () => {
-    saved.set("u1", "violet");
+    saved.set("u1", "dusk");
     await signIn("owner@example.test", "pw-owner");
-    expect(jar.get("anon-appearance")).toMatch(/^(base|ocean|terracotta|violet)$/);
+    expect(jar.get("anon-appearance")).toMatch(/^(ocean|evergreen|dusk)$/);
     expect([...jar.values()].join(" ")).not.toMatch(/owner|u1|@/);
   });
 });

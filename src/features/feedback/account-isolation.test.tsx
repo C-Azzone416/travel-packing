@@ -372,7 +372,7 @@ describe("Settings sign-out clears the same way as the nav (#327)", () => {
         ok: true as const,
         settings: { weatherOptIn: false, temperatureUnit: "F" as const },
       })}
-      initialAppearance="base"
+      initialAppearance="ocean"
       updateAppearance={async (appearance) => ({ ok: true as const, appearance })}
       accountClosureEnabled={false}
       closeAccount={async () => ({ error: null, fieldErrors: {} })}

@@ -48,7 +48,7 @@ describe("updateAppearanceAction", () => {
     await expect(updateAppearanceAction("ocean")).resolves.toEqual({ ok: false, code: "INTERNAL" });
     getDataContext.mockResolvedValue({});
     updateAppearance.mockResolvedValue({ ok: false, error: { code: "INTERNAL" } });
-    await expect(updateAppearanceAction("violet")).resolves.toEqual({
+    await expect(updateAppearanceAction("dusk")).resolves.toEqual({
       ok: false,
       code: "INTERNAL",
     });
@@ -57,8 +57,8 @@ describe("updateAppearanceAction", () => {
 
   it("sends signed-out and not-allowed people to their pages", async () => {
     updateAppearance.mockResolvedValue({ ok: false, error: { code: "UNAUTHENTICATED" } });
-    await expect(updateAppearanceAction("base")).rejects.toThrow("REDIRECT:/sign-in");
+    await expect(updateAppearanceAction("ocean")).rejects.toThrow("REDIRECT:/sign-in");
     updateAppearance.mockResolvedValue({ ok: false, error: { code: "FORBIDDEN" } });
-    await expect(updateAppearanceAction("base")).rejects.toThrow("REDIRECT:/access-denied");
+    await expect(updateAppearanceAction("ocean")).rejects.toThrow("REDIRECT:/access-denied");
   });
 });

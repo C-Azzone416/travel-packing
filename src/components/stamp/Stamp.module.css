@@ -26,7 +26,7 @@
 }
 
 .first {
-  color: var(--accent);
+  color: var(--dark);
   transform: rotate(-7deg);
 }
 

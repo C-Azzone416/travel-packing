@@ -16,8 +16,8 @@ vi.mock("next/headers", () => ({
 }));
 vi.mock("./fonts", () => ({ fontClassNames: "" }));
 vi.mock("@/features/settings/saved-appearance", () => ({
-  readSavedAppearance: async () => "base",
-  appearanceForRequest: async () => "base",
+  readSavedAppearance: async () => "ocean",
+  appearanceForRequest: async () => "ocean",
 }));
 vi.mock("@/features/settings/appearance-actions", () => ({
   updateAppearanceAction: async (appearance: string) => ({ ok: true, appearance }),
@@ -96,6 +96,6 @@ describe("root layout metadata", () => {
   });
 
   it("sets the brand theme color", () => {
-    expect(viewport.themeColor).toBe("#e9e3d6");
+    expect(viewport.themeColor).toBe("#dce5e5");
   });
 });

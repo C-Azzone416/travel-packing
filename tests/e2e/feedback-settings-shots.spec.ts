@@ -8,7 +8,7 @@ import { connectFeedback, fakeFramebriar, openSettingsFromNav } from "./helpers/
 // FEEDBACK_SETTINGS_SHOTS=<folder>; without it these are skipped. Each state shows Settings itself and the screenshot the sheet
 // produces from it (the sheet's preview is the real sanitised capture).
 const SHOTS = process.env.FEEDBACK_SETTINGS_SHOTS;
-const THEMES = ["base", "ocean", "terracotta", "violet"] as const;
+const THEMES = ["ocean", "evergreen", "dusk"] as const;
 const WIDTHS = [390, 1280] as const;
 const CANVAS = /^Your screenshot\. Marks you draw are sent with it/;
 

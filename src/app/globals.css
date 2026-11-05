@@ -1,35 +1,33 @@
-/* Field Ledger (#139). The four themes' role tokens live in ledger-tokens.css; this file binds components to roles and
-   never to a hex. The legacy names below are aliases onto roles so a theme switch reaches every screen. The semantic
-   status colours are the same in all four themes (danger/warn/success are never themed). */
-/* The ledger type stacks (#182): the latin face, then latin-ext (loaded only when a name like Gdańsk or Łódź needs it),
+/* Suitcase (#380). The three colour schemes live in scheme-tokens.css and the type scale in type-scale.css; this file
+   binds components to roles and never to a hex. The legacy names below are aliases onto roles so a scheme switch reaches
+   every screen. The semantic status colours are the same in all three schemes (danger/warn/success are never themed). */
+/* The type stacks (#182, #380): the latin face, then latin-ext (loaded only when a name like Gdańsk or Łódź needs it),
    then a metric-matched Arial fallback. next/font computes this fallback for a single family; the stack is composed
    here, so the fallbacks are declared by hand with the values it computed for the same files, and they come last. */
 @font-face {
-  font-family: "Barlow Fallback";
+  font-family: "DM Sans Fallback";
   src: local("Arial");
-  ascent-override: 103.13%;
-  descent-override: 20.63%;
+  ascent-override: 97.25%;
+  descent-override: 30.39%;
   line-gap-override: 0%;
-  size-adjust: 96.96%;
+  size-adjust: 102%;
 }
 @font-face {
-  font-family: "Bricolage Grotesque Fallback";
+  font-family: "Fraunces Fallback";
   src: local("Arial");
-  ascent-override: 82.39%;
-  descent-override: 23.92%;
+  ascent-override: 87.2%;
+  descent-override: 22.74%;
   line-gap-override: 0%;
-  size-adjust: 112.88%;
+  size-adjust: 112.16%;
 }
 :root {
-  --font-body: var(--font-body-latin), var(--font-body-ext), "Barlow Fallback";
-  --font-display:
-    var(--font-display-latin), var(--font-display-ext), "Bricolage Grotesque Fallback";
+  --font-body: var(--font-body-latin), var(--font-body-ext), "DM Sans Fallback";
+  --font-display: var(--font-display-latin), var(--font-display-ext), "Fraunces Fallback";
   --linen: var(--bg);
-  --paper: var(--surface);
-  --teal: var(--accent);
+  --teal: var(--dark);
   --teal-dark: var(--link);
-  --seafoam: color-mix(in srgb, var(--accent) 22%, var(--surface));
-  --seafoam-soft: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  --seafoam: color-mix(in srgb, var(--dark) 22%, var(--surface));
+  --seafoam-soft: color-mix(in srgb, var(--dark) 10%, var(--surface));
   --warm: var(--notice);
   --muted-text: var(--muted);
 
@@ -425,11 +423,11 @@ main {
   cursor: not-allowed;
 }
 .bottom-nav a[aria-current="page"] [data-fill] {
-  fill: color-mix(in srgb, var(--accent) 16%, transparent);
+  fill: color-mix(in srgb, var(--dark) 16%, transparent);
 }
 .bottom-nav a:active,
 .bottom-nav button:active:not(:disabled) {
-  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  background: color-mix(in srgb, var(--dark) 12%, var(--surface));
 }
 /* The ring sits inside the full-bleed item so the screen edge never clips it. */
 .bottom-nav a:focus-visible,
@@ -445,7 +443,7 @@ main {
   position: absolute;
   inset: 0 0 auto;
   height: 3px;
-  background: var(--accent);
+  background: var(--dark);
 }
 
 .actions {
@@ -801,7 +799,7 @@ body[data-sheet-open] .toast-region {
   .bottom-nav a[aria-current="page"]::before {
     inset: auto 0 calc((var(--topbar-h) - 44px) / -2);
     height: 3px;
-    background: color-mix(in srgb, var(--header-ink) 50%, var(--accent));
+    background: color-mix(in srgb, var(--header-ink) 50%, var(--dark));
   }
   .bottom-nav :focus-visible,
   .bottom-nav a:focus-visible,
@@ -1197,7 +1195,7 @@ body[data-sheet-open] .toast-region {
   cursor: pointer;
 }
 .trip-tabs button.active {
-  border-bottom-color: var(--accent);
+  border-bottom-color: var(--dark);
   color: var(--ink);
 }
 .trip-tabs span {
@@ -1577,7 +1575,7 @@ input:disabled {
 }
 .weather-select-all input,
 .weather-change-row input {
-  accent-color: var(--accent);
+  accent-color: var(--dark);
   width: 22px;
   height: 22px;
   margin: 0;
@@ -1709,7 +1707,7 @@ input:disabled {
 }
 .location-option:hover,
 .location-option.active {
-  border-color: var(--accent);
+  border-color: var(--dark);
   background: var(--seafoam-soft);
 }
 .location-option strong,
@@ -1807,7 +1805,7 @@ input:disabled {
 .list-section {
   margin-top: 20px;
 }
-/* A group: 29px Bricolage heading, the muted "2 of 6 complete" at the right, a hairline rule under (audit 8). */
+/* A group: 29px display heading, the muted "2 of 6 complete" at the right, a hairline rule under (audit 8). */
 .list-section-head {
   display: flex;
   align-items: baseline;
@@ -2033,7 +2031,7 @@ input:disabled {
   cursor: pointer;
 }
 .choice:has(input:checked) {
-  border-color: var(--accent);
+  border-color: var(--dark);
   background: var(--seafoam-soft);
 }
 .choice input {
@@ -2041,7 +2039,7 @@ input:disabled {
   width: 22px;
   height: 22px;
   min-height: 22px;
-  accent-color: var(--accent);
+  accent-color: var(--dark);
 }
 .choice span {
   font-size: 13px;
@@ -2142,7 +2140,7 @@ input:disabled {
 /* A flat Ledger card: the hairline from .card plus the 4px accent rule, like Settings and the hero (no blurred shadow). */
 .auth-card {
   width: 100%;
-  border-top: 4px solid var(--accent);
+  border-top: 4px solid var(--dark);
 }
 .auth-card h1 {
   font-size: clamp(26px, 6vw, 32px);
@@ -2728,7 +2726,7 @@ a.back {
   cursor: pointer;
 }
 .theme-tile:hover {
-  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  border-color: color-mix(in srgb, var(--dark) 40%, transparent);
 }
 /* The real radio covers the whole tile: it is the hit area and the focus target, and it stays invisible. */
 .theme-tile input {
@@ -2777,7 +2775,7 @@ a.back {
 }
 .theme-tile:has(input:checked) {
   background: var(--seafoam-soft);
-  border-color: var(--accent);
+  border-color: var(--dark);
   outline: 3px solid var(--accent-2);
   outline-offset: 3px;
 }
@@ -3006,9 +3004,9 @@ a.back {
   margin-top: 4px;
 }
 
-/* Settings > Appearance > Theme (#142, spec §4): four native radios drawn as option cards, a 4px accent rule on the panel. */
+/* Settings > Appearance > Theme (#142, spec §4): three native radios drawn as option cards, a 4px accent rule on the panel. */
 .appearance-panel {
-  border-top: 4px solid var(--accent);
+  border-top: 4px solid var(--dark);
 }
 .theme-options {
   display: grid;
@@ -3047,7 +3045,7 @@ a.back {
   cursor: pointer;
 }
 .appearance-option:has(input:checked) {
-  border: 2px solid var(--accent);
+  border: 2px solid var(--dark);
   padding: 11px 15px;
   background: var(--selection-surface);
 }
@@ -3068,13 +3066,15 @@ a.back {
 }
 .appearance-swatches i:first-child {
   margin-left: 0;
+  background: var(--dark);
+}
+/* The swatches read the palette tokens directly (never a role alias): a role alias is resolved on <html>, so inside a
+   [data-scheme] swatch it would show the page's scheme, not the swatch's. */
+.appearance-swatches i:nth-child(2) {
   background: var(--accent);
 }
-.appearance-swatches i:nth-child(2) {
-  background: var(--accent-2);
-}
 .appearance-swatches i:nth-child(3) {
-  background: var(--surface);
+  background: var(--paper);
 }
 .appearance-copy {
   display: grid;
@@ -3091,7 +3091,7 @@ a.back {
 }
 .appearance-check {
   display: none;
-  color: var(--accent);
+  color: var(--dark);
   font-weight: 800;
 }
 .appearance-option:has(input:checked) .appearance-check {
@@ -3288,7 +3288,7 @@ a.back {
   min-width: 0;
   padding: var(--ledger-row) 24px;
   border: 1px solid var(--line);
-  border-top: 4px solid var(--accent);
+  border-top: 4px solid var(--dark);
   border-radius: var(--control-radius);
   background:
     repeating-linear-gradient(
@@ -3802,7 +3802,7 @@ a.back {
   margin: 8px 0 16px;
   padding: 8px 28px 24px;
   border: 1px solid var(--line);
-  border-top: 4px solid var(--accent);
+  border-top: 4px solid var(--dark);
   border-radius: var(--control-radius);
   background:
     repeating-linear-gradient(
@@ -3879,7 +3879,7 @@ a.back {
   flex: none;
   flex-direction: column;
   align-items: center;
-  color: var(--accent);
+  color: var(--dark);
 }
 .trip-hero > .status-pill {
   position: absolute;
@@ -4178,7 +4178,7 @@ a.back {
   cursor: pointer;
 }
 .resolver-option:has(input:checked) {
-  border: 2px solid var(--accent);
+  border: 2px solid var(--dark);
   padding: 9px 15px;
   background: var(--selection-surface);
 }
@@ -4196,7 +4196,7 @@ a.back {
 }
 .resolver-check {
   display: none;
-  color: var(--accent);
+  color: var(--dark);
   font-weight: 800;
 }
 .resolver-option:has(input:checked) .resolver-check {
@@ -4222,7 +4222,7 @@ a.back {
   text-decoration: none;
 }
 .staples-tabs a.active {
-  border-bottom-color: var(--accent);
+  border-bottom-color: var(--dark);
   color: var(--ink);
 }
 .saved-lists {
@@ -4241,7 +4241,7 @@ a.back {
 @media (min-width: 721px) {
   .saved-list-card {
     border-top-width: 1px;
-    border-left: 4px solid var(--accent);
+    border-left: 4px solid var(--dark);
   }
 }
 .saved-list-card h2 {
@@ -4432,7 +4432,7 @@ a.back {
   background: var(--selection-surface);
 }
 .start-entry:has(input:checked) {
-  border: 2px solid var(--accent);
+  border: 2px solid var(--dark);
   background: var(--selection-surface);
 }
 .start-entry:has(input:focus-visible) {
@@ -4483,7 +4483,7 @@ a.back {
 }
 .start-check {
   display: none;
-  color: var(--accent);
+  color: var(--dark);
   font-weight: 800;
 }
 .start-entry:has(input:checked) .start-check {
@@ -4670,14 +4670,14 @@ a.back {
   cursor: pointer;
 }
 .edit-tabs button[aria-selected="true"] {
-  border-bottom-color: var(--accent);
+  border-bottom-color: var(--dark);
   color: var(--ink);
 }
 .edit-tab-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--dark);
 }
 .pref-group {
   margin: 0 0 14px;
@@ -5036,7 +5036,7 @@ a.back {
 .feedback-check input {
   width: 22px;
   height: 22px;
-  accent-color: var(--accent);
+  accent-color: var(--dark);
 }
 /* Feedback sheet with the screenshot editor (#266, design's spec). Like Edit Trip, the heading and the Cancel / Send footer stay in
    view and only the body scrolls. --feedback-vh follows the VISUAL viewport (the software keyboard), set by the sheet while it is open. */
@@ -5409,6 +5409,9 @@ a.back {
 }
 .hero-days-more a {
   position: relative;
+  /* The bold link and the regular paragraph are two faces with different metrics; top-aligning keeps the line box at
+     exactly --ledger-row instead of a half pixel taller in WebKit. */
+  vertical-align: top;
   color: var(--link);
   font-weight: 700;
 }
@@ -5485,6 +5488,14 @@ a.back {
 .hero-other-stays {
   font-size: 13px;
   box-shadow: inset 0 1px 0 var(--line);
+}
+/* DM Sans runs wider than the Barlow this line was sized for: keep "Daily forecast for the other stays" on one row at 320px. */
+@media (max-width: 360px) {
+  .hero-other-stays {
+    padding-inline: 10px;
+    font-size: 12px;
+    letter-spacing: -0.01em;
+  }
 }
 @media (min-width: 721px) {
   /* WIDE STACK (container 30em and up): the cells side by side as columns (4 or more wrap to a second row), each cell

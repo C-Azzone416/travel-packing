@@ -28,7 +28,7 @@ export interface SettingsScreenProps {
   signOut: () => Promise<void>;
   initialWeather: WeatherSettings;
   updateWeather: (change: Partial<WeatherSettings>) => Promise<WeatherSettingsResult>;
-  /** The theme saved on the account (Base when none was chosen). */
+  /** The theme saved on the account (Ocean when none was chosen). */
   initialAppearance: Appearance;
   updateAppearance: (appearance: Appearance) => Promise<AppearanceResult>;
   /** Server-side rollout decision. Missing or invalid configuration passes false and hides every closure entry point. */
@@ -38,13 +38,13 @@ export interface SettingsScreenProps {
 
 /** Show a theme now: the attribute drives the role tokens, the cookie lets the server render it before first paint. */
 function applyAppearance(appearance: Appearance) {
-  document.documentElement.dataset.appearance = appearance;
+  document.documentElement.dataset.scheme = appearance;
   document.cookie = appearanceCookieString(appearance, window.location.protocol === "https:");
 }
 
 /** The theme the page is showing right now (what the server rendered), read from the document. */
 function shownAppearance(): Appearance {
-  return parseAppearance(document.documentElement.dataset.appearance);
+  return parseAppearance(document.documentElement.dataset.scheme);
 }
 
 const TIME = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" });

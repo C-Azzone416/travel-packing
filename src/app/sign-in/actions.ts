@@ -2,7 +2,7 @@
 
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { APPEARANCE_COOKIE, isAppearance } from "@/domain/appearance";
+import { APPEARANCE_COOKIE, migrateAppearance } from "@/domain/appearance";
 import { rememberAnonymousAppearance } from "@/features/settings/anonymous-appearance";
 import { readAppearanceForUser } from "@/features/settings/saved-appearance";
 import { requestPasswordReset, resendVerificationCode } from "@/server/auth/account-flows";
@@ -99,7 +99,8 @@ export async function signOutAction(): Promise<void> {
   const jar = await cookies();
   const mirrored = jar.get(APPEARANCE_COOKIE)?.value;
   try {
-    if (isAppearance(mirrored)) await rememberAnonymousAppearance(mirrored);
+    const palette = migrateAppearance(mirrored);
+    if (palette) await rememberAnonymousAppearance(palette);
   } catch {
     // The theme copy is cosmetic and the session is already over: a failure here must not skip the cleanup below or
     // strand the person on an error page, so the signed-out pages just fall back to their current palette (#289).

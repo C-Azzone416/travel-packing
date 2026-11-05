@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
-// Self-hosted Field Ledger fonts (#182): the files are committed with their licences, nothing is fetched from Google at
+// Self-hosted Suitcase fonts (#182, #380): the files are committed with their licences, nothing is fetched from Google at
 // build time, and the families, weights and display setting are the ones the design uses.
 
 interface LocalFontOptions {
@@ -43,29 +43,20 @@ describe("the font setup", () => {
       "--font-body-ext",
       "--font-display-latin",
       "--font-display-ext",
-      "--font-serif",
     ]);
     for (const font of loaded) expect(font.display).toBe("swap");
     expect(classNames.split(" ")).toEqual(loaded.map((font) => `class-for${font.variable}`));
   });
 
-  it("keeps the weights and styles the design uses: Barlow 400/500/600/700, Bricolage 700-800, Literata italic 400", () => {
+  it("keeps the weights and styles the design uses: DM Sans 400-700 and Fraunces 700-800, one variable file per subset", () => {
     for (const subset of ["latin", "ext"]) {
       expect(
         byVariable(`--font-body-${subset}`).src.map((face) => [face.weight, face.style]),
-      ).toEqual([
-        ["400", "normal"],
-        ["500", "normal"],
-        ["600", "normal"],
-        ["700", "normal"],
-      ]);
+      ).toEqual([["400 700", "normal"]]);
       expect(
         byVariable(`--font-display-${subset}`).src.map((face) => [face.weight, face.style]),
       ).toEqual([["700 800", "normal"]]);
     }
-    expect(byVariable("--font-serif").src.map((face) => [face.weight, face.style])).toEqual([
-      ["400", "italic"],
-    ]);
   });
 
   it("lists the latin-ext faces after latin in one stack, so a page of plain Latin text never fetches latin-ext", () => {
@@ -86,10 +77,10 @@ describe("the font setup", () => {
     expect(byVariable("--font-body-ext").preload).toBe(false);
     expect(byVariable("--font-display-ext").preload).toBe(false);
     expect(GLOBALS).toMatch(
-      /--font-body: var\(--font-body-latin\), var\(--font-body-ext\), "Barlow Fallback";/,
+      /--font-body: var\(--font-body-latin\), var\(--font-body-ext\), "DM Sans Fallback";/,
     );
     expect(GLOBALS).toMatch(
-      /--font-display:\s*var\(--font-display-latin\), var\(--font-display-ext\), "Bricolage Grotesque Fallback";/,
+      /--font-display:\s*var\(--font-display-latin\), var\(--font-display-ext\), "Fraunces Fallback";/,
     );
   });
 
@@ -101,11 +92,10 @@ describe("the font setup", () => {
       "--font-display-ext",
     ])
       expect(byVariable(variable).adjustFontFallback, variable).toBe(false);
-    expect(byVariable("--font-serif").adjustFontFallback).toBe("Times New Roman");
   });
 
   it("declares the two hand-written fallbacks the stacks end in, metric-matched Arial", () => {
-    for (const family of ["Barlow Fallback", "Bricolage Grotesque Fallback"]) {
+    for (const family of ["DM Sans Fallback", "Fraunces Fallback"]) {
       const block =
         GLOBALS.match(new RegExp(`@font-face \\{\\s*font-family: "${family}";([^}]*)\\}`))?.[1] ??
         "";
@@ -142,9 +132,8 @@ describe("the committed files", () => {
   });
 
   const LICENCES = [
-    ["OFL-barlow.txt", "Barlow"],
-    ["OFL-bricolage-grotesque.txt", "Bricolage Grotesque"],
-    ["OFL-literata.txt", "Literata"],
+    ["OFL-dm-sans.txt", "DM Sans"],
+    ["OFL-fraunces.txt", "Fraunces"],
   ] as const;
 
   it.each(LICENCES)(
@@ -160,7 +149,7 @@ describe("the committed files", () => {
   );
 
   it("every family that has font files has a licence file next to them", () => {
-    for (const family of ["barlow", "bricolage-grotesque", "literata"])
+    for (const family of ["dm-sans", "fraunces"])
       expect(
         fonts.some((name) => name.startsWith(family)),
         family,

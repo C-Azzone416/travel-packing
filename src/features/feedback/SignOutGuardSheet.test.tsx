@@ -33,7 +33,7 @@ function ui(signOut: () => Promise<void>, entry: Entry) {
           ok: true as const,
           settings: { weatherOptIn: false, temperatureUnit: "F" as const },
         })}
-        initialAppearance="base"
+        initialAppearance="ocean"
         updateAppearance={async (appearance) => ({ ok: true as const, appearance })}
         accountClosureEnabled={false}
         closeAccount={async () => ({ error: null, fieldErrors: {} })}

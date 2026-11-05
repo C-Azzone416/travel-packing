@@ -13,7 +13,7 @@ import {
 // FEEDBACK_ANNOTATION_SHOTS=<folder>; without it these are skipped. The screen capture is replaced by a SYNTHETIC picture (a light or
 // a dark one with a few shapes), so the ink edges can be judged on both and nothing real is in any image.
 const SHOTS = process.env.FEEDBACK_ANNOTATION_SHOTS;
-const THEMES = ["base", "ocean", "terracotta", "violet"] as const;
+const THEMES = ["ocean", "evergreen", "dusk"] as const;
 const WIDTHS = [390, 1280] as const;
 const CANVAS = /^Your screenshot\. Marks you draw are sent with it/;
 const INKS = ["Black", "Red", "Blue", "Yellow"] as const;

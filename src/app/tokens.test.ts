@@ -3,22 +3,28 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { APPEARANCES } from "../domain/appearance";
 
-// The Field Ledger role-token contract (#139 spec §1-§2, #142): all four themes define the identical role set, the
-// semantic colours are not themed, and no component or stylesheet outside the token file references a colour literal.
+// The Suitcase colour schemes (#380): tokens.css from the design files, verbatim, in scheme-tokens.css. All three schemes
+// define the identical palette token set; the older role names that screens still use are aliases onto it; the semantic
+// colours are not themed; and no component or stylesheet outside the token file references a colour literal.
 
 const root = process.cwd();
-const tokensCss = readFileSync(join(root, "src/app/ledger-tokens.css"), "utf8");
+const tokensCss = readFileSync(join(root, "src/app/scheme-tokens.css"), "utf8");
+const typeScaleCss = readFileSync(join(root, "src/app/type-scale.css"), "utf8");
 const globalsCss = readFileSync(join(root, "src/app/globals.css"), "utf8");
 const stripCssComments = (css: string) => css.replace(/\/\*[\s\S]*?\*\//g, "");
 
-/** The spec's role map (§1). A theme must define every one of these and nothing else. */
-const ROLE_TOKENS = [
-  "--bg", "--surface", "--ink", "--muted", "--line", "--line-strong", "--accent", "--link", "--accent-2",
-  "--header", "--header-ink", "--header-muted", "--focus-on-header",
-  "--action", "--action-ink", "--action-border", "--progress", "--track",
-  "--notice", "--notice-ink", "--weather-pill", "--weather-pill-ink", "--complete", "--complete-ink",
-  "--control-bg", "--popover", "--selection-surface", "--status-surface", "--detail-surface",
-  "--weather-surface", "--ledger-rule", "--ledger-shadow",
+/** The palette: exactly the custom properties tokens.css defines in every scheme block. */
+const PALETTE_TOKENS = [
+  "--dark", "--dark2", "--darkEdge", "--ink", "--muted", "--line", "--line2", "--page", "--paper", "--paper2", "--tint",
+  "--accent", "--accentSoft", "--gold", "--goldDeep", "--goldSoft", "--good", "--info", "--onDark", "--onDarkMuted",
+  "--ghost", "--sea", "--seaLine", "--coast",
+].sort(); // prettier-ignore
+/** Role names the pre-redesign screens bind to; each is an alias onto the palette, defined once on :root. */
+const ROLE_ALIASES = [
+  "--bg", "--surface", "--line-strong", "--link", "--accent-2", "--header", "--header-ink", "--header-muted",
+  "--focus-on-header", "--action", "--action-ink", "--action-border", "--progress", "--track", "--notice", "--notice-ink",
+  "--weather-pill", "--weather-pill-ink", "--complete", "--complete-ink", "--control-bg", "--popover",
+  "--selection-surface", "--status-surface", "--detail-surface", "--weather-surface", "--ledger-rule", "--ledger-shadow",
 ].sort(); // prettier-ignore
 const SEMANTIC_TOKENS = ["--danger", "--warn", "--success"];
 
@@ -34,59 +40,66 @@ function rules(css: string): Rule[] {
     ),
   }));
 }
-const themeRule = (id: string) =>
-  rules(tokensCss).find((rule) => rule.selector.includes(`:root[data-appearance="${id}"]`));
+const schemeRule = (id: string) =>
+  rules(tokensCss).find((rule) =>
+    rule.selector
+      .split(",")
+      .map((s) => s.trim())
+      .includes(`[data-scheme="${id}"]`),
+  );
 
-type Rgb = [number, number, number];
-/** A token value as sRGB: #rrggbb, or rgb(r g b / a) composited over `under` (the tints are translucent). */
-function toRgb(value: string, under?: string): Rgb {
-  const hex = value.match(/^#([0-9a-f]{6})$/i);
-  if (hex) return [0, 2, 4].map((i) => parseInt(hex[1].slice(i, i + 2), 16)) as Rgb;
-  const fn = value.match(/^rgb\(\s*(\d+)\s+(\d+)\s+(\d+)(?:\s*\/\s*([\d.]+))?\s*\)$/);
-  if (!fn || !under) throw new Error(`cannot read colour ${value}`);
-  const alpha = fn[4] === undefined ? 1 : Number(fn[4]);
-  const base = toRgb(under);
-  return [1, 2, 3].map((i) => Number(fn[i]) * alpha + base[i - 1] * (1 - alpha)) as Rgb;
-}
-function luminance([r, g, b]: Rgb): number {
-  const [lr, lg, lb] = [r, g, b]
-    .map((c) => c / 255)
-    .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
-  return 0.2126 * lr + 0.7152 * lg + 0.0722 * lb;
-}
-function contrast(a: Rgb, b: Rgb): number {
-  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
-  return (hi + 0.05) / (lo + 0.05);
-}
-
-describe("Field Ledger role tokens", () => {
-  it("has one rule per theme, and Base is also the default with no attribute", () => {
-    for (const id of APPEARANCES) expect(themeRule(id), id).toBeTruthy();
+describe("Suitcase colour schemes", () => {
+  it("has one rule per scheme, and Ocean is also the default with no attribute", () => {
+    for (const id of APPEARANCES) expect(schemeRule(id), id).toBeTruthy();
     expect(
-      themeRule("base")
+      schemeRule("ocean")
         ?.selector.split(",")
         .map((s) => s.trim()),
     ).toContain(":root");
+    for (const id of ["evergreen", "dusk"])
+      expect(
+        schemeRule(id)
+          ?.selector.split(",")
+          .map((s) => s.trim()),
+      ).not.toContain(":root");
   });
 
-  it.each(APPEARANCES)("%s defines exactly the spec's role-token set", (id) => {
-    expect(Object.keys(themeRule(id)?.decls ?? {}).sort()).toEqual(ROLE_TOKENS);
+  it.each(APPEARANCES)("%s defines exactly the palette token set", (id) => {
+    expect(Object.keys(schemeRule(id)?.decls ?? {}).sort()).toEqual(PALETTE_TOKENS);
   });
 
-  it("every theme can also be scoped to a swatch with data-theme-preview", () => {
-    for (const id of APPEARANCES) {
-      expect(themeRule(id)?.selector).toContain(`[data-theme-preview="${id}"]`);
+  it("keeps the design's values verbatim (spot checks per scheme: dark, page, accent, onDark)", () => {
+    const pick = (id: string) => {
+      const d = schemeRule(id)?.decls ?? {};
+      return [d["--dark"], d["--page"], d["--accent"], d["--onDark"]];
+    };
+    expect(pick("ocean")).toEqual(["#142b3b", "#dce5e5", "#b66c4d", "#fff8eb"]);
+    expect(pick("evergreen")).toEqual(["#1f3a30", "#eeebe0", "#c0612f", "#f6f1e2"]);
+    expect(pick("dusk")).toEqual(["#2f2d4f", "#efeaee", "#e06c55", "#fbf3ec"]);
+  });
+
+  it("gives each scheme its own values (no scheme is a copy of another)", () => {
+    for (const token of PALETTE_TOKENS) {
+      const values = APPEARANCES.map((id) => schemeRule(id)?.decls[token]);
+      expect(new Set(values).size, token).toBeGreaterThan(1);
     }
   });
 
-  it("gives each theme its own values (no theme is a copy of another)", () => {
-    const accents = APPEARANCES.map((id) => themeRule(id)?.decls["--accent"]);
-    expect(new Set(accents).size).toBe(APPEARANCES.length);
+  it("defines the role aliases once, on :root, as references onto the palette", () => {
+    const aliases = rules(tokensCss).find(
+      (rule) => rule.selector === ":root" && "--bg" in rule.decls,
+    );
+    expect(Object.keys(aliases?.decls ?? {}).sort()).toEqual(ROLE_ALIASES);
+    for (const [name, value] of Object.entries(aliases?.decls ?? {}))
+      expect(value, name).toMatch(/var\(--/);
+    // The colliding names are palette tokens, never aliases (spec #376: never let two files define --line).
+    for (const name of ["--ink", "--muted", "--line", "--accent", "--paper"])
+      expect(aliases?.decls[name], name).toBeUndefined();
   });
 
-  it("does not theme danger, warn or success: they are defined once, outside every theme", () => {
+  it("does not theme danger, warn or success: they are defined once, outside every scheme", () => {
     for (const id of APPEARANCES) {
-      for (const token of SEMANTIC_TOKENS) expect(themeRule(id)?.decls[token]).toBeUndefined();
+      for (const token of SEMANTIC_TOKENS) expect(schemeRule(id)?.decls[token]).toBeUndefined();
     }
     const semantic = rules(tokensCss).find(
       (rule) => rule.selector === ":root" && "--danger" in rule.decls,
@@ -94,7 +107,16 @@ describe("Field Ledger role tokens", () => {
     for (const token of SEMANTIC_TOKENS) expect(semantic?.decls[token]).toMatch(/^#[0-9a-f]{6}$/);
   });
 
-  it("every var(--x) in the stylesheet resolves to a defined token", () => {
+  it("no longer carries the Field Ledger themes or the old attribute", () => {
+    expect(tokensCss).not.toContain("data-appearance");
+    expect(tokensCss).not.toContain("data-theme-preview");
+    expect(globalsCss).not.toContain("data-appearance");
+    expect(
+      rules(tokensCss).some((rule) => "--surface" in rule.decls && rule.selector !== ":root"),
+    ).toBe(false);
+  });
+
+  it("every var(--x) in the stylesheets resolves to a defined token", () => {
     // The font variables next/font sets on <html> at runtime (fonts.ts); --font-body and --font-display are composed
     // from them in globals.css (#182).
     const defined = new Set<string>([
@@ -102,55 +124,12 @@ describe("Field Ledger role tokens", () => {
       "--font-body-ext",
       "--font-display-latin",
       "--font-display-ext",
-      "--font-serif",
     ]);
-    for (const css of [tokensCss, globalsCss]) {
+    for (const css of [tokensCss, typeScaleCss, globalsCss]) {
       for (const m of stripCssComments(css).matchAll(/(--[\w-]+)\s*:/g)) defined.add(m[1]);
     }
     const used = [...stripCssComments(globalsCss).matchAll(/var\((--[\w-]+)/g)].map((m) => m[1]);
     expect(used.filter((name) => !defined.has(name))).toEqual([]);
-  });
-
-  // The spec's §6 table (#139), read from the real tokens for every theme: text 4.5:1, UI and graphics 3:1. Hover tints are
-  // composited over the surface they sit on. Disabled controls are exempt (the spec keeps the state in text and cursor).
-  const TEXT = 4.5;
-  const UI = 3;
-  type Check = [name: string, fg: string, bg: string, target: number, over?: string];
-  const CHECKS: Check[] = [
-    ["ink / surface", "--ink", "--surface", TEXT],
-    ["ink / bg", "--ink", "--bg", TEXT],
-    ["muted / surface", "--muted", "--surface", TEXT],
-    ["muted / bg", "--muted", "--bg", TEXT],
-    ["link / surface", "--link", "--surface", TEXT],
-    ["link / bg", "--link", "--bg", TEXT],
-    ["action-ink / action", "--action-ink", "--action", TEXT],
-    ["header-ink / header", "--header-ink", "--header", TEXT],
-    ["header-muted / header", "--header-muted", "--header", TEXT],
-    ["weather-pill-ink / pill", "--weather-pill-ink", "--weather-pill", TEXT],
-    ["notice-ink / notice", "--notice-ink", "--notice", TEXT],
-    ["hover: ink / selection tint", "--ink", "--selection-surface", TEXT, "--surface"],
-    ["hover: link / selection tint", "--link", "--selection-surface", TEXT, "--surface"],
-    ["focus ring / bg", "--accent-2", "--bg", UI],
-    ["focus ring / surface", "--accent-2", "--surface", UI],
-    ["focus ring / header", "--focus-on-header", "--header", UI],
-    ["completed: check / complete fill", "--complete-ink", "--complete", UI],
-    ["completed: fill / surface", "--complete", "--surface", UI],
-    ["completed: struck name (muted) / bg", "--muted", "--bg", TEXT],
-    ["control border / surface", "--line-strong", "--surface", UI],
-    ["control border / control-bg", "--line-strong", "--control-bg", UI],
-    ["progress / track", "--progress", "--track", UI],
-    ["stamp 1 / surface", "--accent", "--surface", UI],
-    ["stamp 2 / surface", "--accent-2", "--surface", UI],
-  ]; // prettier-ignore
-
-  it.each(APPEARANCES)("%s meets the spec's contrast table (§6)", (id) => {
-    const t = themeRule(id)?.decls ?? {};
-    const failures = CHECKS.flatMap(([name, fg, bg, target, over]) => {
-      const under = over ? t[over] : undefined;
-      const ratio = contrast(toRgb(t[fg], under), toRgb(t[bg], under ?? t["--surface"]));
-      return ratio >= target ? [] : [`${name}: ${ratio.toFixed(2)} < ${target}`];
-    });
-    expect(failures).toEqual([]);
   });
 
   it("the focus ring is a solid 3px --accent-2 outline with a 3px offset", () => {
@@ -161,6 +140,33 @@ describe("Field Ledger role tokens", () => {
 
   it("honors reduced motion", () => {
     expect(globalsCss).toContain("prefers-reduced-motion: reduce");
+  });
+});
+
+describe("Suitcase type scale", () => {
+  const phone = rules(typeScaleCss)[0].decls;
+  const laptop = rules(typeScaleCss)[1].decls;
+
+  it("defines the phone sizes from the spec as the defaults", () => {
+    expect(phone["--fs-page-title"]).toBe("28px");
+    expect(phone["--fs-hero"]).toBe("32px");
+    expect(phone["--fs-body"]).toBe("18px");
+    expect(phone["--fs-eyebrow"]).toBe("11px");
+    expect(phone["--min-text"]).toBe("11px");
+  });
+
+  it("overrides only the sizes that differ at 1024px and wider", () => {
+    expect(typeScaleCss).toMatch(/@media \(min-width: 1024px\)/);
+    expect(laptop["--fs-page-title"]).toBe("40px");
+    expect(laptop["--fs-hero"]).toBe("72px");
+    expect(laptop["--fs-body"]).toBe("17px");
+    for (const name of Object.keys(laptop)) expect(phone[name], name).toBeDefined();
+  });
+
+  it("never sets a size below the 11px floor", () => {
+    for (const decls of [phone, laptop])
+      for (const [name, value] of Object.entries(decls))
+        if (name.startsWith("--fs-")) expect(parseFloat(value), name).toBeGreaterThanOrEqual(11);
   });
 });
 
