@@ -34,6 +34,6 @@ UPDATE "trip_items" SET "cube" = (CASE
   WHEN ("semantic_id" || ' ' || "name") ~* 'passport|document|licen[cs]e|ticket|visa|insurance|boarding|itinerary|reservation|booking|vaccin|\yid\y' THEN 'documents'
   ELSE 'misc' END)::"item_cube";--> statement-breakpoint
 -- Data: Smart staples become "per day" plus the laundry flag; underwear and socks never carry it. Sleepwear and the Nice
--- attire staples stay Smart (they follow the trip's occasions, which no day count reproduces). Trip rows are untouched.
+-- attire staples and bottoms stay Smart (they follow the trip's occasions, which no day count reproduces). Trip rows are untouched.
 UPDATE "staples" SET "cadence" = 'per day', "laundry_halves" = ("semantic_id" NOT IN ('underwear', 'socks'))
-  WHERE "cadence" = 'smart' AND "semantic_id" IN ('tops', 'bottoms', 'underwear', 'socks');
+  WHERE "cadence" = 'smart' AND "semantic_id" IN ('tops', 'underwear', 'socks');

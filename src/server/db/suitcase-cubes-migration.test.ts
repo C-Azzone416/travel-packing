@@ -179,7 +179,7 @@ describe("0014_suitcase_cubes_laundry", () => {
     expect(
       await rows(`SELECT semantic_id, cadence, laundry_halves FROM staples ORDER BY semantic_id`),
     ).toEqual([
-      { semantic_id: "bottoms", cadence: "per day", laundry_halves: true },
+      { semantic_id: "bottoms", cadence: "smart", laundry_halves: false },
       { semantic_id: "chargers", cadence: "per trip", laundry_halves: false },
       { semantic_id: "medicine", cadence: "per day", laundry_halves: false },
       { semantic_id: "nice-top", cadence: "smart", laundry_halves: false },
@@ -241,7 +241,7 @@ describe("0014_suitcase_cubes_laundry", () => {
     ]);
   });
 
-  it("restores Smart for laundry-flagged tops and bottoms when rolled down", async () => {
+  it("restores Smart for laundry-flagged tops when rolled down", async () => {
     await migrateUp(client, BEFORE);
     await client.exec(`INSERT INTO users (id) VALUES ('owner-a')`);
     await client.exec(`

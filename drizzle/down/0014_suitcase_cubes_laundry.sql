@@ -1,6 +1,6 @@
--- Lossy by nature: "per night" rows become "per day", and tops/bottoms that carried the laundry flag go back to Smart.
+-- Lossy by nature: "per night" rows become "per day", and tops that carried the laundry flag go back to Smart.
 -- Underwear and socks that were Smart before the up migration stay "per day" (their old cadence is not recorded).
-UPDATE "staples" SET "cadence" = 'smart' WHERE "laundry_halves" AND "semantic_id" IN ('tops', 'bottoms') AND "cadence" = 'per day';--> statement-breakpoint
+UPDATE "staples" SET "cadence" = 'smart' WHERE "laundry_halves" AND "semantic_id" IN ('tops') AND "cadence" = 'per day';--> statement-breakpoint
 ALTER TABLE "staples" DROP CONSTRAINT "staples_laundry_not_underwear_socks";--> statement-breakpoint
 ALTER TABLE "trip_items" DROP CONSTRAINT "trip_items_staple_qty_positive";--> statement-breakpoint
 ALTER TABLE "trip_preferences" DROP COLUMN "morning_of_cubes";--> statement-breakpoint
