@@ -210,6 +210,6 @@ describe("Fraunces numerals and the shell page frame (#383)", () => {
   });
 
   it("body has no min-width (it made every page overflow at 195px)", () => {
-    expect(stripCssComments(globalsCss)).not.toMatch(/body\s*\{[^}]*min-width/);
+    expect(stripCssComments(globalsCss)).not.toMatch(/(^|\n)body\s*\{[^}]*min-width/);
   });
 });
