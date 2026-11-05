@@ -1,0 +1,53 @@
+/* Stepper (#381; spec on #376 part 2 section 5). Phone/sheet size first; the inline row size is laptop only. */
+.stepper {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 103px;
+  max-width: 100%;
+  height: 40px;
+  border: 2px solid var(--tint);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink);
+}
+.button {
+  --hit-pad: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 36px;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.button:disabled {
+  color: var(--ghost);
+  cursor: default;
+}
+.value {
+  min-width: 0;
+  font-family: var(--font-body);
+  font-size: 18px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+@media (min-width: 1024px) {
+  .stepper:not(.sheet) {
+    width: 77px;
+    height: 31px;
+  }
+  .stepper:not(.sheet) .button {
+    width: 28px;
+  }
+  .stepper:not(.sheet) .value {
+    font-size: 16px;
+  }
+}

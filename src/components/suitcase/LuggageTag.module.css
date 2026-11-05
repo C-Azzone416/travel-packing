@@ -1,0 +1,96 @@
+/* Luggage tag (#381; spec on #376 part 2 section 3). Phone first; the laptop layout starts at 1024px. */
+.wrap {
+  --notch: 19px;
+  --radius: 16px;
+  --hole: 12px;
+  --hole-left: 10px; /* centre 16px from the left edge, less the radius */
+  --pad: 16px 14px 16px 34px;
+  min-width: 0;
+  filter: drop-shadow(0 6px 10px color-mix(in srgb, var(--darkEdge) 28%, transparent));
+}
+.mini {
+  --notch: 14px;
+  --radius: 14px;
+  --hole: 10px;
+  --hole-left: 9px; /* centre 14px from the left */
+  --pad: 0 14px 0 32px;
+}
+.tag {
+  position: relative;
+  box-sizing: border-box;
+  min-width: 0;
+  border-radius: 0 var(--radius) var(--radius) 0;
+  background: var(--paper);
+  color: var(--ink);
+  /* The chamfered left corners. The border-radius above rounds the right corners; the polygon cuts the left ones. */
+  clip-path: polygon(
+    var(--notch) 0,
+    100% 0,
+    100% 100%,
+    var(--notch) 100%,
+    0 calc(100% - var(--notch)),
+    0 var(--notch)
+  );
+}
+.mini .tag {
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+}
+.content {
+  box-sizing: border-box;
+  min-width: 0;
+  padding: var(--pad);
+}
+.mini .content {
+  flex: 1;
+  padding: 8px 14px 8px 32px;
+}
+.hole {
+  position: absolute;
+  top: 50%;
+  left: var(--hole-left);
+  width: var(--hole);
+  height: var(--hole);
+  transform: translateY(-50%);
+  border-radius: 50%;
+  background: var(--page);
+  box-shadow: 0 0 0 3px var(--tint);
+}
+.mini .hole {
+  box-shadow: 0 0 0 2px var(--tint);
+}
+
+/* 195px: the padding collapses, the hole shrinks to 10 (a badge in the content wraps under the title). */
+@media (max-width: 239px) {
+  .wrap:not(.mini) {
+    --hole: 10px;
+    --hole-left: 11px;
+    --pad: 14px 10px 14px 28px;
+  }
+}
+@media (max-width: 359px) {
+  .mini .content {
+    padding-inline-end: 10px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .wrap {
+    --notch: 30px;
+    --radius: 24px;
+    --hole: 18px;
+    --hole-left: 20px; /* centre 29px from the left */
+    --pad: 28px 30px 28px 56px;
+  }
+  .mini {
+    --notch: 18px;
+    --radius: 18px;
+    --hole: 10px;
+    --hole-left: 9px;
+    --pad: 0 18px 0 32px;
+  }
+  .mini .tag {
+    min-height: 64px;
+  }
+}

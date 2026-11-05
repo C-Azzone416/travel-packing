@@ -1,0 +1,27 @@
+/* Shared by the Suitcase primitives (#381). `.hit` grows the tap area of a control that is shorter than 44px on a phone
+   without changing how it looks: the invisible ::after reaches --hit-pad past the top and bottom edge. Controls in a
+   row are 8px apart or more, so two grown areas never overlap. */
+.hit {
+  position: relative;
+}
+.hit::after {
+  content: "";
+  position: absolute;
+  inset: calc(-1 * var(--hit-pad, 0px)) 0;
+}
+@media (min-width: 1024px) {
+  .hit::after {
+    inset: 0;
+  }
+}
+
+/* The focus ring of the redesign (spec part 2 section 2: 3px --info, offset 2). On a dark surface --info is too close to
+   the fill, so those controls use `.ringOnDark`. */
+.ring:focus-visible {
+  outline: 3px solid var(--info);
+  outline-offset: 2px;
+}
+.ringOnDark:focus-visible {
+  outline: 3px solid var(--onDark);
+  outline-offset: 2px;
+}

@@ -1,0 +1,119 @@
+/* Weather day tile (#381; spec on #376 part 2 section 6). Phone first; the laptop layout starts at 1024px. */
+.tile {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 0;
+  text-align: center;
+  color: var(--ink);
+  font-family: var(--font-body);
+}
+.dayName {
+  font-weight: 600;
+}
+.dayDate {
+  font-weight: 400;
+}
+.high {
+  font-weight: 700;
+}
+.low {
+  color: var(--muted);
+  font-weight: 400;
+}
+.gap {
+  display: none;
+}
+.precip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--muted);
+  font-size: var(--fs-micro, 13px);
+  font-weight: 600;
+}
+.rainWord {
+  font-weight: 400;
+}
+.sun {
+  color: var(--gold);
+}
+.rain {
+  color: var(--accent);
+}
+.icon {
+  color: var(--muted);
+  flex: none;
+}
+
+/* ---- Forecast tile (Packing) ---- */
+.forecast {
+  border: 1.5px solid transparent;
+  border-radius: 10px;
+  padding: 6px 2px;
+  background: var(--paper);
+  font-size: 13px;
+}
+.forecast .temps {
+  font-size: 14px;
+}
+.forecast.alert {
+  border-color: var(--accent);
+  background: var(--accentSoft);
+}
+.forecast.alert .precip {
+  color: var(--accent);
+}
+.forecast .rainWord {
+  display: none;
+}
+
+/* ---- Compact tile (Home) ---- */
+.compact {
+  border-radius: 12px;
+  padding: 8px 6px;
+  background: color-mix(in srgb, var(--paper) 45%, transparent);
+  font-size: 16px;
+}
+.compact .day {
+  font-size: 16px;
+}
+.compact .temps {
+  font-size: 14px;
+}
+.compact.alert {
+  background: var(--tint);
+}
+.compact .rainWord {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .forecast {
+    gap: 3px;
+    padding: 9px 6px;
+    border-radius: 12px;
+    min-height: 91px;
+  }
+  .forecast .temps {
+    font-size: 15px;
+  }
+  .forecast .slash {
+    display: none;
+  }
+  .forecast .gap {
+    display: inline;
+  }
+  .compact .day {
+    font-size: 15px;
+  }
+  .compact .rainWord {
+    display: inline;
+  }
+  .compact {
+    min-height: 69px;
+  }
+}
