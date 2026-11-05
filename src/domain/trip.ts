@@ -7,6 +7,7 @@ import type {
   Suggestions,
   TripItem as CalcTripItem,
 } from "./calc";
+import type { Cube } from "./cubes";
 import type { ReadinessTrip } from "./toiletry-bag";
 import type { TripStop } from "./trip-stops";
 
@@ -42,6 +43,8 @@ export interface Trip extends ReadinessTrip<TripItem> {
   config: TripConfig;
   days: number;
   dailyDays: number;
+  /** Saved "Morning of" flags per cube (#378). Absent: Toiletries only. Read through `morningOfCubesFor`. */
+  morningOfCubes?: Cube[];
   suggestionMemory: Record<string, TripItem>;
   suppressedSuggestions: Record<string, boolean>;
   weather: WeatherState;

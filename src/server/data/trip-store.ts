@@ -4,6 +4,7 @@
 
 import { and, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
+import { DEFAULT_MORNING_OF_CUBES, itemCube } from "../../domain/cubes";
 import type { StampLabels } from "../../domain/stamps";
 import type { ThemeId } from "../../domain/themes";
 import type { Trip, TripConfig, TripItem } from "../../domain/trip";
@@ -301,6 +302,7 @@ function toStoredTrip(
     suppressedSuggestions: Object.fromEntries(
       (prefs?.suppressedSuggestions ?? []).map((id) => [id, true]),
     ),
+    morningOfCubes: prefs?.morningOfCubes ?? [...DEFAULT_MORNING_OF_CUBES],
     toiletryBagPacked: row.toiletryBagPacked,
     ready: row.ready,
     weather: {
@@ -330,6 +332,9 @@ function toDomainItem(row: typeof schema.tripItems.$inferSelect, packed: number)
   if (row.userEdited) item.userEdited = true;
   if (row.groupId) item.groupId = row.groupId;
   if (row.stapleCadence) item.stapleCadence = row.stapleCadence;
+  if (row.stapleQty !== null) item.stapleQty = row.stapleQty;
+  if (row.laundryHalves) item.laundryHalves = true;
+  item.cube = row.cube;
   return item;
 }
 
@@ -439,6 +444,7 @@ async function writeChildren(tx: Db, ownerId: string, trip: StoredTrip): Promise
       ownerId,
       ...trip.config,
       suggestionMemory: trip.suggestionMemory,
+      morningOfCubes: trip.morningOfCubes ?? [...DEFAULT_MORNING_OF_CUBES],
       suppressedSuggestions: Object.keys(trip.suppressedSuggestions).filter(
         (id) => trip.suppressedSuggestions[id],
       ),
@@ -448,6 +454,7 @@ async function writeChildren(tx: Db, ownerId: string, trip: StoredTrip): Promise
       set: {
         ...trip.config,
         suggestionMemory: trip.suggestionMemory,
+        morningOfCubes: trip.morningOfCubes ?? [...DEFAULT_MORNING_OF_CUBES],
         suppressedSuggestions: Object.keys(trip.suppressedSuggestions).filter(
           (id) => trip.suppressedSuggestions[id],
         ),
@@ -501,6 +508,9 @@ async function writeChildren(tx: Db, ownerId: string, trip: StoredTrip): Promise
       optional: Boolean(item.optional),
       userEdited: Boolean(item.userEdited),
       stapleCadence: item.stapleCadence ?? null,
+      stapleQty: item.stapleQty ?? null,
+      laundryHalves: Boolean(item.laundryHalves),
+      cube: itemCube(item),
       sortOrder: index,
     };
     const [saved] = await tx

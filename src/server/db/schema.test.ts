@@ -577,6 +577,7 @@ describe("drizzle schema matches the migrated database", () => {
     );
     expect(enums).toEqual([
       { typname: "item_category", labels: [...schema.ITEM_CATEGORIES] },
+      { typname: "item_cube", labels: [...schema.CUBES] },
       { typname: "item_section", labels: [...schema.ITEM_SECTIONS] },
       { typname: "staple_cadence", labels: [...schema.STAPLE_CADENCES] },
       { typname: "staples_setup_state", labels: [...schema.STAPLES_SETUP_STATES] },
