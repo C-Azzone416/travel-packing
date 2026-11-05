@@ -51,7 +51,7 @@ export function StaplesPreview({
 
   const controls = (
     <>
-      <div className={styles.sliderRow}>
+      <div className={laptop ? styles.sliderRow : "sr-only"}>
         <label htmlFor={sliderId}>Preview a trip of</label>
         <span className={styles.sliderValue} aria-hidden="true">
           {nightsLabel(nights)}
@@ -130,12 +130,12 @@ export function StaplesPreview({
           <ul className={styles.scales}>
             {scaling.map(({ staple, plain, qty }) => (
               <li key={staple.id} className={styles.scaleRow}>
-                <span>
-                  {staple.name}
+                <span>{staple.name}</span>
+                <span className={styles.scaleCount}>
                   {staple.laundryHalves ? <LaundryMarker variant="staples" /> : null}
-                </span>
-                <span>
-                  <HalvedCount plain={plain} qty={qty} />
+                  <span>
+                    <HalvedCount plain={plain} qty={qty} />
+                  </span>
                 </span>
               </li>
             ))}

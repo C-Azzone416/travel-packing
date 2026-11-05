@@ -92,7 +92,7 @@ export function StapleSheet({ staple, onChange, onRemove, onClose }: StapleEdito
         >
           <span>
             <Icon name="refresh" size={18} />
-            Fewer with laundry
+            <span className={styles.laundryText}>Fewer with laundry</span>
           </span>
           <span>{on ? "On" : "Off"}</span>
         </button>
@@ -112,6 +112,7 @@ export function StapleSheet({ staple, onChange, onRemove, onClose }: StapleEdito
           />
           <span className={styles.switchTrack} aria-hidden="true" />
         </label>
+        <p className={styles.packLastHint}>Packed last, on the morning you leave</p>
       </div>
     </ModalSheet>
   );

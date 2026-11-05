@@ -5,6 +5,10 @@
 :global(body):has(.screen) {
   min-width: 0;
 }
+.screen :global(.staples-tabs) {
+  max-width: none;
+  margin: 0 0 -4px;
+}
 .screen {
   display: grid;
   gap: 14px;
@@ -326,13 +330,19 @@
   cursor: pointer;
 }
 .packLastSwitch {
-  max-width: 320px;
+  width: 100%;
   font-size: var(--fs-meta);
+}
+.packLastHint {
+  margin: -6px 0 0;
+  color: var(--muted);
+  font-size: var(--fs-micro);
 }
 
 /* ---- Sheet (phone) ---- */
 .sheet {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   min-width: 0;
 }
@@ -412,14 +422,23 @@
   font-weight: 600;
   cursor: pointer;
 }
+.laundryText {
+  min-width: 0;
+}
 .laundryRow svg {
   flex: none;
 }
 .laundryRow > span:first-child {
   display: inline-flex;
+  flex: 1 1 0;
   align-items: center;
   gap: 8px;
   min-width: 0;
+  text-align: start;
+  line-height: 1.2;
+}
+.laundryRow > span:last-child {
+  flex: none;
 }
 .laundryRow[aria-checked="true"] {
   border-color: var(--dark);
@@ -475,7 +494,7 @@
   bottom: calc(var(--sticky-bottom) + 12px);
   z-index: 5;
   min-width: 0;
-  padding: 14px 16px;
+  padding: 12px 16px;
   border-radius: 20px;
   background: var(--paper);
   color: var(--ink);
@@ -684,12 +703,15 @@
   font-size: 15px;
 }
 .scaleRow > span:first-child {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
   min-width: 0;
   font-weight: 600;
   overflow-wrap: anywhere;
+}
+.scaleCount {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
 }
 .byCube li {
   display: flex;
@@ -745,6 +767,16 @@
 }
 
 @media (max-width: 359px) {
+  .laundryRow {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    border-radius: 26px;
+  }
+  .laundryRow > span:first-child {
+    flex: none;
+    width: 100%;
+  }
   .head {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -759,7 +791,10 @@
 /* ---- Laptop ---- */
 @media (min-width: 1024px) {
   .screen {
-    gap: 20px;
+    gap: 12px;
+  }
+  .screen :global(.staples-tabs) {
+    margin-bottom: -8px;
   }
   .lede {
     display: block;
@@ -772,7 +807,7 @@
     gap: 28px;
   }
   .case {
-    margin-top: 22px;
+    margin-top: 20px;
   }
   .sections {
     display: block;

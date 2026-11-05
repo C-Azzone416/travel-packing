@@ -111,6 +111,7 @@ export function StapleInlineEditor({ staple, onChange, onRemove, onClose }: Stap
         />
         <span className={styles.switchTrack} aria-hidden="true" />
       </label>
+      <p className={styles.packLastHint}>Packed last, on the morning you leave</p>
       {blocked ? (
         <p id={hintId} className={styles.hint}>
           {blocked}
