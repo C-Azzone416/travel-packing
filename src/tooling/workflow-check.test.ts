@@ -220,8 +220,8 @@ describe("checkDeployWorkflow: each rule fails when its line is broken", () => {
     [
       "the gate has an environment",
       mutate(
-        "  gate:\n    runs-on: ubuntu-latest\n",
-        "  gate:\n    environment: production\n    runs-on: ubuntu-latest\n",
+        "    runs-on: ubuntu-24.04\n",
+        "    environment: production\n    runs-on: ubuntu-24.04\n",
       ),
       /gate job must not use a GitHub environment/,
     ],
@@ -826,7 +826,7 @@ describe("checkCiWorkflow", () => {
     ["the summary job renamed", mutateCi(/^ {2}ci:/m, "  summary:"), /ci job is missing/],
     [
       "an extra job nobody summarises",
-      `${ci.replace(/\n {2}deploy:[\s\S]*$/, "")}\n  lint:\n    runs-on: ubuntu-latest\n    timeout-minutes: 5\n    steps: []\n\n${ci.slice(ci.indexOf("  deploy:"))}`,
+      `${ci.replace(/\n {2}deploy:[\s\S]*$/, "")}\n  lint:\n    runs-on: ubuntu-24.04\n    timeout-minutes: 5\n    steps: []\n\n${ci.slice(ci.indexOf("  deploy:"))}`,
       /unknown job lint/,
     ],
     ["no ready_for_review", mutateCi(", ready_for_review", ""), /ready_for_review/],
@@ -1252,7 +1252,7 @@ describe("checkCiWorkflow", () => {
   it("a job downstream of a skippable job needs a status function: ci has one, a plain downstream job does not", () => {
     const extra = ci.replace(
       "  deploy:",
-      "  notify:\n    needs: ci\n    runs-on: ubuntu-latest\n    timeout-minutes: 5\n    steps: []\n\n  deploy:",
+      "  notify:\n    needs: ci\n    runs-on: ubuntu-24.04\n    timeout-minutes: 5\n    steps: []\n\n  deploy:",
     );
     const problems = checkCiWorkflow(extra).join("\n");
     expect(problems).toMatch(/unknown job notify/);
