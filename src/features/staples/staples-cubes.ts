@@ -4,12 +4,14 @@ import {
   calculateSuggestions,
   stapleContext,
   stapleQuantity,
+  supportsSmartQuantity,
   type CalcConfig,
 } from "@/domain/calc";
 import { CUBES, CUBE_LABELS, canCarryLaundryFlag, itemCube, type Cube } from "@/domain/cubes";
 import { canonicalItemId } from "@/domain/item-identity";
 import { TOILETRY_GROUP_ID } from "@/domain/toiletry-bag";
 import type { Staple } from "@/domain/trip";
+import { DEFAULT_TRIP_CONFIG } from "@/features/trips/draft";
 import { cubeForItem } from "@/domain/cubes";
 
 /** The cubes a Staple can live in, in the order the screen shows them. The weather cube is filled by the forecast. */
@@ -18,8 +20,21 @@ export const MIN_NIGHTS = 1;
 export const MAX_NIGHTS = 21;
 export const DEFAULT_NIGHTS = 4;
 
-export type StapleCadenceChoice = "per trip" | "per day" | "per night";
-export const CADENCE_CHOICES: readonly StapleCadenceChoice[] = ["per trip", "per day", "per night"];
+export type StapleCadenceChoice = "per trip" | "per day" | "per night" | "smart";
+const PLAIN_CADENCES: readonly StapleCadenceChoice[] = ["per trip", "per day", "per night"];
+
+/** Smart is offered only to the clothing staples the calculator has a Smart quantity for (the server refuses the rest). */
+export const canChooseSmart = (staple: Pick<Staple, "id" | "category">): boolean =>
+  supportsSmartQuantity(staple.id) && ["Clothing", "Nice attire"].includes(staple.category);
+
+/** The cadence chips a staple's editor shows: the three plain ones, plus Smart where it applies. */
+export function cadenceChoices(
+  staple: Pick<Staple, "id" | "category" | "cadence">,
+): StapleCadenceChoice[] {
+  return canChooseSmart(staple) || staple.cadence === "smart"
+    ? [...PLAIN_CADENCES, "smart"]
+    : [...PLAIN_CADENCES];
+}
 
 /** The cube a Staple is shown in. A stored weather cube (never expected on a Staple) is shown in Misc. */
 export function stapleCube(staple: Staple): Cube {
@@ -52,6 +67,8 @@ export function moveToCube(staple: Staple, cube: Cube): Staple {
     ...(cube === "toiletries" ? { groupId: TOILETRY_GROUP_ID } : {}),
   };
   if (cubeForItem(next) !== cube) next.cube = cube;
+  // Smart quantities exist only for clothing: a Smart staple that leaves Clothing becomes a plain per-trip one.
+  if (next.cadence === "smart" && !canChooseSmart(next)) next.cadence = "per trip";
   return next;
 }
 
@@ -69,7 +86,9 @@ export function withLaundry(staple: Staple, on: boolean): Staple {
 
 /** A cadence change; Smart cannot carry the laundry flag, but the three plain cadences keep it. */
 export function withCadence(staple: Staple, cadence: StapleCadenceChoice): Staple {
-  return { ...staple, cadence };
+  const next: Staple = { ...staple, cadence };
+  if (cadence === "smart") delete next.laundryHalves;
+  return next;
 }
 
 export interface CubeSection {
@@ -105,21 +124,12 @@ export interface PreviewSummary {
 }
 
 /**
- * The calculator's config for a trip of `nights` nights; the day counts come from `calculateSuggestions`. The preview
- * counts every trip day as an everyday outfit (no return outfit), as the design's sample numbers do: the return outfit is
- * a separate trip feature, added on top when a real trip is planned.
+ * The calculator's config for a trip of `nights` nights: a new trip's own defaults (return outfit and a spare on), so the
+ * preview shows what a real trip would START with. The slider sets the length and the switch sets laundry.
  */
 function previewConfig(nights: number, laundry: boolean): CalcConfig {
   const end = new Date(Date.UTC(2026, 0, 1 + nights)).toISOString().slice(0, 10);
-  return {
-    start: "2026-01-01",
-    end,
-    laundry,
-    spare: false,
-    niceAttire: true,
-    occasionCount: 1,
-    returnOutfit: false,
-  };
+  return { ...DEFAULT_TRIP_CONFIG, start: "2026-01-01", end, laundry };
 }
 
 /**

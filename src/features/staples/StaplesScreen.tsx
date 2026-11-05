@@ -111,18 +111,24 @@ export function StaplesScreen({
     [clearDraft, source, track],
   );
 
+  // Remove goes on the same per-staple chain as the saves, so it cannot overtake an upsert still in flight and bring the
+  // staple back; saves still queued behind it are dropped.
   const remove = useCallback(
     (staple: Staple) => {
-      void track(
-        () => removeStaple(staple.id),
-        (staples) => {
-          clearDraft(staple.id);
-          setLoad({ phase: "ready", staples });
-          setOpenId(null);
-          setAnnouncement(`${staple.name} removed from future trips.`);
-          toast.show(`${staple.name} removed from future trips.`);
-        },
-      ).catch(() => undefined);
+      delete latest.current[staple.id];
+      const previous = chains.current[staple.id] ?? Promise.resolve();
+      chains.current[staple.id] = previous.then(async () => {
+        await track(
+          () => removeStaple(staple.id),
+          (staples) => {
+            clearDraft(staple.id);
+            setLoad({ phase: "ready", staples });
+            setOpenId(null);
+            setAnnouncement(`${staple.name} removed from future trips.`);
+            toast.show(`${staple.name} removed from future trips.`);
+          },
+        ).catch(() => clearDraft(staple.id));
+      });
     },
     [clearDraft, removeStaple, toast, track],
   );
@@ -228,6 +234,7 @@ export function StaplesScreen({
   const opened = openId ? (staples.find((staple) => staple.id === openId) ?? null) : null;
   const controls = (staple: Staple) => ({
     staple,
+    taken: (name: string, exceptId: string) => findDuplicate(staples, name, exceptId),
     onChange: (next: Staple) => {
       setAddCube(stapleCube(next));
       commit(next);

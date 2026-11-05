@@ -191,7 +191,7 @@ test(
     await page.getByRole("button", { name: "Save 2 Staples" }).click();
     await expect(page.getByRole("heading", { name: "Your travel ledger" })).toBeVisible();
     await page.getByRole("link", { name: "Staples" }).click();
-    await expect(page.locator('[data-staple-id="underwear"]')).toContainText("× 15");
+    await expect(page.locator('[data-staple-id="underwear"]')).toContainText("× 13");
     await expect(page.locator('[data-staple-id="toothbrush"]')).toContainText("per trip");
   },
 );

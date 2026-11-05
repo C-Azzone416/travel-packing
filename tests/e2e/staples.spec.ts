@@ -74,11 +74,11 @@ test("edit a staple count: existing trips are unchanged, and the next new trip u
   await rowButton(page, "underwear", "Underwear").click();
   const editor = editorOf(page, "Underwear");
   await saved(page, () => editor.getByRole("button", { name: /^More / }).click());
-  // The row shows what the 4-night preview trip gets: 2 per day over 5 days.
-  await expect(staple(page, "underwear")).toContainText("× 10");
+  // The row shows what a new 4-night trip starts with: 2 per day over 4 everyday days, plus the spare.
+  await expect(staple(page, "underwear")).toContainText("× 9");
   await page.reload();
   await expect(staple(page, "underwear")).toContainText("per day");
-  await expect(staple(page, "underwear")).toContainText("× 10");
+  await expect(staple(page, "underwear")).toContainText("× 9");
 
   // Existing trips keep their lists.
   await page.goto("/");

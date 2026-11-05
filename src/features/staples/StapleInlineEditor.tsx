@@ -7,17 +7,21 @@ import { Icon } from "@/components/ui/Icon";
 import { CUBE_LABELS, type Cube } from "@/domain/cubes";
 import type { Staple } from "@/domain/trip";
 import {
-  CADENCE_CHOICES,
+  cadenceChoices,
+  withCadence,
   STAPLE_CUBES,
   canHaveLaundry,
   moveToCube,
   stapleCube,
   withLaundry,
 } from "./staples-cubes";
+import { StapleNameField } from "./StapleNameField";
 import styles from "./Staples.module.css";
 
 export interface StapleEditorControls {
   staple: Staple;
+  /** The staple that already has this name (other than `exceptId`), for the rename check. */
+  taken: (name: string, exceptId: string) => Staple | undefined;
   onChange: (next: Staple) => void;
   onRemove: () => void;
   onClose: () => void;
@@ -27,13 +31,19 @@ export interface StapleEditorControls {
 export function laundryBlockedReason(staple: Staple): string | null {
   if (canHaveLaundry(staple)) return null;
   return staple.cadence === "smart"
-    ? "This staple's count comes from your trip's occasions, so laundry does not change it."
+    ? "A Smart count follows your trip's preferences, so laundry does not change it."
     : "Underwear and socks stay one per day, with or without laundry.";
 }
 
 // The laptop's inline editor (spec part 3 section 1.5): it opens in place under the row. Changes save as they are made.
 // Escape closes it. Pack last, the one control the redesign does not draw, lives here as a small switch.
-export function StapleInlineEditor({ staple, onChange, onRemove, onClose }: StapleEditorControls) {
+export function StapleInlineEditor({
+  staple,
+  taken,
+  onChange,
+  onRemove,
+  onClose,
+}: StapleEditorControls) {
   const hintId = useId();
   const blocked = laundryBlockedReason(staple);
   const on = Boolean(staple.laundryHalves) && blocked === null;
@@ -50,6 +60,12 @@ export function StapleInlineEditor({ staple, onChange, onRemove, onClose }: Stap
       aria-label={`Edit ${staple.name}`}
       onKeyDown={onKeyDown}
     >
+      <StapleNameField
+        key={`${staple.id}:${staple.name}`}
+        staple={staple}
+        taken={taken}
+        onRename={(name) => onChange({ ...staple, name })}
+      />
       <div className={styles.editorRow}>
         <Stepper
           label={`Quantity for ${staple.name}`}
@@ -71,12 +87,12 @@ export function StapleInlineEditor({ staple, onChange, onRemove, onClose }: Stap
         </select>
       </div>
       <div className={styles.editorRow} role="group" aria-label={`How ${staple.name} scales`}>
-        {CADENCE_CHOICES.map((cadence) => (
+        {cadenceChoices(staple).map((cadence) => (
           <Chip
             key={cadence}
             size="row"
             selected={staple.cadence === cadence}
-            onClick={() => onChange({ ...staple, cadence })}
+            onClick={() => onChange(withCadence(staple, cadence))}
           >
             {cadence}
           </Chip>

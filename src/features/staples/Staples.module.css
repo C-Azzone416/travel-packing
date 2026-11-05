@@ -880,3 +880,48 @@
     font-size: 20px;
   }
 }
+
+/* ---- Rename ---- */
+.nameField {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.nameLabel {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: var(--fs-eyebrow);
+  font-weight: 700;
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+}
+.nameInput {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 0;
+  height: 44px;
+  padding: 0 16px;
+  border: 2px solid var(--tint);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+}
+.nameInput[aria-invalid="true"] {
+  border-color: var(--accent);
+}
+.nameInput:focus-visible {
+  outline: 3px solid var(--info);
+  outline-offset: 2px;
+}
+.nameProblem {
+  margin: 0;
+  color: var(--accent);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+}

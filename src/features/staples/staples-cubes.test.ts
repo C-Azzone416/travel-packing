@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { SYNTHETIC_STAPLES, stapleContext, stapleQuantity } from "@/domain/calc";
+import { SYNTHETIC_STAPLES, buildTripItems } from "@/domain/calc";
+import { DEFAULT_TRIP_CONFIG } from "@/features/trips/draft";
 import { TOILETRY_GROUP_ID } from "@/domain/toiletry-bag";
 import type { Staple } from "@/domain/trip";
 import {
   STAPLE_CUBES,
+  canChooseSmart,
   canHaveLaundry,
+  cadenceChoices,
   groupByCube,
   itemsLabel,
   moveToCube,
@@ -124,32 +127,69 @@ describe("laundry and cadence edits", () => {
 });
 
 describe("previewStaples", () => {
-  const tees = staple({ id: "tops", name: "Tees", cadence: "per day", laundryHalves: true });
-  const underwear = staple({ id: "underwear", cadence: "per day", category: "Clothing" });
-  const socks = staple({ id: "socks", cadence: "per day" });
-  const laptop = staple({ id: "laptop", category: "Tech" });
+  const clothing = { category: "Clothing" };
+  const tees = staple({
+    id: "tops",
+    name: "Tees",
+    cadence: "per day",
+    laundryHalves: true,
+    ...clothing,
+  });
+  const bottoms = staple({ id: "bottoms", name: "Bottoms", cadence: "per day", ...clothing });
+  const underwear = staple({ id: "underwear", cadence: "per day", ...clothing });
+  const socks = staple({ id: "socks", cadence: "per day", ...clothing });
+  const laptop = staple({ id: "kindle", name: "Kindle", category: "Tech" });
   const nightly = staple({ id: "meds", name: "Meds", cadence: "per night", qty: 2 });
-  const all = [tees, underwear, socks, laptop, nightly];
+  const smart = staple({ id: "nice-top", name: "Nice top", cadence: "smart", ...clothing });
+  const all = [tees, bottoms, underwear, socks, laptop, nightly, smart];
+  const extras = [tees, bottoms, laptop, nightly, smart];
 
-  it("uses the domain's own quantity for every row", () => {
-    const summary = previewStaples(all, 4, true);
-    for (const row of summary.rows) {
-      const days = { days: 5, nights: 4, dailyDays: 5 };
-      const context = stapleContext({ laundry: true, spare: false }, days);
-      expect(row.qty).toBe(stapleQuantity(row.staple, context));
+  // The preview must show what a real new trip STARTS with: the same builder, the same default preferences.
+  it.each([1, 4, 10, 21])(
+    "matches a real new trip for every staple at %i nights, laundry on and off",
+    (nights) => {
+      for (const laundry of [false, true]) {
+        const start = "2026-01-01";
+        const end = new Date(Date.UTC(2026, 0, 1 + nights)).toISOString().slice(0, 10);
+        const real = buildTripItems({ ...DEFAULT_TRIP_CONFIG, start, end, laundry }, [
+          ...SYNTHETIC_STAPLES,
+          ...all,
+        ]);
+        const summary = previewStaples([...SYNTHETIC_STAPLES, ...all], nights, laundry);
+        let total = 0;
+        for (const row of summary.rows) {
+          const item = real.items.find((entry) => entry.id === row.staple.id);
+          expect(row.qty, `${row.staple.id} at ${nights} nights, laundry ${laundry}`).toBe(
+            item?.qty ?? 0,
+          );
+          total += item?.qty ?? 0;
+        }
+        expect(summary.total).toBe(total);
+      }
+    },
+  );
+
+  it("matches a real trip's 'laundry saves' too", () => {
+    for (const nights of [1, 4, 10, 21]) {
+      const on = previewStaples(all, nights, true);
+      const off = previewStaples(all, nights, false);
+      expect(on.saves).toBe(off.saves);
+      expect(off.total - on.total).toBe(off.saves);
     }
-    // 5 days: tees 5 halved to 3, underwear 5, socks 5, laptop 1, meds 4 nights x 2.
-    expect(summary.rows.map((r) => r.qty)).toEqual([3, 5, 5, 1, 8]);
-    expect(summary.rows.map((r) => r.plain)).toEqual([5, 5, 5, 1, 8]);
-    expect(summary.total).toBe(22);
-    expect(summary.saves).toBe(2);
   });
 
-  it("with laundry off the counts are plain, and 'saves' is what laundry would save", () => {
-    const summary = previewStaples(all, 4, false);
-    expect(summary.total).toBe(24);
-    expect(summary.saves).toBe(2);
-    expect(summary.rows.every((r) => r.qty === r.plain)).toBe(true);
+  it("pins the numbers a default trip starts with (return outfit and a spare on)", () => {
+    const table = [1, 4, 10, 21].map((nights) => {
+      const off = previewStaples([tees, bottoms, underwear, socks], nights, false);
+      const on = previewStaples([tees, bottoms, underwear, socks], nights, true);
+      return [nights, off.total, on.total, on.saves];
+    });
+    expect(table).toEqual([
+      [1, 6, 6, 0],
+      [4, 18, 16, 2],
+      [10, 42, 37, 5],
+      [21, 86, 76, 10],
+    ]);
   });
 
   it("counts by cube, and nothing saves when nothing is marked", () => {
@@ -164,16 +204,43 @@ describe("previewStaples", () => {
     });
   });
 
-  it("rounds halving up (11 -> 6) and handles a one-night trip", () => {
-    expect(previewStaples([tees], 10, true).rows[0].qty).toBe(6);
-    expect(previewStaples([tees], 1, true).rows[0]).toMatchObject({ plain: 2, qty: 1 });
+  it("rounds halving up and handles a one-night trip", () => {
+    expect(previewStaples([tees], 10, true).rows[0]).toMatchObject({ plain: 10, qty: 5 });
+    expect(previewStaples([tees], 1, true).rows[0]).toMatchObject({ plain: 1, qty: 1 });
   });
 
-  it("takes a legacy Smart staple's count from the calculator", () => {
-    const smart = staple({ id: "nice-top", name: "Nice top", cadence: "smart" });
-    expect(previewStaples([smart], 4, false).rows[0].qty).toBeGreaterThan(0);
+  it("takes a legacy Smart staple's count from the calculator, and 0 for an unknown one", () => {
     const unknown = staple({ id: "not-a-smart-id", cadence: "smart" });
     expect(previewStaples([unknown], 4, false).rows[0].qty).toBe(0);
+  });
+});
+
+describe("Smart cadence", () => {
+  it("is offered only to clothing staples that have a Smart quantity (or already are Smart)", () => {
+    expect(canChooseSmart(staple({ id: "bottoms", category: "Clothing" }))).toBe(true);
+    expect(canChooseSmart(staple({ id: "nice-top", category: "Nice attire" }))).toBe(true);
+    expect(canChooseSmart(staple({ id: "laptop", category: "Tech" }))).toBe(false);
+    expect(canChooseSmart(staple({ id: "tops", category: "Tech" }))).toBe(false);
+    expect(cadenceChoices(staple({ id: "laptop", category: "Tech" }))).toEqual([
+      "per trip",
+      "per day",
+      "per night",
+    ]);
+    expect(cadenceChoices(staple({ id: "bottoms", category: "Clothing" }))).toContain("smart");
+    expect(cadenceChoices(staple({ id: "x", cadence: "smart" }))).toContain("smart");
+  });
+
+  it("choosing Smart drops the laundry flag, and leaving Clothing makes a Smart staple per trip", () => {
+    const tops = staple({
+      id: "tops",
+      category: "Clothing",
+      cadence: "per day",
+      laundryHalves: true,
+    });
+    expect(withCadence(tops, "smart")).not.toHaveProperty("laundryHalves");
+    const smart = staple({ id: "tops", category: "Clothing", cadence: "smart" });
+    expect(moveToCube(smart, "tech").cadence).toBe("per trip");
+    expect(moveToCube(smart, "clothing").cadence).toBe("smart");
   });
 });
 

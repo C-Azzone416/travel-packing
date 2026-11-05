@@ -193,17 +193,17 @@ describe("laptop: the preview", () => {
   it("halves the staples marked ↻ when laundry is on, and says what it saves", async () => {
     const { user } = setup({ extra: [TEES] });
     await loaded();
-    // 4 nights: 5 days, so Tees per day is 5; laundry halves it to 3.
-    expect(within(rowFor("tops")).getByText("× 5").closest("del")).toBeTruthy();
-    expect(within(rowFor("tops")).getByText("× 3")).toBeTruthy();
-    expect(within(rowFor("tops")).getByText(/reduced from 5 with laundry/)).toBeTruthy();
+    // 4 nights: a real trip gives tops 4 (days minus the return-outfit day); laundry halves it to 2.
+    expect(within(rowFor("tops")).getByText("× 4").closest("del")).toBeTruthy();
+    expect(within(rowFor("tops")).getByText("× 2")).toBeTruthy();
+    expect(within(rowFor("tops")).getByText(/reduced from 4 with laundry/)).toBeTruthy();
     expect(screen.getByText("Laundry saves 2 (anything marked ↻ is halved).")).toBeTruthy();
     const laundry = screen.getByRole("switch", { name: "Laundry on the trip" });
     expect(laundry).toHaveProperty("checked", true);
     await user.click(laundry);
     expect(laundry).toHaveProperty("checked", false);
-    expect(within(rowFor("tops")).getByText("× 5")).toBeTruthy();
-    expect(within(rowFor("tops")).queryByText("× 3")).toBeNull();
+    expect(within(rowFor("tops")).getByText("× 4")).toBeTruthy();
+    expect(within(rowFor("tops")).queryByText("× 2")).toBeNull();
     expect(
       screen.getByText("Laundry would save 2. Underwear and socks stay one per day."),
     ).toBeTruthy();
@@ -221,14 +221,14 @@ describe("laptop: the preview", () => {
     expect(names).toHaveLength(3);
     expect(names[0]).toMatch(/^Underwear× 5$/);
     expect(names[1]).toMatch(/^Socks× 5$/);
-    expect(names[2]).toMatch(/^TeesFewer with laundry× 5× 3, reduced from 5 with laundry$/);
+    expect(names[2]).toMatch(/^TeesFewer with laundry× 4× 2, reduced from 4 with laundry$/);
     const byCube = within(preview).getByRole("heading", { name: "By cube" })
       .nextElementSibling as HTMLElement;
     expect(
       within(byCube)
         .getAllByRole("listitem")
         .map((li) => li.textContent),
-    ).toEqual(["Clothing14", "Toiletries4", "Tech2", "Documents0", "Misc2"]);
+    ).toEqual(["Clothing13", "Toiletries4", "Tech2", "Documents0", "Misc2"]);
     expect(within(preview).getByText(/items to start/)).toBeTruthy();
   });
 });
@@ -399,7 +399,7 @@ describe("laptop: the inline editor", () => {
       "disabled",
       true,
     );
-    expect(screen.getByText(/comes from your trip's occasions/)).toBeTruthy();
+    expect(screen.getByText(/follows your trip's preferences/)).toBeTruthy();
   });
 
   it("flips Pack last", async () => {
@@ -434,6 +434,158 @@ describe("laptop: the inline editor", () => {
     await user.click(screen.getByRole("button", { name: /^More / }));
     expect(await screen.findByRole("button", { name: /not saved/i })).toBeTruthy();
     await waitFor(() => expect(within(rowFor("last-laptop")).getByText("× 1")).toBeTruthy());
+  });
+});
+
+describe("renaming, Smart, and removing", () => {
+  it("renames a staple from the inline editor, saving when the field is left", async () => {
+    const { user, source } = setup();
+    await loaded();
+    await user.click(within(rowFor("sleepwear")).getByRole("button", { name: /^Sleepwear/ }));
+    const field = screen.getByRole("textbox", { name: "Name" });
+    await user.clear(field);
+    await user.type(field, "  Pyjamas ");
+    expect(source.staplesSnapshot().find((s) => s.id === "sleepwear")!.name).toBe("Sleepwear");
+    await user.tab();
+    await waitFor(() =>
+      expect(source.staplesSnapshot().find((s) => s.id === "sleepwear")!.name).toBe("Pyjamas"),
+    );
+    expect(within(rowFor("sleepwear")).getByRole("button", { name: /^Pyjamas/ })).toBeTruthy();
+    expect(source.staplesSnapshot().filter((s) => s.name === "Pyjamas")).toHaveLength(1);
+  });
+
+  it("saves a rename on Enter, and refuses an empty or taken name without saving", async () => {
+    const upsertStaple = vi.fn();
+    const { user, source } = setup({ wrap: (base) => ({ ...base, upsertStaple }) });
+    await loaded();
+    await user.click(within(rowFor("sleepwear")).getByRole("button", { name: /^Sleepwear/ }));
+    const group = () => within(screen.getByRole("group", { name: "Edit Sleepwear" }));
+    const field = screen.getByRole("textbox", { name: "Name" });
+    await user.clear(field);
+    await user.keyboard("{Enter}");
+    expect(group().getByRole("alert").textContent).toBe("Enter a name.");
+    await user.type(field, "socks");
+    await user.keyboard("{Enter}");
+    expect(group().getByRole("alert").textContent).toBe("You already have Socks.");
+    expect(field.getAttribute("aria-invalid")).toBe("true");
+    await user.type(field, "x");
+    expect(group().queryByRole("alert")).toBeNull();
+    await user.clear(field);
+    await user.type(field, "Sleepwear");
+    await user.tab();
+    expect(upsertStaple).not.toHaveBeenCalled();
+    expect(source.staplesSnapshot().find((s) => s.id === "sleepwear")!.name).toBe("Sleepwear");
+  });
+
+  it("renames from the phone sheet", async () => {
+    const { user, source } = setup({ laptop: false });
+    await loaded();
+    await user.click(within(rowFor("sleepwear")).getByRole("button", { name: /^Sleepwear/ }));
+    const field = within(screen.getByRole("dialog")).getByRole("textbox", { name: "Name" });
+    await user.clear(field);
+    await user.type(field, "Pyjamas");
+    await user.keyboard("{Enter}");
+    await waitFor(() =>
+      expect(source.staplesSnapshot().find((s) => s.id === "sleepwear")!.name).toBe("Pyjamas"),
+    );
+    expect(screen.getByRole("dialog", { name: "Pyjamas" })).toBeTruthy();
+  });
+
+  it("offers a Smart chip only to staples that have a Smart quantity, and can go back to it", async () => {
+    const bottoms: Staple = {
+      id: "bottoms",
+      name: "Bottoms",
+      qty: 1,
+      cadence: "smart",
+      category: "Clothing",
+      packLast: false,
+    };
+    const { user, source } = setup({ extra: [bottoms] });
+    await loaded();
+    await user.click(within(rowFor("bottoms")).getByRole("button", { name: /^Bottoms/ }));
+    const scales = screen.getByRole("group", { name: "How Bottoms scales" });
+    expect(within(scales).getByRole("button", { name: "smart" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    await user.click(within(scales).getByRole("button", { name: "per day" }));
+    await waitFor(() =>
+      expect(source.staplesSnapshot().find((s) => s.id === "bottoms")!.cadence).toBe("per day"),
+    );
+    await user.click(within(scales).getByRole("button", { name: "smart" }));
+    await waitFor(() =>
+      expect(source.staplesSnapshot().find((s) => s.id === "bottoms")!.cadence).toBe("smart"),
+    );
+    // A laptop has no Smart quantity: three chips only.
+    await user.click(within(rowFor("last-laptop")).getByRole("button", { name: /^Laptop/ }));
+    const laptopScales = screen.getByRole("group", { name: "How Laptop scales" });
+    expect(within(laptopScales).queryByRole("button", { name: "smart" })).toBeNull();
+  });
+
+  it("removes after an in-flight save, so the staple cannot come back", async () => {
+    const order: string[] = [];
+    const gate = deferred<void>();
+    const removeStaple = vi.fn(async (id: string) => {
+      order.push("remove");
+      return (await memory().listStaples()).filter((s) => s.id !== id);
+    });
+    const { user, source } = setup({
+      removeStaple,
+      wrap: (base) => ({
+        ...base,
+        upsertStaple: async (staple) => {
+          order.push("upsert-start");
+          await gate.promise;
+          order.push("upsert-end");
+          return base.upsertStaple(staple);
+        },
+      }),
+    });
+    await loaded();
+    await user.click(within(rowFor("sleepwear")).getByRole("button", { name: /^Sleepwear/ }));
+    await user.click(
+      within(screen.getByRole("group", { name: "Edit Sleepwear" })).getByRole("button", {
+        name: /^More /,
+      }),
+    );
+    await waitFor(() => expect(order).toEqual(["upsert-start"]));
+    await user.click(screen.getByRole("button", { name: "Remove" }));
+    // Remove waits behind the save that is still in flight.
+    expect(removeStaple).not.toHaveBeenCalled();
+    await act(async () => gate.resolve());
+    await waitFor(() => expect(removeStaple).toHaveBeenCalledWith("sleepwear"));
+    expect(order).toEqual(["upsert-start", "upsert-end", "remove"]);
+    await waitFor(() => expect(rowFor("sleepwear")).toBeNull());
+    void source;
+  });
+
+  it("drops a save that is still queued when the staple is removed", async () => {
+    const calls: number[] = [];
+    const gate = deferred<void>();
+    const removeStaple = vi.fn(async (id: string) =>
+      (await memory().listStaples()).filter((s) => s.id !== id),
+    );
+    const { user } = setup({
+      removeStaple,
+      wrap: (base) => ({
+        ...base,
+        upsertStaple: async (staple) => {
+          calls.push(staple.qty);
+          await gate.promise;
+          return base.upsertStaple(staple);
+        },
+      }),
+    });
+    await loaded();
+    await user.click(within(rowFor("sleepwear")).getByRole("button", { name: /^Sleepwear/ }));
+    const more = within(screen.getByRole("group", { name: "Edit Sleepwear" })).getByRole("button", {
+      name: /^More /,
+    });
+    await user.click(more);
+    await user.click(more);
+    await user.click(screen.getByRole("button", { name: "Remove" }));
+    await act(async () => gate.resolve());
+    await waitFor(() => expect(removeStaple).toHaveBeenCalled());
+    expect(calls).toEqual([2]);
   });
 });
 

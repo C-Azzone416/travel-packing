@@ -7,18 +7,20 @@ import { Icon } from "@/components/ui/Icon";
 import { ModalSheet } from "@/components/ui/ModalSheet";
 import { CUBE_LABELS, type Cube } from "@/domain/cubes";
 import {
-  CADENCE_CHOICES,
+  cadenceChoices,
+  withCadence,
   STAPLE_CUBES,
   moveToCube,
   stapleCube,
   withLaundry,
 } from "./staples-cubes";
 import { laundryBlockedReason, type StapleEditorControls } from "./StapleInlineEditor";
+import { StapleNameField } from "./StapleNameField";
 import styles from "./Staples.module.css";
 
 // The phone's editor (spec part 3 section 1.5, st-p-sheet): a bottom sheet with CUBE chips, HOW MANY, the laundry row,
 // and Remove / Done. ModalSheet gives it the focus trap, Escape, and the return of focus to the row that opened it.
-export function StapleSheet({ staple, onChange, onRemove, onClose }: StapleEditorControls) {
+export function StapleSheet({ staple, taken, onChange, onRemove, onClose }: StapleEditorControls) {
   const radioName = useId();
   const hintId = useId();
   const blocked = laundryBlockedReason(staple);
@@ -41,6 +43,12 @@ export function StapleSheet({ staple, onChange, onRemove, onClose }: StapleEdito
       }
     >
       <div className={styles.sheet}>
+        <StapleNameField
+          key={`${staple.id}:${staple.name}`}
+          staple={staple}
+          taken={taken}
+          onRename={(name) => onChange({ ...staple, name })}
+        />
         <p className={styles.eyebrow} id={`${radioName}-cube`}>
           Cube
         </p>
@@ -68,12 +76,12 @@ export function StapleSheet({ staple, onChange, onRemove, onClose }: StapleEdito
             onChange={(qty) => onChange({ ...staple, qty })}
           />
           <div className={styles.chips} role="group" aria-label={`How ${staple.name} scales`}>
-            {CADENCE_CHOICES.map((cadence) => (
+            {cadenceChoices(staple).map((cadence) => (
               <Chip
                 key={cadence}
                 size="editor"
                 selected={staple.cadence === cadence}
-                onClick={() => onChange({ ...staple, cadence })}
+                onClick={() => onChange(withCadence(staple, cadence))}
               >
                 {cadence}
               </Chip>

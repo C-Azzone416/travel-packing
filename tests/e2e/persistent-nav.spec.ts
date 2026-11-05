@@ -249,19 +249,22 @@ for (const viewport of [WIDE[0], PHONE[0]]) {
       const band = await limits(page);
       await page.locator("main").focus();
       let stops = 0;
-      let farthest = 0;
+      let seenMain = false;
       for (let i = 0; i < 80; i += 1) {
         await page.keyboard.press("Tab");
-        farthest = Math.max(farthest, await page.evaluate(() => scrollY));
         const at = await inMain();
-        if (!at) continue;
+        if (!at) {
+          // Tab has left the last stop of a short page (focus went to the browser); another press would wrap to the top.
+          if (seenMain) break;
+          continue;
+        }
+        seenMain = true;
         stops += 1;
         expect(at.top).toBeGreaterThanOrEqual(band.top - 0.5);
         expect(at.bottom).toBeLessThanOrEqual(band.bottom + 0.5);
       }
       expect(stops).toBeGreaterThan(5); // WebKit's native Tab order skips some buttons
-      // Tab wraps back to the top once the page has fewer stops than presses, so the test keeps the farthest scroll.
-      expect(farthest).toBeGreaterThan(150);
+      expect(await page.evaluate(() => scrollY)).toBeGreaterThan(150);
 
       // Backward from the bottom: elements above the viewport are scrolled in from the top edge, the case scroll-padding fixes.
       await scrollToBottom(page);
