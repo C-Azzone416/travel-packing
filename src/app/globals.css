@@ -2193,16 +2193,23 @@ input:disabled {
     height: calc(100dvh - 142px);
     min-height: 0;
   }
+  .auth-lid {
+    min-height: 155px;
+  }
   .auth-lid-eyebrow {
     display: none;
   }
   .auth-lid-headline {
     font-size: 20px;
   }
+  .auth-sticker {
+    top: 4px;
+  }
   .auth-cubes {
     grid-template-areas: "clothing toiletries tech documents";
     grid-template-columns: repeat(4, minmax(0, 1fr));
     grid-template-rows: 46px;
+    margin-top: auto;
   }
   .auth-cube,
   .auth-cube[data-cube="clothing"] {

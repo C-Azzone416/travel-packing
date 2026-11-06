@@ -59,6 +59,18 @@ test("the compact #424 AuthSuitcase review set", async ({ page, context, baseURL
     await page.goto("/sign-in");
     await expect(page.getByRole("heading", { level: 1, name: "Welcome back" })).toBeVisible();
     await expectCleanFrame(page, "ocean");
+    expect(
+      await page.evaluate(() =>
+        [...document.querySelectorAll<HTMLElement>("*")]
+          .filter((element) => element.scrollTop !== 0)
+          .map((element) => ({ className: element.className, scrollTop: element.scrollTop })),
+      ),
+    ).toEqual([]);
+    if (size.tag === "390x844") {
+      const sticker = (await page.locator(".auth-sticker").boundingBox())!;
+      const cubes = (await page.locator(".auth-cubes").boundingBox())!;
+      expect(sticker.y + sticker.height).toBeLessThanOrEqual(cubes.y);
+    }
     if (size.tag.endsWith("short")) {
       const panel = await page.locator(".auth-panel").evaluate((element) => ({
         clientHeight: element.clientHeight,
@@ -121,12 +133,30 @@ test("the compact #424 AuthSuitcase review set", async ({ page, context, baseURL
   await expectCleanFrame(page, "ocean");
   await screenshot(page, "auth-ocean-sign-in-error-390x844");
 
+  await page.goto("/sign-in?notice=password-updated");
+  await expect(
+    page.getByRole("status").filter({
+      hasText: "Password updated. Sign in with your new password.",
+    }),
+  ).toBeVisible();
+  await expectCleanFrame(page, "ocean");
+  await screenshot(page, "auth-ocean-sign-in-notice-390x844");
+
   await page.getByRole("link", { name: "Create an account" }).click();
   await expect(page).toHaveURL(/\/sign-up$/);
   await expect(page.getByRole("heading", { level: 1, name: "Create your account" })).toBeVisible();
   await expect(page.getByRole("heading", { level: 1 })).toBeFocused();
   expect(await page.evaluate(() => window.scrollY)).toBe(0);
   expect(await page.locator(".auth-panel").evaluate((element) => element.scrollTop)).toBe(0);
+  expect(
+    await page.evaluate(() =>
+      [...document.querySelectorAll<HTMLElement>("*")]
+        .filter((element) => element.scrollTop !== 0)
+        .map((element) => ({ className: element.className, scrollTop: element.scrollTop })),
+    ),
+  ).toEqual([]);
   await expectCleanFrame(page, "ocean");
+  const lid = (await page.locator(".auth-lid").boundingBox())!;
+  expect(lid.y).toBeGreaterThanOrEqual(0);
   await screenshot(page, "auth-ocean-sign-up-390x844");
 });
