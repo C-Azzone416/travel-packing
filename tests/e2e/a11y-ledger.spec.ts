@@ -6,6 +6,11 @@ import { chooseFromMenu } from "./helpers/menu";
 import { DEVICE, legacyPackingLayout } from "./helpers/device";
 import { planToList } from "./helpers/plan";
 
+// Home is the laptop suitcase view from 1024px (#387); this spec's subject is the page below it, so it runs there.
+test.beforeEach(async ({ page }) => {
+  await legacyPackingLayout(page);
+});
+
 // The screens and dialogs added after the first accessibility pass (#21 audit, 2026-10-22): the Staples | Saved lists tabs, the
 // lists page and editor, Save as a list, Start from a saved list, the inline Add item, the ⋯ menu and the stamp sheet. Axe on
 // each state at both viewports (this spec is tagged for the phone project too), and for every new dialog the keyboard

@@ -1,9 +1,14 @@
 import { expect, test, type Page } from "@playwright/test";
 import { ownerEmailFor, signInAsOwner } from "./helpers/auth";
 import { seedSavedList } from "./helpers/database";
-import { DEVICE, legacyPackingLayout } from "./helpers/device";
+import { DEVICE, laptopPlanLayout, legacyPackingLayout } from "./helpers/device";
 import { chooseFromMenu } from "./helpers/menu";
 import { planToList, reviewAndCreate } from "./helpers/plan";
+
+// Home is the laptop suitcase view from 1024px (#387); this spec's subject is the page below it, so it runs there.
+test.beforeEach(async ({ page }) => {
+  await legacyPackingLayout(page);
+});
 
 // Create flow: Start from a saved list (#170), against the real database. A chosen list REPLACES staples and the
 // length-based recommendations; none chosen is today's flow; a copy never offers the step.
@@ -84,6 +89,7 @@ test("the preview counts the list: its items, and the toiletry bag", async ({ pa
   await openDashboard(page);
   await seedBeach();
   await startStep(page);
+  await laptopPlanLayout(page); // the live preview panel is the laptop Plan layout
   await savedListCard(page).check();
   await page.getByRole("radio", { name: /Beach week/ }).check();
   // 2 towels + 3 shorts + 1 toothbrush, and the bag that holds the toothbrush.

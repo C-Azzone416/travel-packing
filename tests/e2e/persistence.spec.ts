@@ -1,6 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
 import { ownerEmailFor, SECOND_EMAIL, signIn, signInAsOwner } from "./helpers/auth";
 import { chooseFromMenu } from "./helpers/menu";
+import { legacyPackingLayout } from "./helpers/device";
+
+// Home is the laptop suitcase view from 1024px (#387); this spec's subject is the page below it, so it runs there.
+test.beforeEach(async ({ page }) => {
+  await legacyPackingLayout(page);
+});
 
 // These run against a REAL Postgres (the e2e database server), so what the dashboard shows after a reload or in a new
 // session is what was actually stored. Each project signs in as its own seeded owner, and every test leaves that owner's
