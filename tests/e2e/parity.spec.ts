@@ -3,7 +3,7 @@ import { signInAsOwner } from "./helpers/auth";
 import { chooseFromMenu } from "./helpers/menu";
 import { DEVICE, legacyPackingLayout } from "./helpers/device";
 import { reviewAndApply } from "./helpers/preferences";
-import { planAndCreate } from "./helpers/plan";
+import { planAndCreate, pickPlace, toWhen } from "./helpers/plan";
 
 // Parity with the approved prototype's browser test (reference/prototype/tests/browser.test.mjs), on the production app
 // and its real database. Most scenarios are covered by the feature specs; docs/parity.md maps EVERY prototype scenario to
@@ -68,6 +68,8 @@ test("dates: a later departure pulls the return forward and becomes its minimum"
 }) => {
   await openDashboard(page);
   await page.getByRole("link", { name: /Plan a trip/ }).click();
+  await pickPlace(page, "lon", /England/);
+  await toWhen(page);
   await page.getByLabel("Leave", { exact: true }).fill("2026-11-12");
   await page.getByLabel("Return", { exact: true }).fill("2026-11-16");
   await page.getByLabel("Leave", { exact: true }).fill("2026-12-20");

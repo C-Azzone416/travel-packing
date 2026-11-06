@@ -1042,3 +1042,20 @@
     padding-left: 54px;
   }
 }
+
+/* Narrow phones: a stop row keeps its name whole and puts the move and remove buttons on a second line, instead of needing more
+   than the width it has once a classic scrollbar has taken its 15px. */
+@media (max-width: 259px) {
+  .stopRow {
+    flex-wrap: wrap;
+    padding-block: 6px;
+  }
+  .stopName {
+    flex: 1 1 calc(100% - 30px);
+  }
+  .stopDates {
+    display: block;
+    flex-basis: 100%;
+    padding-left: 24px;
+  }
+}

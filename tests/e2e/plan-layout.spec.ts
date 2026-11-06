@@ -50,6 +50,9 @@ for (const text of ["100%", "200%"] as const) {
       await page.setViewportSize({ width, height: 800 });
       await signInAsOwner(page);
       await page.goto("/trips/new");
+      // Classic (always visible) scrollbars, as on Windows and the CI runners: they take 15px of the width that overlay
+      // scrollbars (macOS) do not, so a row that only just fits shows up here.
+      await page.addStyleTag({ content: "html::-webkit-scrollbar { width: 15px; }" });
       if (text === "200%")
         await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
       await expect(page.getByRole("heading", { name: "Plan a trip", level: 1 })).toBeVisible();
