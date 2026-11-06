@@ -252,10 +252,16 @@ export function StaplesScreen({
       </p>
       <div className={styles.layout}>
         <Suitcase interior="dark" inset="staples" className={styles.case}>
-          <form className={styles.add} onSubmit={submitAdd} noValidate aria-label="Add a staple">
+          <form
+            className={styles.add}
+            onSubmit={submitAdd}
+            noValidate
+            autoComplete="off"
+            aria-label="Add a staple"
+          >
             <input
               className={styles.addField}
-              name="name"
+              name="packing-item-name"
               value={name}
               maxLength={NAME_MAX}
               placeholder="Add a staple…"

@@ -155,7 +155,11 @@ test("adding a Bathroom item after placing the bag resets the placement", async 
   await expect(page.getByText("Toiletry bag is in the suitcase")).toBeVisible();
   await page.getByRole("button", { name: "＋ Add a Bathroom item" }).click();
   const dialog = page.getByRole("dialog", { name: "Add a Bathroom item" });
-  await dialog.getByLabel("Item name").fill("Face wash");
+  const itemName = dialog.getByLabel("Item name");
+  await expect(itemName).toHaveAttribute("autocomplete", "off");
+  await expect(itemName).toHaveAttribute("name", "packing-item-name");
+  await expect(itemName.locator("xpath=ancestor::form")).toHaveAttribute("autocomplete", "off");
+  await itemName.fill("Face wash");
   await dialog.getByRole("button", { name: "Add toiletry item" }).click();
   await expect(page.getByText("Face wash", { exact: true })).toBeVisible();
   await expect(page.getByText("Toiletry bag not ready to place")).toBeVisible();

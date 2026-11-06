@@ -115,7 +115,11 @@ describe("SavedListEditor", () => {
     await user.click(screen.getByRole("button", { name: "＋ Add item" }));
     const sheet = screen.getByRole("dialog", { name: "Add an item" });
     expect(within(sheet).queryByText(/packed/i)).toBeNull();
-    await user.type(within(sheet).getByLabelText("Item name"), "Camera");
+    const itemName = within(sheet).getByLabelText("Item name");
+    expect(itemName.getAttribute("autocomplete")).toBe("off");
+    expect(itemName.getAttribute("name")).toBe("packing-item-name");
+    expect(itemName.closest("form")?.getAttribute("autocomplete")).toBe("off");
+    await user.type(itemName, "Camera");
     await user.selectOptions(within(sheet).getByLabelText("Category"), "Tech");
     await user.clear(within(sheet).getByLabelText("Needed quantity"));
     await user.type(within(sheet).getByLabelText("Needed quantity"), "2");
