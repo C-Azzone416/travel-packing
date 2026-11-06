@@ -1,7 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
 import { chooseFromMenu } from "./helpers/menu";
-import { DEVICE, legacyPackingLayout } from "./helpers/device";
+import { DEVICE } from "./helpers/device";
+import { expectPacking, openCube } from "./helpers/packing";
 
 // A fixed clock keeps the seeded sample trips stable: San Diego upcoming, Lisbon past. (Trip ids are the real
 // database's uuids, so tests find a trip's panels by role/name or `aria-controls`, never by a fixture id.)
@@ -249,7 +250,6 @@ test("no horizontal scroll at 390 and 1280, and the sidebar sits beside the hero
 test("the hero's ＋ Add item adds an item inline, never doubles it, and hands Bathroom to its form", async ({
   page,
 }) => {
-  await legacyPackingLayout(page);
   await openDashboard(page);
   const hero = card(page, "San Diego");
   const toggle = hero.getByRole("button", { name: "＋ Add item" });
@@ -278,8 +278,10 @@ test("the hero's ＋ Add item adds an item inline, never doubles it, and hands B
   // It is stored: it is on the trip screen, once, after a reload.
   await page.reload();
   await hero.getByRole("link", { name: "Continue packing: San Diego" }).click();
+  await expectPacking(page);
+  await openCube(page, "Tech");
   await expect(page.locator("[data-item-id]").filter({ hasText: "Camera" })).toHaveCount(1);
-  await page.getByRole("link", { name: "All trips" }).click();
+  await page.goto("/");
 
   // The same item again is not added: the form says so and Edit quantity opens that item's editor on the trip screen.
   const editQuantity = async (needed: number) => {
@@ -291,13 +293,11 @@ test("the hero's ＋ Add item adds an item inline, never doubles it, and hands B
       hero.getByText(new RegExp(`Camera is already on your list \\(needed: ${needed}\\)`)),
     ).toBeVisible();
     await hero.getByRole("button", { name: "Edit quantity" }).click();
-    await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
+    await expectPacking(page);
   };
   const editor = page.getByRole("dialog", { name: "Edit item" });
-  const camera = page
-    .locator("[data-item-id]")
-    .filter({ hasText: "Camera" })
-    .getByRole("button", { name: /^Edit target for Camera/ });
+  // The item's cube opens with its editor; closing it puts focus on the item's own tick.
+  const camera = page.locator("[data-item-id]").filter({ hasText: "Camera" }).getByRole("checkbox");
 
   await editQuantity(2);
   // It opens that item's own editor, and the URL is the plain trip again.
@@ -309,11 +309,10 @@ test("the hero's ＋ Add item adds an item inline, never doubles it, and hands B
   await editor.getByRole("spinbutton", { name: "Quantity" }).fill("3");
   await editor.getByRole("button", { name: "Save item" }).click();
   await expect(editor).toHaveCount(0);
-  await expect(page.locator("[data-item-id]").filter({ hasText: "Camera" })).toContainText(
-    "0 of 3 packed",
-  );
+  await expect(camera).toHaveAttribute("aria-label", "Camera, 3");
+  await expect(camera).not.toBeChecked();
   await expect(camera).toBeFocused();
-  await page.getByRole("link", { name: "All trips" }).click();
+  await page.goto("/");
 
   // Closing without saving (Escape) lands there too.
   await editQuantity(3);
@@ -321,7 +320,7 @@ test("the hero's ＋ Add item adds an item inline, never doubles it, and hands B
   await page.keyboard.press("Escape");
   await expect(editor).toHaveCount(0);
   await expect(camera).toBeFocused();
-  await page.getByRole("link", { name: "All trips" }).click();
+  await page.goto("/");
 
   // Bathroom hands off to the Bathroom form, filled in, right on the dashboard.
   await toggle.click();

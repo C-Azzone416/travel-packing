@@ -1,7 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
 import { chooseFromMenu } from "./helpers/menu";
-import { DEVICE, legacyPackingLayout } from "./helpers/device";
+import { DEVICE } from "./helpers/device";
+import { expectPacking } from "./helpers/packing";
 
 // Trip themes (#48) against the real e2e database: what a trip saves with is what its card shows after a reload.
 // The seeded sample trips are San Diego (Beach) and Lisbon (City).
@@ -17,11 +18,18 @@ const card = (page: Page, name: string) => page.getByRole("article", { name });
 // A Past & archive card still shows the picture.
 const cardArtKey = (page: Page, name: string) =>
   card(page, name).locator("[data-art-key]").getAttribute("data-art-key");
-// The Field Ledger dashboard (#143) shows no picture on upcoming trips, so read a trip's theme on its own screen.
+// The dashboard shows no picture on upcoming trips and the Packing screen has none either, so read a trip's theme from the
+// Change theme sheet on its own screen (the chosen tile), then leave the sheet without saving.
 async function artKey(page: Page, name: string) {
   await page.getByRole("link", { name: new RegExp(`^(Continue|Keep) packing: ${name}$`) }).click();
-  const key = await page.locator(".trip-hero [data-art-key]").getAttribute("data-art-key");
-  await page.getByRole("link", { name: "All trips" }).click();
+  await expectPacking(page);
+  await page.getByRole("button", { name: "Change theme" }).click();
+  const key = await page
+    .getByRole("dialog", { name: "Change theme" })
+    .locator("[data-theme-id]:has(input:checked)")
+    .getAttribute("data-theme-id");
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await page.goto("/");
   await expect(card(page, name)).toBeVisible();
   return key;
 }
@@ -80,7 +88,6 @@ test("the picker appears after the destination, shows all six thumbnails, and Tr
 test("keyboard only: arrow keys pick a theme, the choice is saved, and the card shows it after a reload", async ({
   page,
 }) => {
-  await legacyPackingLayout(page);
   await openDashboard(page);
   await startTrip(page);
   const group = page.getByRole("group", { name: "Trip theme" });
@@ -103,7 +110,6 @@ test("keyboard only: arrow keys pick a theme, the choice is saved, and the card 
 });
 
 test("a trip saved without touching the picker is Travel", async ({ page }) => {
-  await legacyPackingLayout(page);
   await openDashboard(page);
   await startTrip(page);
   await page.getByRole("button", { name: "Continue to packing preferences" }).click();
@@ -115,7 +121,6 @@ test("a trip saved without touching the picker is Travel", async ({ page }) => {
 test("a copy starts on the source trip's theme, and changing it does not touch the source", async ({
   page,
 }) => {
-  await legacyPackingLayout(page);
   await openDashboard(page);
   await chooseFromMenu(page, "San Diego", "Copy trip");
   await page.getByRole("combobox", { name: "Destination search" }).fill("lon");

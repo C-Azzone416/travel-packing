@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
-import { legacyPackingLayout } from "./helpers/device";
 import { signInAsOwner } from "./helpers/auth";
+import { allItemIds, expectPacking } from "./helpers/packing";
 import { FAKE_GEOCODER_PORT, OPEN_METEO_PORT } from "./support/ports";
 
 // #202 with weather on (the preview's setup): turning Nice outfits off must still leave a new trip with no nice-attire
@@ -12,7 +12,6 @@ const FAKE = `http://127.0.0.1:${FAKE_GEOCODER_PORT}`;
 const NICE_IDS = ["nice-top", "nice-bottom", "nice-shoes", "nice-makeup", "nice-undergarments"];
 const inDays = (count: number) =>
   new Date(Date.now() + count * 86_400_000).toISOString().slice(0, 10);
-const row = (page: Page, id: string) => page.locator(`[data-item-id="${id}"]`);
 const niceSwitch = (page: Page) => page.getByRole("switch", { name: "Nice outfits" });
 
 test.beforeEach(async () => {
@@ -36,19 +35,19 @@ async function saveAndOpen(page: Page) {
     .getByRole("link", { name: /^(Continue|Keep) packing: London/ })
     .first()
     .click();
-  await expect(page.getByRole("heading", { name: "London", level: 1 })).toBeVisible();
+  await expectPacking(page);
 }
 
 async function expectNoNiceAttire(page: Page) {
   // Weather replaces the everyday tops and bottoms with its own clothing lines, so only "the list loaded" is asserted here.
-  await expect(row(page, "underwear")).toBeVisible();
-  for (const id of NICE_IDS) await expect(row(page, id)).toHaveCount(0);
+  const ids = await allItemIds(page);
+  expect(ids).toContain("underwear");
+  for (const id of NICE_IDS) expect(ids).not.toContain(id);
 }
 
 test("weather on, Nice outfits turned off AFTER Get weather: no nice-attire items", async ({
   page,
 }) => {
-  await legacyPackingLayout(page);
   test.setTimeout(60_000);
   await toShape(page);
   await niceSwitch(page).click(); // a new trip starts with Nice outfits off (#205): turn it on first
@@ -66,7 +65,6 @@ test("weather on, Nice outfits turned off AFTER Get weather: no nice-attire item
 test("weather on, Nice outfits turned off BEFORE Get weather: no nice-attire items", async ({
   page,
 }) => {
-  await legacyPackingLayout(page);
   test.setTimeout(60_000);
   await toShape(page);
   await niceSwitch(page).click(); // on (it starts off, #205)...

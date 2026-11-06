@@ -144,6 +144,11 @@ const OPERATIONS: Operation[] = [
     "setPackedItem",
     (tripId) => service.setPackedItem(context(), { tripId, itemId: "tops", packed: 1 }),
   ],
+  [
+    "setPackedItems",
+    (tripId) =>
+      service.setPackedItems(context(), { tripId, entries: [{ itemId: "tops", packed: 1 }] }),
+  ],
   ["confirmToiletryBag", (tripId) => service.confirmToiletryBag(context(), { tripId })],
   ["undoToiletryBag", (tripId) => service.undoToiletryBag(context(), { tripId })],
   ["markTripReady", (tripId) => service.markTripReady(context(), { tripId })],
@@ -924,6 +929,65 @@ describe("cubes: add into a cube, move, Morning of (#385)", () => {
       await service.setTripMorningOf(context(), { tripId: trip.id, cube: "tech", on: false }),
     );
     expect(off.trip.morningOfCubes).not.toContain("tech");
+  });
+});
+
+describe("setPackedItems (All in and Undo, #386)", () => {
+  it("saves every entry in one transaction and persists them", async () => {
+    const trip = await seedTrip(db(), OWNER.userId);
+    const open = trip.items.filter((entry) => entry.packed < entry.qty).slice(0, 3);
+    expect(open.length).toBeGreaterThan(1);
+    const result = data(
+      await service.setPackedItems(context(), {
+        tripId: trip.id,
+        entries: open.map((entry) => ({ itemId: entry.id, packed: entry.qty })),
+      }),
+    );
+    for (const entry of open)
+      expect(result.trip.items.find((one) => one.id === entry.id)?.packed).toBe(entry.qty);
+    const stored = await loadTrip(db(), OWNER.userId, trip.id);
+    for (const entry of open)
+      expect(stored?.items.find((one) => one.id === entry.id)?.packed).toBe(entry.qty);
+  });
+
+  it("saves none of them when one entry is unknown (no half-packed cube)", async () => {
+    const trip = await seedTrip(db(), OWNER.userId);
+    const open = trip.items.filter((entry) => entry.packed < entry.qty)[0];
+    const before = JSON.stringify(await loadTrip(db(), OWNER.userId, trip.id));
+    const result = await service.setPackedItems(context(), {
+      tripId: trip.id,
+      entries: [
+        { itemId: open.id, packed: open.qty },
+        { itemId: "no-such-item", packed: 1 },
+      ],
+    });
+    expect(errorOf(result)?.code).toBe("REJECTED");
+    expect(JSON.stringify(await loadTrip(db(), OWNER.userId, trip.id))).toBe(before);
+  });
+
+  it("refuses an empty list, more than 200 entries and a bad count", async () => {
+    const trip = await seedTrip(db(), OWNER.userId);
+    const entry = { itemId: trip.items[0].id, packed: 1 };
+    for (const entries of [
+      [],
+      Array.from({ length: 201 }, () => entry),
+      [{ ...entry, packed: -1 }],
+    ])
+      expect(
+        errorOf(await service.setPackedItems(context(), { tripId: trip.id, entries }))?.code,
+      ).toBe("INVALID_INPUT");
+  });
+
+  it("another owner's trip is NOT_FOUND and stays unchanged", async () => {
+    const theirs = await seedTrip(db(), OTHER_OWNER.userId);
+    as(OWNER);
+    const before = JSON.stringify(await loadTrip(db(), OTHER_OWNER.userId, theirs.id));
+    const result = await service.setPackedItems(context(), {
+      tripId: theirs.id,
+      entries: [{ itemId: theirs.items[0].id, packed: theirs.items[0].qty }],
+    });
+    expect(errorOf(result)?.code).toBe("NOT_FOUND");
+    expect(JSON.stringify(await loadTrip(db(), OTHER_OWNER.userId, theirs.id))).toBe(before);
   });
 });
 

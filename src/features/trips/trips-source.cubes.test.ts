@@ -1,4 +1,4 @@
-// The in-memory source's cube commands (#385): add into a cube, move, Morning of.
+// The in-memory source's cube commands (#385): add into a cube, move, Morning of; and several packed counts at once (#386).
 import { describe, expect, it } from "vitest";
 import { itemCube } from "@/domain/cubes";
 import { sampleLifecycleState } from "./fixtures";
@@ -50,5 +50,23 @@ describe("createMemoryTripsSource: cubes", () => {
     expect(
       (await memory.setMorningOf("san-diego", "tech", false)).trip.morningOfCubes,
     ).not.toContain("tech");
+  });
+
+  it("sets several packed counts as one change, and none when one item is unknown", async () => {
+    const memory = source();
+    const { trip } = await memory.setPackedMany("san-diego", [
+      { itemId: "tops", packed: 4 },
+      { itemId: "underwear", packed: 5 },
+    ]);
+    expect(trip.items.find((entry) => entry.id === "tops")?.packed).toBe(4);
+    expect(trip.items.find((entry) => entry.id === "underwear")?.packed).toBe(5);
+    const before = JSON.stringify(memory.snapshot());
+    await expect(
+      memory.setPackedMany("san-diego", [
+        { itemId: "socks", packed: 5 },
+        { itemId: "nope", packed: 1 },
+      ]),
+    ).rejects.toBeInstanceOf(TripsSourceError);
+    expect(JSON.stringify(memory.snapshot())).toBe(before);
   });
 });

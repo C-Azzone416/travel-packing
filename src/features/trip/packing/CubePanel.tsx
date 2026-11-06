@@ -12,6 +12,7 @@ import {
   editName,
   filterCounts,
   filterItems,
+  HINT,
   isPacked,
   moveTargets,
   panelFooter,
@@ -48,6 +49,71 @@ export interface CubePanelProps {
   extra?: ReactNode;
   panelId: string;
   titleId: string;
+  /**
+   * "laptop" (the default) draws the whole panel as #385 did. "phone" (#386) leaves the filter pills out (the screen draws them
+   * above the suitcase), writes the count as "9 of 14", lists in one column that scrolls inside the suitcase, and keeps the
+   * hint line off (only the state lines show).
+   */
+  layout?: "laptop" | "phone";
+}
+
+export interface FilterBarProps {
+  view: Pick<CubeView, "items">;
+  filter: CubeFilter;
+  onFilter: (filter: CubeFilter) => void;
+  editing: boolean;
+  onEditing: (editing: boolean) => void;
+  className?: string;
+  /** On a phone the pencil is an icon alone (its label stays the accessible name) until it turns into "Done". */
+  phone?: boolean;
+}
+
+// The All / To pack / Packed pills (each counts the ROWS it lists) and the Edit list pill. Shared by the laptop panel head and
+// the phone screen, where it sits above the suitcase.
+export function FilterBar({
+  view,
+  filter,
+  onFilter,
+  editing,
+  onEditing,
+  className,
+  phone = false,
+}: FilterBarProps) {
+  const counts = filterCounts(view.items);
+  return (
+    <PillGroup label="Packing list view" className={className}>
+      {editing ? null : (
+        <>
+          <Pill active={filter === "all"} count={counts.all} onClick={() => onFilter("all")}>
+            All
+          </Pill>
+          <Pill
+            active={filter === "to-pack"}
+            count={counts.toPack}
+            onClick={() => onFilter("to-pack")}
+          >
+            To pack
+          </Pill>
+          <Pill
+            active={filter === "packed"}
+            count={counts.packed}
+            onClick={() => onFilter("packed")}
+          >
+            Packed
+          </Pill>
+        </>
+      )}
+      <Pill
+        icon={editing ? "check" : "pencil"}
+        active={editing}
+        iconOnlyOnPhone={phone && !editing}
+        className={phone ? styles.editPill : undefined}
+        onClick={() => onEditing(!editing)}
+      >
+        {editing ? "Done" : "Edit list"}
+      </Pill>
+    </PillGroup>
+  );
 }
 
 function Row({
@@ -272,15 +338,20 @@ export function CubePanel({
   extra,
   panelId,
   titleId,
+  layout = "laptop",
 }: CubePanelProps) {
-  const counts = filterCounts(view.items);
+  const phone = layout === "phone";
   const shown = editing ? view.items : filterItems(view.items, filter);
   const lockedOn = view.items.some((item) => item.section === "packlast");
   const switchId = useId();
+  const footerText = panelFooter(view, shown.length);
+  // The hint ("Tick as you pack ...") is for the laptop; a phone shows only the lines that report a state.
+  const footer =
+    phone && footerText === HINT ? null : <p className={styles.footer}>{footerText}</p>;
   return (
     <section
       id={panelId}
-      className={styles.panel}
+      className={cx(styles.panel, phone && styles.panelPhone)}
       aria-labelledby={titleId}
       data-cube={view.cube}
       data-editing={editing ? "true" : undefined}
@@ -291,44 +362,24 @@ export function CubePanel({
             {view.label}
           </h2>
           <p className={styles.panelCount}>
-            {view.packed} of {view.total} packed
+            {phone ? `${view.packed} of ${view.total}` : `${view.packed} of ${view.total} packed`}
           </p>
         </div>
-        <PillGroup label="Packing list view" className={styles.panelPills}>
-          {editing ? null : (
-            <>
-              <Pill active={filter === "all"} count={counts.all} onClick={() => onFilter("all")}>
-                All
-              </Pill>
-              <Pill
-                active={filter === "to-pack"}
-                count={counts.toPack}
-                onClick={() => onFilter("to-pack")}
-              >
-                To pack
-              </Pill>
-              <Pill
-                active={filter === "packed"}
-                count={counts.packed}
-                onClick={() => onFilter("packed")}
-              >
-                Packed
-              </Pill>
-            </>
-          )}
-          <Pill
-            icon={editing ? "check" : "pencil"}
-            active={editing}
-            onClick={() => onEditing(!editing)}
-          >
-            {editing ? "Done" : "Edit list"}
-          </Pill>
-        </PillGroup>
+        {phone ? null : (
+          <FilterBar
+            view={view}
+            filter={filter}
+            onFilter={onFilter}
+            editing={editing}
+            onEditing={onEditing}
+            className={styles.panelPills}
+          />
+        )}
       </div>
 
       {shown.length > 0 ? (
         <ul
-          className={cx(styles.list, editing && styles.listEditing)}
+          className={cx(styles.list, editing && styles.listEditing, phone && styles.listPhone)}
           style={{ ["--rows" as string]: Math.ceil(shown.length / 2) }}
           aria-label={`${view.label} items`}
         >
@@ -386,7 +437,7 @@ export function CubePanel({
           </div>
         </div>
       ) : (
-        <p className={styles.footer}>{panelFooter(view, shown.length)}</p>
+        footer
       )}
     </section>
   );

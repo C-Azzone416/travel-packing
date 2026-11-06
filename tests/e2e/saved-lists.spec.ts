@@ -1,7 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { ownerEmailFor, signInAsOwner } from "./helpers/auth";
 import { seedSavedList } from "./helpers/database";
-import { DEVICE, legacyPackingLayout } from "./helpers/device";
+import { DEVICE } from "./helpers/device";
+import { expectPacking, itemRow, openEditor, showItem } from "./helpers/packing";
 
 // Saved lists (#167), against the real database: the Staples | Saved lists tab, the lists page, rename, delete and the
 // list editor. Lists are made from a trip's packing screen in a later mission, so these tests seed them directly.
@@ -197,13 +198,12 @@ async function openSanDiego(page: Page) {
   await signInAsOwner(page);
   await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
   await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
-  await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
+  await expectPacking(page);
 }
 
 test("Save as a list: name it, untick an item, save, follow the link, and the list holds name, category and quantity only", async ({
   page,
 }) => {
-  await legacyPackingLayout(page);
   await openSanDiego(page);
   const trip = page.url();
   await page.getByRole("button", { name: "Save as a list" }).click();
@@ -231,29 +231,23 @@ test("Save as a list: name it, untick an item, save, follow the link, and the li
   await expect(page.getByRole("main").getByText(/packed/i)).toHaveCount(0);
   // The trip is exactly as it was.
   await page.goto(trip);
-  await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
-  await expect(page.locator('[data-item-id="sunglasses"]')).toBeVisible();
+  await expectPacking(page);
+  await expect(await showItem(page, "sunglasses")).toBeVisible();
 });
 
 test("Save as a list: a taken name is refused, and two matching rows go through the duplicate prompt (keep both is two rows)", async ({
   page,
 }) => {
-  await legacyPackingLayout(page);
   await openSanDiego(page);
   // Make two rows that read the same: rename Sunglasses to Everyday glasses (same category), for this trip only.
-  await page
-    .locator('[data-item-id="sunglasses"]')
-    .getByRole("button", { name: /^Sunglasses / })
-    .click();
+  await openEditor(page, "sunglasses");
   const editor = page.getByRole("dialog", { name: "Edit item" });
   await editor.getByLabel("Item name").fill("Everyday glasses");
   await editor
     .getByRole("button", { name: /Update this trip|Save/ })
     .first()
     .click();
-  await expect(
-    page.locator('[data-item-id="sunglasses"]').getByText("Everyday glasses"),
-  ).toBeVisible();
+  await expect(itemRow(page, "sunglasses").getByText("Everyday glasses")).toBeVisible();
 
   await page.getByRole("button", { name: "Save as a list" }).click();
   let sheet = page.getByRole("dialog", { name: "Save as a list" });
@@ -288,7 +282,6 @@ test(
   "Save as a list: 44px targets, keyboard, and nothing scrolls sideways on a phone",
   DEVICE,
   async ({ page }) => {
-    await legacyPackingLayout(page);
     await openSanDiego(page);
     await page.getByRole("button", { name: "Save as a list" }).focus();
     await page.keyboard.press("Enter");

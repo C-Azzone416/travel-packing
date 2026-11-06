@@ -568,6 +568,8 @@ describe("the forecast and the weather review rows", () => {
     const review = within(card).getByRole("button", { name: /\d+ to review/ });
     expect(review.getAttribute("aria-expanded")).toBe("false");
     expect(screen.getByText(/\d+ new to review/)).toBeTruthy();
+    // The forecast is Open-Meteo's: its attribution is on the card block.
+    expect(screen.getByRole("link", { name: "Weather data by Open-Meteo.com" })).toBeTruthy();
     // Nothing in the bag count changed: suggestions are not items.
   });
 

@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
-import { DEVICE, legacyPackingLayout } from "./helpers/device";
+import { allItemIds, expectPacking, itemRow, tick } from "./helpers/packing";
+import { DEVICE } from "./helpers/device";
 
 // The one end-to-end walk a person actually makes, on a real phone (WebKit, touch): sign in, create a trip, pack it on the trip
 // screen, review the bag, say it is Ready, and find it still Ready after a reload. It runs on desktop too (every test does).
@@ -13,7 +14,6 @@ test(
   "golden path: sign in, create a trip, pack it, review the bag, mark it Ready",
   DEVICE,
   async ({ page }) => {
-    await legacyPackingLayout(page);
     // A whole trip, packed one tap at a time with each tap stored: far longer than the 30s a single-screen test gets.
     test.setTimeout(60_000);
     await page.clock.setFixedTime(NOW);
@@ -34,22 +34,17 @@ test(
 
     // Pack: open the trip and check every item. Finishing the Bathroom items opens the bag prompt; confirm it.
     await page.getByRole("link", { name: /(Continue|Keep) packing: London/ }).click();
-    await expect(page.getByRole("heading", { name: "London", level: 1 })).toBeVisible();
-    const row = (id: string) => page.locator(`[data-item-id="${id}"]`);
-    const ids = await page
-      .locator("[data-item-id]")
-      .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-item-id") as string));
+    await expectPacking(page);
+    const ids = await allItemIds(page);
     // Bathroom items go last: checking the last one opens the toiletry bag prompt, which has to be answered before anything else.
     const bathroom = ids.filter((id) => TOILETRIES.includes(id));
-    for (const id of [...ids.filter((entry) => !TOILETRIES.includes(entry)), ...bathroom]) {
-      const pack = row(id).getByRole("button", { name: /^Pack all / });
-      if (await pack.count()) await pack.click();
-    }
+    for (const id of [...ids.filter((entry) => !TOILETRIES.includes(entry)), ...bathroom])
+      await tick(page, id);
     const bagPrompt = page.getByRole("dialog", { name: "Toiletry bag in suitcase?" });
     await expect(bagPrompt).toBeVisible();
     await bagPrompt.getByRole("button", { name: "Confirm" }).click();
     await expect(bagPrompt).toHaveCount(0);
-    await expect(page.getByRole("button", { name: /^Pack all / })).toHaveCount(0);
+    await expect(itemRow(page, bathroom[0]).getByRole("checkbox")).toBeChecked();
 
     // Packing everything only offers the review; it never marks the trip Ready by itself.
     await expect(page.getByText("You’re ready to go.")).toHaveCount(0);

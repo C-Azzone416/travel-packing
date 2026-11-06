@@ -35,25 +35,27 @@ E2E_PREBUILT=1 npm run test:e2e            # start the existing build instead of
 
 ## What runs on `phone`, and why (83 tests)
 
-| Spec                          | Tests | Why it is device-sensitive                                                                                                                                  |
-| ----------------------------- | ----: | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `a11y.spec.ts`                |    34 | axe on every screen and state at phone size, incl. 320px and 200% text; all but the keyboard-only group (no keyboard on a phone)                            |
-| `golden-path.spec.ts`         |     1 | **The golden path**: sign in, create a trip, pack it, review the bag, mark it Ready, still Ready after a reload                                             |
-| `shell.spec.ts`               |     5 | navigation, 44px targets, no sideways scroll at 320px, bottom bar vs side rail, screenshots                                                                 |
-| `auth.spec.ts`                |     5 | the sign-in screens: no app chrome, 44px targets, field widths, screenshots                                                                                 |
-| `auth-screens.spec.ts`        |     6 | the account screens: reachable and outside the shell, 44px targets, axe and screenshots of every state, the numeric-keypad code field                       |
-| `dashboard.spec.ts`           |     4 | 320px with a quick view, 44px controls, the hero on phones, screenshots                                                                                     |
-| `trip-screen.spec.ts`         |     4 | rows 44px and 320px, the sheet's close button and the bag button not wrapping, screenshots                                                                  |
-| `review.spec.ts`              |     2 | 44px targets, screenshots                                                                                                                                   |
-| `staples.spec.ts`             |     2 | 44px targets, screenshots                                                                                                                                   |
-| `create-flow.spec.ts`         |     2 | switches 44px and no sideways scroll at 320px, screenshots                                                                                                  |
-| `trip-themes.spec.ts`         |     2 | the picker at 320px, screenshots                                                                                                                            |
-| `trip-persistence.spec.ts`    |     2 | the theme sheet (a bottom sheet on phones): where it sits, focus returning to the button                                                                    |
-| `location-modes.spec.ts`      |     2 | the picker's spacing keeps the focus ring uncovered, screenshots                                                                                            |
-| `settings.spec.ts`            |     1 | Settings copy and layout at both sizes                                                                                                                      |
-| `feedback-connection.spec.ts` |     3 | Settings and the access notice at phone size (a bottom navigation, full-width buttons), axe, and no Feedback entry point on the sign-in and account screens |
-| `feedback-report.spec.ts`     |     2 | the review sheet as a bottom sheet, and the real screenshot capture in WebKit, saved offline and delivered on reconnect                                     |
-| `parity.spec.ts`              |     1 | a tour of every screen raises no browser errors in the Safari engine                                                                                        |
+| Spec                            | Tests | Why it is device-sensitive                                                                                                                                  |
+| ------------------------------- | ----: | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `a11y.spec.ts`                  |    34 | axe on every screen and state at phone size, incl. 320px and 200% text; all but the keyboard-only group (no keyboard on a phone)                            |
+| `golden-path.spec.ts`           |     1 | **The golden path**: sign in, create a trip, pack it, review the bag, mark it Ready, still Ready after a reload                                             |
+| `shell.spec.ts`                 |     5 | navigation, 44px targets, no sideways scroll at 320px, bottom bar vs side rail, screenshots                                                                 |
+| `auth.spec.ts`                  |     5 | the sign-in screens: no app chrome, 44px targets, field widths, screenshots                                                                                 |
+| `auth-screens.spec.ts`          |     6 | the account screens: reachable and outside the shell, 44px targets, axe and screenshots of every state, the numeric-keypad code field                       |
+| `dashboard.spec.ts`             |     4 | 320px with a quick view, 44px controls, the hero on phones, screenshots                                                                                     |
+| `trip-screen.spec.ts`           |     4 | rows 44px and 320px, the sheet's close button and the bag button not wrapping, Edit list on a phone                                                         |
+| `packing-phone.spec.ts`         |       | Pack mode (#386): the cube bar, All in and Next, the fixed-height layout and its fallback, 390/320/195 at 100% and 200% text, 1023 vs 1024                  |
+| `packing-phone-weather.spec.ts` |       | the one-city forecast card with its dot and review rows (second app)                                                                                        |
+| `review.spec.ts`                |     2 | 44px targets, screenshots                                                                                                                                   |
+| `staples.spec.ts`               |     2 | 44px targets, screenshots                                                                                                                                   |
+| `create-flow.spec.ts`           |     2 | switches 44px and no sideways scroll at 320px, screenshots                                                                                                  |
+| `trip-themes.spec.ts`           |     2 | the picker at 320px, screenshots                                                                                                                            |
+| `trip-persistence.spec.ts`      |     2 | the theme sheet (a bottom sheet on phones): where it sits, focus returning to the button                                                                    |
+| `location-modes.spec.ts`        |     2 | the picker's spacing keeps the focus ring uncovered, screenshots                                                                                            |
+| `settings.spec.ts`              |     1 | Settings copy and layout at both sizes                                                                                                                      |
+| `feedback-connection.spec.ts`   |     3 | Settings and the access notice at phone size (a bottom navigation, full-width buttons), axe, and no Feedback entry point on the sign-in and account screens |
+| `feedback-report.spec.ts`       |     2 | the review sheet as a bottom sheet, and the real screenshot capture in WebKit, saved offline and delivered on reconnect                                     |
+| `parity.spec.ts`                |     1 | a tour of every screen raises no browser errors in the Safari engine                                                                                        |
 
 Not on phone (desktop only): create, copy, archive, remove, pack, review and Ready logic, persistence, location-provider
 behaviour, security headers, auth logic, keyboard-only checks, and the theme-art crops.

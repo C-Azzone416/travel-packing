@@ -45,9 +45,9 @@ const SCREENS = {
   packing: async (page: Page) => {
     await page.goto("/");
     await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
-    // The laptop view's title is "Packing" (#385); below 1024px the page's title is the trip.
+    // The laptop view's title is "Packing" (#385); below 1024px it is "Pack mode" (#386).
     await expect(
-      page.getByRole("heading", { name: /^(Packing|San Diego)$/, level: 1 }),
+      page.getByRole("heading", { name: /^(Packing|Pack mode)$/, level: 1 }),
     ).toBeVisible();
   },
   settings: async (page: Page) => {
@@ -139,7 +139,7 @@ test("ocean: nothing scrolls sideways on the dashboard, packing and Settings at 
 
 // The keyboard paths, once (they do not depend on colour or width).
 test("the Theme radiogroup and a packing row work from the keyboard", async ({ page }) => {
-  // The row's stepper and editor are the page below 1024px (the laptop view's keyboard paths are in packing-laptop.spec.ts).
+  // One tick per row and the editor behind Edit list: the same on the laptop and the phone layout.
   await page.setViewportSize({ width: 1000, height: 900 });
   const theme = THEMES[0];
   await signInWithTheme(page, theme);
@@ -152,17 +152,21 @@ test("the Theme radiogroup and a packing row work from the keyboard", async ({ p
   await expect(page.locator("html")).toHaveAttribute("data-scheme", next.id);
   await expect(page.getByRole("radio", { name: next.radio })).toBeChecked();
 
-  // Packing: a row is packed and edited with Enter alone, and Escape returns focus to the row.
+  // Packing: a row is ticked with Space alone, edited from Edit list with Enter alone, and Escape returns focus to the row.
   await SCREENS.packing(page);
   const underwear = page.locator('[data-item-id="underwear"]');
-  await underwear.getByRole("button", { name: "Increase packed Underwear" }).focus();
+  const box = underwear.getByRole("checkbox");
+  await box.focus();
+  await page.keyboard.press("Space");
+  await expect(box).toBeChecked();
+  await page.getByRole("button", { name: "Edit list" }).focus();
   await page.keyboard.press("Enter");
-  await expect(underwear).toContainText("3 of 5 packed");
-  await underwear.getByRole("button", { name: /^Underwear / }).focus();
+  const edit = underwear.getByRole("button", { name: /^Edit / });
+  await edit.focus();
   await page.keyboard.press("Enter");
   const dialog = page.getByRole("dialog", { name: "Edit item" });
   await expect(dialog.getByLabel("Item name")).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
-  await expect(underwear.getByRole("button", { name: /^Underwear / })).toBeFocused();
+  await expect(edit).toBeFocused();
 });

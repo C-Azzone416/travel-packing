@@ -1,7 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { ownerEmailFor, signInAsOwner } from "./helpers/auth";
 import { seedSavedList } from "./helpers/database";
-import { DEVICE, legacyPackingLayout } from "./helpers/device";
+import { DEVICE } from "./helpers/device";
+import { allItemIds, cubeNav, expectItem, expectPacking, showByName } from "./helpers/packing";
 import { chooseFromMenu } from "./helpers/menu";
 
 // Create flow: Start from a saved list (#170), against the real database. A chosen list REPLACES staples and the
@@ -45,12 +46,9 @@ async function startStep(page: Page) {
   ).toBeVisible();
 }
 
-const rows = (page: Page) => page.locator("[data-item-id]");
-
 test("with saved lists: choose one, review it, and the new trip is exactly the list, unpacked", async ({
   page,
 }) => {
-  await legacyPackingLayout(page);
   await openDashboard(page);
   await seedBeach();
   await startStep(page);
@@ -76,16 +74,21 @@ test("with saved lists: choose one, review it, and the new trip is exactly the l
   await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
 
   await page.getByRole("link", { name: "Keep packing: Lisbon" }).click();
-  await expect(page.getByRole("heading", { name: "Lisbon", level: 1 })).toBeVisible();
-  await expect(rows(page)).toHaveCount(3);
-  await expect(rows(page).filter({ hasText: "Beach towel" })).toContainText("0 of 2 packed");
-  await expect(rows(page).filter({ hasText: "Shorts" })).toBeVisible();
-  // Staples and the length-based items are gone, and Bathroom rows live in the toiletries group.
-  await expect(page.getByText("Socks", { exact: true })).toHaveCount(0);
-  await expect(page.getByText("Underwear", { exact: true })).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "Toiletries" })).toBeVisible();
-  // 6 units plus the toiletry bag, which counts as one more step.
-  await expect(page.getByText("0 of 7 packed / 7 left")).toBeVisible();
+  await expectPacking(page);
+  const ids = await allItemIds(page);
+  expect(ids).toHaveLength(3);
+  // Staples and the length-based items are gone, and the Bathroom row lives in the Toiletries cube.
+  expect(ids).not.toContain("socks");
+  expect(ids).not.toContain("underwear");
+  await expect(cubeNav(page).getByRole("button", { name: /^Toiletries/ })).toBeVisible();
+  await expect(await showByName(page, "Toothbrush")).toBeVisible();
+  // 6 units: the towel twice, the shorts three times and the toothbrush.
+  await expect(page.getByText("0 of 6 in the bag")).toBeVisible();
+  const towel = (await showByName(page, "Beach towel")).getByRole("checkbox", {
+    name: "Beach towel, 2",
+  });
+  await expect(towel).not.toBeChecked();
+  await expect(await showByName(page, "Shorts")).toBeVisible();
 });
 
 test("with saved lists but none chosen: today's Shape the list, staples and recommendations", async ({
@@ -100,7 +103,8 @@ test("with saved lists but none chosen: today's Shape the list, staples and reco
   await page.getByRole("button", { name: "Save trip" }).click();
   await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
   await page.getByRole("link", { name: "Keep packing: Lisbon" }).click();
-  await expect(page.locator('[data-item-id="socks"]')).toBeVisible();
+  await expectPacking(page);
+  await expectItem(page, "socks");
   await expect(page.getByText("Beach towel")).toHaveCount(0);
 });
 
@@ -119,8 +123,9 @@ test("changing your mind: Change starting point from the review goes back and a 
   await expect(page.getByText("Starting from “Ski trip”")).toBeVisible();
   await page.getByRole("button", { name: "Save trip" }).click();
   await page.getByRole("link", { name: "Keep packing: Lisbon" }).click();
-  await expect(rows(page)).toHaveCount(1);
-  await expect(rows(page)).toContainText("Gloves");
+  await expectPacking(page);
+  expect(await allItemIds(page)).toHaveLength(1);
+  await expect(await showByName(page, "Gloves")).toBeVisible();
 });
 
 test("without any saved list there is no list step at all", async ({ page }) => {
