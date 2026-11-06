@@ -395,9 +395,12 @@ export interface AddItemInput {
   name: string;
   category: string;
   neededQty: number;
+  /** The cube to put it in (Packing's "Edit list"). Absent: the cube the category implies. */
+  cube?: Cube;
 }
 
-export type AddItemRejection = "EMPTY_NAME" | "NAME_TOO_LONG" | "INVALID_CATEGORY" | "INVALID_QTY";
+export type AddItemRejection =
+  "EMPTY_NAME" | "NAME_TOO_LONG" | "INVALID_CATEGORY" | "INVALID_QTY" | "INVALID_CUBE";
 
 export type AddItemResult<T> =
   | { ok: true; trip: T; item: TripItem }
@@ -431,6 +434,9 @@ export function addCustomItem<T extends Trip>(trip: T, input: AddItemInput): Add
   if (!Number.isInteger(qty) || qty < 1 || qty > ADD_ITEM_QTY_MAX) {
     return { ok: false, reason: "INVALID_QTY", trip };
   }
+  if (input.cube !== undefined && !isCube(input.cube)) {
+    return { ok: false, reason: "INVALID_CUBE", trip };
+  }
   const existing = findExistingItem(trip, name, input.category);
   if (existing) return { ok: false, reason: "EXISTS", existing, trip };
   const item: TripItem = {
@@ -440,6 +446,7 @@ export function addCustomItem<T extends Trip>(trip: T, input: AddItemInput): Add
     qty,
     packed: 0,
     section: "main",
+    ...(input.cube ? { cube: input.cube } : {}),
   };
   const added = addItem(trip, item);
   if (!added.ok) return { ok: false, reason: "DUPLICATE_ID", trip };

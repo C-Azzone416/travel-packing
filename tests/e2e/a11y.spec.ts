@@ -3,7 +3,7 @@ import { OTHER_EMAIL, setupEmailFor, signIn, signInAsOwner } from "./helpers/aut
 import { resetStaplesSetup } from "./helpers/database";
 import { chooseFromMenu } from "./helpers/menu";
 import { expectAccessible } from "./helpers/a11y";
-import { DEVICE } from "./helpers/device";
+import { DEVICE, legacyPackingLayout } from "./helpers/device";
 import { serverActionId } from "./helpers/server-action";
 
 // Axe checks (#21) for every screen and every dialog, at both viewports (the two Playwright projects). Each state is
@@ -120,6 +120,7 @@ test.describe("trip screen", DEVICE, () => {
   }
 
   test("the screen itself, and with the Still to pack filter", async ({ page }) => {
+    await legacyPackingLayout(page);
     await openSanDiego(page);
     await expectAccessible(page, "trip screen");
     await page.getByRole("button", { name: "Still to pack" }).click();
@@ -129,6 +130,7 @@ test.describe("trip screen", DEVICE, () => {
   test("edit item, remove confirm, add Bathroom item, preferences, theme sheet", async ({
     page,
   }) => {
+    await legacyPackingLayout(page);
     await openSanDiego(page);
     await page
       .locator('[data-item-id="nice-shoes"]')
@@ -153,6 +155,7 @@ test.describe("trip screen", DEVICE, () => {
   });
 
   test("the toiletry bag prompt", async ({ page }) => {
+    await legacyPackingLayout(page);
     await openSanDiego(page);
     for (const id of ["last-toothbrush", "last-toothpaste", "last-deodorant", "last-contacts"])
       await page
@@ -166,6 +169,7 @@ test.describe("trip screen", DEVICE, () => {
   });
 
   test("a trip that is Ready", async ({ page }) => {
+    await legacyPackingLayout(page);
     await openDashboard(page);
     await page.getByRole("button", { name: /Past & archive/ }).click();
     await page.getByRole("link", { name: "Review bag: Lisbon" }).click();
@@ -199,11 +203,13 @@ test.describe("review, settings and staples", DEVICE, () => {
   }
 
   test("review your bag with items still to pack", async ({ page }) => {
+    await legacyPackingLayout(page);
     await openReview(page, false);
     await expectAccessible(page, "review with items left");
   });
 
   test("review your bag on a Ready trip", async ({ page }) => {
+    await legacyPackingLayout(page);
     await openReview(page, true);
     await expectAccessible(page, "review ready");
   });
@@ -281,6 +287,7 @@ test.describe("error states and toasts", DEVICE, () => {
   });
 
   test("a trip row that did not save, and the toast after a removal", async ({ page }) => {
+    await legacyPackingLayout(page);
     await openDashboard(page);
     await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
     await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
@@ -321,6 +328,7 @@ test.describe("keyboard and focus", () => {
   test("a dialog traps Tab, keeps the page behind it unreachable, closes on Escape and returns focus", async ({
     page,
   }) => {
+    await legacyPackingLayout(page);
     await openDashboard(page);
     await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
     await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
@@ -475,6 +483,7 @@ test.describe("design's known items", DEVICE, () => {
   test("the error chip stays on one line, and the Pack last badge keeps its distance", async ({
     page,
   }) => {
+    await legacyPackingLayout(page);
     await openDashboard(page);
     await page.route("**/*", (route) =>
       route.request().method() === "POST" ? route.abort("failed") : route.continue(),
@@ -495,7 +504,8 @@ test.describe("design's known items", DEVICE, () => {
   test("on a wide row the Pack last badge sits on the category line, 6px clear of the text", async ({
     page,
   }) => {
-    await page.setViewportSize({ width: 1440, height: 1000 });
+    await legacyPackingLayout(page);
+    await page.setViewportSize({ width: 1000, height: 1000 });
     await openDashboard(page);
     await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
     const row = page.locator('[data-item-id="last-toothbrush"]');
@@ -504,6 +514,7 @@ test.describe("design's known items", DEVICE, () => {
   });
 
   test("group labels are the same size as field labels", async ({ page }) => {
+    await legacyPackingLayout(page);
     await openDashboard(page);
     await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
     await page
@@ -554,6 +565,7 @@ test.describe("design's known items", DEVICE, () => {
 });
 
 test("screenshots of the visual fixes (after)", DEVICE, async ({ page }, testInfo) => {
+  await legacyPackingLayout(page);
   const shot = (name: string, options: { fullPage?: boolean } = {}) =>
     page.screenshot({
       path: `test-results/screenshots/${testInfo.project.name}-a11y-${name}.png`,

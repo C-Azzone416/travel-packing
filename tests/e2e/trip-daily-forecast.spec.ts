@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { DEVICE } from "./helpers/device";
+import { DEVICE, legacyPackingLayout } from "./helpers/device";
 import { createWeatherTrip, fake, type Stay } from "./helpers/forecast-trip";
 import { OPEN_METEO_PORT } from "./support/ports";
 
@@ -13,7 +13,8 @@ import { OPEN_METEO_PORT } from "./support/ports";
 test.use({ baseURL: `http://localhost:${OPEN_METEO_PORT}` });
 
 const ROW = 28;
-const WIDTHS = [1280, 981, 721, 390, 320] as const;
+// The daily forecast list below is the page under 1024px; the laptop view draws day tiles (packing-laptop-weather.spec.ts).
+const WIDTHS = [1023, 981, 721, 390, 320] as const;
 
 /** Creates and opens a London trip with weather on, and waits for the weather rows. */
 async function openTrip(page: Page, stays: Stay[]) {
@@ -190,6 +191,7 @@ async function expectCleanRows(
 }
 
 test("a typical-only stay keeps today's row: no daily list, no Forecast tag", async ({ page }) => {
+  await legacyPackingLayout(page);
   await openTrip(page, [{ leave: 60, back: 63 }]);
   const row = page.locator(".weather-row");
   await expect(row).toHaveCount(1);
@@ -208,6 +210,7 @@ test(
   "an all-forecast stay: capped at 7 days, expands to all, rows hold at every width",
   { tag: DEVICE.tag },
   async ({ page }) => {
+    await legacyPackingLayout(page);
     await openTrip(page, [{ leave: 1, back: 15 }]);
     const list = page.getByRole("list", { name: "Daily forecast for London" });
     await expect(list.getByRole("listitem")).toHaveCount(7);
@@ -241,6 +244,7 @@ test(
   "a stay that straddles the window shows both tags, never sharing a line of numbers",
   { tag: DEVICE.tag },
   async ({ page }) => {
+    await legacyPackingLayout(page);
     await openTrip(page, [{ leave: 11, back: 25 }]);
     const forecastTag = page.locator(".weather-source.forecast");
     const typicalTag = page.locator(".weather-source.typical");
@@ -275,11 +279,12 @@ test(
   "an in-progress stay: past typical days, the forecast, then later typical days",
   { tag: DEVICE.tag },
   async ({ page }) => {
+    await legacyPackingLayout(page);
     await openTrip(page, [{ leave: -4, back: 25 }]);
     await expect(page.locator(".weather-source.forecast")).toHaveText("Forecast");
     await expect(page.locator(".weather-source.typical")).toHaveText("Typical");
     await expect(page.locator(".weather-days .weather-day").first()).toContainText("Today");
-    for (const width of [1280, 390, 320]) {
+    for (const width of [1023, 390, 320]) {
       await setWidth(page, width);
       await expectCleanRows(page, width);
     }
@@ -287,6 +292,7 @@ test(
 );
 
 test("a one-day stay is one row with no toggle", async ({ page }) => {
+  await legacyPackingLayout(page);
   await openTrip(page, [{ leave: 2, back: 2 }]);
   await expect(page.locator(".weather-day")).toHaveCount(1);
   await expect(page.getByRole("button", { name: /Show/ })).toHaveCount(0);
@@ -296,6 +302,7 @@ test("a one-day stay is one row with no toggle", async ({ page }) => {
 });
 
 test("three stays each keep their own list and toggle", { tag: DEVICE.tag }, async ({ page }) => {
+  await legacyPackingLayout(page);
   await openTrip(page, [{ leave: 1, back: 12 }, { leave: 16 }, { leave: 22 }]);
   const lists = page.locator(".weather-days");
   await expect(page.locator(".weather-row")).toHaveCount(3);
@@ -314,6 +321,7 @@ test("three stays each keep their own list and toggle", { tag: DEVICE.tag }, asy
 test("extremes: a 40-character unbroken city, three-digit Fahrenheit, snow and rain, 200% text", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await openTrip(page, [{ leave: 11, back: 25 }]);
   await page.evaluate(() => {
     document.querySelector(".weather-row-forecast h3")!.textContent =
@@ -358,6 +366,7 @@ for (const width of [390, 320]) {
     `200% text at ${width}px: labels stay on one line and nothing overlaps`,
     { tag: DEVICE.tag },
     async ({ page }) => {
+      await legacyPackingLayout(page);
       await openTrip(page, [{ leave: 1, back: 15 }]);
       await setWidth(page, width);
       await applyLargeText(page);
@@ -381,6 +390,7 @@ test(
   "columns line up when the rows' numbers differ in width",
   { tag: DEVICE.tag },
   async ({ page }) => {
+    await legacyPackingLayout(page);
     await openTrip(page, [{ leave: 1, back: 15 }]);
     await page.evaluate(() => {
       const temps = ["5° / 1°", "104° / 88°", "9° / -2°", "86° / 72°"];
@@ -398,6 +408,7 @@ test(
 );
 
 test("Fahrenheit rows show three-digit temperatures from the provider", async ({ page }) => {
+  await legacyPackingLayout(page);
   await fake("/__weather-set?variant=scorching");
   await openTrip(page, [{ leave: 2, back: 6 }]);
   await expect(page.locator(".weather-day-temps").first()).toHaveText("104° / 88°");
@@ -408,6 +419,7 @@ test("Fahrenheit rows show three-digit temperatures from the provider", async ({
 });
 
 test("the toggle shows a focus ring and the days read as one phrase each", async ({ page }) => {
+  await legacyPackingLayout(page);
   await openTrip(page, [{ leave: 1, back: 15 }]);
   const toggle = page.getByRole("button", { name: /^Show all/ });
   await toggle.focus();

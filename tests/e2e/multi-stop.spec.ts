@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { expectAccessible } from "./helpers/a11y";
 import { chooseFromMenu } from "./helpers/menu";
 import { signInAsOwner } from "./helpers/auth";
-import { DEVICE } from "./helpers/device";
+import { DEVICE, legacyPackingLayout } from "./helpers/device";
 
 // Multi-destination trips (epic #107, #112): create a 3-stop trip, reload, see the route and dates persisted, edit it
 // to 2 stops, copy it to new dates. Fictional trips on the curated place list; the fixed clock keeps dates stable.
@@ -39,6 +39,7 @@ test(
   "create a 3-stop trip: the route and dates persist across a reload",
   DEVICE,
   async ({ page }) => {
+    await legacyPackingLayout(page);
     await openDashboard(page);
     await createThreeStopTrip(page);
     await expect(page.locator(".route-summary")).toHaveText(
@@ -69,6 +70,7 @@ test(
 );
 
 test("edit the route down to 2 stops, then copy the trip to new dates", async ({ page }) => {
+  await legacyPackingLayout(page);
   await openDashboard(page);
   await createThreeStopTrip(page);
   await page.getByRole("button", { name: "Continue to packing preferences" }).click();

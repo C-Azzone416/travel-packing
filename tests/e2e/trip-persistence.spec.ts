@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { SECOND_EMAIL, signIn, signInAsOwner } from "./helpers/auth";
-import { DEVICE } from "./helpers/device";
+import { DEVICE, legacyPackingLayout } from "./helpers/device";
 import { reviewAndApply } from "./helpers/preferences";
 
 // The trip screen against a REAL Postgres: what it shows after a reload is what was stored. Each test starts from the
@@ -34,6 +34,7 @@ const isAction = (request: { method(): string; url(): string }) =>
   request.method() === "POST" && new URL(request.url()).pathname.startsWith("/trips/");
 
 test("a check and an uncheck are stored", async ({ page }) => {
+  await legacyPackingLayout(page);
   await openSanDiego(page);
   await row(page, "tops").getByRole("button", { name: "Pack all Everyday tops" }).click();
   await expect(row(page, "tops")).toContainText("4 of 4 packed");
@@ -50,6 +51,7 @@ test("a check and an uncheck are stored", async ({ page }) => {
 test("fast taps on a stepper show at once and are stored as ONE write with the final count", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await openSanDiego(page);
   const writes: string[] = [];
   page.on("request", (request) => {
@@ -72,6 +74,7 @@ test("fast taps on a stepper show at once and are stored as ONE write with the f
 });
 
 test("the toiletry bag gate and its placement are stored", async ({ page }) => {
+  await legacyPackingLayout(page);
   await openSanDiego(page);
   for (const id of TOILETRIES)
     await row(page, id)
@@ -92,6 +95,7 @@ test("the toiletry bag gate and its placement are stored", async ({ page }) => {
 });
 
 test("Mark as not ready is stored, and keeps every packed count", async ({ page }) => {
+  await legacyPackingLayout(page);
   await openLisbon(page);
   await expect(page.getByText("You’re ready to go.")).toBeVisible();
   const before = await page
@@ -109,6 +113,7 @@ test("Mark as not ready is stored, and keeps every packed count", async ({ page 
 });
 
 test("changing a Ready trip revokes Ready, and that is stored too", async ({ page }) => {
+  await legacyPackingLayout(page);
   await openLisbon(page);
   await page.getByRole("button", { name: "Edit preferences" }).click();
   const dialog = page.getByRole("dialog", { name: "Edit trip" });
@@ -121,6 +126,7 @@ test("changing a Ready trip revokes Ready, and that is stored too", async ({ pag
 });
 
 test("an edit and a removal are stored", async ({ page }) => {
+  await legacyPackingLayout(page);
   await openSanDiego(page);
   await row(page, "sunglasses")
     .getByRole("button", { name: /^Sunglasses / })
@@ -151,6 +157,7 @@ test("an edit and a removal are stored", async ({ page }) => {
 test("when the network fails the row says 'Not saved · Retry', keeps the user's count, and Retry stores it", async ({
   page,
 }, testInfo) => {
+  await legacyPackingLayout(page);
   await page.emulateMedia({ reducedMotion: "reduce" });
   await openSanDiego(page);
   await page.route("**/trips/**", (route) =>
@@ -204,6 +211,7 @@ test(
   "changing the theme from the trip header is stored, and the dashboard card shows it",
   DEVICE,
   async ({ page }, testInfo) => {
+    await legacyPackingLayout(page);
     await page.emulateMedia({ reducedMotion: "reduce" });
     await openSanDiego(page);
     expect(await headerArt(page)).toBe("beach");
@@ -264,6 +272,7 @@ test(
   "cancelling the theme sheet changes nothing, and a failed save keeps the picture and the sheet",
   DEVICE,
   async ({ page }) => {
+    await legacyPackingLayout(page);
     await openSanDiego(page);
     await page.getByRole("button", { name: "Change theme" }).click();
     await page.getByRole("radio", { name: "City" }).check();

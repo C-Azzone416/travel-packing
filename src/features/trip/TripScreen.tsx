@@ -10,6 +10,8 @@ import { Card } from "@/components/ui/Card";
 import { ModalSheet } from "@/components/ui/ModalSheet";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useToast } from "@/components/ui/Toast";
+import { CUBE_LABELS, itemCube, type Cube } from "@/domain/cubes";
+import { findExistingItem } from "@/domain/item-ops";
 import type { Staple, TripItem } from "@/domain/trip";
 import type { LifecycleTrip } from "@/domain/trip-lifecycle";
 import { diffRecommendations, type WeatherChange } from "@/domain/weather/diff";
@@ -34,6 +36,7 @@ import { themeFor } from "@/domain/themes";
 import { automaticStamps, selectStamps } from "@/domain/stamps";
 import { daysBetween } from "@/domain/trip-stops";
 import { localToday } from "@/lib/today";
+import { LAPTOP_MIN_WIDTH, useMinWidth } from "@/lib/use-min-width";
 import { AddItemInline } from "./AddItemInline";
 import { SaveAsListSheet, type SaveOutcome } from "./SaveAsListSheet";
 import { EditTripSheet, type ApplyOutcome, type EditTripTab } from "./EditTripSheet";
@@ -59,6 +62,16 @@ import { revocationReason } from "./review-view";
 import { ReviewSheet } from "./ReviewSheet";
 import { SHOW_TRIP_PICTURE } from "./hero-picture";
 import { WeatherPanel, WeatherReviewBanner, type WeatherPanelState } from "./WeatherPanel";
+import { BagStep } from "./packing/BagStep";
+import { ForecastSection } from "./packing/ForecastSection";
+import { PackingLaptop } from "./packing/PackingLaptop";
+import type { AddOutcome } from "./packing/CubePanel";
+import {
+  buildCubeViews,
+  categoryForCube,
+  toSuggestions,
+  type Suggestion,
+} from "./packing/packing-model";
 import type { WeatherSettings, WeatherSuggestionState } from "@/server/data/weather-store";
 
 /** Taps on a quantity stepper settle for this long before one write carries the final count. */
@@ -134,7 +147,16 @@ function ListSection({
   );
 }
 
-export function TripScreen({ tripId, openItemId }: { tripId: string; openItemId?: string }) {
+export function TripScreen({
+  tripId,
+  openItemId,
+  openCube,
+}: {
+  tripId: string;
+  openItemId?: string;
+  /** The cube the laptop Packing view opens first (?cube=, which the Home tiles link to). */
+  openCube?: Cube;
+}) {
   const source = useTripsSource();
   const router = useRouter();
   const { track } = useSaveStatus();
@@ -152,6 +174,8 @@ export function TripScreen({ tripId, openItemId }: { tripId: string; openItemId?
   const [weather, setWeather] = useState<WeatherExperience | null>(null);
   const [weatherReviewOpen, setWeatherReviewOpen] = useState(false);
   const [weatherReviewError, setWeatherReviewError] = useState(false);
+  const [laundryBusy, setLaundryBusy] = useState(false);
+  const laptop = useMinWidth(LAPTOP_MIN_WIDTH);
   const weatherRequest = useRef(0);
   const bagPromptDismissed = useRef(false);
   // The last trip the server confirmed, so a change that takes the trip out of Ready can say so.
@@ -516,59 +540,173 @@ export function TripScreen({ tripId, openItemId }: { tripId: string; openItemId?
     }
   };
 
+  const reviewWrite = (selected: WeatherChange[], skipped: WeatherChange[]) =>
+    source.weather!.applyReview(
+      tripId,
+      selected.map((change) => {
+        if (change.kind === "add") {
+          const { semanticId, name, category, qty, optional, groupId } = change.item;
+          return {
+            kind: "add" as const,
+            semanticId: change.semanticId,
+            ruleSignature: change.ruleSignature,
+            item: {
+              semanticId,
+              name,
+              category,
+              qty,
+              optional,
+              ...(groupId ? { groupId } : {}),
+            },
+          };
+        }
+        if (change.kind === "split") {
+          return {
+            kind: "split" as const,
+            semanticId: change.semanticId,
+            ruleSignature: change.ruleSignature,
+            clothing: change.clothing,
+          };
+        }
+        return {
+          kind: "remove" as const,
+          semanticId: change.semanticId,
+          ruleSignature: change.ruleSignature,
+        };
+      }),
+      skipped.map((change) => ({
+        semanticId: change.semanticId,
+        ruleSignature: change.ruleSignature,
+      })),
+    );
+
   const applyWeatherReview = (selected: WeatherChange[], skipped: WeatherChange[]) => {
     if (!source.weather) return;
     setWeatherReviewError(false);
-    void act(
-      () =>
-        source.weather!.applyReview(
-          tripId,
-          selected.map((change) => {
-            if (change.kind === "add") {
-              const { semanticId, name, category, qty, optional, groupId } = change.item;
-              return {
-                kind: "add" as const,
-                semanticId: change.semanticId,
-                ruleSignature: change.ruleSignature,
-                item: {
-                  semanticId,
-                  name,
-                  category,
-                  qty,
-                  optional,
-                  ...(groupId ? { groupId } : {}),
-                },
-              };
-            }
-            if (change.kind === "split") {
-              return {
-                kind: "split" as const,
-                semanticId: change.semanticId,
-                ruleSignature: change.ruleSignature,
-                clothing: change.clothing,
-              };
-            }
-            return {
-              kind: "remove" as const,
-              semanticId: change.semanticId,
-              ruleSignature: change.ruleSignature,
-            };
-          }),
-          skipped.map((change) => ({
-            semanticId: change.semanticId,
-            ruleSignature: change.ruleSignature,
-          })),
-        ),
-      {
-        modal: true,
-        onFail: () => setWeatherReviewError(true),
-        after: (change) => {
-          setWeatherReviewOpen(false);
-          toast.show("Packing list updated for the weather.");
-          void loadWeather(change.trip);
-        },
+    void act(() => reviewWrite(selected, skipped), {
+      modal: true,
+      onFail: () => setWeatherReviewError(true),
+      after: (change) => {
+        setWeatherReviewOpen(false);
+        toast.show("Packing list updated for the weather.");
+        void loadWeather(change.trip);
       },
-    );
+    });
+  };
+
+  // ---- the laptop Packing view's handlers (#385): each goes through `act`, so saves, retries and the save states are the
+  // same as everywhere else on this screen.
+  const cubeViews = buildCubeViews(trip);
+  const cubeName = (cube: Cube) =>
+    cubeViews.find((view) => view.cube === cube)?.label ?? CUBE_LABELS[cube];
+  const stopNames = weatherStops.map((stop) => stop.location.city);
+  const firstForecastStop =
+    weather?.panel.kind === "ready"
+      ? (weather.panel.stops.find((stop) => stop.days.length > 0)?.stopIndex ?? 0)
+      : 0;
+  const suggestions = toSuggestions(
+    weatherChanges,
+    stopNames,
+    firstForecastStop,
+    trip.items.filter((entry) => itemCube(entry) === "weather").map((entry) => entry.id),
+  );
+
+  const resolveSuggestion = (suggestion: Suggestion, decision: "add" | "dismiss") => {
+    if (!source.weather) return;
+    const [selected, skipped] =
+      decision === "add" ? [[suggestion.change], []] : [[], [suggestion.change]];
+    void act(() => reviewWrite(selected, skipped), {
+      modal: true,
+      announce: () =>
+        decision === "add"
+          ? suggestion.verb === "Add"
+            ? `${suggestion.name} added to ${suggestion.destination}.`
+            : `${suggestion.name} removed.`
+          : `${suggestion.name} dismissed.`,
+      after: (change) => void loadWeather(change.trip),
+    });
+  };
+
+  const setLaundry = (laundry: boolean) => {
+    if (laundryBusy) return;
+    setLaundryBusy(true);
+    const before = new Map(trip.items.map((entry) => [entry.id, entry.qty]));
+    void act(() => source.updatePreferences(tripId, { ...trip.config, laundry }, trip.updatedAt), {
+      modal: true,
+      onFail: (error) => {
+        if (error instanceof Error && error.message === "STALE") {
+          // The list moved on: show the current one, so the toggle reads what is really saved.
+          void source
+            .getTrip(tripId)
+            .then((current) => {
+              confirmed.current = current;
+              setLoad({ phase: "ready", trip: current });
+            })
+            .catch(() => undefined);
+        }
+        toast.show("Couldn’t change laundry. Nothing was changed.");
+      },
+      after: (change) => {
+        const changed = change.trip.items.filter((entry) => before.get(entry.id) !== entry.qty);
+        toast.show(
+          `Laundry ${laundry ? "on" : "off"} · ${changed.length} ${changed.length === 1 ? "item" : "items"} changed`,
+        );
+      },
+    }).then(() => setLaundryBusy(false));
+  };
+
+  const moveItem = (item: TripItem, cube: Cube) =>
+    void act(() => source.moveItemToCube(tripId, item.id, cube), {
+      announce: () => `${item.name} moved to ${cubeName(cube)}.`,
+    });
+
+  const removeFromCube = (item: TripItem) =>
+    void act(() => source.removeItem(tripId, item.id, "this-trip"), {
+      announce: () => `${item.name} removed.`,
+    });
+
+  const setMorningOf = (cube: Cube, on: boolean) =>
+    void act(() => source.setMorningOf(tripId, cube, on), {
+      announce: () => `${cubeName(cube)} ${on ? "marked" : "no longer marked"} Morning of.`,
+    });
+
+  const addToCube = (cube: Cube, name: string): Promise<AddOutcome> => {
+    // Toiletries items gate the bag step, so they go through the Bathroom form.
+    if (cube === "toiletries") {
+      setDialog({ kind: "add-toiletry", name, qty: 1 });
+      return Promise.resolve({ ok: true });
+    }
+    const category = categoryForCube(cube);
+    const existing = findExistingItem(trip, name, category);
+    if (existing) return Promise.resolve({ ok: false, reason: "EXISTS", existingId: existing.id });
+    return new Promise((resolve) => {
+      void act(() => source.addItem(tripId, { name, category, neededQty: 1, cube }), {
+        announce: () => `${name} added to ${cubeName(cube)}.`,
+        after: () => resolve({ ok: true }),
+        onFail: (error) => {
+          const again = findExistingItem(trip, name, category);
+          resolve(
+            error instanceof TripsSourceError && error.message === "EXISTS" && again
+              ? { ok: false, reason: "EXISTS", existingId: again.id }
+              : { ok: false, reason: "FAILED" },
+          );
+        },
+      });
+    });
+  };
+
+  const weatherPanelProps = {
+    stops: weatherStops,
+    unit: weather?.settings.temperatureUnit ?? ("F" as const),
+    changesCount: weatherChanges.length,
+    onOptIn: () => void setWeatherOptIn(true),
+    onDecline: () => void setWeatherOptIn(false),
+    onTurnOn: () => void setWeatherOptIn(true),
+    onRefresh: () => weather && void loadWeather(trip, weather.settings),
+    onReview: () => {
+      setWeatherReviewError(false);
+      setWeatherReviewOpen(true);
+    },
   };
 
   const row = (item: TripItem) => (
@@ -592,296 +730,434 @@ export function TripScreen({ tripId, openItemId }: { tripId: string; openItemId?
     />
   );
 
+  const laptopBelow = (
+    <>
+      <div className="packing-tools" role="group" aria-label="More for this trip">
+        <button
+          type="button"
+          className="link-button save-as-list"
+          onClick={() => setDialog({ kind: "save-list" })}
+        >
+          Save as a list
+        </button>
+        <button
+          type="button"
+          className="link-button change-theme"
+          onClick={() => setDialog({ kind: "theme" })}
+        >
+          Change theme
+        </button>
+        {trip.stops.length > 0 ? (
+          <button
+            type="button"
+            className="link-button edit-stamp"
+            onClick={() => setDialog({ kind: "stamp" })}
+          >
+            Edit stamp
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className="link-button edit-preferences"
+          onClick={() => setDialog({ kind: "trip", tab: "preferences" })}
+        >
+          Edit preferences
+        </button>
+      </div>
+      {showReviewPrompt(trip) ? (
+        <div className="review-prompt">
+          <h3>Everything is checked. Want to review?</h3>
+          <p>
+            We will show the full bag, including Pack last and the return outfit, before you decide
+            it is ready.
+          </p>
+          <Link
+            className={buttonClassName({ variant: "secondary" })}
+            href={`/trips/${tripId}/review`}
+          >
+            Review your bag
+          </Link>
+        </div>
+      ) : null}
+      {trip.ready ? (
+        <Card padded className="ready-card">
+          <p className="eyebrow">Confirmed after review</p>
+          <h2>You’re ready to go.</h2>
+          <p>
+            You can still correct anything below. Any checklist change will revoke Ready, or you can
+            mark the trip not ready without changing packing progress.
+          </p>
+          <div className="actions">
+            <Link
+              className={buttonClassName({ variant: "secondary", small: true })}
+              href={`/trips/${tripId}/review`}
+            >
+              Review bag again
+            </Link>
+            <Button
+              className="ready-secondary"
+              small
+              onClick={() =>
+                void act(() => source.markNotReady(tripId), {
+                  after: () => toast.show("Progress kept."),
+                })
+              }
+            >
+              Mark as not ready
+            </Button>
+          </div>
+        </Card>
+      ) : null}
+    </>
+  );
+
   return (
     <section className="screen">
-      <section
-        className="trip-hero"
-        data-picture={SHOW_TRIP_PICTURE ? "on" : "off"}
-        aria-labelledby="trip-title"
-      >
-        <div className="hero-picture" aria-hidden="true">
-          <DestinationArt theme={trip.theme} variant="header" priority />
-        </div>
-        <Link className="back-link" href="/">
-          <span aria-hidden="true">←</span> All trips
-        </Link>
-        <div className="trip-hero-main">
-          <div className="trip-hero-copy">
-            <p className="eyebrow hero-eyebrow">
-              {leavesEyebrow(daysBetween(localToday(), trip.start))}
-            </p>
-            <h1 id="trip-title">{trip.destination}</h1>
-            {routeCities(trip).length && !routeIsTitle(trip) ? (
-              <p className="route-chip">
-                <RouteText cities={routeCities(trip)} budget={64} />
-              </p>
-            ) : null}
-            <p className="trip-hero-dates">
-              {place ? `${place} · ` : ""}
-              {formatRange(trip)} · {formatDays(trip.days)}
-            </p>
-            <div className="head-actions">
-              <Button
-                variant="secondary"
-                small
-                className="edit-route"
-                onClick={() => setDialog({ kind: "trip", tab: "route" })}
-              >
-                Edit trip
-              </Button>
-              <Button
-                variant="secondary"
-                small
-                className="change-theme"
-                onClick={() => setDialog({ kind: "theme" })}
-              >
-                Change theme
-              </Button>
-              <Button
-                variant="secondary"
-                small
-                className="save-as-list"
-                onClick={() => setDialog({ kind: "save-list" })}
-              >
-                Save as a list
-              </Button>
-            </div>
-          </div>
-          <div className="hero-stamps">
-            <Stamps
-              stamps={selectStamps(trip.stops, trip.stampLabels)}
-              departure={trip.start}
-              onPicture={SHOW_TRIP_PICTURE}
-            />
-            {trip.stops.length > 0 ? (
-              <button
-                type="button"
-                className="link-button edit-stamp"
-                onClick={() => setDialog({ kind: "stamp" })}
-              >
-                Edit stamp
-              </button>
-            ) : null}
-          </div>
-        </div>
-        {trip.ready ? <StatusBadge status="ready">Ready</StatusBadge> : null}
-        {weather && weatherStops.length > 0 && weatherEmbedded ? (
-          <WeatherPanel
-            embedded
-            stops={weatherStops}
-            state={weather.panel}
-            unit={weather.settings.temperatureUnit}
-            changesCount={weatherChanges.length}
-            onOptIn={() => void setWeatherOptIn(true)}
-            onDecline={() => void setWeatherOptIn(false)}
-            onTurnOn={() => void setWeatherOptIn(true)}
-            onRefresh={() => void loadWeather(trip, weather.settings)}
-            onReview={() => {
-              setWeatherReviewError(false);
-              setWeatherReviewOpen(true);
-            }}
-          />
-        ) : null}
-      </section>
-
       <p className="sr-only" role="status" aria-label="Packing updates">
         {announcement}
       </p>
-
-      {weather && weatherStops.length > 0 && !weatherEmbedded ? (
-        <WeatherPanel
-          stops={weatherStops}
-          state={weather.panel}
-          unit={weather.settings.temperatureUnit}
-          changesCount={weatherChanges.length}
-          onOptIn={() => void setWeatherOptIn(true)}
-          onDecline={() => void setWeatherOptIn(false)}
-          onTurnOn={() => void setWeatherOptIn(true)}
-          onRefresh={() => void loadWeather(trip, weather.settings)}
-          onReview={() => {
-            setWeatherReviewError(false);
-            setWeatherReviewOpen(true);
+      {laptop ? (
+        <PackingLaptop
+          trip={trip}
+          openCube={openCube}
+          failedRows={failedRows}
+          laundryBusy={laundryBusy}
+          onLaundry={setLaundry}
+          onEditTrip={() => setDialog({ kind: "trip", tab: "route" })}
+          onTick={(item, packed) => setCount(item, packed ? item.qty : 0, 0)}
+          onRetry={(id) => {
+            // The retry button only renders while a failure is recorded for this row.
+            const failed = retries.current.get(id) as {
+              write: () => Promise<TripChange>;
+              options: ActOptions;
+            };
+            void act(failed.write, failed.options);
           }}
-        />
-      ) : null}
-      {weather && weatherEmbedded ? (
-        <WeatherReviewBanner
-          changesCount={weatherChanges.length}
-          onReview={() => {
-            setWeatherReviewError(false);
-            setWeatherReviewOpen(true);
+          onEditItem={(id) => {
+            returnFocusTo.current = id;
+            setDialog({ kind: "edit", itemId: id });
           }}
-        />
-      ) : null}
-
-      <div className="packing-top">
-        <div className="packing-progress">
-          <h2 id="packing-list-heading" className="sr-only" tabIndex={-1}>
-            Packing list
-          </h2>
-          <p className="progress-line">
-            {totals.packed} of {totals.total} packed
-            {totals.total - totals.packed > 0 ? ` / ${totals.total - totals.packed} left` : ""}
-          </p>
-          <div
-            className="progress-track"
-            role="progressbar"
-            aria-label="Packing progress"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={totals.percent}
-            aria-valuetext={`${totals.percent}% packed`}
-          >
-            <span style={{ width: `${totals.percent}%` }} />
-          </div>
-        </div>
-        <div className="filters" role="group" aria-label="Packing list filters">
-          <button
-            type="button"
-            className={filter === "all" ? "filter active" : "filter"}
-            aria-pressed={filter === "all"}
-            onClick={() => setFilter("all")}
-          >
-            All items
-          </button>
-          <button
-            type="button"
-            className={filter === "still" ? "filter active" : "filter"}
-            aria-pressed={filter === "still"}
-            onClick={() => setFilter("still")}
-          >
-            Still to pack
-          </button>
-        </div>
-      </div>
-
-      <div className="trip-layout">
-        <div>
-          <div className="packing-panel">
-            <AddItemInline
-              items={trip.items}
+          onMove={moveItem}
+          onRemove={removeFromCube}
+          onMorningOf={setMorningOf}
+          onAdd={addToCube}
+          forecast={
+            <ForecastSection
+              stops={weatherStops}
+              state={weather?.panel ?? { kind: "off" }}
+              unit={weather?.settings.temperatureUnit ?? "F"}
+              today={localToday()}
+              suggestions={suggestions}
               busy={submitting}
-              onAdd={addCustomItem}
-              onBathroom={(name, qty) => setDialog({ kind: "add-toiletry", name, qty })}
-              onEditExisting={(itemId) => setDialog({ kind: "edit", itemId })}
+              onResolve={resolveSuggestion}
+              onRefresh={weatherPanelProps.onRefresh}
+              placeholder={
+                weather && weatherStops.length > 0 ? (
+                  <WeatherPanel {...weatherPanelProps} state={weather.panel} />
+                ) : null
+              }
             />
-            <ListSection
-              id="section-main"
-              title="Everyday & occasion items"
-              subtitle={`${sections.main.length} loose items`}
-              items={sections.main}
-              filter={filter}
-              renderRow={row}
-            />
-            {showToiletries(trip, filter) ? (
-              <ToiletrySection
-                tripId={tripId}
-                items={sections.toiletries}
+          }
+          toiletryExtra={
+            gate.state === "none" ? null : (
+              <BagStep
                 gate={gate}
-                filter={filter}
-                renderRow={row}
-                onPlaceBag={() => setDialog({ kind: "bag" })}
-                onUndoBag={() => void act(() => source.undoBagPlacement(tripId))}
+                onPlace={() => setDialog({ kind: "bag" })}
+                onUndo={() => void act(() => source.undoBagPlacement(tripId))}
                 onAddItem={() => setDialog({ kind: "add-toiletry" })}
               />
-            ) : null}
-            {sections.returns.length ? (
-              <ListSection
-                id="section-return"
-                title="Return travel outfit"
-                subtitle="Fresh set kept separate from everyday counts"
-                items={sections.returns}
-                filter={filter}
-                renderRow={row}
-              />
-            ) : null}
-            {sections.packLast.length ? (
-              <ListSection
-                id="section-packlast"
-                title="Pack last"
-                subtitle="A timing view: items flagged Pack last. Bathroom items flagged Pack last stay in Toiletries."
-                items={sections.packLast}
-                filter={filter}
-                renderRow={row}
-              />
-            ) : null}
-
-            {showReviewPrompt(trip) ? (
-              <div className="review-prompt">
-                <h3>Everything is checked. Want to review?</h3>
-                <p>
-                  We will show the full bag, including Pack last and the return outfit, before you
-                  decide it is ready.
+            )
+          }
+          below={laptopBelow}
+        />
+      ) : (
+        <>
+          <section
+            className="trip-hero"
+            data-picture={SHOW_TRIP_PICTURE ? "on" : "off"}
+            aria-labelledby="trip-title"
+          >
+            <div className="hero-picture" aria-hidden="true">
+              <DestinationArt theme={trip.theme} variant="header" priority />
+            </div>
+            <Link className="back-link" href="/">
+              <span aria-hidden="true">←</span> All trips
+            </Link>
+            <div className="trip-hero-main">
+              <div className="trip-hero-copy">
+                <p className="eyebrow hero-eyebrow">
+                  {leavesEyebrow(daysBetween(localToday(), trip.start))}
                 </p>
-                <Link
-                  className={buttonClassName({ variant: "secondary" })}
-                  href={`/trips/${tripId}/review`}
-                >
-                  Review your bag
-                </Link>
+                <h1 id="trip-title">{trip.destination}</h1>
+                {routeCities(trip).length && !routeIsTitle(trip) ? (
+                  <p className="route-chip">
+                    <RouteText cities={routeCities(trip)} budget={64} />
+                  </p>
+                ) : null}
+                <p className="trip-hero-dates">
+                  {place ? `${place} · ` : ""}
+                  {formatRange(trip)} · {formatDays(trip.days)}
+                </p>
+                <div className="head-actions">
+                  <Button
+                    variant="secondary"
+                    small
+                    className="edit-route"
+                    onClick={() => setDialog({ kind: "trip", tab: "route" })}
+                  >
+                    Edit trip
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    small
+                    className="change-theme"
+                    onClick={() => setDialog({ kind: "theme" })}
+                  >
+                    Change theme
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    small
+                    className="save-as-list"
+                    onClick={() => setDialog({ kind: "save-list" })}
+                  >
+                    Save as a list
+                  </Button>
+                </div>
               </div>
+              <div className="hero-stamps">
+                <Stamps
+                  stamps={selectStamps(trip.stops, trip.stampLabels)}
+                  departure={trip.start}
+                  onPicture={SHOW_TRIP_PICTURE}
+                />
+                {trip.stops.length > 0 ? (
+                  <button
+                    type="button"
+                    className="link-button edit-stamp"
+                    onClick={() => setDialog({ kind: "stamp" })}
+                  >
+                    Edit stamp
+                  </button>
+                ) : null}
+              </div>
+            </div>
+            {trip.ready ? <StatusBadge status="ready">Ready</StatusBadge> : null}
+            {weather && weatherStops.length > 0 && weatherEmbedded ? (
+              <WeatherPanel
+                embedded
+                stops={weatherStops}
+                state={weather.panel}
+                unit={weather.settings.temperatureUnit}
+                changesCount={weatherChanges.length}
+                onOptIn={() => void setWeatherOptIn(true)}
+                onDecline={() => void setWeatherOptIn(false)}
+                onTurnOn={() => void setWeatherOptIn(true)}
+                onRefresh={() => void loadWeather(trip, weather.settings)}
+                onReview={() => {
+                  setWeatherReviewError(false);
+                  setWeatherReviewOpen(true);
+                }}
+              />
             ) : null}
-          </div>
-        </div>
+          </section>
 
-        <aside className="side">
-          <nav className="sections-panel" aria-label="Packing sections">
-            <h3>Packing sections</h3>
-            <ul>
-              {sectionLinks(sections, showToiletries(trip, filter)).map((link) => (
-                <li key={link.target}>
-                  <a href={`#${link.target}`}>{link.label}</a>
-                </li>
-              ))}
-            </ul>
-            <p className="tiny muted">Jump to a section of the list.</p>
-          </nav>
-          {trip.ready ? (
-            <Card padded className="ready-card">
-              <p className="eyebrow">Confirmed after review</p>
-              <h2>You’re ready to go.</h2>
-              <p>
-                You can still correct anything below. Any checklist change will revoke Ready, or you
-                can mark the trip not ready without changing packing progress.
-              </p>
-              <div className="actions">
-                <Link
-                  className={buttonClassName({ variant: "secondary", small: true })}
-                  href={`/trips/${tripId}/review`}
-                >
-                  Review bag again
-                </Link>
-                <Button
-                  className="ready-secondary"
-                  small
-                  onClick={() =>
-                    void act(() => source.markNotReady(tripId), {
-                      after: () => toast.show("Progress kept."),
-                    })
-                  }
-                >
-                  Mark as not ready
-                </Button>
-              </div>
-            </Card>
+          {weather && weatherStops.length > 0 && !weatherEmbedded ? (
+            <WeatherPanel
+              stops={weatherStops}
+              state={weather.panel}
+              unit={weather.settings.temperatureUnit}
+              changesCount={weatherChanges.length}
+              onOptIn={() => void setWeatherOptIn(true)}
+              onDecline={() => void setWeatherOptIn(false)}
+              onTurnOn={() => void setWeatherOptIn(true)}
+              onRefresh={() => void loadWeather(trip, weather.settings)}
+              onReview={() => {
+                setWeatherReviewError(false);
+                setWeatherReviewOpen(true);
+              }}
+            />
           ) : null}
-          <Card padded>
-            <h3>Trip math</h3>
-            <p className="tiny muted">
-              {countedWithEarlierRule(trip)
-                ? STALE_COUNT_NOTE
-                : tripMathLine(trip.days, trip.dailyDays, trip.config.returnOutfit)}
-            </p>
-            <Button
-              variant="ghost"
-              small
-              onClick={() => setDialog({ kind: "trip", tab: "preferences" })}
-            >
-              Edit preferences
-            </Button>
-          </Card>
-        </aside>
-      </div>
+          {weather && weatherEmbedded ? (
+            <WeatherReviewBanner
+              changesCount={weatherChanges.length}
+              onReview={() => {
+                setWeatherReviewError(false);
+                setWeatherReviewOpen(true);
+              }}
+            />
+          ) : null}
+
+          <div className="packing-top">
+            <div className="packing-progress">
+              <h2 id="packing-list-heading" className="sr-only" tabIndex={-1}>
+                Packing list
+              </h2>
+              <p className="progress-line">
+                {totals.packed} of {totals.total} packed
+                {totals.total - totals.packed > 0 ? ` / ${totals.total - totals.packed} left` : ""}
+              </p>
+              <div
+                className="progress-track"
+                role="progressbar"
+                aria-label="Packing progress"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={totals.percent}
+                aria-valuetext={`${totals.percent}% packed`}
+              >
+                <span style={{ width: `${totals.percent}%` }} />
+              </div>
+            </div>
+            <div className="filters" role="group" aria-label="Packing list filters">
+              <button
+                type="button"
+                className={filter === "all" ? "filter active" : "filter"}
+                aria-pressed={filter === "all"}
+                onClick={() => setFilter("all")}
+              >
+                All items
+              </button>
+              <button
+                type="button"
+                className={filter === "still" ? "filter active" : "filter"}
+                aria-pressed={filter === "still"}
+                onClick={() => setFilter("still")}
+              >
+                Still to pack
+              </button>
+            </div>
+          </div>
+
+          <div className="trip-layout">
+            <div>
+              <div className="packing-panel">
+                <AddItemInline
+                  items={trip.items}
+                  busy={submitting}
+                  onAdd={addCustomItem}
+                  onBathroom={(name, qty) => setDialog({ kind: "add-toiletry", name, qty })}
+                  onEditExisting={(itemId) => setDialog({ kind: "edit", itemId })}
+                />
+                <ListSection
+                  id="section-main"
+                  title="Everyday & occasion items"
+                  subtitle={`${sections.main.length} loose items`}
+                  items={sections.main}
+                  filter={filter}
+                  renderRow={row}
+                />
+                {showToiletries(trip, filter) ? (
+                  <ToiletrySection
+                    tripId={tripId}
+                    items={sections.toiletries}
+                    gate={gate}
+                    filter={filter}
+                    renderRow={row}
+                    onPlaceBag={() => setDialog({ kind: "bag" })}
+                    onUndoBag={() => void act(() => source.undoBagPlacement(tripId))}
+                    onAddItem={() => setDialog({ kind: "add-toiletry" })}
+                  />
+                ) : null}
+                {sections.returns.length ? (
+                  <ListSection
+                    id="section-return"
+                    title="Return travel outfit"
+                    subtitle="Fresh set kept separate from everyday counts"
+                    items={sections.returns}
+                    filter={filter}
+                    renderRow={row}
+                  />
+                ) : null}
+                {sections.packLast.length ? (
+                  <ListSection
+                    id="section-packlast"
+                    title="Pack last"
+                    subtitle="A timing view: items flagged Pack last. Bathroom items flagged Pack last stay in Toiletries."
+                    items={sections.packLast}
+                    filter={filter}
+                    renderRow={row}
+                  />
+                ) : null}
+
+                {showReviewPrompt(trip) ? (
+                  <div className="review-prompt">
+                    <h3>Everything is checked. Want to review?</h3>
+                    <p>
+                      We will show the full bag, including Pack last and the return outfit, before
+                      you decide it is ready.
+                    </p>
+                    <Link
+                      className={buttonClassName({ variant: "secondary" })}
+                      href={`/trips/${tripId}/review`}
+                    >
+                      Review your bag
+                    </Link>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            <aside className="side">
+              <nav className="sections-panel" aria-label="Packing sections">
+                <h3>Packing sections</h3>
+                <ul>
+                  {sectionLinks(sections, showToiletries(trip, filter)).map((link) => (
+                    <li key={link.target}>
+                      <a href={`#${link.target}`}>{link.label}</a>
+                    </li>
+                  ))}
+                </ul>
+                <p className="tiny muted">Jump to a section of the list.</p>
+              </nav>
+              {trip.ready ? (
+                <Card padded className="ready-card">
+                  <p className="eyebrow">Confirmed after review</p>
+                  <h2>You’re ready to go.</h2>
+                  <p>
+                    You can still correct anything below. Any checklist change will revoke Ready, or
+                    you can mark the trip not ready without changing packing progress.
+                  </p>
+                  <div className="actions">
+                    <Link
+                      className={buttonClassName({ variant: "secondary", small: true })}
+                      href={`/trips/${tripId}/review`}
+                    >
+                      Review bag again
+                    </Link>
+                    <Button
+                      className="ready-secondary"
+                      small
+                      onClick={() =>
+                        void act(() => source.markNotReady(tripId), {
+                          after: () => toast.show("Progress kept."),
+                        })
+                      }
+                    >
+                      Mark as not ready
+                    </Button>
+                  </div>
+                </Card>
+              ) : null}
+              <Card padded>
+                <h3>Trip math</h3>
+                <p className="tiny muted">
+                  {countedWithEarlierRule(trip)
+                    ? STALE_COUNT_NOTE
+                    : tripMathLine(trip.days, trip.dailyDays, trip.config.returnOutfit)}
+                </p>
+                <Button
+                  variant="ghost"
+                  small
+                  onClick={() => setDialog({ kind: "trip", tab: "preferences" })}
+                >
+                  Edit preferences
+                </Button>
+              </Card>
+            </aside>
+          </div>
+        </>
+      )}
 
       {editing ? (
         <ItemEditor

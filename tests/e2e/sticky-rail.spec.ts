@@ -3,7 +3,8 @@ import { signInAsOwner } from "./helpers/auth";
 import { DEVICE } from "./helpers/device";
 
 // The trip screen's right rail (#297): at 900px and wider the whole rail (sections nav, Ready card, Trip math) is ONE sticky
-// unit, so the sections links can never cover Trip math. Every assertion compares real rects; the fixture must really be long.
+// unit, so the sections links can never cover Trip math. From 1024px the trip page is the suitcase view (#385) and has no
+// rail, so these run at 1000px and below. Every assertion compares real rects; the fixture must really be long.
 // E2E_MUTANT_CSS injects CSS after load so a reviewer can prove each assertion can fail.
 const MUTANT_CSS = process.env.E2E_MUTANT_CSS;
 
@@ -77,8 +78,7 @@ function measure(page: Page) {
 }
 
 const WIDTHS = [
-  { width: 1280, height: 800 },
-  { width: 1024, height: 768 },
+  { width: 1000, height: 800 },
   { width: 900, height: 700 },
 ] as const;
 
@@ -119,7 +119,7 @@ for (const size of WIDTHS) {
 test("a short desktop viewport scrolls the rail itself and reaches Edit preferences (#297)", async ({
   page,
 }) => {
-  await openTrip(page, { width: 1024, height: 420 });
+  await openTrip(page, { width: 1000, height: 420 });
   const rail = page.locator(".trip-layout .side");
   const sizes = await rail.evaluate((el) => ({ scroll: el.scrollHeight, client: el.clientHeight }));
   expect(sizes.scroll).toBeGreaterThan(sizes.client);
@@ -141,7 +141,7 @@ test("a short desktop viewport scrolls the rail itself and reaches Edit preferen
 });
 
 for (const size of [
-  { width: 1280, height: 800 },
+  { width: 1000, height: 800 },
   { width: 900, height: 700 },
   { width: 320, height: 640 },
 ] as const) {
@@ -223,14 +223,14 @@ async function tabThroughRail(page: Page, done: string) {
 }
 
 test("the focus ring of a rail link is not clipped by the rail (#297)", async ({ page }) => {
-  await openTrip(page, { width: 1280, height: 800 });
+  await openTrip(page, { width: 1000, height: 800 });
   const stops = await tabThroughRail(page, "Edit preferences");
   expect(stops.length).toBeGreaterThan(3);
   for (const s of stops) expect(s.ringInside, `ring of "${s.name}"`).toBe(true);
 });
 
 test("Tab through the rail with the Ready card keeps focus visible (#297)", async ({ page }) => {
-  await openTrip(page, { width: 1280, height: 800 }, "Lisbon");
+  await openTrip(page, { width: 1000, height: 800 }, "Lisbon");
   await expect(page.locator(".trip-layout .side .ready-card")).toBeVisible();
   const stops = await tabThroughRail(page, "Edit preferences");
   expect(stops.map((s) => s.name)).toContain("Mark as not ready");

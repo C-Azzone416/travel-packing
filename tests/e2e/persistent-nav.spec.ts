@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { expectAccessible } from "./helpers/a11y";
 import { ownerEmailFor, signInAsOwner } from "./helpers/auth";
-import { DEVICE } from "./helpers/device";
+import { DEVICE, legacyPackingLayout } from "./helpers/device";
 import { connectedOnTrips, fakeFramebriar, forgetFeedbackEnrollment } from "./helpers/feedback";
 import { serverActionId } from "./helpers/server-action";
 import { chooseFromMenu } from "./helpers/menu";
@@ -321,7 +321,9 @@ for (const viewport of [WIDE[0], PHONE[0]]) {
       const heading = await landed("main h2");
       expect(heading.top).toBeGreaterThanOrEqual(heading.barBottom);
 
-      // A packing-list section reached through the sections panel, as a real anchor click.
+      // A packing-list section reached through the sections panel, as a real anchor click. That panel belongs to the page
+      // below 1024px (the laptop view has no sections panel, #385), so a laptop width checks it just under the breakpoint.
+      if (viewport.width >= 1024) await legacyPackingLayout(page);
       await page.goto("/");
       await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
       await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();

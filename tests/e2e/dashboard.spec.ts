@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
 import { chooseFromMenu } from "./helpers/menu";
-import { DEVICE } from "./helpers/device";
+import { DEVICE, legacyPackingLayout } from "./helpers/device";
 
 // A fixed clock keeps the seeded sample trips stable: San Diego upcoming, Lisbon past. (Trip ids are the real
 // database's uuids, so tests find a trip's panels by role/name or `aria-controls`, never by a fixture id.)
@@ -249,6 +249,7 @@ test("no horizontal scroll at 390 and 1280, and the sidebar sits beside the hero
 test("the hero's ＋ Add item adds an item inline, never doubles it, and hands Bathroom to its form", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await openDashboard(page);
   const hero = card(page, "San Diego");
   const toggle = hero.getByRole("button", { name: "＋ Add item" });

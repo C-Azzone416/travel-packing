@@ -3,6 +3,7 @@
 
 import type { LifecycleState, LifecycleTrip, TripDraft } from "@/domain/trip-lifecycle";
 import type { CreateTripActionResult, TripsActionResult } from "./actions";
+import type { Cube } from "@/domain/cubes";
 import type { ItemEdit } from "@/domain/item-ops";
 import type { ThemeId } from "@/domain/themes";
 import type { Scope, Staple, TripConfig } from "@/domain/trip";
@@ -50,6 +51,8 @@ export interface TripActions {
   editItem(tripId: string, itemId: string, edit: ItemEdit): Promise<TripCommandResult>;
   removeItem(tripId: string, itemId: string, scope: Scope): Promise<TripCommandResult>;
   addToiletryItem(tripId: string, item: NewToiletryItem): Promise<TripCommandResult>;
+  moveItemToCube(tripId: string, itemId: string, cube: Cube): Promise<TripCommandResult>;
+  setMorningOf(tripId: string, cube: Cube, on: boolean): Promise<TripCommandResult>;
   addItem(tripId: string, item: NewCustomItem): Promise<AddItemActionResult>;
   saveAsList(tripId: string, name: string, itemIds: string[]): Promise<SaveAsListActionResult>;
   confirmBagPlacement(tripId: string): Promise<TripCommandResult>;
@@ -166,6 +169,8 @@ export function createServerTripsSource(
     editItem: (id, itemId, edit) => unwrapChange(trip.editItem(id, itemId, edit)),
     removeItem: (id, itemId, scope) => unwrapChange(trip.removeItem(id, itemId, scope)),
     addToiletryItem: (id, item) => unwrapChange(trip.addToiletryItem(id, item)),
+    moveItemToCube: (id, itemId, cube) => unwrapChange(trip.moveItemToCube(id, itemId, cube)),
+    setMorningOf: (id, cube, on) => unwrapChange(trip.setMorningOf(id, cube, on)),
     saveAsList: async (id, name, itemIds) => {
       const result = await trip.saveAsList(id, name, itemIds);
       if (!result.ok) {

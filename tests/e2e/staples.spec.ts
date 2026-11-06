@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
-import { DEVICE } from "./helpers/device";
+import { DEVICE, legacyPackingLayout } from "./helpers/device";
 
 // The Staples screen against a REAL Postgres (#18): what it shows after a reload is what was stored. Each test starts
 // from this project's freshly seeded owner (the default staples, San Diego partly packed, Lisbon Ready).
@@ -47,7 +47,22 @@ async function newTrip(
   await expect(page.getByRole("heading", { name: "Paris" })).toHaveCount(expectedCount);
 }
 
+/** The trip's Packing page is the pre-redesign one below 1024px; the Staples screen is drawn at the laptop width. */
+async function underLegacyPacking<T>(page: Page, run: () => Promise<T>): Promise<T> {
+  const size = page.viewportSize();
+  await legacyPackingLayout(page);
+  try {
+    return await run();
+  } finally {
+    if (size) await page.setViewportSize(size);
+  }
+}
+
 async function underwearQty(page: Page, tripName: string): Promise<number> {
+  return underLegacyPacking(page, () => underwearQtyOnPage(page, tripName));
+}
+
+async function underwearQtyOnPage(page: Page, tripName: string): Promise<number> {
   await page
     .getByRole("link", { name: new RegExp(`(Continue|Keep) packing: ${tripName}`) })
     .click();
@@ -88,14 +103,13 @@ test("edit a staple count: existing trips are unchanged, and the next new trip u
   // A trip made after the edit uses it.
   await newTrip(page, /Paris/, "2026-12-04", "2026-12-08", 2);
   await page.goto("/");
-  const second = page.getByRole("link", { name: /Keep packing: Paris/ }).first();
-  await second.click();
-  await expect(page.getByRole("heading", { name: "Paris", level: 1 })).toBeVisible();
-  const text = await page
-    .locator('[data-item-id="underwear"] .qty-stepper span')
-    .first()
-    .innerText();
-  // "N of M packed": M is the needed count for the trip.
+  const text = await underLegacyPacking(page, async () => {
+    const second = page.getByRole("link", { name: /Keep packing: Paris/ }).first();
+    await second.click();
+    await expect(page.getByRole("heading", { name: "Paris", level: 1 })).toBeVisible();
+    return await page.locator('[data-item-id="underwear"] .qty-stepper span').first().innerText();
+    // "N of M packed": M is the needed count for the trip.
+  });
   expect(Number(/of (\d+) packed/.exec(text)?.[1])).toBeGreaterThan(parisBefore);
 });
 

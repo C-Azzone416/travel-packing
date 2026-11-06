@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
-import { DEVICE } from "./helpers/device";
+import { DEVICE, legacyPackingLayout } from "./helpers/device";
 import { reviewAndApply } from "./helpers/preferences";
 
 // Fixed clock: San Diego is upcoming and partly packed, Lisbon is past, fully packed and Ready. In-memory data
@@ -42,6 +42,7 @@ async function packEverythingExceptBag(page: Page) {
 }
 
 test("shows the trip with progress, and the All / Still to pack filter", async ({ page }) => {
+  await legacyPackingLayout(page);
   await openSanDiego(page);
   await expect(page.getByRole("progressbar", { name: "Packing progress" })).toHaveAttribute(
     "aria-valuenow",
@@ -63,6 +64,7 @@ test("shows the trip with progress, and the All / Still to pack filter", async (
 test("check and uncheck, and partial quantities with announcements and limits", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await openSanDiego(page);
   await row(page, "tops").getByRole("button", { name: "Pack all Everyday tops" }).click();
   await expect(
@@ -99,6 +101,7 @@ test("check and uncheck, and partial quantities with announcements and limits", 
 test("the toiletry bag walks every state: waiting, ready to place, in the suitcase, undo, and invalidation", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await openSanDiego(page);
   await expect(page.getByText("Toiletry bag not ready to place")).toBeVisible();
   await expect(page.getByText("0 of 4 contents checked")).toBeVisible();
@@ -141,6 +144,7 @@ test("the toiletry bag walks every state: waiting, ready to place, in the suitca
 });
 
 test("adding a Bathroom item after placing the bag resets the placement", async ({ page }) => {
+  await legacyPackingLayout(page);
   await openSanDiego(page);
   for (const id of TOILETRIES)
     await row(page, id)
@@ -160,6 +164,7 @@ test("adding a Bathroom item after placing the bag resets the placement", async 
 test("completing the last item only reveals Review your bag; it never marks the trip Ready", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await openSanDiego(page);
   await packEverythingExceptBag(page);
   await page
@@ -176,6 +181,7 @@ test("completing the last item only reveals Review your bag; it never marks the 
 test("a trip-only edit leaves the staples alone: a new trip still has the default", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await openSanDiego(page);
   await row(page, "sunglasses")
     .getByRole("button", { name: /^Sunglasses / })
@@ -202,6 +208,7 @@ test("a trip-only edit leaves the staples alone: a new trip still has the defaul
 test("a remembered edit changes future trips, but neither this trip's history nor another existing trip", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await openSanDiego(page);
   await row(page, "sunglasses")
     .getByRole("button", { name: /^Sunglasses / })
@@ -235,6 +242,7 @@ test("a remembered edit changes future trips, but neither this trip's history no
 test("weather: a trip with only curated places says it needs a map place, and adds nothing to the list", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await openSanDiego(page);
   await expect(page.getByText("Weather needs a place from the map.")).toBeVisible();
   await expect(page.getByText(/Simulated/)).toHaveCount(0);
@@ -245,6 +253,7 @@ test("weather: a trip with only curated places says it needs a map place, and ad
 test("a trip whose umbrella was already accepted shows it once, with no suggestion to review", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await openLisbon(page);
   await expect(page.getByText("You’re ready to go.")).toBeVisible();
   await expect(page.getByText(/Simulated/)).toHaveCount(0);
@@ -254,6 +263,7 @@ test("a trip whose umbrella was already accepted shows it once, with no suggesti
 test("an optional item can be removed, after a confirmation that focuses the safe button", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await openSanDiego(page);
   await row(page, "nice-shoes")
     .getByRole("button", { name: /^Dress shoes / })
@@ -285,6 +295,7 @@ test("an optional item can be removed, after a confirmation that focuses the saf
 });
 
 test("a required item has no Remove button, and an empty name is refused", async ({ page }) => {
+  await legacyPackingLayout(page);
   await openSanDiego(page);
   await row(page, "tops")
     .getByRole("button", { name: /^Everyday tops / })
@@ -298,6 +309,7 @@ test("a required item has no Remove button, and an empty name is refused", async
 });
 
 test("editing preferences recalculates the list and revokes Ready", async ({ page }) => {
+  await legacyPackingLayout(page);
   await openLisbon(page);
   await expect(page.getByText("You’re ready to go.")).toBeVisible();
   await page.getByRole("button", { name: "Edit preferences" }).click();
@@ -309,6 +321,7 @@ test("editing preferences recalculates the list and revokes Ready", async ({ pag
 });
 
 test("Mark as not ready keeps every packed count", async ({ page }) => {
+  await legacyPackingLayout(page);
   await openLisbon(page);
   const before = await page
     .getByRole("progressbar", { name: "Packing progress" })
@@ -372,6 +385,7 @@ test(
   "a sheet can be closed with its visible close button, and the bag button never wraps",
   DEVICE,
   async ({ page }, testInfo) => {
+    await legacyPackingLayout(page);
     await openSanDiego(page);
     await row(page, "tops")
       .getByRole("button", { name: /^Everyday tops / })
@@ -402,6 +416,7 @@ test(
 // Design's screenshot set for the trip screen. "Not saved · Retry" is not here: the in-memory source cannot fail, so
 // that state is covered by unit tests now and gets a real network-failure screenshot with the data-layer wiring.
 test("screenshots of the trip screen", DEVICE, async ({ page }, testInfo) => {
+  await legacyPackingLayout(page);
   await page.emulateMedia({ reducedMotion: "reduce" });
   const shot = (name: string, fullPage = false) =>
     page.screenshot({
@@ -447,6 +462,7 @@ test("screenshots of the trip screen", DEVICE, async ({ page }, testInfo) => {
 });
 
 test("screenshot of the Ready trip", DEVICE, async ({ page }, testInfo) => {
+  await legacyPackingLayout(page);
   await page.emulateMedia({ reducedMotion: "reduce" });
   const shot = (name: string) =>
     page.screenshot({
@@ -460,6 +476,7 @@ test("screenshot of the Ready trip", DEVICE, async ({ page }, testInfo) => {
 test("ledger packing screen: stamp, sections panel, no overflow, and a completed row keeps its columns", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await openSanDiego(page);
   await expect(page.getByRole("img", { name: /departure stamp$|route stamps$/ })).toBeVisible();
   await expect(page.getByText(/^Leaves in \d+ days$/)).toBeVisible();
@@ -492,6 +509,7 @@ test("ledger packing screen: stamp, sections panel, no overflow, and a completed
 test("＋ Add item adds an unpacked item of the chosen category, never doubles it, and hands Bathroom to its form", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await openSanDiego(page);
   const total = () => page.locator("[data-item-id]").count();
   const before = await total();
@@ -551,6 +569,7 @@ test(
   "＋ Add item is keyboard operable and fits a phone without sideways scrolling",
   DEVICE,
   async ({ page }) => {
+    await legacyPackingLayout(page);
     await openSanDiego(page);
     await page.getByRole("button", { name: "＋ Add item" }).focus();
     await page.keyboard.press("Enter");

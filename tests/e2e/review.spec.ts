@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
-import { DEVICE } from "./helpers/device";
+import { DEVICE, legacyPackingLayout } from "./helpers/device";
 
 // "Review your bag" and explicit Ready against a REAL Postgres (#17): what the page shows after a reload is what was
 // stored. Each test starts from this project's freshly seeded owner: San Diego partly packed and not Ready, Lisbon
@@ -61,6 +61,7 @@ async function openSanDiegoReviewFromTrip(page: Page) {
 test("Ready is explicit: the last item checked does not make it Ready; review, confirm, then it is stored", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await openSanDiegoReviewFromTrip(page);
   await packEverything(page);
   // Everything is packed and the bag is placed, but the trip is still not Ready until the user says so.
@@ -80,6 +81,7 @@ test("Ready is explicit: the last item checked does not make it Ready; review, c
 test("unchecking an item on a Ready trip takes it out of Ready, visibly, and that is stored", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await openReview(page, "Lisbon", "lisbon");
   await goToReview(page);
   await expect(notReady(page)).toBeVisible();
@@ -95,6 +97,7 @@ test("unchecking an item on a Ready trip takes it out of Ready, visibly, and tha
 });
 
 test("Mark as not ready keeps every packed quantity (checked after a reload)", async ({ page }) => {
+  await legacyPackingLayout(page);
   await openReview(page, "Lisbon", "lisbon");
   await goToReview(page);
   const packedBefore = await page.getByRole("button", { name: /^Packed ✓/ }).count();
@@ -118,6 +121,7 @@ test("Mark as not ready keeps every packed quantity (checked after a reload)", a
 test("the disabled Ready button says why, in text it is described by, and stays focusable", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await openSanDiegoReviewFromTrip(page);
   const button = ready(page);
   await expect(button).toHaveAttribute("aria-disabled", "true");
@@ -134,6 +138,7 @@ test("the disabled Ready button says why, in text it is described by, and stays 
 });
 
 test("a correction keeps focus on the same row", async ({ page }) => {
+  await legacyPackingLayout(page);
   await openSanDiegoReviewFromTrip(page);
   const first = unpacked(page).first();
   const row = page.locator("[data-item-id]").filter({ has: first }).first();
@@ -153,6 +158,7 @@ test("another owner's trip id is not available", async ({ page }) => {
 
 // Design's screenshot set for the review screen.
 test("screenshots of the review screen", DEVICE, async ({ page }, testInfo) => {
+  await legacyPackingLayout(page);
   await page.emulateMedia({ reducedMotion: "reduce" });
   const shot = (name: string, fullPage = true) =>
     page.screenshot({
@@ -178,6 +184,7 @@ test(
   "every control on the review is a 44px target on phone, and nothing scrolls sideways",
   DEVICE,
   async ({ page }, testInfo) => {
+    await legacyPackingLayout(page);
     await openSanDiegoReviewFromTrip(page);
     if (testInfo.project.name === "phone") {
       for (const control of [

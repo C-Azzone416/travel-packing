@@ -45,7 +45,10 @@ const SCREENS = {
   packing: async (page: Page) => {
     await page.goto("/");
     await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
-    await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
+    // The laptop view's title is "Packing" (#385); below 1024px the page's title is the trip.
+    await expect(
+      page.getByRole("heading", { name: /^(Packing|San Diego)$/, level: 1 }),
+    ).toBeVisible();
   },
   settings: async (page: Page) => {
     await page.goto("/settings");
@@ -136,7 +139,8 @@ test("ocean: nothing scrolls sideways on the dashboard, packing and Settings at 
 
 // The keyboard paths, once (they do not depend on colour or width).
 test("the Theme radiogroup and a packing row work from the keyboard", async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 900 });
+  // The row's stepper and editor are the page below 1024px (the laptop view's keyboard paths are in packing-laptop.spec.ts).
+  await page.setViewportSize({ width: 1000, height: 900 });
   const theme = THEMES[0];
   await signInWithTheme(page, theme);
   await SCREENS.settings(page);

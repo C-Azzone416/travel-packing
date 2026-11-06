@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { DEVICE } from "./helpers/device";
+import { DEVICE, legacyPackingLayout } from "./helpers/device";
 import { expectAccessible } from "./helpers/a11y";
 import { createWeatherTrip, fake, type Stay } from "./helpers/forecast-trip";
 import {
@@ -509,6 +509,7 @@ test("one stay at 1280px: the summary is a column and the days sit beside it (#3
 // E5: the hero and the trip page count the same days, with the same figures and words.
 for (const fixture of [F2, F4]) {
   test(`${fixture.name}: the hero and the trip page agree`, async ({ page }) => {
+    await legacyPackingLayout(page);
     await openBand(page, fixture);
     const cards = await page.locator(".hero-day").count();
     const note = await page.locator(".weather-strip .weather-note").first().innerText();
