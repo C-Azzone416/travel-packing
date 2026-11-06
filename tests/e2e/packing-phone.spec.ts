@@ -234,7 +234,7 @@ test(
 );
 
 test(
-  "390x640 and the 640 boundary: a short phone falls back to natural flow with a sticky action bar",
+  "390x600: a short phone falls back to natural flow with a sticky action bar",
   DEVICE,
   async ({ page }) => {
     await open(page, { width: 390, height: 600 });
@@ -251,6 +251,25 @@ test(
     expect(
       await list.evaluate((node) => node.scrollHeight - node.clientHeight),
     ).toBeLessThanOrEqual(1);
+    expect(await sideways(page)).toBeLessThanOrEqual(0);
+  },
+);
+
+test(
+  "390x640 boundary: the fixed-height layout starts and the suitcase list scrolls inside",
+  DEVICE,
+  async ({ page }) => {
+    await open(page, { width: 390, height: 640 });
+    await expect(phoneLayout(page)).not.toHaveAttribute("data-zoomed", "true");
+    const action = (await allIn(page).boundingBox())!;
+    const tabs = (await tabBar(page).boundingBox())!;
+    expect(action.y + action.height).toBeLessThanOrEqual(tabs.y + 1);
+    const list = page.locator("[data-cube] ul").first();
+    const scrolls = await list.evaluate((node) => ({
+      inner: node.scrollHeight > node.clientHeight,
+      overflowY: getComputedStyle(node).overflowY,
+    }));
+    expect(scrolls).toEqual({ inner: true, overflowY: "auto" });
     expect(await sideways(page)).toBeLessThanOrEqual(0);
   },
 );

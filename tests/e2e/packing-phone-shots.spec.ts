@@ -60,12 +60,18 @@ async function makeTrip(page: Page, theme: string) {
   // Some of the first cube is packed, so the filters and the counts have something to show.
   for (const id of ["tops-short", "underwear"]) await tick(page, id).catch(() => undefined);
   await openCube(page, "Clothing");
+  // Keep the saved confirmation from obscuring the fixed action bar in review evidence.
+  await page.mouse.move(0, 0);
+  await expect(page.getByText("Trip saved")).toHaveCount(0, { timeout: 15_000 });
 }
 
 test("ocean 390: default, filters, review rows, Edit list, All in and Next", async ({ page }) => {
   test.setTimeout(240_000);
   await makeTrip(page, "ocean");
   await shot(page, "pk-p-ocean-390");
+  await page.setViewportSize({ width: 390, height: 640 });
+  await shot(page, "pk-p-ocean-390x640");
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("button", { name: /^To pack/ }).click();
   await shot(page, "pk-p-ocean-390-filter-to-pack");
   await page.getByRole("button", { name: /^Packed \d/ }).click();
