@@ -56,11 +56,11 @@ export function ListItemSheet({ item, items, onSave, onClose, onEditOther }: Lis
 
   return (
     <ModalSheet open showClose title={item ? "Edit item" : "Add an item"} onClose={onClose}>
-      <form className="form-grid" onSubmit={submit} noValidate>
+      <form className="form-grid" onSubmit={submit} noValidate autoComplete="off">
         <label className="field">
           Item name
           <input
-            name="name"
+            name="packing-item-name"
             value={name}
             maxLength={LIST_ITEM_NAME_MAX}
             autoComplete="off"

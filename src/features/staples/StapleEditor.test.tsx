@@ -44,7 +44,11 @@ describe("StapleEditor", () => {
   it("adds a staple with the chosen quantity, cadence, category and placement", async () => {
     const { user, onSave } = open(null);
     const dialog = screen.getByRole("dialog", { name: "Add a staple" });
-    await user.type(within(dialog).getByLabelText("Item name"), " Hat ");
+    const itemName = within(dialog).getByLabelText("Item name");
+    expect(itemName.getAttribute("autocomplete")).toBe("off");
+    expect(itemName.getAttribute("name")).toBe("packing-item-name");
+    expect(itemName.closest("form")?.getAttribute("autocomplete")).toBe("off");
+    await user.type(itemName, " Hat ");
     await user.clear(within(dialog).getByLabelText("Quantity"));
     await user.type(within(dialog).getByLabelText("Quantity"), "2");
     await user.click(within(dialog).getByRole("radio", { name: /Per night/ }));
