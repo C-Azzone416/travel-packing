@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
 import { FAKE_GEOCODER_PORT, OPEN_METEO_PORT } from "./support/ports";
-import { DEVICE, legacyPackingLayout } from "./helpers/device";
+import { DEVICE, laptopPlanLayout, legacyPackingLayout } from "./helpers/device";
 import { nextButton, reviewAndCreate, setDates, toList, toWhen } from "./helpers/plan";
 
 // Home is the laptop suitcase view from 1024px (#387); this spec's subject is the page below it, so it runs there.
@@ -176,6 +176,7 @@ test.describe("open-meteo mode (LOCATION_PROVIDER=open-meteo, fake geocoder)", (
     page,
   }) => {
     await openNewTrip(page);
+    await laptopPlanLayout(page); // the "Where" step region is the laptop Plan layout
     await page.getByRole("combobox", { name: "Destination search" }).fill("boom");
     await expect(
       page

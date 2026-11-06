@@ -18,3 +18,13 @@ export const LEGACY_PACKING_VIEWPORT = { width: 1000, height: 900 } as const;
 export async function legacyPackingLayout(page: Page): Promise<void> {
   if (test.info().project.name === "desktop") await page.setViewportSize(LEGACY_PACKING_VIEWPORT);
 }
+
+/**
+ * Plan a trip lays out its steps and live preview from 1024px (#390), while the ledger Home and trip page need a width under
+ * it (legacyPackingLayout). A test that asserts the laptop Plan screen calls this after opening it, and calls
+ * legacyPackingLayout again before it looks at the ledger dashboard or trip page.
+ */
+export async function laptopPlanLayout(page: Page): Promise<void> {
+  if (test.info().project.name === "desktop")
+    await page.setViewportSize({ width: 1440, height: 1000 });
+}

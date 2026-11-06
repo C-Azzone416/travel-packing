@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { ownerEmailFor, signIn, signInAsOwner } from "./helpers/auth";
 import { readTripTravel, setOwnerHomeCity } from "./helpers/database";
 import { chooseFromMenu } from "./helpers/menu";
-import { DEVICE, legacyPackingLayout } from "./helpers/device";
+import { DEVICE, laptopPlanLayout, legacyPackingLayout } from "./helpers/device";
 import {
   chooseMode,
   createButton,
@@ -44,6 +44,10 @@ const SEATTLE = {
 const upcomingCount = (page: Page) => page.getByRole("button", { name: /^Upcoming/ });
 const card = (page: Page, name: string) => page.getByRole("article", { name });
 const plan = (page: Page) => page.getByRole("link", { name: /Plan a trip/ }).click();
+const planAtLaptop = async (page: Page) => {
+  await plan(page);
+  await laptopPlanLayout(page);
+};
 const aboutItems = (page: Page) =>
   page
     .getByRole("complementary", { name: "Live preview of your trip" })
@@ -69,7 +73,7 @@ test("leaving mid-plan saves nothing: the dashboard is unchanged", async ({ page
 
 test("the ambiguous London requires an explicit choice", async ({ page }) => {
   await openDashboard(page);
-  await plan(page);
+  await planAtLaptop(page);
   await page.getByRole("combobox", { name: "Destination search" }).fill("london");
   const options = page.getByRole("option");
   await expect(options).toHaveCount(2);
@@ -88,6 +92,7 @@ test("the ambiguous London requires an explicit choice", async ({ page }) => {
   await setDates(page, "2026-11-12", "2026-11-16");
   await toList(page);
   await reviewAndCreate(page);
+  await legacyPackingLayout(page);
   await expect(card(page, "London").getByText(/Ontario, Canada/)).toBeVisible();
 });
 
@@ -95,7 +100,7 @@ test("keyboard: arrow keys and Enter pick a destination without moving to the ne
   page,
 }) => {
   await openDashboard(page);
-  await plan(page);
+  await planAtLaptop(page);
   const box = page.getByRole("combobox", { name: "Destination search" });
   await box.fill("london");
   // Results arrive after the search debounce and a server round trip; arrows act on what is listed.
@@ -145,7 +150,7 @@ test("create: where, when, how, the list, review -> the trip is on the dashboard
   page,
 }) => {
   await openDashboard(page);
-  await plan(page);
+  await planAtLaptop(page);
   await planToList(page, {
     query: "lon",
     option: /England/,
@@ -160,6 +165,7 @@ test("create: where, when, how, the list, review -> the trip is on the dashboard
   const preview = await count();
   await nextButton(page).click();
   await createButton(page).click();
+  await legacyPackingLayout(page);
 
   await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
   await expect(upcomingCount(page)).toContainText("2");
@@ -367,7 +373,7 @@ test("shows a clear error with Retry when search is unavailable, never falling b
   page,
 }) => {
   await openDashboard(page);
-  await plan(page);
+  await planAtLaptop(page);
   let down = true;
   await page.route("**/api/locations/search**", (route) =>
     down ? route.fulfill({ status: 502, json: { error: "unavailable" } }) : route.continue(),
