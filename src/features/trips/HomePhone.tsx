@@ -143,20 +143,22 @@ function CityRows({
 }
 
 function Sticker({ sticker }: { sticker: HomeStickerView }) {
+  const count = sticker.completedCount > 1 ? ` ×${sticker.completedCount}` : "";
+  const visibleName = `${sticker.region} ${sticker.code || "—"} ${sticker.month}${count}`;
   return (
     <Link
       href={`/trips/${sticker.tripId}`}
       className={styles.sticker}
-      aria-label={sticker.accessibleName}
+      aria-label={`${visibleName}. ${sticker.accessibleName}`}
       data-upcoming={sticker.upcoming || undefined}
       data-shape={sticker.shape}
       data-colour={sticker.colour}
       style={{ "--tilt": `${sticker.tilt}deg` } as React.CSSProperties}
     >
-      <span aria-hidden="true">{sticker.region}</span>
-      <strong aria-hidden="true">{sticker.code || "—"}</strong>
+      <span aria-hidden="true">{sticker.region} </span>
+      <strong aria-hidden="true">{sticker.code || "—"} </strong>
       <span aria-hidden="true">{sticker.month}</span>
-      {sticker.completedCount > 1 ? <b aria-hidden="true">×{sticker.completedCount}</b> : null}
+      {sticker.completedCount > 1 ? <b aria-hidden="true"> ×{sticker.completedCount}</b> : null}
     </Link>
   );
 }

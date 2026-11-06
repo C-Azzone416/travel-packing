@@ -54,6 +54,11 @@ describe("HomePhone", () => {
     expect(window.location.search).toBe("?tab=stamps");
     expect(screen.getByRole("group", { name: "Filter stamps" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Past trips" })).toBeTruthy();
+    expect(
+      screen.getByRole("link", {
+        name: /LISBON DISTRICT PRT SEP\. Lisbon, Sep 2026, 1 trip/,
+      }),
+    ).toBeTruthy();
     expect(screen.getAllByRole("link", { name: /Lisbon/ }).length).toBeGreaterThan(0);
   });
 
