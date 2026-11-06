@@ -155,8 +155,6 @@ describe("loading and states", () => {
       screen.getByText(/^(Leaves in \d+ days|Leaves tomorrow|Leaves today|Under way)$/),
     ).toBeTruthy();
     expect(screen.getByRole("img", { name: /departure stamp$|route stamps$/ })).toBeTruthy();
-    // The trip picture is off on the packing hero, so its stamp is transparent (no backing disc).
-    expect(document.querySelector("[data-stamp]")?.hasAttribute("data-on-picture")).toBe(false);
     expect(
       screen.getByText(/^\d+ of \d+ packed( \/ \d+ left)?$/, { selector: ".progress-line" }),
     ).toBeTruthy();
@@ -576,10 +574,14 @@ describe("toiletry bag gate", () => {
     await ready("Lisbon");
     await user.click(screen.getByRole("button", { name: "＋ Add a Bathroom item" }));
     const dialog = screen.getByRole("dialog", { name: "Add a Bathroom item" });
+    const itemName = within(dialog).getByLabelText("Item name");
+    expect(itemName.getAttribute("autocomplete")).toBe("off");
+    expect(itemName.getAttribute("name")).toBe("packing-item-name");
+    expect(itemName.closest("form")?.getAttribute("autocomplete")).toBe("off");
     await user.click(within(dialog).getByRole("button", { name: "Add toiletry item" }));
     expect(within(dialog).getByRole("alert").textContent).toBe("Enter a name.");
-    expect(within(dialog).getByLabelText("Item name").getAttribute("aria-invalid")).toBe("true");
-    await user.type(within(dialog).getByLabelText("Item name"), "Face wash");
+    expect(itemName.getAttribute("aria-invalid")).toBe("true");
+    await user.type(itemName, "Face wash");
     expect(within(dialog).queryByRole("alert")).toBeNull();
     await user.click(within(dialog).getByRole("radio", { name: /Remember for future trips/ }));
     await user.click(within(dialog).getByRole("switch", { name: "Pack last" }));
@@ -614,14 +616,18 @@ describe("item editor", () => {
     const staples = source.staplesSnapshot();
     await user.click(within(row("sunglasses")).getByRole("button", { name: /^Sunglasses / }));
     const dialog = screen.getByRole("dialog", { name: "Edit item" });
+    const itemName = within(dialog).getByLabelText("Item name");
+    expect(itemName.getAttribute("autocomplete")).toBe("off");
+    expect(itemName.getAttribute("name")).toBe("packing-item-name");
+    expect(itemName.closest("form")?.getAttribute("autocomplete")).toBe("off");
     expect(
       within(dialog)
         .getByRole("radio", { name: /This trip only/ })
         .hasAttribute("checked") ||
         (within(dialog).getByRole("radio", { name: /This trip only/ }) as HTMLInputElement).checked,
     ).toBe(true);
-    await user.clear(within(dialog).getByLabelText("Item name"));
-    await user.type(within(dialog).getByLabelText("Item name"), "Beach sunglasses");
+    await user.clear(itemName);
+    await user.type(itemName, "Beach sunglasses");
     await user.click(within(dialog).getByRole("button", { name: "Save item" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(itemOf(source, "sunglasses").name).toBe("Beach sunglasses");
@@ -991,7 +997,7 @@ describe("preferences and Ready", () => {
     expect(screen.getByRole("button", { name: "Edit preferences" })).toBeTruthy();
   });
 
-  it("a trip with no confirmed location has no place line, and its header art is still its theme", async () => {
+  it("a trip with no confirmed location has no place line or legacy theme art", async () => {
     const state = sampleLifecycleState();
     state.trips[0] = { ...state.trips[0], location: null };
     const base = createMemoryTripsSource(state, { now: () => 1 });
@@ -1002,7 +1008,7 @@ describe("preferences and Ready", () => {
     );
     await ready();
     expect(screen.getByText("Oct 23 – Oct 27 · 5 days")).toBeTruthy();
-    expect(document.querySelector("[data-art-key]")?.getAttribute("data-art-key")).toBe("beach");
+    expect(document.querySelector("[data-art-key]")).toBeNull();
   });
 
   it("a one-day trip says '1 day'", async () => {
@@ -1223,140 +1229,6 @@ describe("dialog submits wait for the source", () => {
   });
 });
 
-describe("changing the theme", () => {
-  const artKey = () =>
-    document.querySelector(".trip-hero [data-art-key]")?.getAttribute("data-art-key");
-  const changeButton = () => screen.getByRole("button", { name: "Change theme" });
-
-  it("opens a sheet with the current theme selected, Save and Cancel, and no other controls changed", async () => {
-    const { user } = setup();
-    await ready();
-    expect(artKey()).toBe("beach");
-    await user.click(changeButton());
-    const sheet = screen.getByRole("dialog", { name: "Change theme" });
-    expect((within(sheet).getByRole("radio", { name: "Beach" }) as HTMLInputElement).checked).toBe(
-      true,
-    );
-    expect(within(sheet).getAllByRole("radio")).toHaveLength(6);
-    expect(within(sheet).getByRole("button", { name: "Cancel" })).toBeTruthy();
-    expect(within(sheet).getByRole("button", { name: "Save theme" })).toBeTruthy();
-    // It starts on the selected option, so the arrow keys move from there.
-    expect(document.activeElement).toBe(within(sheet).getByRole("radio", { name: "Beach" }));
-  });
-
-  it("saving stores the theme, then the header art changes and the change is announced", async () => {
-    const { user, source } = setup();
-    await ready();
-    await user.click(changeButton());
-    await user.click(screen.getByRole("radio", { name: "Mountain / outdoors" }));
-    // Choosing alone changes nothing yet.
-    expect(artKey()).toBe("beach");
-    expect(tripOf(source).theme).toBe("beach");
-    await user.click(screen.getByRole("button", { name: "Save theme" }));
-    await waitFor(() => expect(artKey()).toBe("outdoors"));
-    expect(tripOf(source).theme).toBe("outdoors");
-    expect(screen.queryByRole("dialog")).toBeNull();
-    expect(live().textContent).toBe("Theme changed to Mountain / outdoors.");
-    expect(document.activeElement).toBe(changeButton());
-  });
-
-  it("the header art changes only after the source confirms", async () => {
-    const gate = deferred<void>();
-    const { user, source } = setup("san-diego", (base) => ({
-      ...base,
-      setTheme: async (id, theme) => {
-        await gate.promise;
-        return base.setTheme(id, theme);
-      },
-    }));
-    await ready();
-    await user.click(changeButton());
-    await user.click(screen.getByRole("radio", { name: "City" }));
-    await user.click(screen.getByRole("button", { name: "Save theme" }));
-    // Still waiting: the old picture stays, and the sheet cannot be submitted twice.
-    expect(artKey()).toBe("beach");
-    expect(screen.getByRole("button", { name: "Save theme" }).hasAttribute("disabled")).toBe(true);
-    await act(async () => gate.resolve());
-    await waitFor(() => expect(artKey()).toBe("city"));
-    expect(tripOf(source).theme).toBe("city");
-  });
-
-  it("a double click on Save sends one write", async () => {
-    const gate = deferred<void>();
-    const calls = vi.fn();
-    const { user } = setup("san-diego", (base) => ({
-      ...base,
-      setTheme: async (id, theme) => {
-        calls(theme);
-        await gate.promise;
-        return base.setTheme(id, theme);
-      },
-    }));
-    await ready();
-    await user.click(changeButton());
-    await user.click(screen.getByRole("radio", { name: "Home / family" }));
-    await user.dblClick(screen.getByRole("button", { name: "Save theme" }));
-    expect(calls).toHaveBeenCalledTimes(1);
-    await act(async () => gate.resolve());
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-  });
-
-  it("Cancel and Escape discard the choice and return focus to the button", async () => {
-    const { user, source } = setup();
-    await ready();
-    const before = source.snapshot();
-    await user.click(changeButton());
-    await user.click(screen.getByRole("radio", { name: "Theme park" }));
-    await user.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(screen.queryByRole("dialog")).toBeNull();
-    expect(artKey()).toBe("beach");
-    expect(document.activeElement).toBe(changeButton());
-    await user.click(changeButton());
-    // Reopened, it shows the saved theme again, not the discarded choice.
-    expect((screen.getByRole("radio", { name: "Beach" }) as HTMLInputElement).checked).toBe(true);
-    await user.keyboard("{Escape}");
-    expect(screen.queryByRole("dialog")).toBeNull();
-    expect(source.snapshot()).toBe(before);
-  });
-
-  it("saving without changing the theme just closes, with no write", async () => {
-    const setTheme = vi.fn();
-    const { user } = setup("san-diego", (base) => ({
-      ...base,
-      setTheme: (id, theme) => (setTheme(theme), base.setTheme(id, theme)),
-    }));
-    await ready();
-    await user.click(changeButton());
-    await user.click(screen.getByRole("button", { name: "Save theme" }));
-    expect(screen.queryByRole("dialog")).toBeNull();
-    expect(setTheme).not.toHaveBeenCalled();
-  });
-
-  it("a failed save keeps the sheet open and the old picture, says so in the sheet, and Save tries again", async () => {
-    let fail = true;
-    const { user, source } = setup("san-diego", (base) => ({
-      ...base,
-      setTheme: (id, theme) =>
-        fail ? Promise.reject(new Error("nope")) : base.setTheme(id, theme),
-    }));
-    await ready();
-    await user.click(changeButton());
-    await user.click(screen.getByRole("radio", { name: "City" }));
-    await user.click(screen.getByRole("button", { name: "Save theme" }));
-    expect(await screen.findByRole("button", { name: "Not saved, retry" })).toBeTruthy();
-    const sheet = screen.getByRole("dialog", { name: "Change theme" });
-    // The chip is behind the sheet, so the sheet says so itself.
-    expect(within(sheet).getByRole("alert").textContent).toMatch(/Couldn’t save the theme/);
-    expect(artKey()).toBe("beach");
-    expect(tripOf(source).theme).toBe("beach");
-    fail = false;
-    await user.click(within(sheet).getByRole("button", { name: "Save theme" }));
-    await waitFor(() => expect(artKey()).toBe("city"));
-    expect(tripOf(source).theme).toBe("city");
-    expect(screen.queryByRole("dialog")).toBeNull();
-  });
-});
-
 describe("a form submitted twice while saving saves once", () => {
   // Enter in a field submits the form even though the button is disabled, so the forms ignore a submit while saving.
   const submitTwice = () => {
@@ -1441,53 +1313,6 @@ describe("a form submitted twice while saving saves once", () => {
     await act(async () => gate.resolve());
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(calls).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe("the theme sheet's failure message", () => {
-  it("is cleared as soon as Save is pressed again, while the retry is still pending", async () => {
-    const gate = deferred<void>();
-    let attempts = 0;
-    const { user } = setup("san-diego", (base) => ({
-      ...base,
-      setTheme: async (id, theme) => {
-        attempts += 1;
-        if (attempts === 1) throw new Error("nope");
-        await gate.promise;
-        return base.setTheme(id, theme);
-      },
-    }));
-    await ready();
-    await user.click(screen.getByRole("button", { name: "Change theme" }));
-    await user.click(screen.getByRole("radio", { name: "City" }));
-    await user.click(screen.getByRole("button", { name: "Save theme" }));
-    const sheet = screen.getByRole("dialog", { name: "Change theme" });
-    expect((await within(sheet).findByRole("alert")).textContent).toMatch(
-      /Couldn’t save the theme/,
-    );
-    await user.click(within(sheet).getByRole("button", { name: "Save theme" }));
-    // The retry is in flight: the old message is gone and Save is waiting.
-    expect(within(sheet).queryByRole("alert")).toBeNull();
-    expect(within(sheet).getByRole("button", { name: "Save theme" }).hasAttribute("disabled")).toBe(
-      true,
-    );
-    await act(async () => gate.resolve());
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-  });
-
-  it("is also cleared when the sheet is closed, so reopening starts clean", async () => {
-    const { user } = setup("san-diego", (base) => ({
-      ...base,
-      setTheme: () => Promise.reject(new Error("nope")),
-    }));
-    await ready();
-    await user.click(screen.getByRole("button", { name: "Change theme" }));
-    await user.click(screen.getByRole("radio", { name: "City" }));
-    await user.click(screen.getByRole("button", { name: "Save theme" }));
-    await within(screen.getByRole("dialog")).findByRole("alert");
-    await user.click(screen.getByRole("button", { name: "Cancel" }));
-    await user.click(screen.getByRole("button", { name: "Change theme" }));
-    expect(within(screen.getByRole("dialog")).queryByRole("alert")).toBeNull();
   });
 });
 
@@ -1897,14 +1722,14 @@ describe("Save as a list (#169)", () => {
     return screen.getByRole("dialog", { name: "Save as a list" });
   };
 
-  it("is a secondary action in the hero, next to Edit trip and Change theme", async () => {
+  it("is a secondary action in the hero next to Edit trip", async () => {
     setup();
     await ready();
     const actions = screen.getByRole("button", { name: "Save as a list" }).closest(".head-actions");
     expect(within(actions as HTMLElement).getByRole("button", { name: "Edit trip" })).toBeTruthy();
     expect(
-      within(actions as HTMLElement).getByRole("button", { name: "Change theme" }),
-    ).toBeTruthy();
+      within(actions as HTMLElement).queryByRole("button", { name: "Change theme" }),
+    ).toBeNull();
   });
 
   it("saves the trip's items as a list, says so with a link to the lists, and leaves the trip as it was", async () => {

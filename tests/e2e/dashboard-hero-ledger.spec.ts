@@ -7,7 +7,8 @@ import { DEVICE } from "./helpers/device";
 // hero already shows (long place, big counts), never its data.
 const NOW = new Date("2026-10-16T12:00:00");
 const ROW = 28;
-const WIDTHS = [1280, 981, 721, 390, 320] as const;
+// 1000 is the widest the old ledger renders at (the laptop Home takes over at 1024, #387).
+const WIDTHS = [1000, 981, 721, 390, 320] as const;
 
 async function openHero(page: Page, width: number) {
   await page.setViewportSize({ width, height: width < 700 ? 844 : 900 });
@@ -145,7 +146,7 @@ for (const width of WIDTHS) {
   });
 }
 
-for (const width of [1280, 981, 721]) {
+for (const width of [1000, 981, 721]) {
   test(`the numeral, counts and track share a baseline at ${width}px`, async ({ page }) => {
     await openHero(page, width);
     const { numeral, counts, track } = await baselines(page);
@@ -184,7 +185,7 @@ test("the status row stacks into three rows on a phone, and the actions stay 44p
 test("days to go, the progress bar, packed, then remaining read in that order", async ({
   page,
 }) => {
-  const hero = await openHero(page, 1280);
+  const hero = await openHero(page, 1000);
   const order = await hero
     .locator(".days-to-go, [role=progressbar], .ledger-counts > span")
     .evaluateAll((els) => els.map((el) => el.getAttribute("role") ?? el.className ?? el.tagName));
@@ -195,7 +196,7 @@ test("days to go, the progress bar, packed, then remaining read in that order", 
 
 // The weather strip is off in the seeded data, so build one from its real markup: four stays. Rows after it must still
 // land on a rule, and the strip itself is whole rows.
-for (const width of [1280, 721, 390]) {
+for (const width of [1000, 721, 390]) {
   test(`a weather strip keeps the rows after it on the rules at ${width}px`, async ({ page }) => {
     await openHero(page, width);
     await injectWeather(page, "Mild, pack a light layer");
@@ -255,7 +256,7 @@ for (const width of [390, 320]) {
 // ---- #290: the worst case (every extreme at once) wraps in whole 28px rows and never overflows or overlaps ----
 
 /** Row caps from the design spec (v2), by viewport width: the most 28px rows the status block may take. */
-const ROW_CAP: Record<number, number> = { 1280: 3, 981: 4, 721: 4, 390: 5, 320: 5 };
+const ROW_CAP: Record<number, number> = { 1000: 3, 981: 4, 721: 4, 390: 5, 320: 5 };
 
 /** 4-digit days, 5-digit counts, labels about 40% longer, a long place and a long title, all at once. */
 async function worstCase(page: Page) {

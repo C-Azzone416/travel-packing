@@ -1,6 +1,12 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
-import { DEVICE } from "./helpers/device";
+import { DEVICE, legacyPackingLayout } from "./helpers/device";
+import { planAndCreate } from "./helpers/plan";
+
+// Home is the laptop suitcase view from 1024px (#387); this spec's subject is the page below it, so it runs there.
+test.beforeEach(async ({ page }) => {
+  await legacyPackingLayout(page);
+});
 
 // Historical wording for past trip cards (#301). A fixed clock: San Diego is upcoming (Oct 23–27), Lisbon is past
 // (Sep 3–7) and seeded fully packed and Ready (29 of 29, the bag included). Trips are stored in the e2e database,
@@ -132,12 +138,12 @@ test(
     // Ends 2026-10-15, the day before the fixed today: past, historical wording, not Ready.
     await page.goto("/");
     await page.getByRole("link", { name: /Plan a trip/ }).click();
-    await page.getByRole("combobox", { name: "Destination search" }).fill("paris");
-    await page.getByRole("option", { name: /Paris/ }).click();
-    await page.getByLabel("Leave", { exact: true }).fill("2026-10-13");
-    await page.getByLabel("Return", { exact: true }).fill("2026-10-15");
-    await page.getByRole("button", { name: "Continue to packing preferences" }).click();
-    await page.getByRole("button", { name: "Save trip" }).click();
+    await planAndCreate(page, {
+      query: "paris",
+      option: /Paris/,
+      start: "2026-10-13",
+      end: "2026-10-15",
+    });
     await expect(page.getByRole("link", { name: /Plan a trip/ })).toBeVisible();
 
     await page.goto("/");
@@ -150,12 +156,12 @@ test(
     // Ends 2026-10-16, today: not past, so it stays upcoming with today's wording.
     await page.goto("/");
     await page.getByRole("link", { name: /Plan a trip/ }).click();
-    await page.getByRole("combobox", { name: "Destination search" }).fill("paris");
-    await page.getByRole("option", { name: /Paris/ }).click();
-    await page.getByLabel("Leave", { exact: true }).fill("2026-10-14");
-    await page.getByLabel("Return", { exact: true }).fill("2026-10-16");
-    await page.getByRole("button", { name: "Continue to packing preferences" }).click();
-    await page.getByRole("button", { name: "Save trip" }).click();
+    await planAndCreate(page, {
+      query: "paris",
+      option: /Paris/,
+      start: "2026-10-14",
+      end: "2026-10-16",
+    });
     await expect(page.getByRole("link", { name: /Plan a trip/ })).toBeVisible();
 
     await page.goto("/");

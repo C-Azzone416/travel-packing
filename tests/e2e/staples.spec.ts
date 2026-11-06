@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
 import { DEVICE, legacyPackingLayout } from "./helpers/device";
+import { planAndCreate } from "./helpers/plan";
 
 // The Staples screen against a REAL Postgres (#18): what it shows after a reload is what was stored. Each test starts
 // from this project's freshly seeded owner (the default staples, San Diego partly packed, Lisbon Ready).
@@ -38,13 +39,11 @@ async function newTrip(
 ) {
   await page.goto("/");
   await page.getByRole("link", { name: /Plan a trip/ }).click();
-  await page.getByRole("combobox", { name: "Destination search" }).fill("paris");
-  await page.getByRole("option", { name: destination }).click();
-  await page.getByLabel("Leave", { exact: true }).fill(start);
-  await page.getByLabel("Return", { exact: true }).fill(end);
-  await page.getByRole("button", { name: "Continue to packing preferences" }).click();
-  await page.getByRole("button", { name: "Save trip" }).click();
-  await expect(page.getByRole("heading", { name: "Paris" })).toHaveCount(expectedCount);
+  await planAndCreate(page, { query: "paris", option: destination, start: start, end: end });
+  // The trips are counted as headings on the ledger page (below 1024px); the laptop Home lists later trips as tags.
+  await underLegacyPacking(page, () =>
+    expect(page.getByRole("heading", { name: "Paris" })).toHaveCount(expectedCount),
+  );
 }
 
 /** The trip's Packing page is the pre-redesign one below 1024px; the Staples screen is drawn at the laptop width. */
