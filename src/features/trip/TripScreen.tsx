@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { DestinationArt } from "@/components/art/DestinationArt";
 import { useSaveStatus } from "@/components/shell/SaveStatus";
 import { Button, buttonClassName } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -32,7 +31,6 @@ import { RouteText } from "@/features/trips/RouteText";
 import { formatDays, formatRange, routeCities, routeIsTitle } from "@/features/trips/view";
 import { AddToiletryForm } from "./AddToiletryForm";
 import { Stamps } from "@/components/stamp/Stamp";
-import { themeFor } from "@/domain/themes";
 import { automaticStamps, selectStamps } from "@/domain/stamps";
 import { daysBetween } from "@/domain/trip-stops";
 import { localToday } from "@/lib/today";
@@ -43,7 +41,6 @@ import { EditTripSheet, type ApplyOutcome, type EditTripTab } from "./EditTripSh
 import { ItemEditor } from "./ItemEditor";
 import { PackRow } from "./PackRow";
 import { EditStampSheet } from "./EditStampSheet";
-import { ThemeSheet } from "./ThemeSheet";
 import { ToiletrySection } from "./ToiletrySection";
 import {
   bagGate,
@@ -60,7 +57,6 @@ import {
 } from "./trip-view";
 import { revocationReason } from "./review-view";
 import { ReviewSheet } from "./ReviewSheet";
-import { SHOW_TRIP_PICTURE } from "./hero-picture";
 import { WeatherPanel, WeatherReviewBanner, type WeatherPanelState } from "./WeatherPanel";
 import { BagStep } from "./packing/BagStep";
 import { ForecastSection } from "./packing/ForecastSection";
@@ -88,7 +84,6 @@ type Dialog =
   | { kind: "add-toiletry"; name?: string; qty?: number }
   | { kind: "save-list" }
   | { kind: "bag" }
-  | { kind: "theme" }
   | { kind: "stamp" }
   | { kind: "trip"; tab: EditTripTab };
 
@@ -169,7 +164,6 @@ export function TripScreen({
   const [submitting, setSubmitting] = useState(false);
   const [failedRows, setFailedRows] = useState<ReadonlySet<string>>(new Set());
   const [announcement, setAnnouncement] = useState("");
-  const [themeFailed, setThemeFailed] = useState(false);
   const [stampFailed, setStampFailed] = useState(false);
   const [weather, setWeather] = useState<WeatherExperience | null>(null);
   const [weatherReviewOpen, setWeatherReviewOpen] = useState(false);
@@ -740,13 +734,6 @@ export function TripScreen({
         >
           Save as a list
         </button>
-        <button
-          type="button"
-          className="link-button change-theme"
-          onClick={() => setDialog({ kind: "theme" })}
-        >
-          Change theme
-        </button>
         {trip.stops.length > 0 ? (
           <button
             type="button"
@@ -872,14 +859,7 @@ export function TripScreen({
         />
       ) : (
         <>
-          <section
-            className="trip-hero"
-            data-picture={SHOW_TRIP_PICTURE ? "on" : "off"}
-            aria-labelledby="trip-title"
-          >
-            <div className="hero-picture" aria-hidden="true">
-              <DestinationArt theme={trip.theme} variant="header" priority />
-            </div>
+          <section className="trip-hero" aria-labelledby="trip-title">
             <Link className="back-link" href="/">
               <span aria-hidden="true">←</span> All trips
             </Link>
@@ -910,14 +890,6 @@ export function TripScreen({
                   <Button
                     variant="secondary"
                     small
-                    className="change-theme"
-                    onClick={() => setDialog({ kind: "theme" })}
-                  >
-                    Change theme
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    small
                     className="save-as-list"
                     onClick={() => setDialog({ kind: "save-list" })}
                   >
@@ -929,7 +901,6 @@ export function TripScreen({
                 <Stamps
                   stamps={selectStamps(trip.stops, trip.stampLabels)}
                   departure={trip.start}
-                  onPicture={SHOW_TRIP_PICTURE}
                 />
                 {trip.stops.length > 0 ? (
                   <button
@@ -1237,26 +1208,6 @@ export function TripScreen({
                 );
                 close();
               },
-            });
-          }}
-        />
-      ) : null}
-      {dialog?.kind === "theme" ? (
-        <ThemeSheet
-          current={trip.theme}
-          saving={submitting}
-          failed={themeFailed}
-          onClose={() => {
-            setThemeFailed(false);
-            close();
-          }}
-          onSave={(theme) => {
-            setThemeFailed(false);
-            void act(() => source.setTheme(tripId, theme), {
-              modal: true,
-              onFail: () => setThemeFailed(true),
-              announce: (change) => `Theme changed to ${themeFor(change.trip.theme).label}.`,
-              after: close,
             });
           }}
         />

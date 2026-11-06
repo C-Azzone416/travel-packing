@@ -15,6 +15,7 @@ vi.mock("next/headers", () => ({
   headers: async () => new Headers(),
   cookies: async () => ({ get: () => undefined }),
 }));
+vi.mock("@/features/trips/home-maps", () => ({ homeMaps: async () => ({}) }));
 vi.mock("./fonts", () => ({ fontClassNames: "" }));
 vi.mock("@/features/settings/saved-appearance", () => ({
   readSavedAppearance: async () => "ocean",
@@ -74,13 +75,11 @@ describe("screens", () => {
     expect(html).not.toContain("Close account");
   });
 
-  it("Trips renders the dashboard, starting in its loading state", () => {
+  it("Trips renders the dashboard, starting in its loading state", async () => {
     const html = renderToStaticMarkup(
       <ToastProvider>
         <SaveStatusProvider>
-          <TripsSourceProvider>
-            <TripsPage />
-          </TripsSourceProvider>
+          <TripsSourceProvider>{await TripsPage()}</TripsSourceProvider>
         </SaveStatusProvider>
       </ToastProvider>,
     );

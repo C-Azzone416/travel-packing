@@ -534,3 +534,33 @@ describe("LocationPicker", () => {
     });
   });
 });
+
+describe("a second picker on one screen (#390)", () => {
+  it("names its own search box and its own results message", () => {
+    render(
+      <>
+        <LocationPicker
+          provider={curatedLocationProvider}
+          query=""
+          onQueryChange={() => {}}
+          selected={null}
+          onSelect={() => {}}
+          onClear={() => {}}
+        />
+        <LocationPicker
+          provider={curatedLocationProvider}
+          label="From"
+          resultsLabel="From results"
+          query=""
+          onQueryChange={() => {}}
+          selected={null}
+          onSelect={() => {}}
+          onClear={() => {}}
+        />
+      </>,
+    );
+    expect(screen.getByRole("combobox", { name: "From" })).toBeTruthy();
+    expect(screen.getByRole("status", { name: "From results" })).toBeTruthy();
+    expect(screen.getByRole("status", { name: "Destination results" })).toBeTruthy();
+  });
+});

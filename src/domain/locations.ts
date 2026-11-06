@@ -1,5 +1,5 @@
 // Curated local destination list (#32). Stable IDs ("us-ca-san-diego" style) so a provider
-// can be mapped to them later (#33). A trip's picture comes from its theme (src/domain/themes.ts), not its place.
+// can be mapped to them later (#33).
 // No network, no geocoding.
 
 import type { SampleLocation } from "./trip-lifecycle";

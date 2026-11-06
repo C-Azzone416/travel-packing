@@ -3,6 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { ownerEmailFor, signInAsOwner } from "./helpers/auth";
 import { setOwnerAppearance } from "./helpers/database";
 import { FAKE_GEOCODER_PORT, OPEN_METEO_PORT } from "./support/ports";
+import { planRouteToList, reviewAndCreate } from "./helpers/plan";
 
 // Rendered screenshots of the laptop Packing view for design review (#385): the three colour schemes at 1280 and 1024, with
 // the weather review row open and in Edit list mode. Run with PACKING_SHOTS=<folder>; without it these are skipped, so the
@@ -40,17 +41,16 @@ for (const theme of THEMES) {
       await page.goto("/");
 
       await page.getByRole("link", { name: /Plan a trip/ }).click();
-      await page.getByRole("combobox", { name: "Destination search" }).fill("london");
-      await page.getByRole("option", { name: /England/ }).click();
-      await page.getByLabel("Leave", { exact: true }).fill(inDays(3));
-      await page.getByLabel("Return", { exact: true }).fill(inDays(6));
-      await page.getByRole("button", { name: "+ Add another stop" }).click();
-      await page.getByRole("combobox", { name: "Destination search, Stop 2" }).fill("london");
-      await page.getByRole("option", { name: /Ontario/ }).click();
-      await page.getByLabel("Leave, Stop 2").fill(inDays(9));
-      await page.getByRole("button", { name: "Continue to packing preferences" }).click();
+      await planRouteToList(
+        page,
+        [
+          { query: "london", option: /England/ },
+          { query: "london", option: /Ontario/ },
+        ],
+        [inDays(3), inDays(6), inDays(9)],
+      );
       await page.getByRole("button", { name: "Not now" }).click();
-      await page.getByRole("button", { name: "Save trip" }).click();
+      await reviewAndCreate(page);
       await page
         .getByRole("link", { name: /^(Continue|Keep) packing: London/ })
         .first()

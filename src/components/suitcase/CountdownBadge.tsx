@@ -13,7 +13,7 @@ export function countdownLabel(days: number): string {
 }
 
 // The countdown badge on the luggage tag (spec part 2 section 3): accent fill, --onDark text. Words, not colour alone.
-// `toGo` is the laptop Home tag's longer form: a big Fraunces numeral and "days to go" ("Today" stays "Today").
+// `toGo` is the laptop Home tag's longer form: a big Fraunces numeral and "days to go" (0 reads "Leaves today").
 export function CountdownBadge({
   days,
   toGo = false,
@@ -29,6 +29,13 @@ export function CountdownBadge({
       <span className={cx(styles.badge, className)} data-countdown="to-go">
         <span className={styles.numeral}>{whole}</span>
         {whole === 1 ? " day to go" : " days to go"}
+      </span>
+    );
+  }
+  if (toGo) {
+    return (
+      <span className={cx(styles.badge, className)} data-countdown="to-go">
+        Leaves today
       </span>
     );
   }

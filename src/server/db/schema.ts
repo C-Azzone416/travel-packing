@@ -64,7 +64,7 @@ export const itemCube = pgEnum("item_cube", CUBES);
 /** How the trip gets there (#379). Nullable on trips: a trip that never chose one claims none. */
 export const travelMode = pgEnum("travel_mode", TRAVEL_MODES);
 export const staplesSetupState = pgEnum("staples_setup_state", STAPLES_SETUP_STATES);
-/** The six built-in trip theme images (#48), shared with the domain so the two can never drift apart. */
+/** Legacy trip-theme values retained for stored-record and schema compatibility after the #392 UI removal. */
 export const tripTheme = pgEnum("trip_theme", THEME_IDS);
 
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();

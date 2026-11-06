@@ -110,13 +110,14 @@ export function ItemEditor({
       description="Existing trips stay as they were."
       onClose={onClose}
     >
-      <form className="form-grid editor-form" onSubmit={submit} noValidate>
+      <form className="form-grid editor-form" onSubmit={submit} noValidate autoComplete="off">
         <label className="field">
           Item name
           <input
-            name="name"
+            name="packing-item-name"
             value={name}
             maxLength={50}
+            autoComplete="off"
             aria-invalid={nameError}
             aria-describedby={nameError ? "name-error" : undefined}
             onChange={(event) => {
