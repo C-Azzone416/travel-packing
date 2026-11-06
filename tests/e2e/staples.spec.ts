@@ -44,7 +44,10 @@ async function newTrip(
   await page.getByLabel("Return", { exact: true }).fill(end);
   await page.getByRole("button", { name: "Continue to packing preferences" }).click();
   await page.getByRole("button", { name: "Save trip" }).click();
-  await expect(page.getByRole("heading", { name: "Paris" })).toHaveCount(expectedCount);
+  // The trips are counted as headings on the ledger page (below 1024px); the laptop Home lists later trips as tags.
+  await underLegacyPacking(page, () =>
+    expect(page.getByRole("heading", { name: "Paris" })).toHaveCount(expectedCount),
+  );
 }
 
 /** The trip's Packing page is the pre-redesign one below 1024px; the Staples screen is drawn at the laptop width. */

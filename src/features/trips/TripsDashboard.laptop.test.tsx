@@ -170,6 +170,6 @@ describe("TripsDashboard at laptop width", () => {
     setup(source);
     const button = await screen.findByRole("button", { name: /San Diego · 59°\/50°/ });
     expect(button.getAttribute("aria-expanded")).toBe("true");
-    expect(button.textContent).toContain("Rain likely");
+    expect(button.textContent).toMatch(/\d+ to review/);
   });
 });

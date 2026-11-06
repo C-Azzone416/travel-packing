@@ -17,7 +17,9 @@ import type { UsualWeatherRow } from "@/components/ui/UsualWeather";
 import { routeTextShort, stopsOrDestination, tripDisplayName } from "@/domain/trip-route";
 import { daysBetween, type TripStop } from "@/domain/trip-stops";
 import type { StopWeather } from "@/domain/weather/types";
-import { WEATHER_RULES } from "@/domain/weather/recommend";
+import { diffRecommendations } from "@/domain/weather/diff";
+import { WEATHER_RULES, recommendPacking } from "@/domain/weather/recommend";
+import { toSuggestions } from "@/features/trip/packing/packing-model";
 import { defaultFormatRange } from "@/domain/weather/recommend";
 import { displayTemperature, weatherRowView } from "@/features/trip/weather-view";
 import type { TemperatureUnit } from "@/server/data/weather-store";
@@ -401,4 +403,38 @@ export function usualRows(
       range: `${displayTemperature(row.high, unit)}° / ${displayTemperature(row.low, unit)}°`,
     };
   });
+}
+
+/** What the Home needs to count the weather changes still waiting for a decision (the same diff the Packing page runs). */
+export interface WeatherReview {
+  stops: readonly StopWeather[];
+  /** Skipped suggestions by id and the rule signature they were skipped under. */
+  suppressed: Readonly<Record<string, string>>;
+}
+
+/**
+ * Pending weather changes ("N to review") per stop index. A change that names no stop goes to `fallbackStop`, the first
+ * alert city, so every change has one row to show it (as the Packing page does).
+ */
+export function pendingByStop(
+  trip: LifecycleTrip,
+  review: WeatherReview | undefined,
+  fallbackStop: number,
+): Record<number, number> {
+  const days = review ? review.stops.flatMap((stop) => stop.days) : [];
+  if (!review || days.length === 0) return {};
+  const stops = stopsOrDestination(trip);
+  const names = stops.map((stop) => stop.location.city);
+  const recommendation = recommendPacking({
+    days,
+    dayStopNames: names,
+    config: { ...trip.config, start: trip.start, end: trip.end },
+    theme: trip.theme,
+  });
+  const changes = diffRecommendations(trip.items, recommendation, { ...review.suppressed });
+  const existing = trip.items.filter((item) => itemCube(item) === "weather").map((item) => item.id);
+  const counts: Record<number, number> = {};
+  for (const row of toSuggestions(changes, names, fallbackStop, existing))
+    counts[row.stopIndex ?? fallbackStop] = (counts[row.stopIndex ?? fallbackStop] ?? 0) + 1;
+  return counts;
 }

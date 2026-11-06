@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { LifecycleTrip } from "@/domain/trip-lifecycle";
 import type { TripItem } from "@/domain/trip";
 import type { SampleLocation, TripStop } from "@/domain/trip-stops";
+import { diffRecommendations } from "@/domain/weather/diff";
+import { recommendPacking } from "@/domain/weather/recommend";
 import type { StopWeather } from "@/domain/weather/types";
 import { sampleLifecycleState } from "./fixtures";
 import {
@@ -15,6 +17,7 @@ import {
   heroName,
   isInternational,
   packingHref,
+  pendingByStop,
   suitcaseButtonLabel,
   tagDates,
   upcomingRow,
@@ -398,5 +401,60 @@ describe("usualRows", () => {
       "2027-01-01",
     );
     expect(dry[0].line).toBe("rarely rains");
+  });
+});
+
+describe("pendingByStop", () => {
+  const day = (date: string, stopIndex: number, rain: number) => ({
+    date,
+    stopIndex,
+    source: "forecast" as const,
+    highC: 15,
+    lowC: 10,
+    precipProbability: rain,
+    precipMm: 0,
+    snowCm: 0,
+    uvIndexMax: 3,
+    sunshineHours: 5,
+  });
+  const rainy = (stopIndex: number): StopWeather =>
+    ({
+      stopIndex,
+      status: "ok",
+      days: [day("2027-03-15", stopIndex, 0.9), day("2027-03-16", stopIndex, 0.9)],
+    }) as StopWeather;
+  const bare = () => trip({ items: [item("tops", "Clothing", 3, 0)] });
+
+  it("is empty without a forecast to review", () => {
+    expect(pendingByStop(bare(), undefined, 0)).toEqual({});
+    expect(pendingByStop(bare(), { stops: [], suppressed: {} }, 0)).toEqual({});
+  });
+
+  it("counts the rain changes still waiting, on the stop the rain is in", () => {
+    const counts = pendingByStop(bare(), { stops: [rainy(1)], suppressed: {} }, 0);
+    const total = Object.values(counts).reduce((sum, n) => sum + n, 0);
+    expect(total).toBeGreaterThan(0);
+    expect(Object.keys(counts).every((key) => ["0", "1"].includes(key))).toBe(true);
+  });
+
+  it("drops what was skipped under the same rule, and keeps it when the rule changed", () => {
+    const stops = [rainy(0)];
+    const t = bare();
+    const all = pendingByStop(t, { stops, suppressed: {} }, 0);
+    const days = stops.flatMap((entry) => entry.days);
+    const changes = diffRecommendations(
+      t.items,
+      recommendPacking({
+        days,
+        dayStopNames: ["Lisbon", "Porto"],
+        config: { ...t.config, start: t.start, end: t.end },
+        theme: t.theme,
+      }),
+    );
+    expect(changes.length).toBeGreaterThan(0);
+    const skipped = Object.fromEntries(changes.map((c) => [c.semanticId, c.ruleSignature]));
+    expect(pendingByStop(t, { stops, suppressed: skipped }, 0)).toEqual({});
+    const stale = Object.fromEntries(changes.map((c) => [c.semanticId, "old-rule"]));
+    expect(pendingByStop(t, { stops, suppressed: stale }, 0)).toEqual(all);
   });
 });

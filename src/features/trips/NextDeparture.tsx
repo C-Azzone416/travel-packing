@@ -12,7 +12,7 @@ import { QuickView } from "./QuickView";
 import type { NewCustomItem } from "./trips-source";
 import { RouteText } from "./RouteText";
 import type { UsualWeatherRow } from "@/components/ui/UsualWeather";
-import type { CityWeather } from "./home-view";
+import type { CityWeather, WeatherReview } from "./home-view";
 import type { DepartureView, HeroForecast, TripCardView, WeatherCell } from "./view";
 
 export type HeroWeather =
@@ -29,6 +29,8 @@ export type HeroWeather =
       city?: CityWeather[];
       /** Averages per stop, for a trip whose forecast has not opened yet. */
       usual?: UsualWeatherRow[];
+      /** The forecast and the skipped suggestions, for the count of changes still to review (laptop Home). */
+      review?: WeatherReview;
     };
 
 /**

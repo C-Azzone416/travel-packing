@@ -3,6 +3,11 @@ import { signInAsOwner } from "./helpers/auth";
 import { chooseFromMenu } from "./helpers/menu";
 import { DEVICE, legacyPackingLayout } from "./helpers/device";
 
+// Home is the laptop suitcase view from 1024px (#387); this spec's subject is the page below it, so it runs there.
+test.beforeEach(async ({ page }) => {
+  await legacyPackingLayout(page);
+});
+
 // Trip themes (#48) against the real e2e database: what a trip saves with is what its card shows after a reload.
 // The seeded sample trips are San Diego (Beach) and Lisbon (City).
 const NOW = new Date("2026-10-16T12:00:00");

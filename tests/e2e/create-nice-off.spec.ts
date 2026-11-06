@@ -3,6 +3,11 @@ import { legacyPackingLayout } from "./helpers/device";
 import { signInAsOwner } from "./helpers/auth";
 import { chooseFromMenu } from "./helpers/menu";
 
+// Home is the laptop suitcase view from 1024px (#387); this spec's subject is the page below it, so it runs there.
+test.beforeEach(async ({ page }) => {
+  await legacyPackingLayout(page);
+});
+
 // #202: a NEW trip made with Nice outfits turned OFF must have no nice-attire lines, stored and after a reload, however
 // the person moves through the create flow after turning it off. The unit tests prove the calculator and createTrip are
 // right when they receive "off"; this walks the real screens, the real server action and the real database.

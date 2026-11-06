@@ -44,7 +44,7 @@
   min-height: 160px;
   border-radius: 16px;
   background: var(--sea);
-  color: var(--muted);
+  color: var(--ink);
   font-size: 14px;
 }
 .caption {
@@ -131,6 +131,18 @@
 .cubes > li > * {
   flex: 1;
 }
+/* A narrow tile (1024 to about 1100px) puts the count under the name instead of squeezing the name: a name never breaks
+   inside a word. The li is the container, so this follows the tile, not the window. */
+.cubes > li {
+  container-type: inline-size;
+}
+@container (max-width: 170px) {
+  .cubes > li > * {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "name" "count" "bar" "note";
+    row-gap: 4px;
+  }
+}
 
 /* ---- Luggage tag ---- */
 .tagTop {
@@ -213,9 +225,9 @@
 .cityRow {
   box-sizing: border-box;
   min-width: 0;
-  border: 2px solid transparent;
+  border: 2px solid var(--tint);
   border-radius: 16px;
-  background: var(--paper2);
+  background: var(--paper);
   color: var(--ink);
 }
 .cityRow[data-alert="true"] {
@@ -328,6 +340,14 @@
   align-items: center;
   gap: 4px;
   color: var(--ink);
+}
+@media (max-width: 1100px) {
+  .upHead {
+    column-gap: 12px;
+  }
+  .upTitle {
+    font-size: 23px;
+  }
 }
 .upList {
   display: grid;

@@ -185,7 +185,7 @@ describe("HomeLaptop", () => {
     const porto = screen.getByRole("button", { name: /Porto · 63°\/48°/ });
     expect(lisbon.getAttribute("aria-expanded")).toBe("false");
     expect(porto.getAttribute("aria-expanded")).toBe("true");
-    expect(porto.textContent).toContain("Rain · 1 added");
+    expect(porto.textContent).toContain("Rain · 4 added");
     expect(screen.getByRole("region", { name: "Porto forecast" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "+3 more days" }).getAttribute("href")).toBe(
       "/trips/t1",
@@ -198,7 +198,7 @@ describe("HomeLaptop", () => {
     expect(screen.queryByRole("region", { name: "Porto forecast" })).toBeNull();
   });
 
-  it("says 'likely' for an alert city with nothing added yet, and shows typical cities as plain rows", () => {
+  it("says 'Rain · 0 added' for an alert city with nothing added and nothing to review, and shows typical cities as plain rows", () => {
     const typical: CityWeather = {
       ...city("Lisbon", false),
       source: "typical",
@@ -209,7 +209,7 @@ describe("HomeLaptop", () => {
       trip: trip({ items: [item("tops", "Clothing", 3, 0)] }),
       weather: { phase: "ready", cells: [], city: [typical, city("Porto", true)] },
     });
-    expect(screen.getByRole("button", { name: /^Porto/ }).textContent).toContain("Rain likely");
+    expect(screen.getByRole("button", { name: /^Porto/ }).textContent).toContain("Rain · 0 added");
     expect(screen.queryByRole("button", { name: /^Lisbon/ })).toBeNull();
     expect(screen.getByText(/typical, mostly dry/)).toBeTruthy();
   });

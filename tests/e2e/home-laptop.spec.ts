@@ -114,3 +114,48 @@ for (const width of [1024, 1280]) {
     await expectAccessible(page, `Home laptop ${width}`, { disable: ["color-contrast"] });
   });
 }
+
+// Design round 2 (#431): at the narrow end of the laptop range the tiles are about 140px wide. A name never breaks inside a
+// word (it had read "Clothin" / "g"), and the Upcoming heading row keeps Plan a trip beside the heading.
+for (const width of [1024, 1100]) {
+  test(`${width}: a cube name stays whole on one line, and Plan a trip shares the Upcoming heading's row`, async ({
+    page,
+  }) => {
+    await openHome(page, width);
+    const names = await page.getByRole("list", { name: "Cubes" }).evaluate((list) =>
+      [...list.querySelectorAll<HTMLElement>("li > * > span:first-child")].map((node) => {
+        const style = getComputedStyle(node);
+        const line = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.2;
+        return {
+          text: node.textContent,
+          lines: Math.round(node.getBoundingClientRect().height / line),
+          clipped: node.scrollWidth > node.clientWidth + 1,
+        };
+      }),
+    );
+    expect(names.length).toBeGreaterThan(2);
+    for (const name of names) {
+      expect(name.lines, `${name.text} is one line`).toBe(1);
+      expect(name.clipped, `${name.text} is not cut off`).toBe(false);
+    }
+    const heading = await page.getByRole("heading", { name: "Upcoming trips" }).boundingBox();
+    const plan = await page.getByRole("link", { name: /Plan a trip/ }).boundingBox();
+    expect(plan!.y, "Plan a trip is on the heading's row").toBeLessThan(
+      heading!.y + heading!.height,
+    );
+  });
+}
+
+test("the trip menu's Archive moves the trip out of Upcoming and into Past & archive", async ({
+  page,
+}) => {
+  await openHome(page, 1280);
+  await page.getByRole("button", { name: /More actions for San Diego/ }).click();
+  await page.getByRole("menuitem", { name: "Archive", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toHaveCount(0);
+  // It is still there in the archive.
+  await page.goto("/?view=archive");
+  await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
+});

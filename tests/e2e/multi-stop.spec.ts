@@ -4,6 +4,11 @@ import { chooseFromMenu } from "./helpers/menu";
 import { signInAsOwner } from "./helpers/auth";
 import { DEVICE, legacyPackingLayout } from "./helpers/device";
 
+// Home is the laptop suitcase view from 1024px (#387); this spec's subject is the page below it, so it runs there.
+test.beforeEach(async ({ page }) => {
+  await legacyPackingLayout(page);
+});
+
 // Multi-destination trips (epic #107, #112): create a 3-stop trip, reload, see the route and dates persisted, edit it
 // to 2 stops, copy it to new dates. Fictional trips on the curated place list; the fixed clock keeps dates stable.
 const NOW = new Date("2026-10-16T12:00:00");

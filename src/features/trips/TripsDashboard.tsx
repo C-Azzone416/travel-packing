@@ -110,12 +110,24 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
         if (result.kind !== "ready") return answer({ phase: "unavailable" });
         const stops = heroTrip ? stopsOrDestination(heroTrip) : [];
         const today = getToday();
+        // Skipped suggestions stay out of the count; if they cannot be read, nothing is skipped.
+        const skipped = await Promise.resolve()
+          .then(() => weatherSource.listSuggestions(heroId))
+          .catch(() => []);
         answer({
           phase: "ready",
           cells: weatherCells(heroTrip?.stops ?? [], result.stops, settings.temperatureUnit),
           forecast: heroForecast(heroTrip?.stops ?? [], result.stops, settings.temperatureUnit),
           city: cityWeather(stops, result.stops, settings.temperatureUnit, today),
           usual: usualRows(stops, result.stops, settings.temperatureUnit, today),
+          review: {
+            stops: result.stops,
+            suppressed: Object.fromEntries(
+              skipped
+                .filter((entry) => entry.status === "skipped")
+                .map((entry) => [entry.semanticId, entry.ruleSignature]),
+            ),
+          },
         });
       } catch {
         answer({ phase: "unavailable" });

@@ -26,6 +26,7 @@ import {
   firstOpenCube,
   heroName,
   packingHref,
+  pendingByStop,
   suitcaseButtonLabel,
   tagDates,
   upcomingRow,
@@ -54,11 +55,14 @@ function CityRows({
   rows,
   weatherLabel,
   weatherItems,
+  pending,
   tripId,
 }: {
   rows: readonly CityWeather[];
   weatherLabel: string | null;
   weatherItems: number;
+  /** Weather changes still to review, by stop index. */
+  pending: Readonly<Record<number, number>>;
   tripId: string;
 }) {
   const base = useId();
@@ -70,10 +74,12 @@ function CityRows({
         const open = toggled[row.stopIndex] ?? row.alert;
         const panel = `${base}-panel-${row.stopIndex}`;
         const heading = alertHeading(weatherLabel, row.condition);
+        // "N to review" while changes wait for a decision, "Rain · N added" once they are in the bag (spec decision 5).
+        const waiting = pending[row.stopIndex] ?? 0;
         const state = row.alert
-          ? weatherItems > 0
-            ? `${heading} · ${weatherItems} added`
-            : `${heading} likely`
+          ? waiting > 0
+            ? `${waiting} to review`
+            : `${heading} · ${weatherItems} added`
           : null;
         const text = (
           <span className={styles.cityText}>
@@ -165,10 +171,19 @@ export function HomeLaptop({
 
   const rows = weather.phase === "ready" ? (weather.city ?? []) : [];
   const cities = alertCities(rows);
+  const firstAlert = rows.find((row) => row.alert)?.stopIndex ?? 0;
+  const pending = pendingByStop(
+    trip,
+    weather.phase === "ready" ? weather.review : undefined,
+    firstAlert,
+  );
   const cubes = cubeSummaries(trip, { cities });
   const totals = bagTotals(cubes);
   const weatherCube = cubes.find((cube) => cube.cube === "weather") ?? null;
-  const weatherItems = trip.items.filter((item) => itemCube(item) === "weather").length;
+  // Quantity, like every count on this screen.
+  const weatherItems = trip.items
+    .filter((item) => itemCube(item) === "weather")
+    .reduce((sum, item) => sum + item.qty, 0);
   const label = suitcaseButtonLabel(totals, trip.ready, phase);
   const next = firstOpenCube(cubes);
   const caption = routeCaption({
@@ -197,6 +212,7 @@ export function HomeLaptop({
           rows={rows}
           weatherLabel={weatherCube?.name ?? null}
           weatherItems={weatherItems}
+          pending={pending}
           tripId={trip.id}
         />
       </div>
