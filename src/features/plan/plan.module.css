@@ -4,20 +4,20 @@
 
 /* The app's body keeps a 320px minimum (the app-wide fix is #332). The plan must not scroll sideways down to 195px, so while
    it is on screen the minimum is lifted. */
-:global(body):has([data-plan-screen]) {
+:global(body):has(.screen, .phone) {
   min-width: 0;
 }
 /* The phone Plan is a full screen of its own (spec part 2 section 9): no brand header and no tab bar, a close button instead.
    Laptop keeps the shell. */
 @media (max-width: 1023px) {
-  :global(body):has([data-plan-screen]) :global(.topbar),
-  :global(body):has([data-plan-screen]) :global(.bottom-nav) {
+  :global(body):has(.phone) :global(.topbar),
+  :global(body):has(.phone) :global(.bottom-nav) {
     display: none;
   }
-  :global(body):has([data-plan-screen]) :global(.app-shell) {
+  :global(body):has(.phone) :global(.app-shell) {
     padding-bottom: 0;
   }
-  :global(body):has([data-plan-screen]) :global(main) {
+  :global(body):has(.phone) :global(main) {
     padding-block: 0;
   }
 }

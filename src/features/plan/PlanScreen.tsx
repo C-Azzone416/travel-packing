@@ -447,7 +447,7 @@ function PlanBody({ from, trips, staples, home, lists, allowCustom, today, rende
 
   if (!laptop) {
     return (
-      <div className={styles.phone} data-plan-screen>
+      <div className={styles.phone}>
         <header className={styles.phoneTop}>
           <Link className={styles.close} href="/" aria-label="Close and return to trips">
             <Icon name="close" size={20} />
@@ -490,7 +490,7 @@ function PlanBody({ from, trips, staples, home, lists, allowCustom, today, rende
   }
 
   return (
-    <div className={styles.screen} data-plan-screen>
+    <div className={styles.screen}>
       <Link className={styles.crumb} href="/">
         <Icon name="chevronLeft" size={12} />
         Trips
