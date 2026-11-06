@@ -92,6 +92,15 @@ describe("TripsDashboard at laptop width", () => {
     expect(await screen.findByRole("heading", { name: "Past trips & archive" })).toBeTruthy();
   });
 
+  it("opens Past & archive from the trip menu without a reload", async () => {
+    laptop(true);
+    const user = userEvent.setup();
+    setup();
+    await user.click(await screen.findByRole("button", { name: "More actions for San Diego" }));
+    await user.click(screen.getByRole("menuitem", { name: "Past trips & archive" }));
+    expect(await screen.findByRole("heading", { name: "Past trips & archive" })).toBeTruthy();
+  });
+
   it("asks for fresh maps after a change (archive) and after a route save", async () => {
     laptop(true);
     const user = userEvent.setup();

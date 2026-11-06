@@ -22,7 +22,7 @@ import { HomeLaptop } from "./HomeLaptop";
 import { LaterJourneys } from "./LaterJourneys";
 import type { HomeMaps } from "./home-map-types";
 import { cityWeather, usualRows } from "./home-view";
-import { useLaptop } from "./use-laptop";
+import { LAPTOP_MIN_WIDTH, useMinWidth } from "@/lib/use-min-width";
 import { routeSignature, stopsOrDestination, tripRoutePoints } from "@/domain/trip-route";
 import { NextDeparture, type HeroWeather } from "./NextDeparture";
 import { TripCard } from "./TripCard";
@@ -66,7 +66,7 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
       ? "archive"
       : "upcoming",
   );
-  const laptop = useLaptop();
+  const laptop = useMinWidth(LAPTOP_MIN_WIDTH);
   const [busy, setBusy] = useState<ReadonlySet<string>>(new Set());
   const [removing, setRemoving] = useState<string | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -439,6 +439,7 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
               onEdit={(id) => setEditing(id)}
               onArchive={archive}
               onRemove={setRemoving}
+              onOpenArchive={() => setView("archive")}
             />
           ) : hero ? (
             <div className="ledger-grid">

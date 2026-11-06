@@ -4,6 +4,11 @@ import { seedSavedList } from "./helpers/database";
 import { DEVICE, legacyPackingLayout } from "./helpers/device";
 import { chooseFromMenu } from "./helpers/menu";
 
+// Home is the laptop suitcase view from 1024px (#387); this spec's subject is the page below it, so it runs there.
+test.beforeEach(async ({ page }) => {
+  await legacyPackingLayout(page);
+});
+
 // Create flow: Start from a saved list (#170), against the real database. A chosen list REPLACES staples and the
 // length-based recommendations; none chosen is today's flow; a copy never offers the step.
 const NOW = new Date("2026-10-16T12:00:00");

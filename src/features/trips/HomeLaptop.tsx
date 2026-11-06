@@ -46,6 +46,8 @@ export interface HomeLaptopProps {
   onEdit: (id: string) => void;
   onArchive: (id: string) => void;
   onRemove: (id: string) => void;
+  /** Opens the Past & archive list (the client does not remount on a same-page link, so this is a handler, not a href). */
+  onOpenArchive: () => void;
 }
 
 function CityRows({
@@ -152,6 +154,7 @@ export function HomeLaptop({
   onEdit,
   onArchive,
   onRemove,
+  onOpenArchive,
 }: HomeLaptopProps) {
   const name = tripDisplayName(trip);
   const stops = stopsOrDestination(trip);
@@ -266,7 +269,7 @@ export function HomeLaptop({
                   { key: "edit", label: "Edit trip", onSelect: () => onEdit(trip.id) },
                   { key: "copy", label: "Copy trip", href: `/trips/new?copy=${trip.id}` },
                   { key: "archive", label: "Archive", onSelect: () => onArchive(trip.id) },
-                  { key: "past", label: "Past trips & archive", href: "/?view=archive" },
+                  { key: "past", label: "Past trips & archive", onSelect: onOpenArchive },
                   {
                     key: "remove",
                     label: "Remove",

@@ -79,7 +79,12 @@ const city = (name: string, alert: boolean): CityWeather => ({
 });
 
 function setup(props: Partial<HomeLaptopProps> = {}) {
-  const handlers = { onEdit: vi.fn(), onArchive: vi.fn(), onRemove: vi.fn() };
+  const handlers = {
+    onEdit: vi.fn(),
+    onArchive: vi.fn(),
+    onRemove: vi.fn(),
+    onOpenArchive: vi.fn(),
+  };
   const view = render(
     <HomeLaptop
       trip={trip()}
@@ -282,14 +287,14 @@ describe("HomeLaptop", () => {
 
   it("keeps Edit trip, Copy, Archive and Remove in the trip menu", async () => {
     const user = userEvent.setup();
-    const { onEdit, onArchive, onRemove } = setup();
+    const { onEdit, onArchive, onRemove, onOpenArchive } = setup();
     await user.click(screen.getByRole("button", { name: "More actions for Lisbon & Porto" }));
     expect(screen.getByRole("menuitem", { name: "Copy trip" }).getAttribute("href")).toBe(
       "/trips/new?copy=t1",
     );
-    expect(
-      screen.getByRole("menuitem", { name: "Past trips & archive" }).getAttribute("href"),
-    ).toBe("/?view=archive");
+    await user.click(screen.getByRole("menuitem", { name: "Past trips & archive" }));
+    expect(onOpenArchive).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole("button", { name: "More actions for Lisbon & Porto" }));
     await user.click(screen.getByRole("menuitem", { name: "Edit trip" }));
     expect(onEdit).toHaveBeenCalledWith("t1");
     await user.click(screen.getByRole("button", { name: "More actions for Lisbon & Porto" }));
