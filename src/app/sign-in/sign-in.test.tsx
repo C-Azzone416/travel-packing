@@ -54,6 +54,7 @@ describe("SignInView (design spec #31)", () => {
     expect(html).toContain(">Sign in<");
     expect(html).toMatch(/<a[^>]*href="\/forgot-password"[^>]*>Forgot password\?<\/a>/);
     expect(html).toMatch(/<a[^>]*href="\/sign-up"[^>]*>Create an account<\/a>/);
+    expect(html).toContain("New here?");
     expect(html).not.toContain('role="status"');
     expect(html).not.toContain('role="alert"');
   });

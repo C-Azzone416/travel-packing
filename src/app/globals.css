@@ -1931,13 +1931,14 @@ input:disabled {
   background: var(--paper);
   opacity: 0.7;
 }
-/* "Show password" is a text toggle inside the field's right edge (#204): link colour, a 44px target, aria-pressed. */
+/* "Show password" is a text toggle inside the field's right edge (#204): link colour, a 44px target, aria-pressed.
+   Match the auth-input selector's specificity and reserve the full fixed label, including at 195px. */
 .password-row {
   position: relative;
 }
-.password-row input {
+.auth-card .password-row input {
   width: 100%;
-  padding-right: 70px;
+  padding-right: 132px;
 }
 .password-toggle {
   position: absolute;
@@ -2046,6 +2047,12 @@ input:disabled {
   justify-content: space-between;
   gap: 0 12px;
   margin-top: 12px;
+}
+.auth-sign-up-link {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 4px;
 }
 .field input.code-input {
   min-height: 48px;

@@ -112,9 +112,12 @@ export function SignInView({
           <Link className="auth-link" href="/forgot-password">
             Forgot password?
           </Link>
-          <Link className="auth-link" href="/sign-up">
-            Create an account
-          </Link>
+          <span className="auth-sign-up-link">
+            New here?{" "}
+            <Link className="auth-link" href="/sign-up">
+              Create an account
+            </Link>
+          </span>
         </div>
       </section>
     </AuthShell>

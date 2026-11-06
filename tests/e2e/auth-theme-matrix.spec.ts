@@ -14,10 +14,18 @@ const SHOTS = process.env.AUTH_SHOTS;
 // Only the shape of a link token matters here (the page shows the form for any well-formed one); built like the other specs do.
 const TOKEN = "a".repeat(48);
 
-const CELLS = [
-  ...THEMES.map((theme) => ({ theme, width: 1280 as const, axe: true })),
-  ...THEMES.map((theme) => ({ theme, width: 390 as const, axe: theme === "ocean" })),
-].filter((cell) => cell.axe || SHOTS);
+const CELLS = SHOTS
+  ? THEMES.flatMap((theme) =>
+      ([195, 390, 1024, 1280] as const).map((width) => ({
+        theme,
+        width,
+        axe: width === 1280 || (theme === "ocean" && width === 390),
+      })),
+    )
+  : [
+      ...THEMES.map((theme) => ({ theme, width: 1280 as const, axe: true })),
+      { theme: "ocean" as const, width: 390 as const, axe: true },
+    ];
 
 const sidewaysScroll = (page: Page) =>
   page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -115,6 +123,7 @@ for (const { theme, width, axe } of CELLS) {
     await test.step("sign-in", async () => {
       await page.goto("/sign-in");
       await check("sign-in");
+      await expect(page.locator(".auth-sign-up-link")).toHaveText("New here? Create an account");
       // The toggle is inside the field, at its right edge, and a 44px target.
       const toggle = page.getByRole("button", { name: "Show password" });
       const field = page.getByLabel("Password");
@@ -124,6 +133,24 @@ for (const { theme, width, axe } of CELLS) {
       expect(toggleBox.x).toBeGreaterThanOrEqual(fieldBox.x);
       expect(toggleBox.x + toggleBox.width).toBeLessThanOrEqual(fieldBox.x + fieldBox.width + 1);
       expect(toggleBox.y).toBeGreaterThanOrEqual(fieldBox.y - 1);
+      if (width === 195) {
+        await field.fill("a-very-long-visible-password-that-must-not-run-under-show");
+        await toggle.click();
+        const contentRight = await field.evaluate((input) => {
+          const rect = input.getBoundingClientRect();
+          return rect.right - Number.parseFloat(getComputedStyle(input).paddingRight);
+        });
+        expect(contentRight, "password text ends before the toggle").toBeLessThanOrEqual(
+          toggleBox.x + 0.5,
+        );
+        if (SHOTS) {
+          await page.screenshot({
+            path: join(SHOTS, `${theme}-${width}-sign-in-long-password.png`),
+            fullPage: true,
+          });
+        }
+        await toggle.click();
+      }
     });
     await test.step("sign-in with an error", async () => {
       await page.getByLabel("Email").fill("nobody@example.test");
@@ -215,4 +242,23 @@ test("AuthSuitcase geometry holds from 195px through 1440px", async ({ page }) =
       );
     }
   }
+});
+
+test("a long visible password stays clear of Show at 195px", async ({ page }) => {
+  await page.setViewportSize({ width: 195, height: 844 });
+  await page.goto("/sign-in");
+  await expect(page.locator(".auth-sign-up-link")).toHaveText("New here? Create an account");
+  const field = page.getByLabel("Password");
+  const toggle = page.getByRole("button", { name: "Show password" });
+  await field.fill("a-very-long-visible-password-that-must-not-run-under-show");
+  await toggle.click();
+  const toggleBox = (await toggle.boundingBox())!;
+  const contentRight = await field.evaluate((input) => {
+    const rect = input.getBoundingClientRect();
+    return rect.right - Number.parseFloat(getComputedStyle(input).paddingRight);
+  });
+  expect(contentRight, "password text ends before the toggle").toBeLessThanOrEqual(
+    toggleBox.x + 0.5,
+  );
+  expect(await sidewaysScroll(page), "no sideways scroll").toBeLessThanOrEqual(0);
 });

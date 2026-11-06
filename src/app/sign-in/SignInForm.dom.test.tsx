@@ -29,6 +29,11 @@ describe("SignInForm", () => {
     }
   });
 
+  it("keeps the preserved sign-up prompt beside the account link", () => {
+    render(<SignInForm />);
+    expect(screen.getByText(/New here\?/).textContent).toBe("New here? Create an account");
+  });
+
   it("shows and hides the password", async () => {
     const user = userEvent.setup();
     render(<SignInForm />);

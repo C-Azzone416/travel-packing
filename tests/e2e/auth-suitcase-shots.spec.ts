@@ -81,6 +81,10 @@ test("the compact #424 AuthSuitcase review set", async ({ page, context, baseURL
     await screenshot(page, `auth-ocean-sign-in-${size.tag}`);
   }
 
+  const oceanPanel = page.locator(".auth-panel");
+  await oceanPanel.evaluate((element) => (element.scrollTop = element.scrollHeight));
+  await screenshot(page, "auth-ocean-sign-in-390x600-short-bottom");
+
   // The brand adds no stop: the first six tabs are the accepted form and help-link order.
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/sign-in");
@@ -116,10 +120,16 @@ test("the compact #424 AuthSuitcase review set", async ({ page, context, baseURL
 
   for (const scheme of ["evergreen", "dusk"] as const) {
     await setScheme(context, baseURL!, scheme);
-    await page.setViewportSize({ width: 1280, height: 980 });
-    await page.goto("/sign-in");
-    await expectCleanFrame(page, scheme);
-    await screenshot(page, `auth-${scheme}-sign-in-1280x980`);
+    for (const size of [
+      { width: 1280, height: 980, tag: "1280x980" },
+      { width: 768, height: 900, tag: "768x900" },
+      { width: 390, height: 600, tag: "390x600-short" },
+    ] as const) {
+      await page.setViewportSize(size);
+      await page.goto("/sign-in");
+      await expectCleanFrame(page, scheme);
+      await screenshot(page, `auth-${scheme}-sign-in-${size.tag}`);
+    }
   }
 
   await setScheme(context, baseURL!, "ocean");
