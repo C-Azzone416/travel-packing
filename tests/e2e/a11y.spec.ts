@@ -141,9 +141,7 @@ test.describe("trip screen", DEVICE, () => {
     await expectAccessible(page, "trip screen filtered");
   });
 
-  test("edit item, remove confirm, add Bathroom item, preferences, theme sheet", async ({
-    page,
-  }) => {
+  test("edit item, remove confirm, add Bathroom item and preferences", async ({ page }) => {
     await legacyPackingLayout(page);
     await openSanDiego(page);
     await page
@@ -163,9 +161,6 @@ test.describe("trip screen", DEVICE, () => {
     await page.getByRole("button", { name: "Edit preferences" }).click();
     await expectAccessible(page, "preferences dialog");
     await page.getByRole("button", { name: "Close dialog" }).click();
-
-    await page.getByRole("button", { name: "Change theme" }).click();
-    await expectAccessible(page, "theme sheet");
   });
 
   test("the toiletry bag prompt", async ({ page }) => {

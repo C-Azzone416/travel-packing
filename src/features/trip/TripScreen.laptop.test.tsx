@@ -748,14 +748,10 @@ describe("the toiletry bag step and what sits under the suitcase", () => {
     expect(await screen.findByRole("dialog")).toBeTruthy();
   });
 
-  it("keeps the trip tools reachable: save as a list, theme, stamp, preferences, edit trip", async () => {
+  it("keeps the trip tools reachable: save as a list, stamp, preferences, edit trip", async () => {
     const { user } = setup();
     await ready();
     await user.click(screen.getByRole("button", { name: "Save as a list" }));
-    expect(await screen.findByRole("dialog")).toBeTruthy();
-    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    await user.click(screen.getByRole("button", { name: "Change theme" }));
     expect(await screen.findByRole("dialog")).toBeTruthy();
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());

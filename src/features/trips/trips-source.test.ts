@@ -88,6 +88,7 @@ describe("memory trips source", () => {
         ready: false,
         toiletryBagPacked: false,
         copiedFrom: null,
+        theme: "travel",
       });
       expect(trip.items.every((item) => item.packed === 0)).toBe(true);
       expect(trip.weather.label).toBe("Close forecast");
@@ -104,6 +105,7 @@ describe("memory trips source", () => {
       };
       const trip = await source.createTrip(draft);
       expect(trip.copiedFrom).toBe("san-diego");
+      expect(trip.theme).toBe(original.theme);
       expect(trip.items.every((item) => item.packed === 0)).toBe(true);
       expect(source.snapshot().trips.find((t) => t.id === "san-diego")).toEqual(original);
     });
@@ -392,7 +394,6 @@ describe("per-trip commands", () => {
         reuseNice: false,
         returnOutfit: true,
       },
-      theme: "travel",
     });
     expect(future.items.find((entry) => entry.id === "sunglasses")).toMatchObject({
       name: "Polarized sunglasses",

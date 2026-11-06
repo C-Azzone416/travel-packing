@@ -17,7 +17,6 @@ import {
   setDraftConfig,
   setDraftDates,
   setDraftSavedList,
-  setDraftTheme,
   startCopyDraft,
   startDraft,
   undoRemoveTrip,
@@ -126,7 +125,6 @@ describe("drafts", () => {
       start: "2030-04-01",
       end: "2030-04-05",
       config: CONFIG,
-      theme: "travel",
     });
     config.laundry = true;
     expect(draft.config.laundry).toBe(false);
@@ -488,20 +486,8 @@ describe("a trip that starts from a saved list (#170)", () => {
   });
 });
 
-describe("themes", () => {
-  it("a new draft is Travel, and choosing a theme changes only the theme", () => {
-    const draft = startDraft(CONFIG, "2030-04-01", "2030-04-05");
-    expect(draft.theme).toBe("travel");
-    const chosen = setDraftTheme(draft, "beach");
-    expect(chosen).toEqual({ ...draft, theme: "beach" });
-    expect(draft.theme).toBe("travel");
-  });
-
-  it("a draft can start on a theme", () => {
-    expect(startDraft(CONFIG, "2030-04-01", "2030-04-05", "city").theme).toBe("city");
-  });
-
-  it("saving gives the trip the draft's theme (Travel by default)", () => {
+describe("legacy stored themes", () => {
+  it("keeps theme out of draft state and stores Travel for a new trip", () => {
     const place = {
       id: "p",
       city: "Anywhere",
@@ -510,23 +496,25 @@ describe("themes", () => {
       countryCode: "LD",
       label: "Anywhere, Land",
     };
-    const build = (theme?: Parameters<typeof setDraftTheme>[1]) => {
-      const base = selectDraftLocation(startDraft(CONFIG, "2030-04-01", "2030-04-05"), place);
-      const state = beginDraft(emptyLifecycleState(), theme ? setDraftTheme(base, theme) : base);
-      const saved = saveDraft(state, STAPLES, makeDeps());
-      if (!saved.ok) throw new Error(saved.reason);
-      return saved.trip;
-    };
-    expect(build().theme).toBe("travel");
-    expect(build("outdoors").theme).toBe("outdoors");
+    const draft = selectDraftLocation(startDraft(CONFIG, "2030-04-01", "2030-04-05"), place);
+    expect(draft).not.toHaveProperty("theme");
+    const saved = saveDraft(beginDraft(emptyLifecycleState(), draft), STAPLES, makeDeps());
+    if (!saved.ok) throw new Error(saved.reason);
+    expect(saved.trip.theme).toBe("travel");
   });
 
-  it("a copy starts from the source's theme and the draft can still change it", () => {
+  it("a copy draft has no theme control while save preserves the source compatibility value", () => {
     const source = { ...savedTrip(), theme: "theme_park" as const };
-    const draft = startCopyDraft(source, "2030-07-01", "2030-07-04");
-    expect(draft.theme).toBe("theme_park");
-    expect(setDraftTheme(draft, "home").theme).toBe("home");
-    expect(source.theme).toBe("theme_park");
+    const before = structuredClone(source);
+    const draft = selectDraftLocation(
+      startCopyDraft(source, "2030-07-01", "2030-07-04"),
+      OTHER_LOCATION,
+    );
+    expect(draft).not.toHaveProperty("theme");
+    const saved = saveDraft({ trips: [source], deletedTrips: [], draft }, STAPLES, makeDeps());
+    if (!saved.ok) throw new Error(saved.reason);
+    expect(saved.trip.theme).toBe("theme_park");
+    expect(source).toEqual(before);
   });
 });
 
@@ -555,7 +543,6 @@ describe("copy", () => {
       start: "2030-07-01",
       end: "2030-07-04",
       config: source.config,
-      theme: source.theme,
     });
     expect(draft.config).not.toBe(source.config);
     const state = beginDraft({ trips: [source], deletedTrips: [], draft: null }, draft);

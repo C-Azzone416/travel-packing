@@ -133,7 +133,6 @@ describe("trips server actions", () => {
       start: "2030-04-01",
       end: "2030-04-05",
       config: CONFIG,
-      theme: "travel",
       ...patch,
     });
 
@@ -144,6 +143,7 @@ describe("trips server actions", () => {
         destination: "San Diego",
         start: "2030-04-01",
         end: "2030-04-05",
+        theme: "travel",
       });
       expect(result.trip.location).toMatchObject({
         id: "us-ca-san-diego",
@@ -199,14 +199,19 @@ describe("trips server actions", () => {
       expect(result.trip.items.some((entry) => entry.name === "Towel")).toBe(false);
     });
 
-    it("copies one of the owner's own trips, recording where it came from", async () => {
-      const source = await seedTrip(db(), OWNER.userId);
+    it("copies one of the owner's own trips, preserving its legacy theme without changing the source", async () => {
+      const source = await seedTrip(db(), OWNER.userId, { theme: "city" });
+      const before = stateOf(await loadTripsAction()).trips.find((trip) => trip.id === source.id);
       const result = await createTripAction(
         draft({ mode: "copy", sourceId: source.id, start: "2030-06-01", end: "2030-06-03" }),
       );
       if (!result.ok) throw new Error(`expected ok, got ${result.code}`);
       expect(result.trip.copiedFrom).toBe(source.id);
       expect(result.trip.id).not.toBe(source.id);
+      expect(result.trip.theme).toBe("city");
+      expect(stateOf(await loadTripsAction()).trips.find((trip) => trip.id === source.id)).toEqual(
+        before,
+      );
     });
 
     it("a copy saves the preferences on the draft, not the source's (#202: Nice outfits turned off on the copy)", async () => {
@@ -247,6 +252,7 @@ describe("trips server actions", () => {
         packed: 0,
       });
       expect(result.trip.weather.status).toBe("accepted");
+      expect(result.trip.theme).toBe("travel");
 
       await resetData(ctx.client);
       const invalid = await createTripWithWeatherAction(draft(), [

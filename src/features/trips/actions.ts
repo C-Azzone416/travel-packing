@@ -107,13 +107,11 @@ export async function createTripAction(draft: TripDraft): Promise<CreateTripActi
             ...where,
             ...travelFields(draft),
             config: draft.config,
-            theme: draft.theme,
           })
         : await service.createTrip(context, {
             ...where,
             ...travelFields(draft),
             config: draft.config,
-            theme: draft.theme,
             ...(draft.savedListId ? { savedListId: draft.savedListId } : {}),
           });
   if (saved.ok) return { ok: true, trip: toLifecycleTrip(saved.data) };
@@ -150,7 +148,6 @@ export async function createTripWithWeatherAction(
     ...route,
     ...travelFields(draft),
     config: draft.config,
-    theme: draft.theme,
     accepted,
   });
   if (saved.ok) return { ok: true, trip: toLifecycleTrip(saved.data) };

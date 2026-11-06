@@ -200,6 +200,20 @@ export async function readTripTravel(
   }
 }
 
+/** The retained compatibility theme for one of the owner's trips. The Plan UI never reads or edits it. */
+export async function readTripTheme(ownerId: string, destination: string): Promise<string | null> {
+  const pool = new Pool({ connectionString: E2E_DATABASE_URL, max: 1 });
+  try {
+    const result = await pool.query(
+      "SELECT theme FROM trips WHERE owner_id = $1 AND destination = $2 ORDER BY created_at DESC LIMIT 1",
+      [ownerId, destination],
+    );
+    return result.rows[0]?.theme ?? null;
+  } finally {
+    await pool.end();
+  }
+}
+
 /** Set how one of the owner's trips is travelled, as the Plan a trip screen will (#390); screenshots of the flight Home use it. */
 export async function setTripTravelMode(
   ownerId: string,

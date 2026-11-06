@@ -540,8 +540,10 @@ describe("?copy=<trip id>", () => {
     expect(spy.mock.calls[0][0]).toMatchObject({
       mode: "copy",
       sourceId: "san-diego",
-      theme: "beach",
     });
+    expect(spy.mock.calls[0][0]).not.toHaveProperty("theme");
+    expect(base.snapshot().trips[0].theme).toBe("beach");
+    expect(base.snapshot().trips.find((trip) => trip.id === "san-diego")?.theme).toBe("beach");
   });
 
   it("a copy of a route keeps its stops and wants a new first arrival", async () => {
@@ -1004,7 +1006,7 @@ describe("when something cannot be read or saved", () => {
     await waitFor(() => expect(nav.push).toHaveBeenCalledWith("/"));
   });
 
-  it("does not expose the retired trip-theme picker and keeps the compatibility default", async () => {
+  it("does not expose the retired trip-theme picker or put theme in a new draft", async () => {
     const { user, base } = await setup({});
     const spy = vi.spyOn(base, "createTrip");
     await toStartingList(user);
@@ -1012,7 +1014,8 @@ describe("when something cannot be read or saved", () => {
     expect(screen.queryByRole("group", { name: "Trip theme" })).toBeNull();
     await user.click(screen.getByRole("button", { name: "Create trip" }));
     await waitFor(() => expect(spy).toHaveBeenCalled());
-    expect(spy.mock.calls[0][0].theme).toBe("travel");
+    expect(spy.mock.calls[0][0]).not.toHaveProperty("theme");
+    expect(base.snapshot().trips[0].theme).toBe("travel");
   });
 
   it("offers Fix dates when a stop leaves before it arrives", async () => {

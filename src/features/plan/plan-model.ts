@@ -8,6 +8,7 @@ import { CUBE_LABELS, CUBES, itemCube, weatherCubeLabel, type Cube } from "@/dom
 import { packedTotals } from "@/domain/readiness";
 import { tripItemsFromList } from "@/domain/saved-lists";
 import type { Staple, TripConfig, TripItem } from "@/domain/trip";
+import { DEFAULT_THEME, type ThemeId } from "@/domain/themes";
 import {
   beginDraft,
   draftStops,
@@ -331,12 +332,13 @@ export function recommendationForDraft(
   draft: TripDraft,
   stops: StopWeather[],
   route: readonly TripStop[],
+  compatibilityTheme: ThemeId = DEFAULT_THEME,
 ): WeatherRecommendation {
   return recommendPacking({
     days: stops.flatMap((stop) => stop.days),
     dayStopNames: route.map((stop) => stop.location.city),
     config: { ...draft.config, start: draft.start, end: draft.end },
-    theme: draft.theme,
+    theme: compatibilityTheme,
   });
 }
 
@@ -379,9 +381,10 @@ export function weatherAdds(
   stops: StopWeather[],
   staples: readonly Staple[],
   today: string,
+  compatibilityTheme: ThemeId = DEFAULT_THEME,
 ): WeatherAdds {
   const route = confirmedStops(draft);
-  const recommendation = recommendationForDraft(draft, stops, route);
+  const recommendation = recommendationForDraft(draft, stops, route, compatibilityTheme);
   const baseline = calculateSuggestions({
     ...draft.config,
     start: draft.start,

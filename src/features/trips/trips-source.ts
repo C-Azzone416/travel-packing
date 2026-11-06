@@ -33,7 +33,7 @@ import {
 } from "@/domain/readiness";
 import { categoryCounts, listNameTaken, tripItemsFromList } from "@/domain/saved-lists";
 import { automaticStamps, normaliseStampLabel } from "@/domain/stamps";
-import { isThemeId, type ThemeId } from "@/domain/themes";
+import { DEFAULT_THEME, isThemeId, type ThemeId } from "@/domain/themes";
 import type { Scope, Staple, TripConfig } from "@/domain/trip";
 import {
   archiveTrip,
@@ -138,7 +138,7 @@ export interface TripsSource {
    * suggestions). `basedOn` is the trip's `updatedAt` the person reviewed; if it changed since, this rejects with STALE.
    */
   updatePreferences(tripId: string, config: TripConfig, basedOn?: string): Promise<TripChange>;
-  /** Change the trip's picture (#48). Only the six built-in themes are accepted; nothing else about the trip changes. */
+  /** Compatibility write for the six legacy stored theme values retained after the #392 UI removal. */
   setTheme(tripId: string, theme: ThemeId): Promise<TripChange>;
   /**
    * Set or clear the route stamps' labels (#151): the typed text per slot (trimmed, upper-cased, exactly 3 of A-Z and 0-9),
@@ -301,6 +301,7 @@ export function createMemoryTripsSource(
         [...currentStaples],
         { newId, today: today() },
         list ? tripItemsFromList(list) : undefined,
+        draft.mode === "copy" && draft.sourceId ? find(draft.sourceId).theme : DEFAULT_THEME,
       );
       if (!result.ok) throw new TripsSourceError(result.reason);
       state = { ...result.state, draft: null };

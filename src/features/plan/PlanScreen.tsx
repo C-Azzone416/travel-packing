@@ -216,9 +216,9 @@ function PlanBody({ from, trips, staples, home, lists, allowCustom, today, rende
   const adds = useMemo(
     () =>
       weather.kind === "ready" && listId === null
-        ? weatherAdds(finalDraft, weather.stops, staples, today)
+        ? weatherAdds(finalDraft, weather.stops, staples, today, copySource?.theme)
         : null,
-    [weather, listId, finalDraft, staples, today],
+    [weather, listId, finalDraft, staples, today, copySource?.theme],
   );
   const accepted = useMemo(() => (useWeather && adds ? adds.accepted : []), [useWeather, adds]);
   const preview = useMemo(
