@@ -212,16 +212,17 @@ export function stampsView(
       const complete = [...group.completed].sort((a, b) => b.trip.end.localeCompare(a.trip.end));
       const upcoming = [...group.upcoming].sort((a, b) => a.trip.start.localeCompare(b.trip.start));
       const chosen = complete[0] ?? upcoming[0];
+      const chosenStop = chosen.trip.stops[chosen.stopIndex] ?? group.stop;
       const date = chosen.trip.start;
-      const look = stickerLook(group.stop.location.countryCode, group.stop.location.city);
+      const look = stickerLook(chosenStop.location.countryCode, chosenStop.location.city);
       const count = complete.length;
       return {
         order: date,
         sticker: {
           key: group.key,
-          code: stickerCode(chosen.trip, group.stop, chosen.stopIndex),
-          place: group.stop.location.city,
-          region: regionLabel(group.stop),
+          code: stickerCode(chosen.trip, chosenStop, chosen.stopIndex),
+          place: chosenStop.location.city,
+          region: regionLabel(chosenStop),
           month: month(date),
           monthYear: monthYear(date),
           completedCount: count,
@@ -230,7 +231,7 @@ export function stampsView(
           colour: look.colour,
           tilt: look.tilt,
           tripId: chosen.trip.id,
-          accessibleName: `${group.stop.location.city}, ${monthYear(date)}, ${Math.max(1, count)} ${Math.max(1, count) === 1 ? "trip" : "trips"}`,
+          accessibleName: `${chosenStop.location.city}, ${monthYear(date)}, ${Math.max(1, count)} ${Math.max(1, count) === 1 ? "trip" : "trips"}`,
         },
       };
     })

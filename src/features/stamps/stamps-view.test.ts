@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTrip, emptyLifecycleState, type LifecycleTrip } from "@/domain/trip-lifecycle";
+import { buildTrip, type LifecycleTrip } from "@/domain/trip-lifecycle";
 import type { TripConfig } from "@/domain/trip";
 import type { SampleLocation } from "@/domain/trip-stops";
 import {
@@ -195,7 +195,25 @@ describe("Stamps view", () => {
     });
   });
 
-  it("is independent of lifecycle container order", () => {
-    expect(emptyLifecycleState()).toMatchObject({ trips: [] });
+  it("uses the chosen completed visit's stop metadata regardless of input order", () => {
+    const completed = trip("Lisbon", "PT", "2026-09-01", "2026-09-08", {
+      region: "Lisbon District",
+      airportCode: "LIS",
+    });
+    const future = trip("Lisbon", "PT", "2027-03-01", "2027-03-05", {
+      region: "Future Region",
+    });
+
+    const completedFirst = stampsView([completed, future], today, "rolling").stickers[0];
+    const futureFirst = stampsView([future, completed], today, "rolling").stickers[0];
+
+    expect(completedFirst).toMatchObject({
+      code: "LIS",
+      region: "LISBON DISTRICT",
+      monthYear: "Sep 2026",
+      tripId: completed.id,
+      upcoming: false,
+    });
+    expect(futureFirst).toEqual(completedFirst);
   });
 });
