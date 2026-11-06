@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useEffect } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -148,6 +148,62 @@ describe("SettingsScreen", () => {
       await screen.findByText("Couldn’t save your home city. Nothing was changed."),
     ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Home city: Seattle, change" })).toBeTruthy();
+  });
+
+  it("does not let an older failed Home write replace a newer saved city or its Retry", async () => {
+    const seattle = locationById("us-wa-seattle")!;
+    const lisbon = locationById("pt-lisbon")!;
+    let finishClear!: (result: { ok: false; code: "INTERNAL" }) => void;
+    const clear = new Promise<{ ok: false; code: "INTERNAL" }>((resolve) => {
+      finishClear = resolve;
+    });
+    const updateHomeCity = vi
+      .fn<
+        (
+          location: SampleLocation | null,
+        ) => Promise<{ ok: true; home: TripOrigin | null } | { ok: false; code: "INTERNAL" }>
+      >()
+      .mockReturnValueOnce(clear)
+      .mockResolvedValueOnce({ ok: true, home: { location: lisbon } });
+    setup(undefined, undefined, undefined, undefined, false, { location: seattle }, updateHomeCity);
+
+    await userEvent.click(screen.getByRole("button", { name: "Clear" }));
+    await userEvent.click(screen.getByRole("button", { name: "Home city, choose" }));
+    await userEvent.type(screen.getByRole("combobox", { name: "Home city search" }), "Lisbon");
+    await userEvent.click(await screen.findByRole("option", { name: /Lisbon/ }));
+    expect(screen.getByRole("button", { name: "Home city: Lisbon, change" })).toBeTruthy();
+    expect(updateHomeCity).toHaveBeenCalledTimes(1);
+
+    await act(async () => finishClear({ ok: false, code: "INTERNAL" }));
+    await waitFor(() => expect(updateHomeCity).toHaveBeenCalledTimes(2));
+    expect(updateHomeCity).toHaveBeenNthCalledWith(2, lisbon);
+    expect(await screen.findByRole("button", { name: "Home city: Lisbon, change" })).toBeTruthy();
+    expect(screen.queryByText("Couldn’t save your home city. Nothing was changed.")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+  });
+
+  it("clears the Home field alert when the saved Retry succeeds", async () => {
+    const seattle = locationById("us-wa-seattle")!;
+    const updateHomeCity = vi
+      .fn<
+        (
+          location: SampleLocation | null,
+        ) => Promise<{ ok: true; home: TripOrigin | null } | { ok: false; code: "INTERNAL" }>
+      >()
+      .mockResolvedValueOnce({ ok: false, code: "INTERNAL" })
+      .mockResolvedValueOnce({ ok: true, home: null });
+    setup(undefined, undefined, undefined, undefined, false, { location: seattle }, updateHomeCity);
+
+    await userEvent.click(screen.getByRole("button", { name: "Clear" }));
+    expect(
+      await screen.findByText("Couldn’t save your home city. Nothing was changed."),
+    ).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    expect(await screen.findByRole("button", { name: "Home city, choose" })).toBeTruthy();
+    expect(screen.queryByText("Couldn’t save your home city. Nothing was changed.")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+    expect(await screen.findByText("Home city cleared.")).toBeTruthy();
   });
 
   it("shows the account and a Sign out button that goes straight through (no confirm)", async () => {

@@ -51,9 +51,12 @@ describe("home city settings actions", () => {
   it.each([
     ["UNAUTHENTICATED", "/sign-in"],
     ["FORBIDDEN", "/access-denied"],
-  ] as const)("redirects %s results", async (code, path) => {
+  ] as const)("redirects %s results from reads and writes", async (code, path) => {
     getHomeCity.mockResolvedValue({ ok: false, error: { code } });
     await expect(getHomeCityAction()).rejects.toThrow(`REDIRECT:${path}`);
+
+    setHomeCity.mockResolvedValue({ ok: false, error: { code } });
+    await expect(updateHomeCityAction(seattle)).rejects.toThrow(`REDIRECT:${path}`);
   });
 
   it("returns non-auth service failures without leaking details", async () => {

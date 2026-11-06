@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Suitcase } from "@/components/suitcase/Suitcase";
 import { Button } from "@/components/ui/Button";
 import { ModalSheet } from "@/components/ui/ModalSheet";
@@ -104,6 +104,10 @@ export function SettingsScreen({
   const [homePickerOpen, setHomePickerOpen] = useState(false);
   const [homeQuery, setHomeQuery] = useState("");
   const [homeChoice, setHomeChoice] = useState<SampleLocation | null>(null);
+  // Home changes stay optimistic, but their server writes run in intent order. The id also makes a
+  // failed/successful completion harmless once the owner has chosen something newer.
+  const homeWriteId = useRef(0);
+  const homeWriteQueue = useRef<Promise<void>>(Promise.resolve());
   const [closingAccount, setClosingAccount] = useState(false);
 
   // The account's theme is the truth. If this device was showing another one (a new device, or a choice made
@@ -156,28 +160,46 @@ export function SettingsScreen({
   }
 
   function saveHome(next: SampleLocation | null, cleared = false) {
+    const writeId = ++homeWriteId.current;
     setHomeError(false);
     const previous = home;
     setHome(next ? { location: next } : null);
     setHomePickerOpen(false);
-    void track(
-      async () => {
+
+    const stale = { kind: "stale" as const };
+    const write = () => {
+      // Retry never replays an intent that the owner has already replaced.
+      if (writeId !== homeWriteId.current) return Promise.resolve(stale);
+      const queued = homeWriteQueue.current.then(async () => {
+        if (writeId !== homeWriteId.current) return stale;
         const result = await updateHomeCity(next);
+        // Normalize an obsolete completion before SaveStatus sees it, so it cannot replace a newer
+        // failure/Retry or clear the newer failure by completing later.
+        if (writeId !== homeWriteId.current) return stale;
         if (!result.ok) throw new Error(result.code);
-        return result.home;
-      },
-      (saved) => {
-        setHome(saved);
-        if (cleared && previous) {
-          toast.show("Home city cleared.", {
-            action: {
-              label: "Undo",
-              onAction: () => saveHome(previous.location),
-            },
-          });
-        }
-      },
-    ).catch(() => {
+        return { kind: "saved" as const, home: result.home };
+      });
+      homeWriteQueue.current = queued.then(
+        () => undefined,
+        () => undefined,
+      );
+      return queued;
+    };
+
+    void track(write, (outcome) => {
+      if (outcome.kind === "stale" || writeId !== homeWriteId.current) return;
+      setHomeError(false);
+      setHome(outcome.home);
+      if (cleared && previous) {
+        toast.show("Home city cleared.", {
+          action: {
+            label: "Undo",
+            onAction: () => saveHome(previous.location),
+          },
+        });
+      }
+    }).catch(() => {
+      if (writeId !== homeWriteId.current) return;
       setHome(previous);
       setHomeError(true);
     });
