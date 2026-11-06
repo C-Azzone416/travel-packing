@@ -215,16 +215,26 @@ export function SettingsScreen({
             <button
               type="button"
               className="home-city-field"
+              aria-labelledby="settings-home-city-control-name"
               onClick={() => {
                 setHomeQuery("");
                 setHomeChoice(null);
                 setHomePickerOpen(true);
               }}
             >
-              <span className={home ? "" : "home-city-placeholder"}>
-                {home?.location.city ?? "Choose your home city"}
-              </span>{" "}
-              <span className="home-city-change">{home ? "Change" : "+"}</span>
+              <span
+                aria-hidden="true"
+                className={home ? "" : "home-city-placeholder"}
+                data-text={home?.location.city ?? "Choose your home city"}
+              />
+              <span
+                aria-hidden="true"
+                className="home-city-change"
+                data-text={home ? "Change" : "+"}
+              />
+              <span id="settings-home-city-control-name" className="sr-only">
+                {home ? `Home city: ${home.location.city}, change` : "Home city, choose"}
+              </span>
             </button>
             <p className="settings-help">
               Used as the “From” for new trips. You can change it on any trip.

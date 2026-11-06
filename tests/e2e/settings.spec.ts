@@ -250,20 +250,22 @@ test("Home city saves immediately, persists, clears with Undo, and keeps existin
 }) => {
   await openSettings(page);
   await expect(page.getByText("Trips you already planned keep their own “From”.")).toBeVisible();
-  await page.getByRole("button", { name: "Choose your home city +" }).click();
+  await page.getByRole("button", { name: "Home city, choose" }).click();
   const picker = page.getByRole("dialog", { name: "Choose your home city" });
   await picker.getByRole("combobox", { name: "Home city search" }).fill("Seattle");
   await picker.getByRole("option", { name: /Seattle/ }).click();
-  await expect(page.getByRole("button", { name: "Seattle Change" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Home city: Seattle, change" })).toBeVisible();
+  await expectAccessible(page, "Settings with a configured home city");
   await expect(page.getByText(/^Last saved /)).toBeVisible();
 
   await page.reload();
-  await expect(page.getByRole("button", { name: "Seattle Change" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Home city: Seattle, change" })).toBeVisible();
   await page.getByRole("button", { name: "Clear" }).click();
   await expect(page.getByText("Home city cleared.")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Choose your home city +" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Home city, choose" })).toBeVisible();
+  await expectAccessible(page, "Settings with no home city");
   await page.getByRole("button", { name: "Undo" }).click();
-  await expect(page.getByRole("button", { name: "Seattle Change" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Home city: Seattle, change" })).toBeVisible();
 });
 
 test("the Settings suitcase has the specified columns and no overflow from 195 to 1280 or at 200% text", async ({

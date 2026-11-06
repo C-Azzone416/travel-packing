@@ -104,15 +104,15 @@ describe("SettingsScreen", () => {
       home: location ? { location } : null,
     }));
     setup(undefined, undefined, undefined, undefined, false, null, updateHomeCity);
-    expect(screen.getByRole("button", { name: "Choose your home city +" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Home city, choose" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Clear" })).toBeNull();
 
-    await userEvent.click(screen.getByRole("button", { name: "Choose your home city +" }));
+    await userEvent.click(screen.getByRole("button", { name: "Home city, choose" }));
     await userEvent.type(screen.getByRole("combobox", { name: "Home city search" }), "Lisbon");
     await userEvent.click(await screen.findByRole("option", { name: /Lisbon/ }));
 
     expect(updateHomeCity).toHaveBeenCalledWith(locationById("pt-lisbon"));
-    expect(await screen.findByRole("button", { name: "Lisbon Change" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Home city: Lisbon, change" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Clear" })).toBeTruthy();
     expect(screen.queryByRole("dialog", { name: "Choose your home city" })).toBeNull();
   });
@@ -135,10 +135,10 @@ describe("SettingsScreen", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Clear" }));
     expect(await screen.findByText("Home city cleared.")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Choose your home city +" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Home city, choose" })).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: "Undo" }));
     expect(updateHomeCity).toHaveBeenNthCalledWith(2, seattle);
-    expect(await screen.findByRole("button", { name: "Seattle Change" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Home city: Seattle, change" })).toBeTruthy();
     first.unmount();
 
     const failed = vi.fn(async () => ({ ok: false as const, code: "INTERNAL" as const }));
@@ -147,7 +147,7 @@ describe("SettingsScreen", () => {
     expect(
       await screen.findByText("Couldn’t save your home city. Nothing was changed."),
     ).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Seattle Change" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Home city: Seattle, change" })).toBeTruthy();
   });
 
   it("shows the account and a Sign out button that goes straight through (no confirm)", async () => {

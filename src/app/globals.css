@@ -2140,6 +2140,9 @@ input:disabled {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.home-city-field > [data-text]::before {
+  content: attr(data-text);
+}
 .home-city-placeholder {
   color: var(--muted);
 }
