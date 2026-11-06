@@ -61,6 +61,20 @@
   font-weight: 700;
   cursor: pointer;
 }
+.countRules summary::after {
+  content: "▾";
+  margin-inline-start: 8px;
+  color: currentcolor;
+  line-height: 1;
+}
+.countRules[open] summary::after {
+  transform: rotate(180deg);
+}
+.countRules summary:focus-visible {
+  border-radius: 4px;
+  outline: 3px solid var(--info);
+  outline-offset: 2px;
+}
 .countRules[open] summary {
   margin-bottom: 4px;
 }
@@ -79,7 +93,8 @@
 }
 .countRules li span,
 .countRules p {
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 .countRules p {
   margin: 8px 0 0;

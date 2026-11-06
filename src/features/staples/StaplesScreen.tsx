@@ -196,8 +196,7 @@ export function StaplesScreen({
         <ul>
           {STAPLE_COUNT_RULES.map((rule) => (
             <li key={rule.cadence}>
-              <strong>{rule.label}</strong>
-              <span>{rule.description}</span>
+              <strong>{rule.label}</strong> <span>{rule.description}</span>
             </li>
           ))}
         </ul>

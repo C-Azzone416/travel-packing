@@ -110,8 +110,10 @@ describe("laptop: the page", () => {
     const disclosure = summary.closest("details") as HTMLDetailsElement;
     expect(disclosure.open).toBe(false);
     for (const rule of STAPLE_COUNT_RULES) {
-      expect(within(disclosure).getByText(rule.label)).toBeTruthy();
-      expect(within(disclosure).getByText(rule.description)).toBeTruthy();
+      const label = within(disclosure).getByText(rule.label);
+      const item = label.closest("li");
+      expect(item).toBeTruthy();
+      expect(item!.textContent).toBe(`${rule.label} ${rule.description}`);
     }
     expect(within(disclosure).getByText(/Items marked ↻ are halved/)).toBeTruthy();
     await user.click(summary);
