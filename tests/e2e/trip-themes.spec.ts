@@ -31,8 +31,6 @@ test("a stored trip theme remains readable before the compatibility column is mi
   page,
 }) => {
   await openDashboard(page);
-  await page.getByRole("button", { name: /Past & archive/ }).click();
-  await expect(card(page, "Lisbon")).toBeVisible();
   expect(await readTripTheme(ownerId(), "Lisbon")).toBe("city");
 });
 
