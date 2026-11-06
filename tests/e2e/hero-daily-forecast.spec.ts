@@ -39,10 +39,6 @@ const ROW = 28;
 const CHIP = ROW * 3;
 const WIDTHS = [1000, 981, 721, 390, 320] as const;
 const SIX_WIDTHS = [1000, 981, 721, 390, 320] as const;
-// F2's established legacy-layout checkpoint is 981px. The new 1000px checkpoint lands on a
-// different ledger-grid geometry; 1000px remains covered by the other weather fixtures and
-// dashboard-hero-ledger.spec.ts.
-const MIXED_WIDTHS = [981, 721, 390, 320] as const;
 const THREE_WIDTHS = [1000, 721, 390] as const;
 const onGrid = (value: number) => Math.min(value % ROW, ROW - (value % ROW));
 
@@ -54,7 +50,12 @@ async function openHero(page: Page, stays: Stay[]) {
 
 async function setWidth(page: Page, width: number) {
   await page.setViewportSize({ width, height: width < 700 ? 844 : 900 });
-  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => done(null))));
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    await new Promise((done) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => done(null))),
+    );
+  });
 }
 
 test.beforeEach(async ({ page }) => {
@@ -471,7 +472,7 @@ async function expectContent(page: Page, fixture: Fixture) {
 
 const MATRIX: [Fixture, readonly number[], boolean][] = [
   [F1, SIX_WIDTHS, false],
-  [F2, MIXED_WIDTHS, true],
+  [F2, SIX_WIDTHS, true],
   [F3, SIX_WIDTHS, false],
   [F5, SIX_WIDTHS, false],
   [F6, SIX_WIDTHS, false],
