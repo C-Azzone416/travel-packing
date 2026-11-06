@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
 import { chooseFromMenu } from "./helpers/menu";
-import { DEVICE } from "./helpers/device";
+import { DEVICE, legacyPackingLayout } from "./helpers/device";
 
 // A fixed clock keeps the seeded sample trips stable: San Diego upcoming, Lisbon past. (Trip ids are the real
 // database's uuids, so tests find a trip's panels by role/name or `aria-controls`, never by a fixture id.)
@@ -206,13 +206,13 @@ test("the hero leads with the next departure; Edit trip opens the route sheet", 
   await expect(hero.getByText("days to go")).toBeVisible();
   await expect(hero.getByRole("img", { name: /departure stamp$|route stamps$/ })).toBeVisible();
   await expect(hero.getByRole("link", { name: "Continue packing: San Diego" })).toBeVisible();
-  // The header is the dark role token, not a hard-coded colour.
+  // The header bar is the paper palette token (the laptop bar; on a phone the header sits on the page colour), not a hard-coded colour.
   const headerBackground = await page
-    .locator("header.topbar")
+    .locator("header.topbar .topbar-inner")
     .evaluate((node) => getComputedStyle(node).backgroundColor);
   const headerToken = await page.evaluate(() => {
     const probe = document.createElement("div");
-    probe.style.background = "var(--header)";
+    probe.style.background = "var(--paper)";
     document.body.appendChild(probe);
     const color = getComputedStyle(probe).backgroundColor;
     probe.remove();
@@ -249,6 +249,7 @@ test("no horizontal scroll at 390 and 1280, and the sidebar sits beside the hero
 test("the hero's ＋ Add item adds an item inline, never doubles it, and hands Bathroom to its form", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await openDashboard(page);
   const hero = card(page, "San Diego");
   const toggle = hero.getByRole("button", { name: "＋ Add item" });

@@ -1,0 +1,393 @@
+"use client";
+
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { LaundryMarker, Pill, PillGroup } from "@/components/suitcase";
+import { cx } from "@/components/suitcase/cx";
+import { Icon } from "@/components/ui/Icon";
+import { ADD_ITEM_NAME_MAX } from "@/domain/item-ops";
+import type { Cube } from "@/domain/cubes";
+import type { TripItem } from "@/domain/trip";
+import {
+  checkboxName,
+  editName,
+  filterCounts,
+  filterItems,
+  isPacked,
+  moveTargets,
+  panelFooter,
+  type CubeFilter,
+  type CubeView,
+} from "./packing-model";
+import styles from "./packing.module.css";
+
+export type AddOutcome =
+  | { ok: true }
+  | { ok: false; reason: "EXISTS"; existingId: string }
+  | { ok: false; reason: "FAILED" };
+
+export interface CubePanelProps {
+  view: CubeView;
+  /** The cubes the "move to" select offers (every drawn cube; the item's own is left out). */
+  cubes: readonly CubeView[];
+  filter: CubeFilter;
+  onFilter: (filter: CubeFilter) => void;
+  editing: boolean;
+  onEditing: (editing: boolean) => void;
+  /** The trip has laundry on: halved items show the ↻ marker. */
+  laundry: boolean;
+  failedRows: ReadonlySet<string>;
+  onTick: (item: TripItem, packed: boolean) => void;
+  onRetry: (itemId: string) => void;
+  onEditItem: (itemId: string) => void;
+  onMove: (item: TripItem, cube: Cube) => void;
+  onRemove: (item: TripItem) => void;
+  onMorningOf: (cube: Cube, on: boolean) => void;
+  /** Adds a typed name to this cube. Toiletries items go through the Bathroom form instead. */
+  onAdd: (cube: Cube, name: string) => Promise<AddOutcome>;
+  /** The toiletry bag step, shown at the foot of the Toiletries cube. */
+  extra?: ReactNode;
+  panelId: string;
+  titleId: string;
+}
+
+function Row({
+  item,
+  laundry,
+  failed,
+  onTick,
+  onRetry,
+}: {
+  item: TripItem;
+  laundry: boolean;
+  failed: boolean;
+  onTick: CubePanelProps["onTick"];
+  onRetry: CubePanelProps["onRetry"];
+}) {
+  const packed = isPacked(item);
+  const partial = !packed && item.packed > 0;
+  const input = useRef<HTMLInputElement>(null);
+  // A partly packed row (packed some of its quantity before the redesign) shows the mixed state; one tick finishes it.
+  useEffect(() => {
+    if (input.current) input.current.indeterminate = partial;
+  }, [partial]);
+  return (
+    <li className={styles.row} data-item-id={item.id} data-packed={packed ? "true" : "false"}>
+      <label className={cx(styles.rowLabel, packed && styles.packed)}>
+        <input
+          ref={input}
+          type="checkbox"
+          className={styles.box}
+          checked={packed}
+          aria-label={checkboxName(item)}
+          onChange={() => onTick(item, !packed)}
+        />
+        <span className={styles.name}>{item.name}</span>
+        {item.section === "return" ? <span className={styles.qty}>return outfit</span> : null}
+        {item.qty > 1 ? <span className={styles.qty}>× {item.qty}</span> : null}
+        {laundry && item.laundryHalves ? (
+          <LaundryMarker aria-hidden={undefined} className={styles.laundryMark} />
+        ) : null}
+        {partial ? (
+          <span className={styles.partial}>
+            {item.packed} of {item.qty}
+          </span>
+        ) : null}
+      </label>
+      {failed ? (
+        <button type="button" className={styles.rowError} onClick={() => onRetry(item.id)}>
+          Not saved · Retry
+        </button>
+      ) : null}
+    </li>
+  );
+}
+
+function EditRow({
+  item,
+  cubes,
+  from,
+  onEditItem,
+  onMove,
+  onRemove,
+}: {
+  item: TripItem;
+  cubes: readonly CubeView[];
+  from: Cube;
+  onEditItem: CubePanelProps["onEditItem"];
+  onMove: CubePanelProps["onMove"];
+  onRemove: CubePanelProps["onRemove"];
+}) {
+  return (
+    <li className={cx(styles.row, styles.editRow)} data-item-id={item.id}>
+      <button
+        type="button"
+        className={cx(styles.editName, "edit-target")}
+        onClick={() => onEditItem(item.id)}
+      >
+        {/* The name starts with the visible words (label-content-name-mismatch): "Edit" is spoken only. */}
+        <span className="sr-only">Edit</span> <span className={styles.name}>{item.name}</span>{" "}
+        {item.section === "return" ? <span className={styles.qty}>return outfit</span> : null}{" "}
+        {item.qty > 1 ? <span className={styles.qty}>× {item.qty}</span> : null}
+      </button>
+      <select
+        className={styles.move}
+        aria-label={`Move ${editName(item)} to another cube`}
+        value=""
+        onChange={(event) => {
+          if (event.target.value) onMove(item, event.target.value as Cube);
+        }}
+      >
+        <option value="">Move to…</option>
+        {moveTargets(cubes, from).map((target) => (
+          <option key={target.cube} value={target.cube}>
+            {target.label}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        className={styles.remove}
+        aria-label={`Remove ${editName(item)}`}
+        onClick={() => onRemove(item)}
+      >
+        <Icon name="close" size={16} />
+      </button>
+    </li>
+  );
+}
+
+function AddRow({
+  cube,
+  label,
+  onAdd,
+  onEditItem,
+}: {
+  cube: Cube;
+  label: string;
+  onAdd: CubePanelProps["onAdd"];
+  onEditItem: CubePanelProps["onEditItem"];
+}) {
+  const [name, setName] = useState("");
+  const [problem, setProblem] = useState<null | "EMPTY" | "LONG" | "FAILED">(null);
+  const [existing, setExisting] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const field = useRef<HTMLInputElement>(null);
+  const messageId = useId();
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    if (saving) return;
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setProblem("EMPTY");
+      return field.current?.focus();
+    }
+    if (trimmed.length > ADD_ITEM_NAME_MAX) {
+      setProblem("LONG");
+      return field.current?.focus();
+    }
+    setSaving(true);
+    setProblem(null);
+    setExisting(null);
+    const outcome = await onAdd(cube, trimmed);
+    setSaving(false);
+    if (outcome.ok) {
+      setName("");
+      return field.current?.focus();
+    }
+    if (outcome.reason === "EXISTS") setExisting(outcome.existingId);
+    else setProblem("FAILED");
+  }
+
+  const message =
+    problem === "EMPTY"
+      ? "Enter an item name."
+      : problem === "LONG"
+        ? `Keep the name under ${ADD_ITEM_NAME_MAX} characters.`
+        : problem === "FAILED"
+          ? "Couldn’t add it. Nothing was changed."
+          : null;
+  return (
+    <form className={styles.addRow} onSubmit={submit} noValidate>
+      <label className={styles.addField}>
+        <span className="sr-only">Add an item to {label}</span>
+        <input
+          ref={field}
+          className={styles.addInput}
+          value={name}
+          placeholder="+ Add an item"
+          maxLength={ADD_ITEM_NAME_MAX + 20}
+          aria-invalid={message ? true : undefined}
+          aria-describedby={message || existing ? messageId : undefined}
+          onChange={(event) => {
+            setName(event.target.value);
+            setProblem(null);
+            setExisting(null);
+          }}
+        />
+      </label>
+      <button type="submit" className={styles.addButton} disabled={saving}>
+        Add
+      </button>
+      {message || existing ? (
+        <p id={messageId} className={styles.addMessage} role="alert">
+          {message ?? (
+            <>
+              That’s already on your list.{" "}
+              <button
+                type="button"
+                className={styles.linkButton}
+                onClick={() => onEditItem(existing as string)}
+              >
+                Edit its quantity
+              </button>
+            </>
+          )}
+        </p>
+      ) : null}
+    </form>
+  );
+}
+
+// The open cube (#376 part 3 section 1.3): its title and "9 of 14 packed", the All / To pack / Packed pills with the
+// number of rows each lists, "Edit list", a two-column checklist with ONE tick per item, and the footer line. Edit list
+// swaps the checklist for the editing rows (rename/quantity, move to another cube, remove) plus "Add an item" and the
+// cube's Morning of switch.
+export function CubePanel({
+  view,
+  cubes,
+  filter,
+  onFilter,
+  editing,
+  onEditing,
+  laundry,
+  failedRows,
+  onTick,
+  onRetry,
+  onEditItem,
+  onMove,
+  onRemove,
+  onMorningOf,
+  onAdd,
+  extra,
+  panelId,
+  titleId,
+}: CubePanelProps) {
+  const counts = filterCounts(view.items);
+  const shown = editing ? view.items : filterItems(view.items, filter);
+  const lockedOn = view.items.some((item) => item.section === "packlast");
+  const switchId = useId();
+  return (
+    <section
+      id={panelId}
+      className={styles.panel}
+      aria-labelledby={titleId}
+      data-cube={view.cube}
+      data-editing={editing ? "true" : undefined}
+    >
+      <div className={styles.panelHead}>
+        <div className={styles.panelTitleRow}>
+          <h2 id={titleId} className={styles.panelTitle} tabIndex={-1}>
+            {view.label}
+          </h2>
+          <p className={styles.panelCount}>
+            {view.packed} of {view.total} packed
+          </p>
+        </div>
+        <PillGroup label="Packing list view" className={styles.panelPills}>
+          {editing ? null : (
+            <>
+              <Pill active={filter === "all"} count={counts.all} onClick={() => onFilter("all")}>
+                All
+              </Pill>
+              <Pill
+                active={filter === "to-pack"}
+                count={counts.toPack}
+                onClick={() => onFilter("to-pack")}
+              >
+                To pack
+              </Pill>
+              <Pill
+                active={filter === "packed"}
+                count={counts.packed}
+                onClick={() => onFilter("packed")}
+              >
+                Packed
+              </Pill>
+            </>
+          )}
+          <Pill
+            icon={editing ? "check" : "pencil"}
+            active={editing}
+            onClick={() => onEditing(!editing)}
+          >
+            {editing ? "Done" : "Edit list"}
+          </Pill>
+        </PillGroup>
+      </div>
+
+      {shown.length > 0 ? (
+        <ul
+          className={cx(styles.list, editing && styles.listEditing)}
+          style={{ ["--rows" as string]: Math.ceil(shown.length / 2) }}
+          aria-label={`${view.label} items`}
+        >
+          {shown.map((item) =>
+            editing ? (
+              <EditRow
+                key={item.id}
+                item={item}
+                cubes={cubes}
+                from={view.cube}
+                onEditItem={onEditItem}
+                onMove={onMove}
+                onRemove={onRemove}
+              />
+            ) : (
+              <Row
+                key={item.id}
+                item={item}
+                laundry={laundry}
+                failed={failedRows.has(item.id)}
+                onTick={onTick}
+                onRetry={onRetry}
+              />
+            ),
+          )}
+        </ul>
+      ) : null}
+
+      {extra}
+
+      {editing ? (
+        <div className={styles.editFooter}>
+          {/* The Toiletries cube adds through the Bathroom form in its bag step: one add control, not two. */}
+          {extra ? null : (
+            <AddRow cube={view.cube} label={view.label} onAdd={onAdd} onEditItem={onEditItem} />
+          )}
+          <div className={styles.morningRow}>
+            <label className={styles.morningLabel} htmlFor={switchId}>
+              <strong>Morning of</strong>
+              <span>
+                {lockedOn
+                  ? "A Pack last item is in this cube."
+                  : "Pack this cube the morning you leave."}
+              </span>
+            </label>
+            <input
+              id={switchId}
+              type="checkbox"
+              role="switch"
+              className={styles.switch}
+              checked={view.morningOf}
+              disabled={lockedOn}
+              onChange={(event) => onMorningOf(view.cube, event.target.checked)}
+            />
+          </div>
+        </div>
+      ) : (
+        <p className={styles.footer}>{panelFooter(view, shown.length)}</p>
+      )}
+    </section>
+  );
+}

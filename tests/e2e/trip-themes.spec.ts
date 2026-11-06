@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
 import { chooseFromMenu } from "./helpers/menu";
-import { DEVICE } from "./helpers/device";
+import { DEVICE, legacyPackingLayout } from "./helpers/device";
 
 // Trip themes (#48) against the real e2e database: what a trip saves with is what its card shows after a reload.
 // The seeded sample trips are San Diego (Beach) and Lisbon (City).
@@ -80,6 +80,7 @@ test("the picker appears after the destination, shows all six thumbnails, and Tr
 test("keyboard only: arrow keys pick a theme, the choice is saved, and the card shows it after a reload", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await openDashboard(page);
   await startTrip(page);
   const group = page.getByRole("group", { name: "Trip theme" });
@@ -102,6 +103,7 @@ test("keyboard only: arrow keys pick a theme, the choice is saved, and the card 
 });
 
 test("a trip saved without touching the picker is Travel", async ({ page }) => {
+  await legacyPackingLayout(page);
   await openDashboard(page);
   await startTrip(page);
   await page.getByRole("button", { name: "Continue to packing preferences" }).click();
@@ -113,6 +115,7 @@ test("a trip saved without touching the picker is Travel", async ({ page }) => {
 test("a copy starts on the source trip's theme, and changing it does not touch the source", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await openDashboard(page);
   await chooseFromMenu(page, "San Diego", "Copy trip");
   await page.getByRole("combobox", { name: "Destination search" }).fill("lon");

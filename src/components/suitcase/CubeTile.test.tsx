@@ -129,17 +129,18 @@ describe("CubeTile", () => {
 });
 
 describe("CubeRailItem", () => {
-  it("is a button pressed when selected, and selecting reports it", async () => {
+  it("is a button marked current when selected, and selecting reports it", async () => {
     const onSelect = vi.fn();
     const { rerender } = render(
-      <CubeRailItem name="Clothing" packed={9} total={14} onSelect={onSelect} />,
+      <CubeRailItem name="Clothing" packed={9} total={14} onSelect={onSelect} controls="panel" />,
     );
     const button = screen.getByRole("button", { name: /Clothing/ });
-    expect(button.getAttribute("aria-pressed")).toBe("false");
+    expect(button.getAttribute("aria-current")).toBeNull();
+    expect(button.getAttribute("aria-controls")).toBe("panel");
     await userEvent.click(button);
     expect(onSelect).toHaveBeenCalledOnce();
     rerender(<CubeRailItem name="Clothing" packed={9} total={14} selected />);
-    expect(screen.getByRole("button").getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button").getAttribute("aria-current")).toBe("true");
     expect(screen.getByRole("button").className).toContain("railSelected");
   });
 

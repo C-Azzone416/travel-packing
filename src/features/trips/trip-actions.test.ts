@@ -22,6 +22,8 @@ vi.mock("next/navigation", () => ({
 import {
   acceptWeatherAction,
   addItemAction,
+  moveItemToCubeAction,
+  setMorningOfAction,
   applyWeatherReviewAction,
   addToiletryItemAction,
   confirmBagPlacementAction,
@@ -341,6 +343,34 @@ describe("item and preference commands", () => {
     expect(read.trip.items.some((entry) => entry.id === "razor")).toBe(false);
   });
 
+  it("upsertStapleAction and saveStaplesSetupAction keep the cube and the laundry flag", async () => {
+    const tees = {
+      id: "tops",
+      name: "Tees",
+      qty: 2,
+      cadence: "per night",
+      category: "Clothing",
+      packLast: false,
+      laundryHalves: true,
+      cube: "misc",
+    } as const;
+    const upserted = await upsertStapleAction(tees);
+    if (!upserted.ok) throw new Error(`expected ok, got ${upserted.code}`);
+    expect(upserted.staples.find((entry) => entry.id === "tops")).toEqual(tees);
+    const cleared = await upsertStapleAction({
+      ...tees,
+      laundryHalves: undefined,
+      cube: undefined,
+    });
+    if (!cleared.ok) throw new Error(`expected ok, got ${cleared.code}`);
+    expect(cleared.staples.find((entry) => entry.id === "tops")).not.toHaveProperty(
+      "laundryHalves",
+    );
+    const setup = await saveStaplesSetupAction([tees]);
+    if (!setup.ok) throw new Error(`expected ok, got ${setup.code}`);
+    expect(setup.staples).toEqual([tees]);
+  });
+
   it("upsertStapleAction rejects bad input, and another owner's staples are separate", async () => {
     const bad = {
       id: "x",
@@ -559,6 +589,38 @@ describe("owner gate", () => {
     const read = await getTripAction(trip.id);
     if (!read.ok) throw new Error("expected ok");
     for (const id of ids) expect(read.trip.items.find((entry) => entry.id === id)!.packed).toBe(1);
+  });
+});
+
+describe("cube actions (#385)", () => {
+  it("add into a cube, move an item, and flag Morning of, in the screen's shape", async () => {
+    const trip = await seedTrip(db(), OWNER.userId);
+    const added = await addItemAction(trip.id, {
+      name: "Pillow",
+      category: "Accessories",
+      neededQty: 1,
+      cube: "tech",
+    });
+    if (!added.ok) throw new Error(`expected ok, got ${added.code}`);
+    expect(added.trip.items.find((entry) => entry.name === "Pillow")?.cube).toBe("tech");
+    const item = trip.items[0];
+    const moved = await moveItemToCubeAction(trip.id, item.id, "misc");
+    if (!moved.ok) throw new Error(`expected ok, got ${moved.code}`);
+    expect(moved.trip.items.find((entry) => entry.id === item.id)?.cube).toBe("misc");
+    const flagged = await setMorningOfAction(trip.id, "misc", true);
+    if (!flagged.ok) throw new Error(`expected ok, got ${flagged.code}`);
+    expect(flagged.trip.morningOfCubes).toContain("misc");
+  });
+
+  it("says NOT_FOUND for a trip that is not there", async () => {
+    expect(await moveItemToCubeAction(MISSING, "x", "tech")).toEqual({
+      ok: false,
+      code: "NOT_FOUND",
+    });
+    expect(await setMorningOfAction(MISSING, "tech", true)).toEqual({
+      ok: false,
+      code: "NOT_FOUND",
+    });
   });
 });
 

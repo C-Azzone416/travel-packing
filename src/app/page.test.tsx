@@ -6,6 +6,7 @@ import { TripsSourceProvider } from "@/features/trips/TripsSourceProvider";
 import TripsPage, { metadata as tripsMetadata } from "./page";
 import SettingsPage, { metadata as settingsMetadata } from "./settings/page";
 import StaplesPage, { metadata as staplesMetadata } from "./staples/page";
+import StampsPage, { metadata as stampsMetadata } from "./stamps/page";
 import { metadata as rootMetadata, viewport } from "./layout";
 
 const push = vi.fn();
@@ -51,8 +52,15 @@ describe("screens", () => {
         </SaveStatusProvider>
       </ToastProvider>,
     );
-    expect(html).toContain("<h1>Every trip starts here</h1>");
+    expect(html).toMatch(/<h1[^>]*>Staples<\/h1>/);
     expect(html).toContain('aria-label="Loading staples"');
+  });
+
+  it("Stamps is a placeholder page with its own title (the real page is #391)", () => {
+    const html = renderToStaticMarkup(<StampsPage />);
+    expect(html).toContain("<h1>Stamps</h1>");
+    expect(html).toContain("sticker");
+    expect(stampsMetadata.title).toBe("Stamps");
   });
 
   it("Settings renders the signed-in account and a Sign out button", async () => {

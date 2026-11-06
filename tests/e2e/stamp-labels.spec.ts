@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
-import { DEVICE } from "./helpers/device";
+import { DEVICE, legacyPackingLayout } from "./helpers/device";
 import { expectAccessible } from "./helpers/a11y";
 
 // Per-trip stamp label (#151), through the real data layer: the packing screen's Edit stamp sheet, the same label on the
@@ -28,6 +28,7 @@ async function openStampSheet(page: Page) {
 test("set a custom stamp label, see it on the dashboard and after a reload, then reset it to automatic", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await openSanDiego(page);
   const automatic = await heroStamp(page).getAttribute("aria-label");
   expect(automatic).toMatch(/departure stamp$/);
@@ -68,6 +69,7 @@ test("set a custom stamp label, see it on the dashboard and after a reload, then
 test("a two-country trip has two stamps to label: each is edited on its own, and the name carries both", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await page.clock.setFixedTime(NOW);
   await signInAsOwner(page);
   await page.getByRole("link", { name: /Plan a trip/ }).click();
@@ -103,6 +105,7 @@ test("a two-country trip has two stamps to label: each is edited on its own, and
 test("a label that is not exactly 3 letters or numbers is refused with a message, and nothing is saved", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await openSanDiego(page);
   const automatic = await heroStamp(page).getAttribute("aria-label");
   const sheet = await openStampSheet(page);
@@ -122,6 +125,7 @@ test(
   "the Stamp label sheet is accessible, keyboard operable, and fits a phone",
   DEVICE,
   async ({ page }) => {
+    await legacyPackingLayout(page);
     await openSanDiego(page);
     const edit = page.getByRole("button", { name: "Edit stamp" });
     const box = (await edit.boundingBox())!;

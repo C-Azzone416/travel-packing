@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { ownerEmailFor, signInAsOwner } from "./helpers/auth";
 import { seedSavedList } from "./helpers/database";
-import { DEVICE } from "./helpers/device";
+import { DEVICE, legacyPackingLayout } from "./helpers/device";
 import { chooseFromMenu } from "./helpers/menu";
 
 // Create flow: Start from a saved list (#170), against the real database. A chosen list REPLACES staples and the
@@ -50,6 +50,7 @@ const rows = (page: Page) => page.locator("[data-item-id]");
 test("with saved lists: choose one, review it, and the new trip is exactly the list, unpacked", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await openDashboard(page);
   await seedBeach();
   await startStep(page);

@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
 import { expectAccessible } from "./helpers/a11y";
-import { DEVICE } from "./helpers/device";
+import { DEVICE, legacyPackingLayout } from "./helpers/device";
 
 // Edit trip (#203): the route and the packing preferences in one sheet, with a review of what a recalculation does before it is
 // applied. Real app, real database. The merge rules themselves are unit-tested (item-ops, recalc-preview); these tests prove the
@@ -31,6 +31,7 @@ async function openPreferences(page: Page) {
 test("Edit trip has three ways in: the dashboard, the packing hero and Trip math, each on the right tab", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await page.clock.setFixedTime(NOW);
   await signInAsOwner(page);
   const hero = page.getByRole("article", { name: "San Diego" });
@@ -67,6 +68,7 @@ test("Edit trip has three ways in: the dashboard, the packing hero and Trip math
 test("a recalculation keeps the person's list work: manual, edited, packed and removed items, stored", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await openSanDiego(page);
   // The person's work: a manual item, an edited suggestion, packed progress, and a removed optional suggestion.
   await page.getByRole("button", { name: "＋ Add item" }).click();
@@ -123,6 +125,7 @@ test("a recalculation keeps the person's list work: manual, edited, packed and r
 test("a packed count above the new target is shown, needs an acknowledgement, and is lowered to the target", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await openSanDiego(page);
   await row(page, "tops").getByRole("button", { name: "Pack all Everyday tops" }).click();
   await expect(row(page, "tops")).toContainText("4 of 4 packed");
@@ -142,6 +145,7 @@ test("a packed count above the new target is shown, needs an acknowledgement, an
 test("Cancel, Escape and Back leave the trip unchanged, asking before discarding edits", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await openSanDiego(page);
   const dialog = await openPreferences(page);
   await dialog.getByRole("switch", { name: "Laundry access" }).check();
@@ -164,12 +168,14 @@ test("a review the trip has moved on from is refused: you are asked to review ag
   page,
   context,
 }) => {
+  await legacyPackingLayout(page);
   await openSanDiego(page);
   const dialog = await openPreferences(page);
   await dialog.getByRole("switch", { name: "Laundry access" }).check();
   await dialog.getByRole("button", { name: "Review changes" }).click();
   // Another tab (the same signed-in person) packs something while this review is open.
   const other = await context.newPage();
+  await legacyPackingLayout(other);
   await other.clock.setFixedTime(NOW);
   await other.goto(page.url());
   const socks = other.locator('[data-item-id="socks"]');
@@ -199,6 +205,7 @@ test("a review the trip has moved on from is refused: you are asked to review ag
 });
 
 test("Ready turns off with a preference change, and the review says so first", async ({ page }) => {
+  await legacyPackingLayout(page);
   await page.clock.setFixedTime(NOW);
   await signInAsOwner(page);
   await page.getByRole("button", { name: /Past & archive/ }).click();
@@ -223,6 +230,7 @@ test(
   "the sheet is accessible and fits a phone: axe on the tab and the review, 44px targets, no sideways scroll",
   DEVICE,
   async ({ page }) => {
+    await legacyPackingLayout(page);
     await openSanDiego(page);
     const dialog = await openPreferences(page);
     await expectAccessible(page, "edit trip, preferences tab", { include: '[role="dialog"]' });

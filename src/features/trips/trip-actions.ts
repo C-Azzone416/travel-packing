@@ -6,6 +6,7 @@
 // dashboard's: UNAUTHENTICATED -> sign-in, FORBIDDEN -> access denied (redirects), anything else is a code.
 
 import { redirect } from "next/navigation";
+import type { Cube } from "@/domain/cubes";
 import type { ItemEdit } from "@/domain/item-ops";
 import type { Signals } from "@/domain/readiness";
 import type { ThemeId } from "@/domain/themes";
@@ -89,6 +90,8 @@ export async function upsertStapleAction(staple: Staple): Promise<StaplesReadRes
         cadence: staple.cadence,
         packLast: staple.packLast,
         ...(staple.groupId ? { groupId: staple.groupId } : {}),
+        ...(staple.laundryHalves ? { laundryHalves: true } : {}),
+        ...(staple.cube ? { cube: staple.cube } : {}),
       }),
     (staples) => ({ ok: true as const, staples }),
   ) as Promise<StaplesReadResult>;
@@ -119,6 +122,8 @@ export async function saveStaplesSetupAction(staples: Staple[]): Promise<Staples
         cadence: staple.cadence,
         packLast: staple.packLast,
         ...(staple.groupId ? { groupId: staple.groupId } : {}),
+        ...(staple.laundryHalves ? { laundryHalves: true } : {}),
+        ...(staple.cube ? { cube: staple.cube } : {}),
       })),
     }),
   );
@@ -186,6 +191,24 @@ export async function removeItemAction(
   return command((context) => service.removeItemFromTrip(context, { tripId, itemId, scope }));
 }
 
+/** Move one item to another cube (#385). Only the cube changes. */
+export async function moveItemToCubeAction(
+  tripId: string,
+  itemId: string,
+  cube: Cube,
+): Promise<TripCommandResult> {
+  return command((context) => service.moveItemInTrip(context, { tripId, itemId, cube }));
+}
+
+/** Flag or unflag a cube "Morning of" for this trip (#385). */
+export async function setMorningOfAction(
+  tripId: string,
+  cube: Cube,
+  on: boolean,
+): Promise<TripCommandResult> {
+  return command((context) => service.setTripMorningOf(context, { tripId, cube, on }));
+}
+
 export async function addToiletryItemAction(
   tripId: string,
   item: NewToiletryItem,
@@ -218,6 +241,7 @@ export async function addItemAction(
     name: item.name,
     category: item.category,
     neededQty: item.neededQty,
+    ...(item.cube ? { cube: item.cube } : {}),
   });
   if (result.ok) {
     return {

@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
 import { chooseFromMenu } from "./helpers/menu";
-import { DEVICE } from "./helpers/device";
+import { DEVICE, legacyPackingLayout } from "./helpers/device";
 import { reviewAndApply } from "./helpers/preferences";
 
 // Parity with the approved prototype's browser test (reference/prototype/tests/browser.test.mjs), on the production app
@@ -34,12 +34,12 @@ async function setPreference(page: Page, name: string, on: boolean) {
   await reviewAndApply(page, dialog);
 }
 
-test("home: the headline, three navigation items, one upcoming trip with a 'left to pack' badge, and history kept apart", async ({
+test("home: the headline, four navigation items (Stamps joins the laptop menu), one upcoming trip with a 'left to pack' badge, and history kept apart", async ({
   page,
 }) => {
   await openDashboard(page);
   await expect(page.getByRole("heading", { name: "Your travel ledger", level: 1 })).toBeVisible();
-  await expect(nav(page).getByRole("link")).toHaveCount(3);
+  await expect(nav(page).getByRole("link")).toHaveCount(4);
   await expect(page.getByRole("article")).toHaveCount(1);
   await expect(page.getByRole("article")).toContainText(/\d+ left/);
   await page.getByRole("button", { name: /Past & archive/ }).click();
@@ -74,49 +74,38 @@ test("dates: a later departure pulls the return forward and becomes its minimum"
   await expect(page.getByLabel("Return", { exact: true })).toHaveAttribute("min", "2026-12-20");
 });
 
-test("staples: four sections in order, the Bathroom note, Pack last as a badge only, and the seven flagged defaults", async ({
+test("staples: five cubes in order, Pack last as a badge only, and the seven flagged defaults", async ({
   page,
 }) => {
   await openDashboard(page);
   await page.goto("/staples");
-  await expect(
-    page.getByRole("heading", { name: "Every trip starts here", level: 1 }),
-  ).toBeVisible();
-  await expect(page.getByText("My staples", { exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { level: 2 })).toHaveText([
+  await expect(page.getByRole("heading", { name: "Staples", level: 1 })).toBeVisible();
+  const cubes = page.locator("section[aria-labelledby^='staples-']");
+  await expect(cubes.getByRole("heading", { level: 2 })).toHaveText([
     "Clothing",
-    "Bathroom",
+    "Toiletries",
     "Tech",
-    "Other essentials",
+    "Documents",
+    "Misc",
   ]);
-  await expect(page.getByText(/normal Toiletries checkboxes/)).toBeVisible();
   await expect(page.getByText("Pack last defaults")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
   const glasses = page.locator("[data-staple-id]").filter({ hasText: "Everyday glasses" });
   const sunglasses = page.locator("[data-staple-id]").filter({ hasText: "Sunglasses" });
   await expect(glasses).toHaveCount(1);
   await expect(glasses).toContainText("Pack last");
   await expect(sunglasses).toHaveCount(1);
   await expect(sunglasses).not.toContainText("Pack last");
-  const edits = page.getByRole("button", { name: /^Edit / });
-  await expect(edits).toHaveCount(await page.locator("[data-staple-id]").count());
-
-  await page.getByRole("button", { name: "Pack last" }).click();
-  const rows = page.locator("[data-staple-id]");
-  await expect(rows).toHaveCount(7);
-  for (const tag of await rows.locator(".timing-tag").all())
-    await expect(tag).toHaveText("Pack last");
-  await expect(rows.locator(".timing-tag")).toHaveCount(7);
-  await expect(page.getByRole("heading", { level: 2 })).toHaveText([
-    "Bathroom",
-    "Tech",
-    "Other essentials",
-  ]);
+  // Every staple opens its editor from its row.
+  const rowButtons = page.locator("[data-staple-id] > button");
+  await expect(rowButtons).toHaveCount(await page.locator("[data-staple-id]").count());
+  const flagged = page.locator("[data-staple-id]").filter({ hasText: "Pack last" });
+  await expect(flagged).toHaveCount(7);
 });
 
 test("packing screen: the return travel outfit, Laptop under Pack last, no umbrella before the weather review, and a Pack last Bathroom item only in Toiletries", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await openSanDiego(page);
   await expect(page.getByRole("heading", { name: /Return travel outfit/ })).toBeVisible();
   const packLast = page.locator("#block-packlast");
@@ -132,6 +121,7 @@ test("packing screen: the return travel outfit, Laptop under Pack last, no umbre
 test("Nice outfits: switching off hides generic Nice clothing, switching back on restores edits and progress without personal assumptions", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await openSanDiego(page);
   await expect(row(page, "nice-shoes")).toHaveCount(1);
   await expect(row(page, "nice-makeup")).toHaveCount(0);
@@ -160,6 +150,7 @@ test("Nice outfits: switching off hides generic Nice clothing, switching back on
 });
 
 test("a removed optional item stays removed through later recalculations", async ({ page }) => {
+  await legacyPackingLayout(page);
   await openSanDiego(page);
   await row(page, "nice-shoes").locator(".item-body").click();
   await page
@@ -180,6 +171,7 @@ test("a removed optional item stays removed through later recalculations", async
 test("copy: a remembered Bathroom item travels to the copy, with nothing checked, no assumed Makeup, and the source unchanged", async ({
   page,
 }) => {
+  await legacyPackingLayout(page);
   await openSanDiego(page);
   // Remember a new Bathroom staple from this trip.
   await page.getByRole("button", { name: "＋ Add a Bathroom item" }).click();
@@ -213,6 +205,7 @@ test("copy: a remembered Bathroom item travels to the copy, with nothing checked
 });
 
 test("a tour of every screen raises no uncaught browser errors", DEVICE, async ({ page }) => {
+  await legacyPackingLayout(page);
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await openSanDiego(page);

@@ -50,15 +50,15 @@ function measure(page: Page): Promise<Slot[]> {
 }
 
 const SIZES = [
-  { name: "390", width: 390, height: 700, text: 100, slotMin: 97 },
-  { name: "320", width: 320, height: 640, text: 100, slotMin: 80 },
-  { name: "390@200%", width: 390, height: 700, text: 200, slotMin: 97 },
-  { name: "320@200%", width: 320, height: 640, text: 200, slotMin: 80 },
+  { name: "390", width: 390, height: 700, text: 100, slotMin: 88 },
+  { name: "320", width: 320, height: 640, text: 100, slotMin: 70 },
+  { name: "390@200%", width: 390, height: 700, text: 200, slotMin: 88 },
+  { name: "320@200%", width: 320, height: 640, text: 200, slotMin: 70 },
 ] as const;
 // The 4th label under the measurable rule: "Feedback" iff it fits the slot's inner width (spec, section 3c).
 const FOURTH_LABEL = {
   "390": "Feedback",
-  "320": "Feedback",
+  "320": "Report",
   "390@200%": "Feedback",
   "320@200%": "Report",
 };
@@ -101,10 +101,10 @@ for (const size of SIZES) {
           expect(slot.box.height, `${where} tall`).toBeGreaterThanOrEqual(44);
           // No wrapping or clipping: the label sits inside the slot's padding and nothing scrolls.
           expect(slot.labelBox.left, `${where} label left`).toBeGreaterThanOrEqual(
-            slot.box.x + 3.5,
+            slot.box.x + 1.5,
           );
           expect(slot.labelBox.right, `${where} label right`).toBeLessThanOrEqual(
-            slot.box.x + slot.box.width - 3.5,
+            slot.box.x + slot.box.width - 1.5,
           );
           expect(slot.overflow, `${where} scroll overflow`).toBeLessThanOrEqual(0);
           expect(slot.iconCentre, `${where} icon`).not.toBeNull();
@@ -112,7 +112,7 @@ for (const size of SIZES) {
             Math.abs(slot.iconCentre! - slot.labelCentre),
             `${where} centred`,
           ).toBeLessThanOrEqual(1);
-          expect(slot.svg, `${where} icon is 24px`).toEqual({ width: 24, height: 24 });
+          expect(slot.svg, `${where} icon is 20px`).toEqual({ width: 20, height: 20 });
           if (index > 0) {
             const before = slots[index - 1].box;
             expect(slot.box.x, `${where} does not overlap`).toBeGreaterThanOrEqual(
@@ -135,28 +135,45 @@ for (const size of SIZES) {
   );
 }
 
-test("the divider, the bottom edge and the safe area (#293)", DEVICE, async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 700 });
-  await signInAsOwner(page);
-  await page.goto("/");
-  await expect(page.locator(".nav-feedback")).toBeVisible();
-  const divider = await page.locator(".nav-feedback").evaluate((el) => {
-    const style = getComputedStyle(el, "::before");
-    return { width: parseFloat(style.width), content: style.content, left: style.left };
-  });
-  expect(divider).toEqual({ width: 1, content: '""', left: "0px" });
-  const nav = (await page.locator(".bottom-nav").boundingBox())!;
-  expect(Math.round(nav.y + nav.height)).toBe(700);
-  await page.addStyleTag({ content: ":root{--safe-bottom:34px}" });
-  const inset = await page.evaluate(() => ({
-    bar: document.querySelector(".bottom-nav")!.getBoundingClientRect().bottom,
-    items: [...document.querySelectorAll(".bottom-nav > *")]
-      .filter((el) => el.getBoundingClientRect().width > 0)
-      .map((el) => el.getBoundingClientRect().bottom),
-  }));
-  expect(inset.bar).toBe(700);
-  for (const bottom of inset.items) expect(bottom).toBeLessThanOrEqual(700 - 34 + 0.5);
-});
+test(
+  "the bar floats 8px above the bottom edge and above the safe area (#383)",
+  DEVICE,
+  async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 700 });
+    await signInAsOwner(page);
+    await page.goto("/");
+    await expect(page.locator(".nav-feedback")).toBeVisible();
+    const nav = (await page.locator(".bottom-nav").boundingBox())!;
+    expect(Math.round(nav.y + nav.height)).toBe(700 - 8);
+    // 12px in from each side, as drawn.
+    expect(Math.round(nav.x)).toBe(12);
+    expect(Math.round(nav.width)).toBe(390 - 24);
+    await page.addStyleTag({ content: ":root{--safe-bottom:34px}" });
+    const inset = await page.evaluate(() => ({
+      bar: document.querySelector(".bottom-nav")!.getBoundingClientRect().bottom,
+      items: [...document.querySelectorAll(".bottom-nav > *")]
+        .filter((el) => el.getBoundingClientRect().width > 0)
+        .map((el) => el.getBoundingClientRect().bottom),
+    }));
+    expect(inset.bar).toBe(700 - 34 - 8);
+    for (const bottom of inset.items) expect(bottom).toBeLessThanOrEqual(700 - 34 - 8 + 0.5);
+  },
+);
+
+test(
+  "from 601 to 1023px the header and bar are the same 640px column, centred (#383)",
+  DEVICE,
+  async ({ page }) => {
+    await page.setViewportSize({ width: 900, height: 700 });
+    await signInAsOwner(page);
+    await page.goto("/");
+    await expect(page.locator(".nav-feedback")).toBeVisible();
+    const nav = (await page.locator(".bottom-nav").boundingBox())!;
+    expect(Math.round(nav.width)).toBe(640);
+    expect(Math.round(nav.x)).toBe(130);
+    await expect(page.locator(".bottom-nav a", { hasText: "Stamps" })).toBeHidden();
+  },
+);
 
 test("the new outline icons are drawn, not font glyphs (#300)", DEVICE, async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 700 });
@@ -228,7 +245,7 @@ test("Tab reaches Trips, Staples, Settings, then Feedback, each with a ring; Ent
       const style = getComputedStyle(el);
       return style.outlineStyle !== "none" && parseFloat(style.outlineWidth) > 0;
     });
-  await page.locator(".brand-button").focus();
+  await page.locator(".shell-brand").focus();
   for (const name of ["Trips", "Staples", "Settings"]) {
     await page.keyboard.press("Tab");
     const link = nav.getByRole("link", { name });
@@ -266,13 +283,13 @@ for (const width of [390, 1280]) {
       feedback: document.querySelector(".nav-feedback")!.getBoundingClientRect(),
       innerHeight,
     }));
-    if (width < 721) expect(where.feedback.top).toBeGreaterThan(where.innerHeight - 100);
+    if (width < 1024) expect(where.feedback.top).toBeGreaterThan(where.innerHeight - 100);
     else expect(where.feedback.bottom).toBeLessThanOrEqual(where.bar);
   });
 }
 
 // Desktop header (decision on #300): Feedback AND Sign out, in this order, then the save chip.
-for (const width of [721, 800, 899, 900, 1280]) {
+for (const width of [1024, 1100, 1280]) {
   test(`the header holds Feedback and Sign out without wrapping at ${width}px (#293)`, async ({
     page,
   }) => {
@@ -302,7 +319,7 @@ for (const width of [721, 800, 899, 900, 1280]) {
           "none",
         overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
         brandOverflow: (() => {
-          const brand = document.querySelector<HTMLElement>(".brand-button")!;
+          const brand = document.querySelector<HTMLElement>(".shell-brand")!;
           return brand.scrollWidth - brand.clientWidth;
         })(),
       };
@@ -316,19 +333,14 @@ for (const width of [721, 800, 899, 900, 1280]) {
     if (facts.chip !== null) expect(facts.feedback.x).toBeGreaterThanOrEqual(facts.chip);
     expect(facts.feedback.h).toBeGreaterThanOrEqual(44);
     expect(facts.shortShown, "the Report label never shows here").toBe(false);
-    if (width < 900) {
-      expect(facts.labelShown, "icon only").toBe(false);
-      expect(Math.round(facts.feedback.w)).toBe(44);
-    } else {
-      expect(facts.labelShown, "the word shows").toBe(true);
-    }
+    expect(facts.labelShown, "the word shows").toBe(true);
     await expect(feedback).toHaveAccessibleName("Send feedback report");
   });
 }
 
-// Short landscape: below 667px wide the 48px row layout; both states.
+// Short landscape: the 56px row layout with the icon beside the label; both states.
 for (const state of ["on", "off"] as const) {
-  test(`568x320 landscape: a 48px row layout with Feedback ${state} (#293)`, async ({ page }) => {
+  test(`568x320 landscape: a 56px row layout with Feedback ${state} (#293)`, async ({ page }) => {
     if (state === "off") await feedbackOff(page);
     await page.setViewportSize({ width: 568, height: 320 });
     await signInAsOwner(page);
@@ -340,7 +352,7 @@ for (const state of ["on", "off"] as const) {
     ).toBeVisible();
     const slots = await measure(page);
     const nav = (await page.locator(".bottom-nav").boundingBox())!;
-    expect(Math.round(nav.height)).toBeLessThanOrEqual(49);
+    expect(Math.round(nav.height)).toBe(56);
     expect(slots).toHaveLength(4);
     for (const slot of slots) {
       expect(slot.box.height).toBeGreaterThanOrEqual(44);

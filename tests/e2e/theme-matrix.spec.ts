@@ -45,7 +45,10 @@ const SCREENS = {
   packing: async (page: Page) => {
     await page.goto("/");
     await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
-    await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
+    // The laptop view's title is "Packing" (#385); below 1024px the page's title is the trip.
+    await expect(
+      page.getByRole("heading", { name: /^(Packing|San Diego)$/, level: 1 }),
+    ).toBeVisible();
   },
   settings: async (page: Page) => {
     await page.goto("/settings");
@@ -56,7 +59,7 @@ const SCREENS = {
 const sidewaysScroll = (page: Page) =>
   page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 
-/** The two colours a focus ring may be: the page ring (--accent-2) or, inside the header, --focus-on-header. */
+/** The colours a focus ring may be: the page ring (--accent-2), --info on paper surfaces such as the app header (#383, the primitives' ring), or --focus-on-header on dark ones. Read from the scheme, never hard-coded. */
 async function ringColours(page: Page): Promise<string[]> {
   return page.evaluate(() => {
     const resolve = (token: string) => {
@@ -67,7 +70,7 @@ async function ringColours(page: Page): Promise<string[]> {
       probe.remove();
       return colour;
     };
-    return [resolve("--accent-2"), resolve("--focus-on-header")];
+    return [resolve("--accent-2"), resolve("--info"), resolve("--focus-on-header")];
   });
 }
 
@@ -91,7 +94,7 @@ for (const { theme, width } of CELLS) {
         await expectAccessible(page, `${theme.id} ${width} ${name}`);
 
         // Keyboard focus: each of the first stops draws a solid ring of 2px or more in the theme's ring colour.
-        const [pageRing, headerRing] = await ringColours(page);
+        const rings = await ringColours(page);
         await page.locator("body").click({ position: { x: 1, y: 1 } });
         for (let stop = 0; stop < 6; stop++) {
           await page.keyboard.press("Tab");
@@ -107,9 +110,7 @@ for (const { theme, width } of CELLS) {
           expect(ring.width, `${name} tab stop ${stop + 1} outline width`).toBeGreaterThanOrEqual(
             2,
           );
-          expect([pageRing, headerRing], `${name} tab stop ${stop + 1} outline colour`).toContain(
-            ring.colour,
-          );
+          expect(rings, `${name} tab stop ${stop + 1} outline colour`).toContain(ring.colour);
         }
 
         if (SHOTS)
@@ -138,7 +139,8 @@ test("ocean: nothing scrolls sideways on the dashboard, packing and Settings at 
 
 // The keyboard paths, once (they do not depend on colour or width).
 test("the Theme radiogroup and a packing row work from the keyboard", async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 900 });
+  // The row's stepper and editor are the page below 1024px (the laptop view's keyboard paths are in packing-laptop.spec.ts).
+  await page.setViewportSize({ width: 1000, height: 900 });
   const theme = THEMES[0];
   await signInWithTheme(page, theme);
   await SCREENS.settings(page);
