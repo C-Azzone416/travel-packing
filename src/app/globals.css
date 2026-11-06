@@ -1941,21 +1941,31 @@ input:disabled {
 }
 .field input {
   width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: var(--control-radius);
+  padding: 10px 14px;
+  background: var(--control-bg);
+  color: var(--ink);
+}
+.auth-card .field input {
   min-height: 52px;
-  border: 1.5px solid var(--line);
+  border-width: 1.5px;
   border-radius: 14px;
   padding: 0 16px;
   background: var(--paper);
-  color: var(--ink);
   font-size: 16px;
 }
-.field input:focus {
+.auth-card .field input:focus {
   border-color: var(--dark);
 }
 /* While signing in the fields are read-only (not disabled) so keyboard focus stays where it was. */
 .field input[readonly] {
-  background: var(--paper);
+  background: var(--seafoam-soft);
   color: var(--muted-text);
+}
+.auth-card .field input[readonly] {
+  background: var(--paper);
   opacity: 0.7;
 }
 /* "Show password" is a text toggle inside the field's right edge (#204): link colour, a 44px target, aria-pressed. */
@@ -2081,7 +2091,7 @@ input:disabled {
   letter-spacing: 0.3em;
   text-align: center;
 }
-.field input:-webkit-autofill {
+.auth-card .field input:-webkit-autofill {
   -webkit-text-fill-color: var(--ink);
   box-shadow: 0 0 0 40px var(--paper) inset;
 }
@@ -2225,7 +2235,7 @@ input:disabled {
     font-size: 32px;
   }
   .auth-card .button.block,
-  .field input {
+  .auth-card .field input {
     min-height: 50px;
   }
 }

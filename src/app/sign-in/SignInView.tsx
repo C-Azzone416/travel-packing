@@ -108,14 +108,14 @@ export function SignInView({
             )}
           </Button>
         </form>
-        <nav className="auth-link-row" aria-label="Sign-in help">
+        <div className="auth-link-row">
           <Link className="auth-link" href="/forgot-password">
             Forgot password?
           </Link>
           <Link className="auth-link" href="/sign-up">
             Create an account
           </Link>
-        </nav>
+        </div>
       </section>
     </AuthShell>
   );
