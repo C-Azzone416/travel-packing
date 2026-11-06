@@ -70,11 +70,20 @@ CI confirms; it is not where bugs are found.
   run one after the other from that build (`CI=1`, default port 3102; an `E2E_PORT` / `E2E_DB_PORT` already set in your environment wins, so two verifies on one machine can run side by side: `E2E_PORT=3199 E2E_DB_PORT=5699 npm run verify`). It ends with a short summary naming the head commit; paste it into the pull request.
 - `npm run verify:quick` is everything before the builds (it still includes the unit tests and coverage gate).
 - A **pre-push hook** runs `verify:quick`. `npm install` turns it on (`prepare` points git at `.githooks`); nothing to
-  install by hand and no dependency. Emergency bypass: `git push --no-verify`, then run `npm run verify` yourself before
-  marking the PR ready.
+  install by hand and no dependency. Do not bypass it for routine pushes.
 - `check:workflows` (so CI too) fails when `ci.yml` and `verify` run different checks or in a different order (`build:e2e`, then `test:e2e`), so they cannot
   drift. Adding a check means adding it to both (`src/tooling/verify.ts`).
 - The local run is in addition to CI, never instead of it.
+
+### Fast local loop and shared heavy-work lock
+
+Use `npm run check:fast` while iterating. It runs repository hygiene, lint/format checks, and typechecking without coverage, builds, or browsers. Run the smallest relevant Vitest or Playwright spec while developing; the pre-push hook still runs the complete quick gate.
+
+Resource-heavy local scripts (`test`, `test:coverage`, production/Preview/e2e builds, and Playwright) automatically use `$TMPDIR/caroline-development-heavy.lock` (the user's private macOS temporary directory). Meal Planner uses the same lock, so the Mac runs only one coverage, build, or browser job at a time while editing, Git operations, lint, typechecking, and other fast checks remain free. The lock is held by macOS `lockf`, not by the presence of the file: the kernel releases it if the command exits or is killed. Nested scripts inherit a token and do not deadlock. Run `npm run test:heavy-lock` to verify serialization.
+
+The GitHub rulesets were audited on 2026-11-06: they require a pull request into `develop` but do not require the `ci` status check. Until that setting is deliberately changed, do not remove the pre-push coverage gate, and do not merge unless `ci`, QA, Judge, and Design when labeled all approve the exact current head.
+
+For UI changes, attach rendered phone and desktop evidence for each affected view/state. Add widths, themes, loading/empty/error states, or large-text variants only when the change can affect them. Keep repeatable screenshot specs in the repository, attach the images to the PR, identify the head SHA, and use synthetic data.
 
 ## Working with it
 
