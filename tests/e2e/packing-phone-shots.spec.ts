@@ -99,7 +99,7 @@ test("ocean 320 at 200% text and 195", async ({ page }) => {
   test.setTimeout(240_000);
   await makeTrip(page, "ocean");
   await page.setViewportSize({ width: 320, height: 640 });
-  await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+  const zoomStyle = await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
   await expect
     .poll(() =>
       page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).fontSize)),
@@ -110,7 +110,12 @@ test("ocean 320 at 200% text and 195", async ({ page }) => {
   await shot(page, "pk-p-rev-ocean-320-200", true);
   await page.setViewportSize({ width: 195, height: 640 });
   await shot(page, "pk-p-rev-ocean-195-200", true);
-  await page.evaluate(() => (document.documentElement.style.fontSize = "100%"));
+  await zoomStyle.evaluate((node) => node.parentNode?.removeChild(node));
+  await expect
+    .poll(() =>
+      page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).fontSize)),
+    )
+    .toBeLessThan(20);
   await shot(page, "pk-p-ocean-195", true);
 });
 

@@ -46,6 +46,22 @@ test(
     );
     await expect(page.getByText(/^\d+ of \d+ in the bag$/)).toBeAttached();
     await expect(page.getByRole("link", { name: /All trips/ })).toHaveCount(0);
+    const title = (await page.getByRole("heading", { name: "Pack mode", level: 1 }).boundingBox())!;
+    const laundry = (await page.getByRole("button", { name: "Laundry off" }).boundingBox())!;
+    const count = (await page.getByText(/^\d+ of \d+ in the bag$/).boundingBox())!;
+    const middle = (box: typeof title) => box.y + box.height / 2;
+    expect(
+      Math.abs(middle(title) - middle(laundry)),
+      "title and Laundry share one row",
+    ).toBeLessThanOrEqual(4);
+    expect(
+      Math.min(title.y + title.height, count.y + count.height) - Math.max(title.y, count.y),
+      "title and total overlap on the same row",
+    ).toBeGreaterThan(0);
+    expect(count.x, "the total follows the Laundry pill").toBeGreaterThan(
+      laundry.x + laundry.width,
+    );
+    expect(laundry.width, "the canonical Laundry pill is 104px wide").toBeLessThanOrEqual(106);
     // The Trips tab is the way back.
     await expect(tabBar(page).getByRole("link", { name: /Trips/ })).toHaveAttribute(
       "aria-current",
@@ -328,6 +344,18 @@ for (const size of [
           title.y < laundry.y + laundry.height &&
           laundry.y < title.y + title.height;
         expect(overlap).toBe(false);
+        if (size.width === 195 && zoom) {
+          const skip = page.getByRole("link", { name: "Skip to main content" });
+          const hidden = (await skip.boundingBox())!;
+          expect(
+            hidden.y + hidden.height,
+            "the unfocused skip link is fully offscreen",
+          ).toBeLessThanOrEqual(0);
+          await skip.focus();
+          const shown = (await skip.boundingBox())!;
+          expect(shown.y, "the focused skip link is visible").toBeGreaterThanOrEqual(0);
+          expect(shown.x + shown.width).toBeLessThanOrEqual(size.width + 1);
+        }
       },
     );
   }

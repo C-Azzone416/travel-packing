@@ -93,6 +93,15 @@ test(
     await review.click();
     await expect(review).toHaveAttribute("aria-expanded", "true");
     await expect(page.getByText(/^New: /)).toBeVisible();
+    const suitcase = (await page.locator("[data-cube]").boundingBox())!;
+    const actions = (await page.getByRole("button", { name: /^All in/ }).boundingBox())!;
+    expect(suitcase.y, "the expanded review keeps the suitcase above the actions").toBeLessThan(
+      actions.y,
+    );
+    expect(
+      Math.min(suitcase.y + suitcase.height, actions.y) - suitcase.y,
+      "at least two suitcase rows remain on-screen",
+    ).toBeGreaterThanOrEqual(100);
     // Nothing was counted, and there is no weather cube yet.
     expect(await total(page)).toBe(counted);
     const cubes = page.getByRole("navigation", { name: "Cubes" });

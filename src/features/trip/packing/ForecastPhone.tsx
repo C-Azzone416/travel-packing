@@ -155,6 +155,7 @@ export function ForecastPhone({
       className={cx(phone.phoneForecast, anyPending && phone.phoneForecastAlert)}
       aria-label="Forecast"
       data-forecast-state={anyPending ? "alert" : "normal"}
+      data-review-open={open ? "true" : undefined}
     >
       <div className={phone.phoneForecastHead}>
         {toggle}
