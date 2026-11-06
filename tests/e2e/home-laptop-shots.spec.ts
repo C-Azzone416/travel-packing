@@ -59,8 +59,9 @@ for (const { theme, width, tag } of SIZES) {
     await page.getByRole("button", { name: "Continue to packing preferences" }).click();
     await page.getByRole("button", { name: "Not now" }).click();
     await page.getByRole("button", { name: "Save trip" }).click();
+    // Home may list London as the next trip or as an upcoming row; either way the first link naming it opens its trip.
     await page
-      .getByRole("link", { name: /^(Continue|Keep) packing: London/ })
+      .getByRole("link", { name: /London/ })
       .first()
       .click();
     await expect(page.getByRole("heading", { name: "Packing", level: 1 })).toBeVisible();
