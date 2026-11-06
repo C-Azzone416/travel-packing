@@ -5,7 +5,6 @@ import { curatedLocationProvider, type LocationProvider } from "@/domain/locatio
 import { draftStops, setDraftStops, type TripDraft } from "@/domain/trip-lifecycle";
 import { routeText, type TravelMode } from "@/domain/trip-route";
 import { LocationPicker } from "@/features/trips/LocationPicker";
-import { ThemePicker } from "@/features/trips/ThemePicker";
 import {
   formatNights,
   nightsAt,
@@ -17,7 +16,6 @@ import {
 import { withDates } from "@/features/trips/draft";
 import { formatShortDate } from "@/features/trips/view";
 import { MAX_TRIP_NAME_LENGTH } from "@/domain/trip-route";
-import { setDraftTheme } from "@/domain/trip-lifecycle";
 import {
   COPY_DATE_NOTICE,
   MODE_CHOICES,
@@ -348,7 +346,6 @@ export function ReviewStep({ draft, onDraft, preview }: ReviewStepProps) {
         <dt>List</dt>
         <dd>{preview ? `About ${preview.total} ${preview.total === 1 ? "item" : "items"}` : ""}</dd>
       </dl>
-      <ThemePicker value={draft.theme} onChange={(theme) => onDraft(setDraftTheme(draft, theme))} />
     </div>
   );
 }

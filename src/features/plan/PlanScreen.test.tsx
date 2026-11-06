@@ -537,7 +537,11 @@ describe("?copy=<trip id>", () => {
     await user.click(next());
     await user.click(screen.getByRole("button", { name: "Create trip" }));
     await waitFor(() => expect(spy).toHaveBeenCalled());
-    expect(spy.mock.calls[0][0]).toMatchObject({ mode: "copy", sourceId: "san-diego" });
+    expect(spy.mock.calls[0][0]).toMatchObject({
+      mode: "copy",
+      sourceId: "san-diego",
+      theme: "beach",
+    });
   });
 
   it("a copy of a route keeps its stops and wants a new first arrival", async () => {
@@ -1000,15 +1004,15 @@ describe("when something cannot be read or saved", () => {
     await waitFor(() => expect(nav.push).toHaveBeenCalledWith("/"));
   });
 
-  it("takes the theme chosen on Review to the created trip", async () => {
+  it("does not expose the retired trip-theme picker and keeps the compatibility default", async () => {
     const { user, base } = await setup({});
     const spy = vi.spyOn(base, "createTrip");
     await toStartingList(user);
     await user.click(next());
-    await user.click(screen.getByRole("radio", { name: "Beach" }));
+    expect(screen.queryByRole("group", { name: "Trip theme" })).toBeNull();
     await user.click(screen.getByRole("button", { name: "Create trip" }));
     await waitFor(() => expect(spy).toHaveBeenCalled());
-    expect(spy.mock.calls[0][0].theme).toBe("beach");
+    expect(spy.mock.calls[0][0].theme).toBe("travel");
   });
 
   it("offers Fix dates when a stop leaves before it arrives", async () => {
