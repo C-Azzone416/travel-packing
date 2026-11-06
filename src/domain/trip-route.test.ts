@@ -149,6 +149,6 @@ describe("facts and caption", () => {
       }),
     ).toBe("SEA → LIS → OPO → SEA · flight · 10 nights · 2 cities");
     expect(routeCaption({ nights: 10, stops: LIS_OPO })).toBe("LIS → OPO · 10 nights · 2 cities");
-    expect(routeCaption({ nights: 0, stops: [] })).toBe("day trip · 0 cities");
+    expect(routeCaption({ nights: 0, stops: [] })).toBe("day trip");
   });
 });

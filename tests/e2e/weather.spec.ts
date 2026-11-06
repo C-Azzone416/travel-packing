@@ -6,6 +6,11 @@ import { DEVICE, legacyPackingLayout } from "./helpers/device";
 import { planRouteToList, reviewAndCreate } from "./helpers/plan";
 import { FAKE_GEOCODER_PORT, OPEN_METEO_PORT } from "./support/ports";
 
+// Home is the laptop suitcase view from 1024px (#387); this spec's subject is the page below it, so it runs there.
+test.beforeEach(async ({ page }) => {
+  await legacyPackingLayout(page);
+});
+
 // Weather for every stop (epic #107, #113). The app runs a second time with LOCATION_PROVIDER=open-meteo and
 // WEATHER_PROVIDER=open-meteo, both pointed at one local fake (support/fake-open-meteo.mjs): it serves places with
 // coordinates, serves weather, counts every weather request and can change what it answers. No real network is used.

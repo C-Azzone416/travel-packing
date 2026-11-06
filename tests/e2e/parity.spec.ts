@@ -5,6 +5,11 @@ import { DEVICE, legacyPackingLayout } from "./helpers/device";
 import { reviewAndApply } from "./helpers/preferences";
 import { planAndCreate, pickPlace, toWhen } from "./helpers/plan";
 
+// Home is the laptop suitcase view from 1024px (#387); this spec's subject is the page below it, so it runs there.
+test.beforeEach(async ({ page }) => {
+  await legacyPackingLayout(page);
+});
+
 // Parity with the approved prototype's browser test (reference/prototype/tests/browser.test.mjs), on the production app
 // and its real database. Most scenarios are covered by the feature specs; docs/parity.md maps EVERY prototype scenario to
 // the test that covers it. The tests here close the gaps that mapping found. Each test starts from the freshly seeded
@@ -40,7 +45,13 @@ test("home: the headline, four navigation items (Stamps joins the laptop menu), 
 }) => {
   await openDashboard(page);
   await expect(page.getByRole("heading", { name: "Your travel ledger", level: 1 })).toBeVisible();
-  await expect(nav(page).getByRole("link")).toHaveCount(4);
+  // The laptop menu has the fourth item (Stamps); the tab bar below 1024px has three. Check it at laptop width, then go back.
+  const before = page.viewportSize();
+  if (test.info().project.name === "desktop") {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await expect(nav(page).getByRole("link")).toHaveCount(4);
+    if (before) await page.setViewportSize(before);
+  }
   await expect(page.getByRole("article")).toHaveCount(1);
   await expect(page.getByRole("article")).toContainText(/\d+ left/);
   await page.getByRole("button", { name: /Past & archive/ }).click();
