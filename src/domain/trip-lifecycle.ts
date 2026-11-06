@@ -13,7 +13,6 @@ import {
   parseDate,
 } from "./calc";
 import type { StampLabels } from "./stamps";
-import type { TravelMode } from "./trip-route";
 import { DEFAULT_THEME, type ThemeId } from "./themes";
 import { TOILETRY_GROUP_ID } from "./toiletry-bag";
 import type { TravelMode, TripOrigin } from "./trip-route";
