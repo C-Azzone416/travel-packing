@@ -16,6 +16,7 @@ import type { StampLabels } from "./stamps";
 import { DEFAULT_THEME, type ThemeId } from "./themes";
 import { TOILETRY_GROUP_ID } from "./toiletry-bag";
 import type { Staple, Trip, TripConfig, TripItem } from "./trip";
+import type { TravelMode, TripOrigin } from "./trip-route";
 import {
   addDays,
   daysBetween,
@@ -32,6 +33,10 @@ export type { SampleLocation };
 export interface LifecycleTrip extends Trip {
   destination: string;
   location: SampleLocation | null;
+  /** The route's home, chosen travel mode and optional display name (#379). Older trips omit them. */
+  origin?: TripOrigin | null;
+  travelMode?: TravelMode | null;
+  name?: string | null;
   copiedFrom: string | null;
   archived: boolean;
   /** The trip's picture (#48). */
