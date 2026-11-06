@@ -102,7 +102,9 @@ function setup(props: Partial<HomeLaptopProps> = {}) {
 
 describe("HomeLaptop", () => {
   it("has the landmarks and headings in order, and names the map", () => {
-    setup({ later: [{ ...trip(), id: "t2", start: "2027-04-02", stops: [stop("Denver")] }] });
+    const view = setup({
+      later: [{ ...trip(), id: "t2", start: "2027-04-02", stops: [stop("Denver")] }],
+    });
     expect(screen.getByRole("heading", { level: 1, name: "Trips" })).toBeTruthy();
     expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual([
       "In the bag · tap a cube",
@@ -112,6 +114,8 @@ describe("HomeLaptop", () => {
     expect(screen.getByRole("img", { name: "Route map: Chicago to Lisbon" })).toBeTruthy();
     expect(screen.getByRole("region", { name: /In the bag/ })).toBeTruthy();
     expect(screen.getByRole("region", { name: /Lisbon/ })).toBeTruthy();
+    // Trip-theme illustrations are retired (#375/#441); the route map is the only Home artwork.
+    expect(view.container.querySelector("[data-art-key]")).toBeNull();
   });
 
   it("captions the map, shows the quantity count and a plain fallback without a map", () => {
