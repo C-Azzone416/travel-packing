@@ -361,6 +361,11 @@ p {
     opacity: 0.4;
   }
 }
+@keyframes modalSheetIn {
+  from {
+    opacity: 0.4;
+  }
+}
 .modal-head {
   display: flex;
   align-items: flex-start;
@@ -519,6 +524,8 @@ body[data-sheet-open] .toast-region {
     max-height: 90dvh;
     padding: 0 var(--modal-pad) max(var(--modal-pad), var(--safe-bottom));
     border-radius: 22px 22px 0 0;
+    /* A flush-bottom sheet cannot enter from below the viewport: geometry checks and hit testing run while this animation is active. */
+    animation-name: modalSheetIn;
   }
   .modal-grabber {
     display: block;

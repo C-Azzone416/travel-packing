@@ -27,6 +27,16 @@ describe("ModalSheet suitcase layout (#421)", () => {
     expect(phone).toContain("border-radius: 22px 22px 0 0;");
   });
 
+  it("keeps a flush-bottom phone sheet inside the viewport throughout its entrance", () => {
+    expect(phone).toContain("animation-name: modalSheetIn;");
+    const animation = css.slice(
+      css.indexOf("@keyframes modalSheetIn"),
+      css.indexOf(".modal-head", css.indexOf("@keyframes modalSheetIn")),
+    );
+    expect(animation).toContain("opacity: 0.4;");
+    expect(animation).not.toContain("transform:");
+  });
+
   it("has the specified decorative grabber and tablet cap", () => {
     expect(phone).toMatch(
       /\.modal-grabber\s*{[^}]*width: 44px;[^}]*height: 6px;[^}]*margin: 12px auto 24px;[^}]*border-radius: 3px;[^}]*background: var\(--line\)/s,
