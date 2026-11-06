@@ -998,13 +998,13 @@
   .optionLabel {
     display: grid;
     grid-template-columns: 22px minmax(0, 1fr);
-    column-gap: 10px;
+    column-gap: 4px;
     row-gap: 2px;
-    padding: 12px 12px;
+    padding: 12px 8px;
   }
   .optionInput {
     top: 12px;
-    left: 12px;
+    left: 8px;
   }
   .optionText {
     display: contents;
@@ -1026,7 +1026,7 @@
   }
   .optionActions,
   .chooser {
-    padding-inline: 12px;
+    padding-inline: 8px;
   }
   .phoneTop {
     flex-wrap: wrap;
@@ -1040,6 +1040,21 @@
     flex-basis: 100%;
     order: 3;
     padding-left: 54px;
+  }
+
+  /* At the 195px zoom target, the countdown cannot share a row with a 32px
+     display title without collapsing the title to a few characters wide. */
+  .tagHead {
+    flex-direction: column;
+    gap: 8px;
+  }
+  .tagTitle,
+  .tagAlso,
+  .cubeChip {
+    overflow-wrap: break-word;
+  }
+  .cubeChips {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
