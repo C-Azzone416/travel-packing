@@ -105,16 +105,17 @@ export function AddItemInline({
   const existing = existingId ? items.find((item) => item.id === existingId) : null;
 
   const formEl = (
-    <form className="add-item-form" id={panelId} onSubmit={submit} noValidate>
+    <form className="add-item-form" id={panelId} onSubmit={submit} noValidate autoComplete="off">
       <div className="add-item-field">
         <label className="field">
           Item name
           <input
             ref={nameInput}
-            name="name"
+            name="packing-item-name"
             value={name}
             maxLength={ADD_ITEM_NAME_MAX}
             placeholder="Camera"
+            autoComplete="off"
             autoFocus
             aria-invalid={problems.name === true}
             aria-describedby={problems.name ? `${panelId}-name` : undefined}

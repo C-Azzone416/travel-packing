@@ -40,7 +40,7 @@ export function StapleNameField({ staple, taken, onRename }: StapleNameFieldProp
         Name
         <input
           className={styles.nameInput}
-          name="name"
+          name="packing-item-name"
           value={value}
           maxLength={STAPLE_NAME_MAX}
           autoComplete="off"
