@@ -56,13 +56,15 @@ describe("TripsDashboard at laptop width", () => {
     expect(screen.getByRole("link", { name: /Continue packing: San Diego/ })).toBeTruthy();
   });
 
-  it("keeps today's Home below 1024px, and switches when the window crosses it", async () => {
+  it("uses the four-pill Home below 1024px, and switches to the laptop Home when the window crosses it", async () => {
     const media = laptop(false);
     setup();
-    expect(await screen.findByRole("heading", { name: "Your travel ledger" })).toBeTruthy();
+    expect(await screen.findByRole("tablist", { name: "Home sections" })).toBeTruthy();
+    expect(screen.getByRole("tabpanel").getAttribute("id")).toBe("home-phone-panel-pack");
     expect(screen.queryByRole("heading", { name: /In the bag/ })).toBeNull();
     act(() => media.set(true));
     expect(await screen.findByRole("heading", { name: /In the bag/ })).toBeTruthy();
+    expect(screen.queryByRole("tablist", { name: "Home sections" })).toBeNull();
   });
 
   it("shows the server-drawn map only while it matches the trip's route", async () => {

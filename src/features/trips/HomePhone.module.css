@@ -1,0 +1,616 @@
+/* Home, phone (#388; #376 part 3 section 1.2). Rendered below the 1024px shell switch. */
+.page {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 640px;
+  min-width: 0;
+  margin-inline: auto;
+  display: grid;
+  gap: 19px;
+}
+.hero {
+  min-width: 0;
+}
+.hero > div {
+  min-height: 77px;
+}
+.hero [data-luggage-tag="card"] > div:last-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.tagCopy {
+  min-width: 0;
+}
+.tagCopy p {
+  margin: 0 0 6px;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.1em;
+  overflow-wrap: anywhere;
+}
+.tagCopy h2 {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 32px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+.tagCopy h2[data-size="l"] {
+  font-size: 28px;
+}
+.tagCopy h2[data-size="m"] {
+  font-size: 24px;
+}
+.tagCopy h2 span {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+.tagActions {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.countdown {
+  width: 60px;
+  min-height: 60px;
+  justify-content: center;
+  padding-inline: 7px;
+  border-radius: 16px;
+  text-align: center;
+  white-space: normal;
+}
+
+.panel {
+  min-width: 0;
+  outline: none;
+}
+.panel:focus-visible {
+  outline: 3px solid var(--info);
+  outline-offset: 4px;
+}
+.pack,
+.weather,
+.future,
+.stampsPanel {
+  min-width: 0;
+}
+.pack {
+  display: grid;
+  gap: 26px;
+  padding-top: 4px;
+}
+.mapCard {
+  box-sizing: border-box;
+  min-width: 0;
+  padding: 10px;
+  border-radius: 20px;
+  background: var(--paper);
+}
+.mapCard > * {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  aspect-ratio: 2.6;
+  max-height: 220px;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.mapFallback {
+  display: grid;
+  place-items: center;
+  background: var(--sea);
+  color: var(--muted);
+  font-size: 13px;
+}
+.bagHead {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 8px;
+  margin-bottom: 14px;
+}
+.bagHead p {
+  min-width: 0;
+  margin: 0;
+  font-family: var(--font-display);
+  color: var(--ink);
+}
+.bagHead strong {
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1;
+}
+.bagHead p span {
+  color: var(--muted);
+  font-size: 21px;
+  font-weight: 700;
+}
+.bagHead > span {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
+}
+.cubes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cubes li,
+.cubes li > * {
+  min-width: 0;
+}
+.primary {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 46px;
+  margin-top: 14px;
+  padding: 8px 18px;
+  border-radius: 999px;
+  background: var(--dark);
+  color: var(--onDark);
+  font-size: 18px;
+  font-weight: 700;
+  text-align: center;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.primary:focus-visible,
+.future a:focus-visible,
+.pastLink:focus-visible,
+.sticker:focus-visible,
+.pastTrips a:focus-visible,
+.cityRow button:focus-visible {
+  outline: 3px solid var(--info);
+  outline-offset: 2px;
+}
+
+/* Weather panel */
+.weather {
+  padding-top: 5px;
+}
+.weather > h2 {
+  margin: 0 4px 12px;
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.cityList,
+.days {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cityList {
+  display: grid;
+  gap: 10px;
+}
+.cityRow {
+  min-width: 0;
+  border: 2px solid var(--tint);
+  border-radius: 16px;
+  background: var(--paper);
+  color: var(--ink);
+  overflow: hidden;
+}
+.cityRow[data-alert="true"] {
+  border-color: var(--accent);
+  background: var(--accentSoft);
+}
+.cityRow h3 {
+  margin: 0;
+  font: inherit;
+}
+.cityRow button {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  min-height: 50px;
+  padding: 9px 14px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.cityCopy {
+  min-width: 0;
+  font-size: 17px;
+  overflow-wrap: anywhere;
+}
+.cityCopy strong {
+  font-weight: 700;
+}
+.cityCopy span {
+  color: var(--muted);
+}
+.cityState {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 600;
+}
+.cityRow:not([data-alert="true"]) .cityState {
+  color: var(--muted);
+}
+.days {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(74px, 1fr));
+  gap: 6px;
+  padding: 0 10px 10px;
+}
+.days li {
+  min-width: 0;
+  display: flex;
+}
+.days li > * {
+  flex: 1;
+}
+.moreDays {
+  display: inline-block;
+  margin: 0 12px 12px;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+.emptyWeather,
+.noFuture {
+  margin: 0;
+  padding: 18px;
+  border-radius: 16px;
+  background: var(--paper);
+  color: var(--muted);
+}
+
+/* Future panel */
+.panelHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 4px 12px;
+}
+.panelHead h2,
+.pastTitle {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.15;
+}
+.panelHead a {
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 600;
+}
+.future > ul,
+.pastTrips {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.future > ul > li,
+.future > ul > li > a {
+  min-width: 0;
+}
+.future > ul > li > a {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+.futureRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.futureRow b {
+  font-size: 13px;
+  white-space: nowrap;
+}
+.futureRow strong {
+  min-width: 0;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+.futureRow > span:last-child {
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.pastLink {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 14px;
+  padding: 8px 12px;
+  border: 2px dashed var(--line);
+  border-radius: 16px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Stamps panel */
+.stampsPanel {
+  display: grid;
+  gap: 16px;
+}
+.stampFilters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.stampCase {
+  min-width: 0;
+}
+.stampHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 12px;
+  color: var(--onDark);
+}
+.stampHead p {
+  margin: 0;
+  color: var(--onDarkMuted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.stampHead strong {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 800;
+}
+.stickerGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 14px 8px;
+  margin-top: 16px;
+}
+.sticker {
+  position: relative;
+  box-sizing: border-box;
+  justify-self: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 74px;
+  height: 54px;
+  padding: 5px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--onDark);
+  line-height: 1;
+  text-align: center;
+  text-decoration: none;
+  transform: rotate(var(--tilt));
+  box-shadow:
+    0 0 0 3px var(--paper),
+    0 6px 10px -6px var(--darkEdge);
+}
+.sticker[data-shape="circle"] {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+}
+.sticker[data-shape="squared"] {
+  border-radius: 3px;
+}
+.sticker[data-colour="dark2"] {
+  background: var(--dark2);
+}
+.sticker[data-colour="good"] {
+  background: var(--good);
+}
+.sticker[data-colour="info"] {
+  background: var(--info);
+}
+.sticker[data-colour="goldDeep"] {
+  background: var(--goldDeep);
+}
+.sticker[data-upcoming="true"] {
+  border: 2px dashed var(--ghost);
+  background: transparent;
+  color: var(--ghost);
+  box-shadow: none;
+}
+.sticker > span:first-child {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+.sticker strong {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 800;
+}
+.sticker > span:nth-of-type(2) {
+  font-size: 10px;
+  font-weight: 700;
+}
+.sticker b {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--gold);
+  color: var(--ink);
+  font-size: 11px;
+}
+.totals {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 18px 0 0;
+}
+.totals div {
+  display: flex;
+  flex-direction: column-reverse;
+  min-width: 0;
+  min-height: 62px;
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--dark2);
+  color: var(--onDark);
+}
+.totals dt {
+  color: var(--onDarkMuted);
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.totals dd {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 800;
+}
+.stampNote {
+  margin: 14px 0 0;
+  color: var(--onDarkMuted);
+  font-size: 14px;
+  line-height: 1.4;
+}
+.pastTitle {
+  margin-top: 4px;
+}
+.pastTrips li,
+.pastTrips a {
+  min-width: 0;
+}
+.pastTrips a {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  min-height: 72px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: var(--paper);
+  color: var(--ink);
+  text-decoration: none;
+}
+.pastTrips a > span {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+.pastTrips strong {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+.pastTrips small {
+  color: var(--muted);
+  font-size: 14px;
+}
+.pastTrips a > b {
+  color: var(--good);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 359px) {
+  .cubes {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .futureRow {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .futureRow b {
+    grid-column: 1 / -1;
+  }
+  .futureRow > span:last-child {
+    white-space: normal;
+  }
+  .cityRow button {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .cityState {
+    white-space: normal;
+  }
+}
+
+@media (max-width: 239px) {
+  .hero [data-luggage-tag="card"] > div:last-child {
+    flex-wrap: wrap;
+  }
+  .tagCopy,
+  .tagActions {
+    width: 100%;
+  }
+  .tagActions {
+    justify-content: space-between;
+  }
+  .cubes,
+  .totals {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .stickerGrid {
+    grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  }
+  .panelHead,
+  .stampHead {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .futureRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
