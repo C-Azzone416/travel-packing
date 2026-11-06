@@ -343,6 +343,34 @@ describe("item and preference commands", () => {
     expect(read.trip.items.some((entry) => entry.id === "razor")).toBe(false);
   });
 
+  it("upsertStapleAction and saveStaplesSetupAction keep the cube and the laundry flag", async () => {
+    const tees = {
+      id: "tops",
+      name: "Tees",
+      qty: 2,
+      cadence: "per night",
+      category: "Clothing",
+      packLast: false,
+      laundryHalves: true,
+      cube: "misc",
+    } as const;
+    const upserted = await upsertStapleAction(tees);
+    if (!upserted.ok) throw new Error(`expected ok, got ${upserted.code}`);
+    expect(upserted.staples.find((entry) => entry.id === "tops")).toEqual(tees);
+    const cleared = await upsertStapleAction({
+      ...tees,
+      laundryHalves: undefined,
+      cube: undefined,
+    });
+    if (!cleared.ok) throw new Error(`expected ok, got ${cleared.code}`);
+    expect(cleared.staples.find((entry) => entry.id === "tops")).not.toHaveProperty(
+      "laundryHalves",
+    );
+    const setup = await saveStaplesSetupAction([tees]);
+    if (!setup.ok) throw new Error(`expected ok, got ${setup.code}`);
+    expect(setup.staples).toEqual([tees]);
+  });
+
   it("upsertStapleAction rejects bad input, and another owner's staples are separate", async () => {
     const bad = {
       id: "x",

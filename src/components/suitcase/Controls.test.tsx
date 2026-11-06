@@ -365,6 +365,12 @@ describe("Stepper", () => {
     expect(screen.getByRole("group", { name: "Underwear quantity" }).className).toContain("sheet");
   });
 
+  it("names the buttons for the item when it is given one", () => {
+    render(<Stepper value={2} onChange={() => undefined} itemName="socks" />);
+    expect(screen.getByRole("button", { name: "Fewer socks" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "More socks" })).toBeTruthy();
+  });
+
   it("keeps the spec sizes: sheet 103x40, laptop inline 77x31", () => {
     const text = css("Stepper.module.css");
     expect(text).toMatch(

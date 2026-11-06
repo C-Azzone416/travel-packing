@@ -12,6 +12,8 @@ export interface StepperProps {
   size?: "inline" | "sheet";
   /** Names the group for assistive tech (default "Quantity"). */
   label?: string;
+  /** What is being counted ("socks"): the buttons then read "Fewer socks" and "More socks" instead of the bare words. */
+  itemName?: string;
   className?: string;
 }
 
@@ -24,8 +26,10 @@ export function Stepper({
   max = 99,
   size = "inline",
   label = "Quantity",
+  itemName,
   className,
 }: StepperProps) {
+  const named = (word: string) => (itemName ? `${word} ${itemName}` : word);
   return (
     <div
       role="group"
@@ -34,7 +38,7 @@ export function Stepper({
     >
       <button
         type="button"
-        aria-label="Fewer"
+        aria-label={named("Fewer")}
         disabled={value <= min}
         className={cx(styles.button, shared.hit, shared.ring)}
         onClick={() => onChange(Math.max(min, value - 1))}
@@ -44,7 +48,7 @@ export function Stepper({
       <output className={styles.value}>{value}</output>
       <button
         type="button"
-        aria-label="More"
+        aria-label={named("More")}
         disabled={value >= max}
         className={cx(styles.button, shared.hit, shared.ring)}
         onClick={() => onChange(Math.min(max, value + 1))}
