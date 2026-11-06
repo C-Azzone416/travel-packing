@@ -75,7 +75,7 @@ test.describe("create and copy", DEVICE, () => {
     await expect(page.getByRole("heading", { name: "Confirm the trip" })).toBeVisible();
   }
 
-  test("step 1: empty, searching, results, confirmed with the theme picker", async ({ page }) => {
+  test("step 1: empty, searching, results and confirmed", async ({ page }) => {
     await startTrip(page);
     await expectAccessible(page, "create step 1 empty");
     await page.getByRole("combobox", { name: "Destination search" }).fill("lon");
@@ -84,8 +84,7 @@ test.describe("create and copy", DEVICE, () => {
     await page.getByRole("option", { name: /England/ }).click();
     await page.getByLabel("Leave", { exact: true }).fill("2026-11-12");
     await page.getByLabel("Return", { exact: true }).fill("2026-11-16");
-    await expect(page.getByRole("group", { name: "Trip theme" })).toBeVisible();
-    await expectAccessible(page, "create step 1 confirmed with theme picker");
+    await expectAccessible(page, "create step 1 confirmed");
   });
 
   test("step 1 with no matches, and the discard prompt", async ({ page }) => {
@@ -127,9 +126,7 @@ test.describe("trip screen", DEVICE, () => {
     await expectAccessible(page, "trip screen filtered");
   });
 
-  test("edit item, remove confirm, add Bathroom item, preferences, theme sheet", async ({
-    page,
-  }) => {
+  test("edit item, remove confirm, add Bathroom item and preferences", async ({ page }) => {
     await legacyPackingLayout(page);
     await openSanDiego(page);
     await page
@@ -149,9 +146,6 @@ test.describe("trip screen", DEVICE, () => {
     await page.getByRole("button", { name: "Edit preferences" }).click();
     await expectAccessible(page, "preferences dialog");
     await page.getByRole("button", { name: "Close dialog" }).click();
-
-    await page.getByRole("button", { name: "Change theme" }).click();
-    await expectAccessible(page, "theme sheet");
   });
 
   test("the toiletry bag prompt", async ({ page }) => {

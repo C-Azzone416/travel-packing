@@ -368,12 +368,11 @@ export function TripsDashboard({ source, getToday = localToday }: TripsDashboard
                 Archived trips and trips whose return date has passed will appear here.
               </div>
             ) : (
-              visible.map((trip, index) => (
+              visible.map((trip) => (
                 <TripCard
                   key={trip.id}
                   trip={trip}
                   view={tripCardView(trip, today, view)}
-                  first={index === 0}
                   busy={busy.has(trip.id)}
                   onArchive={archive}
                   onRestore={(id) => void run(id, () => source.restore(id))}

@@ -33,7 +33,6 @@ function renderCard(
     <TripCard
       trip={tripToRender}
       view={tripCardView(tripToRender, today, listView)}
-      first={false}
       busy={busy}
       {...handlers}
     />,
@@ -46,6 +45,11 @@ const progressFor = (destination: string) =>
   screen.getByRole("progressbar", { name: `${destination} packing progress` });
 
 describe("TripCard actions", () => {
+  it("does not render legacy trip-theme artwork", () => {
+    const { container } = renderCard("upcoming", false, { ...trip, theme: "beach" });
+    expect(container.querySelector("img, [data-art-key]")).toBeNull();
+  });
+
   it("Archive on an upcoming card archives that trip", async () => {
     const { onArchive, onRemove } = renderCard("upcoming");
     await userEvent.click(screen.getByRole("button", { name: `Archive: ${trip.destination}` }));

@@ -316,7 +316,7 @@ export function updateTripPreferences(context: DataContext, input: unknown) {
   });
 }
 
-/** Change a trip's picture (#48). Only the six built-in names are accepted; nothing else about the trip changes. */
+/** Compatibility write for the six legacy stored theme values retained after the #392 UI removal. */
 export function setTripTheme(context: DataContext, input: unknown) {
   return mutateTrip(context, inputs.setThemeInput, input, (trip, { theme }) => ({
     trip: { ...trip, theme },

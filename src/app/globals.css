@@ -2228,105 +2228,6 @@ a.back {
   color: var(--ink);
 }
 
-/* Trip theme picker (#48): a native radio group of six tiles. 2 columns on a phone, 3 from 660px. */
-.theme-picker {
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-.theme-picker legend {
-  padding: 0;
-  font-size: 13px;
-  font-weight: 800;
-  color: var(--ink);
-}
-.theme-picker > p {
-  margin: 4px 0 10px;
-}
-.theme-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-@media (min-width: 660px) {
-  .theme-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-.theme-tile {
-  position: relative;
-  display: grid;
-  gap: 8px;
-  min-height: 44px;
-  padding: 8px;
-  border: 1px solid var(--line);
-  border-radius: var(--control-radius);
-  background: var(--control-bg);
-  cursor: pointer;
-}
-.theme-tile:hover {
-  border-color: color-mix(in srgb, var(--dark) 40%, transparent);
-}
-/* The real radio covers the whole tile: it is the hit area and the focus target, and it stays invisible. */
-.theme-tile input {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-  margin: 0;
-  opacity: 0;
-  cursor: pointer;
-}
-.theme-thumb {
-  display: block;
-  aspect-ratio: 3 / 2;
-  overflow: hidden;
-  border-radius: var(--control-radius);
-  background: var(--seafoam);
-}
-.theme-thumb img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: 72% 58%;
-}
-.theme-label {
-  color: var(--ink);
-  font-size: 14px;
-  font-weight: 800;
-  line-height: 1.25;
-}
-.theme-check {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  display: none;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: var(--action);
-  color: var(--action-ink);
-  font-size: 14px;
-  font-weight: 800;
-}
-.theme-tile:has(input:checked) {
-  background: var(--seafoam-soft);
-  border-color: var(--dark);
-  outline: 3px solid var(--accent-2);
-  outline-offset: 3px;
-}
-.theme-tile:has(input:checked) .theme-check {
-  display: inline-grid;
-}
-.theme-tile:has(input:focus-visible) {
-  outline: 3px solid var(--accent-2);
-  outline-offset: 3px;
-}
-
 /* Multi-destination trips (epic #107, design #108): route text, stop cards, the summary strip. */
 .route-text {
   display: inline-block;
@@ -3358,16 +3259,6 @@ a.back {
 .trip-hero > * {
   position: relative;
   z-index: 1;
-}
-/* The theme picture (#48) is an isolated optional layer: hidden until Caroline decides (hero-picture.ts). */
-.hero-picture {
-  display: none;
-}
-.trip-hero[data-picture="on"] .hero-picture {
-  display: block;
-  position: absolute;
-  z-index: 0;
-  inset: 0 0 0 60%;
 }
 .back-link {
   display: inline-flex;

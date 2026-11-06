@@ -88,40 +88,6 @@ test("quick view filters without changing progress or touching the network", asy
   expect(requests).toEqual([]);
 });
 
-test("a failed theme image swaps to the neutral surface at the same size (deferred from #13)", async ({
-  page,
-}) => {
-  await openDashboard(page);
-  await page.getByRole("button", { name: /Past & archive/ }).click();
-  const art = card(page, "Lisbon").locator("[data-art-key]");
-  await expect(art.locator("img")).toBeVisible();
-  const expected = await art.boundingBox();
-
-  const failing = await page.context().newPage();
-  await failing.route("**/themes/*.svg", (route) => route.abort());
-  await failing.setViewportSize(page.viewportSize()!);
-  await openDashboard(failing, { signedIn: true });
-  await failing.getByRole("button", { name: /Past & archive/ }).click();
-  const failedArt = card(failing, "Lisbon").locator("[data-art-key]");
-  await expect(failedArt).toHaveAttribute("data-art-failed", "true");
-  await expect(failedArt.locator("img")).toHaveCount(0);
-  await expect(failedArt).toHaveText("");
-  const actual = await failedArt.boundingBox();
-  expect(actual!.height).toBeCloseTo(expected!.height, 0);
-  expect(actual!.width).toBeCloseTo(expected!.width, 0);
-  // The neutral surface is the theme's --seafoam tint; read it the same way the art does.
-  const background = (node: Element) => getComputedStyle(node).backgroundColor;
-  const neutral = await failedArt.evaluate((node) => {
-    const probe = document.createElement("div");
-    probe.style.background = "var(--seafoam)";
-    node.appendChild(probe);
-    const color = getComputedStyle(probe).backgroundColor;
-    probe.remove();
-    return color;
-  });
-  expect(await failedArt.evaluate(background)).toBe(neutral);
-});
-
 test("no horizontal scroll at 320px with a quick view open", DEVICE, async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 700 });
   await openDashboard(page);

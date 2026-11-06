@@ -18,7 +18,6 @@ import {
   setDraftConfig,
   setDraftSavedList,
   setDraftStops,
-  setDraftTheme,
   type LifecycleTrip,
   type SampleLocation,
   type TripDraft,
@@ -53,7 +52,6 @@ import { countCallout, countTiles, everydayHeading } from "./count-copy";
 import { StartFromList } from "./StartFromList";
 import { StopList } from "./StopList";
 import { addStop } from "./stops-draft";
-import { ThemePicker } from "./ThemePicker";
 import { useTripsSource } from "./TripsSourceProvider";
 import { formatDays, formatRange } from "./view";
 
@@ -522,12 +520,6 @@ function FlowBody({
                 </div>
               </>
             )}
-            {draft.location ? (
-              <ThemePicker
-                value={draft.theme}
-                onChange={(theme) => setDraft(setDraftTheme(draft, theme))}
-              />
-            ) : null}
             {from ? (
               <div className="callout">
                 <strong>The original {from.destination} trip stays unchanged.</strong> This copy
