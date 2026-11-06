@@ -9,6 +9,9 @@ import {
   useSaveStatus,
 } from "@/components/shell/SaveStatus";
 import { ToastProvider } from "@/components/ui/Toast";
+import { locationById } from "@/domain/locations";
+import type { SampleLocation } from "@/domain/trip-lifecycle";
+import type { TripOrigin } from "@/domain/trip-route";
 import { lastSavedText, SettingsScreen } from "./SettingsScreen";
 import type { CloseAccountState } from "./close-account-state";
 
@@ -48,6 +51,12 @@ function setup(
     },
   ),
   accountClosureEnabled = true,
+  initialHome: TripOrigin | null = null,
+  updateHomeCity: (
+    location: SampleLocation | null,
+  ) => Promise<{ ok: true; home: TripOrigin | null } | { ok: false; code: "INTERNAL" }> = async (
+    location,
+  ) => ({ ok: true, home: location ? { location } : null }),
 ) {
   let saved = { weatherOptIn: false, temperatureUnit: "F" as "F" | "C" };
   const update =
@@ -67,6 +76,8 @@ function setup(
           updateWeather={update}
           initialAppearance="ocean"
           updateAppearance={async (appearance) => ({ ok: true as const, appearance })}
+          initialHome={initialHome}
+          updateHomeCity={updateHomeCity}
           accountClosureEnabled={accountClosureEnabled}
           closeAccount={closeAccount}
         />
@@ -77,6 +88,68 @@ function setup(
 }
 
 describe("SettingsScreen", () => {
+  it("draws the Settings suitcase as semantic cubes and keeps optional Feedback absent", () => {
+    const { container } = setup();
+    expect(screen.getByRole("heading", { name: "Settings", level: 1 })).toBeTruthy();
+    expect(
+      screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent),
+    ).toEqual(["Home", "Colour scheme", "Weather and units", "Saving", "Account"]);
+    expect(container.querySelector("[data-interior='dark']")).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Feedback" })).toBeNull();
+  });
+
+  it("shows an unset Home city, saves a selected canonical place immediately, and names the field", async () => {
+    const updateHomeCity = vi.fn(async (location: SampleLocation | null) => ({
+      ok: true as const,
+      home: location ? { location } : null,
+    }));
+    setup(undefined, undefined, undefined, undefined, false, null, updateHomeCity);
+    expect(screen.getByRole("button", { name: "Home city, choose" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Clear" })).toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: "Home city, choose" }));
+    await userEvent.type(screen.getByRole("combobox", { name: "Home city search" }), "Lisbon");
+    await userEvent.click(await screen.findByRole("option", { name: /Lisbon/ }));
+
+    expect(updateHomeCity).toHaveBeenCalledWith(locationById("pt-lisbon"));
+    expect(await screen.findByRole("button", { name: "Home city: Lisbon, change" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Clear" })).toBeTruthy();
+    expect(screen.queryByRole("dialog", { name: "Choose your home city" })).toBeNull();
+  });
+
+  it("clears Home city with Undo and restores a failed clear", async () => {
+    const seattle = locationById("us-wa-seattle")!;
+    const updateHomeCity = vi
+      .fn<(location: SampleLocation | null) => Promise<{ ok: true; home: TripOrigin | null }>>()
+      .mockResolvedValueOnce({ ok: true, home: null })
+      .mockResolvedValueOnce({ ok: true, home: { location: seattle } });
+    const first = setup(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      false,
+      { location: seattle },
+      updateHomeCity,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Clear" }));
+    expect(await screen.findByText("Home city cleared.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Home city, choose" })).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(updateHomeCity).toHaveBeenNthCalledWith(2, seattle);
+    expect(await screen.findByRole("button", { name: "Home city: Seattle, change" })).toBeTruthy();
+    first.unmount();
+
+    const failed = vi.fn(async () => ({ ok: false as const, code: "INTERNAL" as const }));
+    setup(undefined, undefined, undefined, undefined, false, { location: seattle }, failed);
+    await userEvent.click(screen.getByRole("button", { name: "Clear" }));
+    expect(
+      await screen.findByText("Couldn’t save your home city. Nothing was changed."),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Home city: Seattle, change" })).toBeTruthy();
+  });
+
   it("shows the account and a Sign out button that goes straight through (no confirm)", async () => {
     const { signOut } = setup();
     expect(screen.getByRole("heading", { name: "Settings", level: 1 })).toBeTruthy();

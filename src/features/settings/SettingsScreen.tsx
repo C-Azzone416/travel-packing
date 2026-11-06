@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useId, useState } from "react";
+import { Suitcase } from "@/components/suitcase/Suitcase";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
+import { ModalSheet } from "@/components/ui/ModalSheet";
 import { useSaveStatus } from "@/components/shell/SaveStatus";
 import { useSignOut } from "@/components/shell/use-sign-out";
 import { Switch } from "@/components/ui/Switch";
 import { useToast } from "@/components/ui/Toast";
+import type { SampleLocation } from "@/domain/trip-lifecycle";
+import type { TripOrigin } from "@/domain/trip-route";
 import {
   APPEARANCE_COOKIE,
   appearanceCookieString,
@@ -14,12 +17,15 @@ import {
   type Appearance,
 } from "@/domain/appearance";
 import { FeedbackSettings } from "@/features/feedback/FeedbackSettings";
+import { LocationPicker } from "@/features/trips/LocationPicker";
+import { useLocationProvider } from "@/features/trips/LocationProviderContext";
 import type { WeatherSettings } from "@/server/data/weather-store";
 import type { AppearanceResult } from "./appearance-actions";
 import { CloseAccountSheet } from "./CloseAccountSheet";
 import type { CloseAccountState } from "./close-account-state";
 import { ThemePicker } from "./ThemePicker";
 import type { WeatherSettingsResult } from "./weather-actions";
+import type { HomeCityResult } from "./home-actions";
 
 export interface SettingsScreenProps {
   /** The signed-in account, read on the server. Null only if the session vanished mid-request. */
@@ -31,6 +37,9 @@ export interface SettingsScreenProps {
   /** The theme saved on the account (Ocean when none was chosen). */
   initialAppearance: Appearance;
   updateAppearance: (appearance: Appearance) => Promise<AppearanceResult>;
+  /** The owner-level default From place. Existing trips keep their own stored copy. */
+  initialHome?: TripOrigin | null;
+  updateHomeCity?: (location: SampleLocation | null) => Promise<HomeCityResult>;
   /** Server-side rollout decision. Missing or invalid configuration passes false and hides every closure entry point. */
   accountClosureEnabled: boolean;
   closeAccount: (previous: CloseAccountState, formData: FormData) => Promise<CloseAccountState>;
@@ -73,17 +82,28 @@ export function SettingsScreen({
   updateWeather,
   initialAppearance,
   updateAppearance,
+  initialHome = null,
+  updateHomeCity = async (location) => ({
+    ok: true as const,
+    home: location ? { location } : null,
+  }),
   accountClosureEnabled,
   closeAccount,
 }: SettingsScreenProps) {
   const { status, lastSavedAt, retry, track, pending } = useSaveStatus();
   const signOutGuard = useSignOut(signOut);
   const toast = useToast();
+  const locationProvider = useLocationProvider();
   const unitsName = useId();
   const [weather, setWeather] = useState(initialWeather);
   const [weatherError, setWeatherError] = useState(false);
   const [appearance, setAppearance] = useState(initialAppearance);
   const [appearanceError, setAppearanceError] = useState(false);
+  const [home, setHome] = useState<TripOrigin | null>(initialHome);
+  const [homeError, setHomeError] = useState(false);
+  const [homePickerOpen, setHomePickerOpen] = useState(false);
+  const [homeQuery, setHomeQuery] = useState("");
+  const [homeChoice, setHomeChoice] = useState<SampleLocation | null>(null);
   const [closingAccount, setClosingAccount] = useState(false);
 
   // The account's theme is the truth. If this device was showing another one (a new device, or a choice made
@@ -135,6 +155,34 @@ export function SettingsScreen({
     });
   }
 
+  function saveHome(next: SampleLocation | null, cleared = false) {
+    setHomeError(false);
+    const previous = home;
+    setHome(next ? { location: next } : null);
+    setHomePickerOpen(false);
+    void track(
+      async () => {
+        const result = await updateHomeCity(next);
+        if (!result.ok) throw new Error(result.code);
+        return result.home;
+      },
+      (saved) => {
+        setHome(saved);
+        if (cleared && previous) {
+          toast.show("Home city cleared.", {
+            action: {
+              label: "Undo",
+              onAction: () => saveHome(previous.location),
+            },
+          });
+        }
+      },
+    ).catch(() => {
+      setHome(previous);
+      setHomeError(true);
+    });
+  }
+
   const view: SaveView =
     status === "error"
       ? "failed"
@@ -152,107 +200,175 @@ export function SettingsScreen({
         : null;
 
   return (
-    <section className="screen">
+    <section className="screen settings-screen">
       <div className="page-head settings-head">
         <div className="head-copy">
-          <p className="eyebrow">Settings</p>
           <h1>Settings</h1>
-          <p className="muted">Your account and how saving is going.</p>
+          <p className="muted">Your home city, colours, weather and account.</p>
         </div>
       </div>
-      <div className="settings-grid">
-        <Card as="section" padded aria-labelledby="settings-theme" className="appearance-panel">
-          <p className="eyebrow">Appearance</p>
-          <h2 id="settings-theme">Theme</h2>
-          <p className="muted">Choose a colour theme. It applies on all your devices.</p>
-          <ThemePicker value={appearance} onChange={chooseAppearance} />
-          {appearanceError ? (
-            <p className="field-error" role="alert">
-              Couldn’t save that theme. Nothing was changed.
-            </p>
-          ) : null}
-        </Card>
-        <Card as="section" padded aria-labelledby="settings-account">
-          <h2 id="settings-account">Account</h2>
-          {email ? (
-            // The whole row is left out of any feedback screenshot before the picture is made, so no label is left dangling (#273, capture-exclusion.ts).
-            <p data-feedback-identity data-feedback-exclude="account-identity">
-              Signed in as <strong>{email}</strong>
-            </p>
-          ) : null}
-          <form action={signOutGuard.action}>
-            <Button type="submit" variant="secondary">
-              Sign out
-            </Button>
-          </form>
-          {signOutGuard.sheet}
-          {accountClosureEnabled ? (
-            <div className="close-account-entry">
-              <h3>Close account</h3>
-              <p className="muted">
-                Permanently remove your account identity and Packed Smart content.
-              </p>
-              <Button variant="danger" onClick={() => setClosingAccount(true)}>
-                Close account
-              </Button>
-            </div>
-          ) : null}
-        </Card>
-        <Card as="section" padded aria-labelledby="settings-save">
-          <h2 id="settings-save">Save status</h2>
-          <div className="save-status">
-            <div className="save-status-main">
-              <span className={`save-status-glyph save-status-glyph-${view}`} aria-hidden="true">
-                {SAVE_VIEW[view].glyph}
+      <Suitcase interior="dark" inset="staples" className="settings-suitcase">
+        <div className="settings-cubes">
+          <section className="settings-cube" aria-labelledby="settings-home">
+            <h2 id="settings-home">Home</h2>
+            <p className="eyebrow">Home city</p>
+            <button
+              type="button"
+              className="home-city-field"
+              aria-label={home ? `Home city: ${home.location.city}, change` : "Home city, choose"}
+              onClick={() => {
+                setHomeQuery("");
+                setHomeChoice(null);
+                setHomePickerOpen(true);
+              }}
+            >
+              <span className={home ? "" : "home-city-placeholder"}>
+                {home?.location.city ?? "Choose your home city"}
               </span>
-              <div className="save-status-text">
-                <p className={`save-status-line save-status-line-${view}`}>
-                  {SAVE_VIEW[view].line}
-                </p>
-                {detail ? <p className="save-status-detail">{detail}</p> : null}
+              <span className="home-city-change" aria-hidden="true">
+                {home ? "Change" : "+"}
+              </span>
+            </button>
+            <p className="settings-help">
+              Used as the “From” for new trips. You can change it on any trip.
+            </p>
+            <p className="settings-help">Trips you already planned keep their own “From”.</p>
+            {home ? (
+              <button
+                type="button"
+                className="settings-text-button"
+                onClick={() => saveHome(null, true)}
+              >
+                Clear
+              </button>
+            ) : null}
+            {homeError ? (
+              <p className="field-error" role="alert">
+                Couldn’t save your home city. Nothing was changed.
+              </p>
+            ) : null}
+          </section>
+
+          <section className="settings-cube" aria-labelledby="settings-theme">
+            <h2 id="settings-theme">Colour scheme</h2>
+            <p className="muted settings-cube-intro">Applies on all your devices.</p>
+            <ThemePicker value={appearance} onChange={chooseAppearance} />
+            {appearanceError ? (
+              <p className="field-error" role="alert">
+                Couldn’t save that theme. Nothing was changed.
+              </p>
+            ) : null}
+          </section>
+
+          <section className="settings-cube" aria-labelledby="settings-weather">
+            <h2 id="settings-weather">Weather and units</h2>
+            <Switch
+              label="Weather for my trips"
+              description="Uses Open-Meteo. Only map coordinates and dates are sent."
+              checked={weather.weatherOptIn}
+              onChange={(weatherOptIn) => saveWeather({ weatherOptIn }, !weatherOptIn)}
+            />
+            <fieldset className="temperature-units">
+              <legend>Temperature units</legend>
+              <div className="temperature-unit-options">
+                {(["F", "C"] as const).map((unit) => (
+                  <label key={unit}>
+                    <input
+                      type="radio"
+                      name={unitsName}
+                      value={unit}
+                      checked={weather.temperatureUnit === unit}
+                      disabled={!weather.weatherOptIn}
+                      onChange={() => saveWeather({ temperatureUnit: unit })}
+                    />
+                    <span>{unit === "F" ? "°F" : "°C"}</span>
+                  </label>
+                ))}
               </div>
+              <p className="tiny muted">
+                {weather.weatherOptIn ? "°F is the default." : "Turn on weather to use units."}
+              </p>
+            </fieldset>
+            {weatherError ? (
+              <p className="field-error" role="alert">
+                Couldn’t save that setting. Nothing was changed.
+              </p>
+            ) : null}
+            <p className="weather-credit tiny muted">Weather data by Open-Meteo.com</p>
+          </section>
+
+          <section className="settings-cube" aria-labelledby="settings-saving">
+            <h2 id="settings-saving">Saving</h2>
+            <h3 className="sr-only">Save status</h3>
+            <div className="save-status">
+              <div className="save-status-main">
+                <span className={`save-status-glyph save-status-glyph-${view}`} aria-hidden="true">
+                  {SAVE_VIEW[view].glyph}
+                </span>
+                <div className="save-status-text">
+                  <p className={`save-status-line save-status-line-${view}`}>
+                    {SAVE_VIEW[view].line}
+                  </p>
+                  {detail ? <p className="save-status-detail">{detail}</p> : null}
+                </div>
+              </div>
+              {view === "failed" ? <Button onClick={retry}>Retry</Button> : null}
             </div>
-            {view === "failed" ? <Button onClick={retry}>Retry</Button> : null}
-          </div>
-        </Card>
-        <Card as="section" padded aria-labelledby="settings-weather">
-          <h2 id="settings-weather">Weather and units</h2>
-          <Switch
-            label="Weather for my trips"
-            description="Uses Open-Meteo. Only map coordinates and dates are sent."
-            checked={weather.weatherOptIn}
-            onChange={(weatherOptIn) => saveWeather({ weatherOptIn }, !weatherOptIn)}
-          />
-          <fieldset className="temperature-units">
-            <legend>Temperature units</legend>
-            <div className="temperature-unit-options">
-              {(["F", "C"] as const).map((unit) => (
-                <label key={unit}>
-                  <input
-                    type="radio"
-                    name={unitsName}
-                    value={unit}
-                    checked={weather.temperatureUnit === unit}
-                    disabled={!weather.weatherOptIn}
-                    onChange={() => saveWeather({ temperatureUnit: unit })}
-                  />
-                  <span>{unit === "F" ? "°F (default)" : "°C"}</span>
-                </label>
-              ))}
-            </div>
-            <p className="tiny muted">
-              {weather.weatherOptIn ? "Used for weather." : "Turn on weather to use units."}
-            </p>
-          </fieldset>
-          {weatherError ? (
-            <p className="field-error" role="alert">
-              Couldn’t save that setting. Nothing was changed.
-            </p>
-          ) : null}
-          <p className="weather-credit tiny muted">Weather data by Open-Meteo.com</p>
-        </Card>
-        <FeedbackSettings />
-      </div>
+          </section>
+
+          <FeedbackSettings />
+
+          <section className="settings-cube" aria-labelledby="settings-account">
+            <h2 id="settings-account">Account</h2>
+            {email ? (
+              <p data-feedback-identity data-feedback-exclude="account-identity">
+                Signed in as <strong>{email}</strong>
+              </p>
+            ) : null}
+            <form action={signOutGuard.action}>
+              <Button type="submit" variant="secondary">
+                Sign out
+              </Button>
+            </form>
+            {signOutGuard.sheet}
+            {accountClosureEnabled ? (
+              <div className="close-account-entry">
+                <h3>Close account</h3>
+                <p className="muted">
+                  Permanently remove your account identity and Packed Smart content.
+                </p>
+                <Button variant="danger" onClick={() => setClosingAccount(true)}>
+                  Close account
+                </Button>
+              </div>
+            ) : null}
+          </section>
+        </div>
+      </Suitcase>
+
+      <ModalSheet
+        open={homePickerOpen}
+        title="Choose your home city"
+        description="New trips use this as their starting point."
+        onClose={() => setHomePickerOpen(false)}
+        showClose
+      >
+        <LocationPicker
+          provider={locationProvider}
+          query={homeQuery}
+          onQueryChange={setHomeQuery}
+          selected={homeChoice}
+          onSelect={(location) => {
+            setHomeChoice(location);
+            saveHome(location);
+          }}
+          onClear={() => {
+            setHomeChoice(null);
+            setHomeQuery("");
+          }}
+          label="Home city search"
+        />
+      </ModalSheet>
       {accountClosureEnabled && closingAccount ? (
         <CloseAccountSheet action={closeAccount} onClose={() => setClosingAccount(false)} />
       ) : null}

@@ -59,24 +59,24 @@ async function openSettings(page: import("@playwright/test").Page) {
   await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
 }
 
-test("on a wide screen the heading and lede share the cards' column; a phone keeps its margins (#178)", async ({
+test("the heading and lede share the suitcase column; a phone keeps its margins (#413)", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await openSettings(page);
   const left = async (locator: import("@playwright/test").Locator) =>
     Math.round((await locator.boundingBox())!.x);
-  const card = page.locator(".settings-grid > *").first();
+  const suitcase = page.locator(".settings-suitcase");
   const heading = page.getByRole("heading", { name: "Settings", level: 1 });
-  expect(await left(heading)).toBe(await left(card));
-  expect(await left(page.getByText("Your account and how saving is going."))).toBe(
-    await left(card),
+  expect(await left(heading)).toBe(await left(suitcase));
+  expect(await left(page.getByText("Your home city, colours, weather and account."))).toBe(
+    await left(suitcase),
   );
 
   await page.setViewportSize({ width: 390, height: 844 });
   expect(
     await page.locator(".settings-head").evaluate((el) => getComputedStyle(el).marginLeft),
-  ).toBe("2px");
+  ).toBe("0px");
 });
 
 test("Account shows who is signed in, and Sign out goes straight through to sign-in", async ({
@@ -245,8 +245,73 @@ test(
   },
 );
 
-// Field Ledger themes (#142): the choice applies at once, survives reload and navigation, and is account-level.
-test("the Theme choice applies at once and persists across reload, navigation and a device with no cookie", async ({
+test("Home city saves immediately, persists, clears with Undo, and keeps existing-trip copy explicit", async ({
+  page,
+}) => {
+  await openSettings(page);
+  await expect(page.getByText("Trips you already planned keep their own “From”.")).toBeVisible();
+  await page.getByRole("button", { name: "Home city, choose" }).click();
+  const picker = page.getByRole("dialog", { name: "Choose your home city" });
+  await picker.getByRole("combobox", { name: "Home city search" }).fill("Seattle");
+  await picker.getByRole("option", { name: /Seattle/ }).click();
+  await expect(page.getByRole("button", { name: "Home city: Seattle, change" })).toBeVisible();
+  await expect(page.getByText(/^Last saved /)).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Home city: Seattle, change" })).toBeVisible();
+  await page.getByRole("button", { name: "Clear" }).click();
+  await expect(page.getByText("Home city cleared.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Home city, choose" })).toBeVisible();
+  await page.getByRole("button", { name: "Undo" }).click();
+  await expect(page.getByRole("button", { name: "Home city: Seattle, change" })).toBeVisible();
+});
+
+test("the Settings suitcase has the specified columns and no overflow from 195 to 1280 or at 200% text", async ({
+  page,
+}) => {
+  await openSettings(page);
+  for (const width of [1280, 768, 390, 195]) {
+    await page.setViewportSize({ width, height: width < 700 ? 844 : 900 });
+    await page.evaluate(
+      () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+    );
+    const columns = await page
+      .locator(".settings-cubes")
+      .evaluate((node) => getComputedStyle(node).columnCount);
+    expect(columns, `columns at ${width}px`).toBe(width >= 768 ? "2" : "1");
+    const geometry = await page.evaluate(() => ({
+      overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      offenders: [...document.querySelectorAll<HTMLElement>("body *")]
+        .map((node) => ({
+          tag: node.tagName.toLowerCase(),
+          classes: node.className,
+          text: node.textContent?.trim().slice(0, 50),
+          right: Math.round(node.getBoundingClientRect().right),
+          width: Math.round(node.getBoundingClientRect().width),
+        }))
+        .filter((item) => item.right > window.innerWidth + 1)
+        .slice(0, 8),
+    }));
+    expect(
+      geometry.overflow,
+      `page overflow at ${width}px: ${JSON.stringify(geometry.offenders)}`,
+    ).toBeLessThanOrEqual(0);
+  }
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+  await page.getByRole("heading", { name: "Account", level: 2 }).scrollIntoViewIfNeeded();
+  await expect(page.getByRole("button", { name: "Sign out" }).last()).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    ),
+    "page overflow at 390px with 200% text",
+  ).toBeLessThanOrEqual(0);
+});
+
+// Suitcase colour schemes (#413): the choice applies at once, survives reload and navigation, and is account-level.
+test("the colour scheme applies at once and persists across reload, navigation and a device with no cookie", async ({
   page,
   context,
 }) => {
@@ -262,7 +327,7 @@ test("the Theme choice applies at once and persists across reload, navigation an
   await page.getByRole("radio", { name: /Evergreen/ }).check();
   await expect(html).toHaveAttribute("data-scheme", "evergreen");
   expect(await accent()).toBe("#c0612f");
-  await expect(page.getByText("Current theme: Evergreen")).toBeVisible();
+  await expect(page.getByText("Current theme: Evergreen")).toHaveText("Current theme: Evergreen");
   // Saved for real: wait for the "Last saved" proof before leaving.
   await expect(page.getByText(/^Last saved /)).toBeVisible();
 
