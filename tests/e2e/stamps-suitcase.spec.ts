@@ -36,12 +36,18 @@ test("the sticker suitcase is data-backed and selects trips without changing the
 }) => {
   await openStamps(page);
   await expect(page.getByText("1 inked")).toBeVisible();
-  const lisbon = page.getByRole("button", { name: /Lisbon, Sep 2026, 1 trip/ });
-  const sanDiego = page.getByRole("button", { name: /San Diego, Oct 2026, 1 trip/ });
+  const lisbon = page.getByRole("button", { name: "Lisbon, Sep 2026, 1 trip", exact: true });
+  const sanDiego = page.getByRole("button", {
+    name: "San Diego, Oct 2026, 1 trip",
+    exact: true,
+  });
   await expect(lisbon).toHaveAttribute("aria-pressed", "true");
   await expect(sanDiego).toHaveAttribute("data-upcoming", "true");
   await expect(page.getByLabel("Travel totals").getByText("4", { exact: true })).toBeVisible();
   await expect(page.getByRole("article", { name: "Selected trip: Lisbon" })).toBeVisible();
+  await expect(
+    page.getByRole("article", { name: "Selected trip: Lisbon" }).locator("[data-colour]"),
+  ).toHaveAttribute("data-colour", "good");
   await expect(page.getByRole("link", { name: "Reuse this list" })).toHaveAttribute(
     "href",
     /\/trips\/new\?copy=/,

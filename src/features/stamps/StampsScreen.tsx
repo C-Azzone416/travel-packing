@@ -38,6 +38,7 @@ function Sticker({
     <button
       type="button"
       className={styles.stickerButton}
+      aria-label={sticker.accessibleName}
       aria-pressed={selected}
       data-upcoming={sticker.upcoming || undefined}
       data-shape={sticker.shape}
@@ -50,7 +51,6 @@ function Sticker({
       </span>
       <strong className={styles.stickerCode}>{sticker.code || "—"}</strong>
       <span className={styles.stickerMonth}>{sticker.month}</span>
-      <span className="sr-only"> — {sticker.accessibleName}</span>
       {sticker.completedCount > 1 ? (
         <span className={styles.repeatBadge} aria-hidden="true">
           ×{sticker.completedCount}
@@ -63,7 +63,9 @@ function Sticker({
 function SelectedTrip({ trip }: { trip: PastTripView }) {
   return (
     <article className={styles.selectedCard} aria-label={`Selected trip: ${trip.name}`}>
-      <p className={styles.selectedEyebrow}>{trip.eyebrow}</p>
+      <p className={styles.selectedEyebrow} data-colour={trip.stickerColour ?? undefined}>
+        {trip.eyebrow}
+      </p>
       <h3>{trip.name}</h3>
       <p>{trip.facts}</p>
       <div className={styles.selectedActions}>
@@ -98,7 +100,11 @@ function PastTripRow({
       onClick={onSelect}
       data-selected={selected || undefined}
     >
-      <span className={styles.tripCode} aria-hidden="true">
+      <span
+        className={styles.tripCode}
+        data-colour={trip.stickerColour ?? undefined}
+        aria-hidden="true"
+      >
         {trip.code || "—"}
       </span>
       <span className={styles.tripCopy}>

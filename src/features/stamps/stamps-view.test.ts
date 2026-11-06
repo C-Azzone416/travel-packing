@@ -97,6 +97,9 @@ describe("Stamps view", () => {
       tripId: future.id,
     });
     expect(view.pastTrips.map((entry) => entry.name)).toEqual(["Portland again", "Portland"]);
+    expect(view.pastTrips).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: "PDX", stickerColour: "accent" })]),
+    );
     expect(view.totals).toEqual({ trips: 2, places: 1, countries: 1, nights: 5 });
     expect(view.inked).toBe(1);
   });
@@ -185,7 +188,11 @@ describe("Stamps view", () => {
     expect(view.totals.countries).toBe(1);
     expect(stampTripView(dayTrip).facts).toContain("drive · PDX · day trip");
     expect(stampTripView(overnight).facts).toContain("1 night");
-    expect(stampTripView(noStops)).toMatchObject({ code: "", name: "Saved destination" });
+    expect(stampTripView(noStops)).toMatchObject({
+      code: "",
+      stickerColour: null,
+      name: "Saved destination",
+    });
   });
 
   it("is independent of lifecycle container order", () => {

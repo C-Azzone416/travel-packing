@@ -259,7 +259,11 @@
   line-height: 1.35;
 }
 .selectedEyebrow {
+  --trip-sticker: var(--onDarkMuted);
   margin-bottom: 8px !important;
+  padding-left: 8px;
+  border-left: 4px solid var(--trip-sticker);
+  color: var(--onDarkMuted) !important;
   font-size: 11px !important;
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -316,15 +320,36 @@
   background: var(--paper2);
 }
 .tripCode {
+  --trip-sticker: var(--dark2);
   width: 48px;
   height: 48px;
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: var(--dark2);
+  background: var(--trip-sticker);
   color: var(--onDark);
   font-size: 12px;
   font-weight: 800;
+}
+.tripCode[data-colour="accent"],
+.selectedEyebrow[data-colour="accent"] {
+  --trip-sticker: var(--accent);
+}
+.tripCode[data-colour="dark2"],
+.selectedEyebrow[data-colour="dark2"] {
+  --trip-sticker: var(--dark2);
+}
+.tripCode[data-colour="good"],
+.selectedEyebrow[data-colour="good"] {
+  --trip-sticker: var(--good);
+}
+.tripCode[data-colour="info"],
+.selectedEyebrow[data-colour="info"] {
+  --trip-sticker: var(--info);
+}
+.tripCode[data-colour="goldDeep"],
+.selectedEyebrow[data-colour="goldDeep"] {
+  --trip-sticker: var(--goldDeep);
 }
 .tripCopy {
   display: grid;

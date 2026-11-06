@@ -28,6 +28,7 @@ export interface StickerView {
 export interface PastTripView {
   id: string;
   code: string;
+  stickerColour: StickerColour | null;
   name: string;
   monthYear: string;
   eyebrow: string;
@@ -148,6 +149,9 @@ function regionLabel(stop: TripStop): string {
 export function stampTripView(trip: LifecycleTrip): PastTripView {
   const first = trip.stops[0];
   const code = first ? stickerCode(trip, first, 0) : "";
+  const stickerColour = first
+    ? stickerLook(first.location.countryCode, first.location.city).colour
+    : null;
   const totals = packedTotals(trip);
   const nights = Math.max(0, daysBetween(trip.start, trip.end));
   const facts = [
@@ -161,6 +165,7 @@ export function stampTripView(trip: LifecycleTrip): PastTripView {
   return {
     id: trip.id,
     code,
+    stickerColour,
     name: tripDisplayName(trip),
     monthYear: monthYear(trip.start),
     eyebrow: [code, compactMonthYear(trip.start)].filter(Boolean).join(" · "),

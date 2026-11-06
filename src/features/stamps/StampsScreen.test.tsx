@@ -33,13 +33,19 @@ describe("Stamps screen", () => {
     expect(screen.getByRole("region", { name: "Loading stamps" })).toBeTruthy();
     expect(await screen.findByRole("heading", { name: "Past trips", level: 2 })).toBeTruthy();
     expect(screen.getByText("1 inked")).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Lisbon, Sep 2026, 1 trip/ })).toBeTruthy();
-    const upcoming = screen.getByRole("button", { name: /San Diego, Oct 2026, 1 trip/ });
+    expect(screen.getByRole("button", { name: "Lisbon, Sep 2026, 1 trip" })).toBeTruthy();
+    const upcoming = screen.getByRole("button", {
+      name: "San Diego, Oct 2026, 1 trip",
+    });
     expect(upcoming.getAttribute("data-upcoming")).toBe("true");
     const totals = screen.getByLabelText("Travel totals");
     expect(within(totals).getAllByText("1", { selector: "dd" })).toHaveLength(3);
     expect(within(totals).getByText("4", { selector: "dd" })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Lisbon.*packed/ })).toBeTruthy();
+    const selected = screen.getByRole("article", { name: "Selected trip: Lisbon" });
+    expect(selected.querySelector("[data-colour]")?.getAttribute("data-colour")).toBe("good");
+    const lisbonRow = screen.getByRole("button", { name: /Lisbon.*packed/ });
+    expect(lisbonRow.querySelector("[data-colour]")?.getAttribute("data-colour")).toBe("good");
   });
 
   it("selects a row or sticker and updates the reuse and open-trip actions", async () => {
@@ -48,7 +54,11 @@ describe("Stamps screen", () => {
     expect(screen.getByRole("link", { name: "Reuse this list" }).getAttribute("href")).toBe(
       "/trips/new?copy=lisbon",
     );
-    await user.click(screen.getByRole("button", { name: /San Diego, Oct 2026, 1 trip/ }));
+    await user.click(
+      screen.getByRole("button", {
+        name: "San Diego, Oct 2026, 1 trip",
+      }),
+    );
     expect(screen.getByRole("link", { name: "Open trip" }).getAttribute("href")).toBe(
       "/trips/san-diego",
     );
