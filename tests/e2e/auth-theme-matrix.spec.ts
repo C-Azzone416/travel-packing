@@ -22,6 +22,45 @@ const CELLS = [
 const sidewaysScroll = (page: Page) =>
   page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 
+async function expectDuskStickerContrast(page: Page, label: string) {
+  const result = await page.locator(".auth-sticker").evaluate((sticker) => {
+    const parse = (colour: string) =>
+      colour
+        .match(/[\d.]+/g)!
+        .slice(0, 3)
+        .map(Number);
+    const luminance = (colour: string) => {
+      const channels = parse(colour).map((channel) => {
+        const value = channel / 255;
+        return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+    };
+    const ratio = (foreground: string, background: string) => {
+      const light = Math.max(luminance(foreground), luminance(background));
+      const dark = Math.min(luminance(foreground), luminance(background));
+      return (light + 0.05) / (dark + 0.05);
+    };
+    const probe = document.createElement("span");
+    probe.style.color = "var(--ink)";
+    document.body.append(probe);
+    const expectedInk = getComputedStyle(probe).color;
+    probe.remove();
+    const background = getComputedStyle(sticker).backgroundColor;
+    const samples = Object.fromEntries(
+      ["small", "strong"].map((selector) => {
+        const foreground = getComputedStyle(sticker.querySelector(selector)!).color;
+        return [selector, { foreground, ratio: ratio(foreground, background) }];
+      }),
+    );
+    return { expectedInk, samples };
+  });
+  for (const [selector, sample] of Object.entries(result.samples)) {
+    expect(sample.foreground, `${label}: ${selector} uses --ink`).toBe(result.expectedInk);
+    expect(sample.ratio, `${label}: ${selector} contrast`).toBeGreaterThanOrEqual(4.5);
+  }
+}
+
 let email: string;
 test.beforeEach(({}, testInfo) => {
   email = newcomerEmailFor(testInfo.project.name, nextNewcomerSlot());
@@ -57,6 +96,7 @@ for (const { theme, width, axe } of CELLS) {
       await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
       await expect(card).toHaveCSS("border-top-width", "0px");
       await expect(card).toHaveCSS("box-shadow", "none");
+      if (theme === "dusk") await expectDuskStickerContrast(page, name);
       const lidBox = (await lid.boundingBox())!;
       const panelBox = (await page.locator(".auth-panel").boundingBox())!;
       if (width < 1024) expect(panelBox.y, `${name}: panel below lid`).toBeGreaterThan(lidBox.y);

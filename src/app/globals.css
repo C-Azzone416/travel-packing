@@ -1798,6 +1798,9 @@ input:disabled {
   box-shadow: 0 8px 16px color-mix(in srgb, var(--darkEdge) 65%, transparent);
   line-height: 1;
 }
+[data-scheme="dusk"] .auth-sticker {
+  color: var(--ink);
+}
 .auth-sticker small {
   font-size: 12px;
   font-weight: 700;
