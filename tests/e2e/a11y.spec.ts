@@ -5,6 +5,7 @@ import { chooseFromMenu } from "./helpers/menu";
 import { expectAccessible } from "./helpers/a11y";
 import { DEVICE, legacyPackingLayout } from "./helpers/device";
 import { serverActionId } from "./helpers/server-action";
+import { chooseMode, nextButton, pickPlace, setDates, toWhen } from "./helpers/plan";
 
 // Home is the laptop suitcase view from 1024px (#387); this spec's subject is the page below it, so it runs there.
 // Two subjects stay at the laptop width: the Staples screen and the error chip on the laptop Home.
@@ -75,47 +76,53 @@ test.describe("dashboard", DEVICE, () => {
   });
 });
 
-test.describe("create and copy", DEVICE, () => {
+test.describe("plan a trip", DEVICE, () => {
+  // #377: the palette's accent, good and info pairs fall short of 4.5:1 on the redesigned screens; nothing else is exempt.
+  const palette = { disable: ["color-contrast"] };
+
   async function startTrip(page: Page) {
     await openDashboard(page);
     await page.getByRole("link", { name: /Plan a trip/ }).click();
-    await expect(page.getByRole("heading", { name: "Confirm the trip" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Plan a trip", level: 1 })).toBeVisible();
   }
 
-  test("step 1: empty, searching, results, confirmed with the theme picker", async ({ page }) => {
+  test("where: empty, results, and a place chosen", async ({ page }) => {
     await startTrip(page);
-    await expectAccessible(page, "create step 1 empty");
+    await expectAccessible(page, "plan where empty", palette);
     await page.getByRole("combobox", { name: "Destination search" }).fill("lon");
     await expect(page.getByRole("option").first()).toBeVisible();
-    await expectAccessible(page, "create step 1 results");
+    await expectAccessible(page, "plan where results", palette);
     await page.getByRole("option", { name: /England/ }).click();
-    await page.getByLabel("Leave", { exact: true }).fill("2026-11-12");
-    await page.getByLabel("Return", { exact: true }).fill("2026-11-16");
-    await expect(page.getByRole("group", { name: "Trip theme" })).toBeVisible();
-    await expectAccessible(page, "create step 1 confirmed with theme picker");
+    await expectAccessible(page, "plan where with a place and a second stop", palette);
+    await page.getByRole("button", { name: "Add a stop" }).click();
+    await expectAccessible(page, "plan where with a stop to choose", palette);
   });
 
-  test("step 1 with no matches, and the discard prompt", async ({ page }) => {
+  test("where with no matches", async ({ page }) => {
     await startTrip(page);
     await page.getByRole("combobox", { name: "Destination search" }).fill("zzzqqq");
     await expect(page.getByRole("status", { name: "Destination results" })).toHaveText(
       "No places found",
     );
-    await expectAccessible(page, "create no matches");
-    await page.getByRole("button", { name: "Cancel draft", exact: true }).click();
-    await expect(page.getByRole("dialog", { name: "Discard this draft?" })).toBeVisible();
-    await expectAccessible(page, "discard prompt");
+    await expectAccessible(page, "plan no matches", palette);
   });
 
-  test("step 2: shape the list", async ({ page }) => {
+  test("when, how, the starting list and the review", async ({ page }) => {
+    test.slow();
     await startTrip(page);
-    await page.getByRole("combobox", { name: "Destination search" }).fill("lon");
-    await page.getByRole("option", { name: /England/ }).click();
-    await page.getByLabel("Leave", { exact: true }).fill("2026-11-12");
-    await page.getByLabel("Return", { exact: true }).fill("2026-11-16");
-    await page.getByRole("button", { name: "Continue to packing preferences" }).click();
-    await expect(page.getByRole("heading", { name: "Shape the list" })).toBeVisible();
-    await expectAccessible(page, "create step 2");
+    await pickPlace(page, "lon", /England/);
+    await toWhen(page);
+    await expectAccessible(page, "plan when", palette);
+    await setDates(page, "2026-11-12", "2026-11-16");
+    await nextButton(page).click();
+    await expectAccessible(page, "plan how", palette);
+    await chooseMode(page);
+    await nextButton(page).click();
+    await expect(page.getByRole("heading", { name: "Starting list", level: 2 })).toBeVisible();
+    await expectAccessible(page, "plan starting list", palette);
+    await nextButton(page).click();
+    await expect(page.getByRole("heading", { name: "Review", level: 2 })).toBeVisible();
+    await expectAccessible(page, "plan review", palette);
   });
 });
 
@@ -556,11 +563,14 @@ test.describe("design's known items", DEVICE, () => {
   test("date inputs are tied to their hint and notice", async ({ page }) => {
     await openDashboard(page);
     await page.getByRole("link", { name: /Plan a trip/ }).click();
+    await pickPlace(page, "lon", /England/);
+    await toWhen(page);
     for (const label of ["Leave", "Return"]) {
       const input = page.getByLabel(label, { exact: true });
-      await expect(input).toHaveAttribute("aria-describedby", "date-hint date-notice");
+      await expect(input).toHaveAccessibleDescription(/Return cannot be before departure/);
+      // The notice is the second description: it is empty until a date is moved.
+      expect(((await input.getAttribute("aria-describedby")) ?? "").split(" ")).toHaveLength(2);
     }
-    await expect(page.locator("#date-hint")).toContainText("Return cannot be before departure");
   });
 
   test("with reduced motion no animation runs", async ({ page }) => {

@@ -486,6 +486,19 @@ describe("per-trip commands", () => {
   });
 });
 
+describe("the home city in the memory source (#390)", () => {
+  const options = { now: () => 1, newId: () => "x", today: () => "2026-10-16" };
+  it("is none unless the source is given one", async () => {
+    expect(await createMemoryTripsSource(sampleLifecycleState(), options).homeCity?.()).toBeNull();
+  });
+
+  it("answers the home city it was given", async () => {
+    const home = { location: LOCATIONS.find((entry) => entry.id === "us-wa-seattle")! };
+    const source = createMemoryTripsSource(sampleLifecycleState(), { ...options, homeCity: home });
+    expect(await source.homeCity?.()).toBe(home);
+  });
+});
+
 describe("saved lists in the memory source (#170)", () => {
   const BEACH: SavedListDetail = {
     id: "beach",

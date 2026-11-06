@@ -3,6 +3,7 @@ import { signInAsOwner } from "./helpers/auth";
 import { chooseFromMenu } from "./helpers/menu";
 import { DEVICE, legacyPackingLayout } from "./helpers/device";
 import { reviewAndApply } from "./helpers/preferences";
+import { planAndCreate, pickPlace, toWhen } from "./helpers/plan";
 
 // Home is the laptop suitcase view from 1024px (#387); this spec's subject is the page below it, so it runs there.
 test.beforeEach(async ({ page }) => {
@@ -78,6 +79,8 @@ test("dates: a later departure pulls the return forward and becomes its minimum"
 }) => {
   await openDashboard(page);
   await page.getByRole("link", { name: /Plan a trip/ }).click();
+  await pickPlace(page, "lon", /England/);
+  await toWhen(page);
   await page.getByLabel("Leave", { exact: true }).fill("2026-11-12");
   await page.getByLabel("Return", { exact: true }).fill("2026-11-16");
   await page.getByLabel("Leave", { exact: true }).fill("2026-12-20");
@@ -196,12 +199,12 @@ test("copy: a remembered Bathroom item travels to the copy, with nothing checked
   const before = await source.innerText();
 
   await chooseFromMenu(page, "San Diego", "Copy trip");
-  await page.getByRole("combobox", { name: "Destination search" }).fill("paris");
-  await page.getByRole("option", { name: /Paris/ }).click();
-  await page.getByLabel("Leave", { exact: true }).fill("2026-12-04");
-  await page.getByLabel("Return", { exact: true }).fill("2026-12-08");
-  await page.getByRole("button", { name: "Continue to packing preferences" }).click();
-  await page.getByRole("button", { name: "Save trip" }).click();
+  await planAndCreate(page, {
+    query: "paris",
+    option: /Paris/,
+    start: "2026-12-04",
+    end: "2026-12-08",
+  });
   await expect(page.getByRole("article", { name: "Paris" })).toBeVisible();
   expect(await page.getByRole("article", { name: "San Diego" }).innerText()).toBe(before);
 

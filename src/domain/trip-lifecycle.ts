@@ -13,6 +13,7 @@ import {
   parseDate,
 } from "./calc";
 import type { StampLabels } from "./stamps";
+import type { TravelMode } from "./trip-route";
 import { DEFAULT_THEME, type ThemeId } from "./themes";
 import { TOILETRY_GROUP_ID } from "./toiletry-bag";
 import type { TravelMode, TripOrigin } from "./trip-route";
@@ -75,6 +76,15 @@ export interface TripDraft {
    * new (not copied) trip can have one. Just the id: the server loads the list itself, owner-scoped.
    */
   savedListId?: string | null;
+  /**
+   * Where the trip leaves from and returns to (#390). Absent = the account's home city (the server fills it in); null = no
+   * origin. Only the place id goes to the server, which resolves the place itself.
+   */
+  origin?: SampleLocation | null;
+  /** Fly / Drive / Train or other. Absent = none chosen (a copy then keeps its source's). */
+  travelMode?: TravelMode | null;
+  /** The owner's own name for the trip; blank or absent shows the stops. */
+  name?: string | null;
 }
 
 export interface DeletedTrip {

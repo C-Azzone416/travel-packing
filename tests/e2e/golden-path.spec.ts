@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
 import { DEVICE, legacyPackingLayout } from "./helpers/device";
+import { planToList, reviewAndCreate } from "./helpers/plan";
 
 // The one end-to-end walk a person actually makes, on a real phone (WebKit, touch): sign in, create a trip, pack it on the trip
 // screen, review the bag, say it is Ready, and find it still Ready after a reload. It runs on desktop too (every test does).
@@ -22,13 +23,14 @@ test(
 
     // Create: pick a destination, set the dates, continue, save.
     await page.getByRole("link", { name: /Plan a trip/ }).click();
-    await page.getByRole("combobox", { name: "Destination search" }).fill("lon");
-    await page.getByRole("option", { name: /England/ }).click();
-    await page.getByLabel("Leave", { exact: true }).fill("2026-11-12");
-    await page.getByLabel("Return", { exact: true }).fill("2026-11-16");
-    await page.getByRole("button", { name: "Continue to packing preferences" }).click();
-    await expect(page.getByRole("heading", { name: "4 days of everyday clothes" })).toBeVisible();
-    await page.getByRole("button", { name: "Save trip" }).click();
+    await planToList(page, {
+      query: "lon",
+      option: /England/,
+      start: "2026-11-12",
+      end: "2026-11-16",
+    });
+    await expect(page.getByRole("heading", { name: "Starting list", level: 2 })).toBeVisible();
+    await reviewAndCreate(page);
     await expect(page.locator(".toast-region")).toContainText("Trip saved");
     await expect(page.getByRole("article", { name: "London" })).toBeVisible();
 

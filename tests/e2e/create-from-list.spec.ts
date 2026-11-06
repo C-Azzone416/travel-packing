@@ -3,6 +3,7 @@ import { ownerEmailFor, signInAsOwner } from "./helpers/auth";
 import { seedSavedList } from "./helpers/database";
 import { DEVICE, legacyPackingLayout } from "./helpers/device";
 import { chooseFromMenu } from "./helpers/menu";
+import { planToList, reviewAndCreate } from "./helpers/plan";
 
 // Home is the laptop suitcase view from 1024px (#387); this spec's subject is the page below it, so it runs there.
 test.beforeEach(async ({ page }) => {
@@ -31,28 +32,24 @@ async function seedBeach() {
   ]);
 }
 
-async function pickLisbon(page: Page) {
-  await page.getByRole("combobox", { name: "Destination search" }).fill("lisbon");
-  await page
-    .getByRole("option", { name: /Portugal/ })
-    .first()
-    .click();
-  await page.getByLabel("Leave", { exact: true }).fill("2026-11-12");
-  await page.getByLabel("Return", { exact: true }).fill("2026-11-16");
-}
+const LISBON = {
+  query: "lisbon",
+  option: /Portugal/,
+  start: "2026-11-12",
+  end: "2026-11-16",
+};
 
+/** Plan a trip to Lisbon, up to the Starting list. */
 async function startStep(page: Page) {
   await page.getByRole("link", { name: /Plan a trip/ }).click();
-  await pickLisbon(page);
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await expect(
-    page.getByRole("heading", { name: "Start from a saved list", level: 1 }),
-  ).toBeVisible();
+  await planToList(page, LISBON);
 }
 
+const savedListCard = (page: Page) =>
+  page.getByRole("checkbox", { name: /Start from a saved list/ });
 const rows = (page: Page) => page.locator("[data-item-id]");
 
-test("with saved lists: choose one, review it, and the new trip is exactly the list, unpacked", async ({
+test("with saved lists: choose one, see the count, and the new trip is exactly the list, unpacked", async ({
   page,
 }) => {
   await legacyPackingLayout(page);
@@ -60,24 +57,19 @@ test("with saved lists: choose one, review it, and the new trip is exactly the l
   await seedBeach();
   await startStep(page);
 
-  const group = page.getByRole("radiogroup", { name: "Starting point" });
-  await expect(group.getByRole("radio", { name: /No saved list/ })).toBeChecked();
-  await group.getByRole("button", { name: "Preview items in Beach week" }).click();
-  await expect(page.getByRole("region", { name: "Items in Beach week" })).toContainText(
-    "Beach towel",
+  await expect(savedListCard(page)).not.toBeChecked();
+  await savedListCard(page).check();
+  await page.getByRole("radio", { name: /Beach week/ }).check();
+  await expect(page.getByRole("radio", { name: /Beach week · 3 items/ })).toBeChecked();
+  await expect(page.getByRole("radio", { name: /Ski trip · 1 item/ })).not.toBeChecked();
+  // The list replaces the Staples: the Staples card says so, and the preview counts the list .
+  await expect(page.getByRole("checkbox", { name: /Your Staples/ })).toHaveAccessibleDescription(
+    "Your saved list stands in for them on this trip",
   );
-  await group.getByRole("radio", { name: /Beach week/ }).check();
-  await expect(group.getByRole("radio", { name: /No saved list/ })).not.toBeChecked();
-  await expect(page.getByRole("status", { name: "Saved list choice" })).toContainText(
-    "“Beach week” replaces your staples and recommendations.",
-  );
+  // No weather and no past-trip copy is mixed into a list trip.
+  await expect(page.getByRole("checkbox", { name: /Copy a past trip/ })).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Review your list", level: 1 })).toBeVisible();
-  await expect(page.getByText("Starting from “Beach week”")).toBeVisible();
-  await expect(page.getByText("Your packing preferences")).toHaveCount(0);
-  await expect(page.getByRole("region", { name: "Bathroom" })).toContainText("Toothbrush");
-  await page.getByRole("button", { name: "Save trip" }).click();
+  await reviewAndCreate(page);
   await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
 
   await page.getByRole("link", { name: "Keep packing: Lisbon" }).click();
@@ -93,63 +85,66 @@ test("with saved lists: choose one, review it, and the new trip is exactly the l
   await expect(page.getByText("0 of 7 packed / 7 left")).toBeVisible();
 });
 
-test("with saved lists but none chosen: today's Shape the list, staples and recommendations", async ({
-  page,
-}) => {
+test("the preview counts the list: its items, and the toiletry bag", async ({ page }) => {
   await openDashboard(page);
   await seedBeach();
   await startStep(page);
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Shape the list", level: 1 })).toBeVisible();
-  await expect(page.getByText("Your packing preferences")).toBeVisible();
-  await page.getByRole("button", { name: "Save trip" }).click();
+  await savedListCard(page).check();
+  await page.getByRole("radio", { name: /Beach week/ }).check();
+  // 2 towels + 3 shorts + 1 toothbrush, and the bag that holds the toothbrush.
+  await expect(
+    page
+      .getByRole("complementary", { name: "Live preview of your trip" })
+      .getByText("About 7 items to start"),
+  ).toBeVisible();
+});
+
+test("with saved lists but none chosen: the Staples and recommendations", async ({ page }) => {
+  await openDashboard(page);
+  await seedBeach();
+  await startStep(page);
+  await expect(page.getByRole("checkbox", { name: /Your Staples/ })).toBeChecked();
+  await reviewAndCreate(page);
   await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
   await page.getByRole("link", { name: "Keep packing: Lisbon" }).click();
   await expect(page.locator('[data-item-id="socks"]')).toBeVisible();
   await expect(page.getByText("Beach towel")).toHaveCount(0);
 });
 
-test("changing your mind: Change starting point from the review goes back and a different choice sticks", async ({
+test("changing your mind: a different list, or the Staples again, is what sticks", async ({
   page,
 }) => {
   await openDashboard(page);
   await seedBeach();
   await startStep(page);
+  await savedListCard(page).check();
   await page.getByRole("radio", { name: /Beach week/ }).check();
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await page.getByRole("button", { name: "Change starting point" }).click();
-  await expect(page.getByRole("radio", { name: /Beach week/ })).toBeChecked();
   await page.getByRole("radio", { name: /Ski trip/ }).check();
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await expect(page.getByText("Starting from “Ski trip”")).toBeVisible();
-  await page.getByRole("button", { name: "Save trip" }).click();
+  await expect(page.getByRole("radio", { name: /Beach week/ })).not.toBeChecked();
+  await reviewAndCreate(page);
   await page.getByRole("link", { name: "Keep packing: Lisbon" }).click();
   await expect(rows(page)).toHaveCount(1);
   await expect(rows(page)).toContainText("Gloves");
 });
 
-test("without any saved list there is no list step at all", async ({ page }) => {
+test("without any saved list there is no saved-list card at all", async ({ page }) => {
   await openDashboard(page);
-  await page.getByRole("link", { name: /Plan a trip/ }).click();
-  await pickLisbon(page);
-  await page.getByRole("button", { name: "Continue to packing preferences" }).click();
-  await expect(page.getByRole("heading", { name: "Shape the list", level: 1 })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Start from a saved list" })).toHaveCount(0);
+  await startStep(page);
+  await expect(page.getByRole("heading", { name: "Starting list", level: 2 })).toBeVisible();
+  await expect(savedListCard(page)).toHaveCount(0);
 });
 
-test("copying a trip never offers the list step, even when lists exist", async ({ page }) => {
+test("copying a trip never offers a saved list, even when lists exist", async ({ page }) => {
   await openDashboard(page);
   await seedBeach();
   await chooseFromMenu(page, "San Diego", "Copy trip");
-  await expect(page.getByText("Copy of San Diego")).toBeVisible();
-  await pickLisbon(page);
-  await page.getByRole("button", { name: "Continue to packing preferences" }).click();
-  await expect(page.getByRole("heading", { name: "Shape the list", level: 1 })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Start from a saved list" })).toHaveCount(0);
+  await planToList(page, LISBON);
+  await expect(page.getByRole("checkbox", { name: /Copy a past trip/ })).toBeChecked();
+  await expect(savedListCard(page)).toHaveCount(0);
 });
 
 test(
-  "on a phone the step and the review fit the screen, with 44px targets",
+  "on a phone the starting list fits the screen, with 44px targets",
   DEVICE,
   async ({ page }) => {
     await openDashboard(page);
@@ -160,17 +155,18 @@ test(
         () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
       );
     expect(await overflow()).toBe(false);
+    await savedListCard(page).check();
     for (const control of [
-      page.getByRole("button", { name: "Continue", exact: true }),
+      page.getByRole("button", { name: "Next", exact: true }),
       page.getByRole("button", { name: "Back", exact: true }),
-      page.getByRole("button", { name: "Preview items in Beach week" }),
+      savedListCard(page).locator("xpath=ancestor::label"),
+      page.getByRole("radio", { name: /Beach week/ }).locator("xpath=ancestor::label"),
     ]) {
       const box = await control.boundingBox();
       expect(box!.height).toBeGreaterThanOrEqual(44);
     }
-    await page.getByRole("radio", { name: /Beach week/ }).check();
-    await page.getByRole("button", { name: "Continue", exact: true }).click();
-    await expect(page.getByRole("heading", { name: "Review your list" })).toBeVisible();
+    await page.getByRole("button", { name: "Next", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Review", level: 2 })).toBeVisible();
     expect(await overflow()).toBe(false);
   },
 );
