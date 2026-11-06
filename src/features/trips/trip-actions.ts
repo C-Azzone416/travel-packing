@@ -89,6 +89,8 @@ export async function upsertStapleAction(staple: Staple): Promise<StaplesReadRes
         cadence: staple.cadence,
         packLast: staple.packLast,
         ...(staple.groupId ? { groupId: staple.groupId } : {}),
+        ...(staple.laundryHalves ? { laundryHalves: true } : {}),
+        ...(staple.cube ? { cube: staple.cube } : {}),
       }),
     (staples) => ({ ok: true as const, staples }),
   ) as Promise<StaplesReadResult>;
@@ -119,6 +121,8 @@ export async function saveStaplesSetupAction(staples: Staple[]): Promise<Staples
         cadence: staple.cadence,
         packLast: staple.packLast,
         ...(staple.groupId ? { groupId: staple.groupId } : {}),
+        ...(staple.laundryHalves ? { laundryHalves: true } : {}),
+        ...(staple.cube ? { cube: staple.cube } : {}),
       })),
     }),
   );

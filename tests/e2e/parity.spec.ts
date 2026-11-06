@@ -74,44 +74,32 @@ test("dates: a later departure pulls the return forward and becomes its minimum"
   await expect(page.getByLabel("Return", { exact: true })).toHaveAttribute("min", "2026-12-20");
 });
 
-test("staples: four sections in order, the Bathroom note, Pack last as a badge only, and the seven flagged defaults", async ({
+test("staples: five cubes in order, Pack last as a badge only, and the seven flagged defaults", async ({
   page,
 }) => {
   await openDashboard(page);
   await page.goto("/staples");
-  await expect(
-    page.getByRole("heading", { name: "Every trip starts here", level: 1 }),
-  ).toBeVisible();
-  await expect(page.getByText("My staples", { exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { level: 2 })).toHaveText([
+  await expect(page.getByRole("heading", { name: "Staples", level: 1 })).toBeVisible();
+  const cubes = page.locator("section[aria-labelledby^='staples-']");
+  await expect(cubes.getByRole("heading", { level: 2 })).toHaveText([
     "Clothing",
-    "Bathroom",
+    "Toiletries",
     "Tech",
-    "Other essentials",
+    "Documents",
+    "Misc",
   ]);
-  await expect(page.getByText(/normal Toiletries checkboxes/)).toBeVisible();
   await expect(page.getByText("Pack last defaults")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
   const glasses = page.locator("[data-staple-id]").filter({ hasText: "Everyday glasses" });
   const sunglasses = page.locator("[data-staple-id]").filter({ hasText: "Sunglasses" });
   await expect(glasses).toHaveCount(1);
   await expect(glasses).toContainText("Pack last");
   await expect(sunglasses).toHaveCount(1);
   await expect(sunglasses).not.toContainText("Pack last");
-  const edits = page.getByRole("button", { name: /^Edit / });
-  await expect(edits).toHaveCount(await page.locator("[data-staple-id]").count());
-
-  await page.getByRole("button", { name: "Pack last" }).click();
-  const rows = page.locator("[data-staple-id]");
-  await expect(rows).toHaveCount(7);
-  for (const tag of await rows.locator(".timing-tag").all())
-    await expect(tag).toHaveText("Pack last");
-  await expect(rows.locator(".timing-tag")).toHaveCount(7);
-  await expect(page.getByRole("heading", { level: 2 })).toHaveText([
-    "Bathroom",
-    "Tech",
-    "Other essentials",
-  ]);
+  // Every staple opens its editor from its row.
+  const rowButtons = page.locator("[data-staple-id] > button");
+  await expect(rowButtons).toHaveCount(await page.locator("[data-staple-id]").count());
+  const flagged = page.locator("[data-staple-id]").filter({ hasText: "Pack last" });
+  await expect(flagged).toHaveCount(7);
 });
 
 test("packing screen: the return travel outfit, Laptop under Pack last, no umbrella before the weather review, and a Pack last Bathroom item only in Toiletries", async ({
