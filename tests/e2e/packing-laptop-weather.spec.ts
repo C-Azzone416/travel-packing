@@ -28,8 +28,9 @@ async function tripWithPendingSuggestions(page: Page) {
   );
   await page.getByRole("button", { name: "Not now" }).click();
   await reviewAndCreate(page);
+  // Home may list London as the next trip or as an upcoming row; the first link naming it opens its trip.
   await page
-    .getByRole("link", { name: /^(Continue|Keep) packing: London/ })
+    .getByRole("link", { name: /London/ })
     .first()
     .click();
   await expect(page.getByRole("heading", { name: "Packing", level: 1 })).toBeVisible();

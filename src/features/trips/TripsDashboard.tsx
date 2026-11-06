@@ -18,7 +18,12 @@ import { localToday } from "@/lib/today";
 import { AddToiletryForm } from "@/features/trip/AddToiletryForm";
 import { EditTripSheet, type ApplyOutcome } from "@/features/trip/EditTripSheet";
 import { editItemHref } from "@/features/trip/edit-link";
+import { HomeLaptop } from "./HomeLaptop";
 import { LaterJourneys } from "./LaterJourneys";
+import type { HomeMaps } from "./home-map-types";
+import { cityWeather, usualRows } from "./home-view";
+import { LAPTOP_MIN_WIDTH, useMinWidth } from "@/lib/use-min-width";
+import { routeSignature, stopsOrDestination, tripRoutePoints } from "@/domain/trip-route";
 import { NextDeparture, type HeroWeather } from "./NextDeparture";
 import { TripCard } from "./TripCard";
 import type { NewCustomItem, NewToiletryItem, TripsSource } from "./trips-source";
@@ -41,6 +46,8 @@ export interface TripsDashboardProps {
   source: TripsSource;
   /** The one place "today" comes from; injectable so tests never depend on the clock. */
   getToday?: () => string;
+  /** Route maps drawn on the server for the trips that may be next (laptop Home). */
+  maps?: HomeMaps;
 }
 
 /** Earliest departure first (stable for equal dates), so the hero is always the next trip, not the newest one. */
@@ -48,11 +55,18 @@ function byDeparture(trips: LifecycleTrip[]): LifecycleTrip[] {
   return [...trips].sort((a, b) => a.start.localeCompare(b.start));
 }
 
-export function TripsDashboard({ source, getToday = localToday }: TripsDashboardProps) {
+export function TripsDashboard({ source, getToday = localToday, maps }: TripsDashboardProps) {
   const { track } = useSaveStatus();
   const toast = useToast();
   const [load, setLoad] = useState<Load>({ phase: "loading" });
-  const [view, setView] = useState<TripListView>("upcoming");
+  // "?view=archive" opens Past & archive directly: the laptop Home links there until the Stamps screen takes it over (#391).
+  const [view, setView] = useState<TripListView>(() =>
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("view") === "archive"
+      ? "archive"
+      : "upcoming",
+  );
+  const laptop = useMinWidth(LAPTOP_MIN_WIDTH);
   const [busy, setBusy] = useState<ReadonlySet<string>>(new Set());
   const [removing, setRemoving] = useState<string | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -91,13 +105,29 @@ export function TripsDashboard({ source, getToday = localToday }: TripsDashboard
     void (async () => {
       try {
         const settings = await weatherSource.getSettings();
-        if (!settings.weatherOptIn) return answer({ phase: "none" });
+        if (!settings.weatherOptIn) return answer({ phase: "off" });
         const result = await weatherSource.getTripWeather(heroId);
         if (result.kind !== "ready") return answer({ phase: "unavailable" });
+        const stops = heroTrip ? stopsOrDestination(heroTrip) : [];
+        const today = getToday();
+        // Skipped suggestions stay out of the count; if they cannot be read, nothing is skipped.
+        const skipped = await Promise.resolve()
+          .then(() => weatherSource.listSuggestions(heroId))
+          .catch(() => []);
         answer({
           phase: "ready",
           cells: weatherCells(heroTrip?.stops ?? [], result.stops, settings.temperatureUnit),
           forecast: heroForecast(heroTrip?.stops ?? [], result.stops, settings.temperatureUnit),
+          city: cityWeather(stops, result.stops, settings.temperatureUnit, today),
+          usual: usualRows(stops, result.stops, settings.temperatureUnit, today),
+          review: {
+            stops: result.stops,
+            suppressed: Object.fromEntries(
+              skipped
+                .filter((entry) => entry.status === "skipped")
+                .map((entry) => [entry.semanticId, entry.ruleSignature]),
+            ),
+          },
         });
       } catch {
         answer({ phase: "unavailable" });
@@ -145,6 +175,8 @@ export function TripsDashboard({ source, getToday = localToday }: TripsDashboard
       setBusy((current) => new Set(current).add(id));
       return track(write, (state) => {
         setLoad({ phase: "ready", state, today: getToday() });
+        // The server drew the maps for the trips as they were: ask for fresh ones now that something changed.
+        router.refresh?.();
         after?.();
       })
         .then(() => undefined)
@@ -158,7 +190,7 @@ export function TripsDashboard({ source, getToday = localToday }: TripsDashboard
           headingRef.current?.focus();
         });
     },
-    [track, getToday],
+    [track, getToday, router],
   );
 
   if (load.phase === "loading") {
@@ -265,7 +297,10 @@ export function TripsDashboard({ source, getToday = localToday }: TripsDashboard
         await source.setStops(id, stops);
         return source.load();
       },
-      (next) => setLoad({ phase: "ready", state: next, today: getToday() }),
+      (next) => {
+        setLoad({ phase: "ready", state: next, today: getToday() });
+        router.refresh?.();
+      },
     )
       .then(() => true)
       .catch(() => false);
@@ -335,6 +370,12 @@ export function TripsDashboard({ source, getToday = localToday }: TripsDashboard
   );
   const departures = byDeparture(upcoming);
   const hero = departures[0] ?? null;
+  /** The server-drawn map for this trip, only while it still matches the route the trip has now. */
+  const mapFor = (trip: LifecycleTrip) => {
+    const drawn = maps?.[trip.id];
+    const now = routeSignature(tripRoutePoints(trip), trip.travelMode);
+    return drawn && drawn.signature === now ? drawn.node : null;
+  };
   const editTarget = state.trips.find((trip) => trip.id === editing) ?? null;
 
   return (
@@ -384,19 +425,34 @@ export function TripsDashboard({ source, getToday = localToday }: TripsDashboard
         </>
       ) : (
         <>
-          <div className="ledger-head">
-            <div>
-              <p className="eyebrow">{journeysAheadLabel(upcoming.length)}</p>
-              <h1 ref={headingRef} tabIndex={-1}>
-                Your travel ledger
-              </h1>
+          {hero && laptop ? null : (
+            <div className="ledger-head">
+              <div>
+                <p className="eyebrow">{journeysAheadLabel(upcoming.length)}</p>
+                <h1 ref={headingRef} tabIndex={-1}>
+                  Your travel ledger
+                </h1>
+              </div>
+              <Link className={buttonClassName()} href="/trips/new">
+                Plan a trip
+              </Link>
             </div>
-            <Link className={buttonClassName()} href="/trips/new">
-              Plan a trip
-            </Link>
-          </div>
-          {tabs}
-          {hero ? (
+          )}
+          {hero && laptop ? null : tabs}
+          {hero && laptop ? (
+            <HomeLaptop
+              trip={hero}
+              later={departures.slice(1)}
+              today={today}
+              weather={weather}
+              map={mapFor(hero)}
+              busy={busy.has(hero.id)}
+              onEdit={(id) => setEditing(id)}
+              onArchive={archive}
+              onRemove={setRemoving}
+              onOpenArchive={() => setView("archive")}
+            />
+          ) : hero ? (
             <div className="ledger-grid">
               <NextDeparture
                 trip={hero}

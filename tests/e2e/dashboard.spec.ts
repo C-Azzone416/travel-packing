@@ -3,6 +3,11 @@ import { signInAsOwner } from "./helpers/auth";
 import { chooseFromMenu } from "./helpers/menu";
 import { DEVICE, legacyPackingLayout } from "./helpers/device";
 
+// Home is the laptop suitcase view from 1024px (#387); this spec's subject is the page below it, so it runs there.
+test.beforeEach(async ({ page }) => {
+  await legacyPackingLayout(page);
+});
+
 // A fixed clock keeps the seeded sample trips stable: San Diego upcoming, Lisbon past. (Trip ids are the real
 // database's uuids, so tests find a trip's panels by role/name or `aria-controls`, never by a fixture id.)
 const NOW = new Date("2026-10-16T12:00:00");
@@ -172,6 +177,8 @@ test("the hero leads with the next departure; Edit trip opens the route sheet", 
   await expect(hero.getByText("days to go")).toBeVisible();
   await expect(hero.getByRole("img", { name: /departure stamp$|route stamps$/ })).toBeVisible();
   await expect(hero.getByRole("link", { name: "Continue packing: San Diego" })).toBeVisible();
+  // The header is the laptop bar from 1024px (the Home below it is this page, so go up for the bar).
+  await page.setViewportSize({ width: 1280, height: 900 });
   // The header bar is the paper palette token (the laptop bar; on a phone the header sits on the page colour), not a hard-coded colour.
   const headerBackground = await page
     .locator("header.topbar .topbar-inner")
@@ -185,6 +192,7 @@ test("the hero leads with the next departure; Edit trip opens the route sheet", 
     return color;
   });
   expect(headerBackground).toBe(headerToken);
+  await page.setViewportSize({ width: 1000, height: 900 });
 
   await hero.getByRole("button", { name: "Edit trip: San Diego" }).click();
   await expect(page.getByRole("dialog", { name: "Edit trip" })).toBeVisible();
@@ -192,13 +200,13 @@ test("the hero leads with the next departure; Edit trip opens the route sheet", 
   await expect(page.getByRole("dialog", { name: "Edit trip" })).toHaveCount(0);
 });
 
-test("no horizontal scroll at 390 and 1280, and the sidebar sits beside the hero only on wide screens", async ({
+test("no horizontal scroll at 390 and 1000, and the sidebar sits beside the hero only on wide screens", async ({
   page,
 }) => {
   await openDashboard(page);
   for (const [width, beside] of [
     [390, false],
-    [1280, true],
+    [1000, true],
   ] as const) {
     await page.setViewportSize({ width, height: 900 });
     const overflow = await page.evaluate(

@@ -40,7 +40,10 @@ async function newTrip(
   await page.goto("/");
   await page.getByRole("link", { name: /Plan a trip/ }).click();
   await planAndCreate(page, { query: "paris", option: destination, start: start, end: end });
-  await expect(page.getByRole("heading", { name: "Paris" })).toHaveCount(expectedCount);
+  // The trips are counted as headings on the ledger page (below 1024px); the laptop Home lists later trips as tags.
+  await underLegacyPacking(page, () =>
+    expect(page.getByRole("heading", { name: "Paris" })).toHaveCount(expectedCount),
+  );
 }
 
 /** The trip's Packing page is the pre-redesign one below 1024px; the Staples screen is drawn at the laptop width. */

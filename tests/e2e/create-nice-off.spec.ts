@@ -4,6 +4,11 @@ import { signInAsOwner } from "./helpers/auth";
 import { chooseFromMenu } from "./helpers/menu";
 import { nextButton, planAndCreate, planToList, reviewAndCreate } from "./helpers/plan";
 
+// Home is the laptop suitcase view from 1024px (#387); this spec's subject is the page below it, so it runs there.
+test.beforeEach(async ({ page }) => {
+  await legacyPackingLayout(page);
+});
+
 // #202: a NEW trip made with Nice outfits OFF must have no nice-attire lines, stored and after a reload. A new trip starts
 // with it off (#205); Plan a trip (#390) has no Nice outfits switch, so a trip gets it only by copying a trip that has it,
 // and a person who does not want that unticks "Copy a past trip". This walks the real screens, the real server action and
