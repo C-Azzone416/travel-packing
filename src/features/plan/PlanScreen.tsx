@@ -229,16 +229,18 @@ function PlanBody({ from, trips, staples, home, lists, allowCustom, today, rende
     () => previewTrip({ draft: baseDraft, staples, today }),
     [baseDraft, staples, today],
   );
+  // What copying does to the count: for the trip chosen, or (unticked) for the latest past trip the card offers.
+  const copyCandidate = copySource ?? copyChoices[0] ?? null;
   const copyOnly = useMemo(
     () =>
-      copySource
+      copyCandidate
         ? previewTrip({
-            draft: withChoices(draft, { copy: copySource, listId: null, laundry }),
+            draft: withChoices(draft, { copy: copyCandidate, listId: null, laundry }),
             staples,
             today,
           })
         : null,
-    [draft, copySource, laundry, staples, today],
+    [draft, copyCandidate, laundry, staples, today],
   );
   const effect = useMemo(
     () => laundryEffect(baseDraft, staples, today),

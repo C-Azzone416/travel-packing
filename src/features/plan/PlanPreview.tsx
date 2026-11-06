@@ -35,6 +35,10 @@ export function mapPoints(draft: TripDraft): RoutePoint[] {
   return home ? [home, ...stops] : stops;
 }
 
+/** How many more times a map that did not come back is asked for, and how long to wait between asks. */
+export const MAP_RETRIES = 2;
+const RETRY_MS = 600;
+
 function PreviewMap({
   points,
   mode,
@@ -47,21 +51,28 @@ function PreviewMap({
   render: RenderMap;
 }) {
   const key = JSON.stringify({ points, mode, size });
-  const [drawn, setDrawn] = useState<{ key: string; node: ReactNode | null } | null>(null);
+  const [drawn, setDrawn] = useState<{ key: string; node: ReactNode } | null>(null);
   useEffect(() => {
     if (points.length === 0) return;
     let cancelled = false;
-    // A short pause, so typing in a date or reordering does not ask the server for every keystroke.
-    const timer = setTimeout(() => {
-      render({ points, mode, size }).then(
-        (node) => {
-          if (!cancelled) setDrawn({ key, node });
-        },
-        () => {
-          if (!cancelled) setDrawn({ key, node: null });
-        },
-      );
-    }, 150);
+    let timer: ReturnType<typeof setTimeout>;
+    // A short pause, so typing in a date or reordering does not ask the server for every keystroke. A draw that comes back empty
+    // or fails (a busy server, a dropped request) is tried again a couple of times rather than leaving a blank box.
+    const attempt = (left: number, wait: number) => {
+      timer = setTimeout(() => {
+        render({ points, mode, size }).then(
+          (node) => {
+            if (cancelled) return;
+            if (node) setDrawn({ key, node });
+            else if (left > 0) attempt(left - 1, RETRY_MS);
+          },
+          () => {
+            if (!cancelled && left > 0) attempt(left - 1, RETRY_MS);
+          },
+        );
+      }, wait);
+    };
+    attempt(MAP_RETRIES, 150);
     return () => {
       cancelled = true;
       clearTimeout(timer);
@@ -72,7 +83,11 @@ function PreviewMap({
   if (points.length === 0) return null;
   // Keep the last drawn map while the next one is on its way (it is replaced, never blanked).
   return (
-    <div className={styles.map} data-map-ready={drawn?.key === key ? "" : undefined}>
+    <div
+      className={styles.map}
+      data-plan-map=""
+      data-map-ready={drawn?.key === key ? "" : undefined}
+    >
       {drawn?.node ?? <div className={styles.mapEmpty} aria-hidden="true" />}
     </div>
   );

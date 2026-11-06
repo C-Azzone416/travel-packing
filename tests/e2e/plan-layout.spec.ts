@@ -77,3 +77,33 @@ test("1023px is the phone layout and 1024px the laptop's", async ({ page }) => {
     page.getByRole("complementary", { name: "Live preview of your trip" }),
   ).toBeVisible();
 });
+
+// 195px is the hard target (#332): no word is broken to fit a sliver of a column, and the header keeps its rows apart.
+test("195px: the starting list's cards and the header keep whole words", async ({ page }) => {
+  await signInAsOwner(page);
+  await page.setViewportSize({ width: 195, height: 800 });
+  await page.goto("/trips/new");
+  const title = page.getByRole("heading", { name: "Plan a trip", level: 1 });
+  const lineHeight = async (locator: ReturnType<Page["locator"]>) =>
+    locator.evaluate((node) => parseFloat(getComputedStyle(node).lineHeight));
+  const titleBox = (await title.boundingBox())!;
+  // One line: "Plan a trip" is not stacked over three rows beside "Step 1 of 5".
+  expect(titleBox.height).toBeLessThanOrEqual((await lineHeight(title)) * 1.5);
+  await pickPlace(page, "lon", /England/);
+  await nextButton(page).click();
+  await page.getByLabel("Leave", { exact: true }).fill("2026-11-12");
+  await page.getByLabel("Return", { exact: true }).fill("2026-11-15");
+  await nextButton(page).click();
+  await chooseMode(page, "Fly");
+  await nextButton(page).click();
+  await expect(page.getByRole("heading", { name: "Starting list", level: 2 })).toBeVisible();
+  for (const name of [/Your Staples/, /Copy a past trip/, /I’ll have laundry/]) {
+    const card = page.getByRole("checkbox", { name }).locator("xpath=ancestor::label");
+    const heading = card.locator("[class*=optionTitle]");
+    const description = card.locator("[class*=optionSub]");
+    // The title column is wide enough for its longest word, and the description runs the card's full width.
+    expect((await heading.boundingBox())!.width).toBeGreaterThanOrEqual(100);
+    expect((await description.boundingBox())!.width).toBeGreaterThanOrEqual(130);
+    expect(await overflow(page)).toBeLessThanOrEqual(0);
+  }
+});

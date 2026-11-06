@@ -57,6 +57,34 @@ const PLACES = {
   ],
 };
 
+// Lisbon and Porto, for the multi-stop screenshots (#390): Lisbon is hot and dry, Porto cool and rainy.
+PLACES.lisbon = [
+  {
+    id: 2267057,
+    name: "Lisbon",
+    latitude: 38.71667,
+    longitude: -9.13333,
+    country: "Portugal",
+    country_code: "PT",
+    admin1: "Lisbon",
+    admin2: "Lisbon",
+    timezone: "Europe/Lisbon",
+  },
+];
+PLACES.porto = [
+  {
+    id: 2735943,
+    name: "Porto",
+    latitude: 41.14961,
+    longitude: -8.61099,
+    country: "Portugal",
+    country_code: "PT",
+    admin1: "Porto",
+    admin2: "Porto",
+    timezone: "Europe/Lisbon",
+  },
+];
+
 PLACES.countryless = [
   {
     ...PLACES.london[0],
@@ -84,7 +112,8 @@ const weatherState = { variant: "base", fail: false };
 const SCORCHING = { high: 40, low: 31, prob: 0, mm: 0, uv: 11, sun: 12 * 3600 };
 
 function profileFor(latitude) {
-  const first = Math.abs(Number(latitude) - 51.51) < 0.5;
+  const latitudeNow = Number(latitude);
+  const first = Math.abs(latitudeNow - 51.51) < 0.5 || Math.abs(latitudeNow - 38.72) < 0.5;
   if (weatherState.variant === "scorching") return SCORCHING;
   const hot = weatherState.variant === "dry" || first;
   return hot ? HOT_DRY : COOL_WET;

@@ -543,7 +543,7 @@
   font-size: 18px;
   font-weight: 700;
   line-height: 1.25;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .optionTail {
   color: var(--muted);
@@ -554,7 +554,7 @@
   color: var(--muted);
   font-size: 15px;
   line-height: 1.4;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .optionCount {
   flex: none;
@@ -757,8 +757,6 @@
   color: var(--ink);
   font-size: 13px;
   font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 .tagHead {
   display: flex;
@@ -991,4 +989,56 @@
   margin-top: auto;
   padding-top: 10px;
   background: linear-gradient(to bottom, transparent, var(--page) 14px);
+}
+
+/* Narrow phones (spec #332: 195px is the hard target). The option card stacks: the checkbox and the title share the first row,
+   the count sits under the title, and the description runs the full width, so no word is ever broken to fit a 70px column.
+   The header does the same: the close button and the title on one row, "Step N of 5" on its own. */
+@media (max-width: 259px) {
+  .optionLabel {
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr);
+    column-gap: 10px;
+    row-gap: 2px;
+    padding: 12px 12px;
+  }
+  .optionInput {
+    top: 12px;
+    left: 12px;
+  }
+  .optionText {
+    display: contents;
+  }
+  .optionBox {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .optionTitle {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .optionCount {
+    grid-column: 2;
+    grid-row: 2;
+  }
+  .optionSub {
+    grid-column: 1 / -1;
+  }
+  .optionActions,
+  .chooser {
+    padding-inline: 12px;
+  }
+  .phoneTop {
+    flex-wrap: wrap;
+    row-gap: 0;
+  }
+  .phoneTitle {
+    flex: 1 1 0;
+    font-size: 18px;
+  }
+  .phoneStep {
+    flex-basis: 100%;
+    order: 3;
+    padding-left: 54px;
+  }
 }

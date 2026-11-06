@@ -477,6 +477,8 @@ describe("Copy a past trip", () => {
     const { user } = await setup();
     await toStartingList(user);
     const card = screen.getByRole("checkbox", { name: /Copy a past trip/ });
+    // The figure is there before the box is ticked: it is what the latest past trip's preferences would do to the count.
+    expect(card.closest("label")!.lastElementChild!.textContent).toMatch(/^[+−]?\d+$/);
     await user.click(card);
     expect(card.closest("label")!.lastElementChild!.textContent).toMatch(/^[+−]?\d+$/);
     await user.click(card);
@@ -870,18 +872,24 @@ describe("the map", () => {
     await user.click(screen.getByRole("button", { name: /From: Seattle/ }));
   });
 
-  it("shows no map without coordinates, and keeps working if the server cannot draw", async () => {
+  it("asks again when the server's first answer is nothing or fails, so the box is not left blank", async () => {
+    const located = { ...place("us-wa-seattle"), latitude: 1, longitude: 2 };
+    renderMap.mockResolvedValueOnce(null as never);
     renderMap.mockRejectedValueOnce(new Error("down"));
-    await setup(
-      {},
-      {
-        memory: {
-          homeCity: { location: { ...place("us-wa-seattle"), latitude: 1, longitude: 2 } },
-        },
-      },
-    );
-    await waitFor(() => expect(renderMap).toHaveBeenCalled());
+    await setup({}, { memory: { homeCity: { location: located } } });
+    expect(await screen.findByTestId("map", {}, { timeout: 4000 })).toBeTruthy();
+    expect(renderMap).toHaveBeenCalledTimes(3);
+  });
+
+  it("gives up after the retries and shows no map (and no 'ready' mark), while the plan keeps working", async () => {
+    const located = { ...place("us-wa-seattle"), latitude: 1, longitude: 2 };
+    renderMap.mockRejectedValue(new Error("down"));
+    await setup({}, { memory: { homeCity: { location: located } } });
+    await waitFor(() => expect(renderMap).toHaveBeenCalledTimes(3), { timeout: 4000 });
     expect(screen.queryByTestId("map")).toBeNull();
+    expect(document.querySelector("[data-map-ready]")).toBeNull();
+    renderMap.mockReset();
+    renderMap.mockImplementation(async () => <div data-testid="map" />);
   });
 });
 
