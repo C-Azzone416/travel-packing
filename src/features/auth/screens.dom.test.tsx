@@ -38,6 +38,16 @@ describe("SignUpForm", () => {
     expect(document.activeElement).toBe(screen.getByRole("heading", { level: 1 }));
   });
 
+  it("focuses its heading without scrolling the surrounding suitcase", () => {
+    const focus = vi.spyOn(HTMLElement.prototype, "focus");
+    try {
+      render_();
+      expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+    } finally {
+      focus.mockRestore();
+    }
+  });
+
   it("submits the fields and shows field problems under their fields, linked and marked invalid", async () => {
     const action = render_(
       vi.fn(async () =>

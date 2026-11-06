@@ -1842,6 +1842,9 @@ input:disabled {
   font-size: 15px;
   font-weight: 700;
 }
+.auth-cube-label {
+  min-width: 0;
+}
 .auth-cube::before {
   content: "";
   position: absolute;
@@ -2221,6 +2224,9 @@ input:disabled {
 }
 
 @media (max-width: 359px) {
+  .auth-brandbar {
+    padding-inline: 8px;
+  }
   .auth-screen {
     padding-inline: 8px;
   }
@@ -2243,8 +2249,11 @@ input:disabled {
     display: none;
   }
   .auth-cube {
-    overflow: hidden;
     font-size: 10px;
+  }
+  .auth-cube-label {
+    width: 100%;
+    overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }

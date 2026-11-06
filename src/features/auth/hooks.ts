@@ -23,7 +23,9 @@ export function useDelayed(active: boolean, delayMs = 400): boolean {
 export function useHeadingFocus<Key>(key: Key) {
   const ref = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
-    ref.current?.focus();
+    // The auth frame already keeps the heading visible. Avoid letting browser focus scrolling move the entire suitcase
+    // out of the viewport on short or narrow screens; focus still lands on the heading for assistive technology.
+    ref.current?.focus({ preventScroll: true });
   }, [key]);
   return ref;
 }

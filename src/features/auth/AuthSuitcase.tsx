@@ -40,7 +40,7 @@ export function AuthSuitcase({
         <div className="auth-cubes">
           {CUBES.map((cube) => (
             <span className="auth-cube" data-cube={cube.toLowerCase()} key={cube}>
-              {cube}
+              <span className="auth-cube-label">{cube}</span>
             </span>
           ))}
         </div>
