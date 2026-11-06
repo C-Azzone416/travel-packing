@@ -582,6 +582,7 @@
 .panelPhone {
   flex: 1 1 auto;
   min-height: 0;
+  overflow-y: auto;
   gap: 8px;
   padding: 12px 20px;
   border-radius: 0;
@@ -597,10 +598,11 @@
 }
 .listPhone {
   flex: 1 1 auto;
+  /* Two rows at least: a cube with a long header (the bag step) never squeezes its list to nothing; the panel scrolls then. */
+  min-height: 102px;
   grid-auto-flow: row;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: none;
-  min-height: 0;
   overflow-y: auto;
   overscroll-behavior-y: contain;
 }
