@@ -1,10 +1,9 @@
 .root {
-  position: relative;
-  left: 50%;
-  width: min(640px, calc(100vw - 24px));
+  width: 100%;
+  max-width: 640px;
   min-width: 0;
+  margin-inline: auto;
   animation: none;
-  transform: translateX(-50%);
 }
 .root h1 {
   margin-bottom: 6px;
@@ -165,6 +164,11 @@
   text-overflow: ellipsis;
   text-transform: uppercase;
   white-space: nowrap;
+}
+.stickerRegion::before,
+.stickerCode::before,
+.stickerMonth::before {
+  content: attr(data-text);
 }
 .stickerCode {
   display: block;
@@ -434,9 +438,8 @@
 }
 @media (min-width: 1024px) {
   .root {
-    position: static;
-    width: 100%;
-    transform: none;
+    max-width: none;
+    margin-inline: 0;
   }
   .root h1 {
     font-size: 40px;

@@ -46,11 +46,14 @@ function Sticker({
       onClick={onSelect}
       style={{ "--sticker-tilt": `${sticker.tilt}deg` } as React.CSSProperties}
     >
-      <span className={styles.stickerRegion} title={sticker.region}>
-        {sticker.region}
-      </span>
-      <strong className={styles.stickerCode}>{sticker.code || "—"}</strong>
-      <span className={styles.stickerMonth}>{sticker.month}</span>
+      <span
+        className={styles.stickerRegion}
+        title={sticker.region}
+        data-text={sticker.region}
+        aria-hidden="true"
+      />
+      <strong className={styles.stickerCode} data-text={sticker.code || "—"} aria-hidden="true" />
+      <span className={styles.stickerMonth} data-text={sticker.month} aria-hidden="true" />
       {sticker.completedCount > 1 ? (
         <span className={styles.repeatBadge} aria-hidden="true">
           ×{sticker.completedCount}
