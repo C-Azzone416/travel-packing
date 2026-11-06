@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
 import { FAKE_GEOCODER_PORT, OPEN_METEO_PORT } from "./support/ports";
 import { DEVICE } from "./helpers/device";
+import { nextButton, reviewAndCreate, setDates, toList, toWhen } from "./helpers/plan";
 
 // Two copies of the app run during e2e (see playwright.config.ts and support/ports.ts): the default one
 // (LOCATION_PROVIDER unset, so the curated list) and one with LOCATION_PROVIDER=open-meteo, pointed at a
@@ -22,7 +23,7 @@ const received = async (name: string): Promise<FakeQuery[]> => {
 async function openNewTrip(page: Page) {
   await signInAsOwner(page);
   await page.getByRole("link", { name: /Plan a trip/ }).click();
-  await expect(page.getByRole("heading", { name: "Confirm the trip" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Plan a trip", level: 1 })).toBeVisible();
 }
 
 test.describe("curated mode (LOCATION_PROVIDER unset)", () => {
@@ -98,11 +99,11 @@ test.describe("open-meteo mode (LOCATION_PROVIDER=open-meteo, fake geocoder)", (
     );
 
     await options.nth(1).click();
-    await expect(page.getByText("Destination confirmed")).toBeVisible();
-    await page.getByLabel("Leave", { exact: true }).fill("2026-11-12");
-    await page.getByLabel("Return", { exact: true }).fill("2026-11-16");
-    await page.getByRole("button", { name: "Continue to packing preferences" }).click();
-    await page.getByRole("button", { name: "Save trip" }).click();
+    await expect(page.getByRole("button", { name: "Change Springfield" })).toBeVisible();
+    await toWhen(page);
+    await setDates(page, "2026-11-12", "2026-11-16");
+    await toList(page);
+    await reviewAndCreate(page);
     await expect(page.getByRole("article", { name: "Springfield" })).toBeVisible();
     await expect(
       page.getByRole("article", { name: "Springfield" }).getByText("Illinois, United States"),
@@ -119,9 +120,11 @@ test.describe("open-meteo mode (LOCATION_PROVIDER=open-meteo, fake geocoder)", (
       await expect(page.getByRole("option")).toHaveCount(2);
       const box = async (locator: ReturnType<typeof page.locator>) =>
         (await locator.boundingBox())!;
-      const label = await box(page.locator("label.field", { hasText: "Destination search" }));
+      // The From search above it is another picker: measure the destination's own.
+      const picker = page.locator(".location-picker").filter({ has: field });
+      const label = await box(picker.locator("label.field", { hasText: "Destination search" }));
       const input = await box(field);
-      const helper = await box(page.locator(".location-picker .tiny.muted").first());
+      const helper = await box(picker.locator(".tiny.muted").first());
       const results = await box(page.getByRole("listbox"));
       // The 3px focus ring plus its 2px offset needs at least 5px around the box.
       expect(input.y - (label.y + label.height)).toBeGreaterThanOrEqual(5);
@@ -175,12 +178,12 @@ test.describe("open-meteo mode (LOCATION_PROVIDER=open-meteo, fake geocoder)", (
         .filter({ hasText: "Location search is unavailable right now. Try again." }),
     ).toBeVisible();
     await expect(page.getByRole("option")).toHaveCount(0);
-    await page.getByLabel("Leave", { exact: true }).fill("2026-11-12");
-    await page.getByLabel("Return", { exact: true }).fill("2026-11-16");
-    await page
-      .getByRole("button", { name: "Continue to packing preferences" })
-      .click({ force: true });
-    await expect(page.getByRole("heading", { name: "Confirm the trip" })).toBeVisible();
+    // Next stays closed (and says why) until a place is chosen from the list: free text never confirms one.
+    await nextButton(page).click({ force: true });
+    await expect(page.getByRole("region", { name: "Where" })).toHaveAttribute(
+      "aria-current",
+      "step",
+    );
     await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
   });
 
@@ -215,7 +218,7 @@ test.describe("open-meteo mode (LOCATION_PROVIDER=open-meteo, fake geocoder)", (
     await shot("results");
 
     await page.getByRole("option").nth(1).click();
-    await expect(page.getByText("Destination confirmed")).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Change Springfield/ })).toBeVisible();
     await shot("confirmed");
   });
 });

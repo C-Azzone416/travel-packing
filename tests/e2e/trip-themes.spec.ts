@@ -2,6 +2,15 @@ import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
 import { chooseFromMenu } from "./helpers/menu";
 import { DEVICE, legacyPackingLayout } from "./helpers/device";
+import {
+  createButton,
+  nextButton,
+  pickPlace,
+  planToList,
+  setDates,
+  toList,
+  toWhen,
+} from "./helpers/plan";
 
 // Trip themes (#48) against the real e2e database: what a trip saves with is what its card shows after a reload.
 // The seeded sample trips are San Diego (Beach) and Lisbon (City).
@@ -26,12 +35,12 @@ async function artKey(page: Page, name: string) {
   return key;
 }
 
+/** Plan a trip up to its Review step, where the trip's picture is chosen. */
 async function startTrip(page: Page, place = "lon", option = /England/) {
   await page.getByRole("link", { name: /Plan a trip/ }).click();
-  await page.getByRole("combobox", { name: "Destination search" }).fill(place);
-  await page.getByRole("option", { name: option }).click();
-  await page.getByLabel("Leave", { exact: true }).fill("2026-11-12");
-  await page.getByLabel("Return", { exact: true }).fill("2026-11-16");
+  await planToList(page, { query: place, option, start: "2026-11-12", end: "2026-11-16" });
+  await nextButton(page).click();
+  await expect(page.getByRole("heading", { name: "Review", level: 2 })).toBeVisible();
 }
 
 // The Field Ledger dashboard (#143) has no picture on the hero or Later journeys, so a trip's theme shows on the
@@ -43,14 +52,19 @@ test("a seeded trip shows its own theme on its Past & archive card", async ({ pa
   await expect(card(page, "Lisbon").locator("img")).toHaveAttribute("src", "/themes/city.svg");
 });
 
-test("the picker appears after the destination, shows all six thumbnails, and Travel is selected", async ({
+test("the picker is on the Review step, shows all six thumbnails, and Travel is selected", async ({
   page,
 }) => {
   await openDashboard(page);
   await page.getByRole("link", { name: /Plan a trip/ }).click();
   await expect(page.getByRole("group", { name: "Trip theme" })).toHaveCount(0);
-  await page.getByRole("combobox", { name: "Destination search" }).fill("lon");
-  await page.getByRole("option", { name: /England/ }).click();
+  await pickPlace(page, "lon", /England/);
+  await expect(page.getByRole("group", { name: "Trip theme" })).toHaveCount(0);
+  await toWhen(page);
+  await setDates(page, "2026-11-12", "2026-11-16");
+  await toList(page);
+  await expect(page.getByRole("group", { name: "Trip theme" })).toHaveCount(0);
+  await nextButton(page).click();
   const group = page.getByRole("group", { name: "Trip theme" });
   await expect(group).toBeVisible();
   await expect(
@@ -93,8 +107,7 @@ test("keyboard only: arrow keys pick a theme, the choice is saved, and the card 
   await expect(group.locator('[data-theme-id="beach"] .theme-check')).toBeVisible();
   await expect(group.locator('[data-theme-id="travel"] .theme-check')).toBeHidden();
 
-  await page.getByRole("button", { name: "Continue to packing preferences" }).click();
-  await page.getByRole("button", { name: "Save trip" }).click();
+  await createButton(page).click();
   await expect(card(page, "London")).toBeVisible();
   expect(await artKey(page, "London")).toBe("beach");
   await page.reload();
@@ -106,8 +119,7 @@ test("a trip saved without touching the picker is Travel", async ({ page }) => {
   await legacyPackingLayout(page);
   await openDashboard(page);
   await startTrip(page);
-  await page.getByRole("button", { name: "Continue to packing preferences" }).click();
-  await page.getByRole("button", { name: "Save trip" }).click();
+  await createButton(page).click();
   await expect(card(page, "London")).toBeVisible();
   expect(await artKey(page, "London")).toBe("travel");
 });
@@ -118,15 +130,17 @@ test("a copy starts on the source trip's theme, and changing it does not touch t
   await legacyPackingLayout(page);
   await openDashboard(page);
   await chooseFromMenu(page, "San Diego", "Copy trip");
-  await page.getByRole("combobox", { name: "Destination search" }).fill("lon");
-  await page.getByRole("option", { name: /England/ }).click();
-  await page.getByLabel("Leave", { exact: true }).fill("2026-11-12");
-  await page.getByLabel("Return", { exact: true }).fill("2026-11-16");
+  await planToList(page, {
+    query: "lon",
+    option: /England/,
+    start: "2026-11-12",
+    end: "2026-11-16",
+  });
+  await nextButton(page).click();
   const group = page.getByRole("group", { name: "Trip theme" });
   await expect(group.getByRole("radio", { name: "Beach" })).toBeChecked();
   await group.getByRole("radio", { name: "Home / family" }).check();
-  await page.getByRole("button", { name: "Continue to packing preferences" }).click();
-  await page.getByRole("button", { name: "Save trip" }).click();
+  await createButton(page).click();
   await expect(card(page, "London")).toBeVisible();
   expect(await artKey(page, "London")).toBe("home");
   expect(await artKey(page, "San Diego")).toBe("beach");

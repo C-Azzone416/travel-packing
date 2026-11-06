@@ -1,0 +1,994 @@
+/* Plan a trip (#390; spec on #376 part 3 section 1.7 and part 2 sections 3 and 9). Phone first; the laptop layout starts at
+   1024px, the one breakpoint of the redesign. Colours are the scheme tokens only. Nothing here leaks: every selector is a
+   module class, and the few page-level rules below are scoped by `:has` to this screen. */
+
+/* The app's body keeps a 320px minimum (the app-wide fix is #332). The plan must not scroll sideways down to 195px, so while
+   it is on screen the minimum is lifted. */
+:global(body):has([data-plan-screen]) {
+  min-width: 0;
+}
+/* The phone Plan is a full screen of its own (spec part 2 section 9): no brand header and no tab bar, a close button instead.
+   Laptop keeps the shell. */
+@media (max-width: 1023px) {
+  :global(body):has([data-plan-screen]) :global(.topbar),
+  :global(body):has([data-plan-screen]) :global(.bottom-nav) {
+    display: none;
+  }
+  :global(body):has([data-plan-screen]) :global(.app-shell) {
+    padding-bottom: 0;
+  }
+  :global(body):has([data-plan-screen]) :global(main) {
+    padding-block: 0;
+  }
+}
+
+.title,
+.phoneTitle,
+.phoneStepTitle,
+.rowTitle,
+.tagTitle {
+  font-family: var(--font-display);
+}
+.screen {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  color: var(--ink);
+}
+.crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  justify-self: start;
+  min-height: 44px;
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.crumb:focus-visible,
+.close:focus-visible {
+  outline: 3px solid var(--info);
+  outline-offset: 2px;
+}
+.title {
+  margin: 0 0 8px;
+  font-size: var(--fs-page-title);
+  line-height: var(--lh-page-title);
+  font-weight: var(--fw-heading-xl);
+  letter-spacing: var(--tracking-title);
+  color: var(--ink);
+}
+.eyebrow {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-eyebrow);
+  line-height: var(--lh-eyebrow);
+  font-weight: 700;
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+}
+.hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.35;
+}
+.error,
+.notice {
+  margin: 0;
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+.notice:empty {
+  display: none;
+}
+
+/* ---------- Laptop: the steps beside the preview ---------- */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 40px;
+  align-items: start;
+  min-width: 0;
+}
+@media (min-width: 1024px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr) 470px;
+  }
+}
+.steps {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.row {
+  box-sizing: border-box;
+  min-width: 0;
+  border-radius: 16px;
+  background: var(--paper);
+}
+.rowHead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 0 16px;
+  min-width: 0;
+}
+.row[data-state="current"] .rowHead {
+  padding-top: 12px;
+}
+.num {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--line2);
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+}
+.row[data-state="current"] .num {
+  background: var(--dark);
+  color: var(--onDark);
+}
+.row[data-state="done"] .num {
+  background: var(--good);
+  color: var(--onDark);
+}
+.rowTitle {
+  flex: none;
+  margin: 0;
+  font-family: var(--font-body, inherit);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--ink);
+}
+.rowTitle:focus-visible {
+  outline: 3px solid var(--info);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+.rowSummary {
+  min-width: 0;
+  margin-left: auto;
+  text-align: right;
+  color: var(--muted);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.edit {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.edit:focus-visible {
+  outline: 3px solid var(--info);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+.rowBody {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  padding-top: 8px;
+}
+@media (max-width: 1023px) {
+  .rowTitle {
+    flex: 1 1 auto;
+  }
+}
+
+/* ---------- Step bodies ---------- */
+.stepBody {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+.group {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.fromField {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  box-sizing: border-box;
+  min-height: 47px;
+  width: 100%;
+  padding: 10px 16px;
+  border: 1.5px solid var(--line);
+  border-radius: 16px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.fromField:focus-visible {
+  outline: 3px solid var(--info);
+  outline-offset: 2px;
+}
+.fromCity {
+  font-size: 17px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.fromHome {
+  color: var(--muted);
+  font-size: 15px;
+}
+.stops {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.stopList {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.stopRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  min-height: 49px;
+  min-width: 0;
+  padding: 2px 6px 2px 12px;
+  border: 1.5px solid var(--line);
+  border-radius: 16px;
+  background: var(--paper);
+}
+.stopRow[draggable="true"] {
+  cursor: grab;
+}
+.stopRow[data-dragging] {
+  opacity: 0.5;
+}
+.stopRow[data-over] {
+  border-color: var(--dark);
+  box-shadow: 0 0 0 2px var(--dark);
+}
+.grip {
+  flex: none;
+  color: var(--muted);
+  font-size: 18px;
+  letter-spacing: -0.15em;
+  line-height: 1;
+  user-select: none;
+}
+.stopName {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 17px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.stopDates {
+  flex: none;
+  color: var(--muted);
+  font-size: 14px;
+  white-space: nowrap;
+}
+.stopMoves {
+  display: inline-flex;
+  flex: none;
+}
+.iconButton {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.iconButton[aria-disabled="true"] {
+  opacity: 0.35;
+  cursor: default;
+}
+.iconButton:focus-visible,
+.addStop:focus-visible,
+.textButton:focus-visible,
+.back:focus-visible,
+.next:focus-visible,
+.smallButton:focus-visible,
+.smallGhost:focus-visible {
+  outline: 3px solid var(--info);
+  outline-offset: 2px;
+}
+@media (max-width: 359px) {
+  .stopDates {
+    display: none;
+  }
+}
+.stopPick {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.addStop {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-sizing: border-box;
+  min-height: 45px;
+  width: 100%;
+  border: 2px dashed var(--line);
+  border-radius: 16px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.textButton {
+  justify-self: start;
+  min-height: 44px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* Form fields (the dates, the trip name). The app's global input rules are legacy; these are the redesign's. */
+.twoCol {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  gap: 12px;
+  min-width: 0;
+}
+.field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 700;
+}
+.field input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 47px;
+  padding: 8px 14px;
+  border: 1.5px solid var(--line);
+  border-radius: 16px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-size: 17px;
+  font-weight: 600;
+}
+.field input:focus-visible {
+  outline: 3px solid var(--info);
+  outline-offset: 2px;
+}
+.field input[readonly] {
+  background: var(--paper2);
+}
+.dateStops {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.dateStop {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.dateStopName {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+}
+.nights {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* How: the three-way choice. A real radio group; the chosen one is dark and also says "selected" to a screen reader. */
+.modes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+@media (max-width: 359px) {
+  .modes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.mode {
+  position: relative;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  min-height: 49px;
+  padding: 6px 10px;
+  border: 2px solid var(--tint);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 700;
+  text-align: center;
+  cursor: pointer;
+}
+.mode[data-checked] {
+  border-color: var(--dark);
+  background: var(--dark);
+  color: var(--onDark);
+}
+.mode input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.mode:has(input:focus-visible) {
+  outline: 3px solid var(--info);
+  outline-offset: 2px;
+}
+
+/* Starting list: option cards (spec part 2 section 9). */
+.startList {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.option {
+  box-sizing: border-box;
+  min-width: 0;
+  border: 2px solid var(--tint);
+  border-radius: 16px;
+  background: var(--paper);
+}
+.option[data-checked] {
+  border-color: var(--dark);
+}
+.optionLabel {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  min-width: 0;
+  cursor: pointer;
+}
+.optionInput {
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  width: 22px;
+  height: 22px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.optionInput:disabled {
+  cursor: default;
+}
+.optionBox {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
+  border: 2px solid var(--dark);
+  border-radius: 6px;
+  background: var(--paper);
+  color: transparent;
+}
+.option[data-checked] .optionBox {
+  background: var(--dark);
+  color: var(--onDark);
+}
+.optionLabel:has(.optionInput:focus-visible) .optionBox {
+  outline: 3px solid var(--info);
+  outline-offset: 2px;
+}
+.optionText {
+  display: grid;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.optionTitle {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.optionTail {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
+}
+.optionSub {
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.optionCount {
+  flex: none;
+  color: var(--muted);
+  font-size: 17px;
+  font-weight: 700;
+}
+.optionActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 16px 14px 50px;
+}
+.inlineIcon {
+  vertical-align: -2px;
+}
+.smallButton,
+.smallGhost {
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.smallButton {
+  border: 0;
+  background: var(--dark);
+  color: var(--onDark);
+}
+.smallGhost {
+  border: 1.5px solid var(--line);
+  background: none;
+  color: var(--ink);
+}
+.chooser {
+  margin: 0;
+  padding: 0 16px 14px 50px;
+  border: 0;
+  min-width: 0;
+}
+.chooserSearch {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 4px;
+  padding: 6px 12px;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+}
+.chooserList {
+  display: grid;
+  gap: 4px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.chooserRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  font-size: 15px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.chooserRow input {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  min-height: 0;
+  margin: 0;
+  accent-color: var(--dark);
+}
+.sortedLine {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.4;
+}
+.sortedLine strong {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+/* Review */
+.summary {
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  gap: 6px 14px;
+  margin: 0;
+  font-size: 15px;
+}
+.summary dt {
+  color: var(--muted);
+  font-weight: 600;
+}
+.summary dd {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 239px) {
+  .summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Footer buttons: Next (dark, full width), and from step 2 Back (paper). */
+.footer {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.footerButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  min-width: 0;
+}
+.next,
+.back {
+  box-sizing: border-box;
+  height: 49px;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 17px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.next {
+  flex: 1 1 140px;
+  min-width: 0;
+  border: 0;
+  background: var(--dark);
+  color: var(--onDark);
+}
+.next[aria-disabled="true"] {
+  opacity: 0.55;
+  cursor: default;
+}
+.back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex: none;
+  min-width: 82px;
+  padding: 0 16px;
+  border: 2px solid var(--tint);
+  background: var(--paper);
+  color: var(--ink);
+}
+@media (max-width: 1023px) {
+  .next,
+  .back {
+    height: 50px;
+  }
+  .back {
+    min-width: 86px;
+  }
+}
+@media (max-width: 239px) {
+  .next,
+  .back {
+    height: auto;
+    min-height: 50px;
+    padding-block: 6px;
+  }
+  .back {
+    flex: 1 1 100%;
+  }
+}
+
+/* ---------- Preview ---------- */
+.preview {
+  position: sticky;
+  top: 20px;
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+  /* Level with the first step row: the eyebrow sits 24px below the title. */
+  margin-top: 24px;
+}
+.previewPhone {
+  display: grid;
+  gap: 24px;
+  min-width: 0;
+}
+.previewTag {
+  min-width: 0;
+}
+.tagEyebrow {
+  margin: 0 0 6px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.tagHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+.tagNames {
+  min-width: 0;
+}
+.tagTitle {
+  margin: 0;
+  font-size: var(--fs-hero);
+  line-height: var(--lh-hero);
+  font-weight: var(--fw-heading-xl);
+  letter-spacing: var(--tracking-hero);
+  overflow-wrap: anywhere;
+}
+@media (min-width: 1024px) {
+  .tagTitle {
+    font-size: 38px;
+  }
+}
+.tagAlso {
+  margin: 4px 0 0;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: var(--fw-heading-xl);
+  overflow-wrap: anywhere;
+}
+.tagBadge {
+  flex: none;
+}
+.map {
+  margin-top: 12px;
+  min-width: 0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.mapEmpty {
+  aspect-ratio: 418 / 160;
+  background: var(--sea);
+  border-radius: 12px;
+}
+/* The mini suitcase (spec section 1.7): rim 8, handle 70 x 14, paper2 interior, padding 12. Doubled class, so these beat the
+   suitcase's own single-class defaults whichever stylesheet loads last. */
+.miniCase.miniCase {
+  --rim: 8px;
+  --handle-w: 70px;
+  --handle-h: 14px;
+  --pad-home: 12px;
+}
+.miniTitle {
+  margin: 0 0 10px;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 700;
+}
+.cubeChips {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+@media (max-width: 359px) {
+  .cubeChips {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.cubeChip {
+  display: flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 4px 12px;
+  border-radius: 10px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.weather {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.weatherList {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.weatherRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-sizing: border-box;
+  min-height: 45px;
+  padding: 6px 14px;
+  border: 1.5px solid transparent;
+  border-radius: 16px;
+  background: var(--paper);
+}
+.weatherRow[data-alert] {
+  border-color: var(--accent);
+  background: var(--accentSoft);
+}
+.weatherIcon {
+  flex: none;
+  color: var(--goldDeep);
+}
+.weatherRow[data-alert] .weatherIcon {
+  color: var(--accent);
+}
+.weatherText {
+  display: grid;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.weatherCity {
+  font-size: 17px;
+  font-weight: 700;
+}
+.weatherDates {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 400;
+}
+.weatherLine {
+  color: var(--muted);
+  font-size: 14px;
+}
+.weatherRow[data-alert] .weatherLine {
+  color: var(--accent);
+}
+.weatherRange {
+  flex: none;
+  font-size: 17px;
+  font-weight: 700;
+}
+.weatherNote {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* ---------- Phone: one step per screen ---------- */
+.phone {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-sizing: border-box;
+  min-height: 100dvh;
+  min-width: 0;
+  padding: calc(env(safe-area-inset-top, 0px) + 12px) 0
+    calc(env(safe-area-inset-bottom, 0px) + 12px);
+  color: var(--ink);
+}
+.phoneTop {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  color: var(--ink);
+}
+.phoneTitle {
+  flex: 1 1 auto;
+  margin: 0;
+  min-width: 0;
+  font-size: var(--fs-header-title);
+  font-weight: var(--fw-heading-xl);
+  line-height: 1.15;
+}
+.phoneStep {
+  flex: none;
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
+}
+.progress {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 4px;
+}
+.segment {
+  height: 5px;
+  border-radius: 3px;
+  background: var(--tint);
+}
+.segment[data-done] {
+  background: var(--dark);
+}
+.phoneStepBody {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  margin-top: 8px;
+}
+.phoneStepTitle {
+  margin: 0;
+  font-size: var(--fs-step-title);
+  line-height: 1.1;
+  font-weight: var(--fw-heading-xl);
+  letter-spacing: var(--tracking-title);
+}
+.phoneStepTitle:focus-visible {
+  outline: 3px solid var(--info);
+  outline-offset: 4px;
+  border-radius: 6px;
+}
+/* Next is pinned to the bottom of the screen: it stays reachable however long the step is. */
+.phone .footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin-top: auto;
+  padding-top: 10px;
+  background: linear-gradient(to bottom, transparent, var(--page) 14px);
+}
