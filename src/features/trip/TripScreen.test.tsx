@@ -576,10 +576,14 @@ describe("toiletry bag gate", () => {
     await ready("Lisbon");
     await user.click(screen.getByRole("button", { name: "＋ Add a Bathroom item" }));
     const dialog = screen.getByRole("dialog", { name: "Add a Bathroom item" });
+    const itemName = within(dialog).getByLabelText("Item name");
+    expect(itemName.getAttribute("autocomplete")).toBe("off");
+    expect(itemName.getAttribute("name")).toBe("packing-item-name");
+    expect(itemName.closest("form")?.getAttribute("autocomplete")).toBe("off");
     await user.click(within(dialog).getByRole("button", { name: "Add toiletry item" }));
     expect(within(dialog).getByRole("alert").textContent).toBe("Enter a name.");
-    expect(within(dialog).getByLabelText("Item name").getAttribute("aria-invalid")).toBe("true");
-    await user.type(within(dialog).getByLabelText("Item name"), "Face wash");
+    expect(itemName.getAttribute("aria-invalid")).toBe("true");
+    await user.type(itemName, "Face wash");
     expect(within(dialog).queryByRole("alert")).toBeNull();
     await user.click(within(dialog).getByRole("radio", { name: /Remember for future trips/ }));
     await user.click(within(dialog).getByRole("switch", { name: "Pack last" }));
@@ -614,14 +618,18 @@ describe("item editor", () => {
     const staples = source.staplesSnapshot();
     await user.click(within(row("sunglasses")).getByRole("button", { name: /^Sunglasses / }));
     const dialog = screen.getByRole("dialog", { name: "Edit item" });
+    const itemName = within(dialog).getByLabelText("Item name");
+    expect(itemName.getAttribute("autocomplete")).toBe("off");
+    expect(itemName.getAttribute("name")).toBe("packing-item-name");
+    expect(itemName.closest("form")?.getAttribute("autocomplete")).toBe("off");
     expect(
       within(dialog)
         .getByRole("radio", { name: /This trip only/ })
         .hasAttribute("checked") ||
         (within(dialog).getByRole("radio", { name: /This trip only/ }) as HTMLInputElement).checked,
     ).toBe(true);
-    await user.clear(within(dialog).getByLabelText("Item name"));
-    await user.type(within(dialog).getByLabelText("Item name"), "Beach sunglasses");
+    await user.clear(itemName);
+    await user.type(itemName, "Beach sunglasses");
     await user.click(within(dialog).getByRole("button", { name: "Save item" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(itemOf(source, "sunglasses").name).toBe("Beach sunglasses");

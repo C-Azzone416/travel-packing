@@ -35,7 +35,11 @@ describe("AddItemInline", () => {
     expect(screen.queryByRole("textbox")).toBeNull();
     await user.click(toggle());
     expect(toggle().getAttribute("aria-expanded")).toBe("true");
-    expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "Item name" }));
+    const itemName = screen.getByRole("textbox", { name: "Item name" });
+    expect(document.activeElement).toBe(itemName);
+    expect(itemName.getAttribute("autocomplete")).toBe("off");
+    expect(itemName.getAttribute("name")).toBe("packing-item-name");
+    expect(itemName.closest("form")?.getAttribute("autocomplete")).toBe("off");
     expect((screen.getByRole("spinbutton", { name: "Needed" }) as HTMLInputElement).value).toBe(
       "1",
     );
