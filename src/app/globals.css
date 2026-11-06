@@ -338,18 +338,22 @@ p {
   align-items: end;
   justify-items: center;
   padding: 18px;
-  background: color-mix(in srgb, var(--ink) 48%, transparent);
-  backdrop-filter: blur(4px);
+  background: color-mix(in srgb, var(--darkEdge) 55%, transparent);
 }
 .modal {
+  --modal-pad: 21px;
+  --modal-surface: var(--paper);
   width: min(100%, 560px);
   max-height: calc(100vh - 36px);
   overflow: auto;
-  padding: 21px;
+  padding: var(--modal-pad);
   border-radius: var(--control-radius);
-  background: var(--paper);
+  background: var(--modal-surface);
   box-shadow: 0 28px 80px var(--ledger-shadow);
   animation: modalIn 0.18s ease-out;
+}
+.modal-grabber {
+  display: none;
 }
 @keyframes modalIn {
   from {
@@ -502,9 +506,38 @@ body[data-sheet-open] .toast-region {
   box-shadow: 0 8px 24px var(--ledger-shadow);
 }
 
-@media (min-width: 660px) {
+/* Suitcase sheets are attached to the bottom edge on phones. The grabber is decorative; the established close, Escape and
+   backdrop controls remain the ways to dismiss the dialog. */
+@media (max-width: 600px) {
+  .modal-backdrop {
+    padding: 0;
+  }
+  .modal {
+    --modal-pad: 18px;
+    --modal-surface: var(--page);
+    width: 100%;
+    max-height: 90dvh;
+    padding: 0 var(--modal-pad) max(var(--modal-pad), var(--safe-bottom));
+    border-radius: 22px 22px 0 0;
+  }
+  .modal-grabber {
+    display: block;
+    flex: none;
+    width: 44px;
+    height: 6px;
+    margin: 12px auto 24px;
+    border-radius: 3px;
+    background: var(--line);
+  }
+}
+@media (min-width: 601px) {
   .modal-backdrop {
     align-items: center;
+  }
+}
+@media (min-width: 601px) and (max-width: 1023px) {
+  .modal {
+    width: min(100%, 640px);
   }
 }
 
@@ -1650,15 +1683,15 @@ input:disabled {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  margin: 0 -21px;
-  padding: 0 21px 4px;
+  margin: 0 calc(var(--modal-pad) * -1);
+  padding: 0 var(--modal-pad) 4px;
 }
 .staple-editor-actions {
   flex: none;
-  margin: 12px -21px -21px;
-  padding: 12px 21px;
+  margin: 12px calc(var(--modal-pad) * -1) calc(var(--modal-pad) * -1);
+  padding: 12px var(--modal-pad);
   border-top: 1px solid var(--line);
-  background: var(--paper);
+  background: var(--modal-surface);
 }
 
 /* Wide enough for the name and the stepper side by side; below this the stepper sits under the name. */
@@ -2127,7 +2160,7 @@ input:disabled {
 }
 /* The sign-out warning (#325). Up to 659px (the bottom-sheet band) the three choices stack full width, Send now on top; from 660px
    they are one right-aligned row that wraps to full-width stacks rather than overlap. The backdrop already covers the bottom nav
-   (z-index 50); the extra bottom padding keeps the footer clear of the phone's safe-area inset. */
+   (z-index 50); ModalSheet's phone padding keeps the footer clear of the safe-area inset. */
 .sign-out-guard {
   display: grid;
   gap: 10px;
@@ -2135,9 +2168,6 @@ input:disabled {
 .sign-out-guard p {
   margin: 0;
   overflow-wrap: anywhere;
-}
-.modal-backdrop:has(.sign-out-guard) {
-  padding-bottom: max(18px, var(--safe-bottom));
 }
 .modal:has(.sign-out-guard) .modal-actions .button {
   min-width: 0;
@@ -3940,11 +3970,11 @@ a.back {
   }
   .modal:has(.save-list-form) .modal-actions {
     position: sticky;
-    bottom: -21px;
-    margin: 18px -21px -21px;
-    padding: 12px 21px;
+    bottom: calc(var(--modal-pad) * -1);
+    margin: 18px calc(var(--modal-pad) * -1) calc(var(--modal-pad) * -1);
+    padding: 12px var(--modal-pad);
     border-top: 1px solid var(--line);
-    background: var(--paper);
+    background: var(--modal-surface);
   }
 }
 /* The group legend sits on its fieldset's top rule; room above it so the scroll area doesn't clip the first label. */
@@ -4332,8 +4362,8 @@ a.back {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  margin: 0 -21px;
-  padding: 0 21px;
+  margin: 0 calc(var(--modal-pad) * -1);
+  padding: 0 var(--modal-pad);
 }
 .edit-failure {
   flex: none;
@@ -4341,10 +4371,10 @@ a.back {
 }
 .modal:has(.edit-tabs) .modal-actions {
   flex: none;
-  margin: 12px -21px -21px;
-  padding: 12px 21px;
+  margin: 12px calc(var(--modal-pad) * -1) calc(var(--modal-pad) * -1);
+  padding: 12px var(--modal-pad);
   border-top: 1px solid var(--line);
-  background: var(--paper);
+  background: var(--modal-surface);
 }
 .occasion-row input:disabled {
   background: var(--detail-surface);
@@ -4592,15 +4622,24 @@ a.back {
   align-content: start;
   min-height: 0;
   overflow-y: auto;
-  margin: 0 -21px;
-  padding: 0 21px;
+  margin: 0 calc(var(--modal-pad) * -1);
+  padding: 0 var(--modal-pad);
 }
 .modal:has(.feedback-form) .modal-actions {
   flex: none;
-  margin: 12px -21px -21px;
-  padding: 12px 21px;
+  margin: 12px calc(var(--modal-pad) * -1) calc(var(--modal-pad) * -1);
+  padding: 12px var(--modal-pad);
   border-top: 1px solid var(--line);
-  background: var(--paper);
+  background: var(--modal-surface);
+}
+@media (max-width: 600px) {
+  .modal:has(.save-list-form),
+  .modal:has(.edit-tabs) {
+    max-height: 90dvh;
+  }
+  .modal:has(.feedback-form) {
+    max-height: min(90dvh, calc(var(--feedback-vh) - 36px));
+  }
 }
 .feedback-shot {
   display: grid;
