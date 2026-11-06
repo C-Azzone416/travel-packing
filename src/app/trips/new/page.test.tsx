@@ -8,8 +8,8 @@ const render = async (copy?: string | string[]) =>
   })) as ReactElement<{ copyId?: string }>;
 
 describe("/trips/new", () => {
-  it("is titled 'New trip'", () => {
-    expect(metadata.title).toBe("New trip");
+  it("is titled 'Plan a trip'", () => {
+    expect(metadata.title).toBe("Plan a trip");
   });
 
   it("starts a brand-new trip without ?copy", async () => {

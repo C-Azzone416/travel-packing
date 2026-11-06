@@ -1,5 +1,6 @@
 import { expect, type Page } from "@playwright/test";
 import { signInAsOwner } from "./auth";
+import { pickRoute, reviewAndCreate, setDates, setRouteDates, toList, toWhen } from "./plan";
 import { FAKE_GEOCODER_PORT } from "../support/ports";
 
 // Shared by the daily-forecast specs (#303), which run against the second app (WEATHER_PROVIDER = open-meteo on the
@@ -21,24 +22,27 @@ export interface Stay {
 export async function createWeatherTrip(page: Page, stays: Stay[]) {
   await signInAsOwner(page);
   await page.getByRole("link", { name: /Plan a trip/ }).click();
-  await expect(page.getByRole("heading", { name: "Confirm the trip" })).toBeVisible();
-  await page.getByRole("combobox", { name: "Destination search" }).fill("london");
-  await page.getByRole("option", { name: /England/ }).click();
-  await page.getByLabel("Leave", { exact: true }).fill(inDays(stays[0].leave));
-  await page
-    .getByLabel("Return", { exact: true })
-    .fill(inDays(stays[0].back ?? stays[0].leave + 3));
-  for (let at = 1; at < stays.length; at++) {
-    await page.getByRole("button", { name: "+ Add another stop" }).click();
-    await page.getByRole("combobox", { name: `Destination search, Stop ${at + 1}` }).fill("london");
-    await page.getByRole("option", { name: /Ontario/ }).click();
-    await page.getByLabel(`Leave, Stop ${at + 1}`).fill(inDays(stays[at].leave));
+  await expect(page.getByRole("heading", { name: "Plan a trip", level: 1 })).toBeVisible();
+  const stops = stays.map((_, at) =>
+    at === 0 ? { query: "london", option: /England/ } : { query: "london", option: /Ontario/ },
+  );
+  // The first arrival, the first stop's Leave (the day the trip ends for one stop), then each later stop's Leave.
+  const dates = [
+    inDays(stays[0].leave),
+    inDays(stays[0].back ?? stays[0].leave + 3),
+    ...stays.slice(1).map((stay) => inDays(stay.leave)),
+  ];
+  await pickRoute(page, stops);
+  await toWhen(page);
+  if (stays.length === 1) {
+    await setDates(page, dates[0], dates[1]);
+  } else {
+    await setRouteDates(page, dates);
   }
-  await page.getByRole("button", { name: "Continue to packing preferences" }).click();
-  await expect(page.getByRole("heading", { name: "Shape the list" })).toBeVisible();
+  await toList(page);
   await page.getByRole("button", { name: "Get weather" }).click();
-  await expect(page.getByText(/Your list uses the weather for/)).toBeVisible();
-  await page.getByRole("button", { name: "Save trip" }).click();
+  await expect(page.getByRole("checkbox", { name: /Weather suggestions/ })).toBeChecked();
+  await reviewAndCreate(page);
   await page
     .getByRole("link", { name: /^(Continue|Keep) packing: London/ })
     .first()

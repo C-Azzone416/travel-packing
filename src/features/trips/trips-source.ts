@@ -33,7 +33,7 @@ import {
 } from "@/domain/readiness";
 import { categoryCounts, listNameTaken, tripItemsFromList } from "@/domain/saved-lists";
 import { automaticStamps, normaliseStampLabel } from "@/domain/stamps";
-import { isThemeId, type ThemeId } from "@/domain/themes";
+import { DEFAULT_THEME, isThemeId, type ThemeId } from "@/domain/themes";
 import type { Scope, Staple, TripConfig } from "@/domain/trip";
 import {
   archiveTrip,
@@ -46,6 +46,7 @@ import {
   type LifecycleTrip,
   type TripDraft,
 } from "@/domain/trip-lifecycle";
+import type { TripOrigin } from "@/domain/trip-route";
 import { routeLabel, tripDatesFromStops, validateStops, type TripStop } from "@/domain/trip-stops";
 import { localToday } from "@/lib/today";
 import type { SavedListDetail, SavedListSummary } from "@/server/data/service";
@@ -94,6 +95,9 @@ export interface TripsSource {
   /** Persist a finished draft as a new trip. Rejects (and changes nothing) if the draft is incomplete. */
   createTrip(draft: TripDraft): Promise<LifecycleTrip>;
 
+  /** The account's home city (the default "From" of a new trip), or null. Absent on sources without one. */
+  homeCity?(): Promise<TripOrigin | null>;
+
   /** One live trip. Rejects with NOT_FOUND for an id that is not there. */
   getTrip(tripId: string): Promise<LifecycleTrip>;
   /** The owner's staples (what "Remember for future trips" changes). */
@@ -134,7 +138,7 @@ export interface TripsSource {
    * suggestions). `basedOn` is the trip's `updatedAt` the person reviewed; if it changed since, this rejects with STALE.
    */
   updatePreferences(tripId: string, config: TripConfig, basedOn?: string): Promise<TripChange>;
-  /** Change the trip's picture (#48). Only the six built-in themes are accepted; nothing else about the trip changes. */
+  /** Compatibility write for the six legacy stored theme values retained after the #392 UI removal. */
   setTheme(tripId: string, theme: ThemeId): Promise<TripChange>;
   /**
    * Set or clear the route stamps' labels (#151): the typed text per slot (trimmed, upper-cased, exactly 3 of A-Z and 0-9),
@@ -179,6 +183,8 @@ export interface MemorySourceOptions {
   staples?: readonly Staple[];
   /** The owner's saved lists (#170). Left out, the source has none and the create flow shows no list step. */
   savedLists?: readonly SavedListDetail[];
+  /** The account's home city (#390). Left out, the source has none: it answers null. */
+  homeCity?: TripOrigin | null;
 }
 
 const summaryOf = (
@@ -205,6 +211,7 @@ export function createMemoryTripsSource(
     today = localToday,
     staples = SYNTHETIC_STAPLES,
     savedLists,
+    homeCity = null,
   }: MemorySourceOptions,
 ): TripsSource & { snapshot(): LifecycleState; staplesSnapshot(): Staple[] } {
   let state = initial;
@@ -279,6 +286,7 @@ export function createMemoryTripsSource(
     staplesSnapshot: () => currentStaples,
     ...(lists ? { savedLists: lists } : {}),
     load: async () => state,
+    homeCity: async () => homeCity,
     archive: (id) => apply(archiveTrip(state, id)),
     restore: (id) => apply(restoreTrip(state, id)),
     remove: (id) => apply(removeTrip(state, id, now())),
@@ -293,6 +301,7 @@ export function createMemoryTripsSource(
         [...currentStaples],
         { newId, today: today() },
         list ? tripItemsFromList(list) : undefined,
+        draft.mode === "copy" && draft.sourceId ? find(draft.sourceId).theme : DEFAULT_THEME,
       );
       if (!result.ok) throw new TripsSourceError(result.reason);
       state = { ...result.state, draft: null };

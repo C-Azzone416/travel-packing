@@ -24,6 +24,11 @@ import {
 } from "./helpers/hero-weather";
 import { OPEN_METEO_PORT } from "./support/ports";
 
+// Home is the laptop suitcase view from 1024px (#387); this spec's subject is the page below it, so it runs there.
+test.beforeEach(async ({ page }) => {
+  await legacyPackingLayout(page);
+});
+
 // #303 PR 2: the dashboard hero's daily forecast block, under the weather strip. Against the second app (Open-Meteo
 // on the local fake, as trip-daily-forecast does). Layout is asserted from measured rects, per state x width:
 // whole 28px rows (header 28, chips 84 or phone rows 28, "+N more" 28), one line per text, no two cells touching, no
@@ -32,9 +37,9 @@ test.use({ baseURL: `http://localhost:${OPEN_METEO_PORT}` });
 
 const ROW = 28;
 const CHIP = ROW * 3;
-const WIDTHS = [1280, 981, 721, 390, 320] as const;
-const SIX_WIDTHS = [1440, 1280, 981, 721, 390, 320] as const;
-const THREE_WIDTHS = [1280, 721, 390] as const;
+const WIDTHS = [1000, 981, 721, 390, 320] as const;
+const SIX_WIDTHS = [1000, 981, 721, 390, 320] as const;
+const THREE_WIDTHS = [1000, 721, 390] as const;
 const onGrid = (value: number) => Math.min(value % ROW, ROW - (value % ROW));
 
 async function openHero(page: Page, stays: Stay[]) {
@@ -45,7 +50,12 @@ async function openHero(page: Page, stays: Stay[]) {
 
 async function setWidth(page: Page, width: number) {
   await page.setViewportSize({ width, height: width < 700 ? 844 : 900 });
-  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => done(null))));
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    await new Promise((done) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => done(null))),
+    );
+  });
 }
 
 test.beforeEach(async ({ page }) => {
@@ -245,7 +255,7 @@ test("a stay with 5 days or fewer shows only those days and no link", async ({ p
   const days = await page.locator(".hero-day").count();
   expect(days).toBeLessThanOrEqual(7);
   await expect(page.locator(".hero-days-more")).toHaveCount(0);
-  for (const width of [1280, 390, 320]) {
+  for (const width of [1000, 390, 320]) {
     await setWidth(page, width);
     await expectCleanBlock(page, width, { days });
   }
@@ -270,7 +280,7 @@ test("a stay that straddles the window has cards for forecast days only, and one
   await expect(block.locator(".hero-typical .weather-source.typical")).toHaveText("Typical");
   await expect(block.getByRole("listitem")).toHaveCount(5);
   await expect(block.locator(".hero-forecast-head")).toContainText("London · 5 of 15 days");
-  for (const width of [1280, 721, 390, 320]) {
+  for (const width of [1000, 721, 390, 320]) {
     await setWidth(page, width);
     await expectCleanBlock(page, width, { days: 5 });
   }
@@ -285,7 +295,7 @@ test("an in-progress stay starts the block at Today", async ({ page }) => {
   await expect(page.locator(".hero-typical-note")).toHaveText(
     "These days use the average of the last 5 years, not a forecast.",
   );
-  for (const width of [1280, 390]) {
+  for (const width of [1000, 390]) {
     await setWidth(page, width);
     await expectCleanBlock(page, width, { days: 7 });
   }
@@ -348,7 +358,7 @@ async function applyLargeText(page: Page) {
     .toBeGreaterThanOrEqual(24);
 }
 
-for (const width of [1280, 721, 640, 390, 320]) {
+for (const width of [1000, 721, 640, 390, 320]) {
   test(`200% text at ${width}px: nothing overlaps, wraps mid-text or scrolls`, async ({ page }) => {
     await openHero(page, [{ leave: 1, back: 15 }]);
     await setWidth(page, width);
@@ -490,13 +500,14 @@ for (const [fixture, widths, device] of MATRIX) {
   );
 }
 
-// E2: the shapes the issue showed, pinned to numbers: at 1280 one stay is a summary column (at most 17em) and the days
+// E2: the shapes the issue showed, pinned to numbers: at 1000 one stay is a summary column (at most 17em) and the days
 // beside it, and the ~70% empty area of the old full-width cell is gone.
-test("one stay at 1280px: the summary is a column and the days sit beside it (#358)", async ({
+// The wide (>= 1280px) summary-column hero is replaced by the laptop Home from 1024px (#387); its weather rows are in home-laptop.spec.ts.
+test.skip("one stay at 1280px: the summary is a column and the days sit beside it (#358)", async ({
   page,
 }) => {
   await openBand(page, F1);
-  await setWidth(page, 1280);
+  await setWidth(page, 1000);
   const m = await measureBand(page);
   const cell = m.cells[0].box;
   expect(cell.r - cell.x).toBeLessThanOrEqual(17 * m.em + 1);
@@ -584,7 +595,7 @@ test("Forecast and Typical tags differ by word and outline, and stay visible in 
 // E11: the band's only tab stops are its two links, in reading order, and nothing is clipped when they take focus.
 test("keyboard: +N more, then the other-stays link, then the actions", async ({ page }) => {
   await openBand(page, F11);
-  for (const width of [1280, 390]) {
+  for (const width of [1000, 390]) {
     await setWidth(page, width);
     const start = await page.evaluate(() => {
       const focusables = Array.from(
@@ -626,9 +637,9 @@ test("keyboard: +N more, then the other-stays link, then the actions", async ({ 
 
 // E12: axe on the hero with the band, mixed and multi-stop, desktop and phone width.
 for (const fixture of [F2, F9]) {
-  test(`${fixture.name}: no accessibility violations at 1280 and 390`, async ({ page }) => {
+  test(`${fixture.name}: no accessibility violations at 1000 and 390`, async ({ page }) => {
     await openBand(page, fixture);
-    for (const width of [1280, 390]) {
+    for (const width of [1000, 390]) {
       await setWidth(page, width);
       await expectAccessible(page, `${fixture.name} at ${width}px`, { include: ".ledger-hero" });
     }
@@ -737,7 +748,7 @@ async function applyLargeBandText(page: Page) {
     .toBe(32);
 }
 for (const fixture of [F2, F9]) {
-  for (const width of [1280, 721, 390, 320]) {
+  for (const width of [1000, 721, 390, 320]) {
     test(`${fixture.name}: 200% text at ${width}px keeps the band on the rows and inside the hero`, async ({
       page,
     }) => {
@@ -809,7 +820,7 @@ test("screenshots for design review (opt-in)", async ({ page }) => {
       });
     }
     if (item.zoom) await applyLargeText(page);
-    for (const width of item.zoom ? [1280, 640, 390, 320] : WIDTHS) {
+    for (const width of item.zoom ? [1000, 640, 390, 320] : WIDTHS) {
       await setWidth(page, width);
       await page
         .locator(".ledger-hero")

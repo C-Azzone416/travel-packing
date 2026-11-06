@@ -69,18 +69,6 @@ describe("Stamps", () => {
     ) as HTMLElement;
     expect(year.querySelector('[aria-hidden="true"]')?.textContent).toBe("✈ ");
   });
-
-  it("has no backing disc by default, and adds one on every stamp only when it sits on a picture", () => {
-    const two = [
-      { kind: "country" as const, label: "PRT" },
-      { kind: "country" as const, label: "ESP" },
-    ];
-    const clean = render(<Stamps stamps={two} departure="2026-11-03" />);
-    expect(clean.container.querySelectorAll("[data-on-picture]")).toHaveLength(0);
-    clean.unmount();
-    const onPicture = render(<Stamps stamps={two} departure="2026-11-03" onPicture />);
-    expect(onPicture.container.querySelectorAll('[data-on-picture="true"]')).toHaveLength(2);
-  });
 });
 
 describe("Stamps with the owner's label (#151)", () => {
@@ -117,13 +105,10 @@ describe("the stamp stylesheet", () => {
   const rule = (selector: string) =>
     css.match(new RegExp(`(?:^|\\n)\\${selector} \\{([^}]*)\\}`))?.[1] ?? "";
 
-  it("leaves the stamp transparent so the ledger rules show through, and puts the disc on the picture modifier only", () => {
+  it("leaves stamps transparent so the ledger rules show through", () => {
     expect(rule(".stamp")).toMatch(/border-radius/);
     expect(rule(".stamp")).not.toMatch(/background/);
     expect(rule(".first")).not.toMatch(/background/);
     expect(rule(".second")).not.toMatch(/background/);
-    expect(rule(".onPicture")).toMatch(
-      /background: color-mix\(in srgb, var\(--surface\) 92%, transparent\)/,
-    );
   });
 });

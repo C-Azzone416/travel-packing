@@ -28,6 +28,8 @@ export interface LocationPickerProps {
   allowCustom?: boolean;
   /** The search box's label; a stop in a multi-stop route names itself ("Destination search, Stop 2"). */
   label?: string;
+  /** The name of the live region that says how many places were found; a second picker on one screen names its own. */
+  resultsLabel?: string;
 }
 
 // What the provider last answered, for one query and one attempt. Everything else (searching,
@@ -47,6 +49,7 @@ export function LocationPicker({
   onClear,
   allowCustom = ALLOW_CUSTOM_DESTINATION,
   label = "Destination search",
+  resultsLabel = "Destination results",
 }: LocationPickerProps) {
   const inputId = useId();
   const listId = useId();
@@ -186,7 +189,7 @@ export function LocationPicker({
           </button>
         </p>
       ) : null}
-      <p className="sr-only" role="status" aria-label="Destination results">
+      <p className="sr-only" role="status" aria-label={resultsLabel}>
         {announcement}
       </p>
       {searching ? (

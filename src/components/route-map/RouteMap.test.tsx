@@ -229,6 +229,12 @@ describe("RouteMap", () => {
     expect(out).toContain("ATLANTIC OCEAN");
   });
 
+  it("sets the ocean label in the body font variable, which exists (#415), not a made-up one", () => {
+    const out = renderToStaticMarkup(<RouteMap points={[home, lisbon, porto]} mode="fly" />);
+    expect(out).toContain("font-family:var(--font-body)");
+    expect(out).not.toContain("--font-dm-sans");
+  });
+
   it("scales to its container: viewBox plus fluid width, never a fixed pixel width", () => {
     const out = html({ width: 346, height: 133 });
     expect(out).toContain('viewBox="0 0 346 133"');

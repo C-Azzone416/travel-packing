@@ -459,6 +459,8 @@ describe("renaming, Smart, and removing", () => {
     await loaded();
     await user.click(within(rowFor("sleepwear")).getByRole("button", { name: /^Sleepwear/ }));
     const field = screen.getByRole("textbox", { name: "Name" });
+    expect(field.getAttribute("autocomplete")).toBe("off");
+    expect(field.getAttribute("name")).toBe("packing-item-name");
     await user.clear(field);
     await user.type(field, "  Pyjamas ");
     expect(source.staplesSnapshot().find((s) => s.id === "sleepwear")!.name).toBe("Sleepwear");
@@ -498,6 +500,8 @@ describe("renaming, Smart, and removing", () => {
     await loaded();
     await user.click(within(rowFor("sleepwear")).getByRole("button", { name: /^Sleepwear/ }));
     const field = within(screen.getByRole("dialog")).getByRole("textbox", { name: "Name" });
+    expect(field.getAttribute("autocomplete")).toBe("off");
+    expect(field.getAttribute("name")).toBe("packing-item-name");
     await user.clear(field);
     await user.type(field, "Pyjamas");
     await user.keyboard("{Enter}");
@@ -615,7 +619,11 @@ describe("adding a staple", () => {
       }),
     });
     await loaded();
-    await user.type(screen.getByRole("textbox", { name: "Staple name" }), "  Phone charger ");
+    const itemName = screen.getByRole("textbox", { name: "Staple name" });
+    expect(itemName.getAttribute("autocomplete")).toBe("off");
+    expect(itemName.getAttribute("name")).toBe("packing-item-name");
+    expect(itemName.closest("form")?.getAttribute("autocomplete")).toBe("off");
+    await user.type(itemName, "  Phone charger ");
     await user.selectOptions(
       screen.getByRole("combobox", { name: "Cube for the new staple" }),
       "tech",
