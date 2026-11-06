@@ -85,6 +85,23 @@ test("the compact #424 AuthSuitcase review set", async ({ page, context, baseURL
     await expect(control).toBeFocused();
   }
 
+  // AuthShell is retained during client navigation. A scrolled short panel must reset for every linked destination.
+  await page.setViewportSize({ width: 390, height: 600 });
+  await page.goto("/sign-in");
+  const panel = page.locator(".auth-panel");
+  await panel.evaluate((element) => (element.scrollTop = element.scrollHeight));
+  await page.getByRole("link", { name: "Create an account" }).click();
+  await expect(page).toHaveURL(/\/sign-up$/);
+  expect(await panel.evaluate((element) => element.scrollTop)).toBe(0);
+  await panel.evaluate((element) => (element.scrollTop = element.scrollHeight));
+  await page.getByRole("link", { name: "Sign in" }).click();
+  await expect(page).toHaveURL(/\/sign-in$/);
+  expect(await panel.evaluate((element) => element.scrollTop)).toBe(0);
+  await panel.evaluate((element) => (element.scrollTop = element.scrollHeight));
+  await page.getByRole("link", { name: "Forgot password?" }).click();
+  await expect(page).toHaveURL(/\/forgot-password$/);
+  expect(await panel.evaluate((element) => element.scrollTop)).toBe(0);
+
   for (const scheme of ["evergreen", "dusk"] as const) {
     await setScheme(context, baseURL!, scheme);
     await page.setViewportSize({ width: 1280, height: 980 });
@@ -104,10 +121,12 @@ test("the compact #424 AuthSuitcase review set", async ({ page, context, baseURL
   await expectCleanFrame(page, "ocean");
   await screenshot(page, "auth-ocean-sign-in-error-390x844");
 
-  await page.goto("/sign-up");
+  await page.getByRole("link", { name: "Create an account" }).click();
+  await expect(page).toHaveURL(/\/sign-up$/);
   await expect(page.getByRole("heading", { level: 1, name: "Create your account" })).toBeVisible();
   await expect(page.getByRole("heading", { level: 1 })).toBeFocused();
   expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  expect(await page.locator(".auth-panel").evaluate((element) => element.scrollTop)).toBe(0);
   await expectCleanFrame(page, "ocean");
   await screenshot(page, "auth-ocean-sign-up-390x844");
 });

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { AuthShell } from "@/features/auth/AuthShell";
 import { PasswordToggle } from "@/features/auth/AuthParts";
 import { SIGN_IN_HINT_BEFORE } from "@/features/auth/copy";
+import { useAuthPanelTop } from "@/features/auth/hooks";
 import { INVALID_CREDENTIALS_MESSAGE } from "./state";
 
 export interface SignInViewProps {
@@ -35,9 +36,10 @@ export function SignInView({
   banner,
   notice,
 }: SignInViewProps) {
+  const card = useAuthPanelTop();
   return (
     <AuthShell banner={banner}>
-      <section className="auth-card" aria-labelledby="sign-in-title">
+      <section ref={card} className="auth-card" aria-labelledby="sign-in-title">
         <p className="eyebrow">Sign in</p>
         <h1 id="sign-in-title">Welcome back</h1>
         {notice && !error ? (
