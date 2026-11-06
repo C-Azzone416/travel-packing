@@ -1,3 +1,4 @@
+import * as service from "@/server/data/service";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMigratedDb, resetData } from "@/server/db/__fixtures__/db";
 import type { Db } from "@/server/db/retention";
@@ -29,6 +30,7 @@ import {
   confirmBagPlacementAction,
   decrementPackedAction,
   editItemAction,
+  getHomeCityAction,
   getTripAction,
   getStaplesSetupAction,
   incrementPackedAction,
@@ -96,6 +98,16 @@ describe("reads", () => {
     as(OTHER_OWNER);
     expect(await getTripAction(trip.id)).toEqual({ ok: false, code: "NOT_FOUND" });
     expect(await getTripAction("not-a-uuid")).toEqual({ ok: false, code: "INVALID_INPUT" });
+  });
+
+  it("getHomeCityAction is empty until a home city is set, then returns it to its owner only", async () => {
+    expect(await getHomeCityAction()).toEqual({ ok: true, home: null });
+    await service.setHomeCity(makeContext(db(), fake), { location: { id: "pt-lisbon" } });
+    const result = await getHomeCityAction();
+    if (!result.ok) throw new Error("expected ok");
+    expect(result.home?.location).toMatchObject({ id: "pt-lisbon", city: "Lisbon" });
+    as(OTHER_OWNER);
+    expect(await getHomeCityAction()).toEqual({ ok: true, home: null });
   });
 
   it("listStaplesAction returns an empty list for a new owner without seeding defaults", async () => {

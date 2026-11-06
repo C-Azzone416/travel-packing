@@ -5,6 +5,8 @@ import { SAMPLE_TODAY } from "../../../src/server/seed/sample-data";
 import { seedSyntheticData } from "../../../src/server/seed/seed";
 import type { Db } from "../../../src/server/db/retention";
 import * as schema from "../../../src/server/db/schema";
+import { homeToColumns } from "../../../src/server/data/place-columns";
+import type { SampleLocation } from "../../../src/domain/trip-stops";
 import { E2E_DB_PORT } from "../support/ports";
 
 export const E2E_DATABASE_URL = `postgres://postgres:postgres@127.0.0.1:${E2E_DB_PORT}/postgres`;
@@ -162,6 +164,37 @@ export async function setOwnerAppearance(ownerId: string, appearance: string): P
   try {
     const db = drizzle(pool, { schema }) as unknown as Db;
     await db.update(schema.users).set({ appearance }).where(eq(schema.users.id, ownerId));
+  } finally {
+    await pool.end();
+  }
+}
+
+/** Set the owner's home city (the default From of Plan a trip, #379), or clear it with null. */
+export async function setOwnerHomeCity(
+  ownerId: string,
+  place: SampleLocation | null,
+): Promise<void> {
+  const pool = new Pool({ connectionString: E2E_DATABASE_URL, max: 1 });
+  try {
+    const db = drizzle(pool, { schema }) as unknown as Db;
+    await db.update(schema.users).set(homeToColumns(place)).where(eq(schema.users.id, ownerId));
+  } finally {
+    await pool.end();
+  }
+}
+
+/** What the owner's trip with this destination stored for where it leaves from, how, and its name. */
+export async function readTripTravel(
+  ownerId: string,
+  destination: string,
+): Promise<{ origin: string | null; mode: string | null; name: string | null } | null> {
+  const pool = new Pool({ connectionString: E2E_DATABASE_URL, max: 1 });
+  try {
+    const result = await pool.query(
+      "SELECT origin_city AS origin, travel_mode AS mode, name FROM trips WHERE owner_id = $1 AND destination = $2",
+      [ownerId, destination],
+    );
+    return result.rows[0] ?? null;
   } finally {
     await pool.end();
   }

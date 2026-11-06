@@ -20,6 +20,17 @@ export type TripsActionResult =
 export type CreateTripActionResult =
   { ok: true; trip: LifecycleTrip } | { ok: false; code: ErrorCode };
 
+/** The draft's origin, travel mode and name as the server's input names them (left out when the draft says nothing). */
+function travelFields(draft: TripDraft) {
+  return {
+    ...(draft.origin === undefined
+      ? {}
+      : { origin: draft.origin ? { id: draft.origin.id } : null }),
+    ...(draft.travelMode === undefined ? {} : { travelMode: draft.travelMode }),
+    ...(draft.name === undefined ? {} : { name: draft.name }),
+  };
+}
+
 /** The dashboard's whole state, read through the owner gate. */
 async function readState(context: DataContext): Promise<Result<LifecycleState>> {
   const live = await service.listTrips(context);
@@ -94,11 +105,13 @@ export async function createTripAction(draft: TripDraft): Promise<CreateTripActi
         ? await service.copyTrip(context, {
             sourceId: draft.sourceId,
             ...where,
+            ...travelFields(draft),
             config: draft.config,
             theme: draft.theme,
           })
         : await service.createTrip(context, {
             ...where,
+            ...travelFields(draft),
             config: draft.config,
             theme: draft.theme,
             ...(draft.savedListId ? { savedListId: draft.savedListId } : {}),
@@ -135,6 +148,7 @@ export async function createTripWithWeatherAction(
     mode: draft.mode,
     sourceId: draft.sourceId,
     ...route,
+    ...travelFields(draft),
     config: draft.config,
     theme: draft.theme,
     accepted,

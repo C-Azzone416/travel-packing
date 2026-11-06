@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
 import { DEVICE, legacyPackingLayout } from "./helpers/device";
 import { reviewAndApply } from "./helpers/preferences";
+import { planAndCreate } from "./helpers/plan";
 
 // Fixed clock: San Diego is upcoming and partly packed, Lisbon is past, fully packed and Ready. In-memory data
 // survives client-side navigation (links), not a reload, so every step navigates by clicking.
@@ -194,12 +195,12 @@ test("a trip-only edit leaves the staples alone: a new trip still has the defaul
 
   await page.getByRole("link", { name: "All trips" }).click();
   await page.getByRole("link", { name: /Plan a trip/ }).click();
-  await page.getByRole("combobox", { name: "Destination search" }).fill("paris");
-  await page.getByRole("option", { name: /Paris/ }).click();
-  await page.getByLabel("Leave", { exact: true }).fill("2026-11-12");
-  await page.getByLabel("Return", { exact: true }).fill("2026-11-16");
-  await page.getByRole("button", { name: "Continue to packing preferences" }).click();
-  await page.getByRole("button", { name: "Save trip" }).click();
+  await planAndCreate(page, {
+    query: "paris",
+    option: /Paris/,
+    start: "2026-11-12",
+    end: "2026-11-16",
+  });
   await page.getByRole("link", { name: /(Continue|Keep) packing: Paris/ }).click();
   await expect(row(page, "sunglasses")).toContainText("Sunglasses");
   await expect(row(page, "sunglasses")).not.toContainText("Beach");
@@ -229,12 +230,12 @@ test("a remembered edit changes future trips, but neither this trip's history no
   // A trip made afterwards gets the remembered version.
   await page.getByRole("link", { name: "All trips" }).click();
   await page.getByRole("link", { name: /Plan a trip/ }).click();
-  await page.getByRole("combobox", { name: "Destination search" }).fill("paris");
-  await page.getByRole("option", { name: /Paris/ }).click();
-  await page.getByLabel("Leave", { exact: true }).fill("2026-11-12");
-  await page.getByLabel("Return", { exact: true }).fill("2026-11-16");
-  await page.getByRole("button", { name: "Continue to packing preferences" }).click();
-  await page.getByRole("button", { name: "Save trip" }).click();
+  await planAndCreate(page, {
+    query: "paris",
+    option: /Paris/,
+    start: "2026-11-12",
+    end: "2026-11-16",
+  });
   await page.getByRole("link", { name: /(Continue|Keep) packing: Paris/ }).click();
   await expect(row(page, "sunglasses")).toContainText("Polarized sunglasses");
 });

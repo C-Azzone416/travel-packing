@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
 import { DEVICE, legacyPackingLayout } from "./helpers/device";
 import { expectAccessible } from "./helpers/a11y";
+import { planRouteToList, reviewAndCreate } from "./helpers/plan";
 
 // Per-trip stamp label (#151), through the real data layer: the packing screen's Edit stamp sheet, the same label on the
 // dashboard (display only), Reset to automatic, and what a person typing a bad label sees.
@@ -73,16 +74,15 @@ test("a two-country trip has two stamps to label: each is edited on its own, and
   await page.clock.setFixedTime(NOW);
   await signInAsOwner(page);
   await page.getByRole("link", { name: /Plan a trip/ }).click();
-  await page.getByRole("combobox", { name: "Destination search" }).fill("lisbon");
-  await page.getByRole("option", { name: /Lisbon/ }).click();
-  await page.getByLabel("Leave", { exact: true }).fill("2026-11-12");
-  await page.getByLabel("Return", { exact: true }).fill("2026-11-15");
-  await page.getByRole("button", { name: "+ Add another stop" }).click();
-  await page.getByRole("combobox", { name: "Destination search, Stop 2" }).fill("paris");
-  await page.getByRole("option", { name: /Paris/ }).click();
-  await page.getByLabel("Leave, Stop 2").fill("2026-11-18");
-  await page.getByRole("button", { name: "Continue to packing preferences" }).click();
-  await page.getByRole("button", { name: "Save trip" }).click();
+  await planRouteToList(
+    page,
+    [
+      { query: "lisbon", option: /Lisbon/ },
+      { query: "paris", option: /Paris/ },
+    ],
+    ["2026-11-12", "2026-11-15", "2026-11-18"],
+  );
+  await reviewAndCreate(page);
   await page
     .getByRole("article", { name: "Lisbon → Paris" })
     .getByRole("link", { name: /(Continue|Keep) packing/ })
