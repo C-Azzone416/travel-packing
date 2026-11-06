@@ -6,15 +6,11 @@ import { PALETTES, chooseThemeAndSignOut } from "./helpers/appearance";
 import { E2E_PASSWORD, OTHER_EMAIL, newcomerEmailFor, signIn, signInAsOwner } from "./helpers/auth";
 import { nextNewcomerSlot, resetAccount } from "./helpers/inbox";
 
-// Field Ledger on the signed-out screens (#204), in every theme, reached through a real Settings choice and sign-out (#283): sign-in (error and focused field), sign-up, verify, forgot password
-// (and its sent state), reset and set password, an invalid link, finish setup and access-denied. Each shows the brand-only bar at the
-// app header's height, a flat card with the 4px accent rule and no blur, and no sideways scroll; axe checks colour contrast in the
-// theme. Axe runs in every theme at 1280 and in one theme at 390 (the layout is the same in each; the width only changes where
-// things sit), as in theme-matrix.spec.ts. AUTH_SHOTS=<folder> writes a screenshot of every cell, in all eight (theme, width) pairs,
-// for design's rendered review. One browser project runs it (Chromium); the phone width is a viewport, not WebKit.
+// Open AuthSuitcase on every signed-out state (#424), in every theme, reached through a real Settings choice and sign-out
+// (#283). Axe runs in every theme at 1280 and in one theme at 390. AUTH_SHOTS=<folder> writes every reviewed state; without
+// that opt-in, the suite records no broad screenshot matrix.
 const THEMES = ["ocean", "evergreen", "dusk"] as const;
 const SHOTS = process.env.AUTH_SHOTS;
-const BAR_HEIGHT = { 1280: 68, 390: 60 } as const;
 // Only the shape of a link token matters here (the page shows the form for any well-formed one); built like the other specs do.
 const TOKEN = "a".repeat(48);
 
@@ -33,7 +29,7 @@ test.beforeEach(({}, testInfo) => {
 });
 
 for (const { theme, width, axe } of CELLS) {
-  test(`${theme} at ${width}px: every signed-out screen is a Ledger screen`, async ({ page }) => {
+  test(`${theme} at ${width}px: every signed-out screen uses AuthSuitcase`, async ({ page }) => {
     test.setTimeout(90_000);
     await page.setViewportSize({ width, height: width < 700 ? 844 : 900 });
     await page.emulateMedia({ reducedMotion: "reduce" });
@@ -45,27 +41,26 @@ for (const { theme, width, axe } of CELLS) {
 
     const check = async (name: string) => {
       await expect(page.locator("html")).toHaveAttribute("data-scheme", theme);
-      // The brand-only bar: circle and wordmark, no link, no navigation, the app header's height.
+      // The brand-only bar has the app's suitcase mark and no interactive content.
       const bar = page.locator("header.auth-brandbar");
       await expect(bar).toBeVisible();
       await expect(bar.getByText("Packed Smart")).toBeVisible();
       await expect(bar.getByRole("link")).toHaveCount(0);
-      await expect(page.getByRole("navigation")).toHaveCount(0);
-      expect(
-        (await bar.boundingBox())?.height,
-        `${name}: the bar is ${BAR_HEIGHT[width]}px tall`,
-      ).toBe(BAR_HEIGHT[width]);
-      // A flat card: the 4px accent rule on top, a hairline, and no shadow.
+      await expect(bar.getByRole("button")).toHaveCount(0);
+      // The decorative lid never adds a second heading or accessibility noise. The panel is flat inside the case.
+      const suitcase = page.locator(".auth-suitcase");
+      const lid = page.locator(".auth-lid");
       const card = page.locator(".auth-card");
-      await expect(card).toHaveCSS("border-top-width", "4px");
+      await expect(suitcase).toBeVisible();
+      await expect(lid).toHaveAttribute("aria-hidden", "true");
+      await expect(lid).toContainText("READY TOGO!");
+      await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+      await expect(card).toHaveCSS("border-top-width", "0px");
       await expect(card).toHaveCSS("box-shadow", "none");
-      // Top-aligned under the bar: the card does not float in the middle of the screen.
-      const top = (await card.boundingBox())?.y ?? 0;
-      const barBottom = BAR_HEIGHT[width];
-      expect(
-        top - barBottom,
-        `${name}: the card sits ${width < 700 ? 64 : 96}px under the bar`,
-      ).toBe(width < 700 ? 64 : 96);
+      const lidBox = (await lid.boundingBox())!;
+      const panelBox = (await page.locator(".auth-panel").boundingBox())!;
+      if (width < 1024) expect(panelBox.y, `${name}: panel below lid`).toBeGreaterThan(lidBox.y);
+      else expect(panelBox.x, `${name}: panel beside lid`).toBeGreaterThan(lidBox.x);
       expect(await sidewaysScroll(page), `${name}: no sideways scroll`).toBeLessThanOrEqual(0);
       if (axe) await expectAccessible(page, `${theme} ${width} ${name}`);
       if (SHOTS) {
@@ -150,3 +145,34 @@ for (const { theme, width, axe } of CELLS) {
     });
   });
 }
+
+test("AuthSuitcase geometry holds from 195px through 1440px", async ({ page }) => {
+  for (const [width, cubeCount] of [
+    [195, 3],
+    [320, 3],
+    [390, 4],
+    [768, 5],
+    [1024, 5],
+    [1440, 5],
+  ] as const) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/sign-in");
+    await expect(page.getByRole("heading", { level: 1, name: "Welcome back" })).toBeVisible();
+    expect(await sidewaysScroll(page), `${width}: no sideways scroll`).toBeLessThanOrEqual(0);
+    expect(
+      await page
+        .locator(".auth-cube")
+        .evaluateAll(
+          (cubes) => cubes.filter((cube) => getComputedStyle(cube).display !== "none").length,
+        ),
+      `${width}: responsive cube count`,
+    ).toBe(cubeCount);
+    for (const selector of [".auth-suitcase", ".auth-lid", ".auth-panel"]) {
+      const box = (await page.locator(selector).boundingBox())!;
+      expect(box.x, `${width}: ${selector} starts in viewport`).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width, `${width}: ${selector} ends in viewport`).toBeLessThanOrEqual(
+        width + 0.5,
+      );
+    }
+  }
+});

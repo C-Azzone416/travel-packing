@@ -70,11 +70,14 @@ describe("SignInView (design spec #31)", () => {
     expect(view()).toContain('aria-pressed="false"');
   });
 
-  it("shows the error inline, above the submit button, as an alert", () => {
+  it("shows the error below the h1 and above the email field, as an alert", () => {
     const html = view({ error: "Email or password is incorrect." });
     expect(html).toContain('role="alert"');
+    expect(html.indexOf("Welcome back")).toBeLessThan(
+      html.indexOf("Email or password is incorrect."),
+    );
     expect(html.indexOf("Email or password is incorrect.")).toBeLessThan(
-      html.indexOf('type="submit"'),
+      html.indexOf('for="email"'),
     );
   });
 
@@ -90,6 +93,16 @@ describe("SignInView (design spec #31)", () => {
   it("adds nothing to other messages", () => {
     const html = view({ error: "Sign-in isn't available right now." });
     expect(html).not.toContain("If you just signed up");
+  });
+
+  it("hides a prior status notice while an error is shown", () => {
+    const html = view({
+      error: "Email or password is incorrect.",
+      notice: "Password updated. Sign in with your new password.",
+    });
+    expect(html).toContain('role="alert"');
+    expect(html).not.toContain('role="status"');
+    expect(html).not.toContain("Password updated.");
   });
 
   it("shows progress, disables only the submit button, and keeps the fields read-only (focus is not lost)", () => {
@@ -150,7 +163,7 @@ describe("SignInPage", () => {
   ])("shows the %s notice as a status message", async (notice, text) => {
     fake.current = null;
     const html = renderToStaticMarkup(await SignInPage(search({ notice })));
-    expect(html).toMatch(new RegExp(`<p[^>]*role="status"[^>]*>${text}</p>`));
+    expect(html).toMatch(new RegExp(`<p[^>]*role="status"[^>]*>.*${text}</p>`));
   });
 
   it("ignores a notice it does not know, so the address cannot put words on the screen", async () => {

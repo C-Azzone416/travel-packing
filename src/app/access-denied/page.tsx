@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { buttonClassName } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { AuthShell } from "@/features/auth/AuthShell";
 import { SIGN_IN_PATH } from "@/server/auth/proxy-handler";
 
@@ -11,7 +10,7 @@ export const metadata = { title: "Private" };
 export default function AccessDeniedPage() {
   return (
     <AuthShell>
-      <Card as="section" padded className="auth-card" aria-labelledby="denied-title">
+      <section className="auth-card" aria-labelledby="denied-title">
         <p className="eyebrow">Private</p>
         <h1 id="denied-title">This app is private</h1>
         <p>This account doesn’t have access.</p>
@@ -21,7 +20,7 @@ export default function AccessDeniedPage() {
         >
           Back to sign in
         </Link>
-      </Card>
+      </section>
     </AuthShell>
   );
 }

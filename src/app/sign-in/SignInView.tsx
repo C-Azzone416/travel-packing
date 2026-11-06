@@ -6,7 +6,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { AuthShell } from "@/features/auth/AuthShell";
 import { PasswordToggle } from "@/features/auth/AuthParts";
 import { SIGN_IN_HINT_BEFORE } from "@/features/auth/copy";
@@ -38,12 +37,35 @@ export function SignInView({
 }: SignInViewProps) {
   return (
     <AuthShell banner={banner}>
-      <Card as="section" padded className="auth-card" aria-labelledby="sign-in-title">
+      <section className="auth-card" aria-labelledby="sign-in-title">
         <p className="eyebrow">Sign in</p>
         <h1 id="sign-in-title">Welcome back</h1>
-        {notice ? (
+        {notice && !error ? (
           <p className="auth-notice" role="status">
+            <span aria-hidden="true">✓ </span>
             {notice}
+          </p>
+        ) : null}
+        {error ? (
+          <p className="auth-error" role="alert">
+            <span className="auth-error-message">
+              <span aria-hidden="true">⚠ </span>
+              {error}
+            </span>
+            {error === INVALID_CREDENTIALS_MESSAGE ? (
+              <span className="auth-error-detail">
+                {SIGN_IN_HINT_BEFORE}
+                <Link className="auth-link inline-link" href="/forgot-password">
+                  reset your password
+                </Link>
+                .
+                {reference ? (
+                  <span className="auth-reference"> Reference: {reference}.</span>
+                ) : null}
+              </span>
+            ) : reference ? (
+              <span className="auth-error-detail auth-reference">Reference: {reference}.</span>
+            ) : null}
           </p>
         ) : null}
         <form className="auth-form" action={action} noValidate>
@@ -72,29 +94,7 @@ export function SignInView({
               />
               <PasswordToggle shown={showPassword} onToggle={onTogglePassword} />
             </div>
-            <Link className="auth-link forgot-link" href="/forgot-password">
-              Forgot password?
-            </Link>
           </div>
-
-          {error ? (
-            <p className="auth-error" role="alert">
-              <span aria-hidden="true">⚠ </span>
-              {error}
-              {error === INVALID_CREDENTIALS_MESSAGE ? (
-                <>
-                  {" "}
-                  {SIGN_IN_HINT_BEFORE}
-                  <Link className="auth-link inline-link" href="/forgot-password">
-                    reset your password
-                  </Link>
-                  .
-                </>
-              ) : null}
-              {reference ? ` Reference: ${reference}.` : null}
-            </p>
-          ) : null}
-
           <Button type="submit" block disabled={pending} aria-busy={pending}>
             {pending ? (
               <>
@@ -106,13 +106,15 @@ export function SignInView({
             )}
           </Button>
         </form>
-        <p className="auth-links">
-          New here?{" "}
+        <nav className="auth-link-row" aria-label="Sign-in help">
+          <Link className="auth-link" href="/forgot-password">
+            Forgot password?
+          </Link>
           <Link className="auth-link" href="/sign-up">
             Create an account
           </Link>
-        </p>
-      </Card>
+        </nav>
+      </section>
     </AuthShell>
   );
 }

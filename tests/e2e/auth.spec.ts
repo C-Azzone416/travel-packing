@@ -45,11 +45,13 @@ test.describe("signed out", () => {
 
   test("a wrong password shows one generic error and stays on sign-in", async ({ page }) => {
     await signIn(page, OWNER_EMAIL, "wrong-password");
-    // Scoped to the form: Next.js also has its own role="alert" route announcer.
-    await expect(page.locator("form p[role='alert']")).toContainText(
+    // Scoped to the auth panel: Next.js also has its own role="alert" route announcer.
+    await expect(page.locator(".auth-card > p[role='alert']")).toContainText(
       "Email or password is incorrect.",
     );
-    await expect(page.locator("form p[role='alert']")).toContainText(/Reference: [0-9a-f]{12}\./);
+    await expect(page.locator(".auth-card > p[role='alert']")).toContainText(
+      /Reference: [0-9a-f]{12}\./,
+    );
     await expect(page).toHaveURL(/\/sign-in$/);
   });
 });
@@ -126,7 +128,7 @@ test.describe("auth screens stand alone", () => {
     await page.goto("/sign-in");
     await shot("sign-in");
     await signIn(page, OWNER_EMAIL, "wrong-password");
-    await expect(page.locator("form p[role='alert']")).toBeVisible();
+    await expect(page.locator(".auth-card > p[role='alert']")).toBeVisible();
     await shot("sign-in-error");
     await signIn(page, OTHER_EMAIL);
     await expect(page).toHaveURL(/\/access-denied$/);

@@ -17,11 +17,11 @@ const stripCssComments = (css: string) => css.replace(/\/\*[\s\S]*?\*\//g, "");
 const PALETTE_TOKENS = [
   "--dark", "--dark2", "--darkEdge", "--ink", "--muted", "--line", "--line2", "--page", "--paper", "--paper2", "--tint",
   "--accent", "--accentSoft", "--gold", "--goldDeep", "--goldSoft", "--good", "--info", "--onDark", "--onDarkMuted",
-  "--ghost", "--sea", "--seaLine", "--coast",
+  "--ghost", "--sea", "--seaLine", "--coast", "--link",
 ].sort(); // prettier-ignore
 /** Role names the pre-redesign screens bind to; each is an alias onto the palette, defined once on :root. */
 const ROLE_ALIASES = [
-  "--bg", "--surface", "--line-strong", "--link", "--accent-2", "--header", "--header-ink", "--header-muted",
+  "--bg", "--surface", "--line-strong", "--accent-2", "--header", "--header-ink", "--header-muted",
   "--focus-on-header", "--action", "--action-ink", "--action-border", "--progress", "--track", "--notice", "--notice-ink",
   "--weather-pill", "--weather-pill-ink", "--complete", "--complete-ink", "--control-bg", "--popover",
   "--selection-surface", "--status-surface", "--detail-surface", "--weather-surface", "--ledger-rule", "--ledger-shadow",
@@ -76,6 +76,12 @@ describe("Suitcase colour schemes", () => {
     expect(pick("ocean")).toEqual(["#142b3b", "#dce5e5", "#b66c4d", "#fff8eb"]);
     expect(pick("evergreen")).toEqual(["#1f3a30", "#eeebe0", "#c0612f", "#f6f1e2"]);
     expect(pick("dusk")).toEqual(["#2f2d4f", "#efeaee", "#e06c55", "#fbf3ec"]);
+  });
+
+  it("uses the accessible link colour accepted for each scheme", () => {
+    expect(schemeRule("ocean")?.decls["--link"]).toBe("#316a7c");
+    expect(schemeRule("evergreen")?.decls["--link"]).toBe("#376a75");
+    expect(schemeRule("dusk")?.decls["--link"]).toBe("#4e5892");
   });
 
   it("gives each scheme its own values (no scheme is a copy of another)", () => {

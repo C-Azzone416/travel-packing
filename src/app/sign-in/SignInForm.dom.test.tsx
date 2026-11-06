@@ -11,6 +11,24 @@ import { SignInForm } from "./SignInForm";
 beforeEach(() => signInAction.mockReset());
 
 describe("SignInForm", () => {
+  it("uses the accepted keyboard order from the fields through both help links", async () => {
+    const user = userEvent.setup();
+    render(<SignInForm />);
+
+    const order = [
+      screen.getByLabelText("Email"),
+      screen.getByLabelText("Password"),
+      screen.getByRole("button", { name: "Show password" }),
+      screen.getByRole("button", { name: "Sign in" }),
+      screen.getByRole("link", { name: "Forgot password?" }),
+      screen.getByRole("link", { name: "Create an account" }),
+    ];
+    for (const element of order) {
+      await user.tab();
+      expect(document.activeElement).toBe(element);
+    }
+  });
+
   it("shows and hides the password", async () => {
     const user = userEvent.setup();
     render(<SignInForm />);
