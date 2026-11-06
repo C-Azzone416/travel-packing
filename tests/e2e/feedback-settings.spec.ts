@@ -42,10 +42,8 @@ async function paintCanaries(page: Page, email: string) {
       p.textContent?.includes(address),
     );
     for (const row of rows) paint(row, "#ff00ff");
-    // An ordinary region that must stay in the picture: the Save status card, next to the Account card.
-    const heading = [...document.querySelectorAll("h2")].find(
-      (h) => h.textContent === "Save status",
-    );
+    // An ordinary region that must stay in the picture: the Saving card, next to the Account card.
+    const heading = document.querySelector("#settings-saving");
     const card = heading?.closest("section") ?? null;
     if (card) (card as HTMLElement).style.setProperty("background", "#00ffff", "important");
     return { emailRows: rows.length, ordinaryCard: card !== null };

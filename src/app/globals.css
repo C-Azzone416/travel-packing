@@ -2141,7 +2141,7 @@ input:disabled {
   white-space: nowrap;
 }
 .home-city-placeholder {
-  color: var(--ghost);
+  color: var(--muted);
 }
 .home-city-change {
   flex: none;
