@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
-import { TripFlow } from "@/features/trips/TripFlow";
+import { PlanScreen } from "@/features/plan/PlanScreen";
 
-export const metadata: Metadata = { title: "New trip" };
+export const metadata: Metadata = { title: "Plan a trip" };
 
-// `?copy=<trip id>` starts the same flow seeded with that trip's preferences.
+// `?copy=<trip id>` starts the same plan seeded with that trip's route and preferences.
 export default async function NewTripPage({
   searchParams,
 }: {
   searchParams: Promise<{ copy?: string | string[] }>;
 }) {
   const { copy } = await searchParams;
-  return <TripFlow copyId={typeof copy === "string" && copy ? copy : undefined} />;
+  return <PlanScreen copyId={typeof copy === "string" && copy ? copy : undefined} />;
 }

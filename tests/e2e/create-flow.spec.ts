@@ -1,10 +1,23 @@
 import { expect, test, type Page } from "@playwright/test";
 import { ownerEmailFor, signIn, signInAsOwner } from "./helpers/auth";
+import { readTripTravel, setOwnerHomeCity } from "./helpers/database";
 import { chooseFromMenu } from "./helpers/menu";
 import { DEVICE } from "./helpers/device";
+import {
+  chooseMode,
+  createButton,
+  nextButton,
+  pickPlace,
+  planToList,
+  reviewAndCreate,
+  setDates,
+  toList,
+  toWhen,
+} from "./helpers/plan";
 
-// Fixed clock: San Diego is upcoming, Lisbon is past. Trips are stored in the e2e database, so what a test saves
-// survives a reload and a new session; each test starts from the freshly seeded state (see signInAsOwner).
+// Plan a trip (#390) against the real database. Fixed clock: San Diego is upcoming, Lisbon is past. Trips are stored in the
+// e2e database, so what a test saves survives a reload and a new session; each test starts from the freshly seeded state (see
+// signInAsOwner).
 const NOW = new Date("2026-10-16T12:00:00");
 
 async function openDashboard(page: Page) {
@@ -13,80 +26,71 @@ async function openDashboard(page: Page) {
   await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
 }
 
+const ownerId = () => `e2e-${ownerEmailFor(test.info().project.name)}`;
+const SEATTLE = {
+  id: "us-wa-seattle",
+  city: "Seattle",
+  region: "Washington",
+  country: "United States",
+  countryCode: "US",
+  label: "Seattle, Washington, United States",
+};
+
 const upcomingCount = (page: Page) => page.getByRole("button", { name: /^Upcoming/ });
 const card = (page: Page, name: string) => page.getByRole("article", { name });
+const plan = (page: Page) => page.getByRole("link", { name: /Plan a trip/ }).click();
+const aboutItems = (page: Page) =>
+  page
+    .getByRole("complementary", { name: "Live preview of your trip" })
+    .getByText(/^About \d+ items? to start$/);
 
-async function pick(page: Page, text: string, option: RegExp) {
-  await page.getByRole("combobox", { name: "Destination search" }).fill(text);
-  await page.getByRole("option", { name: option }).click();
-}
-
-async function setDates(page: Page, start: string, end: string) {
-  await page.getByLabel("Leave", { exact: true }).fill(start);
-  await page.getByLabel("Return", { exact: true }).fill(end);
-}
-
-test("cancel at step 1 leaves the dashboard unchanged", async ({ page }) => {
+test("leaving mid-plan saves nothing: the dashboard is unchanged", async ({ page }) => {
   await openDashboard(page);
-  await page.getByRole("link", { name: /Plan a trip/ }).click();
-  await expect(page.getByRole("heading", { name: "Confirm the trip" })).toBeVisible();
-  await page.getByRole("combobox", { name: "Destination search" }).fill("lon");
-  await page.getByRole("button", { name: "Cancel draft", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "Discard this draft?" });
-  await expect(dialog.getByRole("button", { name: "Keep editing" })).toBeFocused();
-  await dialog.getByRole("button", { name: "Discard" }).click();
-  await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
-  await expect(upcomingCount(page)).toContainText("1");
-  await expect(page.getByRole("heading", { name: "London" })).toHaveCount(0);
-});
-
-test("cancel at step 2 leaves the dashboard unchanged", async ({ page }) => {
-  await openDashboard(page);
-  await page.getByRole("link", { name: /Plan a trip/ }).click();
-  await pick(page, "lon", /England/);
+  await plan(page);
+  await expect(page.getByRole("heading", { name: "Plan a trip", level: 1 })).toBeVisible();
+  await pickPlace(page, "lon", /England/);
+  await toWhen(page);
   await setDates(page, "2026-11-12", "2026-11-16");
-  await page.getByRole("button", { name: "Continue to packing preferences" }).click();
-  await expect(page.getByRole("heading", { name: "Shape the list" })).toBeVisible();
-  await page.getByRole("button", { name: "Cancel draft", exact: true }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "Discard" }).click();
+  // The close button (phone) or the Trips link (laptop) asks nothing: the plan lives in memory until Create trip.
+  await page
+    .getByRole("main")
+    .getByRole("link", { name: /^(Close and return to trips|Trips)$/ })
+    .click();
+  await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(upcomingCount(page)).toContainText("1");
   await expect(page.getByRole("heading", { name: "London" })).toHaveCount(0);
-});
-
-test("an untouched draft cancels straight away, with no prompt", async ({ page }) => {
-  await openDashboard(page);
-  await page.getByRole("link", { name: /Plan a trip/ }).click();
-  await page.getByRole("button", { name: "Cancel draft", exact: true }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
 });
 
 test("the ambiguous London requires an explicit choice", async ({ page }) => {
   await openDashboard(page);
-  await page.getByRole("link", { name: /Plan a trip/ }).click();
+  await plan(page);
   await page.getByRole("combobox", { name: "Destination search" }).fill("london");
   const options = page.getByRole("option");
   await expect(options).toHaveCount(2);
   await expect(options.nth(0)).toContainText("England, United Kingdom");
   await expect(options.nth(1)).toContainText("Ontario, Canada");
-  await setDates(page, "2026-11-12", "2026-11-16");
-  const next = page.getByRole("button", { name: "Continue to packing preferences" });
+  const next = nextButton(page);
   await expect(next).toHaveAttribute("aria-disabled", "true");
   // Playwright treats aria-disabled as not enabled; force the press to prove it only surfaces the reason.
   await next.click({ force: true });
-  await expect(page.getByRole("heading", { name: "Confirm the trip" })).toBeVisible();
-  await expect(page.getByText("Choose a destination from the list to continue.")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Where" })).toHaveAttribute("aria-current", "step");
+  await expect(page.getByText("Choose a destination from the list to continue.")).toHaveCount(1);
   await options.nth(1).click();
-  await expect(page.getByText("Destination confirmed")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Change London" })).toBeVisible();
   await next.click();
-  await expect(page.getByText(/London, Ontario, Canada/)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "When", level: 2 })).toBeFocused();
+  await setDates(page, "2026-11-12", "2026-11-16");
+  await toList(page);
+  await reviewAndCreate(page);
+  await expect(card(page, "London").getByText(/Ontario, Canada/)).toBeVisible();
 });
 
-test("keyboard: arrow keys and Enter pick a destination without submitting the form", async ({
+test("keyboard: arrow keys and Enter pick a destination without moving to the next step", async ({
   page,
 }) => {
   await openDashboard(page);
-  await page.getByRole("link", { name: /Plan a trip/ }).click();
+  await plan(page);
   const box = page.getByRole("combobox", { name: "Destination search" });
   await box.fill("london");
   // Results arrive after the search debounce and a server round trip; arrows act on what is listed.
@@ -94,14 +98,16 @@ test("keyboard: arrow keys and Enter pick a destination without submitting the f
   await box.press("ArrowDown");
   await box.press("ArrowDown");
   await box.press("Enter");
-  await expect(page.getByText("Destination confirmed")).toBeVisible();
-  await expect(page.getByText(/Ontario · Canada/)).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Confirm the trip" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Change London" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Where" })).toHaveAttribute("aria-current", "step");
+  await expect(page.getByLabel("Leave", { exact: true })).toHaveCount(0);
 });
 
 test("an earlier return moves to the departure, with a visible notice", async ({ page }) => {
   await openDashboard(page);
-  await page.getByRole("link", { name: /Plan a trip/ }).click();
+  await plan(page);
+  await pickPlace(page, "lon", /England/);
+  await toWhen(page);
   await setDates(page, "2026-11-12", "2026-11-10");
   await expect(page.getByLabel("Return", { exact: true })).toHaveValue("2026-11-12");
   await expect(page.getByRole("status", { name: "Date notice" })).toHaveText(
@@ -109,36 +115,60 @@ test("an earlier return moves to the departure, with a visible notice", async ({
   );
 });
 
-test("create: pick, set dates, shape, save -> the trip is on the dashboard with nothing packed", async ({
+test("each step moves focus to its heading, and Back returns to the one before", async ({
   page,
 }) => {
   await openDashboard(page);
-  await page.getByRole("link", { name: /Plan a trip/ }).click();
-  await pick(page, "lon", /England/);
+  await plan(page);
+  await pickPlace(page, "lon", /England/);
+  await nextButton(page).click();
+  await expect(page.getByRole("heading", { name: "When", level: 2 })).toBeFocused();
   await setDates(page, "2026-11-12", "2026-11-16");
-  await page.getByRole("button", { name: "Continue to packing preferences" }).click();
-  await expect(page.getByRole("heading", { name: "4 days of everyday clothes" })).toBeVisible();
-  // #295: the travel outfit is worn, not packed, and the card says so.
-  await expect(page.locator(".callout").filter({ hasText: "How we count" })).toContainText(
-    "worn, not packed",
-  );
+  await nextButton(page).click();
+  await expect(page.getByRole("heading", { name: "How", level: 2 })).toBeFocused();
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "When", level: 2 })).toBeFocused();
+  await nextButton(page).click();
+  await chooseMode(page, "Drive");
+  await nextButton(page).click();
+  await expect(page.getByRole("heading", { name: "Starting list", level: 2 })).toBeFocused();
+  await nextButton(page).click();
+  await expect(page.getByRole("heading", { name: "Review", level: 2 })).toBeFocused();
+});
 
-  await page.getByRole("switch", { name: "Laundry access" }).check();
-  await expect(page.getByRole("status", { name: "List changes" })).toContainText("Everyday tops");
-  await page.getByRole("button", { name: "Save trip" }).click();
+test("create: where, when, how, the list, review -> the trip is on the dashboard with nothing packed, and the preview was right", async ({
+  page,
+}) => {
+  await openDashboard(page);
+  await plan(page);
+  await planToList(page, {
+    query: "lon",
+    option: /England/,
+    start: "2026-11-12",
+    end: "2026-11-16",
+  });
+  const count = async () =>
+    Number(/About (\d+) items/.exec((await aboutItems(page).textContent()) ?? "")![1]);
+  const without = await count();
+  await page.getByRole("checkbox", { name: /I’ll have laundry/ }).check();
+  await expect.poll(count).toBeLessThan(without);
+  const preview = await count();
+  await nextButton(page).click();
+  await createButton(page).click();
 
   await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
   await expect(upcomingCount(page)).toContainText("2");
   await expect(page.locator(".toast-region")).toContainText("Trip saved");
   const london = card(page, "London");
   await expect(london).toBeVisible();
-  await expect(london.getByText(/^0 of \d+ packed$/)).toBeVisible();
+  // What the preview said is what was created: the same number of items, none packed.
+  await expect(london.getByText(`0 of ${preview} packed`)).toBeVisible();
   await expect(london.getByText("Oct 23")).toHaveCount(0);
 
   // It is in the database, not just in the page: it survives a reload.
   await page.reload();
   await expect(upcomingCount(page)).toContainText("2");
-  await expect(card(page, "London").getByText(/^0 of \d+ packed$/)).toBeVisible();
+  await expect(card(page, "London").getByText(`0 of ${preview} packed`)).toBeVisible();
   await expect(card(page, "San Diego")).toBeVisible();
 });
 
@@ -147,11 +177,14 @@ test("create: the saved trip is there in a brand-new session (another device)", 
   browser,
 }) => {
   await openDashboard(page);
-  await page.getByRole("link", { name: /Plan a trip/ }).click();
-  await pick(page, "lon", /England/);
-  await setDates(page, "2026-11-12", "2026-11-16");
-  await page.getByRole("button", { name: "Continue to packing preferences" }).click();
-  await page.getByRole("button", { name: "Save trip" }).click();
+  await plan(page);
+  await planToList(page, {
+    query: "lon",
+    option: /England/,
+    start: "2026-11-12",
+    end: "2026-11-16",
+  });
+  await reviewAndCreate(page, "Winter in London");
   await expect(card(page, "London")).toBeVisible();
 
   const other = await browser.newContext({ viewport: page.viewportSize() ?? undefined });
@@ -167,21 +200,65 @@ test("create: the saved trip is there in a brand-new session (another device)", 
   }
 });
 
-test("copy: a new trip with clear progress, and the source trip unchanged", async ({ page }) => {
+test("From is the home city, changeable for this one trip; the trip keeps its origin, how and name", async ({
+  page,
+}) => {
+  await openDashboard(page);
+  await setOwnerHomeCity(ownerId(), SEATTLE);
+  await plan(page);
+  const from = page.getByRole("button", { name: /^From: Seattle \(home\)/ });
+  await expect(from).toBeVisible();
+  await expect(from).toContainText("· home");
+  await pickPlace(page, "lon", /England/);
+  await toWhen(page);
+  await setDates(page, "2026-11-12", "2026-11-16");
+  await toList(page, "Drive");
+  await reviewAndCreate(page, "Weekend away");
+  await expect(card(page, "London")).toBeVisible();
+  expect(await readTripTravel(ownerId(), "London")).toEqual({
+    origin: "Seattle",
+    mode: "drive",
+    name: "Weekend away",
+  });
+
+  // Changing From for a trip changes that trip only: the account's home city is still Seattle on the next plan.
+  await plan(page);
+  await page.getByRole("button", { name: /^From: Seattle/ }).click();
+  await pickPlace(page, "chic", /Illinois/, "From");
+  await expect(page.getByRole("button", { name: "From: Chicago. Change" })).toBeVisible();
+  await pickPlace(page, "par", /Paris/);
+  await toWhen(page);
+  await setDates(page, "2026-12-04", "2026-12-08");
+  await toList(page, "Train or other");
+  await reviewAndCreate(page);
+  await expect(card(page, "Paris")).toBeVisible();
+  expect(await readTripTravel(ownerId(), "Paris")).toEqual({
+    origin: "Chicago",
+    mode: "other",
+    name: null,
+  });
+  await plan(page);
+  await expect(page.getByRole("button", { name: /^From: Seattle \(home\)/ })).toBeVisible();
+});
+
+test("copy: a new trip from the plan, and the source trip unchanged", async ({ page }) => {
   await openDashboard(page);
   const source = card(page, "San Diego");
   const before = await source.innerText();
   await chooseFromMenu(page, "San Diego", "Copy trip");
 
-  await expect(page.getByText("Copy of San Diego")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Plan a trip", level: 1 })).toBeVisible();
   await expect(page.getByRole("combobox", { name: "Destination search" })).toHaveValue("");
-  await expect(page.getByLabel("Leave", { exact: true })).toHaveValue("");
-  await expect(page.getByText(/The original San Diego trip stays unchanged/)).toBeVisible();
-  await pick(page, "paris", /Paris/);
-  await setDates(page, "2026-12-04", "2026-12-08");
-  await page.getByRole("button", { name: "Continue to packing preferences" }).click();
-  await expect(page.getByText("Unsaved copy of San Diego")).toBeVisible();
-  await page.getByRole("button", { name: "Save trip" }).click();
+  await planToList(page, {
+    query: "paris",
+    option: /Paris/,
+    start: "2026-12-04",
+    end: "2026-12-08",
+  });
+  // The copy is the Starting list's own choice: San Diego's preferences, ticked, and the way to untick it.
+  await expect(page.getByRole("checkbox", { name: /Copy a past trip/ })).toBeChecked();
+  await expect(page.getByRole("radio", { name: /San Diego/ })).toBeChecked();
+  await reviewAndCreate(page);
 
   await expect(upcomingCount(page)).toContainText("2");
   await expect(card(page, "Paris").getByText(/^0 of \d+ packed$/)).toBeVisible();
@@ -194,57 +271,68 @@ test("copy: a new trip with clear progress, and the source trip unchanged", asyn
   expect(await card(page, "San Diego").innerText()).toBe(before);
 });
 
+test("Copy a past trip offers the latest past trip, and copies its preferences", async ({
+  page,
+}) => {
+  await openDashboard(page);
+  await plan(page);
+  await planToList(page, {
+    query: "paris",
+    option: /Paris/,
+    start: "2026-12-04",
+    end: "2026-12-08",
+  });
+  const copy = page.getByRole("checkbox", { name: /Copy a past trip/ });
+  await expect(copy).not.toBeChecked();
+  await expect(copy).toHaveAccessibleDescription(/^Lisbon · Sep 2026 · \d+ items$/);
+  await copy.check();
+  await expect(page.getByRole("radio", { name: /Lisbon · Sep 2026/ })).toBeChecked();
+  await reviewAndCreate(page);
+  await expect(card(page, "Paris")).toBeVisible();
+});
+
 test(
-  "preference switches are keyboard operable with 44px targets, and no step scrolls sideways at 320px",
+  "no step scrolls sideways at 320px, and the controls are 44px or taller",
   DEVICE,
   async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 700 });
     await openDashboard(page);
-    await page.getByRole("link", { name: /Plan a trip/ }).click();
+    await plan(page);
     const overflow = () =>
       page.evaluate(
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
       );
+    const tall = async (locator: ReturnType<Page["locator"]>) => {
+      const box = (await locator.boundingBox())!;
+      expect(box.height).toBeGreaterThanOrEqual(43.9);
+    };
     expect(await overflow()).toBeLessThanOrEqual(0);
-    await pick(page, "lon", /England/);
+    await pickPlace(page, "lon", /England/);
+    await expect(page.getByRole("button", { name: "Add a stop" })).toBeVisible();
+    await tall(page.getByRole("button", { name: "Add a stop" }));
+    await tall(nextButton(page));
+    expect(await overflow()).toBeLessThanOrEqual(0);
+    await toWhen(page);
     await setDates(page, "2026-11-12", "2026-11-16");
     expect(await overflow()).toBeLessThanOrEqual(0);
-    await page.getByRole("button", { name: "Continue to packing preferences" }).click();
-    await expect(page.getByRole("heading", { name: "Shape the list" })).toBeVisible();
+    await nextButton(page).click();
+    for (const mode of await page.getByRole("radio").all()) await tall(mode.locator("xpath=.."));
+    expect(await overflow()).toBeLessThanOrEqual(0);
+    await chooseMode(page);
+    await nextButton(page).click();
+    await expect(page.getByRole("heading", { name: "Starting list", level: 2 })).toBeVisible();
     expect(await overflow()).toBeLessThanOrEqual(0);
 
-    const laundry = page.getByRole("switch", { name: "Laundry access" });
+    const laundry = page.getByRole("checkbox", { name: /I’ll have laundry/ });
     await laundry.focus();
     await page.keyboard.press("Space");
     await expect(laundry).toBeChecked();
-    for (const control of await page.getByRole("switch").all()) {
-      const box = (await control.locator("xpath=..").boundingBox())!;
-      expect(box.height).toBeGreaterThanOrEqual(43.9);
-    }
+    await tall(laundry.locator("xpath=ancestor::label"));
+    await nextButton(page).click();
+    await expect(page.getByRole("heading", { name: "Review", level: 2 })).toBeVisible();
+    expect(await overflow()).toBeLessThanOrEqual(0);
   },
 );
-
-test("screenshots of the create flow", DEVICE, async ({ page }, testInfo) => {
-  await page.emulateMedia({ reducedMotion: "reduce" });
-  await openDashboard(page);
-  await page.getByRole("link", { name: /Plan a trip/ }).click();
-  await page.getByRole("combobox", { name: "Destination search" }).fill("lon");
-  // Take the picture only once the results are on screen: a full-page WebKit screenshot taken mid-search was the
-  // likely cause of the option never appearing (#120).
-  await expect(page.getByRole("option", { name: /Ontario/ })).toBeVisible();
-  await page.screenshot({
-    path: `test-results/screenshots/${testInfo.project.name}-create-step1.png`,
-    fullPage: true,
-  });
-  await page.getByRole("option", { name: /Ontario/ }).click();
-  await setDates(page, "2026-11-12", "2026-11-10");
-  await page.getByRole("button", { name: "Continue to packing preferences" }).click();
-  await expect(page.getByRole("heading", { name: "Shape the list" })).toBeVisible();
-  await page.screenshot({
-    path: `test-results/screenshots/${testInfo.project.name}-create-step2.png`,
-    fullPage: true,
-  });
-});
 
 test("place search goes only through this app's own endpoint, never to a geocoder", async ({
   page,
@@ -258,7 +346,7 @@ test("place search goes only through this app's own endpoint, never to a geocode
       external.push(url.hostname);
   });
   await openDashboard(page);
-  await page.getByRole("link", { name: /Plan a trip/ }).click();
+  await plan(page);
   await page.getByRole("combobox", { name: "Destination search" }).fill("Lon");
   await expect(page.getByRole("option")).toHaveCount(3);
   await expect(page.getByRole("option").nth(0)).toContainText("England, United Kingdom");
@@ -274,7 +362,7 @@ test("shows a clear error with Retry when search is unavailable, never falling b
   page,
 }) => {
   await openDashboard(page);
-  await page.getByRole("link", { name: /Plan a trip/ }).click();
+  await plan(page);
   let down = true;
   await page.route("**/api/locations/search**", (route) =>
     down ? route.fulfill({ status: 502, json: { error: "unavailable" } }) : route.continue(),
@@ -285,11 +373,8 @@ test("shows a clear error with Retry when search is unavailable, never falling b
     .filter({ hasText: "Location search is unavailable right now. Try again." });
   await expect(alert).toBeVisible();
   await expect(page.getByRole("option")).toHaveCount(0);
-  await setDates(page, "2026-11-12", "2026-11-16");
-  await page
-    .getByRole("button", { name: "Continue to packing preferences" })
-    .click({ force: true });
-  await expect(page.getByRole("heading", { name: "Confirm the trip" })).toBeVisible();
+  await nextButton(page).click({ force: true });
+  await expect(page.getByRole("region", { name: "Where" })).toHaveAttribute("aria-current", "step");
   down = false;
   await alert.getByRole("button", { name: "Retry" }).click();
   await expect(page.getByRole("option")).toHaveCount(1);
@@ -300,7 +385,7 @@ test("on an unavailable provider, the popular destinations are an explicit alter
   page,
 }) => {
   await openDashboard(page);
-  await page.getByRole("link", { name: /Plan a trip/ }).click();
+  await plan(page);
   await page.route("**/api/locations/search**", (route) =>
     route.fulfill({ status: 502, json: { error: "unavailable" } }),
   );
@@ -308,5 +393,5 @@ test("on an unavailable provider, the popular destinations are an explicit alter
   await page.getByRole("button", { name: "Choose from popular destinations" }).click();
   await expect(page.getByText("Showing popular destinations.")).toBeVisible();
   await page.getByRole("option", { name: /Paris/ }).click();
-  await expect(page.getByText("Destination confirmed")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Change Paris" })).toBeVisible();
 });

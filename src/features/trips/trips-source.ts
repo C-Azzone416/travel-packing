@@ -33,7 +33,7 @@ import {
 } from "@/domain/readiness";
 import { categoryCounts, listNameTaken, tripItemsFromList } from "@/domain/saved-lists";
 import { automaticStamps, normaliseStampLabel } from "@/domain/stamps";
-import { isThemeId, type ThemeId } from "@/domain/themes";
+import { DEFAULT_THEME, isThemeId, type ThemeId } from "@/domain/themes";
 import type { Scope, Staple, TripConfig } from "@/domain/trip";
 import {
   archiveTrip,
@@ -46,6 +46,7 @@ import {
   type LifecycleTrip,
   type TripDraft,
 } from "@/domain/trip-lifecycle";
+import type { TripOrigin } from "@/domain/trip-route";
 import { routeLabel, tripDatesFromStops, validateStops, type TripStop } from "@/domain/trip-stops";
 import { localToday } from "@/lib/today";
 import type { SavedListDetail, SavedListSummary } from "@/server/data/service";
@@ -93,6 +94,9 @@ export interface TripsSource {
   undoRemove(tripId: string): Promise<LifecycleState>;
   /** Persist a finished draft as a new trip. Rejects (and changes nothing) if the draft is incomplete. */
   createTrip(draft: TripDraft): Promise<LifecycleTrip>;
+
+  /** The account's home city (the default "From" of a new trip), or null. Absent on sources without one. */
+  homeCity?(): Promise<TripOrigin | null>;
 
   /** One live trip. Rejects with NOT_FOUND for an id that is not there. */
   getTrip(tripId: string): Promise<LifecycleTrip>;
@@ -179,6 +183,8 @@ export interface MemorySourceOptions {
   staples?: readonly Staple[];
   /** The owner's saved lists (#170). Left out, the source has none and the create flow shows no list step. */
   savedLists?: readonly SavedListDetail[];
+  /** The account's home city (#390). Left out, the source has none: it answers null. */
+  homeCity?: TripOrigin | null;
 }
 
 const summaryOf = (
@@ -205,6 +211,7 @@ export function createMemoryTripsSource(
     today = localToday,
     staples = SYNTHETIC_STAPLES,
     savedLists,
+    homeCity = null,
   }: MemorySourceOptions,
 ): TripsSource & { snapshot(): LifecycleState; staplesSnapshot(): Staple[] } {
   let state = initial;
@@ -279,6 +286,7 @@ export function createMemoryTripsSource(
     staplesSnapshot: () => currentStaples,
     ...(lists ? { savedLists: lists } : {}),
     load: async () => state,
+    homeCity: async () => homeCity,
     archive: (id) => apply(archiveTrip(state, id)),
     restore: (id) => apply(restoreTrip(state, id)),
     remove: (id) => apply(removeTrip(state, id, now())),
@@ -293,6 +301,7 @@ export function createMemoryTripsSource(
         [...currentStaples],
         { newId, today: today() },
         list ? tripItemsFromList(list) : undefined,
+        draft.mode === "copy" && draft.sourceId ? find(draft.sourceId).theme : DEFAULT_THEME,
       );
       if (!result.ok) throw new TripsSourceError(result.reason);
       state = { ...result.state, draft: null };

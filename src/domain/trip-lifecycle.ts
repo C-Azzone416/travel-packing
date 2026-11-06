@@ -13,6 +13,7 @@ import {
   parseDate,
 } from "./calc";
 import type { StampLabels } from "./stamps";
+import type { TravelMode } from "./trip-route";
 import { DEFAULT_THEME, type ThemeId } from "./themes";
 import { TOILETRY_GROUP_ID } from "./toiletry-bag";
 import type { Staple, Trip, TripConfig, TripItem } from "./trip";
@@ -34,7 +35,7 @@ export interface LifecycleTrip extends Trip {
   location: SampleLocation | null;
   copiedFrom: string | null;
   archived: boolean;
-  /** The trip's picture (#48). */
+  /** Legacy stored value retained until a separate data migration removes the compatibility column. */
   theme: ThemeId;
   /** The owner's stamp label overrides (#151); absent or [null, null] = automatic. A new or copied trip never has them. */
   stampLabels?: StampLabels;
@@ -61,13 +62,20 @@ export interface TripDraft {
   start: string;
   end: string;
   config: TripConfig;
-  /** Chosen on step 1; Travel until changed, and a copy starts from the source trip's theme. */
-  theme: ThemeId;
   /**
    * The one saved list this new trip starts from (#170), or absent for today's staples plus recommendations. Only a
    * new (not copied) trip can have one. Just the id: the server loads the list itself, owner-scoped.
    */
   savedListId?: string | null;
+  /**
+   * Where the trip leaves from and returns to (#390). Absent = the account's home city (the server fills it in); null = no
+   * origin. Only the place id goes to the server, which resolves the place itself.
+   */
+  origin?: SampleLocation | null;
+  /** Fly / Drive / Train or other. Absent = none chosen (a copy then keeps its source's). */
+  travelMode?: TravelMode | null;
+  /** The owner's own name for the trip; blank or absent shows the stops. */
+  name?: string | null;
 }
 
 export interface DeletedTrip {
@@ -131,12 +139,7 @@ function withStops(draft: TripDraft, stops: DraftStop[]): TripDraft {
 }
 
 /** Start a new draft. Dates are normalized (a return before departure becomes departure). */
-export function startDraft(
-  config: TripConfig,
-  start: string,
-  end: string,
-  theme: ThemeId = DEFAULT_THEME,
-): TripDraft {
+export function startDraft(config: TripConfig, start: string, end: string): TripDraft {
   const dates = normalizeTripDates(start, end);
   return {
     mode: "create",
@@ -145,28 +148,24 @@ export function startDraft(
     start: dates.start,
     end: dates.end,
     config: { ...config },
-    theme,
   };
 }
 
 /**
- * Start a copy draft: the source's preference config and theme are carried over. A single-stop source asks for a
+ * Start a copy draft: the source's preference config is carried over. Its stored legacy theme is compatibility data,
+ * not editable draft state; the persistence layer preserves it when the copy is saved. A single-stop source asks for a
  * location and dates anew; a multi-stop source keeps its route, every stop shifted by the same offset so the first
  * arrival lands on `start` (`end` then follows from the stops).
  */
 export function startCopyDraft(source: LifecycleTrip, start: string, end: string): TripDraft {
   const draft: TripDraft = {
-    ...startDraft(source.config, start, end, source.theme),
+    ...startDraft(source.config, start, end),
     mode: "copy",
     sourceId: source.id,
   };
   const stops = source.stops ?? [];
   if (stops.length < 2 || !parseDate(start)) return draft;
   return withStops(draft, shiftStops(stops, daysBetween(stops[0].arrive, start)));
-}
-
-export function setDraftTheme(draft: TripDraft, theme: ThemeId): TripDraft {
-  return { ...draft, theme };
 }
 
 /** Start from this saved list (or, with null, from staples and recommendations again). A copy never has one. */
@@ -313,6 +312,8 @@ export function saveDraft(
   deps: TripBuilderDeps,
   /** A saved list's items (#170): the trip starts from exactly these, with no staples or length-based items. */
   listItems?: readonly TripItem[],
+  /** Stored-data compatibility only: copies keep their source value; new trips default to Travel. */
+  compatibilityTheme?: ThemeId,
 ): LifecycleResult {
   const draft = state.draft;
   if (!draft) return { ok: false, reason: "NO_DRAFT", state };
@@ -330,6 +331,10 @@ export function saveDraft(
     return { ok: false, reason: "INVALID_DATES", state };
   }
   const dates = tripDatesFromStops(confirmed);
+  const theme =
+    compatibilityTheme ??
+    state.trips.find((trip) => trip.id === draft.sourceId)?.theme ??
+    DEFAULT_THEME;
 
   const trip = buildTrip(
     routeLabel(confirmed),
@@ -340,7 +345,7 @@ export function saveDraft(
     staples,
     deps,
     draft.sourceId,
-    draft.theme,
+    theme,
     confirmed,
     listItems,
   );

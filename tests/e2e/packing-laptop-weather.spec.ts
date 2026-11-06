@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
 import { FAKE_GEOCODER_PORT, OPEN_METEO_PORT } from "./support/ports";
+import { planRouteToList, reviewAndCreate } from "./helpers/plan";
 
 // The laptop Packing view's weather review rows (#385) on the second app, which talks to the fake Open-Meteo. A trip made with
 // weather off gets its forecast as suggestions: they are on the card as rows, they do not count until added, Add puts the item
@@ -17,17 +18,16 @@ async function tripWithPendingSuggestions(page: Page) {
   await fetch(`${FAKE}/__weather-reset`);
   await signInAsOwner(page);
   await page.getByRole("link", { name: /Plan a trip/ }).click();
-  await page.getByRole("combobox", { name: "Destination search" }).fill("london");
-  await page.getByRole("option", { name: /England/ }).click();
-  await page.getByLabel("Leave", { exact: true }).fill(inDays(3));
-  await page.getByLabel("Return", { exact: true }).fill(inDays(6));
-  await page.getByRole("button", { name: "+ Add another stop" }).click();
-  await page.getByRole("combobox", { name: "Destination search, Stop 2" }).fill("london");
-  await page.getByRole("option", { name: /Ontario/ }).click();
-  await page.getByLabel("Leave, Stop 2").fill(inDays(9));
-  await page.getByRole("button", { name: "Continue to packing preferences" }).click();
+  await planRouteToList(
+    page,
+    [
+      { query: "london", option: /England/ },
+      { query: "london", option: /Ontario/ },
+    ],
+    [inDays(3), inDays(6), inDays(9)],
+  );
   await page.getByRole("button", { name: "Not now" }).click();
-  await page.getByRole("button", { name: "Save trip" }).click();
+  await reviewAndCreate(page);
   await page
     .getByRole("link", { name: /^(Continue|Keep) packing: London/ })
     .first()

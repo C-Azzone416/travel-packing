@@ -3,6 +3,7 @@ import { expectAccessible } from "./helpers/a11y";
 import { ownerEmailFor, signInAsOwner } from "./helpers/auth";
 import { markTripReady } from "./helpers/database";
 import { DEVICE, legacyPackingLayout } from "./helpers/device";
+import { planRouteToList, reviewAndCreate } from "./helpers/plan";
 import { FAKE_GEOCODER_PORT, OPEN_METEO_PORT } from "./support/ports";
 
 // Weather for every stop (epic #107, #113). The app runs a second time with LOCATION_PROVIDER=open-meteo and
@@ -26,20 +27,20 @@ test.beforeEach(async () => {
 async function newTrip(page: Page) {
   await signInAsOwner(page);
   await page.getByRole("link", { name: /Plan a trip/ }).click();
-  await expect(page.getByRole("heading", { name: "Confirm the trip" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Plan a trip", level: 1 })).toBeVisible();
 }
 
+const weatherCard = (page: Page) => page.getByRole("checkbox", { name: /Weather suggestions/ });
+
 async function fillTwoStops(page: Page) {
-  await page.getByRole("combobox", { name: "Destination search" }).fill("london");
-  await page.getByRole("option", { name: /England/ }).click();
-  await page.getByLabel("Leave", { exact: true }).fill(inDays(3));
-  await page.getByLabel("Return", { exact: true }).fill(inDays(6));
-  await page.getByRole("button", { name: "+ Add another stop" }).click();
-  await page.getByRole("combobox", { name: "Destination search, Stop 2" }).fill("london");
-  await page.getByRole("option", { name: /Ontario/ }).click();
-  await page.getByLabel("Leave, Stop 2").fill(inDays(9));
-  await page.getByRole("button", { name: "Continue to packing preferences" }).click();
-  await expect(page.getByRole("heading", { name: "Shape the list" })).toBeVisible();
+  await planRouteToList(
+    page,
+    [
+      { query: "london", option: /England/ },
+      { query: "london", option: /Ontario/ },
+    ],
+    [inDays(3), inDays(6), inDays(9)],
+  );
 }
 
 const row = (page: Page, id: string) => page.locator(`[data-item-id="${id}"]`);
@@ -49,8 +50,8 @@ async function createWeatherTrip(page: Page) {
   await newTrip(page);
   await fillTwoStops(page);
   await page.getByRole("button", { name: "Get weather" }).click();
-  await expect(page.getByText("Your list uses the weather for London and London.")).toBeVisible();
-  await page.getByRole("button", { name: "Save trip" }).click();
+  await expect(weatherCard(page)).toBeChecked();
+  await reviewAndCreate(page);
   await page
     .getByRole("link", { name: /^(Continue|Keep) packing: London/ })
     .first()
@@ -65,25 +66,16 @@ test("opt in while shaping a 2-stop trip: weather-based lines with reasons, save
   await newTrip(page);
   await fillTwoStops(page);
   // Nothing is asked of the weather service until the person says yes.
-  await expect(page.getByRole("heading", { name: "Get weather for your stops?" })).toBeVisible();
+  await expect(weatherCard(page)).toBeDisabled();
+  await expect(
+    page.getByText(/Only map coordinates and dates are sent to Open-Meteo/),
+  ).toBeVisible();
   expect(await weatherCalls()).toHaveLength(0);
-  await expect(page.getByText("Everyday tops")).toBeVisible();
 
   await page.getByRole("button", { name: "Get weather" }).click();
-  await expect(page.getByText("Your list uses the weather for London and London.")).toBeVisible();
-  for (const name of [
-    "Short-sleeve tops",
-    "Long-sleeve tops",
-    "Shorts",
-    "Pants",
-    "Compact umbrella",
-    "Rain jacket",
-    "Sunscreen",
-  ]) {
-    await expect(page.getByText(name, { exact: true }).first()).toBeVisible();
-  }
-  await expect(page.getByText(/Rain likely in London/).first()).toBeVisible();
-  await expect(page.getByText("Everyday tops")).toHaveCount(0);
+  await expect(weatherCard(page)).toBeChecked();
+  // The card says what the weather added (the forecast rows beside the preview are in the laptop layout; see plan-shots).
+  await expect(weatherCard(page)).toHaveAccessibleDescription(/ · \d+ added$/);
   // Only coordinates and dates were sent: no name, no trip, no identity.
   const calls = (await weatherCalls()) as { params: Record<string, string> }[];
   expect(calls.length).toBeGreaterThan(0);
@@ -98,7 +90,7 @@ test("opt in while shaping a 2-stop trip: weather-based lines with reasons, save
     ]);
   }
 
-  await page.getByRole("button", { name: "Save trip" }).click();
+  await reviewAndCreate(page);
   await page
     .getByRole("link", { name: /^(Continue|Keep) packing: London/ })
     .first()
@@ -181,9 +173,8 @@ test("opting out sends no weather request and keeps the Everyday tops and bottom
   await newTrip(page);
   await fillTwoStops(page);
   await page.getByRole("button", { name: "Not now" }).click();
-  await expect(page.getByText("Weather is off")).toBeVisible();
-  await expect(page.getByText("Everyday tops")).toBeVisible();
-  await page.getByRole("button", { name: "Save trip" }).click();
+  await expect(page.getByText("Weather is off.")).toBeVisible();
+  await reviewAndCreate(page);
   await page
     .getByRole("link", { name: /^(Continue|Keep) packing: London/ })
     .first()
@@ -236,11 +227,11 @@ test(
     test.slow();
     await newTrip(page);
     await fillTwoStops(page);
-    await expectAccessible(page, "shape step with the weather prompt");
+    await expectAccessible(page, "plan: starting list with the weather prompt");
     await page.getByRole("button", { name: "Get weather" }).click();
-    await expect(page.getByText("Your list uses the weather for London and London.")).toBeVisible();
-    await expectAccessible(page, "shape step with weather");
-    await page.getByRole("button", { name: "Save trip" }).click();
+    await expect(weatherCard(page)).toBeChecked();
+    await expectAccessible(page, "plan: starting list with weather");
+    await reviewAndCreate(page);
     await page
       .getByRole("link", { name: /^(Continue|Keep) packing: London/ })
       .first()

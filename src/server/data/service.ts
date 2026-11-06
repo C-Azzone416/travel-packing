@@ -40,13 +40,13 @@ import {
   setDraftConfig,
   setDraftSavedList,
   setDraftStops,
-  setDraftTheme,
   startCopyDraft,
   startDraft,
   type LifecycleTrip,
   type SampleLocation,
   type TripDraft,
 } from "../../domain/trip-lifecycle";
+import { DEFAULT_THEME, type ThemeId } from "../../domain/themes";
 import {
   routeLabel,
   tripDatesFromStops,
@@ -592,11 +592,12 @@ async function saveNewTrip(
   draft: TripDraft,
   travel: TravelRequest,
   inheritedMode: TravelMode | null = null,
+  compatibilityTheme: ThemeId = DEFAULT_THEME,
 ): Promise<StoredTrip> {
   const trip = await withTravel(
     scope,
     context,
-    await buildNewTrip(scope, context, draft),
+    await buildNewTrip(scope, context, draft, compatibilityTheme),
     travel,
     inheritedMode,
   );
@@ -645,6 +646,7 @@ async function buildNewTrip(
   scope: OwnerScope,
   context: DataContext,
   draft: TripDraft,
+  compatibilityTheme: ThemeId = DEFAULT_THEME,
 ): Promise<StoredTrip> {
   const staples = await listStaples(scope.db, scope.ownerId);
   // A saved list replaces staples and recommendations (#170). It is looked up by this owner: another owner's list, or
@@ -658,6 +660,7 @@ async function buildNewTrip(
     staples,
     { newId: () => crypto.randomUUID(), today: todayOf(context) },
     list ? tripItemsFromList(list) : undefined,
+    compatibilityTheme,
   );
   if (!saved.ok) refuse(fail("INVALID_INPUT", { fields: ["location", "start", "end"] }));
   return toStoredTrip(saved.trip);
@@ -700,8 +703,7 @@ async function singleStopDraft(
 /** Create a trip from a confirmed location (or an ordered list of stops), dates, and preferences. */
 export function createTrip(context: DataContext, input: unknown): Promise<Result<StoredTrip>> {
   return run(context, inputs.createTripInput, input, async (scope, request) => {
-    const begin = (start: string, end: string) =>
-      startDraft(request.config, start, end, request.theme);
+    const begin = (start: string, end: string) => startDraft(request.config, start, end);
     const draft = request.stops
       ? setDraftStops(
           begin(request.stops[0].arrive, request.stops[0].leave),
@@ -713,6 +715,8 @@ export function createTrip(context: DataContext, input: unknown): Promise<Result
       context,
       request.savedListId ? setDraftSavedList(draft, request.savedListId) : draft,
       request,
+      null,
+      request.theme ?? DEFAULT_THEME,
     );
   });
 }
@@ -738,9 +742,10 @@ export function copyTrip(context: DataContext, input: unknown): Promise<Result<S
     return saveNewTrip(
       scope,
       context,
-      request.theme ? setDraftTheme(configured, request.theme) : configured,
+      configured,
       request,
       source.travelMode ?? null,
+      request.theme ?? source.theme,
     );
   });
 }
@@ -756,18 +761,23 @@ export function createTripWithWeatherReview(
     const begin = (start: string, end: string) =>
       copied
         ? startCopyDraft({ ...copied, location: null, stops: [] }, start, end)
-        : startDraft(request.config, start, end, request.theme);
+        : startDraft(request.config, start, end);
     let draft = request.stops
       ? setDraftStops(
           begin(request.stops[0].arrive, request.stops.at(-1)?.leave ?? request.stops[0].leave),
           await resolveStops(context, request.stops),
         )
       : await singleStopDraft(context, request, begin);
-    draft = setDraftTheme(setDraftConfig(draft, request.config), request.theme);
+    draft = setDraftConfig(draft, request.config);
 
     return scope.db.transaction(async (tx) => {
       const txScope: OwnerScope = { db: tx as OwnerScope["db"], ownerId: scope.ownerId };
-      const base = await buildNewTrip(txScope, context, draft);
+      const base = await buildNewTrip(
+        txScope,
+        context,
+        draft,
+        request.theme ?? copied?.theme ?? DEFAULT_THEME,
+      );
       const trip = applyWeatherChanges(
         await withTravel(txScope, context, base, request, copied?.travelMode ?? null),
         request.accepted,
