@@ -7,6 +7,7 @@ import { renderInApp } from "@/test/providers";
 import { sampleLifecycleState } from "@/features/trips/fixtures";
 import { createMemoryTripsSource, type TripsSource } from "@/features/trips/trips-source";
 import { TripsSourceProvider } from "@/features/trips/TripsSourceProvider";
+import { STAPLE_COUNT_RULES } from "./staple-count-rules";
 import { StaplesScreen } from "./StaplesScreen";
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/staples" }));
@@ -100,6 +101,21 @@ describe("laptop: the page", () => {
       screen.getByText("Weather suggestions and special items", { exact: false }),
     ).toBeTruthy();
     expect(screen.getByRole("link", { name: "Saved lists" })).toBeTruthy();
+  });
+
+  it("keeps the setup count rules reachable in a closed lede disclosure", async () => {
+    const { user } = setup();
+    await loaded();
+    const summary = screen.getByText("How counts work", { selector: "summary" });
+    const disclosure = summary.closest("details") as HTMLDetailsElement;
+    expect(disclosure.open).toBe(false);
+    for (const rule of STAPLE_COUNT_RULES) {
+      expect(within(disclosure).getByText(rule.label)).toBeTruthy();
+      expect(within(disclosure).getByText(rule.description)).toBeTruthy();
+    }
+    expect(within(disclosure).getByText(/Items marked ↻ are halved/)).toBeTruthy();
+    await user.click(summary);
+    expect(disclosure.open).toBe(true);
   });
 
   it("shows each row's name, cadence and count in the preview trip", async () => {
