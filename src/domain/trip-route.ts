@@ -4,6 +4,8 @@
 // Where a place has a known airport the route uses its three-letter code (as the stamps do, src/domain/stamps.ts);
 // otherwise it uses the city name. A code is never invented.
 
+import { curatedCoordinates } from "./curated-coordinates";
+import type { RoutePoint } from "./route-map/geometry";
 import type { SampleLocation, TripStop } from "./trip-stops";
 
 export const TRAVEL_MODES = ["fly", "drive", "other"] as const;
@@ -127,10 +129,12 @@ export function tripFacts(trip: {
   nights: number;
   stops: readonly TripStop[];
 }): string {
+  const cities = distinctCities(trip.stops).length;
   return [
     trip.travelMode ? TRAVEL_MODE_CAPTION[trip.travelMode] : "",
     nightsText(trip.nights),
-    citiesText(distinctCities(trip.stops).length),
+    // A trip with no stops has no cities to count (#419): say nothing rather than "0 cities".
+    cities > 0 ? citiesText(cities) : "",
   ]
     .filter((part) => part !== "")
     .join(" · ");
@@ -146,4 +150,69 @@ export function routeCaption(trip: {
   return [routeText(trip.origin, trip.stops), tripFacts(trip)]
     .filter((part) => part !== "")
     .join(" · ");
+}
+
+/**
+ * The trip's stops, or its one destination as a stop when it has none (a single-destination trip may be stored without
+ * stops), so the route, the facts and the map treat both the same way.
+ */
+export function stopsOrDestination(trip: {
+  stops: readonly TripStop[];
+  location?: SampleLocation | null;
+  start: string;
+  end: string;
+}): TripStop[] {
+  if (trip.stops.length > 0) return [...trip.stops];
+  return trip.location ? [{ location: trip.location, arrive: trip.start, leave: trip.end }] : [];
+}
+
+/** A place's coordinates: its own (a provider place), else the curated table's, else none. */
+function pointOf(place: Pick<SampleLocation, "id" | "latitude" | "longitude">) {
+  if (Number.isFinite(place.latitude) && Number.isFinite(place.longitude)) {
+    return { lat: place.latitude as number, lng: place.longitude as number };
+  }
+  return curatedCoordinates(place.id);
+}
+
+/**
+ * The points the route map draws: the origin first (as home) when it has coordinates, then every stop that has them.
+ * A place with no known coordinates is left out (never guessed), so the list can be shorter than the route; the map
+ * is shown only when at least one stop remains (otherwise the list is empty).
+ */
+export function tripRoutePoints(trip: {
+  origin?: TripOrigin | null;
+  stops: readonly TripStop[];
+  location?: SampleLocation | null;
+  start: string;
+  end: string;
+}): RoutePoint[] {
+  const points: RoutePoint[] = [];
+  const home = trip.origin ? pointOf(trip.origin.location) : null;
+  if (trip.origin && home) {
+    points.push({
+      ...home,
+      kind: "home",
+      label: trip.origin.location.city.trim(),
+      ...(trip.origin.airportCode ? { code: trip.origin.airportCode } : {}),
+    });
+  }
+  for (const stop of stopsOrDestination(trip)) {
+    const at = pointOf(stop.location);
+    if (!at) continue;
+    points.push({
+      ...at,
+      kind: "stop",
+      label: stop.location.city.trim(),
+      ...(stop.airportCode ? { code: stop.airportCode } : {}),
+    });
+  }
+  return points.some((point) => point.kind === "stop") ? points : [];
+}
+
+/** A short stable string for a set of map points, so a map drawn earlier can be checked against the trip as it is now. */
+export function routeSignature(
+  points: readonly RoutePoint[],
+  mode: TravelMode | null | undefined,
+): string {
+  return JSON.stringify([mode ?? "other", points.map((p) => [p.kind, p.lat, p.lng, p.label])]);
 }

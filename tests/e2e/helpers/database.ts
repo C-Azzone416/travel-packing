@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, like, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import { SAMPLE_TODAY } from "../../../src/server/seed/sample-data";
@@ -195,6 +195,26 @@ export async function readTripTravel(
       [ownerId, destination],
     );
     return result.rows[0] ?? null;
+  } finally {
+    await pool.end();
+  }
+}
+
+/** Set how one of the owner's trips is travelled, as the Plan a trip screen will (#390); screenshots of the flight Home use it. */
+export async function setTripTravelMode(
+  ownerId: string,
+  destination: string,
+  mode: "fly" | "drive" | "other",
+): Promise<void> {
+  const pool = new Pool({ connectionString: E2E_DATABASE_URL, max: 1 });
+  try {
+    const db = drizzle(pool, { schema }) as unknown as Db;
+    await db
+      .update(schema.trips)
+      .set({ travelMode: mode })
+      .where(
+        and(eq(schema.trips.ownerId, ownerId), like(schema.trips.destination, `${destination}%`)),
+      );
   } finally {
     await pool.end();
   }
