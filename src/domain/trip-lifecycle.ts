@@ -14,6 +14,7 @@ import {
 } from "./calc";
 import type { StampLabels } from "./stamps";
 import { DEFAULT_THEME, type ThemeId } from "./themes";
+import type { TripOrigin, TravelMode } from "./trip-route";
 import { TOILETRY_GROUP_ID } from "./toiletry-bag";
 import type { Staple, Trip, TripConfig, TripItem } from "./trip";
 import {
@@ -38,6 +39,9 @@ export interface LifecycleTrip extends Trip {
   theme: ThemeId;
   /** The owner's stamp label overrides (#151); absent or [null, null] = automatic. A new or copied trip never has them. */
   stampLabels?: StampLabels;
+  origin?: TripOrigin | null;
+  travelMode?: TravelMode | null;
+  name?: string | null;
 }
 
 /** A stop being drafted: its place is unconfirmed until the person picks one. */

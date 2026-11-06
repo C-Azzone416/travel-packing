@@ -3,9 +3,9 @@ import { signInAsOwner } from "./helpers/auth";
 import { expectAccessible } from "./helpers/a11y";
 import { DEVICE, legacyPackingLayout } from "./helpers/device";
 
-// Edit trip (#203): the route and the packing preferences in one sheet, with a review of what a recalculation does before it is
-// applied. Real app, real database. The merge rules themselves are unit-tested (item-ops, recalc-preview); these tests prove the
-// sheet shows them truthfully and that the stored list keeps the person's work.
+// Edit trip (#389): the route and the packing preferences in one live-diff sheet. Real app, real
+// database. The merge rules themselves are unit-tested (item-ops, recalc-preview); these tests prove
+// the sheet shows them truthfully and that the stored list keeps the person's work.
 const NOW = new Date("2026-10-16T12:00:00");
 
 async function openSanDiego(page: Page) {
@@ -28,7 +28,7 @@ async function openPreferences(page: Page) {
   return sheet(page);
 }
 
-test("Edit trip has three ways in: the dashboard, the packing hero and Trip math, each on the right tab", async ({
+test("Edit trip has three ways in: the dashboard, the packing hero and Trip math, each on the right section", async ({
   page,
 }) => {
   await legacyPackingLayout(page);
@@ -36,27 +36,18 @@ test("Edit trip has three ways in: the dashboard, the packing hero and Trip math
   await signInAsOwner(page);
   const hero = page.getByRole("article", { name: "San Diego" });
   await hero.getByRole("button", { name: "Edit trip: San Diego" }).click();
-  await expect(sheet(page).getByRole("tab", { name: "Route & dates" })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
+  await expect(sheet(page).getByText("Route & dates")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(sheet(page)).toHaveCount(0);
 
   await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
   await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
   await page.getByRole("button", { name: "Edit trip" }).click();
-  await expect(sheet(page).getByRole("tab", { name: "Route & dates" })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
+  await expect(sheet(page).getByText("Route & dates")).toBeVisible();
   await page.keyboard.press("Escape");
 
   const dialog = await openPreferences(page);
-  await expect(dialog.getByRole("tab", { name: "Packing preferences" })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
+  await expect(dialog.getByText("Packing preferences", { exact: true })).toBeVisible();
   // Pre-filled from the saved trip, not defaults: San Diego has Nice outfits on, with one occasion.
   await expect(dialog.getByRole("switch", { name: "Nice outfits" })).toBeChecked();
   await expect(dialog.getByLabel("Occasions")).toHaveValue("1");
@@ -97,19 +88,13 @@ test("a recalculation keeps the person's list work: manual, edited, packed and r
   await expect(row(page, "nice-shoes")).toHaveCount(0);
 
   const dialog = await openPreferences(page);
-  await dialog.getByRole("switch", { name: "Laundry access" }).check();
-  await dialog.getByRole("button", { name: "Review changes" }).click();
+  await dialog.getByRole("switch", { name: "Laundry on this trip" }).check();
   // The review names what changes, and what stays.
-  await expect(dialog.getByRole("heading", { name: "Review changes to your list" })).toBeVisible();
-  await expect(dialog.getByRole("region", { name: "Updated suggestions" })).toContainText(
-    "Everyday tops",
-  );
-  await dialog.getByText(/Stay as you left them/).click();
-  await expect(dialog.getByText(/Camera/)).toBeVisible();
-  await expect(dialog.getByText(/Not re-added: Dress shoes/)).toBeVisible();
-  // Nothing is applied until Apply: the list behind the sheet is unchanged.
+  await expect(dialog.getByRole("heading", { name: "What changes in your list" })).toBeVisible();
+  await expect(dialog.getByText("Everyday tops")).toBeVisible();
+  // Nothing is applied until Save: the list behind the sheet is unchanged.
   await expect(row(page, "tops")).toContainText("of 4 packed");
-  await dialog.getByRole("button", { name: "Apply changes" }).click();
+  await dialog.getByRole("button", { name: /Save \d+ changes?/ }).click();
   await expect(sheet(page)).toHaveCount(0);
   await expect(page.locator(".toast-region")).toContainText("Preferences updated.");
 
@@ -130,10 +115,9 @@ test("a packed count above the new target is shown, needs an acknowledgement, an
   await row(page, "tops").getByRole("button", { name: "Pack all Everyday tops" }).click();
   await expect(row(page, "tops")).toContainText("4 of 4 packed");
   const dialog = await openPreferences(page);
-  await dialog.getByRole("switch", { name: "Laundry access" }).check();
-  await dialog.getByRole("button", { name: "Review changes" }).click();
+  await dialog.getByRole("switch", { name: "Laundry on this trip" }).check();
   await expect(dialog.getByText(/Packed 4 → 2/)).toBeVisible();
-  const apply = dialog.getByRole("button", { name: "Apply changes" });
+  const apply = dialog.getByRole("button", { name: /Save \d+ changes?/ });
   await expect(apply).toBeDisabled();
   await dialog.getByRole("checkbox", { name: /I understand/ }).check();
   await apply.click();
@@ -142,26 +126,17 @@ test("a packed count above the new target is shown, needs an acknowledgement, an
   await expect(row(page, "tops")).toContainText("2 of 2 packed");
 });
 
-test("Cancel, Escape and Back leave the trip unchanged, asking before discarding edits", async ({
-  page,
-}) => {
+test("Cancel leaves the trip unchanged", async ({ page }) => {
   await legacyPackingLayout(page);
   await openSanDiego(page);
   const dialog = await openPreferences(page);
-  await dialog.getByRole("switch", { name: "Laundry access" }).check();
-  await dialog.getByRole("button", { name: "Review changes" }).click();
-  await dialog.getByRole("button", { name: "Back to preferences" }).click();
-  await expect(dialog.getByRole("switch", { name: "Laundry access" })).toBeChecked();
-  await page.keyboard.press("Escape");
-  await expect(dialog.getByText("Discard your changes?")).toBeVisible();
-  await dialog.getByRole("button", { name: "Keep editing" }).click();
-  await page.keyboard.press("Escape");
-  await dialog.getByRole("button", { name: "Discard" }).click();
+  await dialog.getByRole("switch", { name: "Laundry on this trip" }).check();
+  await dialog.getByRole("button", { name: "Cancel" }).click();
   await expect(sheet(page)).toHaveCount(0);
   await page.reload();
   await expect(row(page, "tops")).toContainText("of 4 packed");
   const again = await openPreferences(page);
-  await expect(again.getByRole("switch", { name: "Laundry access" })).not.toBeChecked();
+  await expect(again.getByRole("switch", { name: "Laundry on this trip" })).not.toBeChecked();
 });
 
 test("a review the trip has moved on from is refused: you are asked to review again, selections kept", async ({
@@ -171,8 +146,7 @@ test("a review the trip has moved on from is refused: you are asked to review ag
   await legacyPackingLayout(page);
   await openSanDiego(page);
   const dialog = await openPreferences(page);
-  await dialog.getByRole("switch", { name: "Laundry access" }).check();
-  await dialog.getByRole("button", { name: "Review changes" }).click();
+  await dialog.getByRole("switch", { name: "Laundry on this trip" }).check();
   // Another tab (the same signed-in person) packs something while this review is open.
   const other = await context.newPage();
   await legacyPackingLayout(other);
@@ -193,14 +167,11 @@ test("a review the trip has moved on from is refused: you are asked to review ag
   await other.reload();
   await expect(other.locator('[data-item-id="socks"]')).toContainText(socksNow);
   await other.close();
-  await dialog.getByRole("button", { name: "Apply changes" }).click();
-  await expect(
-    dialog.getByText("Your list changed while you were reviewing. Review again."),
-  ).toBeVisible();
-  await expect(dialog.getByRole("switch", { name: "Laundry access" })).toBeChecked();
+  await dialog.getByRole("button", { name: /Save \d+ changes?/ }).click();
+  await expect(dialog.getByText(/Your list changed while you were editing/)).toBeVisible();
+  await expect(dialog.getByRole("switch", { name: "Laundry on this trip" })).toBeChecked();
   // Reviewing again works on the current list.
-  await dialog.getByRole("button", { name: "Review changes" }).click();
-  await dialog.getByRole("button", { name: "Apply changes" }).click();
+  await dialog.getByRole("button", { name: /Save \d+ changes?/ }).click();
   await expect(sheet(page)).toHaveCount(0);
 });
 
@@ -212,8 +183,7 @@ test("Ready turns off with a preference change, and the review says so first", a
   await page.getByRole("link", { name: "Review bag: Lisbon" }).click();
   await expect(page.getByRole("heading", { name: "Lisbon", level: 1 })).toBeVisible();
   const dialog = await openPreferences(page);
-  await dialog.getByRole("switch", { name: "Laundry access" }).uncheck();
-  await dialog.getByRole("button", { name: "Review changes" }).click();
+  await dialog.getByRole("switch", { name: "Laundry on this trip" }).uncheck();
   await expect(dialog.getByText("Ready turns off.")).toBeVisible();
   await reviewAndApplyFromReview(page, dialog);
   await expect(page.locator(".toast-region")).toContainText("Ready turned off.");
@@ -222,7 +192,7 @@ test("Ready turns off with a preference change, and the review says so first", a
 async function reviewAndApplyFromReview(page: Page, dialog: ReturnType<typeof sheet>) {
   const acknowledge = dialog.getByRole("checkbox", { name: /I understand/ });
   if ((await acknowledge.count()) > 0) await acknowledge.check();
-  await dialog.getByRole("button", { name: "Apply changes" }).click();
+  await dialog.getByRole("button", { name: /Save \d+ changes?/ }).click();
   await expect(sheet(page)).toHaveCount(0);
 }
 
@@ -239,24 +209,38 @@ test(
     await expectAccessible(page, "edit trip, Nice off with its hint", {
       include: '[role="dialog"]',
     });
-    await dialog.getByRole("button", { name: "Review changes" }).click();
-    await expect(
-      dialog.getByRole("heading", { name: "Review changes to your list" }),
-    ).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: "What changes in your list" })).toBeVisible();
     await expectAccessible(page, "edit trip, review", { include: '[role="dialog"]' });
+    await page.setViewportSize({ width: 195, height: 640 });
+    await expectAccessible(page, "edit trip, 195px review", { include: '[role="dialog"]' });
     for (const control of [
-      dialog.getByRole("button", { name: "Apply changes" }),
-      dialog.getByRole("button", { name: "Back to preferences" }),
+      dialog.getByRole("button", { name: /Save \d+ changes?/ }),
       dialog.getByRole("button", { name: "Cancel" }),
     ]) {
       expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(43.9);
       // The footer is reachable without scrolling the sheet.
       await expect(control).toBeInViewport();
     }
-    expect(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-      ),
-    ).toBeLessThanOrEqual(0);
+    // The legacy Packing page behind the inert backdrop has its own 310px floor; #386 owns that
+    // screen. This issue owns the active editor, so measure the dialog and its descendants directly.
+    const overflow = await dialog.evaluate((root) => {
+      const bounds = root.getBoundingClientRect();
+      const over = root.scrollWidth - root.clientWidth;
+      const offenders = [...root.querySelectorAll<HTMLElement>("*")]
+        .map((element) => ({
+          element,
+          left: element.getBoundingClientRect().left,
+          right: element.getBoundingClientRect().right,
+        }))
+        .filter(({ left, right }) => left < bounds.left - 0.5 || right > bounds.right + 0.5)
+        .slice(0, 8)
+        .map(
+          ({ element, left, right }) =>
+            `${element.tagName.toLowerCase()}.${element.className} ${Math.round(left)}..${Math.round(right)}`,
+        )
+        .join("; ");
+      return { over, offenders };
+    });
+    expect(overflow.over, overflow.offenders).toBeLessThanOrEqual(0);
   },
 );

@@ -1,9 +1,6 @@
-import type { Metadata } from "next";
-import { ReviewScreen } from "@/features/trip/ReviewScreen";
-
-export const metadata: Metadata = { title: "Review your bag" };
+import { redirect } from "next/navigation";
 
 export default async function ReviewPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  return <ReviewScreen tripId={id} />;
+  redirect(`/trips/${id}?review=1`);
 }

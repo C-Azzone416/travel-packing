@@ -60,6 +60,7 @@ const actions = vi.hoisted(() => {
         "skipWeatherAction",
         "reviewWeatherAgainAction",
         "updatePreferencesAction",
+        "updateTravelModeAction",
         "setThemeAction",
         "setStampLabelsAction",
         "setStopsAction",
@@ -282,6 +283,12 @@ describe("TripsSourceProvider", () => {
         (s) => s.updatePreferences("t", config, "2030-01-01T00:00:00.000Z"),
         () => actions.commands.updatePreferencesAction,
         ["t", config, "2030-01-01T00:00:00.000Z"],
+      ],
+      [
+        "updateTravelMode",
+        (s) => s.updateTravelMode!("t", "drive"),
+        () => actions.commands.updateTravelModeAction,
+        ["t", "drive"],
       ],
       [
         "setTheme",

@@ -51,6 +51,7 @@ import {
   togglePackedAction,
   undoBagPlacementAction,
   updatePreferencesAction,
+  updateTravelModeAction,
   type TripCommandResult,
 } from "./trip-actions";
 
@@ -391,7 +392,7 @@ describe("item and preference commands", () => {
     expect(theirs.staples.some((entry) => entry.id === "mine")).toBe(false);
   });
 
-  it("removes an optional item, adds a Bathroom item, and updates preferences", async () => {
+  it("removes an optional item, adds a Bathroom item, and updates trip choices", async () => {
     const trip = await seedTrip(db(), OWNER.userId);
     const removed = changed(await removeItemAction(trip.id, "nice-shoes", "this-trip"));
     expect(removed.trip.items.some((entry) => entry.id === "nice-shoes")).toBe(false);
@@ -414,6 +415,9 @@ describe("item and preference commands", () => {
     );
     expect(updated.trip.config.laundry).toBe(!trip.config.laundry);
     expect(updated.trip.ready).toBe(false);
+
+    const travel = changed(await updateTravelModeAction(trip.id, "drive"));
+    expect(travel.trip.travelMode).toBe("drive");
   });
 
   it("validates names, quantities and scopes", async () => {

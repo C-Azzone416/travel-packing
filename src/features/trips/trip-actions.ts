@@ -14,6 +14,7 @@ import type { Staple, TripConfig, Scope } from "@/domain/trip";
 import type { StaplesSetup } from "@/domain/staples-setup";
 import type { LifecycleTrip } from "@/domain/trip-lifecycle";
 import type { TripStop } from "@/domain/trip-stops";
+import type { TravelMode } from "@/domain/trip-route";
 import type { WeatherAppliedChange } from "@/domain/weather/apply";
 import { ACCESS_DENIED_PATH, SIGN_IN_PATH } from "@/server/auth/proxy-handler";
 import type { DataContext } from "@/server/data/context";
@@ -325,6 +326,17 @@ export async function updatePreferencesAction(
   return command((context) =>
     service.updateTripPreferences(context, { tripId, config, ...(basedOn ? { basedOn } : {}) }),
   );
+}
+
+/** Change only the trip's persisted Getting there choice (#389). */
+export async function updateTravelModeAction(
+  tripId: string,
+  travelMode: TravelMode | null,
+): Promise<TripCommandResult> {
+  return withContext(
+    (context) => service.updateTripTravel(context, { tripId, travelMode }),
+    (trip) => ({ ok: true as const, trip: toLifecycleTrip(trip), signals: NO_SIGNALS }),
+  ) as Promise<TripCommandResult>;
 }
 
 /** Replace the trip's route. Only each stop's place id and its dates are sent; the server resolves the places. */

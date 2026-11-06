@@ -39,6 +39,7 @@ import {
   togglePackedAction,
   undoBagPlacementAction,
   updatePreferencesAction,
+  updateTravelModeAction,
   upsertStapleAction,
 } from "./trip-actions";
 import type { TripsSource } from "./trips-source";
@@ -104,6 +105,7 @@ export function TripsSourceProvider({
           skipWeather: skipWeatherAction,
           reviewWeatherAgain: reviewWeatherAgainAction,
           updatePreferences: updatePreferencesAction,
+          updateTravelMode: updateTravelModeAction,
           setTheme: setThemeAction,
           setStampLabels: setStampLabelsAction,
           setStops: setStopsAction,

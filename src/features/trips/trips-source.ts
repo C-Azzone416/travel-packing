@@ -47,6 +47,7 @@ import {
   type TripDraft,
 } from "@/domain/trip-lifecycle";
 import { routeLabel, tripDatesFromStops, validateStops, type TripStop } from "@/domain/trip-stops";
+import type { TravelMode } from "@/domain/trip-route";
 import { localToday } from "@/lib/today";
 import type { SavedListDetail, SavedListSummary } from "@/server/data/service";
 import type { WeatherSettings, WeatherSuggestionState } from "@/server/data/weather-store";
@@ -134,6 +135,8 @@ export interface TripsSource {
    * suggestions). `basedOn` is the trip's `updatedAt` the person reviewed; if it changed since, this rejects with STALE.
    */
   updatePreferences(tripId: string, config: TripConfig, basedOn?: string): Promise<TripChange>;
+  /** Persist the Edit-trip Getting there choice. Optional on narrow test fakes. */
+  updateTravelMode?(tripId: string, travelMode: TravelMode | null): Promise<TripChange>;
   /** Change the trip's picture (#48). Only the six built-in themes are accepted; nothing else about the trip changes. */
   setTheme(tripId: string, theme: ThemeId): Promise<TripChange>;
   /**
@@ -373,6 +376,7 @@ export function createMemoryTripsSource(
           throw new TripsSourceError("STALE");
         return recalculateSuggestions(trip, config, calculateSuggestions);
       }),
+    updateTravelMode: (id, travelMode) => direct(id, (trip) => ({ ...trip, travelMode })),
     setStops: (id, stops) =>
       direct(id, (trip) => {
         if (!validateStops(stops).ok) throw new TripsSourceError("INVALID_INPUT");

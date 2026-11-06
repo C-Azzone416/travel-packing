@@ -1,13 +1,14 @@
-import type { ReactElement } from "react";
-import { describe, expect, it } from "vitest";
-import ReviewPage, { metadata } from "./page";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import ReviewPage from "./page";
+
+const redirect = vi.hoisted(() => vi.fn());
+vi.mock("next/navigation", () => ({ redirect }));
 
 describe("/trips/[id]/review", () => {
-  it("is titled 'Review your bag' and renders the review for the id in the URL", async () => {
-    expect(metadata.title).toBe("Review your bag");
-    const element = (await ReviewPage({
-      params: Promise.resolve({ id: "san-diego" }),
-    })) as ReactElement<{ tripId: string }>;
-    expect(element.props.tripId).toBe("san-diego");
+  beforeEach(() => redirect.mockClear());
+
+  it("redirects the legacy URL to Packing with the Ready review requested", async () => {
+    await ReviewPage({ params: Promise.resolve({ id: "san-diego" }) });
+    expect(redirect).toHaveBeenCalledWith("/trips/san-diego?review=1");
   });
 });

@@ -1316,6 +1316,17 @@ export function TripScreen({
               });
             })
           }
+          onSaveTravelMode={(travelMode) =>
+            new Promise<boolean>((resolve) => {
+              if (!source.updateTravelMode) return resolve(false);
+              void act(() => source.updateTravelMode!(tripId, travelMode), {
+                modal: true,
+                onFail: () => resolve(false),
+                announce: () => "Travel mode updated.",
+                after: () => resolve(true),
+              });
+            })
+          }
         />
       ) : null}
       <ReviewSheet

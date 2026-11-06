@@ -311,6 +311,22 @@ export function TripsDashboard({ source, getToday = localToday }: TripsDashboard
       });
   }
 
+  function saveTravelMode(
+    id: string,
+    travelMode: Parameters<NonNullable<typeof source.updateTravelMode>>[1],
+  ) {
+    if (!source.updateTravelMode) return Promise.resolve(false);
+    return track(
+      async () => {
+        await source.updateTravelMode!(id, travelMode);
+        return source.load();
+      },
+      (next) => setLoad({ phase: "ready", state: next, today: getToday() }),
+    )
+      .then(() => true)
+      .catch(() => false);
+  }
+
   const archive = (id: string) => void run(id, () => source.archive(id));
 
   const tabs = (
@@ -485,6 +501,7 @@ export function TripsDashboard({ source, getToday = localToday }: TripsDashboard
           onClose={() => setEditing(null)}
           onSaveRoute={(stops) => saveRoute(editTarget.id, stops)}
           onApplyPreferences={(config, basedOn) => applyPreferences(editTarget.id, config, basedOn)}
+          onSaveTravelMode={(travelMode) => saveTravelMode(editTarget.id, travelMode)}
         />
       ) : null}
 

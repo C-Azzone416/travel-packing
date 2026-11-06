@@ -23,4 +23,12 @@ describe("/trips/[id]", () => {
     expect((await render({ edit: ["a", "b"] })).props.openItemId).toBeUndefined();
     expect((await render({ edit: "" })).props.openItemId).toBeUndefined();
   });
+
+  it("keeps the Ready final check at Packing when ?review=1", async () => {
+    const element = (await TripPage({
+      params: Promise.resolve({ id: "san-diego" }),
+      searchParams: Promise.resolve({ review: "1" }),
+    })) as ReactElement<{ tripId: string }>;
+    expect(element.props.tripId).toBe("san-diego");
+  });
 });

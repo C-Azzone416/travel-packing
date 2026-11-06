@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { renderInApp } from "@/test/providers";
@@ -427,7 +427,10 @@ describe("Edit trip", () => {
     const hero = await screen.findByRole("article", { name: "San Diego" });
     await user.click(within(hero).getByRole("button", { name: "Edit trip: San Diego" }));
     const sheet = await screen.findByRole("dialog", { name: "Edit trip" });
-    await user.click(within(sheet).getByRole("button", { name: "Save route" }));
+    fireEvent.change(within(sheet).getByLabelText("Leave"), {
+      target: { value: "2026-10-28" },
+    });
+    await user.click(within(sheet).getByRole("button", { name: /Save \d+ changes?/ }));
     await waitFor(() => expect(setStops).toHaveBeenCalledOnce());
     expect(setStops.mock.calls[0][0]).toBe("san-diego");
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit trip" })).toBeNull());
@@ -441,9 +444,12 @@ describe("Edit trip", () => {
     const hero = await screen.findByRole("article", { name: "San Diego" });
     await user.click(within(hero).getByRole("button", { name: "Edit trip: San Diego" }));
     const sheet = await screen.findByRole("dialog", { name: "Edit trip" });
-    await user.click(within(sheet).getByRole("button", { name: "Save route" }));
+    fireEvent.change(within(sheet).getByLabelText("Leave"), {
+      target: { value: "2026-10-28" },
+    });
+    await user.click(within(sheet).getByRole("button", { name: /Save \d+ changes?/ }));
     await act(async () => {});
     expect(screen.getByRole("dialog", { name: "Edit trip" })).toBeTruthy();
-    expect(within(sheet).getByText(/Couldn’t save the route/)).toBeTruthy();
+    expect(within(sheet).getByText(/Couldn’t save every change/)).toBeTruthy();
   });
 });

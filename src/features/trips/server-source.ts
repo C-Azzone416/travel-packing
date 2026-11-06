@@ -8,6 +8,7 @@ import type { ItemEdit } from "@/domain/item-ops";
 import type { ThemeId } from "@/domain/themes";
 import type { Scope, Staple, TripConfig } from "@/domain/trip";
 import type { TripStop } from "@/domain/trip-stops";
+import type { TravelMode } from "@/domain/trip-route";
 import type {
   AcceptedWeatherDecision,
   AddItemActionResult,
@@ -67,6 +68,7 @@ export interface TripActions {
     config: TripConfig,
     basedOn?: string,
   ): Promise<TripCommandResult>;
+  updateTravelMode(tripId: string, travelMode: TravelMode | null): Promise<TripCommandResult>;
   setTheme(tripId: string, theme: ThemeId): Promise<TripCommandResult>;
   setStampLabels(
     tripId: string,
@@ -194,6 +196,7 @@ export function createServerTripsSource(
     reviewWeatherAgain: (id) => unwrapChange(trip.reviewWeatherAgain(id)),
     updatePreferences: (id, config, basedOn) =>
       unwrapChange(trip.updatePreferences(id, config, basedOn)),
+    updateTravelMode: (id, travelMode) => unwrapChange(trip.updateTravelMode(id, travelMode)),
     setTheme: (id, theme) => unwrapChange(trip.setTheme(id, theme)),
     setStampLabels: (id, slot1, slot2) => unwrapChange(trip.setStampLabels(id, slot1, slot2)),
     setStops: (id, stops) => unwrapChange(trip.setStops(id, stops)),

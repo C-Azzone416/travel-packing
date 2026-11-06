@@ -4351,6 +4351,279 @@ a.back {
   color: var(--muted-text);
   cursor: not-allowed;
 }
+
+/* ---- Suitcase Edit trip (#389): one live review, never a second review step. */
+.modal:has(.edit-suitcase) {
+  display: flex;
+  width: min(100%, 680px);
+  max-height: calc(100dvh - 24px);
+  flex-direction: column;
+  overflow: hidden;
+  padding: 24px;
+  border-radius: 28px 28px 0 0;
+  background: var(--page);
+}
+.modal:has(.edit-suitcase) .modal-head {
+  flex: none;
+}
+.modal:has(.edit-suitcase) .modal-head h2 {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.edit-suitcase {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  margin: 0 -24px;
+  padding: 0 24px 20px;
+}
+.edit-trip-heading h3 {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--font-display), var(--font-body), sans-serif;
+  font-size: clamp(28px, 7vw, 34px);
+  line-height: 1.1;
+}
+.edit-trip-heading p {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+.edit-section {
+  min-width: 0;
+  border-radius: 22px;
+  background: var(--paper2);
+}
+.edit-section > summary {
+  display: flex;
+  min-height: 62px;
+  align-items: center;
+  gap: 9px;
+  padding: 16px 20px;
+  cursor: pointer;
+  list-style: none;
+  font-family: var(--font-display), var(--font-body), sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+}
+.edit-section > summary::-webkit-details-marker {
+  display: none;
+}
+.edit-section > summary::after {
+  content: "▾";
+  margin-left: auto;
+  color: var(--muted);
+  font-family: var(--font-body), sans-serif;
+  font-size: 14px;
+}
+.edit-section:not([open]) > summary::after {
+  content: "▸";
+}
+.edit-section-body {
+  min-width: 0;
+  padding: 0 20px 20px;
+}
+.edit-tab-dot {
+  width: 9px;
+  height: 9px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.edit-travel-mode {
+  min-width: 0;
+  margin: 18px 0 0;
+  padding: 0;
+  border: 0;
+}
+.edit-travel-mode legend {
+  margin-bottom: 9px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.edit-mode-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.edit-mode-options label {
+  min-width: 0;
+  cursor: pointer;
+}
+.edit-mode-options input {
+  position: absolute;
+  opacity: 0;
+}
+.edit-mode-options span {
+  display: grid;
+  min-height: 48px;
+  place-items: center;
+  padding: 8px;
+  border: 2px solid var(--tint);
+  border-radius: 999px;
+  background: var(--paper);
+  font-weight: 700;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.edit-mode-options input:checked + span {
+  border-color: var(--dark);
+  background: var(--dark);
+  color: var(--onDark);
+}
+.edit-mode-options input:focus-visible + span {
+  outline: 3px solid var(--accent-2);
+  outline-offset: 3px;
+}
+.edit-prefs {
+  display: grid;
+  gap: 10px;
+}
+.edit-prefs > .toggle-row,
+.edit-prefs > label {
+  border-radius: 16px;
+  background: var(--paper);
+}
+.edit-live-review {
+  min-width: 0;
+  padding: 18px 20px;
+  border-radius: 22px;
+  background: var(--paper);
+}
+.edit-review-head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.edit-review-head h3 {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--font-display), var(--font-body), sans-serif;
+  font-size: 22px;
+  line-height: 1.15;
+}
+.edit-change-list {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.edit-change-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto);
+  gap: 8px 12px;
+  min-width: 0;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line2);
+}
+.edit-change-list li > div,
+.edit-change-list li > p {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.edit-change-list li > div span {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 14px;
+}
+.edit-change-list li > p {
+  margin: 0;
+  text-align: right;
+}
+.edit-change-list del {
+  color: var(--muted);
+  text-decoration-thickness: 1px;
+}
+.edit-change-list ins {
+  font-weight: 700;
+  text-decoration: none;
+}
+.edit-review-note {
+  margin: 14px 0 0;
+  font-size: 14px;
+}
+.modal:has(.edit-suitcase) .modal-actions {
+  flex: none;
+  margin: 0 -24px -24px;
+  padding: 12px 24px calc(12px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--line2);
+  background: var(--paper);
+}
+.modal:has(.edit-suitcase) .edit-save {
+  flex: 1 1 240px;
+  background: var(--dark);
+  color: var(--onDark);
+}
+
+@media (max-width: 359px) {
+  .modal-backdrop:has(.edit-suitcase) {
+    overflow-x: clip;
+    padding-inline: 0;
+  }
+  .modal:has(.edit-suitcase) {
+    width: 100%;
+    padding-inline: 12px;
+  }
+  .edit-suitcase {
+    margin-inline: -12px;
+    padding-inline: 12px;
+  }
+  .edit-section > summary,
+  .edit-section-body,
+  .edit-live-review {
+    padding-inline: 12px;
+  }
+  .edit-mode-options {
+    grid-template-columns: 1fr;
+  }
+  .edit-prefs .toggle-row > div,
+  .edit-prefs .two-col > * {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .edit-change-list li {
+    grid-template-columns: 1fr;
+  }
+  .edit-change-list li > p {
+    text-align: left;
+  }
+  .modal:has(.edit-suitcase) .modal-actions {
+    margin-inline: -12px;
+    padding-inline: 12px;
+  }
+  .modal:has(.edit-suitcase) .modal-actions .button {
+    width: 100%;
+  }
+}
+
+@media (min-width: 1024px) {
+  .modal-backdrop:has(.edit-suitcase) {
+    align-items: stretch;
+    justify-items: end;
+    padding: 0;
+  }
+  .modal:has(.edit-suitcase) {
+    width: min(680px, 54vw);
+    max-height: 100dvh;
+    padding: 28px;
+    border-radius: 0;
+  }
+  .edit-suitcase {
+    margin-inline: -28px;
+    padding-inline: 28px;
+  }
+  .modal:has(.edit-suitcase) .modal-actions {
+    margin: 0 -28px -28px;
+    padding: 14px 28px 20px;
+  }
+}
 .staples-setup {
   max-width: 760px;
   margin-inline: auto;

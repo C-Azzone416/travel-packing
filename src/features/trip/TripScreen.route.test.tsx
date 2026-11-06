@@ -82,7 +82,7 @@ describe("Edit trip: Route & dates", () => {
     fireEvent.change(within(dialog).getByLabelText("Leave, Stop 2"), {
       target: { value: "2026-10-31" },
     });
-    await user.click(within(dialog).getByRole("button", { name: "Save route" }));
+    await user.click(within(dialog).getByRole("button", { name: /Save \d+ changes?/ }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit trip" })).toBeNull());
     const saved = (await source.getTrip("tour"))!;
     expect(saved).toMatchObject({ end: "2026-10-31", days: 9 });
@@ -102,7 +102,7 @@ describe("Edit trip: Route & dates", () => {
       "paris",
     );
     await user.click(within(screen.getByRole("listbox")).getAllByRole("option")[0]);
-    await user.click(within(dialog).getByRole("button", { name: "Save route" }));
+    await user.click(within(dialog).getByRole("button", { name: /Save \d+ changes?/ }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit trip" })).toBeNull());
     expect((await source.getTrip("san-diego")).stops.map((s) => s.location.city)).toEqual([
       "San Diego",
@@ -116,7 +116,7 @@ describe("Edit trip: Route & dates", () => {
     await user.click(screen.getByRole("button", { name: "Edit trip" }));
     const dialog = screen.getByRole("dialog", { name: "Edit trip" });
     await user.click(within(dialog).getByRole("button", { name: "+ Add another stop" }));
-    await user.click(within(dialog).getByRole("button", { name: "Save route" }));
+    await user.click(within(dialog).getByRole("button", { name: "Save changes" }));
     expect(within(dialog).getByText("Pick a place for Stop 2, or choose Custom.")).toBeTruthy();
     expect(within(dialog).getAllByText("Fix 1 thing above to continue.").length).toBeGreaterThan(0);
     expect((await source.getTrip("san-diego")).stops).toHaveLength(1);
@@ -129,10 +129,7 @@ describe("Edit trip: Route & dates", () => {
     const dialog = screen.getByRole("dialog", { name: "Edit trip" });
     await user.click(within(dialog).getByRole("button", { name: "Remove Lisbon" }));
     await user.click(within(dialog).getByRole("button", { name: "Remove" }));
-    // There is something to lose, so Cancel asks first, in the footer.
     await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
-    expect(within(dialog).getByText("Discard your changes?")).toBeTruthy();
-    await user.click(within(dialog).getByRole("button", { name: "Discard" }));
     expect(screen.queryByRole("dialog", { name: "Edit trip" })).toBeNull();
     expect((await source.getTrip("tour")).stops).toHaveLength(2);
   });
@@ -142,10 +139,13 @@ describe("Edit trip: Route & dates", () => {
     await screen.findByRole("heading", { name: "San Diego → Lisbon", level: 1 });
     await user.click(screen.getByRole("button", { name: "Edit trip" }));
     const dialog = screen.getByRole("dialog", { name: "Edit trip" });
-    await user.click(within(dialog).getByRole("button", { name: "Save route" }));
-    expect(await within(dialog).findByText(/Couldn’t save the route/)).toBeTruthy();
+    fireEvent.change(within(dialog).getByLabelText("Leave, Stop 2"), {
+      target: { value: "2026-10-31" },
+    });
+    await user.click(within(dialog).getByRole("button", { name: /Save \d+ changes?/ }));
+    expect(await within(dialog).findByText(/Couldn’t save every change/)).toBeTruthy();
     await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
     await user.click(screen.getByRole("button", { name: "Edit trip" }));
-    expect(screen.queryByText(/Couldn’t save the route/)).toBeNull();
+    expect(screen.queryByText(/Couldn’t save every change/)).toBeNull();
   });
 });
