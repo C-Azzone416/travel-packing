@@ -17,7 +17,6 @@ import { recommendPacking } from "@/domain/weather/recommend";
 import { TripsSourceError, type TripChange } from "@/features/trips/trips-source";
 import { useTripsSource } from "@/features/trips/TripsSourceProvider";
 import { AddToiletryForm } from "./AddToiletryForm";
-import { themeFor } from "@/domain/themes";
 import { automaticStamps } from "@/domain/stamps";
 import { localToday } from "@/lib/today";
 import { LAPTOP_MIN_WIDTH, useMinWidth } from "@/lib/use-min-width";
@@ -25,7 +24,6 @@ import { SaveAsListSheet, type SaveOutcome } from "./SaveAsListSheet";
 import { EditTripSheet, type ApplyOutcome, type EditTripTab } from "./EditTripSheet";
 import { ItemEditor } from "./ItemEditor";
 import { EditStampSheet } from "./EditStampSheet";
-import { ThemeSheet } from "./ThemeSheet";
 import { bagGate, packedAnnouncement, showReviewPrompt } from "./trip-view";
 import { revocationReason } from "./review-view";
 import { WeatherPanel, type WeatherPanelState } from "./WeatherPanel";
@@ -57,7 +55,6 @@ type Dialog =
   | { kind: "add-toiletry"; name?: string; qty?: number }
   | { kind: "save-list" }
   | { kind: "bag" }
-  | { kind: "theme" }
   | { kind: "stamp" }
   | { kind: "trip"; tab: EditTripTab };
 
@@ -101,7 +98,6 @@ export function TripScreen({
   const [submitting, setSubmitting] = useState(false);
   const [failedRows, setFailedRows] = useState<ReadonlySet<string>>(new Set());
   const [announcement, setAnnouncement] = useState("");
-  const [themeFailed, setThemeFailed] = useState(false);
   const [stampFailed, setStampFailed] = useState(false);
   const [weather, setWeather] = useState<WeatherExperience | null>(null);
   const [laundryBusy, setLaundryBusy] = useState(false);
@@ -670,13 +666,6 @@ export function TripScreen({
       >
         Save as a list
       </button>
-      <button
-        type="button"
-        className="link-button change-theme"
-        onClick={() => setDialog({ kind: "theme" })}
-      >
-        Change theme
-      </button>
       {trip.stops.length > 0 ? (
         <button
           type="button"
@@ -901,26 +890,6 @@ export function TripScreen({
                 );
                 close();
               },
-            });
-          }}
-        />
-      ) : null}
-      {dialog?.kind === "theme" ? (
-        <ThemeSheet
-          current={trip.theme}
-          saving={submitting}
-          failed={themeFailed}
-          onClose={() => {
-            setThemeFailed(false);
-            close();
-          }}
-          onSave={(theme) => {
-            setThemeFailed(false);
-            void act(() => source.setTheme(tripId, theme), {
-              modal: true,
-              onFail: () => setThemeFailed(true),
-              announce: (change) => `Theme changed to ${themeFor(change.trip.theme).label}.`,
-              after: close,
             });
           }}
         />

@@ -1,6 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
 import { SECOND_EMAIL, signIn, signInAsOwner } from "./helpers/auth";
-import { DEVICE } from "./helpers/device";
 import {
   expectNoItem,
   expectPacking,
@@ -187,84 +186,3 @@ test("another signed-in owner cannot open this owner's trip, and sees the same p
   await expect(other.getByText("San Diego")).toHaveCount(0);
   await second.close();
 });
-
-// The theme is only visible in the Change theme sheet (the dashboard and the Packing screen draw no picture for it).
-async function themeKey(page: Page) {
-  await page.getByRole("button", { name: "Change theme" }).click();
-  const key = await page
-    .getByRole("dialog", { name: "Change theme" })
-    .locator("[data-theme-id]:has(input:checked)")
-    .getAttribute("data-theme-id");
-  await page.getByRole("button", { name: "Cancel" }).click();
-  return key;
-}
-
-test(
-  "changing the theme from the Packing screen is stored, and the dashboard card shows it",
-  DEVICE,
-  async ({ page }, testInfo) => {
-    await page.emulateMedia({ reducedMotion: "reduce" });
-    await openSanDiego(page);
-    const button = page.getByRole("button", { name: "Change theme" });
-    expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(43.9);
-    await button.click();
-    const sheet = page.getByRole("dialog", { name: "Change theme" });
-    await expect(sheet.getByRole("radio", { name: "Beach" })).toBeChecked();
-    await expect(sheet.getByRole("radio", { name: "Beach" })).toBeFocused();
-    // Every thumbnail has loaded before the picture is taken.
-    await expect
-      .poll(() =>
-        sheet
-          .locator("img")
-          .evaluateAll((images) =>
-            images.every(
-              (image) =>
-                (image as HTMLImageElement).complete &&
-                (image as HTMLImageElement).naturalWidth > 0,
-            ),
-          ),
-      )
-      .toBe(true);
-    await page.screenshot({
-      path: `test-results/screenshots/${testInfo.project.name}-theme-sheet.png`,
-    });
-    // Keyboard only: arrows move and select from the current theme.
-    await page.keyboard.press("ArrowDown");
-    await expect(sheet.getByRole("radio", { name: "Mountain / outdoors" })).toBeChecked();
-    await sheet.getByRole("button", { name: "Save theme" }).click();
-    await expect(sheet).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Change theme" })).toBeFocused();
-    await expect(page.getByRole("status", { name: "Packing updates" })).toHaveText(
-      "Theme changed to Mountain / outdoors.",
-    );
-    await page.reload();
-    expect(await themeKey(page)).toBe("outdoors");
-  },
-);
-
-test(
-  "cancelling the theme sheet changes nothing, and a failed save keeps the sheet",
-  DEVICE,
-  async ({ page }) => {
-    await openSanDiego(page);
-    await page.getByRole("button", { name: "Change theme" }).click();
-    await page.getByRole("radio", { name: "City" }).check();
-    await page.getByRole("button", { name: "Cancel" }).click();
-    expect(await themeKey(page)).toBe("beach");
-
-    await page.route("**/trips/**", (route) =>
-      isAction(route.request()) ? route.abort("failed") : route.continue(),
-    );
-    await page.getByRole("button", { name: "Change theme" }).click();
-    await page.getByRole("radio", { name: "City" }).check();
-    await page.getByRole("button", { name: "Save theme" }).click();
-    const sheet = page.getByRole("dialog", { name: "Change theme" });
-    await expect(sheet.getByRole("alert")).toContainText("Couldn’t save the theme");
-    await expect(page.getByRole("button", { name: "Not saved, retry" })).toBeVisible();
-    await page.unroute("**/trips/**");
-    await sheet.getByRole("button", { name: "Save theme" }).click();
-    await expect(sheet).toHaveCount(0);
-    await page.reload();
-    expect(await themeKey(page)).toBe("city");
-  },
-);

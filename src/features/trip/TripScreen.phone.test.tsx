@@ -724,17 +724,12 @@ describe("text zoom and the fixed-height layout", () => {
 });
 
 describe("the tools under the suitcase", () => {
-  it("keeps Edit trip, Save as a list, Change theme, Edit stamp and Edit preferences reachable", async () => {
+  it("keeps Edit trip, Save as a list, Edit stamp and Edit preferences reachable", async () => {
     setup();
     await ready();
-    for (const name of [
-      "Edit trip",
-      "Save as a list",
-      "Change theme",
-      "Edit stamp",
-      "Edit preferences",
-    ])
+    for (const name of ["Edit trip", "Save as a list", "Edit stamp", "Edit preferences"])
       expect(screen.getByRole("button", { name }), name).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Change theme" })).toBeNull();
   });
 
   it("a trip with a TripsSourceError on load shows the same error screen", async () => {
