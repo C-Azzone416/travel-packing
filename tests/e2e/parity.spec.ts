@@ -142,6 +142,8 @@ test("Nice outfits: switching off hides generic Nice clothing, switching back on
   await dialog.getByRole("spinbutton", { name: "Quantity" }).fill("2");
   await dialog.getByRole("button", { name: "Save item" }).click();
   await expect(dialog).toHaveCount(0);
+  // The cube stays in Edit list after its item sheet closes; return to the checklist before ticking it.
+  await page.getByRole("button", { name: "Done", exact: true }).click();
   await tick(page, "nice-shoes");
   await expect(
     row(page, "nice-shoes").getByRole("checkbox", { name: "Dress shoes, 2" }),

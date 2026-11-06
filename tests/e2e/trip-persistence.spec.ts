@@ -1,7 +1,15 @@
 import { expect, test, type Page } from "@playwright/test";
 import { SECOND_EMAIL, signIn, signInAsOwner } from "./helpers/auth";
 import { DEVICE } from "./helpers/device";
-import { expectNoItem, expectPacking, openEditor, showItem, tick, untick } from "./helpers/packing";
+import {
+  expectNoItem,
+  expectPacking,
+  openCube,
+  openEditor,
+  showItem,
+  tick,
+  untick,
+} from "./helpers/packing";
 import { reviewAndApply } from "./helpers/preferences";
 
 // The trip screen against a REAL Postgres: what it shows after a reload is what was stored. Each test starts from the
@@ -72,11 +80,13 @@ test("the toiletry bag gate and its placement are stored", async ({ page }) => {
   await page.getByRole("dialog").getByRole("button", { name: "Confirm" }).click();
   await expect(page.getByText("Toiletry bag is in the suitcase")).toBeVisible();
   await page.reload();
+  await openCube(page, "Toiletries");
   await expect(page.getByText("Toiletry bag is in the suitcase")).toBeVisible();
 
   await page.getByRole("button", { name: "Undo placement" }).click();
   await expect(page.getByText("Toiletry bag ready to place")).toBeVisible();
   await page.reload();
+  await openCube(page, "Toiletries");
   await expect(page.getByText("Toiletry bag ready to place")).toBeVisible();
 });
 
