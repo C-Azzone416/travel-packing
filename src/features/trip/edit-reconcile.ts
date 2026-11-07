@@ -14,6 +14,12 @@ export interface EditFields {
   travelMode: TravelMode | null;
 }
 
+/** Whether the person edited Leave / Come home themselves (their own controls), as opposed to a stop edit moving those dates. */
+export interface EndpointsTouched {
+  leave: boolean;
+  home: boolean;
+}
+
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 /**
@@ -25,6 +31,7 @@ export function reconcileStops(
   base: readonly DraftStop[],
   draft: readonly DraftStop[],
   fresh: readonly TripStop[],
+  touched?: EndpointsTouched,
 ): DraftStop[] {
   if (same(base, draft)) return [...fresh];
   const firstArrive = (stops: readonly DraftStop[]) => stops[0]?.arrive ?? "";
@@ -40,20 +47,10 @@ export function reconcileStops(
     // takes the server's date. Leave is applied first (it moves the whole list); Come home then sets the last stop's end. If the
     // person's stops cannot fit the server's end date (it would leave the last stop with too few nights), they keep the end their
     // list gives: the conflicting endpoint stays theirs.
-    const leaveTouched = firstArrive(base) !== firstArrive(draft);
-    // Come home is the person's only when the person set it: the draft's total nights differ from what their stop list explains
-    // (every stop but the last as drafted, plus the last stop's own nights as they were). Removing, reordering or lengthening stops
-    // changes the total nights by itself and is NOT a Come home edit; a Leave edit keeps the nights.
-    const nights = (stops: readonly DraftStop[]) =>
-      daysBetween(firstArrive(stops), lastLeave(stops));
-    const lastNights = (stops: readonly DraftStop[]) =>
-      stops.length > 0
-        ? daysBetween(stops[stops.length - 1].arrive, stops[stops.length - 1].leave)
-        : 0;
-    const explained =
-      draft.slice(0, -1).reduce((sum, entry) => sum + daysBetween(entry.arrive, entry.leave), 0) +
-      lastNights(base);
-    const homeTouched = nights(draft) !== explained;
+    // Which of the two the person actually edited comes from the sheet (set only by the Leave and Come home controls), not from
+    // the draft's dates: adding, removing or reordering stops moves them on its own. A field never edited takes the server's date.
+    const leaveTouched = (touched?.leave ?? true) && firstArrive(base) !== firstArrive(draft);
+    const homeTouched = (touched?.home ?? false) && lastLeave(base) !== lastLeave(draft);
     let mine: DraftStop[] = [...draft];
     const wantStart = leaveTouched ? firstArrive(draft) : (fresh[0]?.arrive ?? "");
     const wantEnd = homeTouched ? lastLeave(draft) : (fresh[fresh.length - 1]?.leave ?? "");
@@ -82,6 +79,7 @@ export function reconcile(
   base: EditFields,
   draft: EditFields,
   fresh: { stops: readonly TripStop[]; config: TripConfig; travelMode: TravelMode | null },
+  touched?: EndpointsTouched,
 ): EditFields {
   const config = { ...fresh.config };
   for (const key of Object.keys(config) as (keyof TripConfig)[]) {
@@ -89,7 +87,7 @@ export function reconcile(
       (config as Record<string, unknown>)[key] = draft.config[key];
   }
   return {
-    stops: reconcileStops(base.stops, draft.stops, fresh.stops),
+    stops: reconcileStops(base.stops, draft.stops, fresh.stops, touched),
     config,
     travelMode: base.travelMode !== draft.travelMode ? draft.travelMode : fresh.travelMode,
   };

@@ -44,7 +44,7 @@ import {
   stopProblems,
 } from "@/features/trips/stops-draft";
 import { localToday } from "@/lib/today";
-import { reconcile } from "./edit-reconcile";
+import { reconcile, type EndpointsTouched } from "./edit-reconcile";
 import { changeCount, editChanges, saveLabel, type ChangeRow } from "./edit-diff";
 import styles from "./EditTripSheet.module.css";
 
@@ -168,11 +168,14 @@ export function EditTripSheet({
   // (edit-reconcile.ts). Adjusted while rendering, the documented way to react to a changed prop.
   const fresh = { stops: trip.stops, config: trip.config, travelMode: trip.travelMode ?? null };
   const [baseline, setBaseline] = useState(fresh);
+  // Whether the person used the Leave or Come home controls (a stop edit moves those dates too, but that is not their edit).
+  const [touched, setTouched] = useState<EndpointsTouched>({ leave: false, home: false });
   if (!isEqual(baseline, fresh)) {
     const next = reconcile(
       { stops: baseline.stops, config: baseline.config, travelMode: baseline.travelMode },
       { stops, config: prefs, travelMode: mode },
       fresh,
+      touched,
     );
     setBaseline(fresh);
     setStops(next.stops as DraftStop[]);
@@ -224,6 +227,7 @@ export function EditTripSheet({
   const canShorten = lastNights !== null && lastNights > (stops.length > 1 ? 1 : 0);
 
   function undoAll() {
+    setTouched({ leave: false, home: false });
     setStops(trip.stops);
     setPrefs(trip.config);
     setMode(trip.travelMode ?? null);
@@ -414,9 +418,10 @@ export function EditTripSheet({
               <input
                 type="date"
                 value={stops[0]?.arrive ?? ""}
-                onChange={(event) =>
-                  setStops(snapContiguous(setFirstArrive(stops, event.target.value)))
-                }
+                onChange={(event) => {
+                  setTouched((was) => ({ ...was, leave: true }));
+                  setStops(snapContiguous(setFirstArrive(stops, event.target.value)));
+                }}
               />
             </label>
             <label className={planStyles.field}>
@@ -425,7 +430,10 @@ export function EditTripSheet({
                 type="date"
                 value={stops[last]?.leave ?? ""}
                 min={stops[last]?.arrive || undefined}
-                onChange={(event) => setStops(setLeave(stops, last, event.target.value))}
+                onChange={(event) => {
+                  setTouched((was) => ({ ...was, home: true }));
+                  setStops(setLeave(stops, last, event.target.value));
+                }}
               />
             </label>
           </div>
@@ -435,7 +443,10 @@ export function EditTripSheet({
               className={styles.step}
               aria-label="One night fewer"
               disabled={!canShorten}
-              onClick={() => setStops(shiftEnd(stops, -1))}
+              onClick={() => {
+                setTouched((was) => ({ ...was, home: true }));
+                setStops(shiftEnd(stops, -1));
+              }}
             >
               <Icon name="minus" size={16} />
             </button>
@@ -444,7 +455,10 @@ export function EditTripSheet({
               type="button"
               className={styles.step}
               aria-label="One night more"
-              onClick={() => setStops(shiftEnd(stops, 1))}
+              onClick={() => {
+                setTouched((was) => ({ ...was, home: true }));
+                setStops(shiftEnd(stops, 1));
+              }}
             >
               <Icon name="plus" size={16} />
             </button>

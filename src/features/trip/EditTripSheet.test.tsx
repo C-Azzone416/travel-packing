@@ -774,6 +774,70 @@ describe("EditTripSheet: Route & dates", () => {
     expect(sent[0].leave).toBe("2026-10-31");
   });
 
+  function renderAdding() {
+    const sandiego = (end: string): LifecycleTrip => ({
+      ...base(),
+      end,
+      stops: [{ ...base().stops[0], arrive: "2026-10-23", leave: end }],
+    });
+    const onSaveRoute = vi.fn<(stops: TripStop[], basedOn?: string) => Promise<SaveResult>>(
+      async () => ({ updatedAt: "T3" }),
+    );
+    function Adding() {
+      const [trip, setTrip] = useState(sandiego("2026-10-27"));
+      return (
+        <>
+          <button
+            type="button"
+            onClick={() => setTrip({ ...sandiego("2026-10-31"), updatedAt: "T2" })}
+          >
+            saved elsewhere
+          </button>
+          <EditTripSheet
+            trip={trip}
+            initialTab="route"
+            today="2026-10-01"
+            onClose={() => {}}
+            onSaveRoute={onSaveRoute}
+            onSetTravelMode={async () => ({})}
+            onApplyPreferences={async () => "ok"}
+          />
+        </>
+      );
+    }
+    renderInApp(<Adding />);
+    return onSaveRoute;
+  }
+  async function addLisbon(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole("button", { name: "Add a stop" }));
+    await user.type(screen.getByRole("combobox", { name: "Destination search, Stop 2" }), "lisbon");
+    await user.click(within(screen.getByRole("listbox")).getAllByRole("option")[0]);
+  }
+
+  it("adding a stop is not a Come home edit: a concurrent later Come home is kept and sent with the fresh save time", async () => {
+    const user = userEvent.setup();
+    const onSaveRoute = renderAdding();
+    await addLisbon(user);
+    elsewhere();
+    expect((screen.getByLabelText("Come home") as HTMLInputElement).value).toBe("2026-10-31");
+    await user.click(screen.getByRole("button", { name: /^Save \d+ changes?$/ }));
+    const [sent, basedOn] = onSaveRoute.mock.calls[0];
+    expect(basedOn).toBe("T2");
+    expect(sent.length).toBe(2);
+    expect(sent[1].leave).toBe("2026-10-31");
+  });
+
+  it("a Come home the person set on top of an added stop beats the concurrent one", async () => {
+    const user = userEvent.setup();
+    const onSaveRoute = renderAdding();
+    await addLisbon(user);
+    fireEvent.change(screen.getByLabelText("Come home"), { target: { value: "2026-10-29" } });
+    elsewhere();
+    expect((screen.getByLabelText("Come home") as HTMLInputElement).value).toBe("2026-10-29");
+    await user.click(screen.getByRole("button", { name: /^Save \d+ changes?$/ }));
+    expect(onSaveRoute.mock.calls[0][0][1].leave).toBe("2026-10-29");
+  });
+
   it("an untouched route follows the server; the dot and count clear when nothing of the person's remains", async () => {
     renderInApp(
       <Harness
