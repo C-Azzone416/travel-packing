@@ -1,6 +1,14 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { ModalSheet } from "@/components/ui/ModalSheet";
@@ -42,7 +50,7 @@ import styles from "./EditTripSheet.module.css";
 export type EditTripTab = "route" | "preferences";
 export type ApplyOutcome = "ok" | "stale" | "failed";
 /** What a host reports after one of the sheet's saves: the trip's new save time (the next save is based on it), or null for a failure. */
-export type SaveResult = { updatedAt?: string } | null;
+export type SaveResult = { updatedAt?: string } | "stale" | null;
 
 export interface EditTripSheetProps {
   /** The trip as saved: its route, its preferences and its list (the live changes are computed from it). */
@@ -54,9 +62,9 @@ export interface EditTripSheetProps {
   today?: string;
   onClose: () => void;
   /** Save the route. Resolves the new save time, or null when it failed (nothing changed). */
-  onSaveRoute: (stops: TripStop[]) => Promise<SaveResult>;
+  onSaveRoute: (stops: TripStop[], basedOn: string | undefined) => Promise<SaveResult>;
   /** Save how the trip is travelled. */
-  onSetTravelMode: (mode: TravelMode) => Promise<SaveResult>;
+  onSetTravelMode: (mode: TravelMode, basedOn: string | undefined) => Promise<SaveResult>;
   /** Apply the preferences, based on the trip's `updatedAt` the live changes were computed from. */
   onApplyPreferences: (config: TripConfig, basedOn: string | undefined) => Promise<ApplyOutcome>;
 }
@@ -184,7 +192,10 @@ export function EditTripSheet({
   const edited = count > 0 || changes.dirty.route || changes.dirty.preferences;
   const canSave = count > 0 && changes.valid && (!needsTick || acknowledged) && !busy;
   // Phone: the list of changes starts open while it is short; the person's own choice wins from then on.
-  const listOpen = movesOpen ?? count <= 3;
+  const [autoOpen, setAutoOpen] = useState(true);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const rowsRef = useRef<HTMLDivElement>(null);
+  const listOpen = movesOpen ?? autoOpen;
 
   const nights = nightsAt({
     arrive: stops[0]?.arrive ?? "",
@@ -217,19 +228,19 @@ export function EditTripSheet({
     // person was shown.
     let basedOn = trip.updatedAt;
     if (changes.routeChanged) {
-      const saved = await onSaveRoute(stops as TripStop[]);
-      if (!saved) {
+      const saved = await onSaveRoute(stops as TripStop[], basedOn);
+      if (!saved || saved === "stale") {
         setBusy(false);
-        setNotice("route-failed");
+        setNotice(saved === "stale" ? "stale" : "route-failed");
         return;
       }
       basedOn = saved.updatedAt ?? basedOn;
     }
     if (changes.travelChanged && mode) {
-      const saved = await onSetTravelMode(mode);
-      if (!saved) {
+      const saved = await onSetTravelMode(mode, basedOn);
+      if (!saved || saved === "stale") {
         setBusy(false);
-        setNotice("travel-failed");
+        setNotice(saved === "stale" ? "stale" : "travel-failed");
         return;
       }
       basedOn = saved.updatedAt ?? basedOn;
@@ -246,6 +257,22 @@ export function EditTripSheet({
     onClose();
   }
 
+  // #376 §1.6: the list starts folded away if the open panel would cover more than 45% of the screen. The height it would have
+  // open is what is not the list now plus the list's natural height (the list is only hidden, never removed, so it can be read).
+  useLayoutEffect(() => {
+    if (movesOpen !== null) return;
+    const measure = () => {
+      const panel = panelRef.current;
+      const list = rowsRef.current;
+      if (!panel || !list) return;
+      const expanded = panel.offsetHeight - list.offsetHeight + list.scrollHeight;
+      setAutoOpen(expanded <= window.innerHeight * 0.45);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [movesOpen, rows, notice, needsTick, changes.notes.length, problems.length]);
+
   const message = notice ? NOTICES[notice] : null;
   // The failure sits just above the pinned panel; make sure it is in view when it appears.
   useEffect(() => {
@@ -253,7 +280,7 @@ export function EditTripSheet({
   }, [message]);
 
   const panel = (
-    <div className={styles.panel}>
+    <div ref={panelRef} className={styles.panel}>
       {message ? (
         <p ref={failureRef} className={styles.failure} role="alert">
           {message}
@@ -286,7 +313,12 @@ export function EditTripSheet({
       <p className="sr-only" role="status" aria-label="Changes summary">
         {count === 0 ? "Nothing to save yet." : `${changeCount(count)} to save.`}
       </p>
-      <div id={`${ids}-rows`} className={styles.rows} data-open={listOpen ? "" : undefined}>
+      <div
+        ref={rowsRef}
+        id={`${ids}-rows`}
+        className={styles.rows}
+        data-open={listOpen ? "" : undefined}
+      >
         {count === 0 ? (
           <p className={styles.empty}>No changes yet.</p>
         ) : (
@@ -340,10 +372,10 @@ export function EditTripSheet({
       title="Edit trip"
       description={tripDisplayName(trip)}
       onClose={() => !busy && onClose()}
-      dismissOnBackdrop={count === 0}
+      dismissOnBackdrop={!edited}
       actions={panel}
     >
-      <div className={styles.body} data-edit-body="">
+      <div className={styles.body} data-edit-body="" inert={busy}>
         <Section
           id={`${ids}-route`}
           title="Route & dates"
@@ -427,65 +459,68 @@ export function EditTripSheet({
           dirty={changes.dirty.preferences}
           onToggle={() => setOpen((current) => ({ ...current, preferences: !current.preferences }))}
         >
-          <fieldset className="pref-group">
-            <legend>Clothing counts</legend>
-            <Switch
-              label="Laundry on this trip"
-              description="Halves anything marked ↻ in your Staples."
-              checked={prefs.laundry}
-              onChange={(laundry) => patch({ laundry })}
-            />
-            <Switch
-              label="One spare underwear + socks"
-              description="Added to the bag count, not the return outfit."
-              checked={prefs.spare}
-              onChange={(spare) => patch({ spare })}
-            />
-            <Switch
-              label="Dedicated return travel outfit"
-              description={returnOutfitHelp(prefs.returnOutfit)}
-              checked={prefs.returnOutfit}
-              onChange={(returnOutfit) => patch({ returnOutfit })}
-            />
-          </fieldset>
-          <fieldset className="pref-group">
-            <legend>Nice outfits</legend>
-            <Switch
-              label="Nice outfits"
-              description={NICE_OUTFITS_DESCRIPTION}
-              checked={prefs.niceAttire}
-              onChange={(niceAttire) => patch({ niceAttire })}
-            />
-            {prefs.niceAttire ? null : (
-              <p id={niceHintId} className="tiny muted nice-hint">
-                {NICE_OFF_HINT}
-              </p>
-            )}
-            <div className={`${planStyles.twoCol} occasion-row`}>
-              <label className={planStyles.field}>
-                Occasions
-                <input
-                  type="number"
-                  min={MIN_OCCASIONS}
-                  max={MAX_OCCASIONS}
-                  value={prefs.occasionCount}
-                  disabled={!prefs.niceAttire}
-                  aria-describedby={prefs.niceAttire ? undefined : niceHintId}
-                  onChange={(event) =>
-                    patch({ occasionCount: clampOccasions(event.target.valueAsNumber) })
-                  }
-                />
-              </label>
+          <div className={styles.prefs}>
+            <fieldset className="pref-group">
+              <legend>Clothing counts</legend>
               <Switch
-                label="Reuse one nice look"
-                description="Repeat the same pieces."
-                checked={prefs.reuseNice}
-                disabled={!prefs.niceAttire}
-                describedBy={prefs.niceAttire ? undefined : niceHintId}
-                onChange={(reuseNice) => patch({ reuseNice })}
+                label="Laundry on this trip"
+                marker={<Icon name="refresh" size={16} />}
+                description="Halves anything marked ↻ in your Staples."
+                checked={prefs.laundry}
+                onChange={(laundry) => patch({ laundry })}
               />
-            </div>
-          </fieldset>
+              <Switch
+                label="One spare underwear + socks"
+                description="Added to the bag count, not the return outfit."
+                checked={prefs.spare}
+                onChange={(spare) => patch({ spare })}
+              />
+              <Switch
+                label="Dedicated return travel outfit"
+                description={returnOutfitHelp(prefs.returnOutfit)}
+                checked={prefs.returnOutfit}
+                onChange={(returnOutfit) => patch({ returnOutfit })}
+              />
+            </fieldset>
+            <fieldset className="pref-group">
+              <legend>Nice outfits</legend>
+              <Switch
+                label="Nice outfits"
+                description={NICE_OUTFITS_DESCRIPTION}
+                checked={prefs.niceAttire}
+                onChange={(niceAttire) => patch({ niceAttire })}
+              />
+              {prefs.niceAttire ? null : (
+                <p id={niceHintId} className="tiny muted nice-hint">
+                  {NICE_OFF_HINT}
+                </p>
+              )}
+              <div className={`${planStyles.twoCol} occasion-row`}>
+                <label className={planStyles.field}>
+                  Occasions
+                  <input
+                    type="number"
+                    min={MIN_OCCASIONS}
+                    max={MAX_OCCASIONS}
+                    value={prefs.occasionCount}
+                    disabled={!prefs.niceAttire}
+                    aria-describedby={prefs.niceAttire ? undefined : niceHintId}
+                    onChange={(event) =>
+                      patch({ occasionCount: clampOccasions(event.target.valueAsNumber) })
+                    }
+                  />
+                </label>
+                <Switch
+                  label="Reuse one nice look"
+                  description="Repeat the same pieces."
+                  checked={prefs.reuseNice}
+                  disabled={!prefs.niceAttire}
+                  describedBy={prefs.niceAttire ? undefined : niceHintId}
+                  onChange={(reuseNice) => patch({ reuseNice })}
+                />
+              </div>
+            </fieldset>
+          </div>
           <p className="tiny muted">
             <strong>How we count:</strong>{" "}
             {tripMathLine(mathDays.days, mathDays.dailyDays, prefs.returnOutfit)}

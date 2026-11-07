@@ -110,3 +110,34 @@ describe("setTravelMode (memory source, Edit trip #389)", () => {
     await expect(memory.setTravelMode("nope", "fly")).rejects.toThrow(TripsSourceError);
   });
 });
+
+describe("the reviewed version on the memory source's route and travel saves (#389)", () => {
+  const withVersion = () => {
+    const state = sampleLifecycleState();
+    state.trips[0] = { ...state.trips[0], updatedAt: "T1" };
+    return createMemoryTripsSource(state, {
+      now: () => 1,
+      newId: () => "new",
+      today: () => "2026-10-16",
+    });
+  };
+  const one = [stop("us-ca-san-diego", "2026-10-23", "2026-10-26")];
+
+  it("a save based on another version is STALE and changes nothing", async () => {
+    const memory = withVersion();
+    await expect(memory.setStops("san-diego", one, "T0")).rejects.toThrow(
+      new TripsSourceError("STALE"),
+    );
+    await expect(memory.setTravelMode("san-diego", "drive", "T0")).rejects.toThrow(
+      new TripsSourceError("STALE"),
+    );
+    expect((await memory.getTrip("san-diego")).travelMode).toBeUndefined();
+  });
+
+  it("the current version applies; no version at all is unchecked", async () => {
+    const memory = withVersion();
+    expect((await memory.setStops("san-diego", one, "T1")).trip.end).toBe("2026-10-26");
+    expect((await memory.setTravelMode("san-diego", "drive", "T1")).trip.travelMode).toBe("drive");
+    expect((await memory.setTravelMode("san-diego", "fly")).trip.travelMode).toBe("fly");
+  });
+});

@@ -139,6 +139,7 @@ test("a packed count above the new target is shown, needs an acknowledgement, an
   await expect(row(page, "tops")).toContainText("4 of 4 packed");
   const dialog = await openPreferences(page);
   await dialog.getByRole("switch", { name: "Laundry on this trip" }).check();
+  await showChanges(page);
   await expect(dialog.getByText("Packed 4 → 2")).toBeVisible();
   await expect(save(page)).toBeDisabled();
   await dialog.getByRole("checkbox", { name: /I understand/ }).check();
@@ -229,6 +230,7 @@ test("Ready turns off with a preference change, and the panel says so first", as
   await expect(page.getByRole("heading", { name: "Lisbon", level: 1 })).toBeVisible();
   const dialog = await openPreferences(page);
   await dialog.getByRole("switch", { name: "Laundry on this trip" }).uncheck();
+  await showChanges(page);
   await expect(dialog.getByText(/Ready turns off/)).toBeVisible();
   const acknowledge = dialog.getByRole("checkbox", { name: /I understand/ });
   if ((await acknowledge.count()) > 0) await acknowledge.check();
@@ -361,7 +363,7 @@ test("at 195px the sheet and its live panel fit: no sideways scroll, Save in vie
       (body) => body.scrollWidth - body.clientWidth,
     ),
   ]);
-  expect(scrolls.every((extra) => extra <= 0)).toBe(true);
+  expect(scrolls).toEqual(scrolls.map(() => 0));
   await expect(save(page)).toBeInViewport();
   await expect(dialog.getByRole("button", { name: "Cancel" })).toBeInViewport();
   // Nothing inside the sheet is wider than the sheet, and no text box is clipped by its own overflow.
@@ -395,4 +397,41 @@ test("at 195px the sheet and its live panel fit: no sideways scroll, Save in vie
     return widest;
   });
   expect(longest).toBeLessThanOrEqual(195);
+});
+
+// Spec #376 1.6: on a phone the list of changes starts folded away when it would cover more than 45% of the screen (here a 195 x 640
+// screen with a one-row list), and a press on "See what moves" opens it and keeps it open.
+test("on a very small phone a short list starts folded, and the person's choice is kept", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 195, height: 640 });
+  await page.clock.setFixedTime(NOW);
+  await signInAsOwner(page);
+  await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
+  await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
+  const dialog = await openPreferences(page);
+  await dialog.getByRole("switch", { name: "One spare underwear + socks" }).uncheck();
+  const moves = dialog.getByRole("button", { name: /See what moves/ });
+  await expect(moves).toHaveAttribute("aria-expanded", "false");
+  await expect(changesList(page)).toBeHidden();
+  await moves.click();
+  await expect(changesList(page)).toBeVisible();
+  await dialog.getByRole("switch", { name: "One spare underwear + socks" }).check();
+  await dialog.getByRole("switch", { name: "Laundry on this trip" }).check();
+  await expect(moves).toHaveAttribute("aria-expanded", "true");
+});
+
+test("the edit controls wait while a save is on its way", async ({ page }) => {
+  await legacyPackingLayout(page);
+  await openSanDiego(page);
+  const dialog = await openPreferences(page);
+  await dialog.getByRole("switch", { name: "Laundry on this trip" }).check();
+  await page.route("**/trips/**", async (route) => {
+    if (route.request().method() === "POST") await new Promise((done) => setTimeout(done, 1500));
+    await route.continue();
+  });
+  const save = dialog.getByRole("button", { name: /^Save \d+ changes?$/ });
+  await save.click();
+  await expect(dialog.locator("[data-edit-body]")).toHaveAttribute("inert", "");
+  await expect(sheet(page)).toHaveCount(0, { timeout: 15_000 });
 });

@@ -290,39 +290,55 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
       .finally(() => setBathroomSaving(false));
   }
 
-  /** Save the route from the Edit trip sheet; true once saved. The sheet shows its own failure message. */
+  /** Save the route from the Edit trip sheet, based on the version the sheet reviewed. */
   function saveRoute(
     id: string,
     stops: Parameters<typeof source.setStops>[1],
+    basedOn: string | undefined,
   ): Promise<SaveResult> {
-    return saveAndReload(id, () => source.setStops(id, stops), true);
+    return saveAndReload(() => source.setStops(id, stops, basedOn), true);
   }
 
-  /** Save how the trip is travelled from the Edit trip sheet. */
-  function saveTravelMode(id: string, mode: Parameters<typeof source.setTravelMode>[1]) {
-    return saveAndReload(id, () => source.setTravelMode(id, mode), false);
-  }
-
-  /** One of the sheet's saves, then the reloaded list; resolves the trip's new save time, or null when it failed. */
-  function saveAndReload(
+  /** Save how the trip is travelled from the Edit trip sheet, based on the version the sheet reviewed. */
+  function saveTravelMode(
     id: string,
-    write: () => Promise<unknown>,
+    mode: Parameters<typeof source.setTravelMode>[1],
+    basedOn: string | undefined,
+  ) {
+    return saveAndReload(() => source.setTravelMode(id, mode, basedOn), false);
+  }
+
+  /**
+   * One of the sheet's saves. The write and the reload are separate: a rejected write is "stale" (the trip changed since the sheet
+   * was based on it) or null; a committed write always answers with ITS OWN save time (never one read from a later reload, which
+   * could belong to someone else's save), and a reload that fails afterwards only says so.
+   */
+  async function saveAndReload(
+    write: () => Promise<{ trip: { updatedAt?: string } }>,
     refresh: boolean,
   ): Promise<SaveResult> {
-    let updatedAt: string | undefined;
-    return track(
-      async () => {
-        await write();
-        return source.load();
-      },
+    let change: { trip: { updatedAt?: string } };
+    try {
+      change = await track(write, () => undefined);
+    } catch (error) {
+      if (error instanceof Error && error.message === "STALE") {
+        await source
+          .load()
+          .then((next) => setLoad({ phase: "ready", state: next, today: getToday() }))
+          .catch(() => undefined);
+        return "stale";
+      }
+      return null;
+    }
+    await track(
+      () => source.load(),
       (next) => {
         setLoad({ phase: "ready", state: next, today: getToday() });
-        updatedAt = next.trips.find((trip) => trip.id === id)?.updatedAt;
         if (refresh) router.refresh?.();
       },
-    )
-      .then((): SaveResult => ({ updatedAt }))
-      .catch((): SaveResult => null);
+      { read: true },
+    ).catch(() => toast.show("Saved, but couldn’t refresh your trips. Reload the page to see it."));
+    return { updatedAt: change.trip.updatedAt };
   }
 
   /** Apply reviewed packing preferences from the Edit trip sheet (#203). STALE means the trip changed since the review. */
@@ -557,8 +573,8 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
           trip={editTarget}
           initialTab="route"
           onClose={() => setEditing(null)}
-          onSaveRoute={(stops) => saveRoute(editTarget.id, stops)}
-          onSetTravelMode={(mode) => saveTravelMode(editTarget.id, mode)}
+          onSaveRoute={(stops, basedOn) => saveRoute(editTarget.id, stops, basedOn)}
+          onSetTravelMode={(mode, basedOn) => saveTravelMode(editTarget.id, mode, basedOn)}
           onApplyPreferences={(config, basedOn) => applyPreferences(editTarget.id, config, basedOn)}
         />
       ) : null}

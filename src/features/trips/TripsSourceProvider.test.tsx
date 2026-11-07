@@ -299,12 +299,17 @@ describe("TripsSourceProvider", () => {
         () => actions.commands.setStampLabelsAction,
         ["t", "ABC", null],
       ],
-      ["setStops", (s) => s.setStops("t", []), () => actions.commands.setStopsAction, ["t", []]],
+      [
+        "setStops",
+        (s) => s.setStops("t", [], "T1"),
+        () => actions.commands.setStopsAction,
+        ["t", [], "T1"],
+      ],
       [
         "setTravelMode",
-        (s) => s.setTravelMode("t", "drive"),
+        (s) => s.setTravelMode("t", "drive", "T1"),
         () => actions.commands.setTravelModeAction,
-        ["t", "drive"],
+        ["t", "drive", "T1"],
       ],
     ];
 

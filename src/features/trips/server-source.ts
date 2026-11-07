@@ -77,8 +77,12 @@ export interface TripActions {
     slot1: string | null,
     slot2: string | null,
   ): Promise<TripCommandResult>;
-  setStops(tripId: string, stops: TripStop[]): Promise<TripCommandResult>;
-  setTravelMode(tripId: string, travelMode: TravelMode): Promise<TripCommandResult>;
+  setStops(tripId: string, stops: TripStop[], basedOn?: string): Promise<TripCommandResult>;
+  setTravelMode(
+    tripId: string,
+    travelMode: TravelMode,
+    basedOn?: string,
+  ): Promise<TripCommandResult>;
 }
 
 export interface WeatherActions {
@@ -201,8 +205,8 @@ export function createServerTripsSource(
       unwrapChange(trip.updatePreferences(id, config, basedOn)),
     setTheme: (id, theme) => unwrapChange(trip.setTheme(id, theme)),
     setStampLabels: (id, slot1, slot2) => unwrapChange(trip.setStampLabels(id, slot1, slot2)),
-    setStops: (id, stops) => unwrapChange(trip.setStops(id, stops)),
-    setTravelMode: (id, mode) => unwrapChange(trip.setTravelMode(id, mode)),
+    setStops: (id, stops, basedOn) => unwrapChange(trip.setStops(id, stops, basedOn)),
+    setTravelMode: (id, mode, basedOn) => unwrapChange(trip.setTravelMode(id, mode, basedOn)),
   };
 
   if (trip.getHomeCity) {

@@ -524,6 +524,11 @@ p {
   .modal-side .modal-head {
     padding: 16px 16px 8px;
   }
+  /* The phone panel is a rounded sheet: the strip behind it must not paint over its corners. */
+  .modal-side .modal-actions {
+    border-top: 0;
+    background: transparent;
+  }
   .modal-side .modal-head p {
     font-size: 28px;
   }

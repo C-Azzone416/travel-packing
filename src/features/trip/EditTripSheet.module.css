@@ -101,6 +101,7 @@
 
 /* The live panel: pinned under the body. */
 .panel {
+  background: var(--paper);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -115,6 +116,7 @@
 @media (max-width: 1023px) {
   .panel {
     padding: 14px 16px 16px;
+    border-top: 1px solid var(--line2);
     border-radius: 20px 20px 0 0;
   }
 }
@@ -190,9 +192,13 @@
   min-height: 0;
   overflow-y: auto;
 }
+/* Folded away on a phone: hidden and taken out of the tab order, but still laid out so its height can be measured. */
 @media (max-width: 1023px) {
   .rows:not([data-open]) {
-    display: none;
+    flex: none;
+    max-height: 0;
+    overflow: hidden;
+    visibility: hidden;
   }
 }
 .list {
@@ -293,5 +299,45 @@
   }
   .buttons > button:last-child {
     order: -1;
+  }
+}
+
+/* Packing preferences: each switch is its own paper row inside the paper2 section (spec #376 1.6, ed-l): 16px corners, 15px help,
+   the switch on the right. Scoped here; the shared switch row elsewhere is unchanged. */
+.prefs :global(.toggle-row) {
+  margin: 0 0 8px;
+  padding: 12px 16px;
+  border: 0;
+  border-radius: 16px;
+  background: var(--paper);
+}
+.prefs :global(.toggle-row) strong {
+  font-size: 17px;
+  overflow-wrap: break-word;
+}
+.prefs :global(.toggle-row) p {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.35;
+}
+.prefs :global(.switch-marker) {
+  display: inline-flex;
+  margin-right: 6px;
+  vertical-align: -2px;
+}
+/* On a very narrow screen the switch goes under its text, so whole words keep their room. */
+@media (max-width: 359px) {
+  .body {
+    padding-inline: 12px;
+  }
+  .section {
+    padding: 12px;
+  }
+  .prefs :global(.toggle-row) {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 12px;
   }
 }

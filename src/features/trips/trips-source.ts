@@ -147,9 +147,9 @@ export interface TripsSource {
    */
   setStampLabels(tripId: string, slot1: string | null, slot2: string | null): Promise<TripChange>;
   /** Replace the trip's route (1-6 stops). Dates, day counts and calculated items follow; rejects an invalid route. */
-  setStops(tripId: string, stops: TripStop[]): Promise<TripChange>;
+  setStops(tripId: string, stops: TripStop[], basedOn?: string): Promise<TripChange>;
   /** Change how the trip is travelled (Fly / Drive / Train or other); the origin and the name are left alone. */
-  setTravelMode(tripId: string, mode: TravelMode): Promise<TripChange>;
+  setTravelMode(tripId: string, mode: TravelMode, basedOn?: string): Promise<TripChange>;
   savedLists?: SavedListsCapability;
   /** Live weather integration exists on the real source. Memory/unit sources may leave it out. */
   weather?: {
@@ -384,8 +384,10 @@ export function createMemoryTripsSource(
           throw new TripsSourceError("STALE");
         return recalculateSuggestions(trip, config, calculateSuggestions);
       }),
-    setStops: (id, stops) =>
+    setStops: (id, stops, basedOn) =>
       direct(id, (trip) => {
+        if (basedOn !== undefined && trip.updatedAt !== undefined && basedOn !== trip.updatedAt)
+          throw new TripsSourceError("STALE");
         if (!validateStops(stops).ok) throw new TripsSourceError("INVALID_INPUT");
         const { start, end } = tripDatesFromStops(stops);
         const moved = recalculateSuggestions(
@@ -407,10 +409,14 @@ export function createMemoryTripsSource(
           ],
         };
       }),
-    setTravelMode: (id, mode) => {
+    setTravelMode: (id, mode, basedOn) => {
       if (!TRAVEL_MODES.includes(mode))
         return Promise.reject(new TripsSourceError("INVALID_INPUT"));
-      return direct(id, (trip) => ({ ...trip, travelMode: mode }));
+      return direct(id, (trip) => {
+        if (basedOn !== undefined && trip.updatedAt !== undefined && basedOn !== trip.updatedAt)
+          throw new TripsSourceError("STALE");
+        return { ...trip, travelMode: mode };
+      });
     },
     setTheme: (id, theme) => {
       if (!isThemeId(theme)) return Promise.reject(new TripsSourceError("INVALID_INPUT"));

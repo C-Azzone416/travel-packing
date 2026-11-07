@@ -250,3 +250,58 @@ describe("setTravelModeAction (Edit trip, #389)", () => {
     expect(await setTravelModeAction(trip.id, "fly")).toEqual({ ok: false, code: "INTERNAL" });
   });
 });
+
+describe("the reviewed version on the route and travel mutations (#389)", () => {
+  const stored = async () => {
+    const created = await createTripAction(route(ROUTE));
+    if (!created.ok) throw new Error(created.code);
+    return created.trip;
+  };
+  const rome = [
+    { location: locationById("it-lazio-rome")!, arrive: "2030-05-02", leave: "2030-05-05" },
+  ];
+
+  it("setStops with the current version applies, and its answer carries the next version", async () => {
+    const trip = await stored();
+    expect(trip.updatedAt).toBeTruthy();
+    const result = await setStopsAction(trip.id, rome, trip.updatedAt);
+    if (!result.ok) throw new Error(result.code);
+    expect(result.trip.stops).toHaveLength(1);
+    expect(result.trip.updatedAt).not.toBe(trip.updatedAt);
+  });
+
+  it("setStops based on an older version is STALE and changes nothing", async () => {
+    const trip = await stored();
+    const other = await setTravelModeAction(trip.id, "drive"); // a concurrent save by the same owner
+    if (!other.ok) throw new Error(other.code);
+    expect(await setStopsAction(trip.id, rome, trip.updatedAt)).toEqual({
+      ok: false,
+      code: "STALE",
+    });
+    const after = await setTravelModeAction(trip.id, "drive");
+    if (!after.ok) throw new Error(after.code);
+    expect(after.trip.stops).toHaveLength(2);
+  });
+
+  it("setTravelMode based on an older version is STALE and changes nothing; the current one applies", async () => {
+    const trip = await stored();
+    const moved = await setStopsAction(trip.id, rome); // no version: unchanged behaviour
+    if (!moved.ok) throw new Error(moved.code);
+    expect(await setTravelModeAction(trip.id, "drive", trip.updatedAt)).toEqual({
+      ok: false,
+      code: "STALE",
+    });
+    const ok = await setTravelModeAction(trip.id, "drive", moved.trip.updatedAt);
+    if (!ok.ok) throw new Error(ok.code);
+    expect(ok.trip.travelMode).toBe("drive");
+  });
+
+  it("a chain of the sheet's saves, each on the version the one before returned, is accepted end to end", async () => {
+    const trip = await stored();
+    const first = await setStopsAction(trip.id, rome, trip.updatedAt);
+    if (!first.ok) throw new Error(first.code);
+    const second = await setTravelModeAction(trip.id, "other", first.trip.updatedAt);
+    if (!second.ok) throw new Error(second.code);
+    expect(second.trip.travelMode).toBe("other");
+  });
+});

@@ -14,7 +14,21 @@ test.beforeEach(({}, info) => {
 });
 const NOW = new Date("2026-10-16T12:00:00");
 
-async function openEdited(page: Page, width: number, height: number) {
+interface Cell {
+  /** Open the list of changes (the default on a phone is whatever the 45% rule gives). */
+  openList?: boolean;
+  /** Fewer edits: only how you are getting there (a short list). */
+  short?: boolean;
+  /** Scroll the body to Packing preferences (otherwise to the top). */
+  prefs?: boolean;
+}
+
+async function openEdited(
+  page: Page,
+  width: number,
+  height: number,
+  cell: Cell = { openList: true },
+) {
   await page.setViewportSize({ width, height });
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.clock.setFixedTime(NOW);
@@ -28,18 +42,33 @@ async function openEdited(page: Page, width: number, height: number) {
     await expect(page.getByRole("dialog", { name: "Edit trip" })).toBeVisible({ timeout: 1000 });
   }).toPass();
   const dialog = page.getByRole("dialog", { name: "Edit trip" });
-  await dialog.getByRole("button", { name: "One night more" }).click();
-  await dialog.getByRole("button", { name: "One night more" }).click();
-  await dialog.getByRole("radio", { name: "Drive" }).check();
-  await dialog.getByRole("button", { name: "Packing preferences" }).click();
-  await dialog.getByRole("switch", { name: "Laundry on this trip" }).check();
-  await expect(dialog.getByRole("button", { name: /^Save \d+ changes$/ })).toBeVisible();
-  // The live list open (a phone starts it folded away when it is long).
+  if (cell.short) {
+    await dialog.getByRole("radio", { name: "Drive" }).check();
+  } else {
+    await dialog.getByRole("button", { name: "One night more" }).click();
+    await dialog.getByRole("button", { name: "One night more" }).click();
+    await dialog.getByRole("radio", { name: "Drive" }).check();
+    await dialog.getByRole("button", { name: "Packing preferences" }).click();
+    await dialog.getByRole("switch", { name: "Laundry on this trip" }).check();
+  }
+  await expect(dialog.getByRole("button", { name: /^Save \d+ changes?$/ })).toBeVisible();
   const moves = dialog.getByRole("button", { name: /See what moves/ });
-  if ((await moves.isVisible()) && (await moves.getAttribute("aria-expanded")) === "false")
+  if (
+    cell.openList &&
+    (await moves.isVisible()) &&
+    (await moves.getAttribute("aria-expanded")) === "false"
+  )
     await moves.click();
-  await expect(dialog.getByRole("list", { name: "What changes in your list" })).toBeVisible();
-  await dialog.locator("[data-edit-body]").evaluate((body) => body.scrollTo(0, 0));
+  const body = dialog.locator("[data-edit-body]");
+  if (cell.prefs) {
+    await dialog.getByRole("button", { name: "Packing preferences" }).scrollIntoViewIfNeeded();
+    await body.evaluate((node) => {
+      const head = [...node.querySelectorAll("button")].find((b) =>
+        b.textContent?.startsWith("Packing preferences"),
+      );
+      head?.scrollIntoView({ block: "start" });
+    });
+  } else await body.evaluate((node) => node.scrollTo(0, 0));
   return dialog;
 }
 
@@ -54,6 +83,10 @@ test.describe("laptop", () => {
     await openEdited(page, 1280, 1000);
     await shot(page, "edit-l-ocean-1280");
   });
+  test("edit-l-ocean-1280-prefs", async ({ page }) => {
+    await openEdited(page, 1280, 1000, { openList: true, prefs: true });
+    await shot(page, "edit-l-ocean-1280-prefs");
+  });
 });
 
 test.describe("phone", () => {
@@ -63,7 +96,12 @@ test.describe("phone", () => {
     await shot(page, "edit-p-ocean-390");
   });
   test("edit-p-ocean-195", async ({ page }) => {
-    await openEdited(page, 195, 640);
+    // The default phone state: a short change list that is still more than 45% of the screen starts folded away.
+    const dialog = await openEdited(page, 195, 640, { short: true });
+    await expect(dialog.getByRole("button", { name: /See what moves/ })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
     await shot(page, "edit-p-ocean-195");
   });
 });

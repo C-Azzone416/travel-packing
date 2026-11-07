@@ -341,11 +341,13 @@ export async function updatePreferencesAction(
 export async function setStopsAction(
   tripId: string,
   stops: TripStop[],
+  basedOn?: string,
 ): Promise<TripCommandResult> {
   return withContext(
     (context) =>
       service.setTripStops(context, {
         tripId,
+        ...(basedOn ? { basedOn } : {}),
         stops: stops.map((stop) => ({
           location: { id: stop.location.id },
           arrive: stop.arrive,
@@ -360,9 +362,11 @@ export async function setStopsAction(
 export async function setTravelModeAction(
   tripId: string,
   travelMode: TravelMode,
+  basedOn?: string,
 ): Promise<TripCommandResult> {
   return withContext(
-    (context) => service.updateTripTravel(context, { tripId, travelMode }),
+    (context) =>
+      service.updateTripTravel(context, { tripId, travelMode, ...(basedOn ? { basedOn } : {}) }),
     (trip) => ({ ok: true as const, trip: toLifecycleTrip(trip), signals: NO_SIGNALS }),
   ) as Promise<TripCommandResult>;
 }

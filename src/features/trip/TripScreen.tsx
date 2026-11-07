@@ -430,6 +430,19 @@ export function TripScreen({
     )?.focus();
   }, [dialog, load]);
 
+  /** A failed save from the Edit trip sheet: STALE (the trip changed since the sheet was based on it) shows the current trip first. */
+  function failedSave(error: unknown, resolve: (result: SaveResult) => void) {
+    if (!(error instanceof Error && error.message === "STALE")) return resolve(null);
+    void source
+      .getTrip(tripId)
+      .then((current) => {
+        confirmed.current = current;
+        setLoad({ phase: "ready", trip: current });
+      })
+      .catch(() => undefined)
+      .finally(() => resolve("stale"));
+  }
+
   const close = () => {
     setDialog(null);
     // The sheet has no opener to give focus back to, so the screen puts it somewhere sensible itself (above).
@@ -1222,11 +1235,11 @@ export function TripScreen({
           trip={trip}
           initialTab={dialog.tab}
           onClose={close}
-          onSaveRoute={(stops) =>
+          onSaveRoute={(stops, basedOn) =>
             new Promise<SaveResult>((resolve) => {
-              void act(() => source.setStops(tripId, stops), {
+              void act(() => source.setStops(tripId, stops, basedOn), {
                 modal: true,
-                onFail: () => resolve(null),
+                onFail: (error) => failedSave(error, resolve),
                 announce: () => "Route updated.",
                 after: (change) => {
                   // New stops and dates are a new question for the weather service.
@@ -1236,11 +1249,11 @@ export function TripScreen({
               });
             })
           }
-          onSetTravelMode={(mode) =>
+          onSetTravelMode={(mode, basedOn) =>
             new Promise<SaveResult>((resolve) => {
-              void act(() => source.setTravelMode(tripId, mode), {
+              void act(() => source.setTravelMode(tripId, mode, basedOn), {
                 modal: true,
-                onFail: () => resolve(null),
+                onFail: (error) => failedSave(error, resolve),
                 announce: () => "Getting there updated.",
                 after: (change) => resolve({ updatedAt: change.trip.updatedAt }),
               });

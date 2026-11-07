@@ -27,8 +27,8 @@ interface Options {
   tab?: EditTripTab;
   today?: string;
   apply?: (config: TripConfig, basedOn: string | undefined) => Promise<ApplyOutcome>;
-  saveRoute?: (stops: TripStop[]) => Promise<SaveResult>;
-  setMode?: (mode: TravelMode) => Promise<SaveResult>;
+  saveRoute?: (stops: TripStop[], basedOn?: string) => Promise<SaveResult>;
+  setMode?: (mode: TravelMode, basedOn?: string) => Promise<SaveResult>;
 }
 
 function setup(options: Options = {}) {
@@ -341,7 +341,8 @@ describe("EditTripSheet: Save N changes", () => {
     const stops = onSaveRoute.mock.calls[0][0];
     expect(stops).toHaveLength(1);
     expect(stops[0].leave).toBe("2026-10-28");
-    expect(onSetTravelMode).toHaveBeenCalledWith("other");
+    expect(onSaveRoute.mock.calls[0][1]).toBe("T1");
+    expect(onSetTravelMode).toHaveBeenCalledWith("other", "T2");
     expect(onApplyPreferences).toHaveBeenCalledWith({ ...trip.config, laundry: true }, "T3");
   });
 
@@ -366,7 +367,7 @@ describe("EditTripSheet: Save N changes", () => {
     await user.click(within(dialog()).getByRole("radio", { name: "Drive" }));
     await user.click(saveButton(dialog()));
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
-    expect(onSetTravelMode).toHaveBeenCalledWith("drive");
+    expect(onSetTravelMode).toHaveBeenCalledWith("drive", "T1");
     expect(onSaveRoute).not.toHaveBeenCalled();
     expect(onApplyPreferences).not.toHaveBeenCalled();
   });
@@ -456,6 +457,119 @@ describe("EditTripSheet: Save N changes", () => {
       (within(dialog()).getByRole("button", { name: "Undo all" }) as HTMLButtonElement).disabled,
     ).toBe(true);
     await act(async () => finish("ok"));
+  });
+});
+
+describe("EditTripSheet: version checks and edits during a save (#389 round 2)", () => {
+  it("a route save the server refuses as stale stops the chain, keeps the edits and says the list moved on", async () => {
+    const { user, dialog, onClose, onSetTravelMode, onApplyPreferences } = setup({
+      tab: "route",
+      saveRoute: async () => "stale",
+    });
+    await user.click(within(dialog()).getByRole("button", { name: "One night more" }));
+    await user.click(within(dialog()).getByRole("radio", { name: "Drive" }));
+    await user.click(saveButton(dialog()));
+    expect(
+      await within(dialog()).findByText(/Your list changed while you were editing/),
+    ).toBeTruthy();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(onSetTravelMode).not.toHaveBeenCalled();
+    expect(onApplyPreferences).not.toHaveBeenCalled();
+    expect(
+      (within(dialog()).getByRole("radio", { name: "Drive" }) as HTMLInputElement).checked,
+    ).toBe(true);
+  });
+
+  it("a travel-mode save refused as stale stops before the preferences", async () => {
+    const { user, dialog, onClose, onApplyPreferences } = setup({
+      tab: "route",
+      setMode: async () => "stale",
+    });
+    await user.click(within(dialog()).getByRole("radio", { name: "Drive" }));
+    await user.click(within(dialog()).getByRole("button", { name: /Packing preferences/ }));
+    await user.click(toggle(dialog(), "Laundry on this trip"));
+    await user.click(saveButton(dialog()));
+    expect(
+      await within(dialog()).findByText(/Your list changed while you were editing/),
+    ).toBeTruthy();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(onApplyPreferences).not.toHaveBeenCalled();
+  });
+
+  it("the edit controls are inert while the save is pending, and open again after a failure", async () => {
+    let finish!: (value: ApplyOutcome) => void;
+    const { user, dialog } = setup({
+      apply: () => new Promise<ApplyOutcome>((resolve) => (finish = resolve)),
+    });
+    await user.click(toggle(dialog(), "One spare underwear + socks"));
+    const body = dialog().querySelector("[data-edit-body]") as HTMLElement;
+    expect(body.hasAttribute("inert")).toBe(false);
+    await user.click(saveButton(dialog()));
+    expect(body.hasAttribute("inert")).toBe(true);
+    await act(async () => finish("failed"));
+    await within(dialog()).findByRole("alert");
+    expect(body.hasAttribute("inert")).toBe(false);
+  });
+
+  it("a press on the scrim does not discard a blank 'Add a stop' (dirty, but no change row yet)", async () => {
+    const { user, dialog, onClose } = setup({ tab: "route" });
+    await user.click(within(dialog()).getByRole("button", { name: "Add a stop" }));
+    expect(within(dialog()).getByRole("button", { name: "Undo all" })).toBeTruthy();
+    fireEvent.mouseDown(screen.getByTestId("modal-backdrop"));
+    expect(onClose).not.toHaveBeenCalled();
+    await user.click(within(dialog()).getByRole("button", { name: "Undo all" }));
+    fireEvent.mouseDown(screen.getByTestId("modal-backdrop"));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("EditTripSheet: the phone list starts folded when it would cover more than 45% of the screen", () => {
+  const heights = (list: number, rest: number) => {
+    const offset = vi.spyOn(HTMLElement.prototype, "offsetHeight", "get");
+    const scroll = vi.spyOn(HTMLElement.prototype, "scrollHeight", "get");
+    // The panel is `rest` tall without its list; the list is `list` tall natural and shown at its current size.
+    offset.mockImplementation(function (this: HTMLElement) {
+      return this.dataset.open !== undefined || this.id.endsWith("-rows") ? 0 : rest;
+    });
+    scroll.mockImplementation(function (this: HTMLElement) {
+      return this.id.endsWith("-rows") ? list : 0;
+    });
+    return () => {
+      offset.mockRestore();
+      scroll.mockRestore();
+    };
+  };
+
+  it("folded when panel + list exceed 45% of the viewport, open when they fit, and the person's toggle wins", async () => {
+    const restore = heights(400, 300); // 700 of a 768px viewport
+    try {
+      const { user, dialog } = setup({ tab: "route" });
+      await user.click(within(dialog()).getByRole("radio", { name: "Drive" })); // a short list: 1 row
+      const moves = within(dialog()).getByRole("button", { name: /See what moves/ });
+      expect(moves.getAttribute("aria-expanded")).toBe("false");
+      await user.click(moves);
+      expect(moves.getAttribute("aria-expanded")).toBe("true");
+      await user.click(within(dialog()).getByRole("radio", { name: "Fly" }));
+      await user.click(within(dialog()).getByRole("radio", { name: "Drive" }));
+      expect(moves.getAttribute("aria-expanded")).toBe("true"); // still the person's choice
+    } finally {
+      restore();
+    }
+  });
+
+  it("open when panel + list fit within 45% of the viewport", async () => {
+    const fits = heights(20, 200); // 220 of 768
+    try {
+      const { user, dialog } = setup({ tab: "route" });
+      await user.click(within(dialog()).getByRole("radio", { name: "Drive" }));
+      expect(
+        within(dialog())
+          .getByRole("button", { name: /See what moves/ })
+          .getAttribute("aria-expanded"),
+      ).toBe("true");
+    } finally {
+      fits();
+    }
   });
 });
 

@@ -807,6 +807,8 @@ export function setTripStops(context: DataContext, input: unknown) {
       const txScope: OwnerScope = { db: tx as OwnerScope["db"], ownerId: scope.ownerId };
       if (!(await lockTrip(txScope.db, txScope.ownerId, request.tripId))) refuse(fail("NOT_FOUND"));
       const current = await mustLoad(txScope, request.tripId);
+      if (request.basedOn !== undefined && request.basedOn !== current.updatedAt)
+        refuse(fail("STALE"));
       const { start, end } = tripDatesFromStops(stops);
       const moved = recalculateSuggestions(
         { ...current, stops, start, end },
@@ -850,6 +852,8 @@ export function updateTripTravel(context: DataContext, input: unknown) {
       const txScope: OwnerScope = { db: tx as OwnerScope["db"], ownerId: scope.ownerId };
       if (!(await lockTrip(txScope.db, txScope.ownerId, request.tripId))) refuse(fail("NOT_FOUND"));
       const current = await mustLoad(txScope, request.tripId);
+      if (request.basedOn !== undefined && request.basedOn !== current.updatedAt)
+        refuse(fail("STALE"));
       const next: StoredTrip = {
         ...current,
         ...(origin === undefined ? {} : { origin }),
