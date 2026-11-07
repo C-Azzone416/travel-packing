@@ -3,13 +3,14 @@ import { expectAccessible } from "./helpers/a11y";
 import { ownerEmailFor, signInAsOwner } from "./helpers/auth";
 import { markTripReady } from "./helpers/database";
 import { allItemIds, expectItem, expectNoItem, expectPacking } from "./helpers/packing";
-import { DEVICE, legacyPackingLayout } from "./helpers/device";
+import { DEVICE, phoneHomeLayout } from "./helpers/device";
 import { planRouteToList, reviewAndCreate } from "./helpers/plan";
 import { FAKE_GEOCODER_PORT, OPEN_METEO_PORT } from "./support/ports";
+import { planATrip, openTripFromHome } from "./helpers/menu";
 
 // Home is the laptop suitcase view from 1024px (#387); this spec's subject is the page below it, so it runs there.
 test.beforeEach(async ({ page }) => {
-  await legacyPackingLayout(page);
+  await phoneHomeLayout(page);
 });
 
 // Weather for every stop (epic #107, #113). The app runs a second time with LOCATION_PROVIDER=open-meteo and
@@ -32,7 +33,7 @@ test.beforeEach(async () => {
 
 async function newTrip(page: Page) {
   await signInAsOwner(page);
-  await page.getByRole("link", { name: /Plan a trip/ }).click();
+  await planATrip(page);
   await expect(page.getByRole("heading", { name: "Plan a trip", level: 1 })).toBeVisible();
 }
 
@@ -61,10 +62,7 @@ async function createWeatherTrip(page: Page) {
   await page.getByRole("button", { name: "Get weather" }).click();
   await expect(weatherCard(page)).toBeChecked();
   await reviewAndCreate(page);
-  await page
-    .getByRole("link", { name: /^(Continue|Keep) packing: London/ })
-    .first()
-    .click();
+  await openTripFromHome(page, "London");
   await expectPacking(page);
   await expect(forecastList(page)).toBeVisible();
 }
@@ -100,10 +98,7 @@ test("opt in while shaping a 2-stop trip: weather-based lines with reasons, save
   }
 
   await reviewAndCreate(page);
-  await page
-    .getByRole("link", { name: /^(Continue|Keep) packing: London/ })
-    .first()
-    .click();
+  await openTripFromHome(page, "London");
   await expectPacking(page);
   await expect(forecastList(page)).toBeVisible();
   // The first London is hot and dry, in Fahrenheit.
@@ -181,10 +176,7 @@ test("opting out sends no weather request and keeps the Everyday tops and bottom
   await page.getByRole("button", { name: "Not now" }).click();
   await expect(page.getByText("Weather is off.")).toBeVisible();
   await reviewAndCreate(page);
-  await page
-    .getByRole("link", { name: /^(Continue|Keep) packing: London/ })
-    .first()
-    .click();
+  await openTripFromHome(page, "London");
   await expect(page.getByText("Weather is off.")).toBeVisible();
   await expectItem(page, "tops");
   await expectNoItem(page, "tops-short");
@@ -223,7 +215,7 @@ test("a provider failure shows Unavailable and leaves the list as it was", async
 });
 
 test("a11y: the opt-in prompt, the forecast and its review rows", DEVICE, async ({ page }) => {
-  await legacyPackingLayout(page);
+  await phoneHomeLayout(page);
   // Creates a trip, saves it, edits its route and runs axe on four screens: more than 30 s on a slow phone runner.
   test.slow();
   await newTrip(page);
@@ -233,10 +225,7 @@ test("a11y: the opt-in prompt, the forecast and its review rows", DEVICE, async 
   await expect(weatherCard(page)).toBeChecked();
   await expectAccessible(page, "plan: starting list with weather");
   await reviewAndCreate(page);
-  await page
-    .getByRole("link", { name: /^(Continue|Keep) packing: London/ })
-    .first()
-    .click();
+  await openTripFromHome(page, "London");
   await expectPacking(page);
   await expect(forecastList(page)).toBeVisible();
   // Colour contrast of the redesigned Packing screen is tracked in #377 and exempted here only.

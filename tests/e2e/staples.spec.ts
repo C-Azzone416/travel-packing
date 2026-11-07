@@ -1,8 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
 import { expectPacking, showItem } from "./helpers/packing";
-import { DEVICE, legacyPackingLayout } from "./helpers/device";
+import { DEVICE, phoneHomeLayout } from "./helpers/device";
 import { planAndCreate } from "./helpers/plan";
+import { planATrip, futureRow, openTripFromHome } from "./helpers/menu";
 
 // The Staples screen against a REAL Postgres (#18): what it shows after a reload is what was stored. Each test starts
 // from this project's freshly seeded owner (the default staples, San Diego partly packed, Lisbon Ready).
@@ -31,10 +32,10 @@ async function openStaples(page: Page) {
   await expect(section(page, "Clothing")).toBeVisible();
 }
 
-/** The ledger Home (trip headings, "Keep packing" links) is drawn below 1024px; the Staples screen is drawn at the laptop width. */
-async function underLegacyPacking<T>(page: Page, run: () => Promise<T>): Promise<T> {
+/** The phone Home (Future pill rows, packing links) is drawn below 1024px; the Staples screen is drawn at the laptop width. */
+async function underPhoneLayout<T>(page: Page, run: () => Promise<T>): Promise<T> {
   const size = page.viewportSize();
-  await legacyPackingLayout(page);
+  await phoneHomeLayout(page);
   try {
     return await run();
   } finally {
@@ -73,23 +74,23 @@ async function newTrip(
   expectedCount: number,
 ) {
   await page.goto("/");
-  await page.getByRole("link", { name: /Plan a trip/ }).click();
+  await planATrip(page);
   await planAndCreate(page, { query: "paris", option: destination, start: start, end: end });
-  // The trips are counted as headings on the ledger page (below 1024px); the laptop Home lists later trips as tags.
-  await underLegacyPacking(page, () =>
-    expect(page.getByRole("heading", { name: "Paris" })).toHaveCount(expectedCount),
+  // The trips are counted as rows under the Future pill (San Diego is the next trip on the fixed clock).
+  await underPhoneLayout(page, async () =>
+    expect(await futureRow(page, /Paris/)).toHaveCount(expectedCount),
   );
 }
 
 /** The needed quantity of the underwear row on the trip's Packing page: the tick's name reads "Underwear, 5". */
 async function underwearQty(page: Page, tripName: string): Promise<number> {
-  return underLegacyPacking(page, () => underwearQtyOnPage(page, tripName));
+  return underPhoneLayout(page, () => underwearQtyOnPage(page, tripName));
 }
 
 async function underwearQtyOnPage(page: Page, tripName: string): Promise<number> {
-  await page
-    .getByRole("link", { name: new RegExp(`(Continue|Keep) packing: ${tripName}`) })
-    .click();
+  // A fresh Home opens on Pack (the next trip's link); the Future pill chosen earlier is in the address and would stay open.
+  await page.goto("/");
+  await openTripFromHome(page, tripName);
   await expectPacking(page);
   const box = (await showItem(page, "underwear")).getByRole("checkbox");
   const name = (await box.getAttribute("aria-label")) ?? "";
@@ -100,6 +101,8 @@ async function underwearQtyOnPage(page: Page, tripName: string): Promise<number>
 test("edit a staple count: existing trips are unchanged, and the next new trip uses the new value", async ({
   page,
 }) => {
+  // Three trips are opened and two created, each through the phone Home's Future pill: more than the default 30 s.
+  test.slow();
   await openStaples(page);
   await page.goto("/");
   await newTrip(page, /Paris/, "2026-12-04", "2026-12-08", 1);
@@ -125,11 +128,8 @@ test("edit a staple count: existing trips are unchanged, and the next new trip u
   // A trip made after the edit uses it.
   await newTrip(page, /Paris/, "2026-12-04", "2026-12-08", 2);
   await page.goto("/");
-  const name = await underLegacyPacking(page, async () => {
-    await page
-      .getByRole("link", { name: /Keep packing: Paris/ })
-      .first()
-      .click();
+  const name = await underPhoneLayout(page, async () => {
+    await (await futureRow(page, /Paris/)).first().click();
     await expectPacking(page);
     return await (
       await showItem(page, "underwear")

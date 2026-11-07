@@ -20,6 +20,10 @@ import {
   pendingByStop,
   suitcaseButtonLabel,
   tagDates,
+  tagDatesShort,
+  tripCount,
+  weatherPillSub,
+  homeModel,
   upcomingRow,
   usualRows,
   weatherNote,
@@ -456,5 +460,134 @@ describe("pendingByStop", () => {
     expect(pendingByStop(t, { stops, suppressed: skipped }, 0)).toEqual({});
     const stale = Object.fromEntries(changes.map((c) => [c.semanticId, "old-rule"]));
     expect(pendingByStop(t, { stops, suppressed: stale }, 0)).toEqual(all);
+  });
+});
+
+describe("the phone tag and pills (#388)", () => {
+  it("writes the dates short, with the month once and the year only when it is not this year", () => {
+    expect(tagDatesShort({ start: "2026-03-14", end: "2026-03-24" }, "2026-03-02")).toBe(
+      "14–24 Mar",
+    );
+    expect(tagDatesShort({ start: "2026-02-28", end: "2026-03-10" }, "2026-02-01")).toBe(
+      "28 Feb – 10 Mar",
+    );
+    expect(tagDatesShort({ start: "2027-03-14", end: "2027-03-24" }, "2026-11-05")).toBe(
+      "14–24 Mar 2027",
+    );
+    expect(tagDatesShort({ start: "2026-12-30", end: "2027-01-02" }, "2026-11-05")).toBe(
+      "30 Dec – 2 Jan 2027",
+    );
+    expect(tagDatesShort({ start: "2026-03-14", end: "2026-03-14" }, "2026-03-01")).toBe("14 Mar");
+    expect(tagDatesShort({ start: "", end: "" }, "2026-03-01")).toBe("Choose dates");
+  });
+
+  it("counts trips with the right plural", () => {
+    expect([0, 1, 2].map(tripCount)).toEqual(["0 trips", "1 trip", "2 trips"]);
+  });
+
+  it("says ALERT only while a city has suggestions to review, never for rain already on the list", () => {
+    const base = { pendingCities: [] as string[], phase: "soon" as const, rows: [{}] as never };
+    expect(weatherPillSub({ phase: "ready" }, { ...base, pendingCities: ["Porto"] })).toEqual({
+      text: "ALERT",
+      alert: true,
+    });
+    // Rain in the forecast, every suggestion already added or skipped: Clear.
+    expect(weatherPillSub({ phase: "ready" }, base)).toEqual({ text: "Clear", alert: false });
+  });
+
+  it("says Usual only for a far trip that has usual rows, and N/A for a forecast with no usable row", () => {
+    const base = { pendingCities: [] as string[], phase: "soon" as const, rows: [] as never };
+    expect(weatherPillSub({ phase: "ready" }, base)).toEqual({ text: "N/A", alert: false });
+    expect(weatherPillSub({ phase: "ready" }, { ...base, phase: "far" }).text).toBe("N/A");
+    expect(
+      weatherPillSub({ phase: "ready", usual: [{}] as never }, { ...base, phase: "far" }).text,
+    ).toBe("Usual");
+    expect(weatherPillSub({ phase: "off" }, base).text).toBe("Off");
+    expect(weatherPillSub({ phase: "loading" }, base).text).toBe("…");
+    expect(weatherPillSub({ phase: "unavailable" }, base).text).toBe("N/A");
+    expect(weatherPillSub({ phase: "none" }, base).text).toBe("N/A");
+  });
+
+  it("names the cities with suggestions still to review, from the pending counts", () => {
+    const t = trip({
+      stops: [stop("Lisbon"), stop("Porto")],
+      items: [item("tops", "Clothing", 3, 0)],
+    });
+    const rainy = {
+      stopIndex: 1,
+      status: "ok",
+      days: ["2027-03-15", "2027-03-16"].map((date) => ({
+        date,
+        stopIndex: 1,
+        source: "forecast",
+        highC: 15,
+        lowC: 10,
+        precipProbability: 0.9,
+        precipMm: 0,
+        snowCm: 0,
+        uvIndexMax: 3,
+        sunshineHours: 5,
+      })),
+    } as StopWeather;
+    const model = homeModel(
+      t,
+      { phase: "ready", review: { stops: [rainy], suppressed: {} } },
+      "2027-03-02",
+    );
+    expect(model.pendingCities.length).toBeGreaterThan(0);
+    expect(model.pendingCities.every((city) => ["Lisbon", "Porto"].includes(city))).toBe(true);
+  });
+
+  it("counts pending changes on a typical-only stay in a mixed route, which has a row but no tiles", () => {
+    const t = trip({
+      stops: [stop("Lisbon"), stop("Porto")],
+      items: [item("tops", "Clothing", 3, 0)],
+    });
+    const hot = (stopIndex: number, source: "forecast" | "typical") =>
+      ({
+        stopIndex,
+        status: "ok",
+        days: ["2027-03-15", "2027-03-16"].map((date) => ({
+          date,
+          stopIndex,
+          source,
+          highC: 34,
+          lowC: 22,
+          precipProbability: 0,
+          precipMm: 0,
+          snowCm: 0,
+          uvIndexMax: 10,
+          sunshineHours: 12,
+        })),
+      }) as StopWeather;
+    const model = homeModel(
+      t,
+      {
+        phase: "ready",
+        city: [
+          { stopIndex: 1, city: "Porto", source: "typical", tiles: [], alert: false } as never,
+        ],
+        review: { stops: [hot(1, "typical")], suppressed: {} },
+      },
+      "2027-03-02",
+    );
+    expect(model.pending[1]).toBeGreaterThan(0);
+    expect(model.pendingCities).toContain("Porto");
+    expect(weatherPillSub({ phase: "ready" }, { ...model, rows: [{}] as never }).alert).toBe(true);
+  });
+
+  it("builds one model for both Homes: quantity totals, the alert cities and the next cube", () => {
+    const trip = sampleLifecycleState().trips[0];
+    const model = homeModel(trip, { phase: "none" }, "2026-10-16");
+    expect(model.totals.packed).toBeLessThanOrEqual(model.totals.total);
+    expect(model.cities).toEqual([]);
+    expect(model.pendingCities).toEqual([]);
+    // Quantities, not rows: the pill's n/m is the sum of item quantities, packed capped at each quantity.
+    const quantity = trip.items.reduce((sum, row) => sum + row.qty, 0);
+    expect(model.totals.total).toBeLessThanOrEqual(quantity);
+    expect(model.totals.total).toBeGreaterThan(trip.items.length);
+    expect(model.nights).toBe(4);
+    expect(model.countdown?.days).toBe(7);
+    expect(model.label).toMatch(/packing/i);
   });
 });

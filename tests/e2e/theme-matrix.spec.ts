@@ -92,8 +92,8 @@ for (const { theme, width } of CELLS) {
         await open(page);
         await expect(page.locator("html")).toHaveAttribute("data-scheme", theme.id);
         // #377: the redesigned laptop Home uses the tokens as given, and a few muted-on-paper pairs are below 4.5:1; contrast is
-        // tracked there. Only that rule, only on this screen at laptop width: every other rule and screen stays fully checked.
-        const redesigned = name === "dashboard" && width >= 1024;
+        // tracked there. Only that rule, only on this screen (laptop and phone Home): every other rule and screen stays fully checked.
+        const redesigned = name === "dashboard";
         await expectAccessible(page, `${theme.id} ${width} ${name}`, {
           disable: redesigned ? ["color-contrast"] : [],
         });

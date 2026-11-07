@@ -1,9 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
-import { legacyPackingLayout } from "./helpers/device";
+import { phoneHomeLayout } from "./helpers/device";
 import { allItemIds, expectPacking } from "./helpers/packing";
 import { planToList, reviewAndCreate } from "./helpers/plan";
 import { FAKE_GEOCODER_PORT, OPEN_METEO_PORT } from "./support/ports";
+import { planATrip, openTripFromHome } from "./helpers/menu";
 
 // #202 with weather on (the preview's setup): a new trip has no nice-attire items, whether the weather suggestions are kept
 // or left out, and however weather changes the list. Runs against the second app instance (LOCATION_PROVIDER /
@@ -22,7 +23,7 @@ test.beforeEach(async () => {
 
 async function toList(page: Page) {
   await signInAsOwner(page);
-  await page.getByRole("link", { name: /Plan a trip/ }).click();
+  await planATrip(page);
   await planToList(page, {
     query: "london",
     option: /England/,
@@ -33,10 +34,7 @@ async function toList(page: Page) {
 
 async function createAndOpen(page: Page) {
   await reviewAndCreate(page);
-  await page
-    .getByRole("link", { name: /^(Continue|Keep) packing: London/ })
-    .first()
-    .click();
+  await openTripFromHome(page, "London");
   await expectPacking(page);
 }
 
@@ -48,7 +46,7 @@ async function expectNoNiceAttire(page: Page) {
 }
 
 test("weather on, suggestions kept: no nice-attire items", async ({ page }) => {
-  await legacyPackingLayout(page);
+  await phoneHomeLayout(page);
   test.setTimeout(60_000);
   await toList(page);
   await page.getByRole("button", { name: "Get weather" }).click();
@@ -60,7 +58,7 @@ test("weather on, suggestions kept: no nice-attire items", async ({ page }) => {
 });
 
 test("weather on, suggestions left out: no nice-attire items", async ({ page }) => {
-  await legacyPackingLayout(page);
+  await phoneHomeLayout(page);
   test.setTimeout(60_000);
   await toList(page);
   await page.getByRole("button", { name: "Get weather" }).click();

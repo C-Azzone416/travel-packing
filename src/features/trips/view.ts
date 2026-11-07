@@ -203,37 +203,6 @@ export function routeDisplay(
 
 // ---------------------------------------------------------------- Field Ledger dashboard (#143, spec §4)
 
-export interface DepartureView {
-  /** Whole days from today to the first day; 0 once the trip has started. */
-  daysToGo: number;
-  /** "days to go", "day to go", or "under way" once the trip has started. */
-  daysLabel: string;
-  /** "Oct 5" */
-  startShort: string;
-  /** "Oct 5 – Oct 9" */
-  range: string;
-  nights: number;
-  /** "4 nights" */
-  nightsLabel: string;
-}
-
-export function departureView(
-  trip: Pick<LifecycleTrip, "start" | "end">,
-  today: string,
-): DepartureView {
-  const ahead = daysBetween(today, trip.start);
-  const daysToGo = Math.max(0, ahead);
-  const nights = Math.max(0, daysBetween(trip.start, trip.end));
-  return {
-    daysToGo,
-    daysLabel: ahead < 0 ? "under way" : daysToGo === 1 ? "day to go" : "days to go",
-    startShort: formatDate(trip.start),
-    range: formatRange(trip),
-    nights,
-    nightsLabel: nights === 1 ? "1 night" : `${nights} nights`,
-  };
-}
-
 /** "N journeys ahead" for the page eyebrow; "No journeys ahead" when there are none. */
 export function journeysAheadLabel(count: number): string {
   return count === 0

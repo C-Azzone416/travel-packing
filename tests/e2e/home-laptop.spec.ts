@@ -3,7 +3,7 @@ import { expectAccessible } from "./helpers/a11y";
 import { signInAsOwner } from "./helpers/auth";
 
 // The laptop (>= 1024px) Home (#387): the next trip as a route map, a suitcase of cube tiles and a luggage tag, in the three
-// width bands (1024, 1280, 1440) and, at 1023, proof that the page below the breakpoint is the old one. A fixed clock keeps
+// width bands (1024, 1280, 1440) and, at 1023, proof that the page below the breakpoint is the phone Home (#388). A fixed clock keeps
 // San Diego the next trip. Home has no other trip in the seed, so the Upcoming list is empty here (it is covered by the unit
 // tests and the screenshots).
 const NOW = new Date("2026-10-16T12:00:00");
@@ -29,8 +29,6 @@ for (const width of BANDS) {
     await expect(page.getByRole("heading", { name: /In the bag/ })).toBeVisible();
     await expect(page.getByRole("list", { name: "Cubes" })).toBeVisible();
     await expect(page.getByRole("link", { name: /^Continue packing: San Diego/ })).toBeVisible();
-    // The old ledger is gone at this width.
-    await expect(page.locator(".ledger-hero")).toHaveCount(0);
     expect(await sideways(page)).toBeLessThanOrEqual(0);
     // Two columns: the tag sits to the right of the suitcase.
     const left = await page.getByRole("region", { name: /In the bag/ }).boundingBox();
@@ -39,12 +37,12 @@ for (const width of BANDS) {
   });
 }
 
-test("1023: Home is the old ledger, unchanged", async ({ page }) => {
+test("1023: Home is the phone Home (the four pills), not the laptop suitcase", async ({ page }) => {
   await openHome(page, 1023);
   await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
-  await expect(page.locator(".ledger-hero")).toBeVisible();
-  await expect(page.getByRole("heading", { name: /In the bag/ })).toHaveCount(0);
-  await expect(page.getByText(/^NEXT TRIP/)).toHaveCount(0);
+  await expect(page.getByRole("tablist", { name: "Trip sections" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^In the bag/ })).toHaveCount(0);
+  await expect(page.getByText(/^NEXT TRIP · \d/)).toBeVisible();
 });
 
 test("a cube tile opens that cube on Packing, and Continue packing opens the first open cube", async ({
@@ -98,11 +96,11 @@ test("the keyboard reaches Continue packing and Enter opens Packing", async ({ p
   await expect(page.getByRole("heading", { name: "Packing", level: 1 })).toBeVisible();
 });
 
-test("640px (200% zoom on a laptop) keeps the old page, with no sideways scroll", async ({
+test("640px (200% zoom on a laptop) is the phone Home, with no sideways scroll", async ({
   page,
 }) => {
   await openHome(page, 640);
-  await expect(page.locator(".ledger-hero")).toBeVisible();
+  await expect(page.getByRole("tablist", { name: "Trip sections" })).toBeVisible();
   expect(await sideways(page)).toBeLessThanOrEqual(0);
 });
 
@@ -155,7 +153,7 @@ test("the trip menu's Archive moves the trip out of Upcoming and into Past & arc
   await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toHaveCount(0);
   await page.reload();
   await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toHaveCount(0);
-  // It is still there in the archive.
-  await page.goto("/?view=archive");
-  await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
+  // It is still there in the archive (the list's own tab is on screen once there is no next trip).
+  await page.getByRole("button", { name: /^Past & archive/ }).click();
+  await expect(page.getByRole("article", { name: "San Diego" })).toBeVisible();
 });

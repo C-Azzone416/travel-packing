@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
-import { DEVICE, legacyPackingLayout } from "./helpers/device";
+import { DEVICE, phoneHomeLayout } from "./helpers/device";
 import {
   allItemIds,
   expectItem,
@@ -15,11 +15,12 @@ import {
 } from "./helpers/packing";
 import { reviewAndApply } from "./helpers/preferences";
 import { planAndCreate } from "./helpers/plan";
+import { planATrip, openPastAndArchive, openTripFromHome } from "./helpers/menu";
 
-// The ledger Home is drawn below 1024px (the laptop Home is #431, the phone Home #388): this spec's flow starts there, so it runs
-// there. The trip page below 1024px is the phone Pack mode.
+// The phone Home (#388) and the phone Pack mode (#386) are drawn below 1024px: this spec's flow starts on the Home and does not
+// depend on the laptop layouts, so it runs there.
 test.beforeEach(async ({ page }) => {
-  await legacyPackingLayout(page);
+  await phoneHomeLayout(page);
 });
 
 // The trip's Packing screen on its flows (saves, the toiletry bag, editing, Ready), at the width of each project: a laptop at
@@ -42,7 +43,7 @@ async function openSanDiego(page: Page) {
 
 async function openLisbon(page: Page) {
   await openDashboard(page);
-  await page.getByRole("button", { name: /Past & archive/ }).click();
+  await openPastAndArchive(page);
   await page.getByRole("link", { name: "Review bag: Lisbon" }).click();
   await expectPacking(page);
 }
@@ -59,14 +60,14 @@ async function packEverythingExceptBag(page: Page) {
 
 async function newParisTrip(page: Page) {
   await page.goto("/");
-  await page.getByRole("link", { name: /Plan a trip/ }).click();
+  await planATrip(page);
   await planAndCreate(page, {
     query: "paris",
     option: /Paris/,
     start: "2026-11-12",
     end: "2026-11-16",
   });
-  await page.getByRole("link", { name: /(Continue|Keep) packing: Paris/ }).click();
+  await openTripFromHome(page, "Paris");
   await expectPacking(page);
 }
 
@@ -200,7 +201,7 @@ test("a remembered edit changes future trips, but neither this trip's history no
 
   // Another existing trip keeps its history.
   await page.goto("/");
-  await page.getByRole("button", { name: /Past & archive/ }).click();
+  await openPastAndArchive(page);
   await page.getByRole("link", { name: "Review bag: Lisbon" }).click();
   await expectPacking(page);
   await expect(await showItem(page, "sunglasses")).toContainText("Sunglasses");

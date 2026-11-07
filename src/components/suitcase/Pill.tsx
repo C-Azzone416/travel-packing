@@ -173,7 +173,7 @@ export function PillTabs({ label, items, value, onChange, idBase, className }: P
             onClick={() => onChange(item.id)}
             onKeyDown={(event) => onKeyDown(event, index)}
           >
-            <span className={styles.tabLabel}>{item.label}</span>
+            <span className={styles.tabLabel}>{item.label}</span>{" "}
             <span className={cx(styles.tabSub, item.alert && styles.tabAlert)}>{item.sub}</span>
           </button>
         );
