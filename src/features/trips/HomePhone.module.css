@@ -11,12 +11,24 @@
 .page > * {
   min-width: 0;
 }
+.tagWrap {
+  position: relative;
+  min-width: 0;
+  /* The menu opens downward over the pills and the panel: the wrapper must sit above the siblings that follow it. */
+  z-index: 2;
+}
 .tag {
   min-width: 0;
-  /* The tag's menu opens downward over the pills and the panel: the tag (a stacking context of its own, for the shadow)
-     must sit above the siblings that follow it, or they take the menu's clicks. */
-  position: relative;
-  z-index: 2;
+}
+.menuSlot {
+  position: absolute;
+  top: 12px;
+  right: 10px;
+}
+.menuGap {
+  flex: none;
+  width: 44px;
+  height: 44px;
 }
 .tagRow {
   display: flex;

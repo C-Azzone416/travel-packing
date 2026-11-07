@@ -131,7 +131,7 @@ test(
 
 test("dashboard controls are keyboard operable with 44px targets", DEVICE, async ({ page }) => {
   await openDashboard(page);
-  const menuButton = tag(page, "San Diego").getByRole("button", {
+  const menuButton = page.getByRole("button", {
     name: "More actions for San Diego",
   });
   for (const control of [menuButton, page.getByRole("tab")]) {

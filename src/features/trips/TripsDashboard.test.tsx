@@ -226,7 +226,7 @@ describe("upcoming view", () => {
     ).toMatch(/^\/trips\/san-diego(\?cube=\w+)?$/);
 
     // Edit trip, Copy trip, Archive, the archive list and Remove live in the tag's menu.
-    await user.click(within(sanDiego).getByRole("button", { name: "More actions for San Diego" }));
+    await user.click(screen.getByRole("button", { name: "More actions for San Diego" }));
     const menu = screen.getByRole("menu", { name: "Actions for San Diego" });
     expect(
       within(menu)
@@ -237,9 +237,7 @@ describe("upcoming view", () => {
       "/trips/new?copy=san-diego",
     );
     await user.keyboard("{Escape}");
-    expect(
-      within(sanDiego).getByRole("button", { name: "More actions for San Diego" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "More actions for San Diego" })).toBeTruthy();
     expect(document.body.textContent).not.toMatch(/sample|Sample/);
     expect(screen.queryByText(/Illustrative/)).toBeNull();
   });
@@ -360,14 +358,10 @@ describe("archive and restore", () => {
     const { user, source } = setup(undefined, (base) => ({ ...base, archive: () => gate.promise }));
     await ready();
     await choose(user, "San Diego", "Archive");
-    const sanDiego = tag("San Diego");
     expect(document.querySelector('[aria-busy="true"]')).not.toBeNull();
     expect(
-      (
-        within(sanDiego).getByRole("button", {
-          name: "More actions for San Diego",
-        }) as HTMLButtonElement
-      ).disabled,
+      (screen.getByRole("button", { name: "More actions for San Diego" }) as HTMLButtonElement)
+        .disabled,
     ).toBe(true);
     expect(source.snapshot().trips.find((t) => t.id === "san-diego")?.archived).toBe(false);
     await act(async () => gate.resolve(await source.archive("san-diego")));

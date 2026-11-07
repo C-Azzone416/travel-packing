@@ -81,49 +81,55 @@ export function HomePhone({
       <h1 ref={headingRef} tabIndex={-1} className="sr-only">
         Trips
       </h1>
-      <LuggageTag role="region" aria-labelledby="home-trip-title" className={styles.tag}>
-        <div className={styles.tagRow}>
-          <div className={styles.tagCopy}>
-            <p className={styles.chip}>
-              NEXT TRIP · {tagDatesShort(trip, today)} · {nights}{" "}
-              {nights === 1 ? "night" : "nights"}
-            </p>
-            <h2 id="home-trip-title" className={styles.name} data-size={hero.size}>
-              {hero.title}
-              {hero.subtitle ? <span className="sr-only"> {hero.subtitle}</span> : null}
-              {hero.subtitle ? (
-                <span className={styles.sub} aria-hidden="true">
-                  {hero.subtitle}
-                </span>
+      <div className={styles.tagWrap}>
+        <LuggageTag role="region" aria-labelledby="home-trip-title" className={styles.tag}>
+          <div className={styles.tagRow}>
+            <div className={styles.tagCopy}>
+              <p className={styles.chip}>
+                NEXT TRIP · {tagDatesShort(trip, today)} · {nights}{" "}
+                {nights === 1 ? "night" : "nights"}
+              </p>
+              <h2 id="home-trip-title" className={styles.name} data-size={hero.size}>
+                {hero.title}
+                {hero.subtitle ? <span className="sr-only"> {hero.subtitle}</span> : null}
+                {hero.subtitle ? (
+                  <span className={styles.sub} aria-hidden="true">
+                    {hero.subtitle}
+                  </span>
+                ) : null}
+              </h2>
+            </div>
+            <div className={styles.tagSide}>
+              {countdown ? (
+                <>
+                  <CountdownBadge days={countdown.days} />
+                  <span className="sr-only">{countdown.spoken}</span>
+                </>
               ) : null}
-            </h2>
+              <span className={styles.menuGap} aria-hidden="true" />
+            </div>
           </div>
-          <div className={styles.tagSide}>
-            {countdown ? (
-              <>
-                <CountdownBadge days={countdown.days} />
-                <span className="sr-only">{countdown.spoken}</span>
-              </>
-            ) : null}
-            <MoreMenu
-              subject={name}
-              disabled={busy}
-              items={[
-                { key: "edit", label: "Edit trip", onSelect: () => onEdit(trip.id) },
-                { key: "copy", label: "Copy trip", href: `/trips/new?copy=${trip.id}` },
-                { key: "archive", label: "Archive", onSelect: () => onArchive(trip.id) },
-                { key: "past", label: "Past trips & archive", onSelect: onOpenArchive },
-                {
-                  key: "remove",
-                  label: "Remove",
-                  danger: true,
-                  onSelect: () => onRemove(trip.id),
-                },
-              ]}
-            />
-          </div>
+        </LuggageTag>
+        {/* The menu sits over the tag, not in it: the tag clips what falls outside its shape. */}
+        <div className={styles.menuSlot}>
+          <MoreMenu
+            subject={name}
+            disabled={busy}
+            items={[
+              { key: "edit", label: "Edit trip", onSelect: () => onEdit(trip.id) },
+              { key: "copy", label: "Copy trip", href: `/trips/new?copy=${trip.id}` },
+              { key: "archive", label: "Archive", onSelect: () => onArchive(trip.id) },
+              { key: "past", label: "Past trips & archive", onSelect: onOpenArchive },
+              {
+                key: "remove",
+                label: "Remove",
+                danger: true,
+                onSelect: () => onRemove(trip.id),
+              },
+            ]}
+          />
         </div>
-      </LuggageTag>
+      </div>
 
       <PillTabs
         label="Trip sections"
