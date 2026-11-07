@@ -139,6 +139,8 @@ test.describe("pills and panels", DEVICE, () => {
         await planATrip(page);
         await planAndCreate(page, { query, option, start, end });
       }
+      // The create flow is still landing on the Home: let it finish before navigating again (WebKit interrupts a goto).
+      await expect(page.getByRole("tablist", { name: "Trip sections" })).toBeVisible();
       await page.setViewportSize({ width, height: 844 });
       await page.goto("/");
       await pill(page, /^Future/).click();
