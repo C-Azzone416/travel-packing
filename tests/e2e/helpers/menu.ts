@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 
 /** Open a trip's ⋯ menu on the dashboard and choose one item (Quick view, Copy trip, Archive, Remove), #155. */
 export async function chooseFromMenu(page: Page, trip: string, item: string): Promise<void> {
@@ -11,6 +11,8 @@ export async function chooseFromMenu(page: Page, trip: string, item: string): Pr
  * the laptop Home a tag menu, #388), so it goes through the tag's menu; with none, the list's own tab is on screen.
  */
 export async function openPastAndArchive(page: Page): Promise<void> {
+  // A save in flight (a trip just removed or archived) keeps the old Home on screen a moment; wait for the settled one.
+  await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
   const tab = page.getByRole("button", { name: /^Past & archive/ });
   if ((await tab.count()) > 0) {
     await tab.click();

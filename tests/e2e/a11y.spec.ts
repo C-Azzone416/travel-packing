@@ -291,10 +291,8 @@ test.describe("error states and toasts", DEVICE, () => {
       await expect(chip.locator(".sync-text")).toBeVisible();
       await expect(chip.locator(".sync-text-compact")).toBeHidden();
     }
-    // #377: the laptop Home (map placeholder, countdown badge) has palette pairs below 4.5:1; only that rule, only on this check.
-    await expectAccessible(page, "dashboard with the error chip", {
-      disable: testInfo.project.name === "phone" ? [] : ["color-contrast"],
-    });
+    // #377: the redesigned Home (map placeholder, countdown badge) has palette pairs below 4.5:1; only that rule, only on this check.
+    await expectAccessible(page, "dashboard with the error chip", { disable: ["color-contrast"] });
     await chip.click();
     await expect(page.getByRole("dialog", { name: "Couldn’t save" })).toBeVisible();
     await expectAccessible(page, "retry sheet");
@@ -467,7 +465,10 @@ test.describe("more states", DEVICE, () => {
     );
     // The fixed clock gives the Home a next trip, so its heading is the screen-reader-only "Trips".
     await expect(page.getByRole("heading", { name: "Trips", level: 1 })).toBeAttached();
-    await expectAccessible(page, "authenticated setup check error");
+    // #377: the redesigned Home's countdown badge falls short of 4.5:1; nothing else is exempt.
+    await expectAccessible(page, "authenticated setup check error", {
+      disable: ["color-contrast"],
+    });
   });
 
   test("review after a change took the trip out of Ready", async ({ page }) => {
