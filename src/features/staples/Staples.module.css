@@ -46,6 +46,59 @@
   font-size: var(--fs-lede);
   line-height: var(--lh-lede);
 }
+.countRules {
+  grid-column: 1 / -1;
+  min-width: 0;
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  line-height: 1.45;
+}
+.countRules summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--link);
+  font-weight: 700;
+  cursor: pointer;
+}
+.countRules summary::after {
+  content: "▾";
+  margin-inline-start: 8px;
+  color: currentcolor;
+  line-height: 1;
+}
+.countRules[open] summary::after {
+  transform: rotate(180deg);
+}
+.countRules summary:focus-visible {
+  border-radius: 4px;
+  outline: 3px solid var(--info);
+  outline-offset: 2px;
+}
+.countRules[open] summary {
+  margin-bottom: 4px;
+}
+.countRules ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-inline-start: 20px;
+}
+.countRules li {
+  padding-inline-start: 2px;
+}
+.countRules li strong {
+  margin-inline-end: 6px;
+  color: var(--ink);
+}
+.countRules li span,
+.countRules p {
+  overflow-wrap: normal;
+  word-break: normal;
+}
+.countRules p {
+  margin: 8px 0 0;
+}
 .layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
