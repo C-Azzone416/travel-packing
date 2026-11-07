@@ -3,6 +3,7 @@ import { legacyPackingLayout } from "./helpers/device";
 import { signInAsOwner } from "./helpers/auth";
 import { planToList, reviewAndCreate } from "./helpers/plan";
 import { FAKE_GEOCODER_PORT, OPEN_METEO_PORT } from "./support/ports";
+import { planATrip } from "./helpers/menu";
 
 // #202 with weather on (the preview's setup): a new trip has no nice-attire items, whether the weather suggestions are kept
 // or left out, and however weather changes the list. Runs against the second app instance (LOCATION_PROVIDER /
@@ -22,7 +23,7 @@ test.beforeEach(async () => {
 
 async function toList(page: Page) {
   await signInAsOwner(page);
-  await page.getByRole("link", { name: /Plan a trip/ }).click();
+  await planATrip(page);
   await planToList(page, {
     query: "london",
     option: /England/,

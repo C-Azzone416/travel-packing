@@ -121,86 +121,48 @@ function PastTripRow({
   );
 }
 
-export function StampsScreen({ getToday = localToday }: { getToday?: () => string }) {
-  const source = useTripsSource();
-  const { track } = useSaveStatus();
-  const [load, setLoad] = useState<Load>({ phase: "loading" });
+/**
+ * The stamps themselves: the filters, the sticker suitcase and the past trips. The Stamps screen and the Home phone's
+ * Stamps pill (#388) draw the same thing from the same trips; `embedded` leaves out the page heading (the Home has its own).
+ */
+export function StampsContent({
+  state,
+  today,
+  embedded = false,
+}: {
+  state: LifecycleState;
+  today: string;
+  embedded?: boolean;
+}) {
   const [filter, setFilter] = useState<StampFilter>("rolling");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [reload, setReload] = useState(0);
 
-  useEffect(() => {
-    let cancelled = false;
-    track(
-      () => source.load(),
-      (state) => {
-        if (!cancelled) setLoad({ phase: "ready", state, today: getToday() });
-      },
-      { read: true },
-    ).catch(() => {
-      if (!cancelled) setLoad({ phase: "error" });
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [source, track, getToday, reload]);
-
-  const view = useMemo(
-    () => (load.phase === "ready" ? stampsView(load.state.trips, load.today, filter) : null),
-    [load, filter],
-  );
+  const view = useMemo(() => stampsView(state.trips, today, filter), [state, today, filter]);
   const visibleIds = useMemo(
     () =>
       new Set([
-        ...(view?.stickers.map((sticker) => sticker.tripId) ?? []),
-        ...(view?.pastTrips.map((trip) => trip.id) ?? []),
+        ...view.stickers.map((sticker) => sticker.tripId),
+        ...view.pastTrips.map((trip) => trip.id),
       ]),
     [view],
   );
-  const defaultId = view?.pastTrips[0]?.id ?? view?.stickers[0]?.tripId ?? null;
+  const defaultId = view.pastTrips[0]?.id ?? view.stickers[0]?.tripId ?? null;
   const activeId = selectedId && visibleIds.has(selectedId) ? selectedId : defaultId;
-  const selectedTrip =
-    load.phase === "ready" && activeId
-      ? (load.state.trips.find((trip) => trip.id === activeId) ?? null)
-      : null;
+  const selectedTrip = activeId ? (state.trips.find((trip) => trip.id === activeId) ?? null) : null;
   const selected = selectedTrip ? stampTripView(selectedTrip) : null;
 
-  if (load.phase === "loading") {
-    return (
-      <section className={`${styles.root} screen`} aria-busy="true" aria-label="Loading stamps">
-        <h1>Stamps</h1>
-        <p className="lede">Every trip earns a sticker when you get home.</p>
-        <div className={styles.loadingCase} aria-hidden="true" />
-      </section>
-    );
-  }
-
-  if (load.phase === "error") {
-    return (
-      <section className={`${styles.root} screen`}>
-        <h1>Stamps</h1>
-        <div className={styles.emptyCard}>
-          <strong>Couldn’t load your stamps.</strong>
-          <p>Nothing was changed.</p>
-          <Button onClick={() => (setLoad({ phase: "loading" }), setReload((value) => value + 1))}>
-            Try again
-          </Button>
-        </div>
-      </section>
-    );
-  }
-
-  if (!view) return null;
-
   return (
-    <section className={`${styles.root} screen`}>
+    <section className={`${styles.root} ${embedded ? styles.embedded : "screen"}`}>
       <div className={styles.pageHead}>
-        <div>
-          <h1>Stamps</h1>
-          <p className="lede">
-            Every trip earns a sticker when you get home. Go back somewhere and you get another one.
-          </p>
-        </div>
+        {embedded ? null : (
+          <div>
+            <h1>Stamps</h1>
+            <p className="lede">
+              Every trip earns a sticker when you get home. Go back somewhere and you get another
+              one.
+            </p>
+          </div>
+        )}
         <div className={styles.filters} role="group" aria-label="Filter stamps">
           {FILTERS.map((option) => (
             <button
@@ -209,7 +171,7 @@ export function StampsScreen({ getToday = localToday }: { getToday?: () => strin
               aria-pressed={filter === option}
               onClick={() => setFilter(option)}
             >
-              {filterLabel(option, load.today)}
+              {filterLabel(option, today)}
             </button>
           ))}
         </div>
@@ -275,4 +237,54 @@ export function StampsScreen({ getToday = localToday }: { getToday?: () => strin
       </div>
     </section>
   );
+}
+
+export function StampsScreen({ getToday = localToday }: { getToday?: () => string }) {
+  const source = useTripsSource();
+  const { track } = useSaveStatus();
+  const [load, setLoad] = useState<Load>({ phase: "loading" });
+  const [reload, setReload] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    track(
+      () => source.load(),
+      (state) => {
+        if (!cancelled) setLoad({ phase: "ready", state, today: getToday() });
+      },
+      { read: true },
+    ).catch(() => {
+      if (!cancelled) setLoad({ phase: "error" });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [source, track, getToday, reload]);
+
+  if (load.phase === "loading") {
+    return (
+      <section className={`${styles.root} screen`} aria-busy="true" aria-label="Loading stamps">
+        <h1>Stamps</h1>
+        <p className="lede">Every trip earns a sticker when you get home.</p>
+        <div className={styles.loadingCase} aria-hidden="true" />
+      </section>
+    );
+  }
+
+  if (load.phase === "error") {
+    return (
+      <section className={`${styles.root} screen`}>
+        <h1>Stamps</h1>
+        <div className={styles.emptyCard}>
+          <strong>Couldn’t load your stamps.</strong>
+          <p>Nothing was changed.</p>
+          <Button onClick={() => (setLoad({ phase: "loading" }), setReload((value) => value + 1))}>
+            Try again
+          </Button>
+        </div>
+      </section>
+    );
+  }
+
+  return <StampsContent state={load.state} today={load.today} />;
 }

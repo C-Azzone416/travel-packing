@@ -3,6 +3,7 @@ import { signInAsOwner } from "./helpers/auth";
 import { FAKE_GEOCODER_PORT, OPEN_METEO_PORT } from "./support/ports";
 import { DEVICE, laptopPlanLayout, legacyPackingLayout } from "./helpers/device";
 import { nextButton, reviewAndCreate, setDates, toList, toWhen } from "./helpers/plan";
+import { futureRow, planATrip } from "./helpers/menu";
 
 // Home is the laptop suitcase view from 1024px (#387); this spec's subject is the page below it, so it runs there.
 test.beforeEach(async ({ page }) => {
@@ -27,7 +28,7 @@ const received = async (name: string): Promise<FakeQuery[]> => {
 
 async function openNewTrip(page: Page) {
   await signInAsOwner(page);
-  await page.getByRole("link", { name: /Plan a trip/ }).click();
+  await planATrip(page);
   await expect(page.getByRole("heading", { name: "Plan a trip", level: 1 })).toBeVisible();
 }
 
@@ -109,10 +110,10 @@ test.describe("open-meteo mode (LOCATION_PROVIDER=open-meteo, fake geocoder)", (
     await setDates(page, "2026-11-12", "2026-11-16");
     await toList(page);
     await reviewAndCreate(page);
-    await expect(page.getByRole("article", { name: "Springfield" })).toBeVisible();
-    await expect(
-      page.getByRole("article", { name: "Springfield" }).getByText("Illinois, United States"),
-    ).toBeVisible();
+    const springfield = await futureRow(page, /Springfield/);
+    await expect(springfield).toBeVisible();
+    await springfield.click();
+    await expect(page.getByText("Illinois, United States").first()).toBeVisible();
   });
 
   test(

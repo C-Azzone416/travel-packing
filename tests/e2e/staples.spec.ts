@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
 import { DEVICE, legacyPackingLayout } from "./helpers/device";
 import { planAndCreate } from "./helpers/plan";
+import { futureRow, planATrip } from "./helpers/menu";
 
 // The Staples screen against a REAL Postgres (#18): what it shows after a reload is what was stored. Each test starts
 // from this project's freshly seeded owner (the default staples, San Diego partly packed, Lisbon Ready).
@@ -61,12 +62,10 @@ async function newTrip(
   expectedCount: number,
 ) {
   await page.goto("/");
-  await page.getByRole("link", { name: /Plan a trip/ }).click();
+  await planATrip(page);
   await planAndCreate(page, { query: "paris", option: destination, start: start, end: end });
-  // The trips are counted as headings on the ledger page (below 1024px); the laptop Home lists later trips as tags.
-  await underLegacyPacking(page, () =>
-    expect(page.getByRole("heading", { name: "Paris" })).toHaveCount(expectedCount),
-  );
+  // The trips are counted as rows under the Future pill (San Diego is the next trip on the fixed clock).
+  await expect(await futureRow(page, /Paris/)).toHaveCount(expectedCount);
 }
 
 /** The trip's Packing page is the pre-redesign one below 1024px; the Staples screen is drawn at the laptop width. */
@@ -85,9 +84,11 @@ async function underwearQty(page: Page, tripName: string): Promise<number> {
 }
 
 async function underwearQtyOnPage(page: Page, tripName: string): Promise<number> {
-  await page
-    .getByRole("link", { name: new RegExp(`(Continue|Keep) packing: ${tripName}`) })
-    .click();
+  const trip =
+    tripName === "San Diego"
+      ? page.getByRole("link", { name: "Continue packing: San Diego" })
+      : await futureRow(page, new RegExp(tripName));
+  await trip.first().click();
   await expect(page.getByRole("heading", { name: tripName, level: 1 })).toBeVisible();
   const text = await page
     .locator('[data-item-id="underwear"] .qty-stepper span')
@@ -126,7 +127,7 @@ test("edit a staple count: existing trips are unchanged, and the next new trip u
   await newTrip(page, /Paris/, "2026-12-04", "2026-12-08", 2);
   await page.goto("/");
   const text = await underLegacyPacking(page, async () => {
-    const second = page.getByRole("link", { name: /Keep packing: Paris/ }).first();
+    const second = (await futureRow(page, /Paris/)).first();
     await second.click();
     await expect(page.getByRole("heading", { name: "Paris", level: 1 })).toBeVisible();
     return await page.locator('[data-item-id="underwear"] .qty-stepper span').first().innerText();

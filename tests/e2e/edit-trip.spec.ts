@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
 import { expectAccessible } from "./helpers/a11y";
 import { DEVICE, legacyPackingLayout } from "./helpers/device";
+import { openPastAndArchive, chooseFromMenu } from "./helpers/menu";
 
 // Edit trip (#203): the route and the packing preferences in one sheet, with a review of what a recalculation does before it is
 // applied. Real app, real database. The merge rules themselves are unit-tested (item-ops, recalc-preview); these tests prove the
@@ -34,8 +35,7 @@ test("Edit trip has three ways in: the dashboard, the packing hero and Trip math
   await legacyPackingLayout(page);
   await page.clock.setFixedTime(NOW);
   await signInAsOwner(page);
-  const hero = page.getByRole("article", { name: "San Diego" });
-  await hero.getByRole("button", { name: "Edit trip: San Diego" }).click();
+  await chooseFromMenu(page, "San Diego", "Edit trip");
   await expect(sheet(page).getByRole("tab", { name: "Route & dates" })).toHaveAttribute(
     "aria-selected",
     "true",
@@ -208,7 +208,7 @@ test("Ready turns off with a preference change, and the review says so first", a
   await legacyPackingLayout(page);
   await page.clock.setFixedTime(NOW);
   await signInAsOwner(page);
-  await page.getByRole("button", { name: /Past & archive/ }).click();
+  await openPastAndArchive(page);
   await page.getByRole("link", { name: "Review bag: Lisbon" }).click();
   await expect(page.getByRole("heading", { name: "Lisbon", level: 1 })).toBeVisible();
   const dialog = await openPreferences(page);

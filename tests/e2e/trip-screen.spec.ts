@@ -3,6 +3,7 @@ import { signInAsOwner } from "./helpers/auth";
 import { DEVICE, legacyPackingLayout } from "./helpers/device";
 import { reviewAndApply } from "./helpers/preferences";
 import { planAndCreate } from "./helpers/plan";
+import { openPastAndArchive, planATrip } from "./helpers/menu";
 
 // Fixed clock: San Diego is upcoming and partly packed, Lisbon is past, fully packed and Ready. In-memory data
 // survives client-side navigation (links), not a reload, so every step navigates by clicking.
@@ -22,7 +23,7 @@ async function openSanDiego(page: Page) {
 
 async function openLisbon(page: Page) {
   await openDashboard(page);
-  await page.getByRole("button", { name: /Past & archive/ }).click();
+  await openPastAndArchive(page);
   await page.getByRole("link", { name: "Review bag: Lisbon" }).click();
   await expect(page.getByRole("heading", { name: "Lisbon", level: 1 })).toBeVisible();
 }
@@ -198,7 +199,7 @@ test("a trip-only edit leaves the staples alone: a new trip still has the defaul
   await expect(row(page, "sunglasses")).toContainText("Beach sunglasses");
 
   await page.getByRole("link", { name: "All trips" }).click();
-  await page.getByRole("link", { name: /Plan a trip/ }).click();
+  await planATrip(page);
   await planAndCreate(page, {
     query: "paris",
     option: /Paris/,
@@ -226,14 +227,14 @@ test("a remembered edit changes future trips, but neither this trip's history no
 
   // Another existing trip keeps its history.
   await page.getByRole("link", { name: "All trips" }).click();
-  await page.getByRole("button", { name: /Past & archive/ }).click();
+  await openPastAndArchive(page);
   await page.getByRole("link", { name: "Review bag: Lisbon" }).click();
   await expect(row(page, "sunglasses")).toContainText("Sunglasses");
   await expect(row(page, "sunglasses")).not.toContainText("Polarized");
 
   // A trip made afterwards gets the remembered version.
   await page.getByRole("link", { name: "All trips" }).click();
-  await page.getByRole("link", { name: /Plan a trip/ }).click();
+  await planATrip(page);
   await planAndCreate(page, {
     query: "paris",
     option: /Paris/,

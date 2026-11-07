@@ -3,6 +3,7 @@ import { signInAsOwner } from "./helpers/auth";
 import { DEVICE, legacyPackingLayout } from "./helpers/device";
 import { expectAccessible } from "./helpers/a11y";
 import { planRouteToList, reviewAndCreate } from "./helpers/plan";
+import { futureRow, planATrip } from "./helpers/menu";
 
 // Per-trip stamp label (#151), through the real data layer: the packing screen's Edit stamp sheet, the same label on the
 // dashboard (display only), Reset to automatic, and what a person typing a bad label sees.
@@ -51,11 +52,7 @@ test("set a custom stamp label, see it on the dashboard and after a reload, then
   await expect(heroStamp(page)).toHaveAttribute("aria-label", "SD7, San Diego, departure stamp");
   await page.getByRole("link", { name: "All trips" }).click();
   await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
-  await expect(
-    page
-      .getByRole("article", { name: "San Diego" })
-      .getByRole("img", { name: "SD7, San Diego, departure stamp" }),
-  ).toBeVisible();
+  // The Home no longer draws route stamps (the redesign's luggage tag has none), so it shows no Edit stamp either.
   await expect(page.getByRole("button", { name: "Edit stamp" })).toHaveCount(0);
 
   // Reset to automatic restores the derived label.
@@ -73,7 +70,7 @@ test("a two-country trip has two stamps to label: each is edited on its own, and
   await legacyPackingLayout(page);
   await page.clock.setFixedTime(NOW);
   await signInAsOwner(page);
-  await page.getByRole("link", { name: /Plan a trip/ }).click();
+  await planATrip(page);
   await planRouteToList(
     page,
     [
@@ -83,10 +80,7 @@ test("a two-country trip has two stamps to label: each is edited on its own, and
     ["2026-11-12", "2026-11-15", "2026-11-18"],
   );
   await reviewAndCreate(page);
-  await page
-    .getByRole("article", { name: "Lisbon → Paris" })
-    .getByRole("link", { name: /(Continue|Keep) packing/ })
-    .click();
+  await (await futureRow(page, /Lisbon → Paris/)).click();
   await expect(heroStamp(page)).toHaveAttribute("aria-label", "PRT, FRA route stamps");
 
   const sheet = await openStampSheet(page);

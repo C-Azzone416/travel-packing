@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { ownerEmailFor, signInAsOwner } from "./helpers/auth";
 import { seedSavedList } from "./helpers/database";
 import { DEVICE, laptopPlanLayout, legacyPackingLayout } from "./helpers/device";
-import { chooseFromMenu } from "./helpers/menu";
+import { chooseFromMenu, futureRow, planATrip } from "./helpers/menu";
 import { planToList, reviewAndCreate } from "./helpers/plan";
 
 // Home is the laptop suitcase view from 1024px (#387); this spec's subject is the page below it, so it runs there.
@@ -41,7 +41,7 @@ const LISBON = {
 
 /** Plan a trip to Lisbon, up to the Starting list. */
 async function startStep(page: Page) {
-  await page.getByRole("link", { name: /Plan a trip/ }).click();
+  await planATrip(page);
   await planToList(page, LISBON);
 }
 
@@ -72,7 +72,7 @@ test("with saved lists: choose one, see the count, and the new trip is exactly t
   await reviewAndCreate(page);
   await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
 
-  await page.getByRole("link", { name: "Keep packing: Lisbon" }).click();
+  await (await futureRow(page, /Lisbon/)).click();
   await expect(page.getByRole("heading", { name: "Lisbon", level: 1 })).toBeVisible();
   await expect(rows(page)).toHaveCount(3);
   await expect(rows(page).filter({ hasText: "Beach towel" })).toContainText("0 of 2 packed");
@@ -107,7 +107,7 @@ test("with saved lists but none chosen: the Staples and recommendations", async 
   await expect(page.getByRole("checkbox", { name: /Your Staples/ })).toBeChecked();
   await reviewAndCreate(page);
   await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
-  await page.getByRole("link", { name: "Keep packing: Lisbon" }).click();
+  await (await futureRow(page, /Lisbon/)).click();
   await expect(page.locator('[data-item-id="socks"]')).toBeVisible();
   await expect(page.getByText("Beach towel")).toHaveCount(0);
 });
@@ -123,7 +123,7 @@ test("changing your mind: a different list, or the Staples again, is what sticks
   await page.getByRole("radio", { name: /Ski trip/ }).check();
   await expect(page.getByRole("radio", { name: /Beach week/ })).not.toBeChecked();
   await reviewAndCreate(page);
-  await page.getByRole("link", { name: "Keep packing: Lisbon" }).click();
+  await (await futureRow(page, /Lisbon/)).click();
   await expect(rows(page)).toHaveCount(1);
   await expect(rows(page)).toContainText("Gloves");
 });

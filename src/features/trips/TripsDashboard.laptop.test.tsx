@@ -56,13 +56,13 @@ describe("TripsDashboard at laptop width", () => {
     expect(screen.getByRole("link", { name: /Continue packing: San Diego/ })).toBeTruthy();
   });
 
-  it("keeps today's Home below 1024px, and switches when the window crosses it", async () => {
+  it("shows the phone Home below 1024px, and switches when the window crosses it", async () => {
     const media = laptop(false);
     setup();
-    expect(await screen.findByRole("heading", { name: "Your travel ledger" })).toBeTruthy();
-    expect(screen.queryByRole("heading", { name: /In the bag/ })).toBeNull();
+    expect(await screen.findByRole("tablist", { name: "Trip sections" })).toBeTruthy();
     act(() => media.set(true));
     expect(await screen.findByRole("heading", { name: /In the bag/ })).toBeTruthy();
+    expect(screen.queryByRole("tablist", { name: "Trip sections" })).toBeNull();
   });
 
   it("shows the server-drawn map only while it matches the trip's route", async () => {
@@ -83,13 +83,6 @@ describe("TripsDashboard at laptop width", () => {
     renderInApp(<TripsDashboard source={memory()} getToday={TODAY} maps={stale} />);
     expect(await screen.findByRole("img", { name: "Route map unavailable" })).toBeTruthy();
     expect(screen.queryByRole("img", { name: "Old map" })).toBeNull();
-  });
-
-  it("opens Past & archive from ?view=archive", async () => {
-    laptop(true);
-    window.history.replaceState(null, "", "/?view=archive");
-    setup();
-    expect(await screen.findByRole("heading", { name: "Past trips & archive" })).toBeTruthy();
   });
 
   it("opens Past & archive from the trip menu without a reload", async () => {

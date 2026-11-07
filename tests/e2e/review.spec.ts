@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
 import { DEVICE, legacyPackingLayout } from "./helpers/device";
+import { openPastAndArchive } from "./helpers/menu";
 
 // "Review your bag" and explicit Ready against a REAL Postgres (#17): what the page shows after a reload is what was
 // stored. Each test starts from this project's freshly seeded owner: San Diego partly packed and not Ready, Lisbon
@@ -19,7 +20,7 @@ async function openReview(page: Page, trip: "San Diego" | "Lisbon", id: "san-die
   if (trip === "San Diego") {
     await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
   } else {
-    await page.getByRole("button", { name: /Past & archive/ }).click();
+    await openPastAndArchive(page);
     await page.getByRole("link", { name: "Review bag: Lisbon" }).click();
   }
   await expect(page.getByRole("heading", { name: trip, level: 1 })).toBeVisible();

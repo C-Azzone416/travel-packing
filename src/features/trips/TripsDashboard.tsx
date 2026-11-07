@@ -15,27 +15,16 @@ import {
   type LifecycleTrip,
 } from "@/domain/trip-lifecycle";
 import { localToday } from "@/lib/today";
-import { AddToiletryForm } from "@/features/trip/AddToiletryForm";
 import { EditTripSheet, type ApplyOutcome } from "@/features/trip/EditTripSheet";
-import { editItemHref } from "@/features/trip/edit-link";
 import { HomeLaptop } from "./HomeLaptop";
-import { LaterJourneys } from "./LaterJourneys";
+import { HomePhone } from "./HomePhone";
 import type { HomeMaps } from "./home-map-types";
-import { cityWeather, usualRows } from "./home-view";
+import { cityWeather, usualRows, type HeroWeather } from "./home-view";
 import { LAPTOP_MIN_WIDTH, useMinWidth } from "@/lib/use-min-width";
 import { routeSignature, stopsOrDestination, tripRoutePoints } from "@/domain/trip-route";
-import { NextDeparture, type HeroWeather } from "./NextDeparture";
 import { TripCard } from "./TripCard";
-import type { NewCustomItem, NewToiletryItem, TripsSource } from "./trips-source";
-import {
-  departureView,
-  formatRange,
-  journeysAheadLabel,
-  tripCardView,
-  heroForecast,
-  weatherCells,
-  type TripListView,
-} from "./view";
+import type { TripsSource } from "./trips-source";
+import { formatRange, journeysAheadLabel, tripCardView, type TripListView } from "./view";
 
 type Load =
   | { phase: "loading" }
@@ -59,24 +48,19 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
   const { track } = useSaveStatus();
   const toast = useToast();
   const [load, setLoad] = useState<Load>({ phase: "loading" });
-  // "?view=archive" opens Past & archive directly: the laptop Home links there until the Stamps screen takes it over (#391).
-  const [view, setView] = useState<TripListView>(() =>
-    typeof window !== "undefined" &&
-    new URLSearchParams(window.location.search).get("view") === "archive"
-      ? "archive"
-      : "upcoming",
-  );
+  const [view, setView] = useState<TripListView>("upcoming");
   const laptop = useMinWidth(LAPTOP_MIN_WIDTH);
   const [busy, setBusy] = useState<ReadonlySet<string>>(new Set());
   const [removing, setRemoving] = useState<string | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
+  // After a write the control that was used may be gone (the next trip archived): focus goes to the page heading.
+  const [focusTick, setFocusTick] = useState(0);
+  useEffect(() => {
+    if (focusTick > 0) headingRef.current?.focus();
+  }, [focusTick]);
 
   const [reloads, setReloads] = useState(0);
   const router = useRouter();
-  const [bathroom, setBathroom] = useState<{ tripId: string; name: string; qty: number } | null>(
-    null,
-  );
-  const [bathroomSaving, setBathroomSaving] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   // The last weather answer and which hero route it was for; a stale one is never shown for another route.
   const [fetched, setFetched] = useState<{ key: string; value: HeroWeather } | null>(null);
@@ -116,8 +100,6 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
           .catch(() => []);
         answer({
           phase: "ready",
-          cells: weatherCells(heroTrip?.stops ?? [], result.stops, settings.temperatureUnit),
-          forecast: heroForecast(heroTrip?.stops ?? [], result.stops, settings.temperatureUnit),
           city: cityWeather(stops, result.stops, settings.temperatureUnit, today),
           usual: usualRows(stops, result.stops, settings.temperatureUnit, today),
           review: {
@@ -187,7 +169,7 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
             next.delete(id);
             return next;
           });
-          headingRef.current?.focus();
+          setFocusTick((tick) => tick + 1);
         });
     },
     [track, getToday, router],
@@ -254,40 +236,6 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
           },
         }),
     );
-  }
-
-  /** The hero's inline "＋ Add item" (#147): true once the source saved it, so the form folds away. */
-  async function addItem(id: string, item: NewCustomItem): Promise<boolean> {
-    return track(
-      async () => {
-        await source.addItem(id, item);
-        return source.load();
-      },
-      (next) => {
-        setLoad({ phase: "ready", state: next, today: getToday() });
-        toast.show(`${item.name.trim()} added to ${item.category}`);
-      },
-    )
-      .then(() => true)
-      .catch(() => false);
-  }
-
-  /** Bathroom items gate bag placement, so they use the Bathroom form, here as on the packing screen. */
-  function addBathroomItem(id: string, item: NewToiletryItem) {
-    setBathroomSaving(true);
-    track(
-      async () => {
-        await source.addToiletryItem(id, item);
-        return source.load();
-      },
-      (next) => {
-        setLoad({ phase: "ready", state: next, today: getToday() });
-        setBathroom(null);
-        toast.show(`${item.name.trim()} added to Bathroom`);
-      },
-    )
-      .catch(() => toast.show("Couldn’t add that item. Nothing was changed."))
-      .finally(() => setBathroomSaving(false));
   }
 
   /** Save the route from the Edit trip sheet; true once saved. The sheet shows its own failure message. */
@@ -425,7 +373,7 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
         </>
       ) : (
         <>
-          {hero && laptop ? null : (
+          {hero ? null : (
             <div className="ledger-head">
               <div>
                 <p className="eyebrow">{journeysAheadLabel(upcoming.length)}</p>
@@ -438,7 +386,7 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
               </Link>
             </div>
           )}
-          {hero && laptop ? null : tabs}
+          {hero ? null : tabs}
           {hero && laptop ? (
             <HomeLaptop
               trip={hero}
@@ -451,33 +399,23 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
               onArchive={archive}
               onRemove={setRemoving}
               onOpenArchive={() => setView("archive")}
+              headingRef={headingRef}
             />
           ) : hero ? (
-            <div className="ledger-grid">
-              <NextDeparture
-                trip={hero}
-                view={tripCardView(hero, today, view)}
-                departure={departureView(hero, today)}
-                weather={weather}
-                busy={busy.has(hero.id)}
-                onEdit={(id) => setEditing(id)}
-                onAddItem={(item) => addItem(hero.id, item)}
-                onBathroom={(name, qty) => setBathroom({ tripId: hero.id, name, qty })}
-                onEditExisting={(itemId) => router.push(editItemHref(hero.id, itemId))}
-                onArchive={archive}
-                onRemove={setRemoving}
-              />
-              <LaterJourneys
-                entries={departures.slice(1).map((trip) => ({
-                  trip,
-                  view: tripCardView(trip, today, view),
-                }))}
-                today={today}
-                busy={busy}
-                onArchive={archive}
-                onRemove={setRemoving}
-              />
-            </div>
+            <HomePhone
+              trip={hero}
+              later={departures.slice(1)}
+              state={state}
+              today={today}
+              weather={weather}
+              map={mapFor(hero)}
+              busy={busy.has(hero.id)}
+              onEdit={(id) => setEditing(id)}
+              onArchive={archive}
+              onRemove={setRemoving}
+              onOpenArchive={() => setView("archive")}
+              headingRef={headingRef}
+            />
           ) : (
             <div className="empty-state">
               <strong>No upcoming trips.</strong>
@@ -520,17 +458,6 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
             )}
           </Card>
         </>
-      ) : null}
-
-      {bathroom && state.trips.some((trip) => trip.id === bathroom.tripId) ? (
-        <AddToiletryForm
-          destination={state.trips.find((trip) => trip.id === bathroom.tripId)!.destination}
-          saving={bathroomSaving}
-          initialName={bathroom.name}
-          initialQty={bathroom.qty}
-          onClose={() => setBathroom(null)}
-          onAdd={(item) => addBathroomItem(bathroom.tripId, item)}
-        />
       ) : null}
 
       {editTarget ? (

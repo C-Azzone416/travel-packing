@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
 import { DEVICE } from "./helpers/device";
+import { openPastAndArchive } from "./helpers/menu";
 
 // The trip screen's right rail (#297): at 900px and wider the whole rail (sections nav, Ready card, Trip math) is ONE sticky
 // unit, so the sections links can never cover Trip math. From 1024px the trip page is the suitcase view (#385) and has no
@@ -21,7 +22,7 @@ async function openTrip(
     await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
   } else {
     // Lisbon is seeded Ready, so its rail carries the Ready card between the sections nav and Trip math.
-    await page.getByRole("button", { name: /Past & archive/ }).click();
+    await openPastAndArchive(page);
     await page.getByRole("link", { name: "Review bag: Lisbon" }).click();
   }
   await expect(page.getByRole("heading", { name: trip, level: 1 })).toBeVisible();

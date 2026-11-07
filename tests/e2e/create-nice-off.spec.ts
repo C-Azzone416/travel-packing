@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { legacyPackingLayout } from "./helpers/device";
 import { signInAsOwner } from "./helpers/auth";
-import { chooseFromMenu } from "./helpers/menu";
+import { chooseFromMenu, planATrip } from "./helpers/menu";
 import { nextButton, planAndCreate, planToList, reviewAndCreate } from "./helpers/plan";
 
 // Home is the laptop suitcase view from 1024px (#387); this spec's subject is the page below it, so it runs there.
@@ -32,7 +32,7 @@ test("a new trip starts with Nice outfits off: no nice-attire items after save a
   test.setTimeout(60_000);
   await page.clock.setFixedTime(NOW);
   await signInAsOwner(page);
-  await page.getByRole("link", { name: /Plan a trip/ }).click();
+  await planATrip(page);
   // Four days, no laundry (the default): the trip in the report.
   await planAndCreate(page, {
     query: "lon",

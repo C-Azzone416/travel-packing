@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { SECOND_EMAIL, signIn, signInAsOwner } from "./helpers/auth";
 import { legacyPackingLayout } from "./helpers/device";
 import { reviewAndApply } from "./helpers/preferences";
+import { openPastAndArchive } from "./helpers/menu";
 
 // The trip screen against a REAL Postgres: what it shows after a reload is what was stored. Each test starts from the
 // freshly seeded state of this project's owner (San Diego partly packed, Lisbon past, Ready, weather accepted).
@@ -24,7 +25,7 @@ async function openSanDiego(page: Page) {
 
 async function openLisbon(page: Page) {
   await openDashboard(page);
-  await page.getByRole("button", { name: /Past & archive/ }).click();
+  await openPastAndArchive(page);
   await page.getByRole("link", { name: "Review bag: Lisbon" }).click();
   await expect(page.getByRole("heading", { name: "Lisbon", level: 1 })).toBeVisible();
 }

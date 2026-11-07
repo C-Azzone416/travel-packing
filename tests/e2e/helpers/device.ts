@@ -10,7 +10,15 @@ export const DEVICE = { tag: "@device" } as const;
 export const LEGACY_PACKING_VIEWPORT = { width: 1000, height: 900 } as const;
 
 /**
- * Runs the rest of a desktop test on the layout below 1024px. Since #385 the trip page is a different screen from 1024px up
+ * Runs the rest of a desktop test on the phone Home layout (below 1024px, #388): the luggage tag with its four pills. A spec
+ * that only drives the Home (and the lists it opens) calls this; one that also opens the trip page uses legacyPackingLayout.
+ */
+export async function phoneHomeLayout(page: Page): Promise<void> {
+  if (test.info().project.name === "desktop") await page.setViewportSize(LEGACY_PACKING_VIEWPORT);
+}
+
+/**
+ * Runs the rest of a desktop test on the trip page layout below 1024px (the Home there is the phone Home since #388). Since #385 the trip page is a different screen from 1024px up
  * (the suitcase view, tests/e2e/packing-laptop.spec.ts), while below it the page is unchanged until the phone redesign (#386).
  * A spec whose subject is a flow (create, copy, Ready, weather review, stamps ...) and not the laptop layout keeps running
  * against that page here; #386 moves these onto the phone redesign. The phone project already runs at its own size.

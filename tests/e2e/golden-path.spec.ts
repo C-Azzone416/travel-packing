@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
 import { DEVICE, legacyPackingLayout } from "./helpers/device";
 import { planToList, reviewAndCreate } from "./helpers/plan";
+import { futureRow, planATrip } from "./helpers/menu";
 
 // The one end-to-end walk a person actually makes, on a real phone (WebKit, touch): sign in, create a trip, pack it on the trip
 // screen, review the bag, say it is Ready, and find it still Ready after a reload. It runs on desktop too (every test does).
@@ -22,7 +23,7 @@ test(
     await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
 
     // Create: pick a destination, set the dates, continue, save.
-    await page.getByRole("link", { name: /Plan a trip/ }).click();
+    await planATrip(page);
     await planToList(page, {
       query: "lon",
       option: /England/,
@@ -32,10 +33,10 @@ test(
     await expect(page.getByRole("heading", { name: "Starting list", level: 2 })).toBeVisible();
     await reviewAndCreate(page);
     await expect(page.locator(".toast-region")).toContainText("Trip saved");
-    await expect(page.getByRole("article", { name: "London" })).toBeVisible();
+    await expect(await futureRow(page, /London/)).toBeVisible();
 
     // Pack: open the trip and check every item. Finishing the Bathroom items opens the bag prompt; confirm it.
-    await page.getByRole("link", { name: /(Continue|Keep) packing: London/ }).click();
+    await (await futureRow(page, /London/)).click();
     await expect(page.getByRole("heading", { name: "London", level: 1 })).toBeVisible();
     const row = (id: string) => page.locator(`[data-item-id="${id}"]`);
     const ids = await page

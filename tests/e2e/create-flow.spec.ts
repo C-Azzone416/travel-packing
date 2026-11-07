@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { ownerEmailFor, signIn, signInAsOwner } from "./helpers/auth";
 import { readTripTravel, setOwnerHomeCity } from "./helpers/database";
-import { chooseFromMenu } from "./helpers/menu";
+import { chooseFromMenu, futureRow, futureTab, planATrip } from "./helpers/menu";
 import { DEVICE, laptopPlanLayout, legacyPackingLayout } from "./helpers/device";
 import {
   chooseMode,
@@ -41,9 +41,10 @@ const SEATTLE = {
   label: "Seattle, Washington, United States",
 };
 
-const upcomingCount = (page: Page) => page.getByRole("button", { name: /^Upcoming/ });
-const card = (page: Page, name: string) => page.getByRole("article", { name });
-const plan = (page: Page) => page.getByRole("link", { name: /Plan a trip/ }).click();
+// The phone Home (#388): the trips after the next one are under the Future pill, and a trip's own numbers are on its page.
+const futureRowNamed = (page: Page, name: string) => futureRow(page, new RegExp(name));
+const tag = (page: Page, name: string) => page.getByRole("region", { name });
+const plan = (page: Page) => planATrip(page);
 const planAtLaptop = async (page: Page) => {
   await plan(page);
   await laptopPlanLayout(page);
@@ -67,7 +68,7 @@ test("leaving mid-plan saves nothing: the dashboard is unchanged", async ({ page
     .click();
   await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(upcomingCount(page)).toContainText("1");
+  await expect(futureTab(page)).toContainText("0 trips");
   await expect(page.getByRole("heading", { name: "London" })).toHaveCount(0);
 });
 
@@ -93,7 +94,11 @@ test("the ambiguous London requires an explicit choice", async ({ page }) => {
   await toList(page);
   await reviewAndCreate(page);
   await legacyPackingLayout(page);
-  await expect(card(page, "London").getByText(/Ontario, Canada/)).toBeVisible();
+  const london = await futureRowNamed(page, "London");
+  await expect(london).toBeVisible();
+  await london.click();
+  await expect(page.getByRole("heading", { name: "London", level: 1 })).toBeVisible();
+  await expect(page.getByText(/Ontario, Canada/).first()).toBeVisible();
 });
 
 test("keyboard: arrow keys and Enter pick a destination without moving to the next step", async ({
@@ -168,19 +173,24 @@ test("create: where, when, how, the list, review -> the trip is on the dashboard
   await legacyPackingLayout(page);
 
   await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
-  await expect(upcomingCount(page)).toContainText("2");
+  await expect(futureTab(page)).toContainText("1 trip");
   await expect(page.locator(".toast-region")).toContainText("Trip saved");
-  const london = card(page, "London");
+  const london = await futureRowNamed(page, "London");
   await expect(london).toBeVisible();
-  // What the preview said is what was created: the same number of items, none packed.
-  await expect(london.getByText(`0 of ${preview} packed`)).toBeVisible();
-  await expect(london.getByText("Oct 23")).toHaveCount(0);
+  await expect(london).toContainText("12 NOV");
+  await expect(london).not.toContainText("23 OCT");
+  // What the preview said is what was created: the same number of items, none packed (the trip's own page says so).
+  await london.click();
+  await expect(page.getByText(`0 of ${preview} packed`)).toBeVisible();
+  await page.getByRole("link", { name: "All trips" }).click();
 
   // It is in the database, not just in the page: it survives a reload.
   await page.reload();
-  await expect(upcomingCount(page)).toContainText("2");
-  await expect(card(page, "London").getByText(`0 of ${preview} packed`)).toBeVisible();
-  await expect(card(page, "San Diego")).toBeVisible();
+  await expect(futureTab(page)).toContainText("1 trip");
+  await (await futureRowNamed(page, "London")).click();
+  await expect(page.getByText(`0 of ${preview} packed`)).toBeVisible();
+  await page.getByRole("link", { name: "All trips" }).click();
+  await expect(tag(page, "San Diego")).toBeVisible();
 });
 
 test("create: the saved trip is there in a brand-new session (another device)", async ({
@@ -196,7 +206,7 @@ test("create: the saved trip is there in a brand-new session (another device)", 
     end: "2026-11-16",
   });
   await reviewAndCreate(page, "Winter in London");
-  await expect(card(page, "London")).toBeVisible();
+  await expect(await futureRowNamed(page, "London")).toBeVisible();
 
   const other = await browser.newContext({ viewport: page.viewportSize() ?? undefined });
   try {
@@ -204,8 +214,9 @@ test("create: the saved trip is there in a brand-new session (another device)", 
     await device.clock.setFixedTime(NOW);
     await signIn(device, ownerEmailFor(test.info().project.name));
     await expect(device).toHaveURL(/\/$/);
-    await expect(upcomingCount(device)).toContainText("2");
-    await expect(card(device, "London").getByText(/^0 of \d+ packed$/)).toBeVisible();
+    await expect(futureTab(device)).toContainText("1 trip");
+    await (await futureRowNamed(device, "London")).click();
+    await expect(device.getByText(/^0 of \d+ packed$/)).toBeVisible();
   } finally {
     await other.close();
   }
@@ -225,7 +236,7 @@ test("From is the home city, changeable for this one trip; the trip keeps its or
   await setDates(page, "2026-11-12", "2026-11-16");
   await toList(page, "Drive");
   await reviewAndCreate(page, "Weekend away");
-  await expect(card(page, "London")).toBeVisible();
+  await expect(await futureRowNamed(page, "London")).toBeVisible();
   expect(await readTripTravel(ownerId(), "London")).toEqual({
     origin: "Seattle",
     mode: "drive",
@@ -242,7 +253,7 @@ test("From is the home city, changeable for this one trip; the trip keeps its or
   await setDates(page, "2026-12-04", "2026-12-08");
   await toList(page, "Train or other");
   await reviewAndCreate(page);
-  await expect(card(page, "Paris")).toBeVisible();
+  await expect(await futureRowNamed(page, "Paris")).toBeVisible();
   expect(await readTripTravel(ownerId(), "Paris")).toEqual({
     origin: "Chicago",
     mode: "other",
@@ -254,7 +265,7 @@ test("From is the home city, changeable for this one trip; the trip keeps its or
 
 test("copy: a new trip from the plan, and the source trip unchanged", async ({ page }) => {
   await openDashboard(page);
-  const source = card(page, "San Diego");
+  const source = tag(page, "San Diego");
   const before = await source.innerText();
   await chooseFromMenu(page, "San Diego", "Copy trip");
 
@@ -271,15 +282,19 @@ test("copy: a new trip from the plan, and the source trip unchanged", async ({ p
   await expect(page.getByRole("radio", { name: /San Diego/ })).toBeChecked();
   await reviewAndCreate(page);
 
-  await expect(upcomingCount(page)).toContainText("2");
-  await expect(card(page, "Paris").getByText(/^0 of \d+ packed$/)).toBeVisible();
-  expect(await card(page, "San Diego").innerText()).toBe(before);
+  await expect(futureTab(page)).toContainText("1 trip");
+  await (await futureRowNamed(page, "Paris")).click();
+  await expect(page.getByText(/^0 of \d+ packed$/)).toBeVisible();
+  await page.getByRole("link", { name: "All trips" }).click();
+  expect(await tag(page, "San Diego").innerText()).toBe(before);
 
   // The copy is stored: it survives a reload, with nothing packed, and the source is still untouched.
   await page.reload();
-  await expect(upcomingCount(page)).toContainText("2");
-  await expect(card(page, "Paris").getByText(/^0 of \d+ packed$/)).toBeVisible();
-  expect(await card(page, "San Diego").innerText()).toBe(before);
+  await expect(futureTab(page)).toContainText("1 trip");
+  await (await futureRowNamed(page, "Paris")).click();
+  await expect(page.getByText(/^0 of \d+ packed$/)).toBeVisible();
+  await page.getByRole("link", { name: "All trips" }).click();
+  expect(await tag(page, "San Diego").innerText()).toBe(before);
 });
 
 test("Copy a past trip offers the latest past trip, and copies its preferences", async ({
@@ -299,7 +314,7 @@ test("Copy a past trip offers the latest past trip, and copies its preferences",
   await copy.check();
   await expect(page.getByRole("radio", { name: /Lisbon · Sep 2026/ })).toBeChecked();
   await reviewAndCreate(page);
-  await expect(card(page, "Paris")).toBeVisible();
+  await expect(await futureRowNamed(page, "Paris")).toBeVisible();
 });
 
 test(

@@ -5,6 +5,7 @@ import { markTripReady } from "./helpers/database";
 import { DEVICE, legacyPackingLayout } from "./helpers/device";
 import { planRouteToList, reviewAndCreate } from "./helpers/plan";
 import { FAKE_GEOCODER_PORT, OPEN_METEO_PORT } from "./support/ports";
+import { planATrip } from "./helpers/menu";
 
 // Home is the laptop suitcase view from 1024px (#387); this spec's subject is the page below it, so it runs there.
 test.beforeEach(async ({ page }) => {
@@ -31,7 +32,7 @@ test.beforeEach(async () => {
 
 async function newTrip(page: Page) {
   await signInAsOwner(page);
-  await page.getByRole("link", { name: /Plan a trip/ }).click();
+  await planATrip(page);
   await expect(page.getByRole("heading", { name: "Plan a trip", level: 1 })).toBeVisible();
 }
 

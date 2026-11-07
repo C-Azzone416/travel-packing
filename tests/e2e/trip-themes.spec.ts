@@ -1,8 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { ownerEmailFor, signInAsOwner } from "./helpers/auth";
 import { readTripTheme } from "./helpers/database";
-import { chooseFromMenu } from "./helpers/menu";
-import { legacyPackingLayout } from "./helpers/device";
+import { chooseFromMenu, futureRow, planATrip } from "./helpers/menu";
+import { phoneHomeLayout } from "./helpers/device";
 import { createButton, nextButton, planToList } from "./helpers/plan";
 
 // The trip-theme UI is retired by the Suitcase design. Stored values remain for compatibility until
@@ -16,12 +16,10 @@ async function openDashboard(page: Page) {
   await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
 }
 
-const card = (page: Page, name: string) => page.getByRole("article", { name });
-
 const ownerId = () => `e2e-${ownerEmailFor(test.info().project.name)}`;
 
 async function startTrip(page: Page, place = "lon", option = /England/) {
-  await page.getByRole("link", { name: /Plan a trip/ }).click();
+  await planATrip(page);
   await planToList(page, { query: place, option, start: "2026-11-12", end: "2026-11-16" });
   await nextButton(page).click();
   await expect(page.getByRole("heading", { name: "Review", level: 2 })).toBeVisible();
@@ -37,17 +35,17 @@ test("a stored trip theme remains readable before the compatibility column is mi
 test("Plan never exposes a trip-theme picker and a new trip keeps the compatibility default", async ({
   page,
 }) => {
-  await legacyPackingLayout(page);
+  await phoneHomeLayout(page);
   await openDashboard(page);
   await startTrip(page);
   await expect(page.getByRole("group", { name: "Trip theme" })).toHaveCount(0);
   await createButton(page).click();
-  await expect(card(page, "London")).toBeVisible();
+  await expect(await futureRow(page, /London/)).toBeVisible();
   expect(await readTripTheme(ownerId(), "London")).toBe("travel");
 });
 
 test("copying a trip preserves its stored theme without exposing a picker", async ({ page }) => {
-  await legacyPackingLayout(page);
+  await phoneHomeLayout(page);
   await openDashboard(page);
   const sourceTheme = await readTripTheme(ownerId(), "San Diego");
   expect(sourceTheme).toBe("beach");
@@ -61,7 +59,7 @@ test("copying a trip preserves its stored theme without exposing a picker", asyn
   await nextButton(page).click();
   await expect(page.getByRole("group", { name: "Trip theme" })).toHaveCount(0);
   await createButton(page).click();
-  await expect(card(page, "London")).toBeVisible();
+  await expect(await futureRow(page, /London/)).toBeVisible();
   expect(await readTripTheme(ownerId(), "London")).toBe(sourceTheme);
   expect(await readTripTheme(ownerId(), "San Diego")).toBe(sourceTheme);
 });
