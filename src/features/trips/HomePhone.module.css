@@ -13,6 +13,10 @@
 }
 .tag {
   min-width: 0;
+  /* The tag's menu opens downward over the pills and the panel: the tag (a stacking context of its own, for the shadow)
+     must sit above the siblings that follow it, or they take the menu's clicks. */
+  position: relative;
+  z-index: 2;
 }
 .tagRow {
   display: flex;
