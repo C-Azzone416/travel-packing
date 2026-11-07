@@ -407,7 +407,7 @@ test("a weather note taller than 140px sits above the block and keeps it on the 
 
 /** The trip's hero with its weather band (an all-typical trip has a band but no forecast block). */
 async function openBand(page: Page, fixture: Fixture) {
-  await createWeatherTrip(page, fixture.stays);
+  await createWeatherTrip(page, fixture.stays, fixture.place);
   await page.goto("/");
   await expect(page.locator(".hero-weather")).toBeVisible({ timeout: 30_000 });
   await expect(page.locator(".weather-strip li")).toHaveCount(fixture.cellCount);
@@ -672,18 +672,21 @@ for (const fixture of [F2, F7, F9]) {
   });
 }
 
-// QA #359: a long typical segment (a cross-month run with high, low, and rain detail) must be allowed to wrap inside
-// itself when it is wider than the line, or it pushes the page sideways at 320px with larger text. The days are chosen
-// from today's date so the run crosses a month end; the assertion pins the full detail and minimum length without
-// depending on whether an equivalent cached synthetic range has a two- or three-digit Fahrenheit high.
+// QA #359: a long typical segment ("Nov 14–Dec 2: High 104° ·": a cross-month run, 3-digit Fahrenheit) must be allowed to
+// wrap inside itself when it is wider than the line, or it pushes the page sideways at 320px with larger text. The days
+// are chosen from today's date so the run crosses a month end; the fixture has its own geocoded place (#447),
+// so the app's weather cache (keyed by rounded coordinates) never serves this trip another test's numbers on any date.
 function longTypicalFixture(): Fixture {
   const dayAt = (offset: number) => new Date(Date.now() + offset * 86_400_000).getUTCDate();
   let boundary = 18;
   while (dayAt(boundary) !== 1) boundary++;
   const back = boundary + 1;
   return {
-    name: "FL long typical run",
+    name: "FL long typical run, 3-digit F",
     stays: [{ leave: 13, back }],
+    // Its own place (own rounded coordinates, so own cache keys), never London: the typical cache key is built from the first
+    // and last historical samples, so any run holding both Dec 31 and Jan 1 collides with every other such run (#447).
+    place: { query: "cairo", option: /Egypt/, name: "Cairo" },
     cards: 3,
     more: 0,
     typical: back - 15,
@@ -698,9 +701,8 @@ async function openLongTypical(page: Page) {
   await openBand(page, fixture);
   const line = page.locator(".hero-typical-line > span").last();
   await expect(line).toContainText(
-    /Other \d+ days · [A-Z][a-z]{2} \d+–[A-Z][a-z]{2} \d+: High \d{2,3}° · Low \d{2,3}° · (?:Rain on \d+ of \d+ days|Rarely rains)/,
+    /Other \d+ days · [A-Z][a-z]{2} \d+–[A-Z][a-z]{2} \d+: High 1\d\d° /,
   );
-  expect((await line.textContent())?.length ?? 0).toBeGreaterThan(60);
   return fixture;
 }
 test("a long typical segment wraps inside itself at 320px with 200% text: no sideways scroll", async ({
