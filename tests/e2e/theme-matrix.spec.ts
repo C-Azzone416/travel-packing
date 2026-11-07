@@ -2,12 +2,6 @@ import { expect, test, type Page } from "@playwright/test";
 import { ownerEmailFor, signInAsOwner } from "./helpers/auth";
 import { setOwnerAppearance } from "./helpers/database";
 import { expectAccessible } from "./helpers/a11y";
-import { legacyPackingLayout } from "./helpers/device";
-
-// Home is the laptop suitcase view from 1024px (#387); this spec's subject is the page below it, so it runs there.
-test.beforeEach(async ({ page }) => {
-  await legacyPackingLayout(page);
-});
 
 // Cross-theme regression and a11y matrix (#145, trimmed in #181; #139 spec §6 and §8(d)). Rendered colour contrast (axe) and
 // the focus-ring colour are checked on the dashboard, the packing screen and Settings in every theme at 1280, and in one
@@ -148,8 +142,10 @@ test("ocean: nothing scrolls sideways on the dashboard, packing and Settings at 
   }
 });
 
-// The keyboard paths, once (they do not depend on colour or width).
+// The keyboard paths, once at the redesigned laptop width (they do not depend on colour).
 test("the Theme radiogroup and a packing row work from the keyboard", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+
   // One tick per row and the editor behind Edit list: the same on the laptop and the phone layout.
   const theme = THEMES[0];
   await signInWithTheme(page, theme);
