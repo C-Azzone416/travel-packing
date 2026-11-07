@@ -23,6 +23,7 @@ const actions = vi.hoisted(() => {
     createTripAction: vi.fn().mockResolvedValue({ ok: true, trip }),
     createTripWithWeatherAction: vi.fn().mockResolvedValue({ ok: true, trip }),
     getTripAction: vi.fn().mockResolvedValue({ ok: true, trip }),
+    getHomeCityAction: vi.fn().mockResolvedValue({ ok: true, home: null }),
     listStaplesAction: vi.fn().mockResolvedValue({ ok: true, staples: [] }),
     upsertStapleAction: vi.fn().mockResolvedValue({ ok: true, staples: [] }),
     listWeatherSuggestionsAction: vi.fn().mockResolvedValue({ ok: true, suggestions: [] }),
@@ -76,6 +77,7 @@ vi.mock("./actions", () => ({
 }));
 vi.mock("./trip-actions", () => ({
   getTripAction: actions.getTripAction,
+  getHomeCityAction: actions.getHomeCityAction,
   listStaplesAction: actions.listStaplesAction,
   upsertStapleAction: actions.upsertStapleAction,
   listWeatherSuggestionsAction: actions.listWeatherSuggestionsAction,
@@ -178,6 +180,7 @@ describe("TripsSourceProvider", () => {
       ["undoRemove", (s) => s.undoRemove("a"), () => actions.dashboard.undoRemoveTripAction, ["a"]],
       ["createTrip", (s) => s.createTrip(draft), () => actions.createTripAction, [draft]],
       ["getTrip", (s) => s.getTrip("t"), () => actions.getTripAction, ["t"]],
+      ["homeCity", (s) => s.homeCity!(), () => actions.getHomeCityAction, []],
       ["listStaples", (s) => s.listStaples(), () => actions.listStaplesAction, []],
       ["upsertStaple", (s) => s.upsertStaple(staple), () => actions.upsertStapleAction, [staple]],
       [
@@ -309,6 +312,7 @@ describe("TripsSourceProvider", () => {
       actions.loadTripsAction,
       actions.createTripAction,
       actions.getTripAction,
+      actions.getHomeCityAction,
       actions.listStaplesAction,
       actions.upsertStapleAction,
       ...Object.values(actions.dashboard),

@@ -1,7 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
 import { expectPacking, showItem } from "./helpers/packing";
-import { DEVICE } from "./helpers/device";
+import { DEVICE, legacyPackingLayout } from "./helpers/device";
+import { planAndCreate } from "./helpers/plan";
 
 // The Staples screen against a REAL Postgres (#18): what it shows after a reload is what was stored. Each test starts
 // from this project's freshly seeded owner (the default staples, San Diego partly packed, Lisbon Ready).
@@ -30,6 +31,17 @@ async function openStaples(page: Page) {
   await expect(section(page, "Clothing")).toBeVisible();
 }
 
+/** The ledger Home (trip headings, "Keep packing" links) is drawn below 1024px; the Staples screen is drawn at the laptop width. */
+async function underLegacyPacking<T>(page: Page, run: () => Promise<T>): Promise<T> {
+  const size = page.viewportSize();
+  await legacyPackingLayout(page);
+  try {
+    return await run();
+  } finally {
+    if (size) await page.setViewportSize(size);
+  }
+}
+
 async function newTrip(
   page: Page,
   destination: RegExp,
@@ -39,17 +51,19 @@ async function newTrip(
 ) {
   await page.goto("/");
   await page.getByRole("link", { name: /Plan a trip/ }).click();
-  await page.getByRole("combobox", { name: "Destination search" }).fill("paris");
-  await page.getByRole("option", { name: destination }).click();
-  await page.getByLabel("Leave", { exact: true }).fill(start);
-  await page.getByLabel("Return", { exact: true }).fill(end);
-  await page.getByRole("button", { name: "Continue to packing preferences" }).click();
-  await page.getByRole("button", { name: "Save trip" }).click();
-  await expect(page.getByRole("heading", { name: "Paris" })).toHaveCount(expectedCount);
+  await planAndCreate(page, { query: "paris", option: destination, start: start, end: end });
+  // The trips are counted as headings on the ledger page (below 1024px); the laptop Home lists later trips as tags.
+  await underLegacyPacking(page, () =>
+    expect(page.getByRole("heading", { name: "Paris" })).toHaveCount(expectedCount),
+  );
 }
 
 /** The needed quantity of the underwear row on the trip's Packing page: the tick's name reads "Underwear, 5". */
 async function underwearQty(page: Page, tripName: string): Promise<number> {
+  return underLegacyPacking(page, () => underwearQtyOnPage(page, tripName));
+}
+
+async function underwearQtyOnPage(page: Page, tripName: string): Promise<number> {
   await page
     .getByRole("link", { name: new RegExp(`(Continue|Keep) packing: ${tripName}`) })
     .click();
@@ -88,16 +102,18 @@ test("edit a staple count: existing trips are unchanged, and the next new trip u
   // A trip made after the edit uses it.
   await newTrip(page, /Paris/, "2026-12-04", "2026-12-08", 2);
   await page.goto("/");
-  await page
-    .getByRole("link", { name: /Keep packing: Paris/ })
-    .first()
-    .click();
-  await expectPacking(page);
-  const name = await (
-    await showItem(page, "underwear")
-  )
-    .getByRole("checkbox")
-    .getAttribute("aria-label");
+  const name = await underLegacyPacking(page, async () => {
+    await page
+      .getByRole("link", { name: /Keep packing: Paris/ })
+      .first()
+      .click();
+    await expectPacking(page);
+    return await (
+      await showItem(page, "underwear")
+    )
+      .getByRole("checkbox")
+      .getAttribute("aria-label");
+  });
   // "Underwear, M": M is the needed count for the trip.
   expect(Number(/, (\d+)$/.exec(name ?? "")?.[1])).toBeGreaterThan(parisBefore);
 });

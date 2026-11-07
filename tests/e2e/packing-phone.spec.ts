@@ -361,6 +361,61 @@ for (const size of [
   }
 }
 
+// Words in the open cube (its title and every item name) are never split across lines, and a wrapped row grows instead of
+// overlapping the next one. A hyphen counts as a boundary too ("Nice-attire" may wrap after it). A DOM Range per word reports one client rect per line the word occupies: two means a mid-word break.
+async function brokenWords(page: Page): Promise<string[]> {
+  return page.locator("[data-cube]").evaluate((cube) => {
+    const broken: string[] = [];
+    const targets = [
+      cube.querySelector("h2"),
+      ...Array.from(cube.querySelectorAll("li[data-item-id] span")),
+    ];
+    for (const target of targets) {
+      if (!target) continue;
+      const walker = document.createTreeWalker(target, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const text = node.textContent ?? "";
+        for (const match of text.matchAll(/[^\s-]+/g)) {
+          const range = document.createRange();
+          range.setStart(node, match.index!);
+          range.setEnd(node, match.index! + match[0].length);
+          const lines = new Set(
+            Array.from(range.getClientRects()).map((rect) => Math.round(rect.top)),
+          );
+          if (lines.size > 1) broken.push(match[0]);
+        }
+      }
+    }
+    return broken;
+  });
+}
+
+for (const zoom of [false, true]) {
+  test(
+    `195px${zoom ? " at 200% text" : ""}: the cube list breaks only between words, and rows grow instead of overlapping`,
+    DEVICE,
+    async ({ page }) => {
+      await open(page, { width: 195, height: 640 });
+      if (zoom) await zoomText(page);
+      expect(await brokenWords(page), "words split across lines").toEqual([]);
+      const rows = page.locator("[data-cube] li[data-item-id]");
+      expect(await rows.count()).toBeGreaterThan(3);
+      const boxes = await rows.evaluateAll((nodes) =>
+        nodes.map((node) => {
+          const rect = node.getBoundingClientRect();
+          return { top: rect.top, bottom: rect.bottom, right: rect.right };
+        }),
+      );
+      for (let index = 1; index < boxes.length; index++)
+        expect(
+          boxes[index].top,
+          `row ${index} starts below row ${index - 1}`,
+        ).toBeGreaterThanOrEqual(boxes[index - 1].bottom - 1);
+      expect(await sideways(page)).toBeLessThanOrEqual(0);
+    },
+  );
+}
+
 test(
   "390 at 200% text with Edit list open: rows wrap and never overflow",
   DEVICE,

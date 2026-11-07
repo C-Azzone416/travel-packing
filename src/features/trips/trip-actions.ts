@@ -13,6 +13,7 @@ import type { ThemeId } from "@/domain/themes";
 import type { Staple, TripConfig, Scope } from "@/domain/trip";
 import type { StaplesSetup } from "@/domain/staples-setup";
 import type { LifecycleTrip } from "@/domain/trip-lifecycle";
+import type { TripOrigin } from "@/domain/trip-route";
 import type { TripStop } from "@/domain/trip-stops";
 import type { WeatherAppliedChange } from "@/domain/weather/apply";
 import { ACCESS_DENIED_PATH, SIGN_IN_PATH } from "@/server/auth/proxy-handler";
@@ -26,6 +27,7 @@ import type { WeatherSuggestionState } from "@/server/data/weather-store";
 
 export type TripReadResult = { ok: true; trip: LifecycleTrip } | { ok: false; code: ErrorCode };
 export type StaplesReadResult = { ok: true; staples: Staple[] } | { ok: false; code: ErrorCode };
+export type HomeCityResult = { ok: true; home: TripOrigin | null } | { ok: false; code: ErrorCode };
 export type StaplesSetupResult = ({ ok: true } & StaplesSetup) | { ok: false; code: ErrorCode };
 export type TripCommandResult =
   { ok: true; trip: LifecycleTrip; signals: Signals } | { ok: false; code: ErrorCode };
@@ -76,6 +78,14 @@ export async function listStaplesAction(): Promise<StaplesReadResult> {
     (context) => service.listStaplesForOwner(context),
     (staples) => ({ ok: true as const, staples }),
   ) as Promise<StaplesReadResult>;
+}
+
+/** The account's home city: the default "From" of a new trip (#390). Null when none is set. */
+export async function getHomeCityAction(): Promise<HomeCityResult> {
+  return withContext(
+    (context) => service.getHomeCity(context),
+    (home) => ({ ok: true as const, home }),
+  ) as Promise<HomeCityResult>;
 }
 
 /** Create or update one staple. The server validates every field; changes apply to future trips only. */

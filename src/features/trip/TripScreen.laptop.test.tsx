@@ -226,7 +226,7 @@ describe("one tick per item", () => {
     const { user, base } = setup();
     await ready();
     const box = within(panel()).getByRole("checkbox", { name: "Underwear, 5" });
-    expect((box as HTMLInputElement).indeterminate).toBe(true);
+    await waitFor(() => expect((box as HTMLInputElement).indeterminate).toBe(true));
     await user.click(box);
     await waitFor(() =>
       expect(tripOf(base).items.find((entry) => entry.id === "underwear")?.packed).toBe(5),

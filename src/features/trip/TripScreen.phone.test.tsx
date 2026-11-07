@@ -428,10 +428,13 @@ describe("All in", () => {
     expect(
       JSON.stringify(tripOf(base).items.filter((entry) => itemCube(entry) !== "clothing")),
     ).toBe(otherBefore);
-    expect(live().textContent).toBe(`Packed ${before.length} items in Clothing.`);
+    // Counts are quantities (#376): the units that went in, not the rows.
+    const units = before.reduce((sum, entry) => sum + (entry.qty - entry.packed), 0);
+    expect(units).toBeGreaterThan(before.length);
+    expect(live().textContent).toBe(`Packed ${units} items in Clothing.`);
     expect(
       within(document.querySelector(".toast-region") as HTMLElement).getByText(
-        `Packed ${before.length} items`,
+        `Packed ${units} items`,
       ),
     ).toBeTruthy();
     expect(document.activeElement).toBe(screen.getByRole("button", { name: /^Next: / }));

@@ -116,14 +116,15 @@ export function StapleEditor({
       description="Set a fixed, per-day, or supported Smart default."
       onClose={onClose}
     >
-      <form className="staple-editor-form" onSubmit={submit} noValidate>
+      <form className="staple-editor-form" onSubmit={submit} noValidate autoComplete="off">
         <div className="form-grid staple-editor-fields">
           <label className="field">
             Item name
             <input
-              name="name"
+              name="packing-item-name"
               value={name}
               maxLength={50}
+              autoComplete="off"
               aria-invalid={problem === "name" || duplicate !== undefined}
               aria-describedby={
                 problem === "name"

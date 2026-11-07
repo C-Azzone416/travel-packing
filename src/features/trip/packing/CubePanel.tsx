@@ -274,15 +274,17 @@ function AddRow({
           ? "Couldn’t add it. Nothing was changed."
           : null;
   return (
-    <form className={styles.addRow} onSubmit={submit} noValidate>
+    <form className={styles.addRow} onSubmit={submit} noValidate autoComplete="off">
       <label className={styles.addField}>
         <span className="sr-only">Add an item to {label}</span>
         <input
           ref={field}
           className={styles.addInput}
+          name="packing-item-name"
           value={name}
           placeholder="+ Add an item"
           maxLength={ADD_ITEM_NAME_MAX + 20}
+          autoComplete="off"
           aria-invalid={message ? true : undefined}
           aria-describedby={message || existing ? messageId : undefined}
           onChange={(event) => {

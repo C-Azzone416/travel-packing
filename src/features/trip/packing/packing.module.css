@@ -454,7 +454,7 @@
   font-size: var(--fs-cube-title, 30px);
   font-weight: var(--fw-heading-xl, 800);
   line-height: 1.1;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .panelTitle:focus-visible {
   outline: 3px solid var(--info);
@@ -508,8 +508,9 @@
 .rowLabel {
   display: flex;
   flex: 1 1 auto;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 4px 10px;
   min-width: 0;
   min-height: 44px;
   cursor: pointer;
@@ -526,9 +527,12 @@
   outline: 3px solid var(--info);
   outline-offset: 2px;
 }
+/* Words break only between words: the basis is the longest word, so a name that cannot sit beside the box and the counts drops to
+   the next line (the row grows), and a single unbreakable string wider than the row is the only case that splits (last resort). */
 .name {
+  flex: 1 1 min-content;
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   font-family: var(--font-body);
   font-size: var(--fs-body, 17px);
   font-weight: 500;
@@ -587,6 +591,12 @@
   padding: 12px 20px;
   border-radius: 0;
   background: transparent;
+}
+/* At 195px the panel's side padding would leave a word like "Underwear" no room beside its box. */
+@media (max-width: 240px) {
+  .panelPhone {
+    padding-inline: 10px;
+  }
 }
 .panelPhone .panelTitleRow {
   flex: 1 1 auto;

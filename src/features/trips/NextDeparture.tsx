@@ -11,13 +11,27 @@ import { AddItemInline } from "@/features/trip/AddItemInline";
 import { QuickView } from "./QuickView";
 import type { NewCustomItem } from "./trips-source";
 import { RouteText } from "./RouteText";
+import type { UsualWeatherRow } from "@/components/ui/UsualWeather";
+import type { CityWeather, WeatherReview } from "./home-view";
 import type { DepartureView, HeroForecast, TripCardView, WeatherCell } from "./view";
 
 export type HeroWeather =
   | { phase: "none" }
+  /** Weather is turned off in Settings (the laptop Home says so, #408). */
+  | { phase: "off" }
   | { phase: "loading" }
   | { phase: "unavailable" }
-  | { phase: "ready"; cells: WeatherCell[]; forecast?: HeroForecast | null };
+  | {
+      phase: "ready";
+      cells: WeatherCell[];
+      forecast?: HeroForecast | null;
+      /** Per-city rows and tiles for the laptop Home (#387). */
+      city?: CityWeather[];
+      /** Averages per stop, for a trip whose forecast has not opened yet. */
+      usual?: UsualWeatherRow[];
+      /** The forecast and the skipped suggestions, for the count of changes still to review (laptop Home). */
+      review?: WeatherReview;
+    };
 
 /**
  * The typical line with each " · " segment kept whole: it breaks between figures, never inside one ("High 92°" or

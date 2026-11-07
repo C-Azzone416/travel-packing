@@ -171,11 +171,7 @@ test(
   DEVICE,
   async ({ page }) => {
     await rememberPictures(page);
-    // Desktop: just under the laptop view (the phone layout, #386); the phone project keeps the 1280px it always used.
-    await openEditor(page, {
-      width: test.info().project.name === "desktop" ? 1000 : 1280,
-      height: 520,
-    });
+    await openEditor(page, { width: 1280, height: 520 });
     await editor(page).getByRole("switch", { name: "Laundry access" }).click();
     await scrollEditorBody(page, 100);
     const before = await editorState(page);

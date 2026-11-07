@@ -598,6 +598,8 @@ export function TripScreen({
     const before = view.items.filter((entry) => !isPacked(entry));
     if (before.length === 0) return Promise.resolve(true);
     const undo = before.map((entry) => ({ itemId: entry.id, packed: entry.packed }));
+    // Counts are quantities everywhere (#376): the message says how many more units went in, not how many rows changed.
+    const units = before.reduce((sum, entry) => sum + (entry.qty - entry.packed), 0);
     return new Promise((resolve) => {
       void act(
         () =>
@@ -606,13 +608,13 @@ export function TripScreen({
             before.map((entry) => ({ itemId: entry.id, packed: entry.qty })),
           ),
         {
-          announce: () => `Packed ${itemsLabel(before.length)} in ${view.label}.`,
+          announce: () => `Packed ${itemsLabel(units)} in ${view.label}.`,
           onFail: () => {
             toast.show(`Couldn’t pack ${view.label}. Nothing was changed.`);
             resolve(false);
           },
           after: () => {
-            toast.show(`Packed ${itemsLabel(before.length)}`, {
+            toast.show(`Packed ${itemsLabel(units)}`, {
               action: {
                 label: "Undo",
                 onAction: () => {

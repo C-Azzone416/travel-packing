@@ -1,8 +1,14 @@
 import { expect, test, type Page } from "@playwright/test";
 import { ownerEmailFor, signInAsOwner } from "./helpers/auth";
 import { seedSavedList } from "./helpers/database";
-import { DEVICE } from "./helpers/device";
+import { DEVICE, legacyPackingLayout } from "./helpers/device";
 import { expectPacking, itemRow, openEditor, showItem } from "./helpers/packing";
+
+// The ledger Home is drawn below 1024px (the laptop Home is #431, the phone Home #388): this spec's flow starts there, so it runs
+// there. The trip page below 1024px is the phone Pack mode.
+test.beforeEach(async ({ page }) => {
+  await legacyPackingLayout(page);
+});
 
 // Saved lists (#167), against the real database: the Staples | Saved lists tab, the lists page, rename, delete and the
 // list editor. Lists are made from a trip's packing screen in a later mission, so these tests seed them directly.

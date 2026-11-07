@@ -1,36 +1,38 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
+import { legacyPackingLayout } from "./helpers/device";
 import { allItemIds, expectPacking } from "./helpers/packing";
+import { planToList, reviewAndCreate } from "./helpers/plan";
 import { FAKE_GEOCODER_PORT, OPEN_METEO_PORT } from "./support/ports";
 
-// #202 with weather on (the preview's setup): turning Nice outfits off must still leave a new trip with no nice-attire
-// items, whether it is turned off before or after "Get weather", and however weather changes the list. Runs against the
-// second app instance (LOCATION_PROVIDER / WEATHER_PROVIDER = open-meteo on a local fake), as weather.spec does.
+// #202 with weather on (the preview's setup): a new trip has no nice-attire items, whether the weather suggestions are kept
+// or left out, and however weather changes the list. Runs against the second app instance (LOCATION_PROVIDER /
+// WEATHER_PROVIDER = open-meteo on a local fake), as weather.spec does.
 test.use({ baseURL: `http://localhost:${OPEN_METEO_PORT}` });
 
 const FAKE = `http://127.0.0.1:${FAKE_GEOCODER_PORT}`;
 const NICE_IDS = ["nice-top", "nice-bottom", "nice-shoes", "nice-makeup", "nice-undergarments"];
 const inDays = (count: number) =>
   new Date(Date.now() + count * 86_400_000).toISOString().slice(0, 10);
-const niceSwitch = (page: Page) => page.getByRole("switch", { name: "Nice outfits" });
+const weatherCard = (page: Page) => page.getByRole("checkbox", { name: /Weather suggestions/ });
 
 test.beforeEach(async () => {
   await fetch(`${FAKE}/__weather-reset`);
 });
 
-async function toShape(page: Page) {
+async function toList(page: Page) {
   await signInAsOwner(page);
   await page.getByRole("link", { name: /Plan a trip/ }).click();
-  await page.getByRole("combobox", { name: "Destination search" }).fill("london");
-  await page.getByRole("option", { name: /England/ }).click();
-  await page.getByLabel("Leave", { exact: true }).fill(inDays(3));
-  await page.getByLabel("Return", { exact: true }).fill(inDays(6));
-  await page.getByRole("button", { name: "Continue to packing preferences" }).click();
-  await expect(page.getByRole("heading", { name: "Shape the list" })).toBeVisible();
+  await planToList(page, {
+    query: "london",
+    option: /England/,
+    start: inDays(3),
+    end: inDays(6),
+  });
 }
 
-async function saveAndOpen(page: Page) {
-  await page.getByRole("button", { name: "Save trip" }).click();
+async function createAndOpen(page: Page) {
+  await reviewAndCreate(page);
   await page
     .getByRole("link", { name: /^(Continue|Keep) packing: London/ })
     .first()
@@ -45,36 +47,26 @@ async function expectNoNiceAttire(page: Page) {
   for (const id of NICE_IDS) expect(ids).not.toContain(id);
 }
 
-test("weather on, Nice outfits turned off AFTER Get weather: no nice-attire items", async ({
-  page,
-}) => {
+test("weather on, suggestions kept: no nice-attire items", async ({ page }) => {
+  await legacyPackingLayout(page);
   test.setTimeout(60_000);
-  await toShape(page);
-  await niceSwitch(page).click(); // a new trip starts with Nice outfits off (#205): turn it on first
-  await expect(niceSwitch(page)).toBeChecked();
+  await toList(page);
   await page.getByRole("button", { name: "Get weather" }).click();
-  await expect(page.getByText(/Your list uses the weather for/)).toBeVisible();
-  await niceSwitch(page).click();
-  await expect(niceSwitch(page)).not.toBeChecked();
-  await saveAndOpen(page);
+  await expect(weatherCard(page)).toBeChecked();
+  await createAndOpen(page);
   await expectNoNiceAttire(page);
   await page.reload();
   await expectNoNiceAttire(page);
 });
 
-test("weather on, Nice outfits turned off BEFORE Get weather: no nice-attire items", async ({
-  page,
-}) => {
+test("weather on, suggestions left out: no nice-attire items", async ({ page }) => {
+  await legacyPackingLayout(page);
   test.setTimeout(60_000);
-  await toShape(page);
-  await niceSwitch(page).click(); // on (it starts off, #205)...
-  await expect(niceSwitch(page)).toBeChecked();
-  await niceSwitch(page).click(); // ...and off again, before Get weather
-  await expect(niceSwitch(page)).not.toBeChecked();
+  await toList(page);
   await page.getByRole("button", { name: "Get weather" }).click();
-  await expect(page.getByText(/Your list uses the weather for/)).toBeVisible();
-  await expect(niceSwitch(page)).not.toBeChecked();
-  await saveAndOpen(page);
+  await expect(weatherCard(page)).toBeChecked();
+  await weatherCard(page).uncheck();
+  await createAndOpen(page);
   await expectNoNiceAttire(page);
   await page.reload();
   await expectNoNiceAttire(page);

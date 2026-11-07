@@ -153,6 +153,31 @@ describe("createServerTripsSource: per-trip commands", () => {
     ]);
   });
 
+  it("reads the home city through its action, and leaves it out when there is no such action", async () => {
+    const home = { location: { id: "pt-lisbon", city: "Lisbon" } } as never;
+    const { fakes } = tripActions();
+    const source = createServerTripsSource(actions().fakes, {
+      ...fakes,
+      getHomeCity: vi.fn(async () => ({ ok: true as const, home })),
+    });
+    expect(await source.homeCity?.()).toBe(home);
+    const empty = createServerTripsSource(actions().fakes, {
+      ...fakes,
+      getHomeCity: async () => ({ ok: true as const, home: null }),
+    });
+    expect(await empty.homeCity?.()).toBeNull();
+    expect(createServerTripsSource(actions().fakes, fakes).homeCity).toBeUndefined();
+  });
+
+  it("a home city read that fails rejects with the error code only", async () => {
+    const { fakes } = tripActions();
+    const source = createServerTripsSource(actions().fakes, {
+      ...fakes,
+      getHomeCity: async () => ({ ok: false as const, code: "INTERNAL" as const }),
+    });
+    await expect(source.homeCity?.()).rejects.toEqual(new TripsSourceError("INTERNAL"));
+  });
+
   it("reads one trip and the owner's staples", async () => {
     const { fakes, calls } = tripActions();
     const source = createServerTripsSource(actions().fakes, fakes);

@@ -21,6 +21,7 @@ import {
   confirmBagPlacementAction,
   decrementPackedAction,
   editItemAction,
+  getHomeCityAction,
   getTripAction,
   incrementPackedAction,
   listStaplesAction,
@@ -84,6 +85,7 @@ export function TripsSourceProvider({
         },
         {
           getTrip: getTripAction,
+          getHomeCity: getHomeCityAction,
           listStaples: listStaplesAction,
           upsertStaple: upsertStapleAction,
           setPacked: setPackedAction,

@@ -13,6 +13,7 @@ import type {
   AddItemActionResult,
   SaveAsListActionResult,
   SkippedWeatherDecision,
+  HomeCityResult,
   StaplesReadResult,
   TripCommandResult,
   TripReadResult,
@@ -43,6 +44,8 @@ export interface TripsActions {
 export interface TripActions {
   getTrip(tripId: string): Promise<TripReadResult>;
   listStaples(): Promise<StaplesReadResult>;
+  /** The account's home city, the default "From" of a new trip. Left out by fakes that have none. */
+  getHomeCity?(): Promise<HomeCityResult>;
   upsertStaple(staple: Staple): Promise<StaplesReadResult>;
   setPacked(tripId: string, itemId: string, packed: number): Promise<TripCommandResult>;
   setPackedMany(
@@ -203,6 +206,15 @@ export function createServerTripsSource(
     setStampLabels: (id, slot1, slot2) => unwrapChange(trip.setStampLabels(id, slot1, slot2)),
     setStops: (id, stops) => unwrapChange(trip.setStops(id, stops)),
   };
+
+  if (trip.getHomeCity) {
+    const getHomeCity = trip.getHomeCity.bind(trip);
+    source.homeCity = async () => {
+      const result = await getHomeCity();
+      if (!result.ok) throw new TripsSourceError(result.code);
+      return result.home;
+    };
+  }
 
   if (weather) {
     source.weather = {

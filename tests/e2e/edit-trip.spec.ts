@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
 import { expectAccessible } from "./helpers/a11y";
-import { DEVICE } from "./helpers/device";
+import { DEVICE, legacyPackingLayout } from "./helpers/device";
 import {
   expectNoItem,
   expectPacking,
@@ -10,6 +10,12 @@ import {
   showItem,
   tick,
 } from "./helpers/packing";
+
+// The ledger Home is drawn below 1024px (the laptop Home is #431, the phone Home #388): this spec's flow starts there, so it runs
+// there. The trip page below 1024px is the phone Pack mode.
+test.beforeEach(async ({ page }) => {
+  await legacyPackingLayout(page);
+});
 
 // Edit trip (#203): the route and the packing preferences in one sheet, with a review of what a recalculation does before it is
 // applied. Real app, real database. The merge rules themselves are unit-tested (item-ops, recalc-preview); these tests prove the

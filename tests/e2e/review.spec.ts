@@ -1,7 +1,13 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
-import { DEVICE } from "./helpers/device";
+import { DEVICE, legacyPackingLayout } from "./helpers/device";
 import { expectPacking } from "./helpers/packing";
+
+// The ledger Home is drawn below 1024px (the laptop Home is #431, the phone Home #388): this spec's flow starts there, so it runs
+// there. The trip page below 1024px is the phone Pack mode.
+test.beforeEach(async ({ page }) => {
+  await legacyPackingLayout(page);
+});
 
 // "Review your bag" and explicit Ready against a REAL Postgres (#17): what the page shows after a reload is what was
 // stored. Each test starts from this project's freshly seeded owner: San Diego partly packed and not Ready, Lisbon

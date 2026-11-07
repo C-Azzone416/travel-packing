@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
-import { DEVICE } from "./helpers/device";
+import { DEVICE, legacyPackingLayout } from "./helpers/device";
 import {
   allItemIds,
   expectItem,
@@ -14,6 +14,13 @@ import {
   untick,
 } from "./helpers/packing";
 import { reviewAndApply } from "./helpers/preferences";
+import { planAndCreate } from "./helpers/plan";
+
+// The ledger Home is drawn below 1024px (the laptop Home is #431, the phone Home #388): this spec's flow starts there, so it runs
+// there. The trip page below 1024px is the phone Pack mode.
+test.beforeEach(async ({ page }) => {
+  await legacyPackingLayout(page);
+});
 
 // The trip's Packing screen on its flows (saves, the toiletry bag, editing, Ready), at the width of each project: a laptop at
 // 1440 on `desktop` and a phone on `phone`. The two layouts share the cube list, the rows and Edit list, so one spec serves
@@ -53,12 +60,12 @@ async function packEverythingExceptBag(page: Page) {
 async function newParisTrip(page: Page) {
   await page.goto("/");
   await page.getByRole("link", { name: /Plan a trip/ }).click();
-  await page.getByRole("combobox", { name: "Destination search" }).fill("paris");
-  await page.getByRole("option", { name: /Paris/ }).click();
-  await page.getByLabel("Leave", { exact: true }).fill("2026-11-12");
-  await page.getByLabel("Return", { exact: true }).fill("2026-11-16");
-  await page.getByRole("button", { name: "Continue to packing preferences" }).click();
-  await page.getByRole("button", { name: "Save trip" }).click();
+  await planAndCreate(page, {
+    query: "paris",
+    option: /Paris/,
+    start: "2026-11-12",
+    end: "2026-11-16",
+  });
   await page.getByRole("link", { name: /(Continue|Keep) packing: Paris/ }).click();
   await expectPacking(page);
 }
@@ -138,7 +145,11 @@ test("adding a Bathroom item after placing the bag resets the placement", async 
   await expect(page.getByText("Toiletry bag is in the suitcase")).toBeVisible();
   await page.getByRole("button", { name: "＋ Add a Bathroom item" }).click();
   const dialog = page.getByRole("dialog", { name: "Add a Bathroom item" });
-  await dialog.getByLabel("Item name").fill("Face wash");
+  const itemName = dialog.getByLabel("Item name");
+  await expect(itemName).toHaveAttribute("autocomplete", "off");
+  await expect(itemName).toHaveAttribute("name", "packing-item-name");
+  await expect(itemName.locator("xpath=ancestor::form")).toHaveAttribute("autocomplete", "off");
+  await itemName.fill("Face wash");
   await dialog.getByRole("button", { name: "Add toiletry item" }).click();
   await expect(page.getByText("Face wash", { exact: true })).toBeVisible();
   await expect(page.getByText("Toiletry bag not ready to place")).toBeVisible();

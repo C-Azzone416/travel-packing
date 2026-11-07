@@ -315,7 +315,8 @@ export const createTripWithWeatherInput = z
     ...routeFields,
     ...travelFields,
     config: tripConfig,
-    theme,
+    /** Legacy compatibility override. New Plan clients omit it. */
+    theme: theme.optional(),
     accepted: z.array(weatherAcceptedChange).max(20),
   })
   .superRefine((value, ctx) => {

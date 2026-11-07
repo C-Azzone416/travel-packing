@@ -9,7 +9,14 @@ import {
   tick,
   untick,
 } from "./helpers/packing";
+import { legacyPackingLayout } from "./helpers/device";
 import { reviewAndApply } from "./helpers/preferences";
+
+// The ledger Home is drawn below 1024px (the laptop Home is #431, the phone Home #388): this spec's flow starts there, so it runs
+// there. The trip page below 1024px is the phone Pack mode.
+test.beforeEach(async ({ page }) => {
+  await legacyPackingLayout(page);
+});
 
 // The trip screen against a REAL Postgres: what it shows after a reload is what was stored. Each test starts from the
 // freshly seeded state of this project's owner (San Diego partly packed, Lisbon past, Ready, weather accepted).

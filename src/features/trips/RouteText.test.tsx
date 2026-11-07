@@ -54,7 +54,6 @@ describe("the dashboard card and Quick view", () => {
     <TripCard
       trip={trip}
       view={tripCardView(trip, "2026-10-16", "upcoming")}
-      first
       busy={false}
       onArchive={() => undefined}
       onRestore={() => undefined}

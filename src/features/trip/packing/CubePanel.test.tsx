@@ -42,7 +42,10 @@ function props(over: Partial<CubePanelProps>): CubePanelProps {
 describe("CubePanel Edit list add controls", () => {
   it("shows the generic add row in an ordinary cube", () => {
     render(<CubePanel {...props({})} />);
-    expect(screen.getByPlaceholderText("+ Add an item")).toBeTruthy();
+    const itemName = screen.getByPlaceholderText("+ Add an item");
+    expect(itemName.getAttribute("autocomplete")).toBe("off");
+    expect(itemName.getAttribute("name")).toBe("packing-item-name");
+    expect(itemName.closest("form")?.getAttribute("autocomplete")).toBe("off");
   });
 
   it("shows only the cube-specific add control when the cube has a bag step (Toiletries)", () => {

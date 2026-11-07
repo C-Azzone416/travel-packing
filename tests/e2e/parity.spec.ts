@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
 import { chooseFromMenu } from "./helpers/menu";
-import { DEVICE } from "./helpers/device";
+import { DEVICE, legacyPackingLayout } from "./helpers/device";
 import {
   expectItem,
   expectNoItem,
@@ -12,6 +12,12 @@ import {
   tick,
 } from "./helpers/packing";
 import { reviewAndApply } from "./helpers/preferences";
+import { planAndCreate, pickPlace, toWhen } from "./helpers/plan";
+
+// Home is the laptop suitcase view from 1024px (#387); this spec's subject is the page below it, so it runs there.
+test.beforeEach(async ({ page }) => {
+  await legacyPackingLayout(page);
+});
 
 // Parity with the approved prototype's browser test (reference/prototype/tests/browser.test.mjs), on the production app
 // and its real database. Most scenarios are covered by the feature specs; docs/parity.md maps EVERY prototype scenario to
@@ -48,7 +54,13 @@ test("home: the headline, four navigation items (Stamps joins the laptop menu), 
 }) => {
   await openDashboard(page);
   await expect(page.getByRole("heading", { name: "Your travel ledger", level: 1 })).toBeVisible();
-  await expect(nav(page).getByRole("link")).toHaveCount(4);
+  // The laptop menu has the fourth item (Stamps); the tab bar below 1024px has three. Check it at laptop width, then go back.
+  const before = page.viewportSize();
+  if (test.info().project.name === "desktop") {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await expect(nav(page).getByRole("link")).toHaveCount(4);
+    if (before) await page.setViewportSize(before);
+  }
   await expect(page.getByRole("article")).toHaveCount(1);
   await expect(page.getByRole("article")).toContainText(/\d+ left/);
   await page.getByRole("button", { name: /Past & archive/ }).click();
@@ -76,6 +88,8 @@ test("dates: a later departure pulls the return forward and becomes its minimum"
 }) => {
   await openDashboard(page);
   await page.getByRole("link", { name: /Plan a trip/ }).click();
+  await pickPlace(page, "lon", /England/);
+  await toWhen(page);
   await page.getByLabel("Leave", { exact: true }).fill("2026-11-12");
   await page.getByLabel("Return", { exact: true }).fill("2026-11-16");
   await page.getByLabel("Leave", { exact: true }).fill("2026-12-20");
@@ -199,12 +213,12 @@ test("copy: a remembered Bathroom item travels to the copy, with nothing checked
   const before = await source.innerText();
 
   await chooseFromMenu(page, "San Diego", "Copy trip");
-  await page.getByRole("combobox", { name: "Destination search" }).fill("paris");
-  await page.getByRole("option", { name: /Paris/ }).click();
-  await page.getByLabel("Leave", { exact: true }).fill("2026-12-04");
-  await page.getByLabel("Return", { exact: true }).fill("2026-12-08");
-  await page.getByRole("button", { name: "Continue to packing preferences" }).click();
-  await page.getByRole("button", { name: "Save trip" }).click();
+  await planAndCreate(page, {
+    query: "paris",
+    option: /Paris/,
+    start: "2026-12-04",
+    end: "2026-12-08",
+  });
   await expect(page.getByRole("article", { name: "Paris" })).toBeVisible();
   expect(await page.getByRole("article", { name: "San Diego" }).innerText()).toBe(before);
 

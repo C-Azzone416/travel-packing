@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { DestinationArt } from "@/components/art/DestinationArt";
 import { Button, buttonClassName } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -14,8 +13,6 @@ import { formatDays, type TripCardView } from "./view";
 export interface TripCardProps {
   trip: LifecycleTrip;
   view: TripCardView;
-  /** Only the first card on the page loads its art eagerly. */
-  first: boolean;
   /** An action on this card is saving: its buttons are disabled until the server confirms. */
   busy: boolean;
   onArchive: (id: string) => void;
@@ -53,15 +50,7 @@ function pastStatus(view: TripCardView): {
   };
 }
 
-export function TripCard({
-  trip,
-  view,
-  first,
-  busy,
-  onArchive,
-  onRestore,
-  onRemove,
-}: TripCardProps) {
+export function TripCard({ trip, view, busy, onArchive, onRestore, onRemove }: TripCardProps) {
   const [quickOpen, setQuickOpen] = useState(false);
   const quickId = `quick-view-${trip.id}`;
   const past = view.past ? pastStatus(view) : null;
@@ -82,7 +71,6 @@ export function TripCard({
       aria-labelledby={`trip-title-${trip.id}`}
       aria-busy={busy}
     >
-      <DestinationArt theme={trip.theme} variant="card" priority={first} />
       <div className="trip-card-body">
         <div className="trip-top">
           <div>
