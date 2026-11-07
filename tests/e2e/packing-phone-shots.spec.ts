@@ -33,12 +33,12 @@ test("ocean 390: Pack mode", async ({ page }) => {
 });
 
 test("ocean 195: the cube list wraps between words", async ({ page }) => {
-  await open(page, 195, 640);
+  await open(page, 195, 1300);
   await shot(page, "pk-p-ocean-195");
 });
 
 test("ocean 195 at 200% text: the cube list wraps between words", async ({ page }) => {
-  await open(page, 195, 640);
+  await open(page, 195, 1300);
   await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
   await expect
     .poll(() =>

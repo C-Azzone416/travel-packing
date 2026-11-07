@@ -390,12 +390,18 @@ async function brokenWords(page: Page): Promise<string[]> {
   });
 }
 
-for (const zoom of [false, true]) {
+// 640 is a short phone; 1300 is tall enough for the whole list to show, the case where rows once stayed at 51px and overlapped.
+for (const [zoom, height] of [
+  [false, 640],
+  [true, 640],
+  [false, 1300],
+  [true, 1300],
+] as const) {
   test(
-    `195px${zoom ? " at 200% text" : ""}: the cube list breaks only between words, and rows grow instead of overlapping`,
+    `195x${height}${zoom ? " at 200% text" : ""}: the cube list breaks only between words, and rows grow instead of overlapping`,
     DEVICE,
     async ({ page }) => {
-      await open(page, { width: 195, height: 640 });
+      await open(page, { width: 195, height });
       if (zoom) await zoomText(page);
       expect(await brokenWords(page), "words split across lines").toEqual([]);
       const rows = page.locator("[data-cube] li[data-item-id]");
@@ -403,9 +409,16 @@ for (const zoom of [false, true]) {
       const boxes = await rows.evaluateAll((nodes) =>
         nodes.map((node) => {
           const rect = node.getBoundingClientRect();
-          return { top: rect.top, bottom: rect.bottom, right: rect.right };
+          return {
+            top: rect.top,
+            bottom: rect.bottom,
+            right: rect.right,
+            overflow: (node as HTMLElement).scrollHeight - (node as HTMLElement).clientHeight,
+          };
         }),
       );
+      for (const [index, box] of boxes.entries())
+        expect(box.overflow, `row ${index} contains its own content`).toBeLessThanOrEqual(1);
       for (let index = 1; index < boxes.length; index++)
         expect(
           boxes[index].top,

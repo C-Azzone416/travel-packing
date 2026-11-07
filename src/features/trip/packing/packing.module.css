@@ -613,6 +613,8 @@
   grid-auto-flow: row;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: none;
+  /* Each row is as tall as its wrapped content (auto tracks stayed at the 51px minimum and let rows overlap at 195px). */
+  grid-auto-rows: max-content;
   overflow-y: auto;
   overscroll-behavior-y: contain;
 }
