@@ -352,7 +352,7 @@ test("at 195px the sheet and its live panel fit: no sideways scroll, Save in vie
   await page.clock.setFixedTime(NOW);
   await signInAsOwner(page);
   await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
-  await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
+  await expectPacking(page);
   const dialog = await openPreferences(page);
   await dialog.getByRole("switch", { name: "Laundry on this trip" }).check();
   await dialog.getByRole("switch", { name: "One spare underwear + socks" }).uncheck();
@@ -417,7 +417,7 @@ test("on a very small phone a short list starts folded, and the person's choice 
   await page.clock.setFixedTime(NOW);
   await signInAsOwner(page);
   await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
-  await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
+  await expectPacking(page);
   const dialog = await openPreferences(page);
   await dialog.getByRole("switch", { name: "One spare underwear + socks" }).uncheck();
   const moves = dialog.getByRole("button", { name: /See what moves/ });
