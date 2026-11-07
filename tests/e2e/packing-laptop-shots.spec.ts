@@ -4,6 +4,7 @@ import { ownerEmailFor, signInAsOwner } from "./helpers/auth";
 import { setOwnerAppearance } from "./helpers/database";
 import { FAKE_GEOCODER_PORT, OPEN_METEO_PORT } from "./support/ports";
 import { planRouteToList, reviewAndCreate } from "./helpers/plan";
+import { openTripFromHome } from "./helpers/menu";
 
 // Rendered screenshots of the laptop Packing view for design review (#385): the three colour schemes at 1280 and 1024, with
 // the weather review row open and in Edit list mode. Run with PACKING_SHOTS=<folder>; without it these are skipped, so the
@@ -51,10 +52,7 @@ for (const theme of THEMES) {
       );
       await page.getByRole("button", { name: "Not now" }).click();
       await reviewAndCreate(page);
-      await page
-        .getByRole("link", { name: /^(Continue|Keep) packing: London/ })
-        .first()
-        .click();
+      await openTripFromHome(page, "London");
       await expect(page.getByRole("heading", { name: "Packing", level: 1 })).toBeVisible();
       await page.getByRole("button", { name: "Turn on" }).click();
       const review = page.getByRole("button", { name: /\d+ to review/ });

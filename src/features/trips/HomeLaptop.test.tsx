@@ -133,7 +133,7 @@ describe("HomeLaptop", () => {
   });
 
   it("makes every cube a link into Packing with a spoken count, and outlines the weather cube", () => {
-    setup({ weather: { phase: "ready", cells: [], city: [city("Porto", true)] } });
+    setup({ weather: { phase: "ready", city: [city("Porto", true)] } });
     const clothing = screen.getByRole("link", { name: /Clothing/ });
     expect(clothing.getAttribute("href")).toBe("/trips/t1?cube=clothing");
     expect(within(clothing).getByText("9 of 14 packed")).toBeTruthy();
@@ -180,7 +180,7 @@ describe("HomeLaptop", () => {
   it("lists the cities as disclosure buttons: the alert city opens itself, the other opens on tap", async () => {
     const user = userEvent.setup();
     setup({
-      weather: { phase: "ready", cells: [], city: [city("Lisbon", false), city("Porto", true)] },
+      weather: { phase: "ready", city: [city("Lisbon", false), city("Porto", true)] },
     });
     expect(
       screen.getByRole("heading", { level: 2, name: "Pack for · tap a place for daily" }),
@@ -211,7 +211,7 @@ describe("HomeLaptop", () => {
     };
     setup({
       trip: trip({ items: [item("tops", "Clothing", 3, 0)] }),
-      weather: { phase: "ready", cells: [], city: [typical, city("Porto", true)] },
+      weather: { phase: "ready", city: [typical, city("Porto", true)] },
     });
     expect(screen.getByRole("button", { name: /^Porto/ }).textContent).toContain("Rain · 0 added");
     expect(screen.queryByRole("button", { name: /^Lisbon/ })).toBeNull();
@@ -223,7 +223,6 @@ describe("HomeLaptop", () => {
       today: "2027-01-02",
       weather: {
         phase: "ready",
-        cells: [],
         city: [city("Porto", true)],
         usual: [
           {

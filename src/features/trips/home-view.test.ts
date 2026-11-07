@@ -20,6 +20,10 @@ import {
   pendingByStop,
   suitcaseButtonLabel,
   tagDates,
+  tagDatesShort,
+  tripCount,
+  weatherPillSub,
+  homeModel,
   upcomingRow,
   usualRows,
   weatherNote,
@@ -456,5 +460,55 @@ describe("pendingByStop", () => {
     expect(pendingByStop(t, { stops, suppressed: skipped }, 0)).toEqual({});
     const stale = Object.fromEntries(changes.map((c) => [c.semanticId, "old-rule"]));
     expect(pendingByStop(t, { stops, suppressed: stale }, 0)).toEqual(all);
+  });
+});
+
+describe("the phone tag and pills (#388)", () => {
+  it("writes the dates short, with the month once and the year only when it is not this year", () => {
+    expect(tagDatesShort({ start: "2026-03-14", end: "2026-03-24" }, "2026-03-02")).toBe(
+      "14–24 Mar",
+    );
+    expect(tagDatesShort({ start: "2026-02-28", end: "2026-03-10" }, "2026-02-01")).toBe(
+      "28 Feb – 10 Mar",
+    );
+    expect(tagDatesShort({ start: "2027-03-14", end: "2027-03-24" }, "2026-11-05")).toBe(
+      "14–24 Mar 2027",
+    );
+    expect(tagDatesShort({ start: "2026-12-30", end: "2027-01-02" }, "2026-11-05")).toBe(
+      "30 Dec – 2 Jan 2027",
+    );
+    expect(tagDatesShort({ start: "2026-03-14", end: "2026-03-14" }, "2026-03-01")).toBe("14 Mar");
+    expect(tagDatesShort({ start: "", end: "" }, "2026-03-01")).toBe("Choose dates");
+  });
+
+  it("counts trips with the right plural", () => {
+    expect([0, 1, 2].map(tripCount)).toEqual(["0 trips", "1 trip", "2 trips"]);
+  });
+
+  it("says ALERT while a city has a rainy day, else the state of the weather", () => {
+    const none = { cities: [] as string[], phase: "soon" as const };
+    expect(weatherPillSub({ phase: "ready" }, { cities: ["Porto"], phase: "soon" })).toEqual({
+      text: "ALERT",
+      alert: true,
+    });
+    expect(weatherPillSub({ phase: "ready" }, none)).toEqual({ text: "Clear", alert: false });
+    expect(weatherPillSub({ phase: "ready" }, { ...none, phase: "far" })).toEqual({
+      text: "Usual",
+      alert: false,
+    });
+    expect(weatherPillSub({ phase: "off" }, none).text).toBe("Off");
+    expect(weatherPillSub({ phase: "loading" }, none).text).toBe("…");
+    expect(weatherPillSub({ phase: "unavailable" }, none).text).toBe("N/A");
+    expect(weatherPillSub({ phase: "none" }, none).text).toBe("N/A");
+  });
+
+  it("builds one model for both Homes: quantity totals, the alert cities and the next cube", () => {
+    const trip = sampleLifecycleState().trips[0];
+    const model = homeModel(trip, { phase: "none" }, "2026-10-16");
+    expect(model.totals.packed).toBeLessThanOrEqual(model.totals.total);
+    expect(model.cities).toEqual([]);
+    expect(model.nights).toBe(4);
+    expect(model.countdown?.days).toBe(7);
+    expect(model.label).toMatch(/packing/i);
   });
 });

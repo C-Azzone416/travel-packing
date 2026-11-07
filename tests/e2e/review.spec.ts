@@ -1,12 +1,13 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
-import { DEVICE, legacyPackingLayout } from "./helpers/device";
+import { DEVICE, phoneHomeLayout } from "./helpers/device";
 import { expectPacking } from "./helpers/packing";
+import { openPastAndArchive } from "./helpers/menu";
 
-// The ledger Home is drawn below 1024px (the laptop Home is #431, the phone Home #388): this spec's flow starts there, so it runs
-// there. The trip page below 1024px is the phone Pack mode.
+// The phone Home (#388) and the phone Pack mode (#386) are drawn below 1024px: this spec's flow starts on the Home and does not
+// depend on the laptop layouts, so it runs there.
 test.beforeEach(async ({ page }) => {
-  await legacyPackingLayout(page);
+  await phoneHomeLayout(page);
 });
 
 // "Review your bag" and explicit Ready against a REAL Postgres (#17): what the page shows after a reload is what was
@@ -26,7 +27,7 @@ async function openReview(page: Page, trip: "San Diego" | "Lisbon", id: "san-die
   if (trip === "San Diego") {
     await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
   } else {
-    await page.getByRole("button", { name: /Past & archive/ }).click();
+    await openPastAndArchive(page);
     await page.getByRole("link", { name: "Review bag: Lisbon" }).click();
   }
   await expectPacking(page);

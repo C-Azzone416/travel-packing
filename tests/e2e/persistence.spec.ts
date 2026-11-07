@@ -1,11 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
 import { ownerEmailFor, SECOND_EMAIL, signIn, signInAsOwner } from "./helpers/auth";
-import { chooseFromMenu } from "./helpers/menu";
-import { legacyPackingLayout } from "./helpers/device";
+import { chooseFromMenu, openPastAndArchive } from "./helpers/menu";
+import { phoneHomeLayout } from "./helpers/device";
 
-// Home is the laptop suitcase view from 1024px (#387); this spec's subject is the page below it, so it runs there.
+// Home is the laptop suitcase view from 1024px (#387) and the phone suitcase below it (#388); this spec runs on the phone Home.
 test.beforeEach(async ({ page }) => {
-  await legacyPackingLayout(page);
+  await phoneHomeLayout(page);
 });
 
 // These run against a REAL Postgres (the e2e database server), so what the dashboard shows after a reload or in a new
@@ -16,7 +16,7 @@ test.beforeEach(async ({ page }) => {
 const NOW = new Date("2026-10-16T12:00:00");
 
 const card = (page: Page, name: string) => page.getByRole("article", { name });
-const tab = (page: Page, name: RegExp) => page.getByRole("button", { name });
+const tag = (page: Page, name: string) => page.getByRole("region", { name });
 const sanDiegoHeading = (page: Page) => page.getByRole("heading", { name: "San Diego", level: 2 });
 
 async function openDashboard(page: Page) {
@@ -39,7 +39,7 @@ test("an archived trip is still archived after a reload, and restoring it persis
 
   await page.reload();
   await expect(page.getByText("No upcoming trips.")).toBeVisible();
-  await tab(page, /Past & archive/).click();
+  await openPastAndArchive(page);
   await expect(card(page, "San Diego").getByText("Archived trip")).toBeVisible();
 
   await card(page, "San Diego").getByRole("button", { name: "Restore: San Diego" }).click();
@@ -50,21 +50,21 @@ test("an archived trip is still archived after a reload, and restoring it persis
 test("a removed trip stays removed after a reload, and Undo brings back the identical trip", async ({
   page,
 }) => {
-  const before = await card(page, "San Diego").innerText();
+  const before = await tag(page, "San Diego").innerText();
   await chooseFromMenu(page, "San Diego", "Remove");
   await page.getByRole("dialog").getByRole("button", { name: "Remove trip" }).click();
   await expect(sanDiegoHeading(page)).toHaveCount(0);
 
   await page.reload();
   await expect(sanDiegoHeading(page)).toHaveCount(0);
-  await tab(page, /Past & archive/).click();
+  await openPastAndArchive(page);
   await expect(page.getByRole("button", { name: "Undo remove: San Diego" })).toBeVisible();
 
   await page.getByRole("button", { name: "Undo remove: San Diego" }).click();
   await page.reload();
   await expect(sanDiegoHeading(page)).toBeVisible();
-  expect(await card(page, "San Diego").innerText()).toBe(before);
-  await tab(page, /Past & archive/).click();
+  expect(await tag(page, "San Diego").innerText()).toBe(before);
+  await openPastAndArchive(page);
   await expect(page.getByText("Nothing recently deleted.")).toBeVisible();
 });
 
@@ -79,13 +79,13 @@ test("changes are there in a brand-new session (another device)", async ({ page,
     await signIn(device, ownerEmailFor(test.info().project.name));
     await expect(device).toHaveURL(/\/$/);
     await expect(device.getByText("No upcoming trips.")).toBeVisible();
-    await device.getByRole("button", { name: /Past & archive/ }).click();
+    await openPastAndArchive(device);
     await expect(card(device, "San Diego").getByText("Archived trip")).toBeVisible();
   } finally {
     await other.close();
   }
 
-  await tab(page, /Past & archive/).click();
+  await openPastAndArchive(page);
   await card(page, "San Diego").getByRole("button", { name: "Restore: San Diego" }).click();
   await page.reload();
   await expect(sanDiegoHeading(page)).toBeVisible();
@@ -110,14 +110,14 @@ test("a second user sees none of the owner's trips, before or after the owner ch
     await expect(sanDiegoHeading(page)).toHaveCount(0);
 
     await second.reload();
-    await second.getByRole("button", { name: /Past & archive/ }).click();
+    await openPastAndArchive(second);
     await expect(second.getByRole("button", { name: "Undo remove: San Diego" })).toHaveCount(0);
     await expect(second.getByText("Lisbon")).toHaveCount(0);
   } finally {
     await other.close();
   }
 
-  await tab(page, /Past & archive/).click();
+  await openPastAndArchive(page);
   await page.getByRole("button", { name: "Undo remove: San Diego" }).click();
   await page.reload();
   await expect(sanDiegoHeading(page)).toBeVisible();

@@ -1,40 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
+import { expectWholeWords, overflow } from "./helpers/layout";
 import { chooseMode, nextButton, pickPlace } from "./helpers/plan";
 
 // Plan a trip (#390), every width-changing state: the width bands (phone 195, 320, 390; laptop 1024, 1280, 1440) at normal and
 // 200% text. At each, no step scrolls sideways and the Next button can be reached on screen. The switch to the laptop layout
 // is at 1024: the live preview is beside the steps from there and is not on a phone until Review.
 const BANDS = [195, 320, 390, 1024, 1280, 1440] as const;
-
-const overflow = (page: Page) =>
-  page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-
-async function expectWholeWords(
-  locator: ReturnType<Page["locator"]>,
-  label: string,
-): Promise<void> {
-  const broken = await locator.evaluate((root) => {
-    const words: string[] = [];
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-    let node = walker.nextNode();
-    while (node) {
-      const text = node.textContent ?? "";
-      for (const match of text.matchAll(/[\p{L}\p{N}]+/gu)) {
-        const range = document.createRange();
-        range.setStart(node, match.index ?? 0);
-        range.setEnd(node, (match.index ?? 0) + match[0].length);
-        const rects = Array.from(range.getClientRects()).filter(
-          (rect) => rect.width > 0.5 && rect.height > 0.5,
-        );
-        if (rects.length > 1) words.push(match[0]);
-      }
-      node = walker.nextNode();
-    }
-    return words;
-  });
-  expect(broken, `${label}: words must wrap only at spaces`).toEqual([]);
-}
 
 async function walkSteps(page: Page, width: number) {
   const check = async (label: string) => {

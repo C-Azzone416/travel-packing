@@ -1,5 +1,6 @@
 import { expect, type Page } from "@playwright/test";
 import { signInAsOwner } from "./auth";
+import { openTripFromHome, planATrip } from "./menu";
 import { pickRoute, reviewAndCreate, setDates, setRouteDates, toList, toWhen } from "./plan";
 import { FAKE_GEOCODER_PORT } from "../support/ports";
 
@@ -28,7 +29,7 @@ export interface WeatherPlace {
 /** Signs in, creates a London trip with weather on (`stays` are day offsets from today), and opens its packing page. */
 export async function createWeatherTrip(page: Page, stays: Stay[], place?: WeatherPlace) {
   await signInAsOwner(page);
-  await page.getByRole("link", { name: /Plan a trip/ }).click();
+  await planATrip(page);
   await expect(page.getByRole("heading", { name: "Plan a trip", level: 1 })).toBeVisible();
   const stops = stays.map((_, at) =>
     at === 0
@@ -52,9 +53,6 @@ export async function createWeatherTrip(page: Page, stays: Stay[], place?: Weath
   await page.getByRole("button", { name: "Get weather" }).click();
   await expect(page.getByRole("checkbox", { name: /Weather suggestions/ })).toBeChecked();
   await reviewAndCreate(page);
-  await page
-    .getByRole("link", { name: new RegExp(`^(Continue|Keep) packing: ${place?.name ?? "London"}`) })
-    .first()
-    .click();
-  await page.waitForURL(/\/trips\/(?!new)[^/?#]+$/);
+  await openTripFromHome(page, place?.name ?? "London");
+  await page.waitForURL(/\/trips\/(?!new)[^/?#]+(\?cube=\w+)?$/);
 }

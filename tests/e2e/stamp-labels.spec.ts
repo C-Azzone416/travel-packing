@@ -1,14 +1,15 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
-import { DEVICE, legacyPackingLayout } from "./helpers/device";
+import { DEVICE, phoneHomeLayout } from "./helpers/device";
 import { expectAccessible } from "./helpers/a11y";
 import { expectPacking } from "./helpers/packing";
 import { planRouteToList, reviewAndCreate } from "./helpers/plan";
+import { futureRow, planATrip } from "./helpers/menu";
 
-// The ledger Home is drawn below 1024px (the laptop Home is #431, the phone Home #388): this spec's flow starts there, so it runs
-// there. The trip page below 1024px is the phone Pack mode.
+// The phone Home (#388) and the phone Pack mode (#386) are drawn below 1024px: this spec's flow starts on the Home and does not
+// depend on the laptop layouts, so it runs there.
 test.beforeEach(async ({ page }) => {
-  await legacyPackingLayout(page);
+  await phoneHomeLayout(page);
 });
 
 // Per-trip stamp label (#151), through the real data layer: the packing screen's Edit stamp sheet, the same label on the
@@ -63,11 +64,7 @@ test("set a custom stamp label, see it on the dashboard and after a reload, then
   await page.reload();
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
-  await expect(
-    page
-      .getByRole("article", { name: "San Diego" })
-      .getByRole("img", { name: "SD7, San Diego, departure stamp" }),
-  ).toBeVisible();
+  // The Home no longer draws route stamps (the redesign's luggage tag has none), so it shows no Edit stamp either.
   await expect(page.getByRole("button", { name: "Edit stamp" })).toHaveCount(0);
 
   // Reset to automatic restores the derived label.
@@ -84,7 +81,7 @@ test("a two-country trip has two stamps to label: each is edited on its own, and
 }) => {
   await page.clock.setFixedTime(NOW);
   await signInAsOwner(page);
-  await page.getByRole("link", { name: /Plan a trip/ }).click();
+  await planATrip(page);
   await planRouteToList(
     page,
     [
@@ -94,10 +91,7 @@ test("a two-country trip has two stamps to label: each is edited on its own, and
     ["2026-11-12", "2026-11-15", "2026-11-18"],
   );
   await reviewAndCreate(page);
-  await page
-    .getByRole("article", { name: "Lisbon → Paris" })
-    .getByRole("link", { name: /(Continue|Keep) packing/ })
-    .click();
+  await (await futureRow(page, /Lisbon & Paris/)).click();
   await expectPacking(page);
 
   const sheet = await openStampSheet(page);
