@@ -84,7 +84,7 @@ test.describe("forecast days", DEVICE, () => {
   });
 
   test("three stays: one row per stay, one city open at a time", async ({ page }) => {
-    const panel = await openWeather(page, [{ leave: 3, back: 6 }, { leave: 9 }, { leave: 12 }]);
+    const panel = await openWeather(page, [{ leave: 8, back: 11 }, { leave: 14 }, { leave: 15 }]);
     const rows = panel.getByRole("button", { name: /London/ });
     await expect(rows).toHaveCount(3);
     const open = () =>
@@ -162,7 +162,9 @@ for (const width of [195, 320] as const) {
       );
       await expectWholeWords(page.locator("main"), `loaded forecast at ${width}px`);
       await expectNoOverlap(page, `loaded forecast at ${width}px`);
-      await expectFocusContained(page, width, `loaded forecast at ${width}px`);
+      // Keyboard Tab does not reach links in iPhone WebKit; the desktop project runs this same test with a keyboard.
+      if (test.info().project.name === "desktop")
+        await expectFocusContained(page, width, `loaded forecast at ${width}px`);
       await expect(page.getByRole("heading", { name: title, level: 2 })).toBeAttached();
     },
   );
@@ -188,7 +190,8 @@ for (const width of [195, 320] as const) {
       expect(await overflow(page)).toBeLessThanOrEqual(0);
       await expectWholeWords(page.locator("main"), `usual weather at ${width}px`);
       await expectNoOverlap(page, `usual weather at ${width}px`);
-      await expectFocusContained(page, width, `usual weather at ${width}px`);
+      if (test.info().project.name === "desktop")
+        await expectFocusContained(page, width, `usual weather at ${width}px`);
     },
   );
 }

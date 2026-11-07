@@ -79,6 +79,7 @@ export function daysUntilDayOfMonth(dayOfMonth: number, minAhead: number): numbe
  * Signs in and plans a two-stay London trip with the forecast OFF, then turns it on from Packing: its rain arrives as
  * suggestions still to review, which is what the Home's Weather pill calls an ALERT. Ends on the Packing page.
  */
+// Days 7/10/13, clear of the days 3-9 weather.spec.ts plans London on (3/6/9, edited to 4/5), and the app caches typical weather by place and range (#447).
 export async function tripWithPendingSuggestions(page: Page, place?: WeatherPlace) {
   await signInAsOwner(page);
   await planATrip(page);
@@ -88,7 +89,7 @@ export async function tripWithPendingSuggestions(page: Page, place?: WeatherPlac
   ];
   await pickRoute(page, stops);
   await toWhen(page);
-  await setRouteDates(page, [inDays(3), inDays(6), inDays(9)]);
+  await setRouteDates(page, [inDays(7), inDays(10), inDays(13)]);
   await toList(page);
   await page.getByRole("button", { name: "Not now" }).click();
   await reviewAndCreate(page);

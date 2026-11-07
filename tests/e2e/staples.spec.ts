@@ -88,6 +88,8 @@ async function underwearQty(page: Page, tripName: string): Promise<number> {
 }
 
 async function underwearQtyOnPage(page: Page, tripName: string): Promise<number> {
+  // A fresh Home opens on Pack (the next trip's link); the Future pill chosen earlier is in the address and would stay open.
+  await page.goto("/");
   await openTripFromHome(page, tripName);
   await expectPacking(page);
   const box = (await showItem(page, "underwear")).getByRole("checkbox");

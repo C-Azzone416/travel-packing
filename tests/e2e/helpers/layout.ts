@@ -47,6 +47,11 @@ export async function expectWholeWords(locator: Locator, label: string): Promise
 export async function enlargeText(page: Page, sample: Locator, factor = 2): Promise<number> {
   await sample.waitFor();
   return page.evaluate((times) => {
+    // No transition may hold a size at its old value while it is read back (WebKit reports the animated value).
+    const calm = document.createElement("style");
+    calm.textContent =
+      "*, *::before, *::after { transition: none !important; animation: none !important; }";
+    document.head.append(calm);
     const all = [...document.querySelectorAll<HTMLElement>("main *, header *")];
     // Read every size first, then write: an inheriting child must not be doubled again after its parent was.
     const sizes = all.map((el) => parseFloat(getComputedStyle(el).fontSize));
