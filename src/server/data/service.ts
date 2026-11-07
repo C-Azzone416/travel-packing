@@ -24,6 +24,7 @@ import {
   markNotReady,
   markReady,
   setPacked,
+  setPackedMany,
   togglePacked,
   undoBagPlacement,
   type CommandResult,
@@ -215,6 +216,13 @@ export const decrementPackedItem = progress(decrementPacked);
 export function setPackedItem(context: DataContext, input: unknown) {
   return mutateTrip(context, inputs.setPackedInput, input, (trip, { itemId, packed }) =>
     unwrap(setPacked(trip, itemId, packed)),
+  );
+}
+
+/** Several packed counts in one transaction ("All in" and Undo, #386): all are saved, or none. */
+export function setPackedItems(context: DataContext, input: unknown) {
+  return mutateTrip(context, inputs.setPackedManyInput, input, (trip, { entries }) =>
+    unwrap(setPackedMany(trip, entries)),
   );
 }
 

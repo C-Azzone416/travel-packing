@@ -2,6 +2,20 @@ import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
 import { expectAccessible } from "./helpers/a11y";
 import { DEVICE, legacyPackingLayout } from "./helpers/device";
+import {
+  expectNoItem,
+  expectPacking,
+  openCube,
+  openEditor,
+  showItem,
+  tick,
+} from "./helpers/packing";
+
+// The ledger Home is drawn below 1024px (the laptop Home is #431, the phone Home #388): this spec's flow starts there, so it runs
+// there. The trip page below 1024px is the phone Pack mode.
+test.beforeEach(async ({ page }) => {
+  await legacyPackingLayout(page);
+});
 
 // Edit trip (#203, #389): the route and dates and the packing preferences in one sheet, with a live "What changes in your list"
 // panel beside the edits. Real app, real database. The merge rules themselves are unit-tested (item-ops, recalc-preview,
@@ -13,10 +27,15 @@ async function openSanDiego(page: Page) {
   await signInAsOwner(page);
   await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
   await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
-  await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
+  await expectPacking(page);
 }
 
 const row = (page: Page, id: string) => page.locator(`[data-item-id="${id}"]`);
+/** The needed quantity of an item: its tick is named "Everyday tops, 4" (the quantity is only in the name when it is more than one). */
+async function qtyOf(page: Page, id: string) {
+  const name = await (await showItem(page, id)).getByRole("checkbox").getAttribute("aria-label");
+  return Number(/, (\d+)/.exec(name ?? "")?.[1] ?? 1);
+}
 const sheet = (page: Page) => page.getByRole("dialog", { name: "Edit trip" });
 const save = (page: Page) => sheet(page).getByRole("button", { name: /^Save \d+ changes?$/ });
 const section = (page: Page, name: string) => sheet(page).getByRole("button", { name });
@@ -43,7 +62,6 @@ async function openPreferences(page: Page) {
 test("Edit trip has three ways in: the dashboard, the packing hero and Trip math, each on the right section", async ({
   page,
 }) => {
-  await legacyPackingLayout(page);
   await page.clock.setFixedTime(NOW);
   await signInAsOwner(page);
   const hero = page.getByRole("article", { name: "San Diego" });
@@ -53,7 +71,7 @@ test("Edit trip has three ways in: the dashboard, the packing hero and Trip math
   await expect(sheet(page)).toHaveCount(0);
 
   await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
-  await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
+  await expectPacking(page);
   await page.getByRole("button", { name: "Edit trip" }).click();
   await expect(section(page, "Route & dates")).toHaveAttribute("aria-expanded", "true");
   await page.keyboard.press("Escape");
@@ -71,34 +89,31 @@ test("Edit trip has three ways in: the dashboard, the packing hero and Trip math
 test("a recalculation keeps the person's list work: manual, edited, packed and removed items, stored", async ({
   page,
 }) => {
-  await legacyPackingLayout(page);
   await openSanDiego(page);
   // The person's work: a manual item, an edited suggestion, packed progress, and a removed optional suggestion.
-  await page.getByRole("button", { name: "＋ Add item" }).click();
-  await page.getByRole("textbox", { name: "Item name" }).fill("Camera");
-  await page.getByRole("combobox", { name: "Category" }).selectOption("Tech");
-  await page.getByRole("button", { name: "Add to list" }).click();
-  await expect(row(page, "tops")).toBeVisible();
-  await row(page, "sleepwear").locator(".item-body").click();
+  await openCube(page, "Tech");
+  await page.getByRole("button", { name: "Edit list" }).click();
+  await page.getByPlaceholder("+ Add an item").fill("Camera");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(page.getByText("Camera", { exact: true })).toHaveCount(1);
+  await openEditor(page, "sleepwear");
   const editor = page.getByRole("dialog", { name: "Edit item" });
   await editor.getByLabel("Item name").fill("Pajamas");
   await editor.getByRole("button", { name: "Save item" }).click();
   await expect(row(page, "sleepwear")).toContainText("Pajamas");
-  const underwearBefore = (await row(page, "underwear").innerText()).match(
-    /(\d+) of (\d+) packed/,
-  )!;
-  await row(page, "underwear").getByRole("button", { name: "Increase packed Underwear" }).click();
-  const underwearNow = `${Number(underwearBefore[1]) + 1} of ${underwearBefore[2]} packed`;
-  await expect(row(page, "underwear")).toContainText(underwearNow);
-  await row(page, "nice-shoes").locator(".item-body").click();
+  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await tick(page, "underwear");
+  await expect(row(page, "underwear").getByRole("checkbox")).toBeChecked();
+  await openEditor(page, "nice-shoes");
   await page.getByRole("button", { name: "Remove item" }).click();
   await page
     .getByRole("dialog", { name: "Remove Dress shoes?" })
     .getByRole("button", { name: /Remove/ })
     .last()
     .click();
-  await expect(row(page, "nice-shoes")).toHaveCount(0);
+  await expectNoItem(page, "nice-shoes");
 
+  const topsBefore = await qtyOf(page, "tops");
   const dialog = await openPreferences(page);
   await dialog.getByRole("switch", { name: "Laundry on this trip" }).check();
   // The panel updates as the switch moves: the preference, then each item whose quantity changes, old → new.
@@ -116,27 +131,27 @@ test("a recalculation keeps the person's list work: manual, edited, packed and r
   await expect(changes).not.toContainText("Pajamas");
   await expect(changes).not.toContainText("Dress shoes");
   // Nothing is saved until Save: the list behind the sheet is unchanged.
-  await expect(row(page, "tops")).toContainText("of 4 packed");
+  expect(topsBefore).toBe(4);
   await save(page).click();
   await expect(sheet(page)).toHaveCount(0);
   await expect(page.locator(".toast-region")).toContainText("Preferences updated.");
 
   // After a reload, from the database: the untouched suggestion followed the new preference; the person's work is intact.
   await page.reload();
-  await expect(row(page, "tops")).toContainText("of 2 packed");
-  await expect(row(page, "sleepwear")).toContainText("Pajamas");
-  await expect(row(page, "underwear")).toContainText(underwearNow);
+  expect(await qtyOf(page, "tops")).toBe(2);
+  await expect(await showItem(page, "sleepwear")).toContainText("Pajamas");
+  await expect((await showItem(page, "underwear")).getByRole("checkbox")).toBeChecked();
+  await openCube(page, "Tech");
   await expect(page.getByText("Camera", { exact: true })).toHaveCount(1);
-  await expect(row(page, "nice-shoes")).toHaveCount(0);
+  await expectNoItem(page, "nice-shoes");
 });
 
 test("a packed count above the new target is shown, needs an acknowledgement, and is lowered to the target", async ({
   page,
 }) => {
-  await legacyPackingLayout(page);
   await openSanDiego(page);
-  await row(page, "tops").getByRole("button", { name: "Pack all Everyday tops" }).click();
-  await expect(row(page, "tops")).toContainText("4 of 4 packed");
+  await tick(page, "tops");
+  await expect(row(page, "tops").getByRole("checkbox", { name: "Everyday tops, 4" })).toBeChecked();
   const dialog = await openPreferences(page);
   await dialog.getByRole("switch", { name: "Laundry on this trip" }).check();
   await showChanges(page);
@@ -146,13 +161,13 @@ test("a packed count above the new target is shown, needs an acknowledgement, an
   await save(page).click();
   await expect(sheet(page)).toHaveCount(0);
   await page.reload();
-  await expect(row(page, "tops")).toContainText("2 of 2 packed");
+  const tops = (await showItem(page, "tops")).getByRole("checkbox", { name: "Everyday tops, 2" });
+  await expect(tops).toBeChecked();
 });
 
 test("Undo all, Cancel and Escape leave the trip unchanged, and ask nothing: nothing was saved", async ({
   page,
 }) => {
-  await legacyPackingLayout(page);
   await openSanDiego(page);
   const dialog = await openPreferences(page);
   await expect(dialog.getByRole("button", { name: "Save changes" })).toBeDisabled();
@@ -174,7 +189,7 @@ test("Undo all, Cancel and Escape leave the trip unchanged, and ask nothing: not
   await page.keyboard.press("Escape");
   await expect(sheet(page)).toHaveCount(0);
   await page.reload();
-  await expect(row(page, "tops")).toContainText("of 4 packed");
+  expect(await qtyOf(page, "tops")).toBe(4);
   const last = await openPreferences(page);
   await expect(last.getByRole("switch", { name: "Laundry on this trip" })).not.toBeChecked();
 });
@@ -183,29 +198,25 @@ test("a list the trip has moved on from is refused: you are told, selections kep
   page,
   context,
 }) => {
-  await legacyPackingLayout(page);
   await openSanDiego(page);
   const dialog = await openPreferences(page);
   await dialog.getByRole("switch", { name: "Laundry on this trip" }).check();
   // Another tab (the same signed-in person) packs something while this sheet is open.
   const other = await context.newPage();
-  await legacyPackingLayout(other);
   await other.clock.setFixedTime(NOW);
   await other.goto(page.url());
   const socks = other.locator('[data-item-id="socks"]');
-  const socksBefore = (await socks.innerText()).match(/(\d+) of (\d+) packed/)!;
-  const socksNow = `${Number(socksBefore[1]) + 1} of ${socksBefore[2]} packed`;
-  // A stepper tap is sent after a short pause: wait for the write that carries it, then a reload shows it stored.
+  // A tick is sent at once: wait for the write that carries it, then a reload shows it stored.
   const written = other.waitForResponse(
     (response) =>
       response.request().method() === "POST" &&
       (response.request().postData() ?? "").includes("socks"),
   );
-  await socks.getByRole("button", { name: "Increase packed Socks" }).click();
-  await expect(socks).toContainText(socksNow);
+  await socks.getByRole("checkbox").check();
+  await expect(socks.getByRole("checkbox")).toBeChecked();
   await written;
   await other.reload();
-  await expect(other.locator('[data-item-id="socks"]')).toContainText(socksNow);
+  await expect(other.locator('[data-item-id="socks"]').getByRole("checkbox")).toBeChecked();
   await other.close();
   await save(page).click();
   await expect(dialog.getByText(/Your list changed while you were editing/)).toBeVisible();
@@ -222,12 +233,11 @@ test("a list the trip has moved on from is refused: you are told, selections kep
 });
 
 test("Ready turns off with a preference change, and the panel says so first", async ({ page }) => {
-  await legacyPackingLayout(page);
   await page.clock.setFixedTime(NOW);
   await signInAsOwner(page);
   await page.getByRole("button", { name: /Past & archive/ }).click();
   await page.getByRole("link", { name: "Review bag: Lisbon" }).click();
-  await expect(page.getByRole("heading", { name: "Lisbon", level: 1 })).toBeVisible();
+  await expectPacking(page);
   const dialog = await openPreferences(page);
   await dialog.getByRole("switch", { name: "Laundry on this trip" }).uncheck();
   await showChanges(page);
@@ -305,7 +315,6 @@ test(
   "the sheet is accessible and fits a phone: axe on both sections, 44px targets, no sideways scroll",
   DEVICE,
   async ({ page }) => {
-    await legacyPackingLayout(page);
     await openSanDiego(page);
     const dialog = await openPreferences(page);
     await expectAccessible(page, "edit trip, preferences open", { include: '[role="dialog"]' });

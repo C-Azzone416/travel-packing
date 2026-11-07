@@ -35,6 +35,7 @@ function actions(result: TripsActionResult = ok) {
 const signals = { promptBagPlacement: true, reviewPrompt: false };
 const TRIP_COMMANDS = [
   "setPacked",
+  "setPackedMany",
   "togglePacked",
   "incrementPacked",
   "decrementPacked",
@@ -99,6 +100,7 @@ describe("createServerTripsSource: per-trip commands", () => {
   const invocations = (source: ReturnType<typeof createServerTripsSource>) =>
     ({
       setPacked: () => source.setPacked("t", "i", 3),
+      setPackedMany: () => source.setPackedMany("t", [{ itemId: "i", packed: 3 }]),
       togglePacked: () => source.togglePacked("t", "i"),
       incrementPacked: () => source.incrementPacked("t", "i"),
       decrementPacked: () => source.decrementPacked("t", "i"),
@@ -129,6 +131,7 @@ describe("createServerTripsSource: per-trip commands", () => {
     for (const name of TRIP_COMMANDS) expect(await run[name](), name).toEqual({ trip, signals });
     expect(calls).toEqual([
       ["setPacked", "t", "i", 3],
+      ["setPackedMany", "t", [{ itemId: "i", packed: 3 }]],
       ["togglePacked", "t", "i"],
       ["incrementPacked", "t", "i"],
       ["decrementPacked", "t", "i"],

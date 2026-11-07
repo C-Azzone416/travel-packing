@@ -135,16 +135,19 @@ p {
   position: absolute;
   z-index: 100;
   left: 12px;
-  top: -80px;
+  top: 12px;
+  max-width: calc(100vw - 24px);
   padding: 12px 16px;
   border-radius: var(--control-radius);
   background: var(--ink);
   color: var(--surface);
   font-weight: 800;
   text-decoration: none;
+  overflow-wrap: anywhere;
+  transform: translateY(calc(-100% - 24px));
 }
 .skip-link:focus {
-  top: 12px;
+  transform: none;
 }
 
 .sr-only {
@@ -1149,7 +1152,6 @@ input:disabled {
 }
 .weather-panel-head,
 .weather-opt-actions,
-.weather-review-banner,
 .weather-unavailable {
   display: flex;
   align-items: center;
@@ -1166,13 +1168,7 @@ input:disabled {
 .weather-attribution {
   color: var(--muted-text);
 }
-.weather-review-banner,
-.weather-ready-callout {
-  padding: 12px;
-  border-radius: var(--control-radius);
-  background: var(--status-remaining-bg);
-  color: var(--status-remaining-text);
-}
+
 .weather-list {
   display: grid;
   margin: 0;
@@ -1248,49 +1244,7 @@ input:disabled {
     animation: none;
   }
 }
-.weather-select-all,
-.weather-change-row {
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: start;
-  min-height: 56px;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--line);
-}
-.weather-select-all {
-  grid-template-columns: 28px minmax(0, 1fr);
-}
-.weather-select-all input,
-.weather-change-row input {
-  accent-color: var(--dark);
-  width: 22px;
-  height: 22px;
-  margin: 0;
-}
-.weather-change-copy,
-.weather-change-reason,
-.weather-change-caution {
-  display: block;
-}
-.weather-change-reason,
-.weather-change-caution,
-.weather-change-copy details {
-  margin-top: 4px;
-  color: var(--muted-text);
-  font-size: 14px;
-}
-.weather-change-tags {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 4px;
-}
-.review-skip-copy {
-  flex-basis: 100%;
-  margin: 0;
-  text-align: right;
-}
+
 @media (max-width: 659px) {
   .weather-row {
     grid-template-columns: minmax(0, 1fr) auto;
@@ -1307,24 +1261,12 @@ input:disabled {
   .weather-mixed {
     grid-column: 1 / -1;
   }
-  .weather-review-banner,
   .weather-opt-actions {
     align-items: stretch;
     flex-direction: column;
   }
-  .weather-review-banner .button,
   .weather-opt-actions .button {
     width: 100%;
-  }
-  .weather-change-row {
-    grid-template-columns: 28px minmax(0, 1fr);
-  }
-  .weather-change-tags {
-    grid-column: 2;
-    justify-content: flex-start;
-  }
-  .review-skip-copy {
-    text-align: left;
   }
 }
 .tag {
@@ -1462,30 +1404,6 @@ input:disabled {
 
 /* ---- Trip screen / packing list (#16). Ported from the prototype; sizes follow design's #12 and #16 gaps. */
 
-.filters {
-  display: flex;
-  gap: 8px;
-  margin: 14px 0;
-}
-.filter {
-  min-height: 44px;
-  padding: 8px 14px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--control-radius);
-  background: transparent;
-  color: var(--ink);
-  font-size: 14px;
-  font-weight: 700;
-  cursor: pointer;
-}
-.filter.active {
-  border-color: var(--ink);
-  background: var(--ink);
-  color: var(--surface);
-}
-.list-section {
-  margin-top: 20px;
-}
 /* A group: 29px display heading, the muted "2 of 6 complete" at the right, a hairline rule under (audit 8). */
 .list-section-head {
   display: flex;
@@ -1503,121 +1421,21 @@ input:disabled {
   font-weight: 800;
   letter-spacing: -0.02em;
 }
-.list-section-count {
-  color: var(--muted);
-  font-size: 13px;
-  white-space: nowrap;
-}
-.list-section-sub {
-  margin: 6px 0 0;
-}
+
 /* The review has no heading between its title (h1) and its sections, so they are h2 in the outline but look the same. */
 .review-group .list-section-head h2 {
   margin: 0;
   font-size: 16px;
   letter-spacing: normal;
 }
-.packing-list {
-  display: grid;
-  gap: 0;
-}
-/* The list sits flat on the page: no card around it (audit 18). */
-.packing-panel {
-  min-width: 0;
-}
 
-.pack-row {
-  display: grid;
-  grid-template-columns: 44px minmax(0, 1fr);
-  align-items: center;
-  gap: 8px 10px;
-  min-height: 62px;
-  padding: 9px 0;
-  border: 0;
-  border-bottom: 1px solid var(--line);
-  border-radius: 0;
-  background: none;
-}
-.pack-row .qty-stepper {
-  grid-column: 2;
-  justify-self: start;
-}
-.pack-row.complete .item-name {
-  text-decoration: line-through;
-}
-.item-body {
-  display: grid;
-  gap: 2px;
-  min-height: 44px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.item-name {
-  font-weight: 800;
-}
-.item-body .item-meta {
-  margin-top: 0;
-}
+/* The list sits flat on the page: no card around it (audit 18). */
+
 /* The "Pack last" badge never touches the name before it (design: 6 to 8 px). */
 .timing-tag {
   margin-left: 7px;
 }
-.qty-stepper {
-  display: grid;
-  grid-template-columns: 44px 38px 44px;
-  align-items: center;
-  text-align: center;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--control-radius);
-  overflow: hidden;
-}
-.qty-stepper button {
-  min-height: 44px;
-  border: 0;
-  background: transparent;
-  color: var(--ink);
-  cursor: pointer;
-  font-size: 18px;
-}
-.qty-stepper button[aria-disabled="true"] {
-  color: var(--line-strong);
-  cursor: not-allowed;
-}
-.qty-stepper span {
-  align-self: stretch;
-  display: grid;
-  place-items: center;
-  border-inline: 1px solid var(--line-strong);
-  font-size: 13px;
-  font-weight: 700;
-}
-.row-error {
-  grid-column: 2 / -1;
-  justify-self: start;
-  min-height: 44px;
-  padding: 0 4px;
-  border: 0;
-  background: none;
-  color: var(--status-remaining-text);
-  font-size: 12px;
-  font-weight: 850;
-  text-decoration: underline;
-  cursor: pointer;
-}
 
-.toiletry-section {
-  margin-top: 20px;
-}
-.toiletry-explainer {
-  margin: 0 0 14px;
-}
-.toiletry-section > .button {
-  margin-top: 12px;
-}
 .bag-placement {
   display: flex;
   align-items: center;
@@ -1773,16 +1591,6 @@ input:disabled {
 }
 
 /* Wide enough for the name and the stepper side by side; below this the stepper sits under the name. */
-@media (min-width: 440px) {
-  .pack-row {
-    grid-template-columns: 44px minmax(0, 1fr) auto;
-  }
-
-  .pack-row .qty-stepper {
-    grid-column: auto;
-    justify-self: end;
-  }
-}
 
 @media (prefers-reduced-motion: reduce) {
   .spinner {
@@ -2510,14 +2318,11 @@ a.back {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
 }
-.head-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 10px;
-}
-.head-actions .button {
-  min-height: 44px;
+
+.add-stop-row {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
 }
 /* Weather polish (#117): reasons cut to two lines on a phone with a More button, a stacked review footer, the What's this? note. */
 .more-button {
@@ -2537,22 +2342,6 @@ a.back {
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
-  }
-  .modal-actions:has(.review-skip-copy) {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .modal-actions:has(.review-skip-copy) .review-add {
-    order: 1;
-  }
-  .modal-actions:has(.review-skip-copy) .review-skip {
-    order: 2;
-  }
-  .modal-actions:has(.review-skip-copy) .review-skip-copy {
-    order: 3;
-  }
-  .modal-actions:has(.review-skip-copy) .button {
-    width: 100%;
   }
 }
 
@@ -2716,49 +2505,10 @@ a.back {
 }
 
 /* Packing screen, Field Ledger (#144, spec §4). Role tokens only. */
-.progress-line {
-  margin: 6px 0 8px;
-  color: var(--ink);
-  font-size: 16px;
-  font-weight: 700;
-}
-
-.weather-review-banner {
-  background: var(--notice);
-  color: var(--notice-ink);
-}
 
 /* Row: state, name and note, stepper, Pack all / Packed, Edit target. The last three are fixed width, so a
    completed row never moves a column. */
-.check-state {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border: 2px solid var(--line-strong);
-  border-radius: var(--state-radius, 50%);
-  color: var(--complete-ink);
-  font-size: 14px;
-  font-weight: 900;
-}
-.pack-row.complete .check-state {
-  border-color: var(--complete);
-  background: var(--complete);
-}
-.pack-row.complete .item-name {
-  color: var(--muted);
-}
-.pack-all {
-  min-width: 0;
-  min-height: 44px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--button-radius, 4px);
-  background: transparent;
-  color: var(--ink);
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-}
+
 /* Edit target is a text link, not a button (audit 19). */
 .edit-target {
   min-width: 0;
@@ -2774,98 +2524,10 @@ a.back {
   text-decoration: underline;
 }
 /* A packed row shows "Packed" as quiet muted text in the same 88px column (still a button: it toggles back). */
-.pack-row.complete .pack-all {
-  border: 0;
-  background: none;
-  color: var(--muted);
-  font-size: 16px;
-  font-weight: 500;
-  text-align: right;
-}
-.weather-guidance {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-.weather-pill {
-  padding: 2px 6px;
-  border-radius: var(--control-radius);
-  background: var(--weather-pill);
-  color: var(--weather-pill-ink);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
+
 .weather-note {
   font-size: 13px;
   color: var(--muted);
-}
-
-.sections-panel {
-  padding: 12px 0 0;
-  border: 0;
-  border-top: 1px solid var(--line-strong);
-}
-.sections-panel h3 {
-  margin: 0 0 8px;
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.sections-panel ul {
-  display: grid;
-  gap: 4px;
-  margin: 0 0 8px;
-  padding: 0;
-  list-style: none;
-}
-.sections-panel a {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 44px;
-  color: var(--link);
-  font-weight: 600;
-  text-decoration: none;
-}
-.sections-panel a:hover {
-  text-decoration: underline;
-}
-
-@media (min-width: 721px) {
-  .pack-row {
-    grid-template-columns: 28px minmax(0, 1fr) 210px 88px 88px;
-  }
-  .pack-row .qty-stepper {
-    grid-column: auto;
-    justify-self: stretch;
-    grid-template-columns: 44px 1fr 44px;
-  }
-}
-
-@media (max-width: 720px) {
-  .pack-row {
-    grid-template-columns: 28px minmax(0, 1fr) 1fr 1fr;
-  }
-  .pack-row .item-body {
-    grid-column: 2 / -1;
-  }
-  .pack-row .qty-stepper {
-    grid-column: 1 / -1;
-    grid-template-columns: 44px 1fr 44px;
-    justify-self: stretch;
-  }
-  .pack-row .pack-all {
-    grid-column: 1 / 3;
-  }
-  .pack-row .edit-target {
-    grid-column: 3 / -1;
-  }
-  .row-error {
-    grid-column: 1 / -1;
-  }
 }
 
 /* ---- Field Ledger dashboard (#143, spec §4). Roles only; the stamp slot belongs to FL-c (#144). */
@@ -3401,38 +3063,12 @@ a.back {
   margin-bottom: 16px;
 }
 /* The Trip math card and the other side cards are flat: a top rule, no box (audit 25). */
-.side .card:not(.ready-card) {
-  padding: 12px 0 0;
-  border: 0;
-  border-top: 1px solid var(--line-strong);
-  background: none;
-}
 
 /* ---- Trip screen (#155, design's corrections on #159): a clean cream hero card, the progress and filters on one
    full-width row, then the list (about 1000px) beside a slim 190px sections column. */
-.trip-hero {
-  position: relative;
-  overflow: hidden;
-  margin: 8px 0 16px;
-  padding: 8px 28px 24px;
-  border: 1px solid var(--line);
-  border-top: 4px solid var(--dark);
-  border-radius: var(--control-radius);
-  background:
-    repeating-linear-gradient(
-      to bottom,
-      transparent 0,
-      transparent 27px,
-      var(--ledger-rule) 27px,
-      var(--ledger-rule) 28px
-    ),
-    var(--surface);
-  box-shadow: 0 8px 24px var(--ledger-shadow);
-}
-.trip-hero > * {
-  position: relative;
-  z-index: 1;
-}
+
+/* The theme picture (#48) is an isolated optional layer: hidden until Caroline decides (hero-picture.ts). */
+
 .back-link {
   display: inline-flex;
   align-items: center;
@@ -3441,220 +3077,15 @@ a.back {
   font-size: 15px;
   text-decoration: underline;
 }
-.trip-hero-main {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 24px;
-}
-.trip-hero-copy {
-  min-width: 0;
-}
-.hero-eyebrow {
-  margin: 0 0 4px;
-  color: var(--link);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.trip-hero h1 {
-  margin: 0 0 6px;
-  font-size: clamp(44px, 3.7vw, 56px);
-  line-height: 0.98;
-  letter-spacing: -0.04em;
-}
-.trip-hero-dates {
-  margin: 0;
-  color: var(--muted);
-}
-.trip-hero p.route-chip {
-  display: inline-block;
-  margin: 0 0 6px;
-  padding: 3px 8px;
-  border-radius: var(--control-radius);
-  background: var(--detail-surface);
-  color: var(--ink);
-  font-size: 14px;
-  font-weight: 700;
-}
-.hero-stamps {
-  display: flex;
-  flex: none;
-  flex-direction: column;
-  align-items: center;
-  color: var(--dark);
-}
-.trip-hero > .status-pill {
-  position: absolute;
-  top: 16px;
-  right: 24px;
-}
-.weather-embedded {
-  margin-top: 20px;
-}
-.weather-embedded .weather-panel-head {
-  margin-bottom: 4px;
-}
-.weather-embedded .weather-panel-head h2 {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.weather-embedded .weather-list {
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(0, 1fr);
-  border-block: 1px solid var(--line);
-  background: var(--weather-surface);
-}
-.weather-embedded .weather-row {
-  grid-template-columns: minmax(0, 1fr);
-  gap: 2px;
-  padding: 12px 14px;
-  border-bottom: 0;
-}
-.weather-embedded .weather-row + .weather-row {
-  border-left: 1px solid var(--line);
-}
-.weather-embedded .weather-row.unavailable {
-  grid-template-columns: minmax(0, 1fr);
-}
-.weather-check-label {
-  display: block;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.weather-review-banner {
-  margin: 0 0 16px;
-}
-.packing-top {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 24px;
-  margin: 8px 0 24px;
-}
-.packing-progress {
-  flex: 0 1 440px;
-  min-width: 0;
-}
-.packing-progress .progress-line {
-  margin: 0 0 8px;
-  font-size: 20px;
-}
-.trip-layout {
-  display: grid;
-  gap: 16px;
-}
-.side {
-  display: grid;
-  gap: 12px;
-  align-content: start;
-}
-.sections-panel ul {
-  gap: 0;
-}
-.sections-panel a {
-  min-height: 44px;
-  font-size: 16px;
-  padding-block: 8px;
-  line-height: 1.3;
-  min-width: 0;
-  overflow-wrap: anywhere;
-  justify-content: flex-start;
-}
-.sections-panel li {
-  min-width: 0;
-  max-width: 100%;
-}
-.sections-panel p {
-  margin: 8px 0 0;
-  font-style: italic;
-}
+
 @media (min-width: 900px) {
-  .trip-layout {
-    grid-template-columns: minmax(0, 1fr) 190px;
-    column-gap: 32px;
-    align-items: start;
-  }
   /* One sticky unit (#297): the whole rail sticks, nothing inside it does, so the nav can never cover Trip math. */
-  .trip-layout .side {
-    position: sticky;
-    top: calc(var(--sticky-top) + 12px);
-    z-index: 10;
-    align-self: stretch; /* the grid area is the full list height, so the sticky rail has travel */
-    max-height: calc(100vh - var(--sticky-top) - 24px);
-    max-height: calc(100dvh - var(--sticky-top) - 24px);
-    overflow-x: hidden;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    scrollbar-width: thin;
-    scroll-padding: 8px;
-    padding: 6px; /* room for the 3px focus ring plus its 3px offset, so the rail overflow never clips it */
-    margin: -6px; /* cancels the padding: the visible column does not move */
-  }
 }
-@media (min-width: 900px) and (max-height: 760px) {
-  .trip-layout .side .sections-panel p {
-    display: none;
-  }
-}
+
 @media (max-width: 899px) {
   /* Below 900 the sections panel moves above the list as a wrapping chip row; the other side cards stay below. */
-  .trip-layout .side {
-    display: contents;
-  }
-  .trip-layout .side > * {
-    order: 1;
-  }
-  .trip-layout .side > .sections-panel {
-    order: -1;
-    padding: 12px 0;
-  }
-  .sections-panel ul {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-  .sections-panel li a {
-    padding: 8px 12px;
-    border: 1px solid var(--line-strong);
-    border-radius: var(--control-radius);
-  }
-  .sections-panel p {
-    display: none;
-  }
 }
-@media (max-width: 720px) {
-  .trip-hero {
-    padding: 4px 20px 20px;
-  }
-  .trip-hero-main {
-    flex-direction: column;
-    gap: 14px;
-  }
-  .trip-hero h1 {
-    font-size: 40px;
-  }
-  .weather-embedded .weather-list {
-    grid-auto-flow: row;
-  }
-  .weather-embedded .weather-row + .weather-row {
-    border-left: 0;
-    border-top: 1px solid var(--line);
-  }
-  .packing-top {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 12px;
-  }
-  .packing-progress {
-    flex-basis: auto;
-  }
-}
+
 .back-link span {
   margin-right: 6px;
 }
@@ -4028,10 +3459,6 @@ a.back {
   text-decoration: underline;
 }
 @media (max-width: 720px) {
-  .hero-stamps {
-    flex-direction: row;
-    gap: 12px;
-  }
   .edit-stamp {
     margin-top: 0;
   }

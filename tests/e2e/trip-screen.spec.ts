@@ -1,11 +1,31 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
 import { DEVICE, legacyPackingLayout } from "./helpers/device";
+import {
+  allItemIds,
+  expectItem,
+  expectNoItem,
+  expectPacking,
+  itemRow,
+  openCube,
+  openEditor,
+  showItem,
+  tick,
+  untick,
+} from "./helpers/packing";
 import { reviewAndApply } from "./helpers/preferences";
 import { planAndCreate } from "./helpers/plan";
 
-// Fixed clock: San Diego is upcoming and partly packed, Lisbon is past, fully packed and Ready. In-memory data
-// survives client-side navigation (links), not a reload, so every step navigates by clicking.
+// The ledger Home is drawn below 1024px (the laptop Home is #431, the phone Home #388): this spec's flow starts there, so it runs
+// there. The trip page below 1024px is the phone Pack mode.
+test.beforeEach(async ({ page }) => {
+  await legacyPackingLayout(page);
+});
+
+// The trip's Packing screen on its flows (saves, the toiletry bag, editing, Ready), at the width of each project: a laptop at
+// 1440 on `desktop` and a phone on `phone`. The two layouts share the cube list, the rows and Edit list, so one spec serves
+// both; what differs is in packing-laptop.spec.ts and packing-phone.spec.ts.
+// Fixed clock: San Diego is upcoming and partly packed, Lisbon is past, fully packed and Ready.
 const NOW = new Date("2026-10-16T12:00:00");
 
 async function openDashboard(page: Page) {
@@ -17,104 +37,82 @@ async function openDashboard(page: Page) {
 async function openSanDiego(page: Page) {
   await openDashboard(page);
   await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
-  await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
+  await expectPacking(page);
 }
 
 async function openLisbon(page: Page) {
   await openDashboard(page);
   await page.getByRole("button", { name: /Past & archive/ }).click();
   await page.getByRole("link", { name: "Review bag: Lisbon" }).click();
-  await expect(page.getByRole("heading", { name: "Lisbon", level: 1 })).toBeVisible();
+  await expectPacking(page);
 }
 
-const row = (page: Page, id: string) => page.locator(`[data-item-id="${id}"]`);
 const TOILETRIES = ["last-toothbrush", "last-toothpaste", "last-deodorant", "last-contacts"];
 const status = (page: Page) => page.getByRole("status", { name: "Packing updates" });
 
 async function packEverythingExceptBag(page: Page) {
-  const ids = await page
-    .locator("[data-item-id]")
-    .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-item-id") as string));
+  const ids = await allItemIds(page);
   // Bathroom items go last, because completing them opens the bag-placement prompt.
-  for (const id of [...ids.filter((entry) => !TOILETRIES.includes(entry)), ...TOILETRIES]) {
-    const pack = row(page, id).getByRole("button", { name: /^Pack all / });
-    if (await pack.count()) await pack.click();
-  }
+  for (const id of [...ids.filter((entry) => !TOILETRIES.includes(entry)), ...TOILETRIES])
+    await (await showItem(page, id)).getByRole("checkbox").check();
 }
 
-test("shows the trip with progress, and the All / Still to pack filter", async ({ page }) => {
-  await legacyPackingLayout(page);
+async function newParisTrip(page: Page) {
+  await page.goto("/");
+  await page.getByRole("link", { name: /Plan a trip/ }).click();
+  await planAndCreate(page, {
+    query: "paris",
+    option: /Paris/,
+    start: "2026-11-12",
+    end: "2026-11-16",
+  });
+  await page.getByRole("link", { name: /(Continue|Keep) packing: Paris/ }).click();
+  await expectPacking(page);
+}
+
+test("shows the count, and the To pack and Packed filters of the open cube", async ({ page }) => {
   await openSanDiego(page);
-  await expect(page.getByRole("progressbar", { name: "Packing progress" })).toHaveAttribute(
-    "aria-valuenow",
-    "18", // 6 of 33 (#295: the arrival day adds one top, underwear and socks)
-  );
-  await expect(page.locator(".trip-hero > .status-pill")).toHaveCount(0);
-  await expect(row(page, "sleepwear")).toBeVisible();
-  await page.getByRole("button", { name: "Still to pack" }).click();
-  await expect(page.getByRole("button", { name: "Still to pack" })).toHaveAttribute(
+  await expect(page.getByText(/^6 of \d+ in the bag$/)).toBeVisible();
+  await expect(itemRow(page, "sleepwear")).toBeVisible();
+  await page.getByRole("button", { name: /^To pack/ }).click();
+  await expect(page.getByRole("button", { name: /^To pack/ })).toHaveAttribute(
     "aria-pressed",
     "true",
   );
-  await expect(row(page, "sleepwear")).toHaveCount(0);
-  await expect(row(page, "underwear")).toBeVisible();
-  await page.getByRole("button", { name: "All items", exact: true }).click();
-  await expect(row(page, "sleepwear")).toBeVisible();
+  await expect(itemRow(page, "sleepwear")).toHaveCount(0);
+  await expect(itemRow(page, "underwear")).toBeVisible();
+  await page.getByRole("button", { name: /^All \d/ }).click();
+  await expect(itemRow(page, "sleepwear")).toBeVisible();
 });
 
-test("check and uncheck, and partial quantities with announcements and limits", async ({
+test("a tick packs the whole quantity and an untick packs none, announced each time", async ({
   page,
 }) => {
-  await legacyPackingLayout(page);
   await openSanDiego(page);
-  await row(page, "tops").getByRole("button", { name: "Pack all Everyday tops" }).click();
-  await expect(
-    row(page, "tops").getByRole("button", { name: "Packed, mark Everyday tops unpacked" }),
-  ).toHaveText("Packed");
-  await row(page, "tops")
-    .getByRole("button", { name: "Packed, mark Everyday tops unpacked" })
-    .click();
-  await expect(
-    row(page, "tops").getByRole("button", { name: "Pack all Everyday tops" }),
-  ).toBeVisible();
-
-  const underwear = row(page, "underwear");
-  await expect(underwear).toContainText("2 of 5 packed");
-  await underwear.getByRole("button", { name: "Increase packed Underwear" }).click();
-  await expect(underwear).toContainText("3 of 5 packed");
-  await expect(status(page)).toHaveText("Underwear 3 of 5 packed");
-  await underwear.getByRole("button", { name: "Increase packed Underwear" }).click();
-  await underwear.getByRole("button", { name: "Increase packed Underwear" }).click();
-  await expect(
-    underwear.getByRole("button", { name: "Increase packed Underwear" }),
-  ).toHaveAttribute("aria-disabled", "true");
-  // At the limit the button stays focusable but a press does nothing (Playwright treats aria-disabled as not clickable).
-  await underwear.getByRole("button", { name: "Increase packed Underwear" }).click({ force: true });
-  await expect(underwear).toContainText("5 of 5 packed");
-  for (let n = 0; n < 5; n++)
-    await underwear.getByRole("button", { name: "Decrease packed Underwear" }).click();
-  await expect(
-    underwear.getByRole("button", { name: "Decrease packed Underwear" }),
-  ).toHaveAttribute("aria-disabled", "true");
-  await expect(underwear).toContainText("0 of 5 packed");
+  await tick(page, "tops");
+  await expect(itemRow(page, "tops").getByRole("checkbox")).toBeChecked();
+  await expect(status(page)).toHaveText("Everyday tops 4 of 4 packed");
+  await untick(page, "tops");
+  await expect(itemRow(page, "tops").getByRole("checkbox")).not.toBeChecked();
+  await expect(status(page)).toHaveText("Everyday tops 0 of 4 packed");
+  // Two of five underwear were packed in the seed: the tick shows it as partly done until it finishes the row.
+  const underwear = itemRow(page, "underwear").getByRole("checkbox");
+  expect(await underwear.evaluate((box: HTMLInputElement) => box.indeterminate)).toBe(true);
+  await underwear.check();
+  await expect(status(page)).toHaveText("Underwear 5 of 5 packed");
 });
 
 test("the toiletry bag walks every state: waiting, ready to place, in the suitcase, undo, and invalidation", async ({
   page,
 }) => {
-  await legacyPackingLayout(page);
   await openSanDiego(page);
+  await openCube(page, "Toiletries");
   await expect(page.getByText("Toiletry bag not ready to place")).toBeVisible();
-  await expect(page.getByText("0 of 4 contents checked")).toBeVisible();
+  await expect(page.getByText(/\(0 of 4 checked\)/)).toBeVisible();
 
-  for (const id of TOILETRIES.slice(0, 3))
-    await row(page, id)
-      .getByRole("button", { name: /^Pack all / })
-      .click();
+  for (const id of TOILETRIES.slice(0, 3)) await tick(page, id);
   await expect(page.getByText("Toiletry bag not ready to place")).toBeVisible();
-  await row(page, TOILETRIES[3])
-    .getByRole("button", { name: /^Pack all / })
-    .click();
+  await tick(page, TOILETRIES[3]);
 
   // The last Bathroom item opens the placement prompt once; it never confirms by itself.
   const prompt = page.getByRole("dialog", { name: "Toiletry bag in suitcase?" });
@@ -130,27 +128,19 @@ test("the toiletry bag walks every state: waiting, ready to place, in the suitca
 
   await page.getByRole("button", { name: "Undo placement" }).click();
   await expect(page.getByText("Toiletry bag ready to place")).toBeVisible();
-  await expect(
-    row(page, "last-toothbrush").getByRole("button", { name: "Packed, mark Toothbrush unpacked" }),
-  ).toBeVisible();
+  await expect(itemRow(page, "last-toothbrush").getByRole("checkbox")).toBeChecked();
 
   await page.getByRole("button", { name: "Put bag in suitcase" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Confirm" }).click();
   await expect(page.getByText("Toiletry bag is in the suitcase")).toBeVisible();
   // Unchecking any content invalidates the placement.
-  await row(page, "last-contacts")
-    .getByRole("button", { name: "Packed, mark Contacts unpacked" })
-    .click();
+  await untick(page, "last-contacts");
   await expect(page.getByText("Toiletry bag not ready to place")).toBeVisible();
 });
 
 test("adding a Bathroom item after placing the bag resets the placement", async ({ page }) => {
-  await legacyPackingLayout(page);
   await openSanDiego(page);
-  for (const id of TOILETRIES)
-    await row(page, id)
-      .getByRole("button", { name: /^Pack all / })
-      .click();
+  for (const id of TOILETRIES) await tick(page, id);
   await page.getByRole("dialog").getByRole("button", { name: "Confirm" }).click();
   await expect(page.getByText("Toiletry bag is in the suitcase")).toBeVisible();
   await page.getByRole("button", { name: "＋ Add a Bathroom item" }).click();
@@ -163,13 +153,12 @@ test("adding a Bathroom item after placing the bag resets the placement", async 
   await dialog.getByRole("button", { name: "Add toiletry item" }).click();
   await expect(page.getByText("Face wash", { exact: true })).toBeVisible();
   await expect(page.getByText("Toiletry bag not ready to place")).toBeVisible();
-  await expect(page.getByText("4 of 5 contents checked")).toBeVisible();
+  await expect(page.getByText(/\(4 of 5 checked\)/)).toBeVisible();
 });
 
 test("completing the last item only reveals Review your bag; it never marks the trip Ready", async ({
   page,
 }) => {
-  await legacyPackingLayout(page);
   await openSanDiego(page);
   await packEverythingExceptBag(page);
   await page
@@ -179,100 +168,74 @@ test("completing the last item only reveals Review your bag; it never marks the 
   const review = page.getByRole("link", { name: "Review your bag" });
   await expect(review).toBeVisible();
   await expect(review).toHaveAttribute("href", /^\/trips\/[0-9a-f-]{36}\/review$/);
-  await expect(page.locator(".trip-hero > .status-pill")).toHaveCount(0);
   await expect(page.getByText("You’re ready to go.")).toHaveCount(0);
 });
 
 test("a trip-only edit leaves the staples alone: a new trip still has the default", async ({
   page,
 }) => {
-  await legacyPackingLayout(page);
   await openSanDiego(page);
-  await row(page, "sunglasses")
-    .getByRole("button", { name: /^Sunglasses / })
-    .click();
+  await openEditor(page, "sunglasses");
   const dialog = page.getByRole("dialog", { name: "Edit item" });
   await dialog.getByLabel("Item name").fill("Beach sunglasses");
   await expect(dialog.getByRole("radio", { name: /This trip only/ })).toBeChecked();
   await dialog.getByRole("button", { name: "Save item" }).click();
-  await expect(row(page, "sunglasses")).toContainText("Beach sunglasses");
+  await expect(itemRow(page, "sunglasses")).toContainText("Beach sunglasses");
 
-  await page.getByRole("link", { name: "All trips" }).click();
-  await page.getByRole("link", { name: /Plan a trip/ }).click();
-  await planAndCreate(page, {
-    query: "paris",
-    option: /Paris/,
-    start: "2026-11-12",
-    end: "2026-11-16",
-  });
-  await page.getByRole("link", { name: /(Continue|Keep) packing: Paris/ }).click();
-  await expect(row(page, "sunglasses")).toContainText("Sunglasses");
-  await expect(row(page, "sunglasses")).not.toContainText("Beach");
+  await newParisTrip(page);
+  await expect(await showItem(page, "sunglasses")).toContainText("Sunglasses");
+  await expect(itemRow(page, "sunglasses")).not.toContainText("Beach");
 });
 
 test("a remembered edit changes future trips, but neither this trip's history nor another existing trip", async ({
   page,
 }) => {
-  await legacyPackingLayout(page);
   await openSanDiego(page);
-  await row(page, "sunglasses")
-    .getByRole("button", { name: /^Sunglasses / })
-    .click();
+  await openEditor(page, "sunglasses");
   const dialog = page.getByRole("dialog", { name: "Edit item" });
   await dialog.getByLabel("Item name").fill("Polarized sunglasses");
   await dialog.getByRole("radio", { name: /Remember for future trips/ }).check();
   await dialog.getByRole("button", { name: "Save item" }).click();
-  await expect(row(page, "sunglasses")).toContainText("Polarized sunglasses");
+  await expect(itemRow(page, "sunglasses")).toContainText("Polarized sunglasses");
 
   // Another existing trip keeps its history.
-  await page.getByRole("link", { name: "All trips" }).click();
+  await page.goto("/");
   await page.getByRole("button", { name: /Past & archive/ }).click();
   await page.getByRole("link", { name: "Review bag: Lisbon" }).click();
-  await expect(row(page, "sunglasses")).toContainText("Sunglasses");
-  await expect(row(page, "sunglasses")).not.toContainText("Polarized");
+  await expectPacking(page);
+  await expect(await showItem(page, "sunglasses")).toContainText("Sunglasses");
+  await expect(itemRow(page, "sunglasses")).not.toContainText("Polarized");
 
   // A trip made afterwards gets the remembered version.
-  await page.getByRole("link", { name: "All trips" }).click();
-  await page.getByRole("link", { name: /Plan a trip/ }).click();
-  await planAndCreate(page, {
-    query: "paris",
-    option: /Paris/,
-    start: "2026-11-12",
-    end: "2026-11-16",
-  });
-  await page.getByRole("link", { name: /(Continue|Keep) packing: Paris/ }).click();
-  await expect(row(page, "sunglasses")).toContainText("Polarized sunglasses");
+  await newParisTrip(page);
+  await expect(await showItem(page, "sunglasses")).toContainText("Polarized sunglasses");
 });
 
 test("weather: a trip with only curated places says it needs a map place, and adds nothing to the list", async ({
   page,
 }) => {
-  await legacyPackingLayout(page);
   await openSanDiego(page);
   await expect(page.getByText("Weather needs a place from the map.")).toBeVisible();
   await expect(page.getByText(/Simulated/)).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Review suggestion" })).toHaveCount(0);
-  await expect(row(page, "weather-umbrella")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /to review/ })).toHaveCount(0);
+  await expectNoItem(page, "weather-umbrella");
 });
 
 test("a trip whose umbrella was already accepted shows it once, with no suggestion to review", async ({
   page,
 }) => {
-  await legacyPackingLayout(page);
   await openLisbon(page);
   await expect(page.getByText("You’re ready to go.")).toBeVisible();
   await expect(page.getByText(/Simulated/)).toHaveCount(0);
-  await expect(row(page, "weather-umbrella")).toHaveCount(1);
+  const ids = await allItemIds(page);
+  expect(ids.filter((id) => id === "weather-umbrella")).toHaveLength(1);
 });
 
 test("an optional item can be removed, after a confirmation that focuses the safe button", async ({
   page,
 }) => {
-  await legacyPackingLayout(page);
   await openSanDiego(page);
-  await row(page, "nice-shoes")
-    .getByRole("button", { name: /^Dress shoes / })
-    .click();
+  await openEditor(page, "nice-shoes");
   await page
     .getByRole("dialog", { name: "Edit item" })
     .getByRole("button", { name: "Remove item" })
@@ -283,11 +246,9 @@ test("an optional item can be removed, after a confirmation that focuses the saf
   // Keeping the item returns to the editor; closing that leaves everything as it was.
   await expect(page.getByRole("dialog", { name: "Edit item" })).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(row(page, "nice-shoes")).toBeVisible();
+  await expectItem(page, "nice-shoes");
 
-  await row(page, "nice-shoes")
-    .getByRole("button", { name: /^Dress shoes / })
-    .click();
+  await openEditor(page, "nice-shoes");
   await page
     .getByRole("dialog", { name: "Edit item" })
     .getByRole("button", { name: "Remove item" })
@@ -296,15 +257,12 @@ test("an optional item can be removed, after a confirmation that focuses the saf
     .getByRole("dialog", { name: "Remove Dress shoes?" })
     .getByRole("button", { name: "Remove item" })
     .click();
-  await expect(row(page, "nice-shoes")).toHaveCount(0);
+  await expectNoItem(page, "nice-shoes");
 });
 
 test("a required item has no Remove button, and an empty name is refused", async ({ page }) => {
-  await legacyPackingLayout(page);
   await openSanDiego(page);
-  await row(page, "tops")
-    .getByRole("button", { name: /^Everyday tops / })
-    .click();
+  await openEditor(page, "tops");
   const dialog = page.getByRole("dialog", { name: "Edit item" });
   await expect(dialog.getByRole("button", { name: "Remove item" })).toHaveCount(0);
   await dialog.getByLabel("Item name").fill("   ");
@@ -314,7 +272,6 @@ test("a required item has no Remove button, and an empty name is refused", async
 });
 
 test("editing preferences recalculates the list and revokes Ready", async ({ page }) => {
-  await legacyPackingLayout(page);
   await openLisbon(page);
   await expect(page.getByText("You’re ready to go.")).toBeVisible();
   await page.getByRole("button", { name: "Edit preferences" }).click();
@@ -322,22 +279,16 @@ test("editing preferences recalculates the list and revokes Ready", async ({ pag
   await dialog.getByRole("switch", { name: "Laundry on this trip" }).uncheck();
   await reviewAndApply(page, dialog);
   await expect(page.getByText("You’re ready to go.")).toHaveCount(0);
-  await expect(page.locator(".trip-hero > .status-pill")).toHaveCount(0);
 });
 
 test("Mark as not ready keeps every packed count", async ({ page }) => {
-  await legacyPackingLayout(page);
   await openLisbon(page);
-  const before = await page
-    .getByRole("progressbar", { name: "Packing progress" })
-    .getAttribute("aria-valuenow");
+  const total = page.getByText(/^(\d+) of \1 in the bag$/);
+  const before = await total.innerText();
   await page.getByRole("button", { name: "Mark as not ready" }).click();
   await expect(page.getByText("You’re ready to go.")).toHaveCount(0);
   await expect(page.locator(".toast-region")).toContainText("Progress kept.");
-  await expect(page.getByRole("progressbar", { name: "Packing progress" })).toHaveAttribute(
-    "aria-valuenow",
-    before ?? "",
-  );
+  await expect(total).toHaveText(before);
 });
 
 test("an unknown trip says so, with a way back", async ({ page }) => {
@@ -360,29 +311,31 @@ test(
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
       ),
     ).toBeLessThanOrEqual(0);
-    const underwear = row(page, "underwear");
-    const targets: [string, ReturnType<typeof underwear.getByRole>][] = [
-      ["check", underwear.getByRole("button", { name: "Pack all Underwear" })],
-      ["edit", underwear.getByRole("button", { name: /^Underwear / })],
-      ["increase", underwear.getByRole("button", { name: "Increase packed Underwear" })],
-      ["decrease", underwear.getByRole("button", { name: "Decrease packed Underwear" })],
-      ["filter", page.getByRole("button", { name: "Still to pack" })],
+    const underwear = itemRow(page, "underwear");
+    // The whole row is the tick's label, so its height is the target (the pills are drawn 34px with a 44px tap area).
+    const row = (await underwear.locator("label").boundingBox())!;
+    expect(row.height, "row height").toBeGreaterThanOrEqual(43.9);
+    const targets: [string, ReturnType<typeof page.getByRole>][] = [
+      ["all in", page.getByRole("button", { name: /^All in/ })],
     ];
     for (const [label, control] of targets) {
       const box = (await control.boundingBox())!;
       expect(box.height, `${label} height`).toBeGreaterThanOrEqual(43.9);
-      expect(box.width, `${label} width`).toBeGreaterThanOrEqual(43.9);
     }
-    await underwear.getByRole("button", { name: "Increase packed Underwear" }).focus();
+    const box = underwear.getByRole("checkbox");
+    await box.focus();
+    await page.keyboard.press("Space");
+    await expect(box).toBeChecked();
+    await page.getByRole("button", { name: "Edit list" }).focus();
     await page.keyboard.press("Enter");
-    await expect(underwear).toContainText("3 of 5 packed");
-    await underwear.getByRole("button", { name: /^Underwear / }).focus();
+    const edit = underwear.getByRole("button", { name: /^Edit / });
+    await edit.focus();
     await page.keyboard.press("Enter");
     const dialog = page.getByRole("dialog", { name: "Edit item" });
     await expect(dialog.getByLabel("Item name")).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(dialog).toHaveCount(0);
-    await expect(underwear.getByRole("button", { name: /^Underwear / })).toBeFocused();
+    await expect(edit).toBeFocused();
   },
 );
 
@@ -390,23 +343,17 @@ test(
   "a sheet can be closed with its visible close button, and the bag button never wraps",
   DEVICE,
   async ({ page }, testInfo) => {
-    await legacyPackingLayout(page);
     await openSanDiego(page);
-    await row(page, "tops")
-      .getByRole("button", { name: /^Everyday tops / })
-      .click();
+    await openEditor(page, "tops");
     const close = page.getByRole("button", { name: "Close dialog" });
     const box = (await close.boundingBox())!;
     expect(box.width).toBeGreaterThanOrEqual(43.9);
     expect(box.height).toBeGreaterThanOrEqual(43.9);
     await close.click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
-    await expect(row(page, "tops").getByRole("button", { name: /^Everyday tops / })).toBeFocused();
+    await expect(itemRow(page, "tops").getByRole("button", { name: /^Edit / })).toBeFocused();
 
-    for (const id of TOILETRIES)
-      await row(page, id)
-        .getByRole("button", { name: /^Pack all / })
-        .click();
+    for (const id of TOILETRIES) await tick(page, id);
     await page.getByRole("button", { name: "Not yet" }).click();
     const put = page.getByRole("button", { name: "Put bag in suitcase" });
     const card = page.locator(".bag-placement.pending");
@@ -418,173 +365,61 @@ test(
   },
 );
 
-// Design's screenshot set for the trip screen. "Not saved · Retry" is not here: the in-memory source cannot fail, so
-// that state is covered by unit tests now and gets a real network-failure screenshot with the data-layer wiring.
-test("screenshots of the trip screen", DEVICE, async ({ page }, testInfo) => {
-  await legacyPackingLayout(page);
-  await page.emulateMedia({ reducedMotion: "reduce" });
-  const shot = (name: string, fullPage = false) =>
-    page.screenshot({
-      path: `test-results/screenshots/${testInfo.project.name}-trip-${name}.png`,
-      fullPage,
-    });
-
-  await openSanDiego(page);
-  await shot("top");
-  await row(page, "underwear").scrollIntoViewIfNeeded();
-  await shot("partial-row");
-  await shot("full", true);
-
-  await row(page, "nice-shoes")
-    .getByRole("button", { name: /^Dress shoes / })
-    .click();
-  await shot("editor");
-  await page
-    .getByRole("dialog", { name: "Edit item" })
-    .getByRole("button", { name: "Remove item" })
-    .click();
-  await shot("remove-confirm");
-  await page.getByRole("button", { name: "Keep item" }).click();
-  await page.keyboard.press("Escape");
-
-  await page.getByText("Toiletry bag not ready to place").scrollIntoViewIfNeeded();
-  await shot("toiletries-waiting");
-  for (const id of TOILETRIES)
-    await row(page, id)
-      .getByRole("button", { name: /^Pack all / })
-      .click();
-  await shot("bag-prompt");
-  await page.getByRole("button", { name: "Not yet" }).click();
-  await page.getByText("Toiletry bag ready to place").scrollIntoViewIfNeeded();
-  await shot("toiletries-ready");
-  await page.getByRole("button", { name: "Put bag in suitcase" }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "Confirm" }).click();
-  await expect(page.getByText("Toiletry bag is in the suitcase")).toBeVisible();
-  await shot("toiletries-in-suitcase");
-
-  await page.getByRole("button", { name: "Edit preferences" }).click();
-  await shot("preferences");
-});
-
-test("screenshot of the Ready trip", DEVICE, async ({ page }, testInfo) => {
-  await legacyPackingLayout(page);
-  await page.emulateMedia({ reducedMotion: "reduce" });
-  const shot = (name: string) =>
-    page.screenshot({
-      path: `test-results/screenshots/${testInfo.project.name}-trip-${name}.png`,
-    });
-  await openLisbon(page);
-  await expect(page.getByText("You’re ready to go.")).toBeVisible();
-  await shot("ready");
-});
-
-test("ledger packing screen: stamp, sections panel, no overflow, and a completed row keeps its columns", async ({
+// Adding to a cube from Edit list (the old inline "＋ Add item" form is gone with the old page).
+test("Edit list adds an unpacked item to the cube, never doubles it, and hands Bathroom to its form", async ({
   page,
 }) => {
-  await legacyPackingLayout(page);
   await openSanDiego(page);
-  await expect(page.getByRole("img", { name: /departure stamp$|route stamps$/ })).toBeVisible();
-  await expect(page.getByText(/^Leaves in \d+ days$/)).toBeVisible();
-  await expect(page.locator(".progress-line")).toContainText(/\d+ of \d+ packed/);
-
-  const overflow = await page.evaluate(
-    () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
-  );
-  expect(overflow).toBe(false);
-
-  const panel = page.getByRole("navigation", { name: "Packing sections" });
-  await expect(panel).toBeVisible();
-  await panel.getByRole("link", { name: /Everyday & occasion/ }).click();
-  await expect(page).toHaveURL(/#block-main$/);
-
-  const target = row(page, "underwear").getByRole("button", { name: /^Edit target for / });
-  const before = await target.boundingBox();
-  await row(page, "underwear")
-    .getByRole("button", { name: /^Pack all / })
-    .click();
-  await expect(row(page, "underwear").getByRole("button", { name: /unpacked$/ })).toHaveText(
-    "Packed",
-  );
-  const after = await target.boundingBox();
-  expect(after?.x).toBe(before?.x);
-  expect(after?.width).toBe(before?.width);
-});
-
-// Generic add-item (#147): the packing screen's inline "＋ Add item".
-test("＋ Add item adds an unpacked item of the chosen category, never doubles it, and hands Bathroom to its form", async ({
-  page,
-}) => {
-  await legacyPackingLayout(page);
-  await openSanDiego(page);
-  const total = () => page.locator("[data-item-id]").count();
-  const before = await total();
-
-  const toggle = page.getByRole("button", { name: "＋ Add item" });
-  await expect(toggle).toHaveAttribute("aria-expanded", "false");
-  await toggle.click();
-  // Closed by default, 44px controls once open.
-  for (const control of [
-    page.getByRole("textbox", { name: "Item name" }),
-    page.getByRole("combobox", { name: "Category" }),
-    page.getByRole("spinbutton", { name: "Needed" }),
-    page.getByRole("button", { name: "Add to list" }),
-  ]) {
-    expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
-  }
-  await page.getByRole("textbox", { name: "Item name" }).fill("Camera");
-  await page.getByRole("combobox", { name: "Category" }).selectOption("Tech");
-  await page.getByRole("spinbutton", { name: "Needed" }).fill("2");
-  await page.getByRole("button", { name: "Add to list" }).click();
-
+  await openCube(page, "Tech");
+  await page.getByRole("button", { name: "Edit list" }).click();
+  const field = page.getByPlaceholder("+ Add an item");
+  await field.fill("Camera");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
   await expect(status(page)).toHaveText("Camera added to Tech.");
-  await expect(toggle).toBeFocused();
-  await expect(page.getByRole("textbox", { name: "Item name" })).toHaveCount(0);
-  const camera = page.locator("[data-item-id]").filter({ hasText: "Camera" });
-  await expect(camera).toHaveCount(1);
-  await expect(camera.getByRole("img", { name: "0 of 2 packed" })).toBeVisible();
-  expect(await total()).toBe(before + 1);
-
-  // Saved for real: still there after a reload, still one row.
-  await page.reload();
+  await expect(field).toHaveValue("");
   await expect(page.locator("[data-item-id]").filter({ hasText: "Camera" })).toHaveCount(1);
 
+  // Saved for real: still there after a reload, still one row, and not packed.
+  await page.reload();
+  await openCube(page, "Tech");
+  const camera = page.locator("[data-item-id]").filter({ hasText: "Camera" });
+  await expect(camera).toHaveCount(1);
+  await expect(camera.getByRole("checkbox")).not.toBeChecked();
+
   // The same item again is not added: the form says so and offers the quantity editor.
-  await toggle.click();
-  await page.getByRole("textbox", { name: "Item name" }).fill("  camera ");
-  await page.getByRole("combobox", { name: "Category" }).selectOption("Tech");
-  await page.getByRole("button", { name: "Add to list" }).click();
-  await expect(page.getByText(/Camera is already on your list \(needed: 2\)/)).toBeVisible();
-  expect(await total()).toBe(before + 1);
-  await page.getByRole("button", { name: "Edit quantity" }).click();
+  await page.getByRole("button", { name: "Edit list" }).click();
+  await page.getByPlaceholder("+ Add an item").fill("  camera ");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(page.getByText(/already on your list/)).toBeVisible();
+  await expect(camera).toHaveCount(1);
+  await page.getByRole("button", { name: "Edit its quantity" }).click();
   await expect(page.getByRole("dialog", { name: "Edit item" })).toBeVisible();
   await page.keyboard.press("Escape");
 
   // Bathroom hands off to the existing form, filled in.
-  await toggle.click();
-  await page.getByRole("textbox", { name: "Item name" }).fill("Floss");
-  await page.getByRole("combobox", { name: "Category" }).selectOption("Bathroom");
-  await page.getByRole("button", { name: "Continue to Bathroom item" }).click();
+  await openCube(page, "Toiletries");
+  await page.getByRole("button", { name: "＋ Add a Bathroom item" }).click();
   const bathroom = page.getByRole("dialog", { name: "Add a Bathroom item" });
-  await expect(bathroom.getByLabel("Item name")).toHaveValue("Floss");
+  await bathroom.getByLabel("Item name").fill("Floss");
   await bathroom.getByRole("button", { name: "Add toiletry item" }).click();
   await expect(page.locator("[data-item-id]").filter({ hasText: "Floss" })).toHaveCount(1);
 });
 
 test(
-  "＋ Add item is keyboard operable and fits a phone without sideways scrolling",
+  "Edit list is keyboard operable and fits a phone without sideways scrolling",
   DEVICE,
   async ({ page }) => {
-    await legacyPackingLayout(page);
     await openSanDiego(page);
-    await page.getByRole("button", { name: "＋ Add item" }).focus();
+    await openCube(page, "Tech");
+    await page.getByRole("button", { name: "Edit list" }).focus();
     await page.keyboard.press("Enter");
-    await expect(page.getByRole("textbox", { name: "Item name" })).toBeFocused();
+    const field = page.getByPlaceholder("+ Add an item");
+    await field.focus();
     await page.keyboard.type("Charger cable");
     await page.keyboard.press("Enter");
     await expect(page.locator("[data-item-id]").filter({ hasText: "Charger cable" })).toHaveCount(
       1,
     );
-    await page.getByRole("button", { name: "＋ Add item" }).click();
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );

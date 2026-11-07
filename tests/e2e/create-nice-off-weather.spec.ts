@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
-import { legacyPackingLayout } from "./helpers/device";
 import { signInAsOwner } from "./helpers/auth";
+import { legacyPackingLayout } from "./helpers/device";
+import { allItemIds, expectPacking } from "./helpers/packing";
 import { planToList, reviewAndCreate } from "./helpers/plan";
 import { FAKE_GEOCODER_PORT, OPEN_METEO_PORT } from "./support/ports";
 
@@ -13,7 +14,6 @@ const FAKE = `http://127.0.0.1:${FAKE_GEOCODER_PORT}`;
 const NICE_IDS = ["nice-top", "nice-bottom", "nice-shoes", "nice-makeup", "nice-undergarments"];
 const inDays = (count: number) =>
   new Date(Date.now() + count * 86_400_000).toISOString().slice(0, 10);
-const row = (page: Page, id: string) => page.locator(`[data-item-id="${id}"]`);
 const weatherCard = (page: Page) => page.getByRole("checkbox", { name: /Weather suggestions/ });
 
 test.beforeEach(async () => {
@@ -37,13 +37,14 @@ async function createAndOpen(page: Page) {
     .getByRole("link", { name: /^(Continue|Keep) packing: London/ })
     .first()
     .click();
-  await expect(page.getByRole("heading", { name: "London", level: 1 })).toBeVisible();
+  await expectPacking(page);
 }
 
 async function expectNoNiceAttire(page: Page) {
   // Weather replaces the everyday tops and bottoms with its own clothing lines, so only "the list loaded" is asserted here.
-  await expect(row(page, "underwear")).toBeVisible();
-  for (const id of NICE_IDS) await expect(row(page, id)).toHaveCount(0);
+  const ids = await allItemIds(page);
+  expect(ids).toContain("underwear");
+  for (const id of NICE_IDS) expect(ids).not.toContain(id);
 }
 
 test("weather on, suggestions kept: no nice-attire items", async ({ page }) => {

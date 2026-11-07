@@ -174,6 +174,8 @@ export interface CubeChipProps extends Omit<CubeProgress, "note" | "alert"> {
   selected?: boolean;
   onSelect?: () => void;
   className?: string;
+  /** The id of the panel this chip opens (aria-controls). */
+  controls?: string;
 }
 
 // A cube chip in the phone Packing bar (spec part 2 section 2): name, then "9/14" and the Morning-of marker.
@@ -185,12 +187,14 @@ export function CubeChip({
   selected = false,
   onSelect,
   className,
+  controls,
 }: CubeChipProps) {
   return (
     <button
       type="button"
       className={cx(styles.chip, selected && styles.chipSelected, className)}
-      aria-pressed={selected}
+      aria-current={selected ? "true" : undefined}
+      aria-controls={controls}
       onClick={onSelect}
     >
       <span className={styles.chipName}>{name}</span>

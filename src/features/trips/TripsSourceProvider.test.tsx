@@ -43,6 +43,7 @@ const actions = vi.hoisted(() => {
     commands: Object.fromEntries(
       [
         "setPackedAction",
+        "setPackedManyAction",
         "togglePackedAction",
         "incrementPackedAction",
         "decrementPackedAction",
@@ -188,6 +189,12 @@ describe("TripsSourceProvider", () => {
         (s) => s.setPacked("t", "i", 3),
         () => actions.commands.setPackedAction,
         ["t", "i", 3],
+      ],
+      [
+        "setPackedMany",
+        (s) => s.setPackedMany("t", [{ itemId: "i", packed: 3 }]),
+        () => actions.commands.setPackedManyAction,
+        ["t", [{ itemId: "i", packed: 3 }]],
       ],
       [
         "togglePacked",

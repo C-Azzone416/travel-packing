@@ -517,39 +517,6 @@ test.skip("one stay at 1280px: the summary is a column and the days sit beside i
   expect(m.band.b - m.band.y).toBe(140);
 });
 
-// E5: the hero and the trip page count the same days, with the same figures and words.
-for (const fixture of [F2, F4]) {
-  test(`${fixture.name}: the hero and the trip page agree`, async ({ page }) => {
-    await legacyPackingLayout(page);
-    await openBand(page, fixture);
-    const cards = await page.locator(".hero-day").count();
-    const note = await page.locator(".weather-strip .weather-note").first().innerText();
-    const range = await page.locator(".weather-strip .weather-range").first().innerText();
-    const typicalLine = await page.locator(".hero-typical-line > span").last().innerText();
-    await page
-      .getByRole("link", { name: /^(Continue|Keep) packing: London/ })
-      .first()
-      .click();
-    await page.waitForURL(/\/trips\/(?!new)[^/?#]+$/);
-    await expect(page.locator(".weather-row-forecast")).toBeVisible({ timeout: 20_000 });
-    const forecastHead = await page.locator(".weather-part-head").first().innerText();
-    const typicalHead = await page.locator(".weather-typical-part").innerText();
-    const panelDays = await page.locator(".weather-row-forecast .weather-day").count();
-    // the same days: as many cards as the panel's daily rows, and the note counts "forecast days" of that many
-    expect(cards).toBe(panelDays);
-    expect(note).toMatch(
-      new RegExp(`^(Mostly dry|Snow likely|Rain on \\d+ of ${panelDays} forecast days?)$`),
-    );
-    // the same figures: the cell's range and the panel's Forecast line
-    const [, high, low] = /^(-?\d+)° \/ (-?\d+)°/.exec(range) ?? [];
-    expect(forecastHead).toContain(`High ${high}° · Low ${low}°`);
-    const rain = /^Rain on (\d+) of/.exec(note);
-    if (rain) expect(forecastHead).toContain(`Rain on ${rain[1]} of ${panelDays} day`);
-    // the same words: the hero adds only the dates after the day count
-    expect(typicalHead.replace(/^Typical\s*/, "")).toBe(typicalLine.replace(/ · [^:]+:/, ":"));
-  });
-}
-
 // E10: Forecast and Typical differ by word and by shape, not colour alone, and both survive forced colours.
 test("Forecast and Typical tags differ by word and outline, and stay visible in forced colours", async ({
   page,

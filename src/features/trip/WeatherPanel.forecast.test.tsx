@@ -88,7 +88,6 @@ function renderStays(
     onDecline: vi.fn(),
     onTurnOn: vi.fn(),
     onRefresh: vi.fn(),
-    onReview: vi.fn(),
     ...over,
   };
   return render(<WeatherPanel {...input} />);
