@@ -30,6 +30,29 @@ async function openStaples(page: Page) {
   await expect(section(page, "Clothing")).toBeVisible();
 }
 
+async function expectWholeWords(locator: ReturnType<Page["locator"]>, label: string) {
+  const broken = await locator.evaluate((root) => {
+    const words: string[] = [];
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let node = walker.nextNode();
+    while (node) {
+      const text = node.textContent ?? "";
+      for (const match of text.matchAll(/[\p{L}\p{N}]+/gu)) {
+        const range = document.createRange();
+        range.setStart(node, match.index ?? 0);
+        range.setEnd(node, (match.index ?? 0) + match[0].length);
+        const rects = Array.from(range.getClientRects()).filter(
+          (rect) => rect.width > 0.5 && rect.height > 0.5,
+        );
+        if (rects.length > 1) words.push(match[0]);
+      }
+      node = walker.nextNode();
+    }
+    return words;
+  });
+  expect(broken, `${label}: words must wrap only at spaces`).toEqual([]);
+}
+
 async function newTrip(
   page: Page,
   destination: RegExp,
@@ -306,6 +329,32 @@ test("screenshots of the staples screen", DEVICE, async ({ page }, testInfo) => 
   await page.getByRole("textbox", { name: "Staple name" }).fill("socks");
   await page.getByRole("button", { name: "Add staple" }).click();
   await shot("duplicate", false);
+});
+
+test("the count-rules disclosure stays reachable and wraps whole words at every review width", async ({
+  page,
+}) => {
+  await signInAsOwner(page);
+  for (const width of [195, 390, 1024, 1280]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto("/staples");
+    await expect(section(page, "Clothing")).toBeVisible();
+    const summary = page.getByText("How counts work", { exact: true });
+    const disclosure = summary.locator("xpath=ancestor::details");
+    await expect(disclosure).not.toHaveAttribute("open", "");
+    await expect(summary).toBeVisible();
+    expect((await summary.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await summary.click();
+    await expect(disclosure).toHaveAttribute("open", "");
+    await expect(disclosure.getByText("Fixed per trip", { exact: true })).toBeVisible();
+    await expect(disclosure.getByText(/Underwear and socks stay one per day/)).toBeVisible();
+    await expectWholeWords(disclosure, `count rules at ${width}px`);
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow, `count rules at ${width}px`).toBeLessThanOrEqual(0);
+    await expect(page.getByRole("region", { name: "Clothing" })).toBeVisible();
+  }
 });
 
 // Design's re-check of #384: the phone dock is drawn about 125px tall (st-p-ocean), and the staple sheet keeps Remove and Done

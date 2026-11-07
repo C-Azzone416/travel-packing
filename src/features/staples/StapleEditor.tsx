@@ -16,6 +16,7 @@ import {
   sectionOf,
   type Section,
 } from "./staples-view";
+import { STAPLE_COUNT_RULES, stapleCountRuleDescription } from "./staple-count-rules";
 
 export const MAX_STAPLE_QTY = 30;
 
@@ -181,38 +182,23 @@ export function StapleEditor({
           <fieldset className="scope-choice">
             <legend>How the quantity works</legend>
             <div className="choice-stack">
-              {(["per trip", "per day", "per night", "smart"] as const).map((value) => (
-                <label className="choice" key={value}>
+              {STAPLE_COUNT_RULES.map((rule) => (
+                <label className="choice" key={rule.cadence}>
                   <input
                     type="radio"
                     name={radioName}
-                    value={value}
-                    checked={cadence === value}
-                    disabled={value === "smart" && !smartSupported}
-                    onChange={() => setCadence(value)}
+                    value={rule.cadence}
+                    checked={cadence === rule.cadence}
+                    disabled={rule.cadence === "smart" && !smartSupported}
+                    onChange={() => setCadence(rule.cadence)}
                   />
                   <span>
-                    <strong>
-                      {value === "per day"
-                        ? "Per day"
-                        : value === "per night"
-                          ? "Per night"
-                          : value === "per trip"
-                            ? "Fixed per trip"
-                            : "Smart"}
-                    </strong>
+                    <strong>{rule.label}</strong>
                     <small>
-                      {value === "per day"
-                        ? staple?.laundryHalves
-                          ? "Multiplies by every calendar day, including travel days. Halves (rounding up) when the trip has laundry."
-                          : "Multiplies by every calendar day, including travel days. Laundry does not change it."
-                        : value === "per night"
-                          ? "Multiplies by the nights away, one fewer than the days."
-                          : value === "per trip"
-                            ? "The same amount on every trip."
-                            : smartSupported
-                              ? "Uses the shared clothing rules, including trip preferences."
-                              : "Available only for supported clothing staples."}
+                      {stapleCountRuleDescription(rule.cadence, {
+                        laundryHalves: Boolean(staple?.laundryHalves),
+                        smartSupported,
+                      })}
                     </small>
                   </span>
                 </label>
