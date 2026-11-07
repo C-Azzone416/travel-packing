@@ -92,7 +92,7 @@ export interface ModalSheetProps {
   variant?: "dialog" | "side";
 }
 
-// Bottom sheet on phones, centered dialog from 660px. Traps focus, closes on
+// Bottom sheet on phones, centered dialog from 601px. Traps focus, closes on
 // Escape or a backdrop press, and returns focus to whatever opened it.
 export function ModalSheet({
   open,
@@ -212,6 +212,7 @@ export function ModalSheet({
         tabIndex={-1}
         onKeyDown={onKeyDown}
       >
+        <div className="modal-grabber" aria-hidden="true" />
         <div className="modal-head">
           <div>
             {eyebrow ? <p className="tiny muted modal-eyebrow">{eyebrow}</p> : null}

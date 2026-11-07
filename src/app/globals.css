@@ -338,22 +338,34 @@ p {
   align-items: end;
   justify-items: center;
   padding: 18px;
-  background: color-mix(in srgb, var(--ink) 48%, transparent);
-  backdrop-filter: blur(4px);
+  background: color-mix(in srgb, var(--darkEdge) 55%, transparent);
 }
 .modal {
+  --modal-pad: 21px;
+  --modal-pad-bottom: var(--modal-pad);
+  /* Bottom clearance under pinned footer actions; phone sheets raise it to the safe-area inset. */
+  --modal-foot-bottom: 12px;
+  --modal-surface: var(--paper);
   width: min(100%, 560px);
   max-height: calc(100vh - 36px);
   overflow: auto;
-  padding: 21px;
+  padding: var(--modal-pad);
   border-radius: var(--control-radius);
-  background: var(--paper);
+  background: var(--modal-surface);
   box-shadow: 0 28px 80px var(--ledger-shadow);
   animation: modalIn 0.18s ease-out;
+}
+.modal-grabber {
+  display: none;
 }
 @keyframes modalIn {
   from {
     transform: translateY(18px);
+    opacity: 0.4;
+  }
+}
+@keyframes modalSheetIn {
+  from {
     opacity: 0.4;
   }
 }
@@ -434,14 +446,17 @@ p {
 
 /* The side sheet (Edit trip, #389; spec #376 part 2 section 8). From 1024px: a right-anchored 560px panel over a scrim, full
    height, no radius. Below 1024px: a full screen with no scrim. Head and pinned footer stay in view; the body scrolls. */
-.modal-backdrop-side {
+.modal-backdrop.modal-backdrop-side {
   padding: 0;
   align-items: stretch;
   justify-items: end;
   background: color-mix(in srgb, var(--darkEdge) 55%, transparent);
   backdrop-filter: none;
 }
-.modal-side {
+.modal.modal-side .modal-grabber {
+  display: none;
+}
+.modal.modal-side {
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
@@ -514,10 +529,10 @@ p {
   }
 }
 @media (max-width: 1023px) {
-  .modal-backdrop-side {
+  .modal-backdrop.modal-backdrop-side {
     background: var(--page);
   }
-  .modal-side {
+  .modal.modal-side {
     width: 100%;
     border-left: 0;
   }
@@ -604,7 +619,36 @@ body[data-sheet-open] .toast-region {
   box-shadow: 0 8px 24px var(--ledger-shadow);
 }
 
-@media (min-width: 660px) {
+/* Suitcase sheets are attached to the bottom edge on phones. The grabber is decorative; the established close, Escape and
+   backdrop controls remain the ways to dismiss the dialog. */
+@media (max-width: 1023px) {
+  .modal-backdrop {
+    padding: 0;
+    align-items: end;
+  }
+  .modal {
+    --modal-pad: 18px;
+    --modal-pad-bottom: max(var(--modal-pad), var(--safe-bottom));
+    --modal-foot-bottom: max(var(--modal-pad), var(--safe-bottom));
+    --modal-surface: var(--page);
+    width: min(100%, 640px);
+    max-height: 90dvh;
+    padding: 0 var(--modal-pad) var(--modal-pad-bottom);
+    border-radius: 22px 22px 0 0;
+    /* A flush-bottom sheet cannot enter from below the viewport: geometry checks and hit testing run while this animation is active. */
+    animation-name: modalSheetIn;
+  }
+  .modal-grabber {
+    display: block;
+    flex: none;
+    width: 44px;
+    height: 6px;
+    margin: 12px auto 24px;
+    border-radius: 3px;
+    background: var(--line);
+  }
+}
+@media (min-width: 1024px) {
   .modal-backdrop {
     align-items: center;
   }
@@ -1717,15 +1761,15 @@ input:disabled {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  margin: 0 -21px;
-  padding: 0 21px 4px;
+  margin: 0 calc(var(--modal-pad) * -1);
+  padding: 0 var(--modal-pad) 4px;
 }
 .staple-editor-actions {
   flex: none;
-  margin: 12px -21px -21px;
-  padding: 12px 21px;
+  margin: 12px calc(var(--modal-pad) * -1) calc(var(--modal-pad-bottom) * -1);
+  padding: 12px var(--modal-pad) var(--modal-foot-bottom);
   border-top: 1px solid var(--line);
-  background: var(--paper);
+  background: var(--modal-surface);
 }
 
 /* Wide enough for the name and the stepper side by side; below this the stepper sits under the name. */
@@ -2186,7 +2230,7 @@ input:disabled {
 }
 /* The sign-out warning (#325). Up to 659px (the bottom-sheet band) the three choices stack full width, Send now on top; from 660px
    they are one right-aligned row that wraps to full-width stacks rather than overlap. The backdrop already covers the bottom nav
-   (z-index 50); the extra bottom padding keeps the footer clear of the phone's safe-area inset. */
+   (z-index 50); ModalSheet's phone padding keeps the footer clear of the safe-area inset. */
 .sign-out-guard {
   display: grid;
   gap: 10px;
@@ -2194,9 +2238,6 @@ input:disabled {
 .sign-out-guard p {
   margin: 0;
   overflow-wrap: anywhere;
-}
-.modal-backdrop:has(.sign-out-guard) {
-  padding-bottom: max(18px, var(--safe-bottom));
 }
 .modal:has(.sign-out-guard) .modal-actions .button {
   min-width: 0;
@@ -3778,11 +3819,11 @@ a.back {
   }
   .modal:has(.save-list-form) .modal-actions {
     position: sticky;
-    bottom: -21px;
-    margin: 18px -21px -21px;
-    padding: 12px 21px;
+    bottom: calc(var(--modal-pad-bottom) * -1);
+    margin: 18px calc(var(--modal-pad) * -1) calc(var(--modal-pad-bottom) * -1);
+    padding: 12px var(--modal-pad) var(--modal-foot-bottom);
     border-top: 1px solid var(--line);
-    background: var(--paper);
+    background: var(--modal-surface);
   }
 }
 /* The group legend sits on its fieldset's top rule; room above it so the scroll area doesn't clip the first label. */
@@ -4107,7 +4148,8 @@ a.back {
 .modal:has(.feedback-form) {
   display: flex;
   flex-direction: column;
-  width: min(100%, 760px);
+  /* The shared sheet cap (640px, #376 part 2 section 8) holds through the tablet band; the wide editor layout starts at 1024. */
+  width: min(100%, 640px);
   max-height: calc(var(--feedback-vh) - 36px);
   overflow: hidden;
 }
@@ -4119,15 +4161,29 @@ a.back {
   align-content: start;
   min-height: 0;
   overflow-y: auto;
-  margin: 0 -21px;
-  padding: 0 21px;
+  margin: 0 calc(var(--modal-pad) * -1);
+  padding: 0 var(--modal-pad);
 }
 .modal:has(.feedback-form) .modal-actions {
   flex: none;
-  margin: 12px -21px -21px;
-  padding: 12px 21px;
+  margin: 12px calc(var(--modal-pad) * -1) calc(var(--modal-pad-bottom) * -1);
+  padding: 12px var(--modal-pad) var(--modal-foot-bottom);
   border-top: 1px solid var(--line);
-  background: var(--paper);
+  background: var(--modal-surface);
+}
+@media (min-width: 1024px) {
+  .modal:has(.feedback-form) {
+    width: min(100%, 760px);
+  }
+}
+@media (max-width: 1023px) {
+  .modal:has(.save-list-form),
+  .modal:has(.edit-tabs) {
+    max-height: 90dvh;
+  }
+  .modal:has(.feedback-form) {
+    max-height: min(90dvh, calc(var(--feedback-vh) - 36px));
+  }
 }
 .feedback-shot {
   display: grid;
