@@ -719,6 +719,61 @@ describe("EditTripSheet: Route & dates", () => {
     expect(screen.getByRole("button", { name: /^Save \d+ changes?$/ })).toBeTruthy();
   });
 
+  it("removing a stop is not a Come home edit: a concurrent later Come home is kept and sent with the fresh save time", async () => {
+    const user = userEvent.setup();
+    const lisbon = {
+      ...base().stops[0].location,
+      id: "pt-lisbon",
+      city: "Lisbon",
+      label: "Lisbon, Portugal",
+    };
+    const twoStops = (end: string): LifecycleTrip => ({
+      ...base(),
+      end,
+      stops: [
+        { ...base().stops[0], arrive: "2026-10-23", leave: "2026-10-26" },
+        { location: lisbon, arrive: "2026-10-26", leave: end },
+      ],
+    });
+    const onSaveRoute = vi.fn<(stops: TripStop[], basedOn?: string) => Promise<SaveResult>>(
+      async () => ({
+        updatedAt: "T3",
+      }),
+    );
+    function Removing() {
+      const [trip, setTrip] = useState(twoStops("2026-10-29"));
+      return (
+        <>
+          <button
+            type="button"
+            onClick={() => setTrip({ ...twoStops("2026-10-31"), updatedAt: "T2" })}
+          >
+            saved elsewhere
+          </button>
+          <EditTripSheet
+            trip={trip}
+            initialTab="route"
+            today="2026-10-01"
+            onClose={() => {}}
+            onSaveRoute={onSaveRoute}
+            onSetTravelMode={async () => ({})}
+            onApplyPreferences={async () => "ok"}
+          />
+        </>
+      );
+    }
+    renderInApp(<Removing />);
+    await user.click(screen.getByRole("button", { name: "Remove Lisbon" }));
+    elsewhere();
+    expect((screen.getByLabelText("Come home") as HTMLInputElement).value).toBe("2026-10-31");
+    await user.click(screen.getByRole("button", { name: /^Save \d+ changes?$/ }));
+    expect(onSaveRoute).toHaveBeenCalledTimes(1);
+    const [sent, basedOn] = onSaveRoute.mock.calls[0];
+    expect(basedOn).toBe("T2");
+    expect(sent.map((stop) => stop.location.id)).toEqual([base().stops[0].location.id]);
+    expect(sent[0].leave).toBe("2026-10-31");
+  });
+
   it("an untouched route follows the server; the dot and count clear when nothing of the person's remains", async () => {
     renderInApp(
       <Harness

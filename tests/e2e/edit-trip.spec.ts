@@ -113,7 +113,7 @@ test("a recalculation keeps the person's list work: manual, edited, packed and r
     .click();
   await expectNoItem(page, "nice-shoes");
 
-  const topsBefore = await qtyOf(page, "tops");
+  await showItem(page, "tops"); // the cube that holds it stays showing behind the sheet
   const dialog = await openPreferences(page);
   await dialog.getByRole("switch", { name: "Laundry on this trip" }).check();
   // The panel updates as the switch moves: the preference, then each item whose quantity changes, old → new.
@@ -131,7 +131,11 @@ test("a recalculation keeps the person's list work: manual, edited, packed and r
   await expect(changes).not.toContainText("Pajamas");
   await expect(changes).not.toContainText("Dress shoes");
   // Nothing is saved until Save: the list behind the sheet is unchanged.
-  expect(topsBefore).toBe(4);
+  // (read from the row's own checkbox, which the open sheet leaves in the page; the cube that holds it was opened before the sheet)
+  await expect(page.locator('[data-item-id="tops"] input[type="checkbox"]')).toHaveAttribute(
+    "aria-label",
+    "Everyday tops, 4",
+  );
   await save(page).click();
   await expect(sheet(page)).toHaveCount(0);
   await expect(page.locator(".toast-region")).toContainText("Preferences updated.");

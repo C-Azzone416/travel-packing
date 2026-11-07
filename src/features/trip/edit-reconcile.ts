@@ -41,10 +41,19 @@ export function reconcileStops(
     // person's stops cannot fit the server's end date (it would leave the last stop with too few nights), they keep the end their
     // list gives: the conflicting endpoint stays theirs.
     const leaveTouched = firstArrive(base) !== firstArrive(draft);
-    // Come home is the person's when the trip's total nights changed (a Leave edit or a reorder keeps them).
+    // Come home is the person's only when the person set it: the draft's total nights differ from what their stop list explains
+    // (every stop but the last as drafted, plus the last stop's own nights as they were). Removing, reordering or lengthening stops
+    // changes the total nights by itself and is NOT a Come home edit; a Leave edit keeps the nights.
     const nights = (stops: readonly DraftStop[]) =>
       daysBetween(firstArrive(stops), lastLeave(stops));
-    const homeTouched = nights(base) !== nights(draft);
+    const lastNights = (stops: readonly DraftStop[]) =>
+      stops.length > 0
+        ? daysBetween(stops[stops.length - 1].arrive, stops[stops.length - 1].leave)
+        : 0;
+    const explained =
+      draft.slice(0, -1).reduce((sum, entry) => sum + daysBetween(entry.arrive, entry.leave), 0) +
+      lastNights(base);
+    const homeTouched = nights(draft) !== explained;
     let mine: DraftStop[] = [...draft];
     const wantStart = leaveTouched ? firstArrive(draft) : (fresh[0]?.arrive ?? "");
     const wantEnd = homeTouched ? lastLeave(draft) : (fresh[fresh.length - 1]?.leave ?? "");

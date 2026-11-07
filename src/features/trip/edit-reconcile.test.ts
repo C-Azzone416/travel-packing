@@ -76,16 +76,16 @@ describe("reconcileStops", () => {
 
   it("a stop edit that changes the total nights keeps the person's end when the server's end cannot fit", () => {
     const base = two("2026-10-23", "2026-10-26", "2026-10-29");
-    // The person makes the first stop longer by two nights: they come home on 31 Oct (their Come home changed too).
+    // The person makes the first stop longer by two nights AND sets Come home a night later: they come home on 1 Nov.
     const longer: DraftStop[] = [
       { ...base[0], leave: "2026-10-28" },
-      { ...base[1], arrive: "2026-10-28", leave: "2026-10-31" },
+      { ...base[1], arrive: "2026-10-28", leave: "2026-11-01" },
     ];
     // The server's trip now ends on 24 Oct (2 nights total): two stops cannot fit.
     const fresh = two("2026-10-22", "2026-10-23", "2026-10-24");
     const out = reconcileStops(base, longer, fresh);
     expect(out.map((entry) => entry.location?.id)).toEqual(["us-ca-san-diego", "pt-lisbon"]);
-    expect(out[1].leave).toBe("2026-10-31"); // the conflicting endpoint stays theirs
+    expect(out[1].leave).toBe("2026-11-01"); // the conflicting endpoint stays theirs
   });
 
   it("with the person's Leave edited and Come home untouched, the server's end is taken when it fits", () => {
@@ -98,6 +98,27 @@ describe("reconcileStops", () => {
     const out = reconcileStops(base, reorderedEarlier, fresh);
     expect(out[0].arrive).toBe("2026-10-21"); // their Leave
     expect(out[1].leave).toBe("2026-10-31"); // the server's Come home
+  });
+
+  it("removing a stop is not a Come home edit: the server's later Come home is kept when it fits", () => {
+    const base = two("2026-10-23", "2026-10-26", "2026-10-29");
+    // The person removes Lisbon; San Diego keeps its three nights (Come home untouched).
+    const removed: DraftStop[] = [base[0]];
+    // Another editor changed Come home to 31 Oct.
+    const fresh = one("2026-10-23", "2026-10-31");
+    const out = reconcileStops(base, removed, fresh);
+    expect(out.map((entry) => entry.location?.id)).toEqual(["us-ca-san-diego"]);
+    expect(out[0].arrive).toBe("2026-10-23");
+    expect(out[0].leave).toBe("2026-10-31"); // the fresh Come home, not the stale 26 Oct
+  });
+
+  it("removing the first stop keeps the fresh Come home too, and an edited Come home on top of a removal stays the person's", () => {
+    const base = two("2026-10-23", "2026-10-26", "2026-10-29");
+    const removedFirst: DraftStop[] = [{ ...base[1], arrive: "2026-10-23", leave: "2026-10-26" }];
+    const fresh = two("2026-10-23", "2026-10-26", "2026-10-31");
+    expect(reconcileStops(base, removedFirst, fresh)[0].leave).toBe("2026-10-31");
+    const editedHome: DraftStop[] = [{ ...base[0], leave: "2026-10-28" }];
+    expect(reconcileStops(base, editedHome, fresh)[0].leave).toBe("2026-10-28");
   });
 
   it("a stop still to be chosen counts as touched, and an empty draft route is handled", () => {
