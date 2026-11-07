@@ -238,6 +238,37 @@ describe("HomePhone", () => {
     expect(row.textContent).toMatch(/\d+ to review/);
   });
 
+  it("shows the review count on a typical-only city (no daily tiles), without a disclosure", async () => {
+    const user = userEvent.setup();
+    const typicalHot = {
+      ...dryHotStop(1),
+      days: dryHotStop(1).days.map((day) => ({ ...day, source: "typical" })),
+    } as StopWeather;
+    setup({
+      trip: bareTrip(),
+      weather: {
+        phase: "ready",
+        city: [
+          city("Lisbon", false),
+          {
+            ...city("Porto", false),
+            stopIndex: 1,
+            source: "typical",
+            summary: "typical, mostly dry",
+            tiles: [],
+          },
+        ],
+        review: { stops: [typicalHot], suppressed: {} },
+      },
+    });
+    await user.click(screen.getByRole("tab", { name: "Weather ALERT" }));
+    const panel = screen.getByRole("tabpanel");
+    // Porto has no days to open: its row is plain text, and still says how many changes wait.
+    expect(within(panel).queryByRole("button", { name: /Porto/ })).toBeNull();
+    const row = within(panel).getByText(/Porto/).closest("li")!;
+    expect(row.textContent).toMatch(/\d+ to review/);
+  });
+
   it("never alerts before the forecast opens, and says N/A when the usual row has no observations", () => {
     const far = setup({
       today: FAR_TODAY,

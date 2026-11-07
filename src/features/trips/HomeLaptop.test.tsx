@@ -218,6 +218,46 @@ describe("HomeLaptop", () => {
     expect(screen.getByText(/typical, mostly dry/)).toBeTruthy();
   });
 
+  it("shows the review count on a typical-only city in a mixed route, as plain text with no disclosure", () => {
+    const typical: CityWeather = {
+      ...city("Porto", false),
+      stopIndex: 1,
+      source: "typical",
+      tiles: [],
+      summary: "typical, mostly dry",
+    };
+    setup({
+      trip: trip({ items: [item("tops", "Clothing", 3, 0)] }),
+      weather: {
+        phase: "ready",
+        city: [city("Lisbon", false), typical],
+        review: {
+          stops: [
+            {
+              stopIndex: 1,
+              status: "ok",
+              days: ["2027-03-15", "2027-03-16"].map((date) => ({
+                date,
+                stopIndex: 1,
+                source: "typical",
+                highC: 34,
+                lowC: 22,
+                precipProbability: 0,
+                precipMm: 0,
+                snowCm: 0,
+                uvIndexMax: 10,
+                sunshineHours: 12,
+              })),
+            },
+          ],
+          suppressed: {},
+        } as never,
+      },
+    });
+    expect(screen.queryByRole("button", { name: /^Porto/ })).toBeNull();
+    expect(screen.getByText(/^Porto · /).closest("li")!.textContent).toMatch(/\d+ to review/);
+  });
+
   it("shows the Usual weather block before the forecast opens, with no tiles", () => {
     setup({
       today: "2027-01-02",

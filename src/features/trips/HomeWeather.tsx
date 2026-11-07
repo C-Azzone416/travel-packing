@@ -76,7 +76,11 @@ function CityRows({
             data-weather-source={row.source}
           >
             {row.tiles.length === 0 ? (
-              <div className={styles.cityStatic}>{text}</div>
+              <div className={styles.cityStatic}>
+                {text}
+                {/* A typical-only stay has no days to open, but its changes still wait on a decision. */}
+                {state ? <span className={styles.cityState}>{state}</span> : null}
+              </div>
             ) : (
               <h3 className={styles.cityHead}>
                 <button

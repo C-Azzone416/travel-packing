@@ -255,6 +255,22 @@ describe("the Weather pill and its panel", () => {
     expect(within(tabs()).queryByRole("tab", { name: "Weather Usual" })).toBeNull();
   });
 
+  it("stops at 'unavailable' on an empty 200: the suggestions are never read for a trip with no weather", async () => {
+    const listSuggestions = vi.fn(async () => []);
+    setup(undefined, (base) => ({
+      ...base,
+      weather: {
+        getSettings: async () => ({ weatherOptIn: true, temperatureUnit: "F" }),
+        getTripWeather: async () => ({ kind: "ready", stops: [] }),
+        listSuggestions,
+      } as unknown as TripsSource["weather"],
+    }));
+    const pill = await within(await tabsReady()).findByRole("tab", { name: "Weather N/A" });
+    await userEvent.setup().click(pill);
+    expect(screen.getByText("Weather is unavailable right now.")).toBeTruthy();
+    expect(listSuggestions).not.toHaveBeenCalled();
+  });
+
   it("treats a thrown weather read as unavailable", async () => {
     setup(undefined, (base) => ({
       ...base,

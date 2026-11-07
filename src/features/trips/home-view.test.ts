@@ -538,6 +538,44 @@ describe("the phone tag and pills (#388)", () => {
     expect(model.pendingCities.every((city) => ["Lisbon", "Porto"].includes(city))).toBe(true);
   });
 
+  it("counts pending changes on a typical-only stay in a mixed route, which has a row but no tiles", () => {
+    const t = trip({
+      stops: [stop("Lisbon"), stop("Porto")],
+      items: [item("tops", "Clothing", 3, 0)],
+    });
+    const hot = (stopIndex: number, source: "forecast" | "typical") =>
+      ({
+        stopIndex,
+        status: "ok",
+        days: ["2027-03-15", "2027-03-16"].map((date) => ({
+          date,
+          stopIndex,
+          source,
+          highC: 34,
+          lowC: 22,
+          precipProbability: 0,
+          precipMm: 0,
+          snowCm: 0,
+          uvIndexMax: 10,
+          sunshineHours: 12,
+        })),
+      }) as StopWeather;
+    const model = homeModel(
+      t,
+      {
+        phase: "ready",
+        city: [
+          { stopIndex: 1, city: "Porto", source: "typical", tiles: [], alert: false } as never,
+        ],
+        review: { stops: [hot(1, "typical")], suppressed: {} },
+      },
+      "2027-03-02",
+    );
+    expect(model.pending[1]).toBeGreaterThan(0);
+    expect(model.pendingCities).toContain("Porto");
+    expect(weatherPillSub({ phase: "ready" }, { ...model, rows: [{}] as never }).alert).toBe(true);
+  });
+
   it("builds one model for both Homes: quantity totals, the alert cities and the next cube", () => {
     const trip = sampleLifecycleState().trips[0];
     const model = homeModel(trip, { phase: "none" }, "2026-10-16");
