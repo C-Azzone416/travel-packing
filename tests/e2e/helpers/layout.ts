@@ -12,6 +12,12 @@ export async function expectWholeWords(locator: Locator, label: string): Promise
     let node = walker.nextNode();
     while (node) {
       const text = node.textContent ?? "";
+      // Visually hidden text (a 1px clipped box) is read aloud, not seen: it has no lines to break.
+      const box = node.parentElement?.getBoundingClientRect();
+      if (box && box.width <= 2) {
+        node = walker.nextNode();
+        continue;
+      }
       for (const match of text.matchAll(/[\p{L}\p{N}]+/gu)) {
         const range = document.createRange();
         range.setStart(node, match.index ?? 0);
