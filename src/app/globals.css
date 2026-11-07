@@ -543,6 +543,11 @@ body[data-sheet-open] .toast-region {
     background: var(--line);
   }
 }
+@media (min-width: 1024px) {
+  .modal-backdrop {
+    align-items: center;
+  }
+}
 
 /* ---- Trips dashboard (#14; the Field Ledger layout is at the end of this file, #143). */
 .section-head {

@@ -43,9 +43,11 @@ test.describe("shared sheet (#421)", () => {
     }
   });
 
-  test("the Feedback sheet is wider than the cap from 1024px", async ({ page }) => {
+  test("the Feedback sheet is wider and vertically centred from 1024px", async ({ page }) => {
     const dialog = await openFeedback(page, { width: 1280, height: 900 });
-    expect((await dialog.boundingBox())!.width).toBeGreaterThan(700);
+    const box = (await dialog.boundingBox())!;
+    expect(box.width).toBeGreaterThan(700);
+    expect(Math.abs(box.y + box.height / 2 - 900 / 2)).toBeLessThanOrEqual(1);
   });
 
   test("pinned footer actions keep the safe-area inset clear", DEVICE, async ({ page }) => {
