@@ -112,7 +112,13 @@ describe("CubeTile", () => {
 
   it("the phone tile name is 15px so Documents fits the 80px inner width at 390", () => {
     expect(css).toMatch(/\.tile \.name \{[^}]*font-size: 15px/);
-    expect(css).toMatch(/min-width: 1024px\)[\s\S]*\.tile \.name \{\s*font-size: 16px/);
+    expect(css).toMatch(/min-width: 1024px\)[\s\S]*\.tile \.name \{[^}]*font-size: 16px/);
+  });
+
+  it("the laptop tile name is one line that ends in an ellipsis and never breaks inside a word (#387)", () => {
+    expect(css).toMatch(
+      /min-width: 1024px\)[\s\S]*\.tile \.name \{[^}]*overflow-wrap: normal[^}]*text-overflow: ellipsis[^}]*white-space: nowrap/,
+    );
   });
 
   it("a tile name breaks mid-word only as a last resort: break-word on phones, anywhere only at 239px and below", () => {

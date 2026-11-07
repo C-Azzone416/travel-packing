@@ -52,14 +52,15 @@ export function AddToiletryForm({
       description="Create a normal toiletry checklist item."
       onClose={onClose}
     >
-      <form className="form-grid" onSubmit={submit} noValidate>
+      <form className="form-grid" onSubmit={submit} noValidate autoComplete="off">
         <label className="field">
           Item name
           <input
-            name="name"
+            name="packing-item-name"
             value={name}
             maxLength={50}
             placeholder="Face wash"
+            autoComplete="off"
             aria-invalid={nameError}
             aria-describedby={nameError ? "toiletry-name-error" : undefined}
             onChange={(event) => {

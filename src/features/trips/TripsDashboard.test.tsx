@@ -276,23 +276,6 @@ describe("upcoming view", () => {
   });
 });
 
-describe("trip themes on cards", () => {
-  it("each Past & archive card shows its trip's theme art, and a trip's theme is the only thing that picks it", async () => {
-    const state = sampleLifecycleState();
-    state.trips = state.trips.map((trip) =>
-      trip.id === "san-diego" ? { ...trip, theme: "theme_park" as const, archived: true } : trip,
-    );
-    const { user } = setup(state);
-    await screen.findByRole("heading", { name: "Your travel ledger", level: 1 });
-    await user.click(tab(/Past & archive/));
-    const sanDiego = card("San Diego");
-    expect(sanDiego.querySelector("[data-art-key]")?.getAttribute("data-art-key")).toBe(
-      "theme_park",
-    );
-    expect(sanDiego.querySelector("img")?.getAttribute("src")).toBe("/themes/theme_park.svg");
-  });
-});
-
 describe("past & archive view", () => {
   it("shows past trips by date, no Archive or Restore for them, and an empty Recently deleted", async () => {
     const { user } = setup();

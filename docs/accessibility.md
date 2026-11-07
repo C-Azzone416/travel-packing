@@ -17,9 +17,9 @@ WebKit iPhone 15; desktop 1440×1000, Chromium), for the specs tagged `@device`.
 | Account screens                       | `auth-screens.spec.ts`                                                          | the account screens, locked verify, forgot-password confirmation                                                                                                                                                                                                                                                                                                |
 | Dashboard                             | `a11y.spec.ts`, `nav-sign-out.spec.ts`                                          | upcoming, quick view, past and archive, recently deleted with Undo, remove dialog, error chip, retry sheet, Undo toast, loading, load error                                                                                                                                                                                                                     |
 | Dashboard hero Add item, ⋯ trip menu  | `a11y-ledger.spec.ts`                                                           | inline Add item open; menu open                                                                                                                                                                                                                                                                                                                                 |
-| Create / copy                         | `a11y.spec.ts`, `multi-stop.spec.ts`, `weather.spec.ts`                         | step 1 (empty, results, no matches, confirmed with the theme picker), discard prompt, stops step, shape step with weather                                                                                                                                                                                                                                       |
+| Create / copy                         | `a11y.spec.ts`, `multi-stop.spec.ts`, `weather.spec.ts`                         | step 1 (empty, results, no matches, confirmed destination), discard prompt, stops step, shape step with weather                                                                                                                                                                                                                                                 |
 | Start from a saved list               | `a11y-ledger.spec.ts`                                                           | the step, a list previewed and chosen                                                                                                                                                                                                                                                                                                                           |
-| Trip screen                           | `a11y.spec.ts`, `multi-stop.spec.ts`, `weather.spec.ts`, `stamp-labels.spec.ts` | the screen, filter, Ready, not available, edit item, remove confirm, add Bathroom item, preferences, theme sheet, weather panel and review sheet, toiletry bag prompts, an unsaved row, edit route sheet, Stamp label sheet (automatic, custom)                                                                                                                 |
+| Trip screen                           | `a11y.spec.ts`, `multi-stop.spec.ts`, `weather.spec.ts`, `stamp-labels.spec.ts` | the screen, filter, Ready, not available, edit item, remove confirm, add Bathroom item, preferences, weather panel and review sheet, toiletry bag prompts, an unsaved row, edit route sheet, Stamp label sheet (automatic, custom)                                                                                                                              |
 | Packing inline Add item               | `a11y-ledger.spec.ts`                                                           | open                                                                                                                                                                                                                                                                                                                                                            |
 | Save as a list                        | `a11y-ledger.spec.ts`                                                           | the sheet, the duplicate prompt                                                                                                                                                                                                                                                                                                                                 |
 | Review your bag                       | `a11y.spec.ts`                                                                  | items left, Ready, Ready revoked                                                                                                                                                                                                                                                                                                                                |
@@ -37,7 +37,7 @@ Also asserted (not axe):
   Delete list, Add and Edit list item, Save as a list, Stamp label (`a11y-ledger.spec.ts`). These run on desktop Chromium:
   Safari only tabs to buttons and links when the person turns on full keyboard access, which is a browser setting, so a
   Tab-order test on WebKit would test that setting, not the app. The ⋯ menu's arrow-key, Home/End and Escape behaviour is
-  covered by `MoreMenu.test.tsx`; the radio-group keyboard behaviour of the theme picker by its unit test.
+  covered by `MoreMenu.test.tsx`; the radio-group keyboard behaviour of the Settings colour-scheme picker by its unit test.
 - **Live regions.** `Toast.tsx` has a polite `role="status"` region and a separate assertive `role="alert"` region from the
   start (`Toast.test.tsx` covers timing and pausing on hover and focus). The new notices ("Renamed to …", the list Undo toast,
   "Stamp updated.") are asserted to appear in the polite region (`a11y-ledger.spec.ts`).
@@ -67,9 +67,9 @@ For the first pass's visible changes the e2e run saves `after` screenshots (arti
 
 ## Colour contrast
 
-The role tokens (Field Ledger, #139) define four themes. `tokens.test.ts` asserts the contrast table from the real tokens on
-every CI run, and axe measures the rendered pairs. Text over illustrations is decorative and exempt; the trip picture is
-off in the current design. If a token is changed and a pair falls under 4.5:1 for text or 3:1 for UI, the unit test names the
+The role tokens (Field Ledger, #139) define four colour schemes. `tokens.test.ts` asserts the contrast table from the real
+tokens on every CI run, and axe measures the rendered pairs. Trip illustrations were removed in #392. If a token is changed
+and a pair falls under 4.5:1 for text or 3:1 for UI, the unit test names the
 pair and the theme. Not yet covered by axe: the Saved lists screens and sheets in the three non-Base themes (they use the same
 tokens as the screens that are).
 
@@ -89,7 +89,7 @@ file does not claim a result. Run each row, tick it, and record the date below. 
 ### Original flows
 
 - [ ] **Create a trip** (Caroline to verify): the destination combobox announces its result count; choosing a result announces
-      the confirmed destination; the theme radio group announces its label and state; Continue explains why it is unavailable.
+      the confirmed destination; Continue explains why it is unavailable.
 - [ ] **Packing** (Caroline to verify): each row announces its name and "tap to edit"; the stepper announces "1 of 4 packed" and
       each change is announced once; checking a row announces its new state.
 - [ ] **Toiletry gate** (Caroline to verify): the prompt opens focused on "Not yet"; the bag state card is announced; confirming
@@ -101,8 +101,8 @@ file does not claim a result. Run each row, tick it, and record the date below. 
 
 ### Added since (Field Ledger, saved lists, stamps)
 
-- [ ] **Themes** (Caroline to verify): on Settings the Theme radio group announces "Theme", each option's name and which is
-      selected, and the arrow keys move between options; "Current theme: …" shows the change when you reach it.
+- [ ] **Colour schemes** (Caroline to verify): on Settings the Theme radio group announces "Theme", each option's name and
+      which is selected, and the arrow keys move between options; "Current theme: …" shows the change when you reach it.
 - [ ] **⋯ trip menu** (Caroline to verify): the button reads "More actions for <trip>" and its expanded state; the menu is announced
       as a menu; the arrow keys move between items; Escape returns to the button.
 - [ ] **Add item** (Caroline to verify): the "＋ Add item" toggle reads its expanded state; the form fields are named (Item name,
