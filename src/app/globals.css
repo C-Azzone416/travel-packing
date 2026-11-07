@@ -342,6 +342,9 @@ p {
 }
 .modal {
   --modal-pad: 21px;
+  --modal-pad-bottom: var(--modal-pad);
+  /* Bottom clearance under pinned footer actions; phone sheets raise it to the safe-area inset. */
+  --modal-foot-bottom: 12px;
   --modal-surface: var(--paper);
   width: min(100%, 560px);
   max-height: calc(100vh - 36px);
@@ -513,16 +516,19 @@ body[data-sheet-open] .toast-region {
 
 /* Suitcase sheets are attached to the bottom edge on phones. The grabber is decorative; the established close, Escape and
    backdrop controls remain the ways to dismiss the dialog. */
-@media (max-width: 600px) {
+@media (max-width: 1023px) {
   .modal-backdrop {
     padding: 0;
+    align-items: end;
   }
   .modal {
     --modal-pad: 18px;
+    --modal-pad-bottom: max(var(--modal-pad), var(--safe-bottom));
+    --modal-foot-bottom: max(var(--modal-pad), var(--safe-bottom));
     --modal-surface: var(--page);
-    width: 100%;
+    width: min(100%, 640px);
     max-height: 90dvh;
-    padding: 0 var(--modal-pad) max(var(--modal-pad), var(--safe-bottom));
+    padding: 0 var(--modal-pad) var(--modal-pad-bottom);
     border-radius: 22px 22px 0 0;
     /* A flush-bottom sheet cannot enter from below the viewport: geometry checks and hit testing run while this animation is active. */
     animation-name: modalSheetIn;
@@ -535,16 +541,6 @@ body[data-sheet-open] .toast-region {
     margin: 12px auto 24px;
     border-radius: 3px;
     background: var(--line);
-  }
-}
-@media (min-width: 601px) {
-  .modal-backdrop {
-    align-items: center;
-  }
-}
-@media (min-width: 601px) and (max-width: 1023px) {
-  .modal {
-    width: min(100%, 640px);
   }
 }
 
@@ -1655,8 +1651,8 @@ input:disabled {
 }
 .staple-editor-actions {
   flex: none;
-  margin: 12px calc(var(--modal-pad) * -1) calc(var(--modal-pad) * -1);
-  padding: 12px var(--modal-pad);
+  margin: 12px calc(var(--modal-pad) * -1) calc(var(--modal-pad-bottom) * -1);
+  padding: 12px var(--modal-pad) var(--modal-foot-bottom);
   border-top: 1px solid var(--line);
   background: var(--modal-surface);
 }
@@ -3811,9 +3807,9 @@ a.back {
   }
   .modal:has(.save-list-form) .modal-actions {
     position: sticky;
-    bottom: calc(var(--modal-pad) * -1);
-    margin: 18px calc(var(--modal-pad) * -1) calc(var(--modal-pad) * -1);
-    padding: 12px var(--modal-pad);
+    bottom: calc(var(--modal-pad-bottom) * -1);
+    margin: 18px calc(var(--modal-pad) * -1) calc(var(--modal-pad-bottom) * -1);
+    padding: 12px var(--modal-pad) var(--modal-foot-bottom);
     border-top: 1px solid var(--line);
     background: var(--modal-surface);
   }
@@ -4066,8 +4062,8 @@ a.back {
 }
 .modal:has(.edit-tabs) .modal-actions {
   flex: none;
-  margin: 12px calc(var(--modal-pad) * -1) calc(var(--modal-pad) * -1);
-  padding: 12px var(--modal-pad);
+  margin: 12px calc(var(--modal-pad) * -1) calc(var(--modal-pad-bottom) * -1);
+  padding: 12px var(--modal-pad) var(--modal-foot-bottom);
   border-top: 1px solid var(--line);
   background: var(--modal-surface);
 }
@@ -4305,7 +4301,8 @@ a.back {
 .modal:has(.feedback-form) {
   display: flex;
   flex-direction: column;
-  width: min(100%, 760px);
+  /* The shared sheet cap (640px, #376 part 2 section 8) holds through the tablet band; the wide editor layout starts at 1024. */
+  width: min(100%, 640px);
   max-height: calc(var(--feedback-vh) - 36px);
   overflow: hidden;
 }
@@ -4322,12 +4319,17 @@ a.back {
 }
 .modal:has(.feedback-form) .modal-actions {
   flex: none;
-  margin: 12px calc(var(--modal-pad) * -1) calc(var(--modal-pad) * -1);
-  padding: 12px var(--modal-pad);
+  margin: 12px calc(var(--modal-pad) * -1) calc(var(--modal-pad-bottom) * -1);
+  padding: 12px var(--modal-pad) var(--modal-foot-bottom);
   border-top: 1px solid var(--line);
   background: var(--modal-surface);
 }
-@media (max-width: 600px) {
+@media (min-width: 1024px) {
+  .modal:has(.feedback-form) {
+    width: min(100%, 760px);
+  }
+}
+@media (max-width: 1023px) {
   .modal:has(.save-list-form),
   .modal:has(.edit-tabs) {
     max-height: 90dvh;
