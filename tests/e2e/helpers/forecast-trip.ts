@@ -1,6 +1,6 @@
 import { expect, type Page } from "@playwright/test";
 import { signInAsOwner } from "./auth";
-import { planATrip } from "./menu";
+import { openTripFromHome, planATrip } from "./menu";
 import { pickRoute, reviewAndCreate, setDates, setRouteDates, toList, toWhen } from "./plan";
 import { FAKE_GEOCODER_PORT } from "../support/ports";
 
@@ -44,9 +44,6 @@ export async function createWeatherTrip(page: Page, stays: Stay[]) {
   await page.getByRole("button", { name: "Get weather" }).click();
   await expect(page.getByRole("checkbox", { name: /Weather suggestions/ })).toBeChecked();
   await reviewAndCreate(page);
-  await page
-    .getByRole("link", { name: /^(Continue packing|Start packing|Open list|Keep packing): London/ })
-    .first()
-    .click();
-  await page.waitForURL(/\/trips\/(?!new)[^/?#]+$/);
+  await openTripFromHome(page, "London");
+  await page.waitForURL(/\/trips\/(?!new)[^/?#]+(\?cube=\w+)?$/);
 }

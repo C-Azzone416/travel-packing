@@ -5,7 +5,7 @@ import { markTripReady } from "./helpers/database";
 import { DEVICE, legacyPackingLayout } from "./helpers/device";
 import { planRouteToList, reviewAndCreate } from "./helpers/plan";
 import { FAKE_GEOCODER_PORT, OPEN_METEO_PORT } from "./support/ports";
-import { planATrip } from "./helpers/menu";
+import { planATrip, openTripFromHome } from "./helpers/menu";
 
 // Home is the laptop suitcase view from 1024px (#387); this spec's subject is the page below it, so it runs there.
 test.beforeEach(async ({ page }) => {
@@ -58,10 +58,7 @@ async function createWeatherTrip(page: Page) {
   await page.getByRole("button", { name: "Get weather" }).click();
   await expect(weatherCard(page)).toBeChecked();
   await reviewAndCreate(page);
-  await page
-    .getByRole("link", { name: /^(Continue|Keep) packing: London/ })
-    .first()
-    .click();
+  await openTripFromHome(page, "London");
   await expect(page.locator(".weather-row")).toHaveCount(2);
 }
 
@@ -97,10 +94,7 @@ test("opt in while shaping a 2-stop trip: weather-based lines with reasons, save
   }
 
   await reviewAndCreate(page);
-  await page
-    .getByRole("link", { name: /^(Continue|Keep) packing: London/ })
-    .first()
-    .click();
+  await openTripFromHome(page, "London");
   const rows = page.locator(".weather-row");
   await expect(rows).toHaveCount(2);
   await expect(rows.nth(0)).toContainText("Forecast");
@@ -181,10 +175,7 @@ test("opting out sends no weather request and keeps the Everyday tops and bottom
   await page.getByRole("button", { name: "Not now" }).click();
   await expect(page.getByText("Weather is off.")).toBeVisible();
   await reviewAndCreate(page);
-  await page
-    .getByRole("link", { name: /^(Continue|Keep) packing: London/ })
-    .first()
-    .click();
+  await openTripFromHome(page, "London");
   await expect(page.getByText("Weather is off.")).toBeVisible();
   await expect(row(page, "tops")).toHaveCount(1);
   await expect(row(page, "tops-short")).toHaveCount(0);
@@ -238,10 +229,7 @@ test(
     await expect(weatherCard(page)).toBeChecked();
     await expectAccessible(page, "plan: starting list with weather");
     await reviewAndCreate(page);
-    await page
-      .getByRole("link", { name: /^(Continue|Keep) packing: London/ })
-      .first()
-      .click();
+    await openTripFromHome(page, "London");
     await expect(page.locator(".weather-row")).toHaveCount(2);
     await expectAccessible(page, "trip with the weather panel");
     await fake("/__weather-set?variant=dry");

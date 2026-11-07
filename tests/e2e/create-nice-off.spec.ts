@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { legacyPackingLayout } from "./helpers/device";
 import { signInAsOwner } from "./helpers/auth";
-import { chooseFromMenu, planATrip } from "./helpers/menu";
+import { chooseFromMenu, planATrip, openTripFromHome } from "./helpers/menu";
 import { nextButton, planAndCreate, planToList, reviewAndCreate } from "./helpers/plan";
 
 // Home is the laptop suitcase view from 1024px (#387); this spec's subject is the page below it, so it runs there.
@@ -41,7 +41,7 @@ test("a new trip starts with Nice outfits off: no nice-attire items after save a
     end: "2026-11-15",
   });
   await expect(page.locator(".toast-region")).toContainText("Trip saved");
-  await page.getByRole("link", { name: /(Continue|Keep) packing: London/ }).click();
+  await openTripFromHome(page, "London");
   await expect(page.getByRole("heading", { name: "London", level: 1 })).toBeVisible();
   await expectNoNiceAttire(page);
 
@@ -67,10 +67,7 @@ test("copying a trip that has Nice outfits keeps the nice-attire items (the cont
   await expect(page.getByRole("checkbox", { name: /Copy a past trip/ })).toBeChecked();
   await reviewAndCreate(page);
   await expect(page.locator(".toast-region")).toContainText("Trip saved");
-  await page
-    .getByRole("link", { name: /(Continue|Keep) packing: Paris/ })
-    .first()
-    .click();
+  await openTripFromHome(page, "Paris");
   await expect(row(page, "nice-top")).toBeVisible();
 });
 
@@ -93,7 +90,7 @@ test("copy: unticking 'Copy a past trip' makes the trip with the defaults, Nice 
   await nextButton(page).click();
   await page.getByRole("button", { name: "Create trip" }).click();
   await expect(page.locator(".toast-region")).toContainText("Trip saved");
-  await page.getByRole("link", { name: /(Continue|Keep) packing: Paris/ }).click();
+  await openTripFromHome(page, "Paris");
   await expect(page.getByRole("heading", { name: "Paris", level: 1 })).toBeVisible();
   await expectNoNiceAttire(page);
   await page.reload();

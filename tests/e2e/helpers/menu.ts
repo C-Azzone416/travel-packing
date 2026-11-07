@@ -47,3 +47,19 @@ export async function planATrip(page: Page): Promise<void> {
     await link.first().click({ timeout: 2000 });
   }).toPass();
 }
+
+/**
+ * Opens a trip's packing page from the Home: the next trip's primary link (Start, Continue, Open list or Review bag), or the
+ * trip's row under the Future pill when it is a later one (#388).
+ */
+export async function openTripFromHome(page: Page, name: string): Promise<void> {
+  const primary = page.getByRole("link", {
+    name: new RegExp(`^(Continue packing|Start packing|Open list|Review bag): ${name}`),
+  });
+  await primary.or(futureTab(page)).first().waitFor();
+  if ((await primary.count()) > 0) {
+    await primary.first().click();
+    return;
+  }
+  await (await futureRow(page, new RegExp(name))).first().click();
+}
