@@ -156,8 +156,15 @@ export function FeedbackSettings() {
   }
 
   return (
-    <Card as="section" padded id="settings-feedback" aria-labelledby="settings-feedback-title">
-      <h2 id="settings-feedback-title">Send feedback to the developer</h2>
+    <Card
+      as="section"
+      padded
+      className="settings-cube settings-feedback-cube"
+      id="settings-feedback"
+      aria-labelledby="settings-feedback-cube-title"
+    >
+      <h2 id="settings-feedback-cube-title">Feedback</h2>
+      <h3 id="settings-feedback-title">Send feedback to the developer</h3>
       <p>
         Connect with an invitation from the developer to send feedback from inside the app. Your
         connection belongs to your account, so it works on your other devices too. Nothing is sent
