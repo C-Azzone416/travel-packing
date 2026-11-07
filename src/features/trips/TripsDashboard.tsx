@@ -17,14 +17,15 @@ import {
 import { localToday } from "@/lib/today";
 import { EditTripSheet, type ApplyOutcome } from "@/features/trip/EditTripSheet";
 import { HomeLaptop } from "./HomeLaptop";
+import { HomeEmpty } from "./HomeEmpty";
 import { HomePhone } from "./HomePhone";
 import type { HomeMaps } from "./home-map-types";
-import { cityWeather, usualRows, type HeroWeather } from "./home-view";
+import { cityWeather, noTripModel, usualRows, type HeroWeather } from "./home-view";
 import { LAPTOP_MIN_WIDTH, useMinWidth } from "@/lib/use-min-width";
 import { routeSignature, stopsOrDestination, tripRoutePoints } from "@/domain/trip-route";
 import { TripCard } from "./TripCard";
 import type { TripsSource } from "./trips-source";
-import { formatRange, journeysAheadLabel, tripCardView, type TripListView } from "./view";
+import { formatRange, tripCardView, type TripListView } from "./view";
 
 type Load =
   | { phase: "loading" }
@@ -124,6 +125,23 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
     // weatherKey stands for the hero and its stops: a changed route is a new question for the weather service.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [source, weatherKey]);
+  // Whether the account has a home city, asked only when the Home has no trip to show (the first-run nudge). Unknown until
+  // answered, and a failed or missing answer stays unknown: the nudge is a hint, so it never guesses.
+  const noTrip = load.phase === "ready" && heroId === null;
+  const [homeCityUnset, setHomeCityUnset] = useState(false);
+  useEffect(() => {
+    if (!noTrip || !source.homeCity) return;
+    let cancelled = false;
+    source
+      .homeCity()
+      .then((home) => {
+        if (!cancelled) setHomeCityUnset(home === null);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [noTrip, source]);
   const weather: HeroWeather =
     !weatherKey || !source.weather
       ? { phase: "none" }
@@ -376,20 +394,6 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
         </>
       ) : (
         <>
-          {hero ? null : (
-            <div className="ledger-head">
-              <div>
-                <p className="eyebrow">{journeysAheadLabel(upcoming.length)}</p>
-                <h1 ref={headingRef} tabIndex={-1}>
-                  Your travel ledger
-                </h1>
-              </div>
-              <Link className={buttonClassName()} href="/trips/new">
-                Plan a trip
-              </Link>
-            </div>
-          )}
-          {hero ? null : tabs}
           {hero && laptop ? (
             <HomeLaptop
               trip={hero}
@@ -420,11 +424,16 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
               headingRef={headingRef}
             />
           ) : (
-            <div className="empty-state">
-              <strong>No upcoming trips.</strong>
-              <br />
-              Plan a trip or restore one from Past & archive.
-            </div>
+            <HomeEmpty
+              model={noTripModel(state.trips, today)}
+              laptop={laptop}
+              homeCityUnset={homeCityUnset}
+              hasHistory={
+                state.deletedTrips.length > 0 || state.trips.some((trip) => trip.archived)
+              }
+              onOpenArchive={() => setView("archive")}
+              headingRef={headingRef}
+            />
           )}
         </>
       )}

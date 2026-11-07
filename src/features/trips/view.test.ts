@@ -277,16 +277,7 @@ describe("route display (epic #107)", () => {
   });
 });
 
-describe("Field Ledger dashboard view models (#143)", () => {
-  it("labels the journeys ahead", async () => {
-    const { journeysAheadLabel } = await import("./view");
-    expect([0, 1, 3].map(journeysAheadLabel)).toEqual([
-      "No journeys ahead",
-      "1 journey ahead",
-      "3 journeys ahead",
-    ]);
-  });
-
+describe("Dashboard view models (#143)", () => {
   it("builds one compact weather cell per stay that has weather, in the person's unit", async () => {
     const { weatherCells } = await import("./view");
     const stop = (city: string, arrive: string, leave: string) => ({

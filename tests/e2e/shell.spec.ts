@@ -27,11 +27,7 @@ test(
       await expect(page).toHaveTitle(screen.title);
       // Trips and Staples lead with their prototype headlines; Settings leads with its name.
       const heading =
-        screen.label === "Trips"
-          ? "Your travel ledger"
-          : screen.label === "Staples"
-            ? "Staples"
-            : screen.label;
+        screen.label === "Trips" ? "Trips" : screen.label === "Staples" ? "Staples" : screen.label;
       await expect(page.getByRole("heading", { name: heading, level: 1 })).toBeVisible();
       await expect(nav.getByRole("link", { name: screen.label })).toHaveAttribute(
         "aria-current",

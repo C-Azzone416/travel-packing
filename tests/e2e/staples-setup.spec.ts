@@ -62,7 +62,7 @@ test(
     await editor.getByRole("button", { name: "Save staple" }).click();
     await page.getByRole("button", { name: "Save 1 Staples" }).click();
 
-    await expect(page.getByRole("heading", { name: "Your travel ledger" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^Where to (first|next)\?$/ })).toBeVisible();
     await expect(page.getByRole("complementary", { name: "Staples setup reminder" })).toHaveCount(
       0,
     );
@@ -116,7 +116,7 @@ test(
 
     await page.unroute("**/*");
     await page.getByRole("button", { name: "Try save again" }).click();
-    await expect(page.getByRole("heading", { name: "Your travel ledger" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^Where to (first|next)\?$/ })).toBeVisible();
     await page.getByRole("link", { name: "Staples" }).click();
     await expect(page.locator('[data-staple-id="underwear"]')).toBeVisible();
   },
@@ -154,7 +154,7 @@ test(
     await expect(rowOf(page, "Underwear")).toContainText("1 per day");
     await expect(rowOf(page, "Socks")).not.toContainText("per day");
     await page.getByRole("button", { name: "Save 2 Staples" }).click();
-    await expect(page.getByRole("heading", { name: "Your travel ledger" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^Where to (first|next)\?$/ })).toBeVisible();
 
     for (const reload of [false, true]) {
       if (reload) await page.reload();
@@ -177,7 +177,7 @@ test(
     await editRule(page, rowOf(page, "Underwear"), "3", /^Per day/);
     await expect(rowOf(page, "Underwear")).toContainText("3 per day");
     await page.getByRole("button", { name: "Save 1 Staples" }).click();
-    await expect(page.getByRole("heading", { name: "Your travel ledger" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^Where to (first|next)\?$/ })).toBeVisible();
 
     // Reopen setup from the reminder with the saved list still in place.
     await setStaplesSetupLifecycle(ownerId, "incomplete");
@@ -189,7 +189,7 @@ test(
     await page.getByRole("checkbox", { name: "Toothbrush" }).check();
     await expect(rowOf(page, "Underwear")).toContainText("3 per day");
     await page.getByRole("button", { name: "Save 2 Staples" }).click();
-    await expect(page.getByRole("heading", { name: "Your travel ledger" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^Where to (first|next)\?$/ })).toBeVisible();
     await page.getByRole("link", { name: "Staples" }).click();
     await expect(page.locator('[data-staple-id="underwear"]')).toContainText("× 13");
     await expect(page.locator('[data-staple-id="toothbrush"]')).toContainText("per trip");

@@ -99,7 +99,7 @@ for (const { theme, width } of CELLS) {
     await shot("save-error-selections-retained");
     await page.unroute("**/*");
     await page.getByRole("button", { name: "Try save again" }).click();
-    await expect(page.getByRole("heading", { name: "Your travel ledger" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^Where to (first|next)\?$/ })).toBeVisible();
 
     // A migrated account keeps its existing Staples and gets an invitation to review, not fresh defaults.
     await setStaplesSetupLifecycle(setupOwner, "skipped");
