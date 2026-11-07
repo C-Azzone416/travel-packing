@@ -669,43 +669,107 @@ describe("EditTripSheet: Route & dates", () => {
     expect(within(dialog()).getByText("Items you packed for it stay ticked")).toBeTruthy();
   });
 
-  it("starts again from the saved route when the trip's stops change under the sheet", async () => {
-    function Harness() {
-      const [trip, setTrip] = useState(base());
-      return (
-        <>
-          <button
-            type="button"
-            onClick={() =>
-              setTrip({
-                ...trip,
-                end: "2026-10-30",
-                stops: [{ ...trip.stops[0], leave: "2026-10-30" }],
-              })
-            }
-          >
-            saved elsewhere
-          </button>
-          <EditTripSheet
-            trip={trip}
-            initialTab="route"
-            today="2026-10-01"
-            onClose={() => {}}
-            onSaveRoute={async () => ({})}
-            onSetTravelMode={async () => ({})}
-            onApplyPreferences={async () => "ok"}
-          />
-        </>
-      );
-    }
-    const user = userEvent.setup();
-    renderInApp(<Harness />);
-    await user.click(screen.getByRole("button", { name: "One night more" }));
-    expect(screen.getByText("5 nights")).toBeTruthy();
+  function Harness({
+    change,
+    tab,
+  }: {
+    change: (trip: LifecycleTrip) => LifecycleTrip;
+    tab: EditTripTab;
+  }) {
+    const [trip, setTrip] = useState(base());
+    return (
+      <>
+        <button type="button" onClick={() => setTrip(change(trip))}>
+          saved elsewhere
+        </button>
+        <EditTripSheet
+          trip={trip}
+          initialTab={tab}
+          today="2026-10-01"
+          onClose={() => {}}
+          onSaveRoute={async () => ({})}
+          onSetTravelMode={async () => ({})}
+          onApplyPreferences={async () => "ok"}
+        />
+      </>
+    );
+  }
+  const elsewhere = () =>
     fireEvent.click(screen.getByRole("button", { name: "saved elsewhere", hidden: true }));
+
+  it("when the trip changes under the sheet, an edited Come home is kept and the concurrent Leave change is taken", async () => {
+    const user = userEvent.setup();
+    renderInApp(
+      <Harness
+        tab="route"
+        change={(trip) => ({
+          ...trip,
+          start: "2026-10-21",
+          stops: [{ ...trip.stops[0], arrive: "2026-10-21", leave: "2026-10-27" }],
+          end: "2026-10-27",
+        })}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "One night more" })); // Come home 10-28
+    elsewhere();
+    expect((screen.getByLabelText("Leave") as HTMLInputElement).value).toBe("2026-10-21");
+    expect((screen.getByLabelText("Come home") as HTMLInputElement).value).toBe("2026-10-28");
+    // The rows are rebased on the new server state: the dates row is old (21-27 Oct) -> new, and Save counts it.
+    expect(screen.getByText("6 → 7 nights")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Save \d+ changes?$/ })).toBeTruthy();
+  });
+
+  it("an untouched route follows the server; the dot and count clear when nothing of the person's remains", async () => {
+    renderInApp(
+      <Harness
+        tab="route"
+        change={(trip) => ({
+          ...trip,
+          end: "2026-10-30",
+          stops: [{ ...trip.stops[0], leave: "2026-10-30" }],
+        })}
+      />,
+    );
+    elsewhere();
     expect((screen.getByLabelText("Come home") as HTMLInputElement).value).toBe("2026-10-30");
-    expect(screen.getByText("7 nights")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Save changes" })).toBeTruthy();
+    expect(screen.queryAllByRole("img", { name: "edited, not saved yet" })).toHaveLength(0);
+  });
+
+  it("when another device changes Spare, an untouched Spare takes it and an edited Laundry is kept", async () => {
+    const user = userEvent.setup();
+    renderInApp(
+      <Harness
+        tab="preferences"
+        change={(trip) => ({ ...trip, config: { ...trip.config, spare: false } })}
+      />,
+    );
+    await user.click(
+      toggle(screen.getByRole("dialog", { name: "Edit trip" }), "Laundry on this trip"),
+    );
+    elsewhere();
+    const dialog = screen.getByRole("dialog", { name: "Edit trip" });
+    expect(toggle(dialog, "One spare underwear + socks").checked).toBe(false);
+    expect(toggle(dialog, "Laundry on this trip").checked).toBe(true);
+    // The diff is against the new server state: only Laundry is offered, not a reversal of the other device's change.
+    expect(within(dialog).queryByText("Spare underwear + socks")).toBeNull();
+    expect(within(dialog).getByText("Laundry")).toBeTruthy();
+  });
+
+  it("a preference toggled and toggled back is untouched, so the server value wins", async () => {
+    const user = userEvent.setup();
+    renderInApp(
+      <Harness
+        tab="preferences"
+        change={(trip) => ({ ...trip, config: { ...trip.config, spare: false, laundry: true } })}
+      />,
+    );
+    const dialog = screen.getByRole("dialog", { name: "Edit trip" });
+    await user.click(toggle(dialog, "One spare underwear + socks"));
+    await user.click(toggle(dialog, "One spare underwear + socks")); // back at the baseline
+    elsewhere();
+    expect(toggle(dialog, "One spare underwear + socks").checked).toBe(false);
+    expect(toggle(dialog, "Laundry on this trip").checked).toBe(true);
   });
 
   it("Getting there starts on the saved mode", () => {

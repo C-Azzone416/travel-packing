@@ -531,6 +531,30 @@ describe("Edit trip", () => {
       expect(screen.queryByText(/Couldn’t save how you’re getting there/)).toBeNull();
     });
 
+    it("a preference write that committed but whose reload failed closes the sheet and says the list could not refresh", async () => {
+      let reloads = 0;
+      const written = vi.fn();
+      const { user } = setup(undefined, (base) => ({
+        ...base,
+        updatePreferences: async (id, config, based) => {
+          written(config);
+          return base.updatePreferences(id, config, based);
+        },
+        load: async () => {
+          if (++reloads > 1) throw new Error("offline"); // the first load is the page's own
+          return base.load();
+        },
+      }));
+      const sheet = await open(user);
+      await user.click(within(sheet).getByRole("button", { name: /Packing preferences/ }));
+      await user.click(within(sheet).getByRole("switch", { name: "Laundry on this trip" }));
+      await user.click(within(sheet).getByRole("button", { name: /^Save \d+ changes?$/ }));
+      await waitFor(() => expect(written).toHaveBeenCalledTimes(1));
+      expect(await screen.findByText(/Saved, but couldn’t refresh your trips/)).toBeTruthy();
+      await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit trip" })).toBeNull());
+      expect(screen.queryByText(/Nothing changed/)).toBeNull();
+    });
+
     it("a rejected stale route save reloads the list and tells the sheet it is stale", async () => {
       const { user } = setup(undefined, (base) => ({
         ...base,

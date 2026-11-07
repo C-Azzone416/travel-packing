@@ -44,6 +44,7 @@ import {
   stopProblems,
 } from "@/features/trips/stops-draft";
 import { localToday } from "@/lib/today";
+import { reconcile } from "./edit-reconcile";
 import { changeCount, editChanges, saveLabel, type ChangeRow } from "./edit-diff";
 import styles from "./EditTripSheet.module.css";
 
@@ -70,6 +71,8 @@ export interface EditTripSheetProps {
 }
 
 type Notice = null | "route-failed" | "travel-failed" | "failed" | "stale";
+
+const isEqual = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 const NOTICES: Record<Exclude<Notice, null>, string> = {
   "route-failed": "Couldn’t save the route. Nothing changed. Press Save to try again.",
@@ -158,15 +161,24 @@ export function EditTripSheet({
   const provider = useLocationProvider();
   const ids = useId();
   const [stops, setStops] = useState<DraftStop[]>(trip.stops);
-  const [stopsBase, setStopsBase] = useState<readonly TripStop[]>(trip.stops);
-  // A saved route (the trip's stops changed under us) is the new starting point: the draft is reset while rendering, the documented
-  // way to adjust state to a changed prop.
-  if (JSON.stringify(stopsBase) !== JSON.stringify(trip.stops)) {
-    setStopsBase(trip.stops);
-    setStops(trip.stops);
-  }
   const [prefs, setPrefs] = useState<TripConfig>(trip.config);
   const [mode, setMode] = useState<TravelMode | null>(trip.travelMode ?? null);
+  // What the drafts were last in step with. When the trip changes under the sheet (a save by another device, or our own partial
+  // save), each field is rebased: the person's value if they changed it from this baseline, the fresh server value otherwise
+  // (edit-reconcile.ts). Adjusted while rendering, the documented way to react to a changed prop.
+  const fresh = { stops: trip.stops, config: trip.config, travelMode: trip.travelMode ?? null };
+  const [baseline, setBaseline] = useState(fresh);
+  if (!isEqual(baseline, fresh)) {
+    const next = reconcile(
+      { stops: baseline.stops, config: baseline.config, travelMode: baseline.travelMode },
+      { stops, config: prefs, travelMode: mode },
+      fresh,
+    );
+    setBaseline(fresh);
+    setStops(next.stops as DraftStop[]);
+    setPrefs(next.config);
+    setMode(next.travelMode);
+  }
   const [open, setOpen] = useState<Record<EditTripTab, boolean>>({
     route: initialTab === "route",
     preferences: initialTab === "preferences",

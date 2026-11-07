@@ -348,11 +348,32 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
     basedOn: string | undefined,
   ): Promise<ApplyOutcome> {
     const before = state.trips.find((trip) => trip.id === id);
-    return track(
-      async () => {
-        await source.updatePreferences(id, config, basedOn);
-        return source.load();
-      },
+    return applyPreferencesNow(id, config, basedOn, before);
+  }
+
+  /** The write and the reload are separate, as for the route and travel mode: a rejected write is "failed" or "stale"; a committed one is "ok" even if the reload after it fails (which only says so). */
+  async function applyPreferencesNow(
+    id: string,
+    config: Parameters<typeof source.updatePreferences>[1],
+    basedOn: string | undefined,
+    before: { ready?: boolean; toiletryBagPacked?: boolean } | undefined,
+  ): Promise<ApplyOutcome> {
+    try {
+      await track(
+        () => source.updatePreferences(id, config, basedOn),
+        () => undefined,
+      );
+    } catch (error) {
+      if (!(error instanceof Error && error.message === "STALE")) return "failed";
+      // The list moved on while it was being reviewed: show the current one, so reviewing again is about it.
+      await source
+        .load()
+        .then((next) => setLoad({ phase: "ready", state: next, today: getToday() }))
+        .catch(() => undefined);
+      return "stale";
+    }
+    await track(
+      () => source.load(),
       (next) => {
         setLoad({ phase: "ready", state: next, today: getToday() });
         const after = next.trips.find((trip) => trip.id === id);
@@ -368,17 +389,9 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
             .join(" "),
         );
       },
-    )
-      .then((): ApplyOutcome => "ok")
-      .catch(async (error: unknown): Promise<ApplyOutcome> => {
-        if (!(error instanceof Error && error.message === "STALE")) return "failed";
-        // The list moved on while it was being reviewed: show the current one, so reviewing again is about it.
-        await source
-          .load()
-          .then((next) => setLoad({ phase: "ready", state: next, today: getToday() }))
-          .catch(() => undefined);
-        return "stale";
-      });
+      { read: true },
+    ).catch(() => toast.show("Saved, but couldn’t refresh your trips. Reload the page to see it."));
+    return "ok";
   }
 
   const archive = (id: string) => void run(id, () => source.archive(id));
