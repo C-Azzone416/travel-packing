@@ -350,3 +350,27 @@ test("the colour scheme applies at once and persists across reload, navigation a
   await page.goto("/settings");
   await expect(html).toHaveAttribute("data-scheme", "evergreen");
 });
+
+test("a configured home city stays readable in the Home card at 390 and 195", async ({ page }) => {
+  await openSettings(page);
+  await page.getByRole("button", { name: "Home city, choose" }).click();
+  const picker = page.getByRole("dialog", { name: "Choose your home city" });
+  await picker.getByRole("combobox", { name: "Home city search" }).fill("Seattle");
+  await picker.getByRole("option", { name: /Seattle/ }).click();
+  const field = page.getByRole("button", { name: "Home city: Seattle, change" });
+  await expect(field).toBeVisible();
+  for (const width of [390, 195]) {
+    await page.setViewportSize({ width, height: 844 });
+    const city = await field.locator("> span:first-child").evaluate((node) => {
+      const box = node.getBoundingClientRect();
+      return {
+        width: box.width,
+        height: box.height,
+        text: getComputedStyle(node, "::before").content,
+      };
+    });
+    expect(city.text, `city text at ${width}px`).toBe('"Seattle"');
+    expect(city.height, `city height at ${width}px`).toBeGreaterThan(10);
+    expect(city.width, `city width at ${width}px`).toBeGreaterThan(40);
+  }
+});
