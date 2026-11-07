@@ -217,3 +217,42 @@ describe("Stamps view", () => {
     expect(futureFirst).toEqual(completedFirst);
   });
 });
+
+describe("the rolling window's boundaries (#446)", () => {
+  it("includes a trip that starts exactly one year before today, and excludes one that starts the day before", () => {
+    const today = "2026-10-16";
+    const onBoundary = trip("Boston", "US", "2025-10-16", "2025-10-18");
+    const dayBefore = trip("Denver", "US", "2025-10-15", "2025-10-17");
+    expect(tripMatchesFilter(onBoundary, "rolling", today)).toBe(true);
+    expect(tripMatchesFilter(dayBefore, "rolling", today)).toBe(false);
+    const view = stampsView([dayBefore, onBoundary], today, "rolling");
+    expect(view.pastTrips.map((entry) => entry.id)).toEqual([onBoundary.id]);
+  });
+
+  it("keeps a trip that starts today under every filter, including a day trip taken today", () => {
+    const today = "2026-10-16";
+    const starts = trip("Lisbon", "PT", "2026-10-16", "2026-10-19");
+    const dayTrip = trip("Porto", "PT", "2026-10-16", "2026-10-16");
+    for (const filter of ["rolling", "year"] as const) {
+      expect(tripMatchesFilter(starts, filter, today)).toBe(true);
+      expect(tripMatchesFilter(dayTrip, filter, today)).toBe(true);
+    }
+    const view = stampsView([starts, dayTrip], today, "rolling");
+    expect(view.stickers).toHaveLength(2);
+    expect(view.stickers.every((entry) => entry.upcoming)).toBe(true);
+    expect(view.pastTrips).toEqual([]);
+  });
+
+  it("on a Feb 29 today the window rolls to Mar 1 of last year (setUTCFullYear), inclusive at that date", () => {
+    // 2028 is a leap year. One year earlier is Feb 29 2027, which does not exist, so the rolling start
+    // lands on Mar 1 2027 and a trip that started Feb 28 2027 falls outside the window.
+    const today = "2028-02-29";
+    const onMarch1 = trip("Boston", "US", "2027-03-01", "2027-03-03");
+    const febEnd = trip("Denver", "US", "2027-02-28", "2027-03-01");
+    expect(tripMatchesFilter(onMarch1, "rolling", today)).toBe(true);
+    expect(tripMatchesFilter(febEnd, "rolling", today)).toBe(false);
+    expect(
+      stampsView([onMarch1, febEnd], today, "rolling").pastTrips.map((entry) => entry.id),
+    ).toEqual([onMarch1.id]);
+  });
+});
