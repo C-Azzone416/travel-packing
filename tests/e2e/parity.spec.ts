@@ -197,8 +197,9 @@ test("copy: a remembered Bathroom item travels to the copy, with nothing checked
   await add.getByRole("button", { name: "Add toiletry item" }).click();
   await expect(page.getByText("Face wash", { exact: true })).toBeVisible();
   await page.getByRole("link", { name: "All trips" }).click();
+  // The trip page has a region with the same name, so wait for the Home itself (its pills) first.
+  await expect(page.getByRole("tablist", { name: "Trip sections" })).toBeVisible();
   const source = page.getByRole("region", { name: "San Diego" });
-  await expect(source).toBeVisible();
   const before = await source.innerText();
 
   await chooseFromMenu(page, "San Diego", "Copy trip");

@@ -183,7 +183,7 @@ test("create: where, when, how, the list, review -> the trip is on the dashboard
   await london.click();
   await expect(page.getByText(`0 of ${preview} packed`)).toBeVisible();
   await page.getByRole("link", { name: "All trips" }).click();
-  await expect(tag(page, "San Diego")).toBeVisible();
+  await expect(page.getByRole("tablist", { name: "Trip sections" })).toBeVisible();
 
   // It is in the database, not just in the page: it survives a reload.
   await page.reload();
@@ -191,7 +191,7 @@ test("create: where, when, how, the list, review -> the trip is on the dashboard
   await (await futureRowNamed(page, "London")).click();
   await expect(page.getByText(`0 of ${preview} packed`)).toBeVisible();
   await page.getByRole("link", { name: "All trips" }).click();
-  await expect(tag(page, "San Diego")).toBeVisible();
+  await expect(page.getByRole("tablist", { name: "Trip sections" })).toBeVisible();
 });
 
 test("create: the saved trip is there in a brand-new session (another device)", async ({
