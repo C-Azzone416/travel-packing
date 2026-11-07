@@ -110,6 +110,21 @@ describe("reads", () => {
     expect(await getHomeCityAction()).toEqual({ ok: true, home: null });
   });
 
+  it("cross-user: getHomeCityAction returns each owner their own home city, never the other's", async () => {
+    await service.setHomeCity(makeContext(db(), fake), { location: { id: "pt-lisbon" } });
+    as(OTHER_OWNER);
+    await service.setHomeCity(makeContext(db(), fake), { location: { id: "us-co-denver" } });
+    expect(await getHomeCityAction()).toMatchObject({
+      ok: true,
+      home: { location: { city: "Denver" } },
+    });
+    as(OWNER);
+    expect(await getHomeCityAction()).toMatchObject({
+      ok: true,
+      home: { location: { city: "Lisbon" } },
+    });
+  });
+
   it("listStaplesAction returns an empty list for a new owner without seeding defaults", async () => {
     const result = await listStaplesAction();
     if (!result.ok) throw new Error("expected ok");
