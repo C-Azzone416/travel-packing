@@ -1,5 +1,5 @@
 import { expect, type Page } from "@playwright/test";
-import type { Stay } from "./forecast-trip";
+import type { Stay, WeatherPlace } from "./forecast-trip";
 
 // The dashboard hero's weather band (#357, #358): the strip of stay cells, the daily-forecast block and the typical row
 // read as one band. These helpers measure it in the page and assert the layout contract from the rects, never by eye.
@@ -30,6 +30,8 @@ export const intersects = (a: Box, b: Box) =>
 export interface Fixture {
   name: string;
   stays: Stay[];
+  /** A fake-geocoder place other than London, so the fixture has its own weather cache entries (#447). */
+  place?: WeatherPlace;
   /** Forecast cards shown (capped at 7). */
   cards: number;
   /** "+N more days" link, 0 for none. */
