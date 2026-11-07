@@ -146,7 +146,7 @@ test(
       start: "2026-10-13",
       end: "2026-10-15",
     });
-    await expect(page.getByRole("link", { name: /Plan a trip/ })).toBeVisible();
+    await expect(page.getByRole("tablist", { name: "Trip sections" })).toBeVisible();
 
     await page.goto("/");
     const paris = await pastCard(page, "Paris");
@@ -164,17 +164,17 @@ test(
       start: "2026-10-14",
       end: "2026-10-16",
     });
-    await expect(page.getByRole("link", { name: /Plan a trip/ })).toBeVisible();
+    await expect(page.getByRole("tablist", { name: "Trip sections" })).toBeVisible();
 
     await page.goto("/");
-    const upcoming = card(page, "Paris");
-    await expect(upcoming).toBeVisible();
-    await expect(upcoming.getByText("Past trip")).toHaveCount(0);
-    // Paris is under way, so the dashboard shows it as the next departure: it keeps today's progress wording
-    // ("N% packed") and its packing link.
-    await expect(progressbar(page, "Paris")).toHaveAttribute("aria-valuetext", "0% packed");
+    await expect(page.getByRole("region", { name: "Paris" })).toBeVisible();
+    await expect(page.getByText("Past trip")).toHaveCount(0);
+    // Paris is under way, so the phone Home shows it as the next trip: nothing packed, and its packing link.
+    await expect(page.getByRole("heading", { name: /in the bag/ })).toHaveText(
+      /^0 \/ \d+ in the bag$/,
+    );
     await expect(
-      page.getByRole("link", { name: /^(Continue|Keep) packing: Paris$/ }),
+      page.getByRole("link", { name: /^(Continue packing|Start packing|Open list): Paris$/ }),
     ).toBeVisible();
   },
 );

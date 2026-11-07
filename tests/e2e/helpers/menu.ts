@@ -41,6 +41,9 @@ export async function futureRow(page: Page, name: string | RegExp) {
 export async function planATrip(page: Page): Promise<void> {
   const link = page.getByRole("link", { name: /Plan a trip/ });
   await link.or(futureTab(page)).first().waitFor();
-  if (!(await link.first().isVisible())) await futureTab(page).click();
-  await link.first().click();
+  // The Home re-renders as it loads, which can detach the link mid-click: try again until it takes.
+  await expect(async () => {
+    if (!(await link.first().isVisible())) await futureTab(page).click({ timeout: 2000 });
+    await link.first().click({ timeout: 2000 });
+  }).toPass();
 }
