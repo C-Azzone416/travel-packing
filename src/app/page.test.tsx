@@ -56,10 +56,18 @@ describe("screens", () => {
     expect(html).toContain('aria-label="Loading staples"');
   });
 
-  it("Stamps is a placeholder page with its own title (the real page is #391)", () => {
-    const html = renderToStaticMarkup(<StampsPage />);
-    expect(html).toContain("<h1>Stamps</h1>");
-    expect(html).toContain("sticker");
+  it("Stamps renders its screen, starting in its loading state", () => {
+    const html = renderToStaticMarkup(
+      <ToastProvider>
+        <SaveStatusProvider>
+          <TripsSourceProvider>
+            <StampsPage />
+          </TripsSourceProvider>
+        </SaveStatusProvider>
+      </ToastProvider>,
+    );
+    expect(html).toMatch(/<h1[^>]*>Stamps<\/h1>/);
+    expect(html).toContain('aria-label="Loading stamps"');
     expect(stampsMetadata.title).toBe("Stamps");
   });
 
