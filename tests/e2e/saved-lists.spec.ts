@@ -1,13 +1,13 @@
 import { expect, test, type Page } from "@playwright/test";
 import { ownerEmailFor, signInAsOwner } from "./helpers/auth";
 import { seedSavedList } from "./helpers/database";
-import { DEVICE, legacyPackingLayout } from "./helpers/device";
+import { DEVICE, phoneHomeLayout } from "./helpers/device";
 import { expectPacking, itemRow, openEditor, showItem } from "./helpers/packing";
 
-// The ledger Home is drawn below 1024px (the laptop Home is #431, the phone Home #388): this spec's flow starts there, so it runs
-// there. The trip page below 1024px is the phone Pack mode.
+// The phone Home (#388) and the phone Pack mode (#386) are drawn below 1024px: this spec's flow starts on the Home and does not
+// depend on the laptop layouts, so it runs there.
 test.beforeEach(async ({ page }) => {
-  await legacyPackingLayout(page);
+  await phoneHomeLayout(page);
 });
 
 // Saved lists (#167), against the real database: the Staples | Saved lists tab, the lists page, rename, delete and the

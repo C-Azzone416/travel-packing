@@ -1,0 +1,251 @@
+/* Home, phone (#388; spec on #376 part 3 section 1.2). Rendered only below 1024px. */
+.page {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 640px;
+  min-width: 0;
+  margin-inline: auto;
+  display: grid;
+  gap: 16px;
+}
+.page > * {
+  min-width: 0;
+}
+.tagWrap {
+  position: relative;
+  min-width: 0;
+  /* The menu opens downward over the pills and the panel: the wrapper must sit above the siblings that follow it. */
+  z-index: 2;
+}
+.tag {
+  min-width: 0;
+}
+.menuSlot {
+  position: absolute;
+  top: 12px;
+  right: 10px;
+}
+.tagRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px 12px;
+  min-width: 0;
+  /* Room for the menu button that sits over the tag's top right corner. */
+  padding-inline-end: 48px;
+}
+/* The copy takes the row; the countdown wraps below it when they do not fit side by side. A word longer than the whole row
+   still breaks (break-word). */
+.tagCopy {
+  flex: 1 1 8rem;
+  min-width: 0;
+}
+.tagSide {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+}
+.chip {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  line-height: 1.3;
+  text-transform: uppercase;
+  overflow-wrap: break-word;
+}
+.name {
+  margin: 2px 0 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(24px, 8vw, 40px);
+  line-height: 1;
+  letter-spacing: -0.02em;
+  overflow-wrap: break-word;
+}
+.name[data-size="l"] {
+  font-size: clamp(22px, 7vw, 32px);
+}
+.name[data-size="m"] {
+  font-size: clamp(20px, 6vw, 26px);
+  line-height: 1.05;
+}
+.sub {
+  margin-inline-start: 8px;
+  font-weight: 700;
+  font-size: clamp(14px, 4.4vw, 18px);
+  letter-spacing: 0;
+}
+/* At 239px and below the menu button gets a row of its own above the copy, and the type steps down, so even large text keeps
+   whole words in a column that is only about 115px wide. */
+@media (max-width: 239px) {
+  .tagRow {
+    padding-inline-end: 0;
+    padding-top: 36px;
+  }
+  .menuSlot {
+    top: 2px;
+    right: 6px;
+  }
+  .chip {
+    letter-spacing: 0.04em;
+  }
+  .name,
+  .name[data-size="l"],
+  .name[data-size="m"] {
+    font-size: 18px;
+  }
+  .sub {
+    font-size: 14px;
+  }
+}
+.pills {
+  min-width: 0;
+}
+.panel {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.panel > * {
+  min-width: 0;
+}
+.note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+/* ---- Pack ---- */
+.mapCard {
+  margin: 0;
+  box-sizing: border-box;
+  padding: 10px;
+  border-radius: 24px;
+  background: var(--paper);
+  color: var(--ink);
+  min-width: 0;
+}
+.mapFallback {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  /* An explicit width: with only aspect-ratio and a min-height the box takes its width from the height and overflows. */
+  width: 100%;
+  aspect-ratio: 2.6;
+  min-height: 120px;
+  border-radius: 16px;
+  background: var(--sea);
+  color: var(--ink);
+  font-size: 14px;
+}
+.bagHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin-bottom: 12px;
+}
+.bigCount {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 22px;
+  line-height: 1.15;
+  min-width: 0;
+}
+.packed {
+  font-size: 34px;
+}
+.bigOf {
+  color: var(--muted);
+  font-weight: 700;
+}
+.hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+.cubes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 6px;
+  margin: 0 0 14px;
+  padding: 0;
+  list-style: none;
+}
+.cubes > li {
+  min-width: 0;
+  display: flex;
+}
+.cubes > li > * {
+  flex: 1;
+}
+.primary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: 48px;
+  padding: 6px 20px;
+  border-radius: 999px;
+  background: var(--dark);
+  color: var(--onDark);
+  font-family: var(--font-body);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  text-decoration: none;
+}
+.primary:focus-visible,
+.plan:focus-visible,
+.pastLink:focus-visible {
+  outline: 3px solid var(--info);
+  outline-offset: 2px;
+}
+
+/* ---- Future ---- */
+.futureHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+.futureTitle {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 26px;
+  line-height: 1.15;
+}
+.plan {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 600;
+  text-decoration: underline;
+}
+.pastLink {
+  display: block;
+  box-sizing: border-box;
+  padding: 18px 14px;
+  border: 2px dashed var(--tint);
+  border-radius: 20px;
+  color: var(--muted);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-align: center;
+  text-decoration: none;
+}

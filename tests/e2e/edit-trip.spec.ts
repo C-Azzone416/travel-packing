@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
 import { expectAccessible } from "./helpers/a11y";
-import { DEVICE, legacyPackingLayout } from "./helpers/device";
+import { DEVICE, phoneHomeLayout } from "./helpers/device";
 import {
   expectNoItem,
   expectPacking,
@@ -10,11 +10,12 @@ import {
   showItem,
   tick,
 } from "./helpers/packing";
+import { openPastAndArchive, chooseFromMenu } from "./helpers/menu";
 
-// The ledger Home is drawn below 1024px (the laptop Home is #431, the phone Home #388): this spec's flow starts there, so it runs
-// there. The trip page below 1024px is the phone Pack mode.
+// The phone Home (#388) and the phone Pack mode (#386) are drawn below 1024px: this spec's flow starts on the Home and does not
+// depend on the laptop layouts, so it runs there.
 test.beforeEach(async ({ page }) => {
-  await legacyPackingLayout(page);
+  await phoneHomeLayout(page);
 });
 
 // Edit trip (#203): the route and the packing preferences in one sheet, with a review of what a recalculation does before it is
@@ -52,8 +53,7 @@ test("Edit trip has three ways in: the dashboard, the packing screen and Edit pr
 }) => {
   await page.clock.setFixedTime(NOW);
   await signInAsOwner(page);
-  const hero = page.getByRole("article", { name: "San Diego" });
-  await hero.getByRole("button", { name: "Edit trip: San Diego" }).click();
+  await chooseFromMenu(page, "San Diego", "Edit trip");
   await expect(sheet(page).getByRole("tab", { name: "Route & dates" })).toHaveAttribute(
     "aria-selected",
     "true",
@@ -218,7 +218,7 @@ test("a review the trip has moved on from is refused: you are asked to review ag
 test("Ready turns off with a preference change, and the review says so first", async ({ page }) => {
   await page.clock.setFixedTime(NOW);
   await signInAsOwner(page);
-  await page.getByRole("button", { name: /Past & archive/ }).click();
+  await openPastAndArchive(page);
   await page.getByRole("link", { name: "Review bag: Lisbon" }).click();
   await expectPacking(page);
   const dialog = await openPreferences(page);

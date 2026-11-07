@@ -11,10 +11,15 @@ import {
   weatherCubeLabel,
   type Cube,
 } from "@/domain/cubes";
-import type { LifecycleTrip, TripPhase } from "@/domain/trip-lifecycle";
+import { tripPhase, type LifecycleTrip, type TripPhase } from "@/domain/trip-lifecycle";
 import { packingButtonLabel } from "@/lib/trip-phase-copy";
 import type { UsualWeatherRow } from "@/components/ui/UsualWeather";
-import { routeTextShort, stopsOrDestination, tripDisplayName } from "@/domain/trip-route";
+import {
+  routeCaption,
+  routeTextShort,
+  stopsOrDestination,
+  tripDisplayName,
+} from "@/domain/trip-route";
 import { daysBetween, type TripStop } from "@/domain/trip-stops";
 import type { StopWeather } from "@/domain/weather/types";
 import { diffRecommendations } from "@/domain/weather/diff";
@@ -211,6 +216,21 @@ export function tagDates(trip: Pick<LifecycleTrip, "start" | "end">, today: stri
       ? `${from.weekday} ${from.day}`
       : `${from.weekday} ${from.day} ${from.month}`;
   return `${left} – ${to.weekday} ${to.day} ${to.month}${year}`;
+}
+
+/**
+ * The phone tag's dates: "14–24 MAR" when both days share a month, "28 FEB – 3 MAR" when they do not, "14 MAR" for one
+ * day, with the year after it when it is not this year (the tag upper-cases it).
+ */
+export function tagDatesShort(trip: Pick<LifecycleTrip, "start" | "end">, today: string): string {
+  const from = dateParts(trip.start);
+  const to = dateParts(trip.end);
+  if (!from || !to) return "Choose dates";
+  const year = to.year === (dateParts(today)?.year ?? to.year) ? "" : ` ${to.year}`;
+  if (trip.start === trip.end) return `${from.day} ${from.month}${year}`;
+  if (from.month === to.month && from.year === to.year)
+    return `${from.day}–${to.day} ${to.month}${year}`;
+  return `${from.day} ${from.month} – ${to.day} ${to.month}${year}`;
 }
 
 /** The hero's two lines: the name, and "& Porto" under it when an unnamed trip has several cities. */
@@ -437,4 +457,109 @@ export function pendingByStop(
   for (const row of toSuggestions(changes, names, fallbackStop, existing))
     counts[row.stopIndex ?? fallbackStop] = (counts[row.stopIndex ?? fallbackStop] ?? 0) + 1;
   return counts;
+}
+
+// ---------------------------------------------------------------- the Home model, shared by the laptop and phone Homes
+
+/** What the Home knows about the next trip's weather: the answer from the weather service, or why there is none. */
+export type HeroWeather =
+  | { phase: "none" }
+  /** Weather is turned off in Settings (the Home says so, #408). */
+  | { phase: "off" }
+  | { phase: "loading" }
+  | { phase: "unavailable" }
+  | {
+      phase: "ready";
+      /** Per-city rows and tiles for the Home (#387). */
+      city?: CityWeather[];
+      /** Averages per stop, for a trip whose forecast has not opened yet. */
+      usual?: UsualWeatherRow[];
+      /** The forecast and the skipped suggestions, for the count of changes still to review. */
+      review?: WeatherReview;
+    };
+
+/**
+ * Everything the laptop and the phone Home both say about the next trip (#387, #388): one model, so a count or a label
+ * can never differ between the two layouts. Counts are quantity.
+ */
+export function homeModel(trip: LifecycleTrip, weather: HeroWeather, today: string) {
+  const stops = stopsOrDestination(trip);
+  const phase = tripPhase(trip, today);
+  const nights = Math.max(0, daysBetween(trip.start, trip.end));
+  const rows = weather.phase === "ready" ? (weather.city ?? []) : [];
+  const cities = alertCities(rows);
+  const firstAlert = rows.find((row) => row.alert)?.stopIndex ?? 0;
+  // Before the forecast opens there is only typical weather: it never makes suggestions, so nothing is pending (#408).
+  const pending =
+    phase === "far"
+      ? {}
+      : pendingByStop(trip, weather.phase === "ready" ? weather.review : undefined, firstAlert);
+  const cubes = cubeSummaries(trip, { cities });
+  const totals = bagTotals(cubes);
+  return {
+    name: tripDisplayName(trip),
+    stops,
+    phase,
+    nights,
+    hero: heroName(trip),
+    countdown: phase === "during" || phase === "past" ? null : countdownFor(trip, today),
+    rows,
+    /** Cities with a rainy (or snowy) day: they are outlined and open themselves. */
+    cities,
+    pending,
+    /** Cities with weather suggestions still to review: the Weather pill says ALERT while there is one. */
+    pendingCities: Object.entries(pending)
+      .filter(([, count]) => count > 0)
+      .map(([index]) => stops[Number(index)]?.location.city.trim() ?? "")
+      .filter((city) => city !== ""),
+    cubes,
+    totals,
+    weatherCube: cubes.find((cube) => cube.cube === "weather") ?? null,
+    weatherItems: trip.items
+      .filter((item) => itemCube(item) === "weather")
+      .reduce((sum, item) => sum + item.qty, 0),
+    label: suitcaseButtonLabel(totals, trip.ready, phase),
+    next: firstOpenCube(cubes),
+    caption: routeCaption({
+      origin: trip.origin,
+      travelMode: trip.travelMode,
+      nights,
+      stops,
+    }),
+  };
+}
+
+export type HomeModel = ReturnType<typeof homeModel>;
+
+/**
+ * The second line of the phone Weather pill: ALERT while a city has suggestions still to review (a forecast with rain that
+ * is already on the list is not an alert), else the state of the weather. A forecast that holds no usable row says N/A,
+ * never Clear: missing observations are not good weather.
+ */
+export function weatherPillSub(
+  weather: HeroWeather,
+  model: Pick<HomeModel, "pendingCities" | "phase" | "rows">,
+): { text: string; alert: boolean } {
+  if (model.pendingCities.length > 0) return { text: "ALERT", alert: true };
+  switch (weather.phase) {
+    case "ready":
+      if (model.phase === "far")
+        // Usual needs observations: an unavailable placeholder row is not weather.
+        return {
+          text: (weather.usual ?? []).some((row) => !row.unavailable) ? "Usual" : "N/A",
+          alert: false,
+        };
+      return { text: model.rows.length > 0 ? "Clear" : "N/A", alert: false };
+    case "off":
+      return { text: "Off", alert: false };
+    case "loading":
+      return { text: "…", alert: false };
+    default:
+      return { text: "N/A", alert: false };
+  }
+}
+
+/** "1 trip", "2 trips". */
+export function tripCount(count: number): string {
+  return `${count} ${count === 1 ? "trip" : "trips"}`;
 }

@@ -4,6 +4,7 @@ import { signInAsOwner } from "./helpers/auth";
 import { DEVICE } from "./helpers/device";
 import { planRouteToList, reviewAndCreate } from "./helpers/plan";
 import { FAKE_GEOCODER_PORT, OPEN_METEO_PORT } from "./support/ports";
+import { planATrip, openTripFromHome } from "./helpers/menu";
 
 // The phone Packing view's forecast (#386) on the second app, which talks to the fake Open-Meteo: ONE city at a time with a
 // toggle, a dot on the city that has changes, "N to review" opening Add and Dismiss rows. Like the laptop, a trip made with
@@ -19,7 +20,7 @@ const inDays = (count: number) =>
 async function tripWithPendingSuggestions(page: Page) {
   await fetch(`${FAKE}/__weather-reset`);
   await signInAsOwner(page);
-  await page.getByRole("link", { name: /Plan a trip/ }).click();
+  await planATrip(page);
   await planRouteToList(
     page,
     [
@@ -30,10 +31,7 @@ async function tripWithPendingSuggestions(page: Page) {
   );
   await page.getByRole("button", { name: "Not now" }).click();
   await reviewAndCreate(page);
-  await page
-    .getByRole("link", { name: /^(Continue|Keep) packing: London/ })
-    .first()
-    .click();
+  await openTripFromHome(page, "London");
   await expect(page.getByRole("heading", { name: "Pack mode", level: 1 })).toBeVisible();
   // Weather is off for the trip: the stand-in panel says so. Turning it on brings the forecast and its suggestions.
   await page.getByRole("button", { name: "Turn on" }).click();

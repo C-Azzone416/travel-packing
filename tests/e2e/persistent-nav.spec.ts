@@ -1,15 +1,15 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { expectAccessible } from "./helpers/a11y";
 import { ownerEmailFor, signInAsOwner } from "./helpers/auth";
-import { DEVICE, legacyPackingLayout } from "./helpers/device";
+import { DEVICE, phoneHomeLayout } from "./helpers/device";
 import { connectedOnTrips, fakeFramebriar, forgetFeedbackEnrollment } from "./helpers/feedback";
 import { serverActionId } from "./helpers/server-action";
 import { chooseFromMenu } from "./helpers/menu";
 
-// The ledger Home is drawn below 1024px (the laptop Home is #431, the phone Home #388): this spec's flow starts there, so it runs
-// there. The trip page below 1024px is the phone Pack mode.
+// The phone Home (#388) and the phone Pack mode (#386) are drawn below 1024px: this spec's flow starts on the Home and does not
+// depend on the laptop layouts, so it runs there.
 test.beforeEach(async ({ page }) => {
-  await legacyPackingLayout(page);
+  await phoneHomeLayout(page);
 });
 
 // Persistent navigation and Feedback on long pages (#282). Every assertion compares against real neighbours (the bar's

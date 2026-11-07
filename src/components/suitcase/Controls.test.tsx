@@ -160,10 +160,10 @@ describe("PillTabs (Home four-pill row)", () => {
     expect(screen.getByRole("tablist", { name: "Home sections" })).toBeTruthy();
     const tabs = screen.getAllByRole("tab");
     expect(tabs.map((tab) => tab.textContent)).toEqual([
-      "Pack41/60",
-      "WeatherALERT",
-      "Future2 trips",
-      "Stamps6",
+      "Pack 41/60",
+      "Weather ALERT",
+      "Future 2 trips",
+      "Stamps 6",
     ]);
     expect(tabs.map((tab) => tab.getAttribute("aria-selected"))).toEqual([
       "true",

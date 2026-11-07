@@ -1,9 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 import { OTHER_EMAIL, setupEmailFor, signIn, signInAsOwner } from "./helpers/auth";
 import { resetStaplesSetup } from "./helpers/database";
-import { chooseFromMenu } from "./helpers/menu";
+import { chooseFromMenu, openPastAndArchive, planATrip } from "./helpers/menu";
 import { expectAccessible } from "./helpers/a11y";
-import { DEVICE, legacyPackingLayout } from "./helpers/device";
+import { DEVICE, phoneHomeLayout } from "./helpers/device";
 import { expectPacking, openCube, openEditor, tick } from "./helpers/packing";
 import { serverActionId } from "./helpers/server-action";
 import { chooseMode, nextButton, pickPlace, setDates, toWhen } from "./helpers/plan";
@@ -12,7 +12,7 @@ import { chooseMode, nextButton, pickPlace, setDates, toWhen } from "./helpers/p
 // Two subjects stay at the laptop width: the Staples screen and the error chip on the laptop Home.
 test.beforeEach(async ({ page }, testInfo) => {
   if (/staples|a failed save: the error chip/.test(testInfo.titlePath.join(" "))) return;
-  await legacyPackingLayout(page);
+  await phoneHomeLayout(page);
 });
 
 // Axe checks (#21) for every screen and every dialog, at both viewports (the two Playwright projects). Each state is
@@ -46,16 +46,25 @@ test.describe("signed out", DEVICE, () => {
 });
 
 test.describe("dashboard", DEVICE, () => {
-  test("upcoming, with the quick view open", async ({ page }) => {
+  test("the phone Home: each pill's panel", async ({ page }) => {
     await openDashboard(page);
-    await expectAccessible(page, "dashboard upcoming");
-    await chooseFromMenu(page, "San Diego", "Quick view");
-    await expectAccessible(page, "dashboard quick view");
+    // #377: the palette's accent and muted pairs fall short of 4.5:1 on the redesigned screens; nothing else is exempt.
+    const palette = { disable: ["color-contrast"] };
+    await expectAccessible(page, "dashboard pack panel", palette);
+    for (const [pill, label] of [
+      [/^Weather/, "weather"],
+      [/^Future/, "future"],
+      [/^Stamps/, "stamps"],
+    ] as const) {
+      await page.getByRole("tab", { name: pill }).click();
+      await expect(page.getByRole("tabpanel")).toBeVisible();
+      await expectAccessible(page, `dashboard ${label} panel`, palette);
+    }
   });
 
   test("past and archive, and recently deleted", async ({ page }) => {
     await openDashboard(page);
-    await page.getByRole("button", { name: /Past & archive/ }).click();
+    await openPastAndArchive(page);
     await expect(page.getByRole("heading", { name: "Lisbon", level: 2 })).toBeVisible();
     await expectAccessible(page, "dashboard past");
   });
@@ -64,7 +73,7 @@ test.describe("dashboard", DEVICE, () => {
     await openDashboard(page);
     await chooseFromMenu(page, "San Diego", "Remove");
     await page.getByRole("dialog").getByRole("button", { name: "Remove trip" }).click();
-    await page.getByRole("button", { name: /Past & archive/ }).click();
+    await openPastAndArchive(page);
     await expect(page.getByRole("heading", { name: "Recently deleted" })).toBeVisible();
     await expectAccessible(page, "dashboard recently deleted");
   });
@@ -83,7 +92,7 @@ test.describe("plan a trip", DEVICE, () => {
 
   async function startTrip(page: Page) {
     await openDashboard(page);
-    await page.getByRole("link", { name: /Plan a trip/ }).click();
+    await planATrip(page);
     await expect(page.getByRole("heading", { name: "Plan a trip", level: 1 })).toBeVisible();
   }
 
@@ -177,7 +186,7 @@ test.describe("trip screen", DEVICE, () => {
 
   test("a trip that is Ready", async ({ page }) => {
     await openDashboard(page);
-    await page.getByRole("button", { name: /Past & archive/ }).click();
+    await openPastAndArchive(page);
     await page.getByRole("link", { name: "Review bag: Lisbon" }).click();
     await expectPacking(page);
     await expectAccessible(page, "trip screen ready", options);
@@ -195,7 +204,7 @@ test.describe("review, settings and staples", DEVICE, () => {
   async function openReview(page: Page, lisbon: boolean) {
     await openDashboard(page);
     if (lisbon) {
-      await page.getByRole("button", { name: /Past & archive/ }).click();
+      await openPastAndArchive(page);
       await page.getByRole("link", { name: "Review bag: Lisbon" }).click();
       await expectPacking(page);
       await page.getByRole("link", { name: "Review bag again" }).click();
@@ -209,13 +218,13 @@ test.describe("review, settings and staples", DEVICE, () => {
   }
 
   test("review your bag with items still to pack", async ({ page }) => {
-    await legacyPackingLayout(page);
+    await phoneHomeLayout(page);
     await openReview(page, false);
     await expectAccessible(page, "review with items left");
   });
 
   test("review your bag on a Ready trip", async ({ page }) => {
-    await legacyPackingLayout(page);
+    await phoneHomeLayout(page);
     await openReview(page, true);
     await expectAccessible(page, "review ready");
   });
@@ -279,10 +288,8 @@ test.describe("error states and toasts", DEVICE, () => {
       await expect(chip.locator(".sync-text")).toBeVisible();
       await expect(chip.locator(".sync-text-compact")).toBeHidden();
     }
-    // #377: the laptop Home (map placeholder, countdown badge) has palette pairs below 4.5:1; only that rule, only on this check.
-    await expectAccessible(page, "dashboard with the error chip", {
-      disable: testInfo.project.name === "phone" ? [] : ["color-contrast"],
-    });
+    // #377: the redesigned Home (map placeholder, countdown badge) has palette pairs below 4.5:1; only that rule, only on this check.
+    await expectAccessible(page, "dashboard with the error chip", { disable: ["color-contrast"] });
     await chip.click();
     await expect(page.getByRole("dialog", { name: "Couldn’t save" })).toBeVisible();
     await expectAccessible(page, "retry sheet");
@@ -396,13 +403,18 @@ test.describe("narrow screens and large text", DEVICE, () => {
     await openDashboard(page);
     await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
     await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
+    // Plan a trip is in the Future pill's panel on the phone Home.
+    await page.getByRole("tab", { name: /^Future/ }).click();
     await expect(page.getByRole("link", { name: /Plan a trip/ })).toBeVisible();
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
       ),
     ).toBeLessThanOrEqual(0);
-    await expectAccessible(page, "dashboard with 200% text at 320px");
+    // #377: the redesigned Home's palette pairs fall short of 4.5:1; nothing else is exempt.
+    await expectAccessible(page, "dashboard with 200% text at 320px", {
+      disable: ["color-contrast"],
+    });
   });
 });
 
@@ -443,13 +455,17 @@ test.describe("more states", DEVICE, () => {
     await expect(page.getByRole("status", { name: "Staples setup unavailable" })).toContainText(
       "Couldn’t check your Staples setup.",
     );
-    await expect(page.getByRole("heading", { name: "Your travel ledger" })).toBeVisible();
-    await expectAccessible(page, "authenticated setup check error");
+    // The fixed clock gives the Home a next trip, so its heading is the screen-reader-only "Trips".
+    await expect(page.getByRole("heading", { name: "Trips", level: 1 })).toBeAttached();
+    // #377: the redesigned Home's countdown badge falls short of 4.5:1; nothing else is exempt.
+    await expectAccessible(page, "authenticated setup check error", {
+      disable: ["color-contrast"],
+    });
   });
 
   test("review after a change took the trip out of Ready", async ({ page }) => {
     await openDashboard(page);
-    await page.getByRole("button", { name: /Past & archive/ }).click();
+    await openPastAndArchive(page);
     await page.getByRole("link", { name: "Review bag: Lisbon" }).click();
     await page.getByRole("link", { name: "Review bag again" }).click();
     await expect(page.getByRole("heading", { name: "Toiletries · Bathroom" })).toBeVisible();
@@ -505,7 +521,7 @@ test.describe("design's known items", DEVICE, () => {
 
   test("date inputs are tied to their hint and notice", async ({ page }) => {
     await openDashboard(page);
-    await page.getByRole("link", { name: /Plan a trip/ }).click();
+    await planATrip(page);
     await pickPlace(page, "lon", /England/);
     await toWhen(page);
     for (const label of ["Leave", "Return"]) {

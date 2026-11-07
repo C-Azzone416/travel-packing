@@ -133,7 +133,7 @@ describe("HomeLaptop", () => {
   });
 
   it("makes every cube a link into Packing with a spoken count, and outlines the weather cube", () => {
-    setup({ weather: { phase: "ready", cells: [], city: [city("Porto", true)] } });
+    setup({ weather: { phase: "ready", city: [city("Porto", true)] } });
     const clothing = screen.getByRole("link", { name: /Clothing/ });
     expect(clothing.getAttribute("href")).toBe("/trips/t1?cube=clothing");
     expect(within(clothing).getByText("9 of 14 packed")).toBeTruthy();
@@ -180,7 +180,7 @@ describe("HomeLaptop", () => {
   it("lists the cities as disclosure buttons: the alert city opens itself, the other opens on tap", async () => {
     const user = userEvent.setup();
     setup({
-      weather: { phase: "ready", cells: [], city: [city("Lisbon", false), city("Porto", true)] },
+      weather: { phase: "ready", city: [city("Lisbon", false), city("Porto", true)] },
     });
     expect(
       screen.getByRole("heading", { level: 2, name: "Pack for · tap a place for daily" }),
@@ -211,11 +211,51 @@ describe("HomeLaptop", () => {
     };
     setup({
       trip: trip({ items: [item("tops", "Clothing", 3, 0)] }),
-      weather: { phase: "ready", cells: [], city: [typical, city("Porto", true)] },
+      weather: { phase: "ready", city: [typical, city("Porto", true)] },
     });
     expect(screen.getByRole("button", { name: /^Porto/ }).textContent).toContain("Rain · 0 added");
     expect(screen.queryByRole("button", { name: /^Lisbon/ })).toBeNull();
     expect(screen.getByText(/typical, mostly dry/)).toBeTruthy();
+  });
+
+  it("shows the review count on a typical-only city in a mixed route, as plain text with no disclosure", () => {
+    const typical: CityWeather = {
+      ...city("Porto", false),
+      stopIndex: 1,
+      source: "typical",
+      tiles: [],
+      summary: "typical, mostly dry",
+    };
+    setup({
+      trip: trip({ items: [item("tops", "Clothing", 3, 0)] }),
+      weather: {
+        phase: "ready",
+        city: [city("Lisbon", false), typical],
+        review: {
+          stops: [
+            {
+              stopIndex: 1,
+              status: "ok",
+              days: ["2027-03-15", "2027-03-16"].map((date) => ({
+                date,
+                stopIndex: 1,
+                source: "typical",
+                highC: 34,
+                lowC: 22,
+                precipProbability: 0,
+                precipMm: 0,
+                snowCm: 0,
+                uvIndexMax: 10,
+                sunshineHours: 12,
+              })),
+            },
+          ],
+          suppressed: {},
+        } as never,
+      },
+    });
+    expect(screen.queryByRole("button", { name: /^Porto/ })).toBeNull();
+    expect(screen.getByText(/^Porto · /).closest("li")!.textContent).toMatch(/\d+ to review/);
   });
 
   it("shows the Usual weather block before the forecast opens, with no tiles", () => {
@@ -223,7 +263,6 @@ describe("HomeLaptop", () => {
       today: "2027-01-02",
       weather: {
         phase: "ready",
-        cells: [],
         city: [city("Porto", true)],
         usual: [
           {
