@@ -18,7 +18,7 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 
 /**
  * The route is three fields. The places (which stops, in what order, and the nights at every stop but the last) are ONE field: if
- * the person touched that, their whole list is kept. Otherwise the fresh route is taken, with the person's own Leave (first arrival)
+ * the person touched that, their whole list is kept, and Leave and Come home are still reconciled on their own. Otherwise the fresh route is taken, with the person's own Leave (first arrival)
  * and Come home (last leave) applied on top when they changed those.
  */
 export function reconcileStops(
@@ -35,7 +35,27 @@ export function reconcileStops(
       stop.location?.id ?? null,
       at < stops.length - 1 ? daysBetween(stop.arrive, stop.leave) : null,
     ]);
-  if (!same(shape(base), shape(draft))) return [...draft];
+  if (!same(shape(base), shape(draft))) {
+    // The stop group is the person's, as a unit. Leave and Come home are still their own fields: one the person did not change
+    // takes the server's date. Leave is applied first (it moves the whole list); Come home then sets the last stop's end. If the
+    // person's stops cannot fit the server's end date (it would leave the last stop with too few nights), they keep the end their
+    // list gives: the conflicting endpoint stays theirs.
+    const leaveTouched = firstArrive(base) !== firstArrive(draft);
+    // Come home is the person's when the trip's total nights changed (a Leave edit or a reorder keeps them).
+    const nights = (stops: readonly DraftStop[]) =>
+      daysBetween(firstArrive(stops), lastLeave(stops));
+    const homeTouched = nights(base) !== nights(draft);
+    let mine: DraftStop[] = [...draft];
+    const wantStart = leaveTouched ? firstArrive(draft) : (fresh[0]?.arrive ?? "");
+    const wantEnd = homeTouched ? lastLeave(draft) : (fresh[fresh.length - 1]?.leave ?? "");
+    if (wantStart && wantStart !== firstArrive(mine)) mine = setFirstArrive(mine, wantStart);
+    const at = mine.length - 1;
+    if (wantEnd && at >= 0 && wantEnd !== lastLeave(mine)) {
+      const minNights = mine.length > 1 ? 1 : 0;
+      if (daysBetween(mine[at].arrive, wantEnd) >= minNights) mine = setLeave(mine, at, wantEnd);
+    }
+    return mine;
+  }
   let next: DraftStop[] = [...fresh];
   if (firstArrive(base) !== firstArrive(draft)) next = setFirstArrive(next, firstArrive(draft));
   // Come home counts as the person's when the last stop's nights changed; a Leave edit moves it too, but keeps the nights.

@@ -4177,8 +4177,7 @@ a.back {
   }
 }
 @media (max-width: 1023px) {
-  .modal:has(.save-list-form),
-  .modal:has(.edit-tabs) {
+  .modal:has(.save-list-form) {
     max-height: 90dvh;
   }
   .modal:has(.feedback-form) {
