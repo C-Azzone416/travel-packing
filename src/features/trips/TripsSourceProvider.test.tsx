@@ -64,6 +64,7 @@ const actions = vi.hoisted(() => {
         "setThemeAction",
         "setStampLabelsAction",
         "setStopsAction",
+        "setTravelModeAction",
       ].map(command),
     ),
   };
@@ -299,6 +300,12 @@ describe("TripsSourceProvider", () => {
         ["t", "ABC", null],
       ],
       ["setStops", (s) => s.setStops("t", []), () => actions.commands.setStopsAction, ["t", []]],
+      [
+        "setTravelMode",
+        (s) => s.setTravelMode("t", "drive"),
+        () => actions.commands.setTravelModeAction,
+        ["t", "drive"],
+      ],
     ];
 
     const everyAction = () => [

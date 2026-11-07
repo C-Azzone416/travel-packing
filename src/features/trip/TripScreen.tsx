@@ -37,7 +37,12 @@ import { localToday } from "@/lib/today";
 import { LAPTOP_MIN_WIDTH, useMinWidth } from "@/lib/use-min-width";
 import { AddItemInline } from "./AddItemInline";
 import { SaveAsListSheet, type SaveOutcome } from "./SaveAsListSheet";
-import { EditTripSheet, type ApplyOutcome, type EditTripTab } from "./EditTripSheet";
+import {
+  EditTripSheet,
+  type ApplyOutcome,
+  type EditTripTab,
+  type SaveResult,
+} from "./EditTripSheet";
 import { ItemEditor } from "./ItemEditor";
 import { PackRow } from "./PackRow";
 import { EditStampSheet } from "./EditStampSheet";
@@ -1218,16 +1223,26 @@ export function TripScreen({
           initialTab={dialog.tab}
           onClose={close}
           onSaveRoute={(stops) =>
-            new Promise<boolean>((resolve) => {
+            new Promise<SaveResult>((resolve) => {
               void act(() => source.setStops(tripId, stops), {
                 modal: true,
-                onFail: () => resolve(false),
+                onFail: () => resolve(null),
                 announce: () => "Route updated.",
                 after: (change) => {
                   // New stops and dates are a new question for the weather service.
                   void loadWeather(change.trip, weather?.settings);
-                  resolve(true);
+                  resolve({ updatedAt: change.trip.updatedAt });
                 },
+              });
+            })
+          }
+          onSetTravelMode={(mode) =>
+            new Promise<SaveResult>((resolve) => {
+              void act(() => source.setTravelMode(tripId, mode), {
+                modal: true,
+                onFail: () => resolve(null),
+                announce: () => "Getting there updated.",
+                after: (change) => resolve({ updatedAt: change.trip.updatedAt }),
               });
             })
           }

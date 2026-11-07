@@ -7,6 +7,7 @@ import type { Cube } from "@/domain/cubes";
 import type { ItemEdit } from "@/domain/item-ops";
 import type { ThemeId } from "@/domain/themes";
 import type { Scope, Staple, TripConfig } from "@/domain/trip";
+import type { TravelMode } from "@/domain/trip-route";
 import type { TripStop } from "@/domain/trip-stops";
 import type {
   AcceptedWeatherDecision,
@@ -77,6 +78,7 @@ export interface TripActions {
     slot2: string | null,
   ): Promise<TripCommandResult>;
   setStops(tripId: string, stops: TripStop[]): Promise<TripCommandResult>;
+  setTravelMode(tripId: string, travelMode: TravelMode): Promise<TripCommandResult>;
 }
 
 export interface WeatherActions {
@@ -200,6 +202,7 @@ export function createServerTripsSource(
     setTheme: (id, theme) => unwrapChange(trip.setTheme(id, theme)),
     setStampLabels: (id, slot1, slot2) => unwrapChange(trip.setStampLabels(id, slot1, slot2)),
     setStops: (id, stops) => unwrapChange(trip.setStops(id, stops)),
+    setTravelMode: (id, mode) => unwrapChange(trip.setTravelMode(id, mode)),
   };
 
   if (trip.getHomeCity) {

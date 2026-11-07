@@ -16,7 +16,7 @@ import {
 } from "@/domain/trip-lifecycle";
 import { localToday } from "@/lib/today";
 import { AddToiletryForm } from "@/features/trip/AddToiletryForm";
-import { EditTripSheet, type ApplyOutcome } from "@/features/trip/EditTripSheet";
+import { EditTripSheet, type ApplyOutcome, type SaveResult } from "@/features/trip/EditTripSheet";
 import { editItemHref } from "@/features/trip/edit-link";
 import { HomeLaptop } from "./HomeLaptop";
 import { LaterJourneys } from "./LaterJourneys";
@@ -291,19 +291,38 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
   }
 
   /** Save the route from the Edit trip sheet; true once saved. The sheet shows its own failure message. */
-  function saveRoute(id: string, stops: Parameters<typeof source.setStops>[1]): Promise<boolean> {
+  function saveRoute(
+    id: string,
+    stops: Parameters<typeof source.setStops>[1],
+  ): Promise<SaveResult> {
+    return saveAndReload(id, () => source.setStops(id, stops), true);
+  }
+
+  /** Save how the trip is travelled from the Edit trip sheet. */
+  function saveTravelMode(id: string, mode: Parameters<typeof source.setTravelMode>[1]) {
+    return saveAndReload(id, () => source.setTravelMode(id, mode), false);
+  }
+
+  /** One of the sheet's saves, then the reloaded list; resolves the trip's new save time, or null when it failed. */
+  function saveAndReload(
+    id: string,
+    write: () => Promise<unknown>,
+    refresh: boolean,
+  ): Promise<SaveResult> {
+    let updatedAt: string | undefined;
     return track(
       async () => {
-        await source.setStops(id, stops);
+        await write();
         return source.load();
       },
       (next) => {
         setLoad({ phase: "ready", state: next, today: getToday() });
-        router.refresh?.();
+        updatedAt = next.trips.find((trip) => trip.id === id)?.updatedAt;
+        if (refresh) router.refresh?.();
       },
     )
-      .then(() => true)
-      .catch(() => false);
+      .then((): SaveResult => ({ updatedAt }))
+      .catch((): SaveResult => null);
   }
 
   /** Apply reviewed packing preferences from the Edit trip sheet (#203). STALE means the trip changed since the review. */
@@ -539,6 +558,7 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
           initialTab="route"
           onClose={() => setEditing(null)}
           onSaveRoute={(stops) => saveRoute(editTarget.id, stops)}
+          onSetTravelMode={(mode) => saveTravelMode(editTarget.id, mode)}
           onApplyPreferences={(config, basedOn) => applyPreferences(editTarget.id, config, basedOn)}
         />
       ) : null}

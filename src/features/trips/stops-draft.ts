@@ -90,6 +90,15 @@ export function setLeave(stops: readonly DraftStop[], index: number, leave: stri
   });
 }
 
+/** Come home a night later or earlier: the last stop's Leave moves by a day. A route of 2+ stops keeps at least one night per stop. */
+export function shiftEnd(stops: readonly DraftStop[], delta: 1 | -1): DraftStop[] {
+  const last = stops[stops.length - 1];
+  if (!last || !valid(last.leave) || !valid(last.arrive)) return [...stops];
+  const leave = addDays(last.leave, delta);
+  if (daysBetween(last.arrive, leave) < (stops.length > 1 ? 1 : 0)) return [...stops];
+  return setLeave(stops, stops.length - 1, leave);
+}
+
 /** Change the first stop's Arrive date. The whole trip moves with it (stops keep their nights). */
 export function setFirstArrive(stops: readonly DraftStop[], arrive: string): DraftStop[] {
   if (stops.length === 0) return [];
@@ -164,17 +173,4 @@ export function stopProblems(stops: readonly DraftStop[]): StopProblem[] {
 /** "Fix 2 things above to continue." */
 export function fixSummary(count: number): string {
   return `Fix ${count} ${count === 1 ? "thing" : "things"} above to continue.`;
-}
-
-/** The summary strip: route, range and nights, or a prompt until every place is picked. */
-export function routeSummary(stops: readonly DraftStop[]): string {
-  if (stops.some((stop) => !stop.location)) {
-    return "Pick a place for each stop to see your route.";
-  }
-  const cities = stops.map((stop) => (stop.location as { city: string }).city).join(" → ");
-  const first = stops[0].arrive;
-  const last = stops[stops.length - 1].leave;
-  if (!valid(first) || !valid(last)) return cities;
-  const nights = daysBetween(first, last);
-  return `${cities} · ${formatShortDate(first)} – ${formatShortDate(last)} · ${formatNights(nights)}`;
 }

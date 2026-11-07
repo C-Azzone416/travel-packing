@@ -90,3 +90,23 @@ describe("setStops (memory source)", () => {
     ).rejects.toThrow("NOT_FOUND");
   });
 });
+
+describe("setTravelMode (memory source, Edit trip #389)", () => {
+  it("changes only the travel mode", async () => {
+    const memory = source();
+    const before = await memory.getTrip("san-diego");
+    const change = await memory.setTravelMode("san-diego", "drive");
+    expect(change.trip.travelMode).toBe("drive");
+    expect({ ...change.trip, travelMode: before.travelMode }).toEqual(before);
+    expect(change.signals).toEqual({ promptBagPlacement: false, reviewPrompt: false });
+    expect((await memory.getTrip("san-diego")).travelMode).toBe("drive");
+  });
+
+  it("refuses an unknown mode and a missing trip", async () => {
+    const memory = source();
+    await expect(memory.setTravelMode("san-diego", "rocket" as never)).rejects.toThrow(
+      new TripsSourceError("INVALID_INPUT"),
+    );
+    await expect(memory.setTravelMode("nope", "fly")).rejects.toThrow(TripsSourceError);
+  });
+});

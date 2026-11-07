@@ -432,6 +432,103 @@ p {
   margin-top: 18px;
 }
 
+/* The side sheet (Edit trip, #389; spec #376 part 2 section 8). From 1024px: a right-anchored 560px panel over a scrim, full
+   height, no radius. Below 1024px: a full screen with no scrim. Head and pinned footer stay in view; the body scrolls. */
+.modal-backdrop-side {
+  padding: 0;
+  align-items: stretch;
+  justify-items: end;
+  background: color-mix(in srgb, var(--darkEdge) 55%, transparent);
+  backdrop-filter: none;
+}
+.modal-side {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: min(100%, 560px);
+  height: 100dvh;
+  max-height: none;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 0;
+  border-left: 1px solid var(--line);
+  background: var(--page);
+  box-shadow: none;
+  animation: none;
+}
+.modal-side .modal-head {
+  flex: none;
+  align-items: flex-start;
+  margin: 0;
+  padding: 24px 24px 12px;
+}
+.modal-side .modal-head > :first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.modal-side .modal-head h2 {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.modal-side .modal-head p {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1.1;
+  overflow-wrap: break-word;
+}
+.modal-side .modal-head-end {
+  margin: 0;
+}
+.modal-side .modal-close {
+  width: 44px;
+  height: 44px;
+  margin: 0;
+  border-color: transparent;
+  border-radius: 50%;
+  background: var(--paper);
+}
+.modal-side .modal-actions {
+  display: block;
+  flex: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line2);
+  background: var(--paper);
+}
+/* Beside the title the head buttons need room; on a very narrow screen they take their own line above it. */
+@media (max-width: 399px) {
+  .modal-side .modal-head {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+  .modal-side .modal-head-end {
+    align-self: flex-end;
+  }
+}
+@media (max-width: 1023px) {
+  .modal-backdrop-side {
+    background: var(--page);
+  }
+  .modal-side {
+    width: 100%;
+    border-left: 0;
+  }
+  .modal-side .modal-head {
+    padding: 16px 16px 8px;
+  }
+  .modal-side .modal-head p {
+    font-size: 28px;
+  }
+}
+
 /* Plain toasts sit above the nav; the assertive error region is separate. */
 .toast-region {
   position: fixed;
@@ -919,6 +1016,11 @@ input:disabled {
 }
 .occasion-row {
   margin-top: 14px;
+}
+.occasion-row input:disabled {
+  background: var(--detail-surface);
+  color: var(--muted-text);
+  cursor: not-allowed;
 }
 .occasion-row .toggle-row {
   padding: 4px 0;
@@ -1953,14 +2055,6 @@ input:disabled {
   font-size: 12px;
   font-weight: 800;
 }
-.icon-button {
-  min-width: 44px;
-  min-height: 44px;
-  border: 1px solid var(--line);
-  border-radius: var(--control-radius);
-  background: white;
-  cursor: pointer;
-}
 .skeleton-row {
   height: 44px;
   margin: 10px 0;
@@ -2221,101 +2315,6 @@ a.back {
 .head-actions .button {
   min-height: 44px;
 }
-.stop-list {
-  display: grid;
-  gap: 12px;
-}
-.stop-card {
-  display: grid;
-  gap: 12px;
-}
-.stop-card [role="group"] {
-  display: grid;
-  gap: 12px;
-}
-.stop-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.stop-head h2,
-.stop-head h3 {
-  margin: 0;
-  flex: 1;
-  font-size: 16px;
-}
-.stop-number {
-  display: inline-grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: var(--seafoam-soft);
-  color: var(--ink);
-  font-weight: 800;
-}
-.stop-actions {
-  display: flex;
-  gap: 4px;
-}
-.stop-actions .icon-button {
-  min-width: 44px;
-  min-height: 44px;
-}
-.stop-actions .icon-button[aria-disabled="true"] {
-  opacity: 0.4;
-}
-.stop-actions .icon-button {
-  display: inline-grid;
-  place-items: center;
-}
-.stop-actions .icon-button.danger:hover {
-  color: var(--danger);
-}
-.stop-connector {
-  height: 26px;
-  margin: 0 0 6px 30px;
-  border-left: 2px dashed var(--muted-text);
-  font-size: 12px;
-  color: var(--muted-text);
-}
-.stop-connector span {
-  display: none;
-  padding-left: 10px;
-}
-@media (min-width: 900px) {
-  .stop-connector span {
-    display: inline;
-  }
-}
-.stop-dates input[readonly] {
-  background: var(--bg);
-}
-@media (min-width: 600px) {
-  .stop-dates {
-    grid-template-columns: 1fr 1fr auto;
-    align-items: end;
-  }
-}
-.nights-chip {
-  justify-self: start;
-  align-self: end;
-  padding: 3px 10px;
-  border-radius: var(--control-radius);
-  background: var(--seafoam-soft);
-  color: var(--ink);
-  font-size: 13px;
-  font-weight: 700;
-}
-.route-summary {
-  margin: 0;
-  padding: 12px;
-  border-radius: var(--control-radius);
-  background: var(--seafoam-soft);
-  color: var(--ink);
-  font-weight: 700;
-}
-
 /* Weather polish (#117): reasons cut to two lines on a phone with a More button, a stacked review footer, the What's this? note. */
 .more-button {
   margin-left: 6px;
@@ -3870,43 +3869,7 @@ a.back {
   }
 }
 
-/* ---- Edit trip: tabs, preference groups and the recalculation review (#203, design). Role tokens only. */
-.modal:has(.edit-tabs) {
-  width: min(100%, 640px);
-}
-.edit-tabs {
-  display: flex;
-  gap: 4px 20px;
-  margin: 0 0 16px;
-  border-bottom: 1px solid var(--line);
-}
-.edit-tabs button {
-  display: inline-flex;
-  min-height: 44px;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: -1px;
-  padding: 0 2px;
-  border: 0;
-  border-bottom: 3px solid transparent;
-  border-radius: 0;
-  background: transparent;
-  color: var(--muted);
-  font: inherit;
-  font-size: 15px;
-  font-weight: 700;
-  cursor: pointer;
-}
-.edit-tabs button[aria-selected="true"] {
-  border-bottom-color: var(--dark);
-  color: var(--ink);
-}
-.edit-tab-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--dark);
-}
+/* ---- Edit trip: the preference groups inside the sheet (#203, #389). The sheet itself is EditTripSheet.module.css. */
 .pref-group {
   margin: 0 0 14px;
   padding: 0;
@@ -3916,128 +3879,6 @@ a.back {
   padding: 0;
   font-size: 14px;
   font-weight: 800;
-}
-.review-changes h3 {
-  margin: 0 0 6px;
-  outline-offset: 4px;
-}
-.review-changes h4 {
-  margin: 18px 0 6px;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.review-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 12px 0 0;
-  padding: 0;
-  list-style: none;
-}
-.review-chips li {
-  padding: 4px 8px;
-  border-radius: var(--control-radius);
-  background: var(--detail-surface);
-  font-size: 12px;
-  font-weight: 700;
-}
-.review-group ul {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.review-group li {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--line);
-}
-.review-group li p {
-  flex-basis: 100%;
-  margin: 0;
-}
-.review-stay {
-  margin-top: 18px;
-}
-.review-stay summary {
-  min-height: 44px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 700;
-  cursor: pointer;
-}
-.warn-tag {
-  background: transparent;
-  box-shadow: inset 0 0 0 1px currentColor;
-  color: var(--danger);
-}
-.review-also {
-  margin-top: 18px;
-  padding: 4px 14px 10px;
-  border-radius: var(--control-radius);
-  background: var(--detail-surface);
-}
-.review-also p {
-  margin: 6px 0 0;
-}
-.review-ack {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  margin-top: 16px;
-  font-weight: 700;
-}
-.review-ack input {
-  width: 24px;
-  height: 24px;
-  flex: none;
-}
-.edit-trip-discard {
-  flex: 1 1 100%;
-  margin: 0;
-  font-weight: 700;
-  text-align: right;
-}
-.edit-trip-nochange {
-  flex: 1 1 100%;
-  text-align: right;
-}
-/* The dialog keeps its head and footer in view; only the body scrolls, so Apply, Back, Cancel, the discard prompt and errors never scroll away. */
-.modal:has(.edit-tabs) {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-.modal:has(.edit-tabs) .modal-head {
-  flex: none;
-}
-.edit-body {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  margin: 0 -21px;
-  padding: 0 21px;
-}
-.edit-failure {
-  flex: none;
-  margin: 12px 0 0;
-}
-.modal:has(.edit-tabs) .modal-actions {
-  flex: none;
-  margin: 12px -21px -21px;
-  padding: 12px 21px;
-  border-top: 1px solid var(--line);
-  background: var(--paper);
-}
-.occasion-row input:disabled {
-  background: var(--detail-surface);
-  color: var(--muted-text);
-  cursor: not-allowed;
 }
 .staples-setup {
   max-width: 760px;
@@ -4159,13 +4000,6 @@ a.back {
   font-weight: 700;
 }
 @media (max-width: 720px) {
-  .modal:has(.edit-tabs) {
-    max-height: calc(100vh - 18px);
-  }
-  .edit-tabs button {
-    flex: 1 1 0;
-    justify-content: center;
-  }
   .staples-reminder {
     margin: 4px 0 16px;
     align-items: stretch;

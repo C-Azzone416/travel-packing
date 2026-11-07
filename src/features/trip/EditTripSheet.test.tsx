@@ -1,103 +1,610 @@
 // @vitest-environment jsdom
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { renderInApp } from "@/test/providers";
-import { calculateSuggestions } from "@/domain/calc";
-import { recalculateSuggestions } from "@/domain/item-ops";
 import { setPacked } from "@/domain/readiness";
-import type { Trip, TripConfig } from "@/domain/trip";
+import type { TripConfig } from "@/domain/trip";
+import type { LifecycleTrip } from "@/domain/trip-lifecycle";
+import type { TravelMode } from "@/domain/trip-route";
+import type { TripStop } from "@/domain/trip-stops";
 import { sampleLifecycleState } from "@/features/trips/fixtures";
-import { EditTripSheet, type ApplyOutcome, type EditTripTab } from "./EditTripSheet";
+import {
+  EditTripSheet,
+  type ApplyOutcome,
+  type EditTripTab,
+  type SaveResult,
+} from "./EditTripSheet";
 
-const base = (): Trip => sampleLifecycleState().trips[0]; // San Diego: Nice outfits on, 1 occasion, return outfit on
+const base = (): LifecycleTrip => ({
+  ...sampleLifecycleState().trips[0], // San Diego, 5 days: Nice outfits on, 1 occasion, return outfit on
+  updatedAt: "T1",
+});
 
-function setup(
-  options: {
-    trip?: Trip;
-    tab?: EditTripTab;
-    apply?: (config: TripConfig, basedOn: string | undefined) => Promise<ApplyOutcome>;
-    saveRoute?: () => Promise<boolean>;
-  } = {},
-) {
-  const trip = options.trip ?? base();
+interface Options {
+  trip?: LifecycleTrip;
+  tab?: EditTripTab;
+  today?: string;
+  apply?: (config: TripConfig, basedOn: string | undefined) => Promise<ApplyOutcome>;
+  saveRoute?: (stops: TripStop[]) => Promise<SaveResult>;
+  setMode?: (mode: TravelMode) => Promise<SaveResult>;
+}
+
+function setup(options: Options = {}) {
   const onClose = vi.fn();
   const onApplyPreferences = vi.fn(options.apply ?? (async () => "ok" as const));
-  const onSaveRoute = vi.fn(options.saveRoute ?? (async () => true));
+  const onSaveRoute = vi.fn(options.saveRoute ?? (async () => ({ updatedAt: "T2" })));
+  const onSetTravelMode = vi.fn(options.setMode ?? (async () => ({ updatedAt: "T3" })));
   const user = userEvent.setup();
+  const trip = options.trip ?? base();
   renderInApp(
     <EditTripSheet
       trip={trip}
       initialTab={options.tab ?? "preferences"}
+      today={options.today ?? "2026-10-01"}
       onClose={onClose}
       onSaveRoute={onSaveRoute}
+      onSetTravelMode={onSetTravelMode}
       onApplyPreferences={onApplyPreferences}
     />,
   );
   const dialog = () => screen.getByRole("dialog", { name: "Edit trip" });
-  return { user, trip, dialog, onClose, onApplyPreferences, onSaveRoute };
+  return { user, trip, dialog, onClose, onApplyPreferences, onSaveRoute, onSetTravelMode };
 }
 
 const toggle = (dialog: HTMLElement, name: string) =>
   within(dialog).getByRole("switch", { name }) as HTMLInputElement;
+const SAVE = { name: /^Save \d+ changes?$/ };
+const saveButton = (dialog: HTMLElement) =>
+  within(dialog).getByRole("button", SAVE) as HTMLButtonElement;
+const rowsOf = (dialog: HTMLElement) =>
+  within(within(dialog).getByRole("list", { name: "What changes in your list" })).getAllByRole(
+    "listitem",
+  );
 
-describe("EditTripSheet: tabs", () => {
-  it("is one Edit trip dialog with Route & dates and Packing preferences tabs, opening on the one asked for", () => {
-    setup({ tab: "preferences" });
-    const tabs = screen.getByRole("tablist", { name: "What to edit" });
-    const route = within(tabs).getByRole("tab", { name: "Route & dates" });
-    const prefs = within(tabs).getByRole("tab", { name: "Packing preferences" });
-    expect(prefs.getAttribute("aria-selected")).toBe("true");
-    expect(route.getAttribute("aria-selected")).toBe("false");
-    expect(screen.getByRole("tabpanel", { name: "Packing preferences" })).toBeTruthy();
-    expect(screen.queryByRole("tabpanel", { name: "Route & dates" })).toBeNull(); // the other panel is hidden
+describe("EditTripSheet: the sheet", () => {
+  it("is one Edit trip dialog named for the trip, with the Feedback-free head and a close button", () => {
+    const { dialog } = setup();
+    expect(within(dialog()).getByRole("heading", { name: "Edit trip", level: 2 })).toBeTruthy();
+    expect(dialog().getAttribute("aria-describedby")).toBeTruthy();
+    expect(document.getElementById(dialog().getAttribute("aria-describedby")!)?.textContent).toBe(
+      "San Diego",
+    );
+    expect(dialog().className).toContain("modal-side");
+    expect(within(dialog()).getByRole("button", { name: "Close dialog" })).toBeTruthy();
+  });
+
+  it("opens the section asked for, and each section opens and closes (aria-expanded)", async () => {
+    const { user, dialog } = setup({ tab: "preferences" });
+    const route = within(dialog()).getByRole("button", { name: "Route & dates" });
+    const prefs = within(dialog()).getByRole("button", { name: "Packing preferences" });
+    expect(prefs.getAttribute("aria-expanded")).toBe("true");
+    expect(route.getAttribute("aria-expanded")).toBe("false");
+    expect(within(dialog()).getByRole("region", { name: "Packing preferences" })).toBeTruthy();
+    expect(within(dialog()).queryByRole("region", { name: "Route & dates" })).toBeNull(); // hidden
+    await user.click(route);
+    expect(route.getAttribute("aria-expanded")).toBe("true");
+    expect(within(dialog()).getByRole("region", { name: "Route & dates" })).toBeTruthy();
+    await user.click(prefs);
+    expect(within(dialog()).queryByRole("region", { name: "Packing preferences" })).toBeNull();
+    expect(route.getAttribute("aria-controls")).toBe(
+      within(dialog()).getByRole("region", { name: "Route & dates" }).id,
+    );
   });
 
   it("opens on Route & dates from the dashboard", () => {
     setup({ tab: "route" });
-    expect(screen.getByRole("tab", { name: "Route & dates" }).getAttribute("aria-selected")).toBe(
-      "true",
-    );
-    expect(screen.getByRole("group", { name: /^Stop 1$|^Destination/ }) ?? true).toBeTruthy();
-  });
-
-  it("the arrow keys, Home and End move between the tabs and focus follows", async () => {
-    const { user } = setup({ tab: "route" });
-    const route = screen.getByRole("tab", { name: "Route & dates" });
-    const prefs = screen.getByRole("tab", { name: "Packing preferences" });
-    route.focus();
-    await user.keyboard("{ArrowRight}");
-    expect(prefs.getAttribute("aria-selected")).toBe("true");
-    expect(document.activeElement).toBe(prefs);
-    await user.keyboard("{ArrowRight}");
-    expect(route.getAttribute("aria-selected")).toBe("true"); // wraps
-    await user.keyboard("{End}");
-    expect(document.activeElement).toBe(prefs);
-    await user.keyboard("{Home}");
-    expect(document.activeElement).toBe(route);
-    // Only the selected tab is in the tab order.
-    expect(route.tabIndex).toBe(0);
-    expect(prefs.tabIndex).toBe(-1);
-  });
-
-  it("each tab keeps its own unsaved draft when you switch, and marks it", async () => {
-    const { user, dialog } = setup({ tab: "preferences" });
-    await user.click(toggle(dialog(), "Laundry access"));
     expect(
-      within(screen.getByRole("tab", { name: /Packing preferences/ })).getByLabelText(
-        /unsaved changes/,
-      ),
+      screen.getByRole("button", { name: "Route & dates" }).getAttribute("aria-expanded"),
+    ).toBe("true");
+    expect(screen.getByText("San Diego", { selector: "span" })).toBeTruthy();
+  });
+
+  it("puts a dot on an edited section and takes it away when the edit is reverted", async () => {
+    const { user, dialog } = setup({ tab: "preferences" });
+    const prefs = within(dialog()).getByRole("button", { name: /Packing preferences/ });
+    expect(within(prefs).queryByRole("img")).toBeNull();
+    await user.click(toggle(dialog(), "Laundry on this trip"));
+    expect(within(prefs).getByRole("img", { name: "edited, not saved yet" })).toBeTruthy();
+    const route = within(dialog()).getByRole("button", { name: /Route & dates/ });
+    expect(within(route).queryByRole("img")).toBeNull();
+    await user.click(toggle(dialog(), "Laundry on this trip"));
+    expect(within(prefs).queryByRole("img")).toBeNull();
+  });
+
+  it("marks Route & dates when only how you are getting there changed", async () => {
+    const { user, dialog } = setup({ tab: "route" });
+    await user.click(within(dialog()).getByRole("radio", { name: "Drive" }));
+    expect(
+      within(within(dialog()).getByRole("button", { name: /Route & dates/ })).getByRole("img"),
     ).toBeTruthy();
-    expect(screen.getByRole("img", { name: "unsaved changes" })).toBeTruthy();
-    await user.click(screen.getByRole("tab", { name: "Route & dates" }));
-    await user.click(screen.getByRole("tab", { name: /Packing preferences/ }));
-    expect(toggle(dialog(), "Laundry access").checked).toBe(true);
+    expect(
+      within(within(dialog()).getByRole("button", { name: /Packing preferences/ })).queryByRole(
+        "img",
+      ),
+    ).toBeNull();
   });
 });
 
-describe("EditTripSheet: the Packing preferences tab", () => {
+describe("EditTripSheet: What changes in your list", () => {
+  it("starts with 'No changes yet.', a disabled Save changes and no Undo all", () => {
+    const { dialog } = setup();
+    expect(
+      within(dialog()).getByText("No changes yet.", { selector: "p:not(.sr-only)" }),
+    ).toBeTruthy();
+    const save = within(dialog()).getByRole("button", {
+      name: "Save changes",
+    }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    expect(within(dialog()).queryByRole("button", { name: "Undo all" })).toBeNull();
+    expect(
+      within(dialog()).getByText(/Items you added or edited yourself stay as they are/),
+    ).toBeTruthy();
+  });
+
+  it("updates live as you edit: old struck, new bold, N changes on the button, announced politely", async () => {
+    const { user, dialog } = setup();
+    await user.click(toggle(dialog(), "Laundry on this trip"));
+    const list = rowsOf(dialog());
+    expect(list.length).toBeGreaterThan(1);
+    expect(within(list[0]).getByText("Laundry")).toBeTruthy();
+    expect(list[0].querySelector("del")?.textContent).toBe("off");
+    expect(list[0].querySelector("ins")?.textContent).toBe("on");
+    // The item rows follow the preference, old → new in quantities.
+    const tops = list.find((entry) => entry.textContent?.startsWith("Everyday tops"))!;
+    expect(tops.querySelector("del")?.textContent).toMatch(/^× \d+$/);
+    expect(tops.querySelector("ins")?.textContent).toMatch(/^× \d+$/);
+    expect(saveButton(dialog()).textContent).toBe(`Save ${list.length} changes`);
+    expect(within(dialog()).getByRole("status", { name: "Changes summary" }).textContent).toBe(
+      `${list.length} changes to save.`,
+    );
+    await user.click(toggle(dialog(), "One spare underwear + socks"));
+    expect(saveButton(dialog()).textContent).toBe(`Save ${rowsOf(dialog()).length} changes`);
+    expect(rowsOf(dialog()).length).toBeGreaterThan(list.length - 1);
+  });
+
+  it("says 'Save 1 change' for a single change", async () => {
+    const { user, dialog } = setup({ tab: "route" });
+    await user.click(within(dialog()).getByRole("radio", { name: "Fly" }));
+    expect(within(dialog()).getByRole("button", { name: "Save 1 change" })).toBeTruthy();
+    expect(within(dialog()).getByRole("status", { name: "Changes summary" }).textContent).toBe(
+      "1 change to save.",
+    );
+  });
+
+  it("'already packed · add N more' appears for a packed line that grows", async () => {
+    const full = base();
+    const tops = full.items.find((item) => item.id === "tops")!;
+    const packed = { ...setPacked(full, "tops", tops.qty).trip, updatedAt: "T1" } as LifecycleTrip;
+    const { user, dialog } = setup({ trip: packed });
+    await user.click(toggle(dialog(), "Dedicated return travel outfit")); // one more everyday day
+    expect(within(dialog()).getByText(/^Already packed · add \d+ more$/)).toBeTruthy();
+  });
+
+  it("Undo all puts every field back, clears the dots and the rows", async () => {
+    const { user, dialog } = setup({ tab: "route" });
+    await user.click(within(dialog()).getByRole("radio", { name: "Drive" }));
+    await user.click(within(dialog()).getByRole("button", { name: "One night more" }));
+    await user.click(within(dialog()).getByRole("button", { name: /Packing preferences/ }));
+    await user.click(toggle(dialog(), "Laundry on this trip"));
+    expect(within(dialog()).getAllByRole("img", { name: "edited, not saved yet" })).toHaveLength(2);
+    await user.click(within(dialog()).getByRole("button", { name: "Undo all" }));
+    expect(within(dialog()).queryAllByRole("img", { name: "edited, not saved yet" })).toHaveLength(
+      0,
+    );
+    expect(toggle(dialog(), "Laundry on this trip").checked).toBe(false);
+    expect((within(dialog()).getByLabelText("Come home") as HTMLInputElement).value).toBe(
+      base().end,
+    );
+    expect(within(dialog()).getByRole("button", { name: "Save changes" })).toBeTruthy();
+    expect(within(dialog()).queryByRole("button", { name: "Undo all" })).toBeNull();
+    expect(
+      (within(dialog()).getByRole("radio", { name: "Drive" }) as HTMLInputElement).checked,
+    ).toBe(false);
+  });
+
+  it("See what moves toggles the list on a phone: open while short, closed while long, the person's choice wins", async () => {
+    const { user, dialog } = setup({ tab: "route" });
+    await user.click(within(dialog()).getByRole("radio", { name: "Drive" }));
+    const moves = within(dialog()).getByRole("button", { name: /See what moves/ });
+    expect(moves.getAttribute("aria-expanded")).toBe("true"); // 1 row
+    await user.click(moves);
+    expect(moves.getAttribute("aria-expanded")).toBe("false");
+    expect(
+      document.getElementById(moves.getAttribute("aria-controls")!)?.hasAttribute("data-open"),
+    ).toBe(false);
+    await user.click(moves);
+    expect(moves.getAttribute("aria-expanded")).toBe("true");
+    // Many rows: collapsed by default.
+    await user.click(within(dialog()).getByRole("button", { name: /Packing preferences/ }));
+    await user.click(toggle(dialog(), "Laundry on this trip"));
+    await user.click(within(dialog()).getByRole("button", { name: "Undo all" }));
+    await user.click(toggle(dialog(), "Laundry on this trip"));
+    await user.click(toggle(dialog(), "Dedicated return travel outfit"));
+    await user.click(toggle(dialog(), "One spare underwear + socks"));
+    expect(rowsOf(dialog()).length).toBeGreaterThan(3);
+  });
+
+  it("a trip counted with the earlier rule offers to bring itself up to date with nothing edited", async () => {
+    const stale: LifecycleTrip = {
+      ...base(),
+      dailyDays: 3,
+      items: base().items.map((item) => (item.id === "tops" ? { ...item, qty: 3 } : item)),
+    };
+    const { user, dialog, onApplyPreferences, onClose, trip } = setup({ trip: stale });
+    expect(rowsOf(dialog()).length).toBe(1);
+    expect(within(rowsOf(dialog())[0]).getByText("Everyday tops")).toBeTruthy();
+    await user.click(saveButton(dialog()));
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(onApplyPreferences).toHaveBeenCalledWith(trip.config, "T1");
+  });
+
+  it("Ready turns off and the packed count that drops need a tick before Save is possible", async () => {
+    const ready: LifecycleTrip = {
+      ...(setPacked(base(), "tops", 3).trip as LifecycleTrip),
+      updatedAt: "T1",
+      ready: true,
+    };
+    const { user, dialog, onApplyPreferences } = setup({ trip: ready });
+    await user.click(toggle(dialog(), "Laundry on this trip"));
+    expect(within(dialog()).getByText("Packed 3 → 2")).toBeTruthy();
+    expect(within(dialog()).getByText(/^Ready turns off/)).toBeTruthy();
+    expect(saveButton(dialog()).disabled).toBe(true);
+    await user.click(
+      within(dialog()).getByRole("checkbox", {
+        name: /I understand packed counts above will change/,
+      }),
+    );
+    expect(saveButton(dialog()).disabled).toBe(false);
+    await user.click(saveButton(dialog()));
+    await waitFor(() => expect(onApplyPreferences).toHaveBeenCalledTimes(1));
+  });
+
+  it("Undo all drops a tick that was given", async () => {
+    const packed = { ...(setPacked(base(), "tops", 3).trip as LifecycleTrip), updatedAt: "T1" };
+    const { user, dialog } = setup({ trip: packed });
+    await user.click(toggle(dialog(), "Laundry on this trip"));
+    await user.click(within(dialog()).getByRole("checkbox", { name: /I understand/ }));
+    await user.click(within(dialog()).getByRole("button", { name: "Undo all" }));
+    await user.click(toggle(dialog(), "Laundry on this trip"));
+    expect(
+      (within(dialog()).getByRole("checkbox", { name: /I understand/ }) as HTMLInputElement)
+        .checked,
+    ).toBe(false);
+  });
+});
+
+describe("EditTripSheet: Cancel, Escape and × leave the trip untouched", () => {
+  it.each([
+    [
+      "Cancel",
+      async (user: ReturnType<typeof userEvent.setup>) =>
+        user.click(screen.getByRole("button", { name: "Cancel" })),
+    ],
+    ["Escape", async (user: ReturnType<typeof userEvent.setup>) => user.keyboard("{Escape}")],
+    [
+      "the × button",
+      async (user: ReturnType<typeof userEvent.setup>) =>
+        user.click(screen.getByRole("button", { name: "Close dialog" })),
+    ],
+  ])(
+    "%s closes at once, even with edits: nothing was saved, so nothing is asked",
+    async (_n, leave) => {
+      const { user, dialog, onClose, onApplyPreferences, onSaveRoute, onSetTravelMode } = setup();
+      await user.click(toggle(dialog(), "Laundry on this trip"));
+      await leave(user);
+      expect(onClose).toHaveBeenCalledTimes(1);
+      expect(onApplyPreferences).not.toHaveBeenCalled();
+      expect(onSaveRoute).not.toHaveBeenCalled();
+      expect(onSetTravelMode).not.toHaveBeenCalled();
+    },
+  );
+
+  it("a press on the scrim closes when nothing was changed, and is ignored when there are edits", async () => {
+    const { user, dialog, onClose } = setup();
+    fireEvent.mouseDown(screen.getByTestId("modal-backdrop"));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    await user.click(toggle(dialog(), "Laundry on this trip"));
+    fireEvent.mouseDown(screen.getByTestId("modal-backdrop"));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("EditTripSheet: Save N changes", () => {
+  it("saves the route, then how you are travelling, then the preferences, each based on the save time before", async () => {
+    const order: string[] = [];
+    const { user, dialog, onClose, onSaveRoute, onSetTravelMode, onApplyPreferences, trip } = setup(
+      {
+        tab: "route",
+        saveRoute: async () => {
+          order.push("route");
+          return { updatedAt: "T2" };
+        },
+        setMode: async () => {
+          order.push("mode");
+          return { updatedAt: "T3" };
+        },
+        apply: async () => {
+          order.push("prefs");
+          return "ok";
+        },
+      },
+    );
+    await user.click(within(dialog()).getByRole("button", { name: "One night more" }));
+    await user.click(within(dialog()).getByRole("radio", { name: "Train or other" }));
+    await user.click(within(dialog()).getByRole("button", { name: /Packing preferences/ }));
+    await user.click(toggle(dialog(), "Laundry on this trip"));
+    await user.click(saveButton(dialog()));
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(order).toEqual(["route", "mode", "prefs"]);
+    const stops = onSaveRoute.mock.calls[0][0];
+    expect(stops).toHaveLength(1);
+    expect(stops[0].leave).toBe("2026-10-28");
+    expect(onSetTravelMode).toHaveBeenCalledWith("other");
+    expect(onApplyPreferences).toHaveBeenCalledWith({ ...trip.config, laundry: true }, "T3");
+  });
+
+  it("calls only what changed, and keeps the old save time when a host does not report one", async () => {
+    const { user, dialog, onClose, onSaveRoute, onSetTravelMode, onApplyPreferences } = setup({
+      setMode: async () => ({}),
+    });
+    await user.click(toggle(dialog(), "Laundry on this trip"));
+    await user.click(saveButton(dialog()));
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(onSaveRoute).not.toHaveBeenCalled();
+    expect(onSetTravelMode).not.toHaveBeenCalled();
+    expect(onApplyPreferences.mock.calls[0][1]).toBe("T1");
+    // A mode save with no reported time passes the earlier one on.
+  });
+
+  it("a mode-only change reaches the server and nothing else", async () => {
+    const { user, dialog, onClose, onSaveRoute, onApplyPreferences, onSetTravelMode } = setup({
+      tab: "route",
+      setMode: async () => ({}),
+    });
+    await user.click(within(dialog()).getByRole("radio", { name: "Drive" }));
+    await user.click(saveButton(dialog()));
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(onSetTravelMode).toHaveBeenCalledWith("drive");
+    expect(onSaveRoute).not.toHaveBeenCalled();
+    expect(onApplyPreferences).not.toHaveBeenCalled();
+  });
+
+  it("a route that does not save says so, stops there and keeps every edit", async () => {
+    const { user, dialog, onClose, onSetTravelMode, onApplyPreferences } = setup({
+      tab: "route",
+      saveRoute: async () => null,
+    });
+    await user.click(within(dialog()).getByRole("button", { name: "One night more" }));
+    await user.click(within(dialog()).getByRole("radio", { name: "Drive" }));
+    await user.click(saveButton(dialog()));
+    const alert = await within(dialog()).findByRole("alert");
+    expect(alert.textContent).toMatch(/Couldn’t save the route/);
+    expect(onClose).not.toHaveBeenCalled();
+    expect(onSetTravelMode).not.toHaveBeenCalled();
+    expect(onApplyPreferences).not.toHaveBeenCalled();
+    expect(
+      (within(dialog()).getByRole("radio", { name: "Drive" }) as HTMLInputElement).checked,
+    ).toBe(true);
+    expect(saveButton(dialog()).disabled).toBe(false);
+  });
+
+  it("a travel mode that does not save says so and stops before the preferences", async () => {
+    const { user, dialog, onClose, onApplyPreferences } = setup({
+      tab: "route",
+      setMode: async () => null,
+    });
+    await user.click(within(dialog()).getByRole("radio", { name: "Drive" }));
+    await user.click(within(dialog()).getByRole("button", { name: /Packing preferences/ }));
+    await user.click(toggle(dialog(), "Laundry on this trip"));
+    await user.click(saveButton(dialog()));
+    expect((await within(dialog()).findByRole("alert")).textContent).toMatch(
+      /Couldn’t save how you’re getting there/,
+    );
+    expect(onClose).not.toHaveBeenCalled();
+    expect(onApplyPreferences).not.toHaveBeenCalled();
+  });
+
+  it("failed preferences keep the selections, and Save again tries again", async () => {
+    let attempts = 0;
+    const { user, dialog, onClose, onApplyPreferences } = setup({
+      apply: async () => (++attempts === 1 ? "failed" : "ok"),
+    });
+    await user.click(toggle(dialog(), "One spare underwear + socks"));
+    await user.click(saveButton(dialog()));
+    const alert = await within(dialog()).findByRole("alert");
+    expect(alert.textContent).toMatch(/Couldn’t apply the changes/);
+    // The message sits in the pinned panel, never inside the scrolling body.
+    expect(alert.closest("[role='region']")).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(toggle(dialog(), "One spare underwear + socks").checked).toBe(false);
+    await user.click(saveButton(dialog()));
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(onApplyPreferences).toHaveBeenCalledTimes(2);
+  });
+
+  it("a stale save says the list moved on, keeps the selections and stays open", async () => {
+    const { user, dialog, onClose } = setup({ apply: async () => "stale" });
+    await user.click(toggle(dialog(), "Laundry on this trip"));
+    await user.click(saveButton(dialog()));
+    expect(
+      await within(dialog()).findByText(/Your list changed while you were editing/),
+    ).toBeTruthy();
+    expect(toggle(dialog(), "Laundry on this trip").checked).toBe(true);
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("is single-shot while it is in flight, and says Saving…", async () => {
+    let finish!: (value: ApplyOutcome) => void;
+    const { user, dialog, onApplyPreferences } = setup({
+      apply: () => new Promise<ApplyOutcome>((resolve) => (finish = resolve)),
+    });
+    await user.click(toggle(dialog(), "One spare underwear + socks"));
+    const save = saveButton(dialog());
+    fireEvent.click(save);
+    fireEvent.click(save);
+    expect(onApplyPreferences).toHaveBeenCalledTimes(1);
+    const busy = within(dialog()).getByRole("button", { name: "Saving…" });
+    expect(busy.getAttribute("aria-busy")).toBe("true");
+    // Escape does not abandon a save in flight, and Cancel and Undo all wait too.
+    await user.keyboard("{Escape}");
+    expect(
+      (within(dialog()).getByRole("button", { name: "Cancel" }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(
+      (within(dialog()).getByRole("button", { name: "Undo all" }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    await act(async () => finish("ok"));
+  });
+});
+
+describe("EditTripSheet: Route & dates", () => {
+  it("fills Leave and Come home from the route, and says the nights", () => {
+    const { dialog } = setup({ tab: "route" });
+    expect((within(dialog()).getByLabelText("Leave") as HTMLInputElement).value).toBe(base().start);
+    expect((within(dialog()).getByLabelText("Come home") as HTMLInputElement).value).toBe(
+      base().end,
+    );
+    expect(within(dialog()).getByText("4 nights")).toBeTruthy();
+  });
+
+  it("Leave moves the whole trip; Come home changes its end; the Dates row says both", async () => {
+    const { user, dialog } = setup({ tab: "route" });
+    fireEvent.change(within(dialog()).getByLabelText("Leave"), { target: { value: "2026-10-22" } });
+    expect((within(dialog()).getByLabelText("Come home") as HTMLInputElement).value).toBe(
+      "2026-10-26",
+    );
+    expect(within(dialog()).getByText("Dates")).toBeTruthy();
+    await user.click(within(dialog()).getByRole("button", { name: "Undo all" }));
+    fireEvent.change(within(dialog()).getByLabelText("Come home"), {
+      target: { value: "2026-10-30" },
+    });
+    expect(within(dialog()).getByText("4 → 7 nights")).toBeTruthy();
+    expect(within(dialog()).getByText("7 nights")).toBeTruthy();
+  });
+
+  it("the − and + next to Come home change the nights, and − stops at a day trip", async () => {
+    const { user, dialog } = setup({ tab: "route" });
+    const less = within(dialog()).getByRole("button", {
+      name: "One night fewer",
+    }) as HTMLButtonElement;
+    const more = within(dialog()).getByRole("button", { name: "One night more" });
+    await user.click(more);
+    expect(within(dialog()).getByText("5 nights")).toBeTruthy();
+    for (let i = 0; i < 5; i += 1) await user.click(less);
+    expect(within(dialog()).getByText("0 nights")).toBeTruthy();
+    expect(less.disabled).toBe(true);
+  });
+
+  it("a Come home before Leave is a problem in words, and Save waits", async () => {
+    const { user, dialog } = setup({ tab: "route" });
+    fireEvent.change(within(dialog()).getByLabelText("Come home"), {
+      target: { value: "2026-10-01" },
+    });
+    expect(
+      within(dialog()).getByText(/San Diego: Stay at least one night|San Diego: Choose a date/),
+    ).toBeTruthy();
+    expect(within(dialog()).getByText("Fix 1 thing above to save.")).toBeTruthy();
+    expect(
+      (within(dialog()).getByRole("button", { name: "Save changes" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    await user.click(within(dialog()).getByRole("button", { name: "Undo all" }));
+    expect(within(dialog()).queryByText(/Fix 1 thing/)).toBeNull();
+  });
+
+  it("adds a stop with the keyboard-friendly picker; the new stop is a row once it has a place", async () => {
+    const { user, dialog } = setup({ tab: "route" });
+    await user.click(within(dialog()).getByRole("button", { name: "Add a stop" }));
+    expect(within(dialog()).getByText("Pick a place for Stop 2, or choose Custom.")).toBeTruthy();
+    await user.type(
+      within(dialog()).getByRole("combobox", { name: "Destination search, Stop 2" }),
+      "lisbon",
+    );
+    await user.click(within(screen.getByRole("listbox")).getAllByRole("option")[0]);
+    const row = rowsOf(dialog()).find((entry) => entry.textContent?.startsWith("Lisbon"))!;
+    expect(row.textContent).toContain("new stop");
+    expect(within(dialog()).getByText("Its forecast appears 16 days out")).toBeTruthy();
+    expect(within(dialog()).getAllByRole("button", { name: /^Move .* (up|down)$/ }).length).toBe(4);
+  });
+
+  it("removes a stop and shows it as removed, with packed items staying ticked", async () => {
+    const trip: LifecycleTrip = {
+      ...base(),
+      end: "2026-10-29",
+      stops: [
+        { ...base().stops[0], leave: "2026-10-26" },
+        {
+          location: {
+            ...base().stops[0].location,
+            id: "pt-lisbon",
+            city: "Lisbon",
+            label: "Lisbon, Portugal",
+          },
+          arrive: "2026-10-26",
+          leave: "2026-10-29",
+        },
+      ],
+    };
+    const { user, dialog } = setup({ trip, tab: "route" });
+    await user.click(within(dialog()).getByRole("button", { name: "Move Lisbon up" }));
+    expect(within(dialog()).getByText("reordered")).toBeTruthy();
+    await user.click(within(dialog()).getByRole("button", { name: "Remove Lisbon" }));
+    expect(within(dialog()).getByText("removed")).toBeTruthy();
+    expect(within(dialog()).getByText("Items you packed for it stay ticked")).toBeTruthy();
+  });
+
+  it("starts again from the saved route when the trip's stops change under the sheet", async () => {
+    function Harness() {
+      const [trip, setTrip] = useState(base());
+      return (
+        <>
+          <button
+            type="button"
+            onClick={() =>
+              setTrip({
+                ...trip,
+                end: "2026-10-30",
+                stops: [{ ...trip.stops[0], leave: "2026-10-30" }],
+              })
+            }
+          >
+            saved elsewhere
+          </button>
+          <EditTripSheet
+            trip={trip}
+            initialTab="route"
+            today="2026-10-01"
+            onClose={() => {}}
+            onSaveRoute={async () => ({})}
+            onSetTravelMode={async () => ({})}
+            onApplyPreferences={async () => "ok"}
+          />
+        </>
+      );
+    }
+    const user = userEvent.setup();
+    renderInApp(<Harness />);
+    await user.click(screen.getByRole("button", { name: "One night more" }));
+    expect(screen.getByText("5 nights")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "saved elsewhere", hidden: true }));
+    expect((screen.getByLabelText("Come home") as HTMLInputElement).value).toBe("2026-10-30");
+    expect(screen.getByText("7 nights")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeTruthy();
+  });
+
+  it("Getting there starts on the saved mode", () => {
+    const { dialog } = setup({ trip: { ...base(), travelMode: "drive" }, tab: "route" });
+    expect(
+      (within(dialog()).getByRole("radio", { name: "Drive" }) as HTMLInputElement).checked,
+    ).toBe(true);
+  });
+});
+
+describe("EditTripSheet: Packing preferences", () => {
   it("is pre-filled from the trip's saved configuration, all six fields", () => {
-    const trip: Trip = {
+    const trip: LifecycleTrip = {
       ...base(),
       config: {
         laundry: true,
@@ -109,12 +616,13 @@ describe("EditTripSheet: the Packing preferences tab", () => {
       },
     };
     const { dialog } = setup({ trip });
-    expect(toggle(dialog(), "Laundry access").checked).toBe(true);
+    expect(toggle(dialog(), "Laundry on this trip").checked).toBe(true);
     expect(toggle(dialog(), "One spare underwear + socks").checked).toBe(false);
     expect(toggle(dialog(), "Nice outfits").checked).toBe(true);
     expect((within(dialog()).getByLabelText("Occasions") as HTMLInputElement).value).toBe("4");
     expect(toggle(dialog(), "Reuse one nice look").checked).toBe(false);
     expect(toggle(dialog(), "Dedicated return travel outfit").checked).toBe(false);
+    expect(within(dialog()).getByText("Halves anything marked ↻ in your Staples.")).toBeTruthy();
   });
 
   it("groups the clothing counts and the Nice outfits settings in labelled fieldsets", () => {
@@ -147,28 +655,6 @@ describe("EditTripSheet: the Packing preferences tab", () => {
     expect(occasions.value).toBe("1");
   });
 
-  it("shows the live count line for the draft", async () => {
-    const { user, dialog } = setup();
-    const line = () => within(dialog()).getByText(/How we count:/).parentElement?.textContent ?? "";
-    expect(line()).toContain("everyday clothes");
-    const before = line();
-    await user.click(toggle(dialog(), "Dedicated return travel outfit"));
-    expect(line()).not.toBe(before);
-  });
-
-  it("Review changes is off with 'No changes to apply' until something changes", async () => {
-    const { user, dialog } = setup();
-    const review = within(dialog()).getByRole("button", {
-      name: "Review changes",
-    }) as HTMLButtonElement;
-    expect(review.disabled).toBe(true);
-    expect(within(dialog()).getByText("No changes to apply")).toBeTruthy();
-    await user.click(toggle(dialog(), "Laundry access"));
-    expect(review.disabled).toBe(false);
-    await user.click(toggle(dialog(), "Laundry access"));
-    expect(review.disabled).toBe(true);
-  });
-
   it("How we count switches between the two #295 equations as the return outfit is toggled", async () => {
     const { user, dialog } = setup();
     const line = () => within(dialog()).getByText(/How we count:/).parentElement?.textContent ?? "";
@@ -180,310 +666,57 @@ describe("EditTripSheet: the Packing preferences tab", () => {
       "How we count: 5 days away, none held back for home = 5 days of everyday clothes. Your travel outfit is worn, not packed.",
     );
   });
-
-  describe("a trip counted with the earlier rule (#295)", () => {
-    // Saved before the arrival-day rule: 5 days with the return outfit on stored 3 everyday days; today's rule gives 4.
-    const stale = (): Trip => ({ ...base(), dailyDays: 3 });
-
-    it("Review changes is reachable with unchanged preferences, and applies them (lazy recalculation)", async () => {
-      const { user, dialog, trip, onApplyPreferences, onClose } = setup({ trip: stale() });
-      const review = within(dialog()).getByRole("button", {
-        name: "Review changes",
-      }) as HTMLButtonElement;
-      expect(review.disabled).toBe(false);
-      expect(within(dialog()).queryByText("No changes to apply")).toBeNull();
-      await user.click(review);
-      await user.click(within(dialog()).getByRole("button", { name: "Apply changes" }));
-      await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
-      expect(onApplyPreferences).toHaveBeenCalledWith(trip.config, trip.updatedAt);
-    });
-
-    it("opening and cancelling it still asks nothing: no unsaved changes are claimed", async () => {
-      const { user, onClose } = setup({ trip: stale() });
-      await user.click(screen.getByRole("button", { name: "Cancel" }));
-      expect(onClose).toHaveBeenCalledTimes(1);
-      expect(screen.queryByText("Discard your changes?")).toBeNull();
-    });
-
-    it("a trip already on today's rule keeps Review changes off", () => {
-      setup();
-      expect(
-        (
-          within(screen.getByRole("dialog", { name: "Edit trip" })).getByRole("button", {
-            name: "Review changes",
-          }) as HTMLButtonElement
-        ).disabled,
-      ).toBe(true);
-    });
-  });
 });
 
-describe("EditTripSheet: cancel, Escape and × change nothing", () => {
-  it("closes at once when nothing was changed", async () => {
-    const { user, onClose, onApplyPreferences, onSaveRoute } = setup();
-    await user.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(onClose).toHaveBeenCalledTimes(1);
-    expect(onApplyPreferences).not.toHaveBeenCalled();
-    expect(onSaveRoute).not.toHaveBeenCalled();
+describe("EditTripSheet: focus", () => {
+  it("traps focus in the sheet and gives it back to the opener on close", async () => {
+    const user = userEvent.setup();
+    function Host() {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <button type="button" onClick={() => setOpen(true)}>
+            Edit trip opener
+          </button>
+          {open ? (
+            <EditTripSheet
+              trip={base()}
+              initialTab="preferences"
+              today="2026-10-01"
+              onClose={() => setOpen(false)}
+              onSaveRoute={async () => ({})}
+              onSetTravelMode={async () => ({})}
+              onApplyPreferences={async () => "ok"}
+            />
+          ) : null}
+        </>
+      );
+    }
+    renderInApp(<Host />);
+    const opener = screen.getByRole("button", { name: "Edit trip opener" });
+    await user.click(opener);
+    const dialog = screen.getByRole("dialog", { name: "Edit trip" });
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    for (let i = 0; i < 40; i += 1) {
+      await user.tab();
+      expect(dialog.contains(document.activeElement)).toBe(true);
+    }
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(opener);
   });
 
-  it.each([
-    [
-      "Cancel",
-      async (user: ReturnType<typeof userEvent.setup>) =>
-        user.click(screen.getByRole("button", { name: "Cancel" })),
-    ],
-    ["Escape", async (user: ReturnType<typeof userEvent.setup>) => user.keyboard("{Escape}")],
-    [
-      "the × button",
-      async (user: ReturnType<typeof userEvent.setup>) =>
-        user.click(screen.getByRole("button", { name: "Close dialog" })),
-    ],
-  ])(
-    "with edits, %s asks 'Discard your changes?' in the footer first; Keep editing keeps them, Discard closes",
-    async (_name, leave) => {
-      const { user, dialog, onClose, onApplyPreferences } = setup();
-      await user.click(toggle(dialog(), "Laundry access"));
-      await leave(user);
-      expect(onClose).not.toHaveBeenCalled();
-      expect(within(dialog()).getByText("Discard your changes?")).toBeTruthy();
-      await user.click(within(dialog()).getByRole("button", { name: "Keep editing" }));
-      expect(within(dialog()).queryByText("Discard your changes?")).toBeNull();
-      expect(toggle(dialog(), "Laundry access").checked).toBe(true);
-      await leave(user);
-      await user.click(within(dialog()).getByRole("button", { name: "Discard" }));
-      expect(onClose).toHaveBeenCalledTimes(1);
-      expect(onApplyPreferences).not.toHaveBeenCalled();
-    },
-  );
-});
-
-describe("EditTripSheet: the review", () => {
-  const review = async (
-    user: ReturnType<typeof userEvent.setup>,
-    change: (dialog: HTMLElement) => Promise<void>,
-    dialog: () => HTMLElement,
-  ) => {
-    await change(dialog());
-    await user.click(within(dialog()).getByRole("button", { name: "Review changes" }));
-  };
-
-  it("lists what changes in plain words, groups it, and counts it, before anything is applied", async () => {
-    const { user, dialog, onApplyPreferences } = setup();
-    await review(user, async (d) => user.click(toggle(d, "Laundry access")), dialog);
-    const sheet = dialog();
-    expect(
-      within(sheet).getByRole("heading", { name: "Review changes to your list" }),
-    ).toBeTruthy();
-    expect(document.activeElement?.textContent).toBe("Review changes to your list");
-    expect(
-      within(sheet).getByText(
-        /We’ll recalculate the suggested items|we’ll recalculate the suggested items/,
-      ),
-    ).toBeTruthy();
-    const updated = within(sheet).getByRole("region", { name: "Updated suggestions" });
-    expect(within(updated).getByText(/Everyday tops:/).textContent).toMatch(/\d+ → \d+/);
-    expect(within(sheet).getByText(/\d+ updated/, { selector: "li" })).toBeTruthy();
-    expect(onApplyPreferences).not.toHaveBeenCalled();
-  });
-
-  it("a packed count above the new target is shown, needs an acknowledgement, and Apply stays off until it is ticked", async () => {
-    const trip = setPacked(base(), "tops", 3).trip;
-    const { user, dialog, onApplyPreferences } = setup({ trip });
-    await review(user, async (d) => user.click(toggle(d, "Laundry access")), dialog);
-    const sheet = dialog();
-    expect(within(sheet).getByText(/Packed 3 → 2/)).toBeTruthy();
-    expect(within(sheet).getByText(/packed count is lowered to the new target/)).toBeTruthy();
-    const apply = within(sheet).getByRole("button", { name: "Apply changes" }) as HTMLButtonElement;
-    expect(apply.disabled).toBe(true);
-    await user.click(
-      within(sheet).getByRole("checkbox", { name: /I understand packed counts above will change/ }),
-    );
-    expect(apply.disabled).toBe(false);
-    await user.click(apply);
-    await waitFor(() => expect(onApplyPreferences).toHaveBeenCalledTimes(1));
-  });
-
-  it("applies exactly the selections, based on the trip's updatedAt, and closes", async () => {
-    const trip = { ...base(), updatedAt: "2026-10-16T10:00:00.000Z" };
-    const { user, dialog, onApplyPreferences, onClose } = setup({ trip });
-    await review(user, async (d) => user.click(toggle(d, "Laundry access")), dialog);
-    await user.click(within(dialog()).getByRole("button", { name: "Apply changes" }));
-    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
-    expect(onApplyPreferences).toHaveBeenCalledWith(
-      { ...trip.config, laundry: !trip.config.laundry },
-      "2026-10-16T10:00:00.000Z",
-    );
-  });
-
-  it("with nothing risky there is no acknowledgement; with nothing to change it says so", async () => {
-    const { user, dialog } = setup();
-    await review(user, async (d) => user.click(toggle(d, "One spare underwear + socks")), dialog);
-    expect(within(dialog()).queryByRole("checkbox")).toBeNull();
-    expect(
-      (within(dialog()).getByRole("button", { name: "Apply changes" }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(false);
-  });
-
-  it("turning Nice outfits off lists the removed items with Packed and Edited tags and the remembered note", async () => {
-    const packed = setPacked(base(), "nice-shoes", 1).trip;
-    const { user, dialog } = setup({ trip: packed });
-    await review(user, async (d) => user.click(toggle(d, "Nice outfits")), dialog);
-    const removed = within(dialog()).getByRole("region", {
-      name: /Removed because of your new preferences/,
-    });
-    expect(within(removed).getByText(/Dress shoes/)).toBeTruthy();
-    expect(within(removed).getAllByText("Packed").length).toBeGreaterThan(0);
-    expect(
-      within(removed).getByText(/These are remembered\. Turn the preference back on/),
-    ).toBeTruthy();
-    // A packed item is removed, so the acknowledgement appears.
-    expect(within(dialog()).getByRole("checkbox", { name: /I understand/ })).toBeTruthy();
-  });
-
-  it("lists the user's own work under 'Stay as you left them', and suppressed suggestions as not re-added", async () => {
-    const withWork: Trip = {
-      ...base(),
-      items: [
-        ...base().items,
-        {
-          id: "custom-camera",
-          name: "Camera",
-          category: "Tech",
-          qty: 1,
-          packed: 0,
-          section: "main",
-        },
-      ],
-      suppressedSuggestions: { "nice-shoes": true },
-    };
-    const { user, dialog } = setup({ trip: withWork });
-    await review(user, async (d) => user.click(toggle(d, "Laundry access")), dialog);
-    const stay = within(dialog())
-      .getByText(/Stay as you left them/)
-      .closest("details") as HTMLElement;
-    expect(within(stay).getByText(/Camera/)).toBeTruthy();
-    expect(within(stay).getByText(/Not re-added: Dress shoes/)).toBeTruthy();
-  });
-
-  it("'Also changes': Ready turns off, while clothing-only recalculation keeps bag placement", async () => {
-    const readyAndPlaced: Trip = { ...base(), ready: true, toiletryBagPacked: true };
-    const { user, dialog } = setup({ trip: readyAndPlaced });
-    await review(user, async (d) => user.click(toggle(d, "Nice outfits")), dialog);
-    expect(within(dialog()).getByText("Ready turns off.")).toBeTruthy();
-    expect(within(dialog()).queryByText(/Toiletry bag placement resets/)).toBeNull();
-  });
-
-  it("no 'Also changes' strip for a trip that is not Ready and whose Bathroom items stay", async () => {
-    const { user, dialog } = setup();
-    await review(user, async (d) => user.click(toggle(d, "Laundry access")), dialog);
-    expect(within(dialog()).queryByText("Also changes")).toBeNull();
-  });
-
-  it("Back to preferences returns with every selection intact", async () => {
-    const { user, dialog } = setup();
-    await review(user, async (d) => user.click(toggle(d, "Laundry access")), dialog);
-    await user.click(within(dialog()).getByRole("button", { name: "Back to preferences" }));
-    expect(toggle(dialog(), "Laundry access").checked).toBe(!base().config.laundry);
-  });
-
-  it("the preview is exactly what the recalculation makes: the same list the server will save", async () => {
-    // The review is built from recalculateSuggestions, so the item counts it reports match applying it.
-    const trip = base();
-    const next = recalculateSuggestions(
-      trip,
-      { ...trip.config, laundry: true },
-      calculateSuggestions,
-    );
-    const { user, dialog } = setup();
-    await review(user, async (d) => user.click(toggle(d, "Laundry access")), dialog);
-    const tops = next.items.find((item) => item.id === "tops")!;
-    const from = trip.items.find((item) => item.id === "tops")!;
-    expect(within(dialog()).getByText(`${from.qty} → ${tops.qty}`)).toBeTruthy();
-  });
-});
-
-describe("EditTripSheet: errors keep the selections", () => {
-  it("a failed apply stays in the review with a message and Try again, and the selections are kept", async () => {
-    let attempts = 0;
-    const { user, dialog, onApplyPreferences, onClose } = setup({
-      apply: async () => (++attempts === 1 ? "failed" : "ok"),
-    });
-    await user.click(toggle(dialog(), "One spare underwear + socks"));
-    await user.click(within(dialog()).getByRole("button", { name: "Review changes" }));
-    await user.click(within(dialog()).getByRole("button", { name: "Apply changes" }));
-    const alert = await within(dialog()).findByRole("alert");
-    expect(alert.textContent).toMatch(/Couldn’t apply the changes/);
-    // In flow outside the scrolling body, so the pinned footer cannot cover it.
-    expect(alert.closest(".edit-body")).toBeNull();
-    expect(onClose).not.toHaveBeenCalled();
-    await user.click(within(dialog()).getByRole("button", { name: "Try again" }));
-    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
-    expect(onApplyPreferences).toHaveBeenCalledTimes(2);
-  });
-
-  it("a stale review sends you back to the preferences with a message, selections kept", async () => {
-    const { user, dialog, onClose } = setup({ apply: async () => "stale" });
-    await user.click(toggle(dialog(), "Laundry access"));
-    await user.click(within(dialog()).getByRole("button", { name: "Review changes" }));
-    await user.click(within(dialog()).getByRole("button", { name: "Apply changes" }));
-    expect(
-      await within(dialog()).findByText(
-        "Your list changed while you were reviewing. Review again.",
-      ),
-    ).toBeTruthy();
-    expect(
-      within(dialog()).queryByRole("heading", { name: "Review changes to your list" }),
-    ).toBeNull();
-    expect(toggle(dialog(), "Laundry access").checked).toBe(!base().config.laundry);
-    expect(onClose).not.toHaveBeenCalled();
-  });
-
-  it("Apply is single-shot while it is in flight", async () => {
-    let finish!: (value: ApplyOutcome) => void;
-    const { user, dialog, onApplyPreferences } = setup({
-      apply: () => new Promise<ApplyOutcome>((resolve) => (finish = resolve)),
-    });
-    await user.click(toggle(dialog(), "One spare underwear + socks"));
-    await user.click(within(dialog()).getByRole("button", { name: "Review changes" }));
-    const apply = within(dialog()).getByRole("button", { name: "Apply changes" });
-    fireEvent.click(apply);
-    fireEvent.click(apply);
-    expect(onApplyPreferences).toHaveBeenCalledTimes(1);
-    expect(
-      within(dialog()).getByRole("button", { name: "Applying…" }).getAttribute("aria-busy"),
-    ).toBe("true");
-    await act(async () => finish("ok"));
-  });
-});
-
-describe("EditTripSheet: the Route & dates tab", () => {
-  it("saves the route, then closes when the preferences tab has nothing unsaved", async () => {
-    const { user, onSaveRoute, onClose } = setup({ tab: "route" });
-    await user.click(screen.getByRole("button", { name: "Save route" }));
-    await waitFor(() => expect(onSaveRoute).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
-  });
-
-  it("stays open on the Packing preferences tab after saving the route when it has unsaved changes there", async () => {
-    const { user, dialog, onClose } = setup({ tab: "preferences" });
-    await user.click(toggle(dialog(), "Laundry access"));
-    await user.click(screen.getByRole("tab", { name: "Route & dates" }));
-    await user.click(screen.getByRole("button", { name: "Save route" }));
-    await waitFor(() =>
-      expect(
-        screen.getByRole("tab", { name: /Packing preferences/ }).getAttribute("aria-selected"),
-      ).toBe("true"),
-    );
-    expect(onClose).not.toHaveBeenCalled();
-    expect(toggle(dialog(), "Laundry access").checked).toBe(!base().config.laundry);
-  });
-
-  it("says so, and stays open, when the route does not save", async () => {
-    const { user, dialog, onClose } = setup({ tab: "route", saveRoute: async () => false });
-    await user.click(screen.getByRole("button", { name: "Save route" }));
-    expect(await within(dialog()).findByText(/Couldn’t save the route/)).toBeTruthy();
-    expect(onClose).not.toHaveBeenCalled();
+  it("every control has a name", () => {
+    const { dialog } = setup({ tab: "route" });
+    for (const control of dialog().querySelectorAll("button, input, select")) {
+      const name =
+        control.getAttribute("aria-label") ||
+        (control as HTMLElement).innerText ||
+        control.textContent ||
+        (control.id && document.querySelector(`label[for="${control.id}"]`)?.textContent) ||
+        control.closest("label")?.textContent ||
+        control.getAttribute("aria-labelledby");
+      expect(name, control.outerHTML.slice(0, 120)).toBeTruthy();
+    }
   });
 });

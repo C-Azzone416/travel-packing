@@ -55,6 +55,7 @@ const TRIP_COMMANDS = [
   "setTheme",
   "setStampLabels",
   "setStops",
+  "setTravelMode",
 ] as const;
 
 function tripActions(result: TripCommandResult = { ok: true, trip, signals }) {
@@ -118,6 +119,7 @@ describe("createServerTripsSource: per-trip commands", () => {
       setTheme: () => source.setTheme("t", "beach"),
       setStampLabels: () => source.setStampLabels("t", "ABC", null),
       setStops: () => source.setStops("t", []),
+      setTravelMode: () => source.setTravelMode("t", "drive"),
     }) satisfies Record<(typeof TRIP_COMMANDS)[number], () => Promise<unknown>>;
 
   it("passes every command's arguments to the matching action and returns the trip and signals", async () => {
@@ -147,6 +149,7 @@ describe("createServerTripsSource: per-trip commands", () => {
       ["setTheme", "t", "beach"],
       ["setStampLabels", "t", "ABC", null],
       ["setStops", "t", []],
+      ["setTravelMode", "t", "drive"],
     ]);
   });
 

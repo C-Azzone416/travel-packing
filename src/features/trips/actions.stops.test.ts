@@ -24,7 +24,7 @@ vi.mock("next/navigation", () => ({
 import { locationById } from "@/domain/locations";
 import { startDraft, setDraftStops, type DraftStop, type TripDraft } from "@/domain/trip-lifecycle";
 import { createTripAction, createTripWithWeatherAction } from "./actions";
-import { setStopsAction } from "./trip-actions";
+import { setStopsAction, setTravelModeAction } from "./trip-actions";
 
 let ctx: Awaited<ReturnType<typeof createMigratedDb>>;
 const fake = createFakeAuth();
@@ -203,5 +203,50 @@ describe("createTripWithWeatherAction", () => {
     await expect(createTripWithWeatherAction(route(ROUTE), [])).rejects.toThrow(
       /NEXT_REDIRECT.*access-denied/,
     );
+  });
+});
+
+describe("setTravelModeAction (Edit trip, #389)", () => {
+  const stored = async () => {
+    const created = await createTripAction(route(ROUTE));
+    if (!created.ok) throw new Error(created.code);
+    return created.trip;
+  };
+
+  it("changes only the travel mode and returns the changed trip with no signals", async () => {
+    const trip = await stored();
+    const result = await setTravelModeAction(trip.id, "drive");
+    if (!result.ok) throw new Error(result.code);
+    expect(result.signals).toEqual({ promptBagPlacement: false, reviewPrompt: false });
+    expect(result.trip.travelMode).toBe("drive");
+    expect(result.trip.stops).toEqual(trip.stops);
+    expect(result.trip.items).toEqual(trip.items);
+  });
+
+  it("is INVALID_INPUT for an unknown mode, NOT_FOUND for a missing trip or another owner's trip", async () => {
+    const trip = await stored();
+    expect(await setTravelModeAction(trip.id, "rocket" as never)).toEqual({
+      ok: false,
+      code: "INVALID_INPUT",
+    });
+    expect(await setTravelModeAction("00000000-0000-4000-8000-0000000000ff", "fly")).toEqual({
+      ok: false,
+      code: "NOT_FOUND",
+    });
+    as(OTHER_OWNER);
+    expect(await setTravelModeAction(trip.id, "fly")).toEqual({ ok: false, code: "NOT_FOUND" });
+    as(OWNER);
+    // The other owner's attempt changed nothing.
+    const again = await setTravelModeAction(trip.id, "other");
+    if (!again.ok) throw new Error(again.code);
+    expect(again.trip.travelMode).toBe("other");
+  });
+
+  it("redirects to sign-in when nobody is signed in, and is INTERNAL without a database", async () => {
+    const trip = await stored();
+    as(null);
+    await expect(setTravelModeAction(trip.id, "fly")).rejects.toThrow(/NEXT_REDIRECT/);
+    current = null;
+    expect(await setTravelModeAction(trip.id, "fly")).toEqual({ ok: false, code: "INTERNAL" });
   });
 });

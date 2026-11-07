@@ -136,8 +136,8 @@ test("a changed forecast offers itemized changes; accepting some revokes Ready, 
   await fake("/__weather-set?variant=dry");
   await page.getByRole("button", { name: "Edit trip" }).click();
   const sheet = page.getByRole("dialog", { name: "Edit trip" });
-  await sheet.getByLabel("Arrive", { exact: true }).fill(inDays(4));
-  await sheet.getByRole("button", { name: "Save route" }).click();
+  await sheet.getByLabel("Leave", { exact: true }).fill(inDays(4));
+  await sheet.getByRole("button", { name: /^Save \d+ changes?$/ }).click();
   await expect(sheet).toHaveCount(0);
   // Editing the route took the trip out of Ready; make it Ready again so the review has something to revoke.
   await markTripReady(`e2e-${ownerEmailFor(test.info().project.name)}`, "London → London");
@@ -214,8 +214,8 @@ test("a provider failure shows Unavailable and leaves the list as it was", async
   // A different range, so the server cannot answer from its memory of the last one.
   await page.getByRole("button", { name: "Edit trip" }).click();
   const sheet = page.getByRole("dialog", { name: "Edit trip" });
-  await sheet.getByLabel("Arrive", { exact: true }).fill(inDays(5));
-  await sheet.getByRole("button", { name: "Save route" }).click();
+  await sheet.getByLabel("Leave", { exact: true }).fill(inDays(5));
+  await sheet.getByRole("button", { name: /^Save \d+ changes?$/ }).click();
   await expect(
     page.getByText("We couldn’t reach the weather service. Your list is unchanged."),
   ).toBeVisible();
@@ -246,8 +246,8 @@ test(
     await fake("/__weather-set?variant=dry");
     await page.getByRole("button", { name: "Edit trip" }).click();
     const sheet = page.getByRole("dialog", { name: "Edit trip" });
-    await sheet.getByLabel("Arrive", { exact: true }).fill(inDays(4));
-    await sheet.getByRole("button", { name: "Save route" }).click();
+    await sheet.getByLabel("Leave", { exact: true }).fill(inDays(4));
+    await sheet.getByRole("button", { name: /^Save \d+ changes?$/ }).click();
     // Wait for the banner itself (the weather is fetched again after the route edit), so a failure says what was missing.
     const banner = page.locator(".weather-review-banner");
     await expect(banner).toBeVisible();

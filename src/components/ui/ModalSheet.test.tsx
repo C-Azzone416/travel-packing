@@ -520,4 +520,24 @@ describe("data-sheet-open on <body> (#341)", () => {
     unmount();
     expect(document.body.hasAttribute("data-sheet-open")).toBe(false);
   });
+
+  it("the side variant is the same dialog with the side-sheet classes (Edit trip, #389)", () => {
+    render(
+      <ModalSheet open variant="side" title="Edit trip" onClose={() => {}}>
+        x
+      </ModalSheet>,
+    );
+    const dialog = screen.getByRole("dialog", { name: "Edit trip" });
+    expect(dialog.className).toBe("modal modal-side");
+    expect(dialog.parentElement?.className).toBe("modal-backdrop modal-backdrop-side");
+  });
+
+  it("the default variant keeps the plain dialog classes", () => {
+    render(
+      <ModalSheet open title="Plain" onClose={() => {}}>
+        x
+      </ModalSheet>,
+    );
+    expect(screen.getByRole("dialog", { name: "Plain" }).className).toBe("modal");
+  });
 });

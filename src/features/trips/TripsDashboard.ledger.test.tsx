@@ -427,10 +427,42 @@ describe("Edit trip", () => {
     const hero = await screen.findByRole("article", { name: "San Diego" });
     await user.click(within(hero).getByRole("button", { name: "Edit trip: San Diego" }));
     const sheet = await screen.findByRole("dialog", { name: "Edit trip" });
-    await user.click(within(sheet).getByRole("button", { name: "Save route" }));
+    await user.click(within(sheet).getByRole("button", { name: "One night more" }));
+    await user.click(within(sheet).getByRole("button", { name: /^Save \d+ changes?$/ }));
     await waitFor(() => expect(setStops).toHaveBeenCalledOnce());
     expect(setStops.mock.calls[0][0]).toBe("san-diego");
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit trip" })).toBeNull());
+  });
+
+  it("saves how you are getting there on its own, then closes", async () => {
+    const setTravelMode = vi.fn();
+    const { user } = setup(undefined, (base) => ({
+      ...base,
+      setTravelMode: async (id, mode) => {
+        setTravelMode(id, mode);
+        return base.setTravelMode(id, mode);
+      },
+    }));
+    const hero = await screen.findByRole("article", { name: "San Diego" });
+    await user.click(within(hero).getByRole("button", { name: "Edit trip: San Diego" }));
+    const sheet = await screen.findByRole("dialog", { name: "Edit trip" });
+    await user.click(within(sheet).getByRole("radio", { name: "Drive" }));
+    await user.click(within(sheet).getByRole("button", { name: "Save 1 change" }));
+    await waitFor(() => expect(setTravelMode).toHaveBeenCalledWith("san-diego", "drive"));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit trip" })).toBeNull());
+  });
+
+  it("says so and stays open when the travel mode does not save", async () => {
+    const { user } = setup(undefined, (base) => ({
+      ...base,
+      setTravelMode: () => Promise.reject(new Error("down")),
+    }));
+    const hero = await screen.findByRole("article", { name: "San Diego" });
+    await user.click(within(hero).getByRole("button", { name: "Edit trip: San Diego" }));
+    const sheet = await screen.findByRole("dialog", { name: "Edit trip" });
+    await user.click(within(sheet).getByRole("radio", { name: "Drive" }));
+    await user.click(within(sheet).getByRole("button", { name: "Save 1 change" }));
+    expect(await within(sheet).findByText(/Couldn’t save how you’re getting there/)).toBeTruthy();
   });
 
   it("keeps the sheet open and offers Save again when the save fails", async () => {
@@ -441,7 +473,8 @@ describe("Edit trip", () => {
     const hero = await screen.findByRole("article", { name: "San Diego" });
     await user.click(within(hero).getByRole("button", { name: "Edit trip: San Diego" }));
     const sheet = await screen.findByRole("dialog", { name: "Edit trip" });
-    await user.click(within(sheet).getByRole("button", { name: "Save route" }));
+    await user.click(within(sheet).getByRole("button", { name: "One night more" }));
+    await user.click(within(sheet).getByRole("button", { name: /^Save \d+ changes?$/ }));
     await act(async () => {});
     expect(screen.getByRole("dialog", { name: "Edit trip" })).toBeTruthy();
     expect(within(sheet).getByText(/Couldn’t save the route/)).toBeTruthy();

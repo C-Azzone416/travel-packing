@@ -85,6 +85,11 @@ export interface ModalSheetProps {
   showClose?: boolean;
   /** A small control beside the close button in the head (the trip editor's Feedback entry, #296). Absent: the head is unchanged. */
   headerAction?: ReactNode;
+  /**
+   * "side": a right-anchored panel from 1024px up and a full screen below it (Edit trip, #389). Default "dialog": the bottom
+   * sheet on phones and the centred dialog from 660px. Focus, Escape and the backdrop behave the same in both.
+   */
+  variant?: "dialog" | "side";
 }
 
 // Bottom sheet on phones, centered dialog from 660px. Traps focus, closes on
@@ -100,6 +105,7 @@ export function ModalSheet({
   dismissOnBackdrop = true,
   showClose = false,
   headerAction,
+  variant = "dialog",
 }: ModalSheetProps) {
   const titleId = useId();
   const descriptionId = useId();
@@ -187,7 +193,7 @@ export function ModalSheet({
   return createPortal(
     <div
       ref={backdropRef}
-      className="modal-backdrop"
+      className={variant === "side" ? "modal-backdrop modal-backdrop-side" : "modal-backdrop"}
       data-testid="modal-backdrop"
       onMouseDown={(event) => {
         if (event.target !== event.currentTarget) return;
@@ -198,7 +204,7 @@ export function ModalSheet({
     >
       <div
         ref={dialogRef}
-        className="modal"
+        className={variant === "side" ? "modal modal-side" : "modal"}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
