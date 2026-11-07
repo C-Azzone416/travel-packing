@@ -39,6 +39,8 @@ export async function resetOwnerData(ownerId: string): Promise<void> {
         appearance: null,
         staplesSetupState: "completed",
         staplesReminderDismissed: false,
+        // The home city (#379) is the account's: no test inherits the one a previous test set.
+        ...homeToColumns(null),
       })
       .where(eq(schema.users.id, ownerId));
     await seedSyntheticData(db, ownerId, SAMPLE_TODAY);
