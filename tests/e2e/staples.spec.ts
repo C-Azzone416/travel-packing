@@ -103,6 +103,8 @@ async function underwearQtyOnPage(page: Page, tripName: string): Promise<number>
 test("edit a staple count: existing trips are unchanged, and the next new trip uses the new value", async ({
   page,
 }) => {
+  // Three trips are opened and two created, each through the phone Home's Future pill: more than the default 30 s.
+  test.slow();
   await openStaples(page);
   await page.goto("/");
   await newTrip(page, /Paris/, "2026-12-04", "2026-12-08", 1);
