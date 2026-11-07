@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
 import { DEVICE } from "./helpers/device";
 import { expectWholeWords, overflow } from "./helpers/layout";
+import { expectPacking } from "./helpers/packing";
 
 // The phone Home (#388; spec #376 part 3 section 1.2): the next trip as a luggage tag with four pills (Pack, Weather, Future,
 // Stamps), each with its own panel. These run on the phone project at its own size and on the desktop project at the widths
@@ -48,7 +49,7 @@ test.describe("pills and panels", DEVICE, () => {
     const go = page.getByRole("link", { name: /^Continue packing: San Diego/ });
     await expect(go).toBeVisible();
     await go.click();
-    await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
+    await expectPacking(page);
   });
 
   test("each pill opens its own panel, by click and by arrow keys", async ({ page }) => {

@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { expectAccessible } from "./helpers/a11y";
-import { DEVICE, legacyPackingLayout } from "./helpers/device";
+import { DEVICE, phoneHomeLayout } from "./helpers/device";
 import {
   connectFeedback,
   connectedOnTrips,
@@ -12,7 +12,7 @@ import {
 
 // Home is the laptop suitcase view from 1024px (#387); this spec's subject is the page below it, so it runs there.
 test.beforeEach(async ({ page }) => {
-  await legacyPackingLayout(page);
+  await phoneHomeLayout(page);
 });
 
 // Connecting the signed-in ACCOUNT to the feedback service from Settings (#131, #133, #260), against the real app and its server, with a fake

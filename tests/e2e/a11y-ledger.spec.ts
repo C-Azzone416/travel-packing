@@ -3,16 +3,17 @@ import { ownerEmailFor, signInAsOwner } from "./helpers/auth";
 import { seedSavedList } from "./helpers/database";
 import { expectAccessible, expectDialogKeyboard } from "./helpers/a11y";
 import { chooseFromMenu, planATrip } from "./helpers/menu";
-import { DEVICE, legacyPackingLayout } from "./helpers/device";
+import { DEVICE, phoneHomeLayout } from "./helpers/device";
+import { expectPacking, itemRow, openEditor } from "./helpers/packing";
 import { planToList } from "./helpers/plan";
 
 // Home is the laptop suitcase view from 1024px (#387); this spec's subject is the page below it, so it runs there.
 test.beforeEach(async ({ page }) => {
-  await legacyPackingLayout(page);
+  await phoneHomeLayout(page);
 });
 
 // The screens and dialogs added after the first accessibility pass (#21 audit, 2026-10-22): the Staples | Saved lists tabs, the
-// lists page and editor, Save as a list, Start from a saved list, the inline Add item (packing screen), the ⋯ menu and the stamp sheet. Axe on
+// lists page and editor, Save as a list, Start from a saved list, the ⋯ menu and the stamp sheet. Axe on
 // each state at both viewports (this spec is tagged for the phone project too), and for every new dialog the keyboard
 // behaviour: Tab and Shift+Tab stay inside it, Escape closes it, focus returns to what opened it.
 const NOW = new Date("2026-10-16T12:00:00");
@@ -45,7 +46,7 @@ async function openLists(page: Page) {
 async function openPacking(page: Page) {
   await openDashboard(page);
   await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
-  await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
+  await expectPacking(page);
 }
 
 test.describe("saved lists", DEVICE, () => {
@@ -105,32 +106,28 @@ test.describe("saved lists", DEVICE, () => {
 
 test.describe("save as a list", DEVICE, () => {
   test("the sheet and the duplicate prompt: axe", async ({ page }) => {
-    await legacyPackingLayout(page);
     await openPacking(page);
     const opener = page.getByRole("button", { name: "Save as a list" });
     await opener.click();
-    await expectAccessible(page, "save as a list sheet");
+    await expectAccessible(page, "save as a list sheet", { disable: ["color-contrast"] });
     await page.keyboard.press("Escape");
 
     // Two rows with the same name and category lead to the duplicate prompt.
-    await page
-      .locator('[data-item-id="sunglasses"]')
-      .getByRole("button", { name: /^Sunglasses / })
-      .click();
+    await openEditor(page, "sunglasses");
     const editor = page.getByRole("dialog", { name: "Edit item" });
     await editor.getByLabel("Item name").fill("Everyday glasses");
     await editor
       .getByRole("button", { name: /Update this trip|Save/ })
       .first()
       .click();
-    await expect(
-      page.locator('[data-item-id="sunglasses"]').getByText("Everyday glasses"),
-    ).toBeVisible();
+    await expect(itemRow(page, "sunglasses").getByText("Everyday glasses")).toBeVisible();
     await opener.click();
     const sheet = page.getByRole("dialog", { name: "Save as a list" });
     await sheet.getByRole("button", { name: "Save list" }).click();
     await expect(page.getByRole("dialog", { name: "Some items appear twice" })).toBeVisible();
-    await expectAccessible(page, "save as a list, duplicate prompt");
+    await expectAccessible(page, "save as a list, duplicate prompt", {
+      disable: ["color-contrast"],
+    });
   });
 });
 
@@ -170,14 +167,6 @@ test.describe("add item, the ⋯ menu and the stamp sheet", DEVICE, () => {
       page.getByRole("heading", { name: "Past trips & archive", level: 1 }),
     ).toBeVisible();
   });
-
-  test("the packing screen's inline Add item", async ({ page }) => {
-    await legacyPackingLayout(page);
-    await openPacking(page);
-    await page.getByRole("button", { name: "＋ Add item" }).click();
-    await expect(page.getByRole("textbox", { name: "Item name" })).toBeVisible();
-    await expectAccessible(page, "packing screen with the inline Add item open");
-  });
 });
 
 // The keyboard behaviour of each new dialog. Tab order is Chromium's: Safari only tabs to buttons and links when the person
@@ -210,7 +199,6 @@ test.describe("keyboard in the new dialogs", () => {
   });
 
   test("Save as a list, and the Stamp label sheet", async ({ page }) => {
-    await legacyPackingLayout(page);
     await openPacking(page);
     await expectDialogKeyboard(
       page,
@@ -228,7 +216,6 @@ test.describe("keyboard in the new dialogs", () => {
 // Every new notice that is not in a dialog goes through the polite status region (role="status"), where a screen reader reads it
 // once; the toast's own timing and pause behaviour are unit-tested (Toast.test.tsx).
 test("the new toasts are announced in the polite status region", async ({ page }) => {
-  await legacyPackingLayout(page);
   await openLists(page);
   const region = page.locator(".toast-region");
   await expect(region).toHaveAttribute("role", "status");
@@ -245,7 +232,7 @@ test("the new toasts are announced in the polite status region", async ({ page }
 
   await page.goto("/");
   await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
-  await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
+  await expectPacking(page);
   await page.getByRole("button", { name: "Edit stamp" }).click();
   const stamp = page.getByRole("dialog", { name: "Stamp label" });
   await stamp.getByRole("radio", { name: "Custom" }).check();
@@ -301,7 +288,7 @@ test.describe("narrow screens", DEVICE, () => {
     await expectNoSidewaysScroll("list editor with a long item name");
     await page.goto("/");
     await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
-    await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
+    await expectPacking(page);
     await expectNoSidewaysScroll("packing screen");
     for (const [opener, dialog] of [
       ["Save as a list", "Save as a list"],

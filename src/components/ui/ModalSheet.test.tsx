@@ -51,6 +51,18 @@ describe("ModalSheet", () => {
     expect(screen.getByText("This can be undone.")).toBeTruthy();
   });
 
+  it("includes a decorative suitcase grabber without adding an accessible control", async () => {
+    render(<Harness />);
+    await userEvent.click(screen.getByRole("button", { name: "Open" }));
+    const grabber = screen.getByRole("dialog").querySelector(".modal-grabber");
+    expect(grabber).not.toBeNull();
+    expect(grabber?.getAttribute("aria-hidden")).toBe("true");
+    expect(screen.getAllByRole("button").map((button) => button.textContent)).toEqual([
+      "Open",
+      "Confirm",
+    ]);
+  });
+
   it("omits aria-describedby without a description", async () => {
     render(<Harness />);
     await userEvent.click(screen.getByRole("button", { name: "Open" }));

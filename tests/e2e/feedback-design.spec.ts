@@ -5,12 +5,12 @@ import { ownerEmailFor, signInAsOwner } from "./helpers/auth";
 import { setOwnerAppearance } from "./helpers/database";
 import { connectFeedback, connectedOnTrips, fakeFramebriar, goToTrips } from "./helpers/feedback";
 import { chooseFromMenu } from "./helpers/menu";
-import { DEVICE, legacyPackingLayout } from "./helpers/device";
+import { DEVICE, phoneHomeLayout } from "./helpers/device";
 import { serverActionId } from "./helpers/server-action";
 
 // Home is the laptop suitcase view from 1024px (#387); this spec's subject is the page below it, so it runs there.
 test.beforeEach(async ({ page }) => {
-  await legacyPackingLayout(page);
+  await phoneHomeLayout(page);
 });
 
 const THEMES = ["ocean", "evergreen", "dusk"] as const;

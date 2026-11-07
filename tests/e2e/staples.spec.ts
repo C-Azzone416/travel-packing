@@ -1,8 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
-import { DEVICE, legacyPackingLayout } from "./helpers/device";
+import { expectPacking, showItem } from "./helpers/packing";
+import { DEVICE, phoneHomeLayout } from "./helpers/device";
 import { planAndCreate } from "./helpers/plan";
-import { futureRow, planATrip } from "./helpers/menu";
+import { planATrip, futureRow, openTripFromHome } from "./helpers/menu";
 
 // The Staples screen against a REAL Postgres (#18): what it shows after a reload is what was stored. Each test starts
 // from this project's freshly seeded owner (the default staples, San Diego partly packed, Lisbon Ready).
@@ -29,6 +30,17 @@ async function openStaples(page: Page) {
   await page.goto("/staples");
   await expect(page.getByRole("heading", { name: "Staples", level: 1 })).toBeVisible();
   await expect(section(page, "Clothing")).toBeVisible();
+}
+
+/** The phone Home (Future pill rows, packing links) is drawn below 1024px; the Staples screen is drawn at the laptop width. */
+async function underPhoneLayout<T>(page: Page, run: () => Promise<T>): Promise<T> {
+  const size = page.viewportSize();
+  await phoneHomeLayout(page);
+  try {
+    return await run();
+  } finally {
+    if (size) await page.setViewportSize(size);
+  }
 }
 
 async function expectWholeWords(locator: ReturnType<Page["locator"]>, label: string) {
@@ -65,39 +77,23 @@ async function newTrip(
   await planATrip(page);
   await planAndCreate(page, { query: "paris", option: destination, start: start, end: end });
   // The trips are counted as rows under the Future pill (San Diego is the next trip on the fixed clock).
-  await underLegacyPacking(page, async () =>
+  await underPhoneLayout(page, async () =>
     expect(await futureRow(page, /Paris/)).toHaveCount(expectedCount),
   );
 }
 
-/** The trip's Packing page is the pre-redesign one below 1024px; the Staples screen is drawn at the laptop width. */
-async function underLegacyPacking<T>(page: Page, run: () => Promise<T>): Promise<T> {
-  const size = page.viewportSize();
-  await legacyPackingLayout(page);
-  try {
-    return await run();
-  } finally {
-    if (size) await page.setViewportSize(size);
-  }
-}
-
+/** The needed quantity of the underwear row on the trip's Packing page: the tick's name reads "Underwear, 5". */
 async function underwearQty(page: Page, tripName: string): Promise<number> {
-  return underLegacyPacking(page, () => underwearQtyOnPage(page, tripName));
+  return underPhoneLayout(page, () => underwearQtyOnPage(page, tripName));
 }
 
 async function underwearQtyOnPage(page: Page, tripName: string): Promise<number> {
-  const trip =
-    tripName === "San Diego"
-      ? page.getByRole("link", { name: "Continue packing: San Diego" })
-      : await futureRow(page, new RegExp(tripName));
-  await trip.first().click();
-  await expect(page.getByRole("heading", { name: tripName, level: 1 })).toBeVisible();
-  const text = await page
-    .locator('[data-item-id="underwear"] .qty-stepper span')
-    .first()
-    .innerText();
+  await openTripFromHome(page, tripName);
+  await expectPacking(page);
+  const box = (await showItem(page, "underwear")).getByRole("checkbox");
+  const name = (await box.getAttribute("aria-label")) ?? "";
   await page.goBack();
-  return Number(/of (\d+) packed/.exec(text)?.[1]);
+  return Number(/, (\d+)$/.exec(name)?.[1]);
 }
 
 test("edit a staple count: existing trips are unchanged, and the next new trip uses the new value", async ({
@@ -130,14 +126,17 @@ test("edit a staple count: existing trips are unchanged, and the next new trip u
   // A trip made after the edit uses it.
   await newTrip(page, /Paris/, "2026-12-04", "2026-12-08", 2);
   await page.goto("/");
-  const text = await underLegacyPacking(page, async () => {
-    const second = (await futureRow(page, /Paris/)).first();
-    await second.click();
-    await expect(page.getByRole("heading", { name: "Paris", level: 1 })).toBeVisible();
-    return await page.locator('[data-item-id="underwear"] .qty-stepper span').first().innerText();
-    // "N of M packed": M is the needed count for the trip.
+  const name = await underPhoneLayout(page, async () => {
+    await (await futureRow(page, /Paris/)).first().click();
+    await expectPacking(page);
+    return await (
+      await showItem(page, "underwear")
+    )
+      .getByRole("checkbox")
+      .getAttribute("aria-label");
   });
-  expect(Number(/of (\d+) packed/.exec(text)?.[1])).toBeGreaterThan(parisBefore);
+  // "Underwear, M": M is the needed count for the trip.
+  expect(Number(/, (\d+)$/.exec(name ?? "")?.[1])).toBeGreaterThan(parisBefore);
 });
 
 test("add a staple to a cube: it is stored, per trip, and Pack last starts off", async ({

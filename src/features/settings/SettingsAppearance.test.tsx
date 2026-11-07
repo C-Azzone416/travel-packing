@@ -50,10 +50,10 @@ afterEach(() => {
   document.cookie = "appearance=; Max-Age=0; Path=/";
 });
 
-describe("Settings Theme picker", () => {
-  it("is a radiogroup named Theme with three options named by their text, Ocean checked when nothing is saved", () => {
+describe("Settings colour-scheme picker", () => {
+  it("is a radiogroup named Colour scheme with three options named by their text, Ocean checked when nothing is saved", () => {
     setup();
-    const group = screen.getByRole("radiogroup", { name: "Theme" });
+    const group = screen.getByRole("radiogroup", { name: "Colour scheme" });
     expect(group).toBeTruthy();
     const names = within(group).getAllByRole("radio");
     expect(names.map((radio) => radio.getAttribute("value"))).toEqual([
@@ -65,7 +65,7 @@ describe("Settings Theme picker", () => {
     expect(screen.getByText("Dusk")).toBeTruthy();
     expect((screen.getByRole("radio", { name: /Ocean/ }) as HTMLInputElement).checked).toBe(true);
     expect(screen.getByText(/Current theme:/).textContent).toBe("Current theme: Ocean");
-    // Each option draws its own scheme as three swatches, scoped with data-scheme and hidden from assistive tech.
+    // Each option draws its own scheme as a mini suitcase, scoped with data-scheme and hidden from assistive tech.
     const swatches = [...group.querySelectorAll(".appearance-swatches")];
     expect(swatches.map((swatch) => swatch.getAttribute("data-scheme"))).toEqual([
       "ocean",
@@ -74,7 +74,7 @@ describe("Settings Theme picker", () => {
     ]);
     for (const swatch of swatches) {
       expect(swatch.getAttribute("aria-hidden")).toBe("true");
-      expect(swatch.querySelectorAll("i").length).toBe(3);
+      expect(swatch.querySelectorAll("i").length).toBe(2);
     }
   });
 

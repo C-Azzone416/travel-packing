@@ -54,6 +54,14 @@ export const setPackedInput = z.object({
   itemId,
   packed: z.number().int().min(0).max(999),
 });
+/** "All in" and its Undo: up to 200 items' packed counts in one change. */
+export const setPackedManyInput = z.object({
+  tripId,
+  entries: z
+    .array(z.object({ itemId, packed: z.number().int().min(0).max(999) }))
+    .min(1)
+    .max(200),
+});
 export const editItemInput = z.object({ tripId, itemId, name, qty, timing, scope });
 export const removeItemInput = z.object({ tripId, itemId, scope });
 export const addToiletryItemInput = z.object({

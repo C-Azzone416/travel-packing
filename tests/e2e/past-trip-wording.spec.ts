@@ -1,12 +1,12 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
-import { DEVICE, legacyPackingLayout } from "./helpers/device";
+import { DEVICE, phoneHomeLayout } from "./helpers/device";
 import { openPastAndArchive, planATrip } from "./helpers/menu";
 import { planAndCreate } from "./helpers/plan";
 
 // Home is the laptop suitcase view from 1024px (#387); this spec's subject is the page below it, so it runs there.
 test.beforeEach(async ({ page }) => {
-  await legacyPackingLayout(page);
+  await phoneHomeLayout(page);
 });
 
 // Historical wording for past trip cards (#301). A fixed clock: San Diego is upcoming (Oct 23–27), Lisbon is past

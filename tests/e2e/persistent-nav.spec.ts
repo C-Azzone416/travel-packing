@@ -1,10 +1,16 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { expectAccessible } from "./helpers/a11y";
 import { ownerEmailFor, signInAsOwner } from "./helpers/auth";
-import { DEVICE, legacyPackingLayout } from "./helpers/device";
+import { DEVICE, phoneHomeLayout } from "./helpers/device";
 import { connectedOnTrips, fakeFramebriar, forgetFeedbackEnrollment } from "./helpers/feedback";
 import { serverActionId } from "./helpers/server-action";
 import { chooseFromMenu } from "./helpers/menu";
+
+// The phone Home (#388) and the phone Pack mode (#386) are drawn below 1024px: this spec's flow starts on the Home and does not
+// depend on the laptop layouts, so it runs there.
+test.beforeEach(async ({ page }) => {
+  await phoneHomeLayout(page);
+});
 
 // Persistent navigation and Feedback on long pages (#282). Every assertion compares against real neighbours (the bar's
 // rect, the tab bar's rect, what is actually under a point), because a check that only says "is in the viewport" passed
@@ -320,27 +326,6 @@ for (const viewport of [WIDE[0], PHONE[0]]) {
       };
       const heading = await landed("main h2");
       expect(heading.top).toBeGreaterThanOrEqual(heading.barBottom);
-
-      // A packing-list section reached through the sections panel, as a real anchor click. That panel belongs to the page
-      // below 1024px (the laptop view has no sections panel, #385), so a laptop width checks it just under the breakpoint.
-      if (viewport.width >= 1024) await legacyPackingLayout(page);
-      await page.goto("/");
-      await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
-      await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
-      if (MUTANT_CSS) await page.addStyleTag({ content: MUTANT_CSS });
-      const section = await landed(".list-section");
-      expect(section.top).toBeGreaterThanOrEqual(section.barBottom);
-      const link = page.locator(".sections-panel a").nth(1);
-      await link.scrollIntoViewIfNeeded();
-      await link.click();
-      const target = await page.evaluate(() => {
-        const rect = document.querySelector(":target")!.getBoundingClientRect();
-        return {
-          top: rect.top,
-          barBottom: document.querySelector(".topbar")!.getBoundingClientRect().bottom,
-        };
-      });
-      expect(target.top).toBeGreaterThanOrEqual(target.barBottom);
     },
   );
 }

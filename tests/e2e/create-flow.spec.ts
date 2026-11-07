@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { ownerEmailFor, signIn, signInAsOwner } from "./helpers/auth";
 import { readTripTravel, setOwnerHomeCity } from "./helpers/database";
 import { chooseFromMenu, futureRow, futureTab, planATrip } from "./helpers/menu";
-import { DEVICE, laptopPlanLayout, legacyPackingLayout } from "./helpers/device";
+import { DEVICE, laptopPlanLayout, phoneHomeLayout } from "./helpers/device";
 import {
   chooseMode,
   createButton,
@@ -17,7 +17,7 @@ import {
 
 // Home is the laptop suitcase view from 1024px (#387); this spec's subject is the page below it, so it runs there.
 test.beforeEach(async ({ page }) => {
-  await legacyPackingLayout(page);
+  await phoneHomeLayout(page);
 });
 
 // Plan a trip (#390) against the real database. Fixed clock: San Diego is upcoming, Lisbon is past. Trips are stored in the
@@ -93,7 +93,7 @@ test("the ambiguous London requires an explicit choice", async ({ page }) => {
   await setDates(page, "2026-11-12", "2026-11-16");
   await toList(page);
   await reviewAndCreate(page);
-  await legacyPackingLayout(page);
+  await phoneHomeLayout(page);
   const london = await futureRowNamed(page, "London");
   await expect(london).toBeVisible();
   await london.click();
@@ -170,7 +170,7 @@ test("create: where, when, how, the list, review -> the trip is on the dashboard
   const preview = await count();
   await nextButton(page).click();
   await createButton(page).click();
-  await legacyPackingLayout(page);
+  await phoneHomeLayout(page);
 
   await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
   await expect(futureTab(page)).toContainText("1 trip");

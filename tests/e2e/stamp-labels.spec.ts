@@ -1,9 +1,16 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
-import { DEVICE, legacyPackingLayout } from "./helpers/device";
+import { DEVICE, phoneHomeLayout } from "./helpers/device";
 import { expectAccessible } from "./helpers/a11y";
+import { expectPacking } from "./helpers/packing";
 import { planRouteToList, reviewAndCreate } from "./helpers/plan";
 import { futureRow, planATrip } from "./helpers/menu";
+
+// The phone Home (#388) and the phone Pack mode (#386) are drawn below 1024px: this spec's flow starts on the Home and does not
+// depend on the laptop layouts, so it runs there.
+test.beforeEach(async ({ page }) => {
+  await phoneHomeLayout(page);
+});
 
 // Per-trip stamp label (#151), through the real data layer: the packing screen's Edit stamp sheet, the same label on the
 // dashboard (display only), Reset to automatic, and what a person typing a bad label sees.
@@ -14,9 +21,15 @@ async function openSanDiego(page: Page) {
   await signInAsOwner(page);
   await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
   await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
-  await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
+  await expectPacking(page);
 }
-const heroStamp = (page: Page) => page.locator(".hero-stamps").getByRole("img");
+// The stamp is drawn on the dashboard (the Packing screen only has the Edit stamp link, under the suitcase).
+const dashboardStamp = (page: Page, trip: string) =>
+  page.getByRole("article", { name: trip }).getByRole("img", { name: /stamps?$/ });
+async function stampOnDashboard(page: Page, trip: string) {
+  await page.goto("/");
+  return dashboardStamp(page, trip);
+}
 /** Open the sheet; a click that lands before the page is interactive is repeated until the sheet shows. */
 async function openStampSheet(page: Page) {
   const sheet = page.getByRole("dialog", { name: "Stamp label" });
@@ -30,10 +43,11 @@ async function openStampSheet(page: Page) {
 test("set a custom stamp label, see it on the dashboard and after a reload, then reset it to automatic", async ({
   page,
 }) => {
-  await legacyPackingLayout(page);
   await openSanDiego(page);
-  const automatic = await heroStamp(page).getAttribute("aria-label");
+  const automatic = await (await stampOnDashboard(page, "San Diego")).getAttribute("aria-label");
   expect(automatic).toMatch(/departure stamp$/);
+  await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
+  await expectPacking(page);
 
   const sheet = await openStampSheet(page);
   await expect(sheet.getByRole("group", { name: "Stamp 1, automatic" })).toBeVisible();
@@ -44,13 +58,11 @@ test("set a custom stamp label, see it on the dashboard and after a reload, then
   await sheet.getByRole("button", { name: "Save" }).click();
   await expect(sheet).toBeHidden();
   await expect(page.getByText("Stamp updated.")).toBeVisible();
-  await expect(heroStamp(page)).toHaveAttribute("aria-label", "SD7, San Diego, departure stamp");
   await expect(page.getByRole("button", { name: "Edit stamp" })).toBeFocused();
 
-  // It is stored: a reload shows it, and the dashboard shows the same label with no way to edit it there.
+  // It is stored: after a reload the dashboard shows the label, with no way to edit it there.
   await page.reload();
-  await expect(heroStamp(page)).toHaveAttribute("aria-label", "SD7, San Diego, departure stamp");
-  await page.getByRole("link", { name: "All trips" }).click();
+  await page.goto("/");
   await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
   // The Home no longer draws route stamps (the redesign's luggage tag has none), so it shows no Edit stamp either.
   await expect(page.getByRole("button", { name: "Edit stamp" })).toHaveCount(0);
@@ -61,13 +73,12 @@ test("set a custom stamp label, see it on the dashboard and after a reload, then
   await reset.getByRole("button", { name: "Reset to automatic" }).click();
   await reset.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByText("Stamp reset to automatic.")).toBeVisible();
-  await expect(heroStamp(page)).toHaveAttribute("aria-label", automatic!);
+  await expect(await stampOnDashboard(page, "San Diego")).toHaveAttribute("aria-label", automatic!);
 });
 
 test("a two-country trip has two stamps to label: each is edited on its own, and the name carries both", async ({
   page,
 }) => {
-  await legacyPackingLayout(page);
   await page.clock.setFixedTime(NOW);
   await signInAsOwner(page);
   await planATrip(page);
@@ -81,7 +92,7 @@ test("a two-country trip has two stamps to label: each is edited on its own, and
   );
   await reviewAndCreate(page);
   await (await futureRow(page, /Lisbon & Paris/)).click();
-  await expect(heroStamp(page)).toHaveAttribute("aria-label", "PRT, FRA route stamps");
+  await expectPacking(page);
 
   const sheet = await openStampSheet(page);
   await expect(sheet.getByRole("group", { name: "Stamp 1, automatic" })).toBeVisible();
@@ -91,17 +102,20 @@ test("a two-country trip has two stamps to label: each is edited on its own, and
   await second.getByRole("textbox", { name: "Label", exact: true }).fill("zz9");
   await sheet.getByRole("button", { name: "Save" }).click();
   await expect(sheet).toBeHidden();
-  await expect(heroStamp(page)).toHaveAttribute("aria-label", "PRT, ZZ9 route stamps");
   await page.reload();
-  await expect(heroStamp(page)).toHaveAttribute("aria-label", "PRT, ZZ9 route stamps");
+  await expectPacking(page);
+  const again = await openStampSheet(page);
+  await expect(
+    again
+      .getByRole("group", { name: /^Stamp 2,/ })
+      .getByRole("textbox", { name: "Label", exact: true }),
+  ).toHaveValue("ZZ9");
 });
 
 test("a label that is not exactly 3 letters or numbers is refused with a message, and nothing is saved", async ({
   page,
 }) => {
-  await legacyPackingLayout(page);
   await openSanDiego(page);
-  const automatic = await heroStamp(page).getAttribute("aria-label");
   const sheet = await openStampSheet(page);
   await sheet.getByRole("radio", { name: "Custom" }).check();
   const field = sheet.getByRole("textbox", { name: "Label", exact: true });
@@ -112,14 +126,14 @@ test("a label that is not exactly 3 letters or numbers is refused with a message
   // Not saveable while it is invalid.
   await expect(sheet.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
   await sheet.getByRole("button", { name: "Cancel" }).click();
-  await expect(heroStamp(page)).toHaveAttribute("aria-label", automatic!);
+  await expect(sheet).toBeHidden();
+  await expect(page.getByRole("button", { name: "Edit stamp" })).toBeFocused();
 });
 
 test(
   "the Stamp label sheet is accessible, keyboard operable, and fits a phone",
   DEVICE,
   async ({ page }) => {
-    await legacyPackingLayout(page);
     await openSanDiego(page);
     const edit = page.getByRole("button", { name: "Edit stamp" });
     const box = (await edit.boundingBox())!;

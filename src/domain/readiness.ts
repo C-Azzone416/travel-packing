@@ -105,6 +105,29 @@ export function setPacked<T extends ReadinessTrip>(
   });
 }
 
+/**
+ * Set several items' packed counts as ONE change ("All in" and its Undo, #386): every entry is applied, or none is (an unknown
+ * item rejects the whole command and returns the trip as it was). The signals are the combined ones, as if the entries had been
+ * ticked one after another.
+ */
+export function setPackedMany<T extends ReadinessTrip>(
+  trip: T,
+  entries: readonly { itemId: string; packed: number }[],
+): CommandResult<T> {
+  let next = trip;
+  let signals = NO_SIGNALS;
+  for (const entry of entries) {
+    const result = setPacked(next, entry.itemId, entry.packed);
+    if (!result.ok) return rejected(trip, result.reason);
+    next = result.trip;
+    signals = {
+      promptBagPlacement: signals.promptBagPlacement || result.signals.promptBagPlacement,
+      reviewPrompt: signals.reviewPrompt || result.signals.reviewPrompt,
+    };
+  }
+  return accepted(next, { ...signals, reviewPrompt: allPacked(next) && !next.ready });
+}
+
 export function togglePacked<T extends ReadinessTrip>(trip: T, itemId: string): CommandResult<T> {
   const item = findItem(trip, itemId);
   if (!item) return rejected(trip, "ITEM_NOT_FOUND");

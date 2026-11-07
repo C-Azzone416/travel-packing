@@ -1,13 +1,13 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
 import { FAKE_GEOCODER_PORT, OPEN_METEO_PORT } from "./support/ports";
-import { DEVICE, laptopPlanLayout, legacyPackingLayout } from "./helpers/device";
+import { DEVICE, laptopPlanLayout, phoneHomeLayout } from "./helpers/device";
 import { nextButton, reviewAndCreate, setDates, toList, toWhen } from "./helpers/plan";
 import { futureRow, planATrip } from "./helpers/menu";
 
 // Home is the laptop suitcase view from 1024px (#387); this spec's subject is the page below it, so it runs there.
 test.beforeEach(async ({ page }) => {
-  await legacyPackingLayout(page);
+  await phoneHomeLayout(page);
 });
 
 // Two copies of the app run during e2e (see playwright.config.ts and support/ports.ts): the default one

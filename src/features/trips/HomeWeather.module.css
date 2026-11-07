@@ -50,6 +50,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 8px 12px;
   width: 100%;
   min-height: 46px;
@@ -67,8 +68,11 @@
   border-radius: 14px;
 }
 .cityText {
-  min-width: 0;
-  overflow-wrap: anywhere;
+  flex: 1 1 0;
+  /* Never narrower than its longest word, so the state wraps below it on a narrow screen instead of squeezing the words
+     apart; a word longer than the whole row still breaks (break-word). */
+  min-width: min(min-content, 100%);
+  overflow-wrap: break-word;
 }
 .cityText strong {
   font-weight: 700;

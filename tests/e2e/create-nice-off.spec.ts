@@ -1,12 +1,13 @@
 import { expect, test, type Page } from "@playwright/test";
-import { legacyPackingLayout } from "./helpers/device";
 import { signInAsOwner } from "./helpers/auth";
 import { chooseFromMenu, planATrip, openTripFromHome } from "./helpers/menu";
+import { phoneHomeLayout } from "./helpers/device";
+import { allItemIds, expectPacking } from "./helpers/packing";
 import { nextButton, planAndCreate, planToList, reviewAndCreate } from "./helpers/plan";
 
 // Home is the laptop suitcase view from 1024px (#387); this spec's subject is the page below it, so it runs there.
 test.beforeEach(async ({ page }) => {
-  await legacyPackingLayout(page);
+  await phoneHomeLayout(page);
 });
 
 // #202: a NEW trip made with Nice outfits OFF must have no nice-attire lines, stored and after a reload. A new trip starts
@@ -16,19 +17,15 @@ test.beforeEach(async ({ page }) => {
 const NOW = new Date("2026-10-16T12:00:00");
 const NICE_IDS = ["nice-top", "nice-bottom", "nice-shoes", "nice-makeup", "nice-undergarments"];
 
-const row = (page: Page, id: string) => page.locator(`[data-item-id="${id}"]`);
-
 async function expectNoNiceAttire(page: Page) {
-  await expect(row(page, "tops")).toBeVisible();
-  for (const id of NICE_IDS) await expect(row(page, id)).toHaveCount(0);
-  await expect(page.getByText("Nice-attire top")).toHaveCount(0);
-  await expect(page.getByText("Dress shoes")).toHaveCount(0);
+  const ids = await allItemIds(page);
+  expect(ids).toContain("tops");
+  for (const id of NICE_IDS) expect(ids).not.toContain(id);
 }
 
 test("a new trip starts with Nice outfits off: no nice-attire items after save and reload", async ({
   page,
 }) => {
-  await legacyPackingLayout(page);
   test.setTimeout(60_000);
   await page.clock.setFixedTime(NOW);
   await signInAsOwner(page);
@@ -42,7 +39,7 @@ test("a new trip starts with Nice outfits off: no nice-attire items after save a
   });
   await expect(page.locator(".toast-region")).toContainText("Trip saved");
   await openTripFromHome(page, "London");
-  await expect(page.getByRole("heading", { name: "London", level: 1 })).toBeVisible();
+  await expectPacking(page);
   await expectNoNiceAttire(page);
 
   await page.reload();
@@ -68,13 +65,13 @@ test("copying a trip that has Nice outfits keeps the nice-attire items (the cont
   await reviewAndCreate(page);
   await expect(page.locator(".toast-region")).toContainText("Trip saved");
   await openTripFromHome(page, "Paris");
-  await expect(row(page, "nice-top")).toBeVisible();
+  await expectPacking(page);
+  expect(await allItemIds(page)).toContain("nice-top");
 });
 
 test("copy: unticking 'Copy a past trip' makes the trip with the defaults, Nice outfits off", async ({
   page,
 }) => {
-  await legacyPackingLayout(page);
   test.setTimeout(60_000);
   await page.clock.setFixedTime(NOW);
   await signInAsOwner(page);
@@ -91,7 +88,7 @@ test("copy: unticking 'Copy a past trip' makes the trip with the defaults, Nice 
   await page.getByRole("button", { name: "Create trip" }).click();
   await expect(page.locator(".toast-region")).toContainText("Trip saved");
   await openTripFromHome(page, "Paris");
-  await expect(page.getByRole("heading", { name: "Paris", level: 1 })).toBeVisible();
+  await expectPacking(page);
   await expectNoNiceAttire(page);
   await page.reload();
   await expectNoNiceAttire(page);

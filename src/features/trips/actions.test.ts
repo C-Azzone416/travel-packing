@@ -33,6 +33,7 @@ import {
   restoreTripAction,
   undoRemoveTripAction,
 } from "./actions";
+import { getHomeCityAction } from "./trip-actions";
 
 let ctx: Awaited<ReturnType<typeof createMigratedDb>>;
 const fake = createFakeAuth();
@@ -309,6 +310,40 @@ describe("trips server actions", () => {
         await service.setHomeCity(makeContext(db(), fake), { location: { id: "pt-lisbon" } });
         expect((await createTripAction(draft())).ok).toBe(true);
         expect((await stored())[0].origin_city).toBe("Lisbon");
+      });
+
+      it("cross-user: another owner's home city is never this owner's origin, and this owner's never theirs", async () => {
+        await seedOwner(db(), OWNER.userId);
+        await seedOwner(db(), OTHER_OWNER.userId);
+        await service.setHomeCity(makeContext(db(), fake), { location: { id: "pt-lisbon" } });
+        as(OTHER_OWNER);
+        await service.setHomeCity(makeContext(db(), fake), { location: { id: "us-co-denver" } });
+        expect(await getHomeCityAction()).toMatchObject({
+          ok: true,
+          home: { location: { city: "Denver" } },
+        });
+
+        // The other owner saves a trip without an origin: it takes THEIR home (Denver), never Lisbon.
+        expect((await createTripAction(draft())).ok).toBe(true);
+        expect((await stored())[0].origin_city).toBe("Denver");
+
+        // Back as the first owner: their own home (Lisbon) is the default, never Denver.
+        as(OWNER);
+        expect((await createTripAction(draft())).ok).toBe(true);
+        expect((await stored())[0].origin_city).toBe("Lisbon");
+        expect(await getHomeCityAction()).toMatchObject({
+          ok: true,
+          home: { location: { city: "Lisbon" } },
+        });
+      });
+
+      it("cross-user: an owner with no home city gets no origin, even when another owner has one", async () => {
+        await seedOwner(db(), OWNER.userId);
+        await seedOwner(db(), OTHER_OWNER.userId);
+        await service.setHomeCity(makeContext(db(), fake), { location: { id: "pt-lisbon" } });
+        as(OTHER_OWNER);
+        expect((await createTripAction(draft())).ok).toBe(true);
+        expect((await stored())[0].origin_city).toBeNull();
       });
 
       it("a copy and a weather-reviewed trip take them too", async () => {

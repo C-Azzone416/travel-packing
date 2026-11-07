@@ -1,13 +1,14 @@
 import { expect, test, type Page } from "@playwright/test";
 import { expectAccessible } from "./helpers/a11y";
-import { futureRow, futureTab, planATrip } from "./helpers/menu";
+import { planATrip, futureRow, futureTab } from "./helpers/menu";
 import { signInAsOwner } from "./helpers/auth";
-import { DEVICE, legacyPackingLayout } from "./helpers/device";
+import { expectPacking } from "./helpers/packing";
+import { DEVICE, phoneHomeLayout } from "./helpers/device";
 import { pickRoute, reviewAndCreate, setRouteDates, toList, toWhen } from "./helpers/plan";
 
 // Home is the laptop suitcase view from 1024px (#387); this spec's subject is the page below it, so it runs there.
 test.beforeEach(async ({ page }) => {
-  await legacyPackingLayout(page);
+  await phoneHomeLayout(page);
 });
 
 // Multi-destination trips (epic #107, #112): create a 3-stop trip, reload, see the route and dates persisted, edit it
@@ -45,7 +46,6 @@ test(
   "create a 3-stop trip: the route and dates persist across a reload",
   DEVICE,
   async ({ page }) => {
-    await legacyPackingLayout(page);
     await openDashboard(page);
     await createThreeStopTrip(page);
     await expect(page.getByLabel("Arrive, Stop 2")).toHaveValue("2026-11-15");
@@ -61,17 +61,17 @@ test(
     await expect(await trip(page, /Lisbon.*Paris.*Rome/)).toBeVisible();
 
     await (await trip(page, /Lisbon.*Paris.*Rome/)).click();
-    await expect(page.getByText("Nov 12 – Nov 22").first()).toBeVisible();
-    await expect(
-      page.getByRole("heading", { name: "Lisbon → Paris → Rome", level: 1 }),
-    ).toBeVisible();
-    // The title is the route, so the header does not repeat it as a chip.
-    await expect(page.locator(".route-chip")).toHaveCount(0);
+    await expectPacking(page);
+    // The Home row shows the start; the whole route and its dates are in the Edit trip sheet.
+    await page.getByRole("button", { name: "Edit trip" }).click();
+    const dates = page.getByRole("dialog", { name: "Edit trip" });
+    await expect(dates.getByLabel("Arrive, Stop 2")).toHaveValue("2026-11-15");
+    await expect(dates.getByLabel("Arrive, Stop 3")).toHaveValue("2026-11-18");
+    await page.keyboard.press("Escape");
   },
 );
 
 test("edit the route down to 2 stops, then copy the trip to new dates", async ({ page }) => {
-  await legacyPackingLayout(page);
   await openDashboard(page);
   await createThreeStopTrip(page);
   await toList(page);
@@ -87,11 +87,10 @@ test("edit the route down to 2 stops, then copy the trip to new dates", async ({
   await expect(sheet.getByLabel("Arrive, Stop 2")).toHaveValue("2026-11-15");
   await sheet.getByRole("button", { name: "Save route" }).click();
   await expect(sheet).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "Lisbon → Rome", level: 1 })).toBeVisible();
+  await expect(page.getByRole("status", { name: "Packing updates" })).toHaveText("Route updated.");
 
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Lisbon → Rome", level: 1 })).toBeVisible();
-  await expect(page.locator(".route-chip")).toHaveCount(0);
+  await expectPacking(page);
 
   await page.goto("/");
   // A later trip has no menu on the phone Home (#388); Copy trip is the link the menu uses.
