@@ -903,6 +903,107 @@ describe("EditTripSheet: Route & dates", () => {
     expect((screen.getByLabelText("Leave") as HTMLInputElement).value).toBe("2026-10-21");
   });
 
+  describe("a refresh that agrees with the person's date settles it", () => {
+    const lisbon = {
+      ...base().stops[0].location,
+      id: "pt-lisbon",
+      city: "Lisbon",
+      label: "Lisbon, Portugal",
+    };
+    const twoStops = (start: string, end: string, updatedAt: string): LifecycleTrip => ({
+      ...base(),
+      start,
+      end,
+      updatedAt,
+      stops: [
+        { ...base().stops[0], arrive: start, leave: "2026-10-26" },
+        { location: lisbon, arrive: "2026-10-26", leave: end },
+      ],
+    });
+    const oneStop = (start: string, end: string, updatedAt: string): LifecycleTrip => ({
+      ...base(),
+      start,
+      end,
+      updatedAt,
+      stops: [{ ...base().stops[0], arrive: start, leave: end }],
+    });
+    const setDate = (label: string, value: string) =>
+      fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    const field = (label: string) => (screen.getByLabelText(label) as HTMLInputElement).value;
+
+    it("Come home: saved and echoed back, then a stop-only edit takes the next concurrent date", async () => {
+      const user = userEvent.setup();
+      // What the server answers after each of the two saves (the sheet is re-fed these as the stale reload).
+      const reloads = [
+        twoStops("2026-10-23", "2026-10-30", "T2"),
+        oneStop("2026-10-23", "2026-10-31", "T3"),
+      ];
+      const calls: [TripStop[], string | undefined][] = [];
+      function TwoSaves() {
+        const [trip, setTrip] = useState(twoStops("2026-10-23", "2026-10-29", "T1"));
+        return (
+          <EditTripSheet
+            trip={trip}
+            initialTab="route"
+            today="2026-10-01"
+            onClose={() => {}}
+            onSaveRoute={async (stops, basedOn) => {
+              calls.push([stops, basedOn]);
+              const next = reloads.shift()!;
+              setTrip(next);
+              return { updatedAt: next.updatedAt };
+            }}
+            onSetTravelMode={async () => ({})}
+            onApplyPreferences={async () => "ok"}
+          />
+        );
+      }
+      renderInApp(<TwoSaves />);
+      setDate("Come home", "2026-10-30");
+      await user.click(screen.getByRole("button", { name: /^Save \d+ changes?$/ }));
+      await waitFor(() => expect(calls.length).toBe(1));
+      expect(field("Come home")).toBe("2026-10-30"); // settled: the server agrees
+      await user.click(screen.getByRole("button", { name: "Remove Lisbon" }));
+      await user.click(screen.getByRole("button", { name: /^Save \d+ changes?$/ }));
+      await waitFor(() => expect(calls.length).toBe(2));
+      expect(calls[1][1]).toBe("T2");
+      // The reload after the second save brought Oct 31 (T3): the person's Oct 30 was settled, so the server's date is taken.
+      expect(field("Come home")).toBe("2026-10-31");
+    });
+
+    it("Leave: an active Leave edit survives a stop removal and a concurrent earlier Leave", async () => {
+      const user = userEvent.setup();
+      function Active() {
+        const [trip, setTrip] = useState(twoStops("2026-10-23", "2026-10-29", "T1"));
+        return (
+          <>
+            <button
+              type="button"
+              onClick={() => setTrip(oneStop("2026-10-21", "2026-10-31", "T2"))}
+            >
+              saved elsewhere
+            </button>
+            <EditTripSheet
+              trip={trip}
+              initialTab="route"
+              today="2026-10-01"
+              onClose={() => {}}
+              onSaveRoute={async () => ({})}
+              onSetTravelMode={async () => ({})}
+              onApplyPreferences={async () => "ok"}
+            />
+          </>
+        );
+      }
+      renderInApp(<Active />);
+      setDate("Leave", "2026-10-22");
+      await user.click(screen.getByRole("button", { name: "Remove San Diego" }));
+      elsewhere();
+      expect(field("Leave")).toBe("2026-10-22");
+      expect(field("Come home")).toBe("2026-10-31");
+    });
+  });
+
   it("an untouched route follows the server; the dot and count clear when nothing of the person's remains", async () => {
     renderInApp(
       <Harness

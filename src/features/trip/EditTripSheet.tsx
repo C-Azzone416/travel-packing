@@ -178,6 +178,13 @@ export function EditTripSheet({
       touched,
     );
     setBaseline(fresh);
+    // An endpoint the server now agrees with is settled: it stays the person's only while the new baseline still differs from it.
+    const edge = (list: readonly DraftStop[], which: "arrive" | "leave") =>
+      list[which === "arrive" ? 0 : list.length - 1]?.[which];
+    setTouched((was) => ({
+      leave: was.leave && edge(next.stops as DraftStop[], "arrive") !== edge(fresh.stops, "arrive"),
+      home: was.home && edge(next.stops as DraftStop[], "leave") !== edge(fresh.stops, "leave"),
+    }));
     setStops(next.stops as DraftStop[]);
     setPrefs(next.config);
     setMode(next.travelMode);
