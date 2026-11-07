@@ -183,6 +183,7 @@ test("create: where, when, how, the list, review -> the trip is on the dashboard
   await london.click();
   await expect(page.getByText(`0 of ${preview} packed`)).toBeVisible();
   await page.getByRole("link", { name: "All trips" }).click();
+  await expect(tag(page, "San Diego")).toBeVisible();
 
   // It is in the database, not just in the page: it survives a reload.
   await page.reload();
@@ -216,7 +217,7 @@ test("create: the saved trip is there in a brand-new session (another device)", 
     await expect(device).toHaveURL(/\/$/);
     await expect(futureTab(device)).toContainText("1 trip");
     await (await futureRowNamed(device, "London")).click();
-    await expect(device.getByText(/^0 of \d+ packed$/)).toBeVisible();
+    await expect(device.locator(".progress-line")).toHaveText(/^0 of \d+ packed/);
   } finally {
     await other.close();
   }
@@ -284,7 +285,7 @@ test("copy: a new trip from the plan, and the source trip unchanged", async ({ p
 
   await expect(futureTab(page)).toContainText("1 trip");
   await (await futureRowNamed(page, "Paris")).click();
-  await expect(page.getByText(/^0 of \d+ packed$/)).toBeVisible();
+  await expect(page.locator(".progress-line")).toHaveText(/^0 of \d+ packed/);
   await page.getByRole("link", { name: "All trips" }).click();
   expect(await tag(page, "San Diego").innerText()).toBe(before);
 
@@ -292,7 +293,7 @@ test("copy: a new trip from the plan, and the source trip unchanged", async ({ p
   await page.reload();
   await expect(futureTab(page)).toContainText("1 trip");
   await (await futureRowNamed(page, "Paris")).click();
-  await expect(page.getByText(/^0 of \d+ packed$/)).toBeVisible();
+  await expect(page.locator(".progress-line")).toHaveText(/^0 of \d+ packed/);
   await page.getByRole("link", { name: "All trips" }).click();
   expect(await tag(page, "San Diego").innerText()).toBe(before);
 });
