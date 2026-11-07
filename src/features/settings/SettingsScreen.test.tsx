@@ -32,6 +32,22 @@ function saveCard() {
   return within(card);
 }
 
+type HomeUpdateResult = { ok: true; home: TripOrigin | null } | { ok: false; code: "INTERNAL" };
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((finish) => {
+    resolve = finish;
+  });
+  return { promise, resolve };
+}
+
+async function chooseHomeCity(city: string) {
+  await userEvent.click(screen.getByRole("button", { name: /Home city.*(?:choose|change)/ }));
+  await userEvent.type(screen.getByRole("combobox", { name: "Home city search" }), city);
+  await userEvent.click(await screen.findByRole("option", { name: new RegExp(city) }));
+}
+
 function setup(
   email: string | null = "owner@example.test",
   signOut = vi.fn(async () => {}),
@@ -180,6 +196,81 @@ describe("SettingsScreen", () => {
     expect(await screen.findByRole("button", { name: "Home city: Lisbon, change" })).toBeTruthy();
     expect(screen.queryByText("Couldn’t save your home city. Nothing was changed.")).toBeNull();
     expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+  });
+
+  it("rolls a current failed Home intent back to the initial confirmed city when an older clear also fails", async () => {
+    const seattle = locationById("us-wa-seattle")!;
+    const lisbon = locationById("pt-lisbon")!;
+    const clear = deferred<HomeUpdateResult>();
+    const saveLisbon = deferred<HomeUpdateResult>();
+    const updateHomeCity = vi
+      .fn<(location: SampleLocation | null) => Promise<HomeUpdateResult>>()
+      .mockReturnValueOnce(clear.promise)
+      .mockReturnValueOnce(saveLisbon.promise);
+    setup(undefined, undefined, undefined, undefined, false, { location: seattle }, updateHomeCity);
+
+    await userEvent.click(screen.getByRole("button", { name: "Clear" }));
+    await chooseHomeCity("Lisbon");
+    expect(screen.getByRole("button", { name: "Home city: Lisbon, change" })).toBeTruthy();
+    expect(updateHomeCity).toHaveBeenCalledTimes(1);
+
+    await act(async () => clear.resolve({ ok: false, code: "INTERNAL" }));
+    await waitFor(() => expect(updateHomeCity).toHaveBeenCalledTimes(2));
+    expect(updateHomeCity).toHaveBeenNthCalledWith(2, lisbon);
+    await act(async () => saveLisbon.resolve({ ok: false, code: "INTERNAL" }));
+
+    expect(await screen.findByRole("button", { name: "Home city: Seattle, change" })).toBeTruthy();
+    expect(screen.getByText("Couldn’t save your home city. Nothing was changed.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
+  });
+
+  it("rolls a current failed Home intent back to an older clear that the server confirmed", async () => {
+    const seattle = locationById("us-wa-seattle")!;
+    const lisbon = locationById("pt-lisbon")!;
+    const clear = deferred<HomeUpdateResult>();
+    const saveLisbon = deferred<HomeUpdateResult>();
+    const updateHomeCity = vi
+      .fn<(location: SampleLocation | null) => Promise<HomeUpdateResult>>()
+      .mockReturnValueOnce(clear.promise)
+      .mockReturnValueOnce(saveLisbon.promise);
+    setup(undefined, undefined, undefined, undefined, false, { location: seattle }, updateHomeCity);
+
+    await userEvent.click(screen.getByRole("button", { name: "Clear" }));
+    await chooseHomeCity("Lisbon");
+    expect(screen.getByRole("button", { name: "Home city: Lisbon, change" })).toBeTruthy();
+    expect(updateHomeCity).toHaveBeenCalledTimes(1);
+
+    await act(async () => clear.resolve({ ok: true, home: null }));
+    await waitFor(() => expect(updateHomeCity).toHaveBeenCalledTimes(2));
+    expect(updateHomeCity).toHaveBeenNthCalledWith(2, lisbon);
+    await act(async () => saveLisbon.resolve({ ok: false, code: "INTERNAL" }));
+
+    expect(await screen.findByRole("button", { name: "Home city, choose" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Home city: (?:Seattle|Lisbon)/ })).toBeNull();
+    expect(screen.getByText("Couldn’t save your home city. Nothing was changed.")).toBeTruthy();
+  });
+
+  it("skips a queued middle Home intent after the owner chooses something newer", async () => {
+    const seattle = locationById("us-wa-seattle")!;
+    const paris = locationById("fr-idf-paris")!;
+    const clear = deferred<HomeUpdateResult>();
+    const updateHomeCity = vi
+      .fn<(location: SampleLocation | null) => Promise<HomeUpdateResult>>()
+      .mockReturnValueOnce(clear.promise)
+      .mockResolvedValueOnce({ ok: true, home: { location: paris } });
+    setup(undefined, undefined, undefined, undefined, false, { location: seattle }, updateHomeCity);
+
+    await userEvent.click(screen.getByRole("button", { name: "Clear" }));
+    await chooseHomeCity("Lisbon");
+    await chooseHomeCity("Paris");
+    expect(screen.getByRole("button", { name: "Home city: Paris, change" })).toBeTruthy();
+    expect(updateHomeCity).toHaveBeenCalledTimes(1);
+
+    await act(async () => clear.resolve({ ok: true, home: null }));
+    await waitFor(() => expect(updateHomeCity).toHaveBeenCalledTimes(2));
+    expect(updateHomeCity).toHaveBeenNthCalledWith(2, paris);
+    expect(updateHomeCity).not.toHaveBeenCalledWith(locationById("pt-lisbon"));
+    expect(await screen.findByRole("button", { name: "Home city: Paris, change" })).toBeTruthy();
   });
 
   it("clears the Home field alert when the saved Retry succeeds", async () => {

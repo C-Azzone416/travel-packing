@@ -108,6 +108,7 @@ export function SettingsScreen({
   // failed/successful completion harmless once the owner has chosen something newer.
   const homeWriteId = useRef(0);
   const homeWriteQueue = useRef<Promise<void>>(Promise.resolve());
+  const confirmedHome = useRef<TripOrigin | null>(initialHome);
   const [closingAccount, setClosingAccount] = useState(false);
 
   // The account's theme is the truth. If this device was showing another one (a new device, or a choice made
@@ -173,6 +174,9 @@ export function SettingsScreen({
       const queued = homeWriteQueue.current.then(async () => {
         if (writeId !== homeWriteId.current) return stale;
         const result = await updateHomeCity(next);
+        // A successful response is the newest server-confirmed state even when a later UI intent
+        // has already replaced it. A later failure must roll back to this, not to optimistic UI.
+        if (result.ok) confirmedHome.current = result.home;
         // Normalize an obsolete completion before SaveStatus sees it, so it cannot replace a newer
         // failure/Retry or clear the newer failure by completing later.
         if (writeId !== homeWriteId.current) return stale;
@@ -200,7 +204,7 @@ export function SettingsScreen({
       }
     }).catch(() => {
       if (writeId !== homeWriteId.current) return;
-      setHome(previous);
+      setHome(confirmedHome.current);
       setHomeError(true);
     });
   }
