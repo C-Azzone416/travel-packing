@@ -198,6 +198,7 @@ test("copy: a remembered Bathroom item travels to the copy, with nothing checked
   await expect(page.getByText("Face wash", { exact: true })).toBeVisible();
   await page.getByRole("link", { name: "All trips" }).click();
   const source = page.getByRole("region", { name: "San Diego" });
+  await expect(source).toBeVisible();
   const before = await source.innerText();
 
   await chooseFromMenu(page, "San Diego", "Copy trip");

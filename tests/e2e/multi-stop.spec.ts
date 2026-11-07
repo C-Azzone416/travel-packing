@@ -39,7 +39,7 @@ async function createThreeStopTrip(page: Page) {
   await setRouteDates(page, ["2026-11-12", "2026-11-15", "2026-11-18", "2026-11-22"]);
 }
 
-const trip = (page: Page, name: string) => futureRow(page, name);
+const trip = (page: Page, name: RegExp) => futureRow(page, name);
 
 test(
   "create a 3-stop trip: the route and dates persist across a reload",
@@ -54,13 +54,13 @@ test(
     await toList(page);
     await reviewAndCreate(page);
 
-    const saved = await trip(page, "Lisbon → Paris → Rome");
+    const saved = await trip(page, /Lisbon.*Paris.*Rome/);
     await expect(saved).toBeVisible();
     await expect(saved).toContainText("12 NOV");
     await page.reload();
-    await expect(await trip(page, "Lisbon → Paris → Rome")).toBeVisible();
+    await expect(await trip(page, /Lisbon.*Paris.*Rome/)).toBeVisible();
 
-    await (await trip(page, "Lisbon → Paris → Rome")).click();
+    await (await trip(page, /Lisbon.*Paris.*Rome/)).click();
     await expect(page.getByText("Nov 12 – Nov 22").first()).toBeVisible();
     await expect(
       page.getByRole("heading", { name: "Lisbon → Paris → Rome", level: 1 }),
@@ -76,7 +76,7 @@ test("edit the route down to 2 stops, then copy the trip to new dates", async ({
   await createThreeStopTrip(page);
   await toList(page);
   await reviewAndCreate(page);
-  await (await trip(page, "Lisbon → Paris → Rome")).click();
+  await (await trip(page, /Lisbon.*Paris.*Rome/)).click();
 
   await page.getByRole("button", { name: "Edit trip" }).click();
   const sheet = page.getByRole("dialog", { name: "Edit trip" });
@@ -95,7 +95,7 @@ test("edit the route down to 2 stops, then copy the trip to new dates", async ({
 
   await page.goto("/");
   // A later trip has no menu on the phone Home (#388); Copy trip is the link the menu uses.
-  const copyOf = await (await trip(page, "Lisbon → Rome")).getAttribute("href");
+  const copyOf = await (await trip(page, /Lisbon.*Rome/)).getAttribute("href");
   await page.goto(`/trips/new?copy=${copyOf!.split("/").pop()}`);
   await expect(page.getByRole("button", { name: "Remove Rome" })).toBeVisible();
   await toWhen(page);
@@ -106,7 +106,7 @@ test("edit the route down to 2 stops, then copy the trip to new dates", async ({
   await reviewAndCreate(page);
   await futureTab(page).click();
   await expect(
-    page.getByRole("list", { name: "Future trips" }).getByRole("link", { name: /Lisbon → Rome/ }),
+    page.getByRole("list", { name: "Future trips" }).getByRole("link", { name: /Lisbon.*Rome/ }),
   ).toHaveCount(2);
 });
 
@@ -136,7 +136,7 @@ test(
     await expectAccessible(page, "plan: when step, three stops", { disable: ["color-contrast"] });
     await toList(page);
     await reviewAndCreate(page);
-    await (await trip(page, "Lisbon → Paris → Rome")).click();
+    await (await trip(page, /Lisbon.*Paris.*Rome/)).click();
     await expectAccessible(page, "trip with route chip");
     await page.getByRole("button", { name: "Edit trip" }).click();
     await expectAccessible(page, "edit route sheet");

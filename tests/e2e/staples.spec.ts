@@ -65,7 +65,9 @@ async function newTrip(
   await planATrip(page);
   await planAndCreate(page, { query: "paris", option: destination, start: start, end: end });
   // The trips are counted as rows under the Future pill (San Diego is the next trip on the fixed clock).
-  await expect(await futureRow(page, /Paris/)).toHaveCount(expectedCount);
+  await underLegacyPacking(page, async () =>
+    expect(await futureRow(page, /Paris/)).toHaveCount(expectedCount),
+  );
 }
 
 /** The trip's Packing page is the pre-redesign one below 1024px; the Staples screen is drawn at the laptop width. */

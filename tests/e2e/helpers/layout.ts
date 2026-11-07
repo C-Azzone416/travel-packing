@@ -13,8 +13,12 @@ export async function expectWholeWords(locator: Locator, label: string): Promise
     while (node) {
       const text = node.textContent ?? "";
       // Visually hidden text (a 1px clipped box) is read aloud, not seen: it has no lines to break.
-      const box = node.parentElement?.getBoundingClientRect();
-      if (box && box.width <= 2) {
+      let hidden = false;
+      for (let el = node.parentElement; el && el !== root.parentElement; el = el.parentElement) {
+        const box = el.getBoundingClientRect();
+        if (box.width <= 2 && box.height <= 2) hidden = true;
+      }
+      if (hidden) {
         node = walker.nextNode();
         continue;
       }
