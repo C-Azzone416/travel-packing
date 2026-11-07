@@ -80,7 +80,7 @@ test("a two-country trip has two stamps to label: each is edited on its own, and
     ["2026-11-12", "2026-11-15", "2026-11-18"],
   );
   await reviewAndCreate(page);
-  await (await futureRow(page, /Lisbon → Paris/)).click();
+  await (await futureRow(page, /Lisbon & Paris/)).click();
   await expect(heroStamp(page)).toHaveAttribute("aria-label", "PRT, FRA route stamps");
 
   const sheet = await openStampSheet(page);
