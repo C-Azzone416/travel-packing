@@ -3,6 +3,8 @@ import { signInAsOwner } from "./helpers/auth";
 import { DEVICE } from "./helpers/device";
 import { expectWholeWords, overflow } from "./helpers/layout";
 import { expectPacking } from "./helpers/packing";
+import { planATrip } from "./helpers/menu";
+import { planAndCreate } from "./helpers/plan";
 
 // The phone Home (#388; spec #376 part 3 section 1.2): the next trip as a luggage tag with four pills (Pack, Weather, Future,
 // Stamps), each with its own panel. These run on the phone project at its own size and on the desktop project at the widths
@@ -90,9 +92,63 @@ test.describe("pills and panels", DEVICE, () => {
       "/trips/new",
     );
     const past = panel.getByRole("link", { name: "Past trips are with your stamps ›" });
-    await expect(past).toHaveAttribute("href", "/stamps");
+    await expect(past).toHaveAttribute("href", "/?tab=stamps");
     await past.click();
-    await expect(page.getByRole("heading", { name: "Stamps", level: 1 })).toBeVisible();
+    // Home's own Stamps panel, in the address; the Stamps screen is still in the navigation.
+    await expect(pill(page, /^Stamps/)).toHaveAttribute("aria-selected", "true");
+    await expect(page).toHaveURL(/\/\?tab=stamps$/);
+    await expect(page.getByRole("heading", { name: "Trips", level: 1 })).toBeAttached();
+  });
+
+  test("at 195 a later trip's mini tag stacks, keeps whole words and keeps its menu off the name", async ({
+    page,
+  }) => {
+    await openHome(page, 390);
+    await planATrip(page);
+    await planAndCreate(page, {
+      query: "lon",
+      option: /England/,
+      start: "2026-12-17",
+      end: "2026-12-20",
+    });
+    await page.setViewportSize({ width: 195, height: 844 });
+    await page.goto("/");
+    await pill(page, /^Future/).click();
+    const row = page.getByRole("list", { name: "Future trips" }).getByRole("listitem").first();
+    await expectWholeWords(row, "the later trip's mini tag at 195");
+    const name = (await row
+      .locator("span")
+      .filter({ hasText: /^London$/ })
+      .first()
+      .boundingBox())!;
+    const menu = (await row.getByRole("button", { name: /^More actions for/ }).boundingBox())!;
+    const apart = menu.y + menu.height <= name.y + 0.5 || menu.x + menu.width <= name.x + 0.5;
+    expect(apart, "the ⋯ button must not sit over the name").toBe(true);
+    expect(await overflow(page)).toBeLessThanOrEqual(0);
+  });
+
+  test("the chosen pill is in the address: a link, a reload and Back all land on it", async ({
+    page,
+  }) => {
+    await openHome(page);
+    await pill(page, /^Future/).click();
+    await expect(page).toHaveURL(/tab=future/);
+    await pill(page, /^Stamps/).click();
+    await expect(page).toHaveURL(/tab=stamps/);
+    await page.goBack();
+    await expect(pill(page, /^Future/)).toHaveAttribute("aria-selected", "true");
+    await page.reload();
+    await expect(pill(page, /^Future/)).toHaveAttribute("aria-selected", "true");
+    await page.goto("/?tab=weather");
+    await expect(pill(page, /^Weather/)).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("tabpanel")).toHaveAttribute("aria-labelledby", "home-tab-weather");
+  });
+
+  test("the Pack card is the map alone: no route caption under it", async ({ page }) => {
+    await openHome(page);
+    const card = page.getByRole("figure");
+    await expect(card).toHaveAttribute("aria-label", /.+/);
+    await expect(card.locator("figcaption")).toHaveCount(0);
   });
 
   test("Stamps shows the filters, the stickers and the past trips, under the Home's own heading", async ({

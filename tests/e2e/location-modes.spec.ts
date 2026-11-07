@@ -112,8 +112,11 @@ test.describe("open-meteo mode (LOCATION_PROVIDER=open-meteo, fake geocoder)", (
     await reviewAndCreate(page);
     const springfield = await futureRow(page, /Springfield/);
     await expect(springfield).toBeVisible();
-    await springfield.click();
-    await expect(page.getByText("Illinois, United States").first()).toBeVisible();
+    await page.getByRole("button", { name: "More actions for Springfield" }).click();
+    await page.getByRole("menuitem", { name: "Edit trip", exact: true }).click();
+    await expect(
+      page.getByRole("dialog").getByText("Springfield · Illinois · United States"),
+    ).toBeVisible();
   });
 
   test(

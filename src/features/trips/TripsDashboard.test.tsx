@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderInApp } from "@/test/providers";
 import type { LifecycleState } from "@/domain/trip-lifecycle";
 import { sampleLifecycleState } from "./fixtures";
@@ -12,6 +12,8 @@ const push = vi.fn();
 vi.mock("next/navigation", () => ({ usePathname: () => "/", useRouter: () => ({ push }) }));
 
 const TODAY = () => "2026-10-16";
+
+afterEach(() => window.history.replaceState(null, "", "/"));
 
 function setup(
   initial: LifecycleState = sampleLifecycleState(),

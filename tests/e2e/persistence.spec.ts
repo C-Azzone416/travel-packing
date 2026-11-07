@@ -51,6 +51,8 @@ test("a removed trip stays removed after a reload, and Undo brings back the iden
   page,
 }) => {
   const before = await tag(page, "San Diego").innerText();
+  // The trip's packed/total quantities (the Pack pill) must survive the remove and the undo exactly.
+  const packBefore = await page.getByRole("tab", { name: /^Pack \d+\/\d+$/ }).innerText();
   await chooseFromMenu(page, "San Diego", "Remove");
   await page.getByRole("dialog").getByRole("button", { name: "Remove trip" }).click();
   await expect(sanDiegoHeading(page)).toHaveCount(0);
@@ -64,6 +66,7 @@ test("a removed trip stays removed after a reload, and Undo brings back the iden
   await page.reload();
   await expect(sanDiegoHeading(page)).toBeVisible();
   expect(await tag(page, "San Diego").innerText()).toBe(before);
+  expect(await page.getByRole("tab", { name: /^Pack \d+\/\d+$/ }).innerText()).toBe(packBefore);
   await openPastAndArchive(page);
   await expect(page.getByText("Nothing recently deleted.")).toBeVisible();
 });

@@ -34,11 +34,11 @@
   /* Room for the menu button that sits over the tag's top right corner. */
   padding-inline-end: 48px;
 }
-/* The copy takes the row; it never gets narrower than its longest word, so the countdown wraps below it on a narrow
-   screen instead of squeezing the name into pieces. A word longer than the whole row still breaks (break-word). */
+/* The copy takes the row; the countdown wraps below it when they do not fit side by side. A word longer than the whole row
+   still breaks (break-word). */
 .tagCopy {
-  flex: 1 1 0;
-  min-width: min(min-content, 100%);
+  flex: 1 1 8rem;
+  min-width: 0;
 }
 .tagSide {
   flex: none;
@@ -78,6 +78,29 @@
   font-weight: 700;
   font-size: clamp(14px, 4.4vw, 18px);
   letter-spacing: 0;
+}
+/* At 239px and below the menu button gets a row of its own above the copy, and the type steps down, so even large text keeps
+   whole words in a column that is only about 115px wide. */
+@media (max-width: 239px) {
+  .tagRow {
+    padding-inline-end: 0;
+    padding-top: 36px;
+  }
+  .menuSlot {
+    top: 2px;
+    right: 6px;
+  }
+  .chip {
+    letter-spacing: 0.04em;
+  }
+  .name,
+  .name[data-size="l"],
+  .name[data-size="m"] {
+    font-size: 18px;
+  }
+  .sub {
+    font-size: 14px;
+  }
 }
 .pills {
   min-width: 0;
@@ -119,13 +142,6 @@
   background: var(--sea);
   color: var(--ink);
   font-size: 14px;
-}
-.caption {
-  margin: 8px 4px 0;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.3;
-  overflow-wrap: anywhere;
 }
 .bagHead {
   display: flex;

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderInApp } from "@/test/providers";
 import type { LifecycleState } from "@/domain/trip-lifecycle";
 import { sampleLifecycleState } from "./fixtures";
@@ -14,6 +14,8 @@ vi.mock("next/navigation", () => ({
 }));
 
 const TODAY = () => "2026-10-16";
+
+afterEach(() => window.history.replaceState(null, "", "/"));
 
 /** Open a trip's ⋯ menu and choose one item. */
 async function choose(user: ReturnType<typeof userEvent.setup>, trip: string, item: string) {
@@ -112,7 +114,7 @@ describe("the phone Home and the Future pill", () => {
       within(panel)
         .getByRole("link", { name: "Past trips are with your stamps ›" })
         .getAttribute("href"),
-    ).toBe("/stamps");
+    ).toBe("/?tab=stamps");
     expect(within(panel).getByRole("link", { name: "Plan a trip" }).getAttribute("href")).toBe(
       "/trips/new",
     );
@@ -193,7 +195,7 @@ describe("the Weather pill and its panel", () => {
     const { user } = setup(undefined, (base) => weatherSource(base));
     await screen.findByRole("region", { name: "San Diego" });
     const tab = await within(await tabsReady()).findByRole("tab", { name: "Weather ALERT" });
-    expect(screen.getByText("Weather alert: San Diego.")).toBeTruthy();
+    expect(screen.getByText("Weather alert: suggestions to review for San Diego.")).toBeTruthy();
     await user.click(tab);
     expect(screen.getByRole("tabpanel").textContent).toContain("68°");
   });
@@ -228,6 +230,19 @@ describe("the Weather pill and its panel", () => {
     expect(screen.getByRole("link", { name: "Continue packing: San Diego" })).toBeTruthy();
   });
 
+  it("says weather is unavailable, not Clear, when the answer is 200 but every stop is unavailable", async () => {
+    const { user } = setup(undefined, (base) =>
+      weatherSource(base, undefined, {
+        kind: "ready",
+        stops: [{ stopIndex: 0, status: "unavailable", days: [] }],
+      } as never),
+    );
+    const pill = await within(await tabsReady()).findByRole("tab", { name: "Weather N/A" });
+    expect(within(tabs()).queryByRole("tab", { name: "Weather Clear" })).toBeNull();
+    await user.click(pill);
+    expect(screen.getByText("Weather is unavailable right now.")).toBeTruthy();
+  });
+
   it("treats a thrown weather read as unavailable", async () => {
     setup(undefined, (base) => ({
       ...base,
@@ -238,6 +253,51 @@ describe("the Weather pill and its panel", () => {
       } as unknown as TripsSource["weather"],
     }));
     expect(await within(await tabsReady()).findByRole("tab", { name: "Weather N/A" })).toBeTruthy();
+  });
+});
+
+describe("a later trip's menu on the Future pill", () => {
+  it("archives or removes the later trip and leaves the next trip alone", async () => {
+    const { user, base } = setup(withLater());
+    await screen.findByRole("region", { name: "San Diego" });
+    await user.click(within(tabs()).getByRole("tab", { name: /^Future/ }));
+    await user.click(screen.getByRole("button", { name: "More actions for Denver" }));
+    expect(screen.getByRole("menuitem", { name: "Copy trip" }).getAttribute("href")).toBe(
+      "/trips/new?copy=later",
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Archive" }));
+    await waitFor(() =>
+      expect(base.snapshot().trips.find((trip) => trip.id === "later")?.archived).toBe(true),
+    );
+    expect(base.snapshot().trips.find((trip) => trip.id === "san-diego")?.archived).toBe(false);
+    expect(screen.getByRole("region", { name: "San Diego" })).toBeTruthy();
+    expect(await screen.findByText("No other trips planned yet.")).toBeTruthy();
+  });
+
+  it("removes the later trip after confirming, with the next trip untouched", async () => {
+    const { user, base } = setup(withLater());
+    await screen.findByRole("region", { name: "San Diego" });
+    await user.click(within(tabs()).getByRole("tab", { name: /^Future/ }));
+    await user.click(screen.getByRole("button", { name: "More actions for Denver" }));
+    await user.click(screen.getByRole("menuitem", { name: "Remove" }));
+    await user.click(
+      within(screen.getByRole("dialog", { name: "Remove Denver?" })).getByRole("button", {
+        name: "Remove trip",
+      }),
+    );
+    await waitFor(() =>
+      expect(base.snapshot().deletedTrips.map(({ trip }) => trip.id)).toEqual(["later"]),
+    );
+    expect(base.snapshot().trips.map((trip) => trip.id)).toEqual(["san-diego"]);
+  });
+
+  it("opens the Edit trip sheet for the later trip", async () => {
+    const { user } = setup(withLater());
+    await screen.findByRole("region", { name: "San Diego" });
+    await user.click(within(tabs()).getByRole("tab", { name: /^Future/ }));
+    await user.click(screen.getByRole("button", { name: "More actions for Denver" }));
+    await user.click(screen.getByRole("menuitem", { name: "Edit trip" }));
+    expect(await screen.findByRole("dialog", { name: "Edit trip" })).toBeTruthy();
   });
 });
 

@@ -1,13 +1,14 @@
 // @vitest-environment jsdom
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LifecycleTrip } from "@/domain/trip-lifecycle";
 import type { TripItem } from "@/domain/trip";
 import type { SampleLocation, TripStop } from "@/domain/trip-stops";
 import { sampleLifecycleState } from "./fixtures";
 import { HomePhone, type HomePhoneProps } from "./HomePhone";
 import type { CityWeather } from "./home-view";
+import type { StopWeather } from "@/domain/weather/types";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/",
@@ -104,6 +105,28 @@ function setup(props: Partial<HomePhoneProps> = {}) {
   return { ...handlers, ...view };
 }
 
+afterEach(() => window.history.replaceState(null, "", "/"));
+
+/** A rainy forecast for one stop: what the Weather pill's ALERT is about, once it is not on the list yet. */
+const rainyStop = (stopIndex: number): StopWeather =>
+  ({
+    stopIndex,
+    status: "ok",
+    days: ["2027-03-15", "2027-03-16"].map((date) => ({
+      date,
+      stopIndex,
+      source: "forecast",
+      highC: 15,
+      lowC: 10,
+      precipProbability: 0.9,
+      precipMm: 0,
+      snowCm: 0,
+      uvIndexMax: 3,
+      sunshineHours: 5,
+    })),
+  }) as StopWeather;
+const bareTrip = () => trip({ items: [item("tops", "Clothing", 3, 0)] });
+
 const later = (id: string, name: string, start: string) =>
   trip({ id, name, start, end: start, stops: [stop(name)] });
 
@@ -157,12 +180,19 @@ describe("HomePhone", () => {
     expect(screen.getByRole("img", { name: "Route map unavailable" })).toBeTruthy();
   });
 
-  it("shows ALERT on the Weather pill, announces it, and opens the rainy city's daily tiles", async () => {
+  it("shows ALERT while a city has suggestions to review, announces it, and opens the rainy city", async () => {
     const user = userEvent.setup();
-    setup({ weather: { phase: "ready", city: [city("Lisbon", false), city("Porto", true)] } });
+    setup({
+      trip: bareTrip(),
+      weather: {
+        phase: "ready",
+        city: [city("Lisbon", false), city("Porto", true)],
+        review: { stops: [rainyStop(1)], suppressed: {} },
+      },
+    });
     const pill = screen.getByRole("tab", { name: "Weather ALERT" });
     expect(pill.textContent).toBe("Weather ALERT");
-    expect(screen.getByText("Weather alert: Porto.")).toBeTruthy();
+    expect(screen.getByText(/Weather alert: suggestions to review for Porto\./)).toBeTruthy();
     await user.click(pill);
     const panel = screen.getByRole("tabpanel");
     expect(panel.getAttribute("aria-labelledby")).toBe("home-tab-weather");
@@ -174,7 +204,38 @@ describe("HomePhone", () => {
         .getByRole("button", { name: /Lisbon/ })
         .getAttribute("aria-expanded"),
     ).toBe("false");
-    expect(within(panel).getByText(/Rain · 4 added/)).toBeTruthy();
+    expect(within(panel).getByText(/\d+ to review/)).toBeTruthy();
+  });
+
+  it("does not alert for rain that is already on the list, and clears once the last suggestion is resolved", () => {
+    const rain = { phase: "ready" as const, city: [city("Lisbon", false), city("Porto", true)] };
+    // The default trip holds its rain gear: the forecast has rain, nothing is left to review.
+    const done = setup({ weather: rain });
+    expect(screen.getByRole("tab", { name: "Weather Clear" })).toBeTruthy();
+    expect(screen.queryByText(/Weather alert/)).toBeNull();
+    done.unmount();
+    const view = setup({
+      trip: bareTrip(),
+      weather: { ...rain, review: { stops: [rainyStop(1)], suppressed: {} } },
+    });
+    expect(screen.getByRole("tab", { name: "Weather ALERT" })).toBeTruthy();
+    // Nothing is left to review (the suggestions were added or skipped): the same trip, with the rain on its list.
+    view.rerender(
+      <HomePhone
+        trip={trip()}
+        later={[]}
+        state={sampleLifecycleState()}
+        today="2027-03-02"
+        weather={rain}
+        map={null}
+        busy={false}
+        onEdit={vi.fn()}
+        onArchive={vi.fn()}
+        onRemove={vi.fn()}
+        onOpenArchive={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("tab", { name: "Weather Clear" })).toBeTruthy();
   });
 
   it("says Clear when no city has rain, and keeps every panel non-empty while weather loads or is missing", async () => {
@@ -200,7 +261,13 @@ describe("HomePhone", () => {
 
   it("shows Usual weather for a far trip and the off block when weather is off", async () => {
     const user = userEvent.setup();
-    const view = setup({ today: FAR_TODAY, weather: { phase: "ready", usual: [] } });
+    const usual = [
+      { city: "Lisbon", dates: "Mar 14 – Mar 24", summary: "High 63°", range: "63° / 48°" },
+    ];
+    const view = setup({
+      today: FAR_TODAY,
+      weather: { phase: "ready", usual: usual as never },
+    });
     expect(screen.getByRole("tab", { name: "Weather Usual" })).toBeTruthy();
     view.unmount();
     setup({ weather: { phase: "off" } });
@@ -223,7 +290,7 @@ describe("HomePhone", () => {
     expect(rows.map((row) => row.getAttribute("href"))).toEqual(["/trips/t2", "/trips/t3"]);
     expect(rows[0].textContent).toContain("02 APR");
     const past = within(panel).getByRole("link", { name: "Past trips are with your stamps ›" });
-    expect(past.getAttribute("href")).toBe("/stamps");
+    expect(past.getAttribute("href")).toBe("/?tab=stamps");
   });
 
   it("says nothing else is planned, and still links to the stamps, with one trip singular", async () => {
@@ -300,5 +367,86 @@ describe("HomePhone", () => {
     setup({ trip: trip({ stops: [stop("Lisbon")] }) });
     expect(screen.getByRole("heading", { level: 2, name: "Lisbon" })).toBeTruthy();
     expect(screen.queryByText("& Porto")).toBeNull();
+  });
+
+  it("keeps the chosen pill in the address, opens the pill the address names, and follows Back", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState(null, "", "/?tab=future");
+    const view = setup();
+    expect(screen.getByRole("tab", { name: /^Future/ }).getAttribute("aria-selected")).toBe("true");
+    await user.click(screen.getByRole("tab", { name: /^Weather/ }));
+    expect(new URLSearchParams(window.location.search).get("tab")).toBe("weather");
+    act(() => {
+      window.history.replaceState(null, "", "/?tab=stamps");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+    expect(screen.getByRole("tab", { name: /^Stamps/ }).getAttribute("aria-selected")).toBe("true");
+    view.unmount();
+    window.history.replaceState(null, "", "/?tab=nonsense");
+    setup();
+    expect(screen.getByRole("tab", { name: /^Pack/ }).getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("opens Home's own Stamps panel from the Future footer, and leaves a modified click alone", async () => {
+    const user = userEvent.setup();
+    setup();
+    await user.click(screen.getByRole("tab", { name: /^Future/ }));
+    await user.click(screen.getByRole("link", { name: /Past trips are with your stamps/ }));
+    expect(screen.getByRole("tab", { name: /^Stamps/ }).getAttribute("aria-selected")).toBe("true");
+    expect(new URLSearchParams(window.location.search).get("tab")).toBe("stamps");
+  });
+
+  it("draws the Pack map card without a visible route caption, keeping the route in its name", () => {
+    setup();
+    const figure = screen.getByRole("figure");
+    expect(figure.getAttribute("aria-label")).toMatch(/Lisbon/);
+    expect(figure.querySelector("figcaption")).toBeNull();
+  });
+
+  it("keeps one city open at a time on the Weather panel", async () => {
+    const user = userEvent.setup();
+    setup({
+      weather: {
+        phase: "ready",
+        city: [{ ...city("Lisbon", true), stopIndex: 0 }, city("Porto", true)],
+      },
+    });
+    await user.click(screen.getByRole("tab", { name: /^Weather/ }));
+    const panel = screen.getByRole("tabpanel");
+    const lisbon = within(panel).getByRole("button", { name: /Lisbon/ });
+    const porto = within(panel).getByRole("button", { name: /Porto/ });
+    expect(lisbon.getAttribute("aria-expanded")).toBe("true");
+    expect(porto.getAttribute("aria-expanded")).toBe("false");
+    await user.click(porto);
+    expect(porto.getAttribute("aria-expanded")).toBe("true");
+    expect(lisbon.getAttribute("aria-expanded")).toBe("false");
+    await user.click(porto);
+    expect(porto.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("gives each Future row the tag's menu: Edit, Copy, Archive and Remove", async () => {
+    const user = userEvent.setup();
+    const handlers = setup({
+      later: [later("t2", "Denver", "2027-04-02"), later("t3", "Boston", "2027-05-10")],
+    });
+    await user.click(screen.getByRole("tab", { name: /^Future/ }));
+    await user.click(screen.getByRole("button", { name: "More actions for Boston" }));
+    expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual([
+      "Edit trip",
+      "Copy trip",
+      "Archive",
+      "Remove",
+    ]);
+    expect(screen.getByRole("menuitem", { name: "Copy trip" }).getAttribute("href")).toBe(
+      "/trips/new?copy=t3",
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Archive" }));
+    expect(handlers.onArchive).toHaveBeenCalledWith("t3");
+    await user.click(screen.getByRole("button", { name: "More actions for Denver" }));
+    await user.click(screen.getByRole("menuitem", { name: "Remove" }));
+    expect(handlers.onRemove).toHaveBeenCalledWith("t2");
+    await user.click(screen.getByRole("button", { name: "More actions for Denver" }));
+    await user.click(screen.getByRole("menuitem", { name: "Edit trip" }));
+    expect(handlers.onEdit).toHaveBeenCalledWith("t2");
   });
 });

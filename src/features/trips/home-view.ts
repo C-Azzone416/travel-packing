@@ -504,9 +504,14 @@ export function homeModel(trip: LifecycleTrip, weather: HeroWeather, today: stri
     hero: heroName(trip),
     countdown: phase === "during" || phase === "past" ? null : countdownFor(trip, today),
     rows,
-    /** Cities with a rainy (or snowy) day: the Weather pill says ALERT while there is one. */
+    /** Cities with a rainy (or snowy) day: they are outlined and open themselves. */
     cities,
     pending,
+    /** Cities with weather suggestions still to review: the Weather pill says ALERT while there is one. */
+    pendingCities: Object.entries(pending)
+      .filter(([, count]) => count > 0)
+      .map(([index]) => stops[Number(index)]?.location.city.trim() ?? "")
+      .filter((city) => city !== ""),
     cubes,
     totals,
     weatherCube: cubes.find((cube) => cube.cube === "weather") ?? null,
@@ -526,15 +531,21 @@ export function homeModel(trip: LifecycleTrip, weather: HeroWeather, today: stri
 
 export type HomeModel = ReturnType<typeof homeModel>;
 
-/** The second line of the phone Weather pill: ALERT while a city has a rainy day, else the state of the weather. */
+/**
+ * The second line of the phone Weather pill: ALERT while a city has suggestions still to review (a forecast with rain that
+ * is already on the list is not an alert), else the state of the weather. A forecast that holds no usable row says N/A,
+ * never Clear: missing observations are not good weather.
+ */
 export function weatherPillSub(
   weather: HeroWeather,
-  model: Pick<HomeModel, "cities" | "phase">,
+  model: Pick<HomeModel, "pendingCities" | "phase" | "rows">,
 ): { text: string; alert: boolean } {
-  if (model.cities.length > 0) return { text: "ALERT", alert: true };
+  if (model.pendingCities.length > 0) return { text: "ALERT", alert: true };
   switch (weather.phase) {
     case "ready":
-      return { text: model.phase === "far" ? "Usual" : "Clear", alert: false };
+      if (model.phase === "far")
+        return { text: (weather.usual?.length ?? 0) > 0 ? "Usual" : "N/A", alert: false };
+      return { text: model.rows.length > 0 ? "Clear" : "N/A", alert: false };
     case "off":
       return { text: "Off", alert: false };
     case "loading":

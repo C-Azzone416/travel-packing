@@ -162,7 +162,9 @@ export function HomeLaptop({
                 Plan a trip
               </Link>
             </div>
-            {later.length > 0 ? <HomeUpcoming trips={later} today={today} /> : null}
+            {later.length > 0 ? (
+              <HomeUpcoming trips={later} today={today} actions={{ onEdit, onArchive, onRemove }} />
+            ) : null}
           </section>
         </div>
       </div>

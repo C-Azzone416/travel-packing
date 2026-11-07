@@ -214,6 +214,8 @@ test("copy: a remembered Bathroom item travels to the copy, with nothing checked
   await expect(page.getByRole("tablist", { name: "Trip sections" })).toBeVisible();
   const source = page.getByRole("region", { name: "San Diego" });
   const before = await source.innerText();
+  // The source trip's packed/total quantities (the Pack pill): a copy must not change them.
+  const packBefore = await page.getByRole("tab", { name: /^Pack \d+\/\d+$/ }).innerText();
 
   await chooseFromMenu(page, "San Diego", "Copy trip");
   await planAndCreate(page, {
@@ -226,6 +228,8 @@ test("copy: a remembered Bathroom item travels to the copy, with nothing checked
   await page.getByRole("tab", { name: /^Future/ }).click();
   await expect(page.getByRole("link", { name: /Paris/ })).toBeVisible();
   expect(await source.innerText()).toBe(before);
+  await page.getByRole("tab", { name: /^Pack/ }).click();
+  expect(await page.getByRole("tab", { name: /^Pack \d+\/\d+$/ }).innerText()).toBe(packBefore);
 
   await openTripFromHome(page, "Paris");
   await expectPacking(page);

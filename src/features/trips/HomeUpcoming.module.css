@@ -37,7 +37,7 @@
   font-weight: 800;
   font-size: 20px;
   line-height: 1.15;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .miniRoute {
   flex: none;
@@ -49,4 +49,46 @@
 .miniLink:focus-visible {
   outline: 3px solid var(--info);
   outline-offset: 2px;
+}
+.item {
+  position: relative;
+  min-width: 0;
+}
+.menuSlot {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+}
+.miniRow[data-menu="true"] {
+  padding-inline-end: 40px;
+}
+/* Below 360px the date, the name and the route stack, so the name keeps the whole row (spec #376 part 1). */
+@media (max-width: 359px) {
+  .miniRow {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+    padding-block: 6px;
+  }
+  .miniDate {
+    width: auto;
+  }
+  .miniName {
+    min-width: 0;
+    max-width: 100%;
+    font-size: 18px;
+  }
+  /* The menu gets a row of its own above the copy, as on the next trip's tag, so the name keeps the whole row. */
+  .miniRow[data-menu="true"] {
+    padding-inline-end: 0;
+    padding-top: 34px;
+  }
+  .menuSlot {
+    top: 4px;
+    transform: none;
+  }
+  .miniRoute {
+    max-width: 100%;
+  }
 }

@@ -93,9 +93,10 @@ test("edit the route down to 2 stops, then copy the trip to new dates", async ({
   await expectPacking(page);
 
   await page.goto("/");
-  // A later trip has no menu on the phone Home (#388); Copy trip is the link the menu uses.
-  const copyOf = await (await trip(page, /Lisbon.*Rome/)).getAttribute("href");
-  await page.goto(`/trips/new?copy=${copyOf!.split("/").pop()}`);
+  // A later trip's row has the same ⋯ menu as the next trip's tag: Copy trip is a user path, not a typed URL.
+  await (await trip(page, /Lisbon.*Rome/)).waitFor();
+  await page.getByRole("button", { name: /^More actions for Lisbon/ }).click();
+  await page.getByRole("menuitem", { name: "Copy trip", exact: true }).click();
   await expect(page.getByRole("button", { name: "Remove Rome" })).toBeVisible();
   await toWhen(page);
   await expect(page.getByText("Choose a new start date for the copy.").first()).toBeVisible();

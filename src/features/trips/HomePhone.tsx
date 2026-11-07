@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, type ReactNode, type Ref } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode, type Ref } from "react";
 import { Icon } from "@/components/ui/Icon";
 import { MoreMenu } from "@/components/ui/MoreMenu";
 import { CountdownBadge, CubeTile, LuggageTag, PillTabs, Suitcase } from "@/components/suitcase";
@@ -21,6 +21,14 @@ import { HomeWeather } from "./HomeWeather";
 import styles from "./HomePhone.module.css";
 
 export type HomePanel = "pack" | "weather" | "future" | "stamps";
+
+const PANELS: readonly HomePanel[] = ["pack", "weather", "future", "stamps"];
+
+/** The pill chosen in the address (`/?tab=weather`); Pack when there is none or it is not one of the four. */
+function panelFromLocation(): HomePanel {
+  const tab = new URLSearchParams(window.location.search).get("tab");
+  return PANELS.find((panel) => panel === tab) ?? "pack";
+}
 
 export interface HomePhoneProps {
   trip: LifecycleTrip;
@@ -61,9 +69,23 @@ export function HomePhone({
   onOpenArchive,
   headingRef,
 }: HomePhoneProps) {
-  const [panel, setPanel] = useState<HomePanel>("pack");
+  // The chosen pill is in the address, so a link, a reload and Back all land on it. The Home draws only after its trips have
+  // loaded in the browser, so reading the address in the initial state cannot disagree with the server's markup.
+  const [panel, setPanelState] = useState<HomePanel>(panelFromLocation);
+  const setPanel = useCallback((next: HomePanel) => {
+    setPanelState(next);
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", next);
+    window.history.pushState(null, "", url);
+  }, []);
+  useEffect(() => {
+    const onPop = () => setPanelState(panelFromLocation());
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
   const model = homeModel(trip, weather, today);
-  const { name, nights, hero, countdown, totals, cubes, label, next, caption, cities } = model;
+  const { name, nights, hero, countdown, totals, cubes, label, next, caption, pendingCities } =
+    model;
   const stamps = useMemo(() => stampsView(state.trips, today, "rolling").inked, [state, today]);
   const weatherSub = weatherPillSub(weather, model);
   const weatherEmpty = (
@@ -145,7 +167,9 @@ export function HomePhone({
       />
       {/* The ALERT arrives after the forecast loads, so it is announced here as well as named on the pill. */}
       <p className="sr-only" role="status">
-        {cities.length > 0 ? `Weather alert: ${cities.join(", ")}.` : ""}
+        {pendingCities.length > 0
+          ? `Weather alert: suggestions to review for ${pendingCities.join(", ")}.`
+          : ""}
       </p>
 
       {panel === "pack" ? (
@@ -155,13 +179,12 @@ export function HomePhone({
           aria-labelledby="home-tab-pack"
           className={styles.panel}
         >
-          <figure className={styles.mapCard}>
+          <figure className={styles.mapCard} aria-label={caption}>
             {map ?? (
               <div className={styles.mapFallback} role="img" aria-label="Route map unavailable">
                 Map unavailable
               </div>
             )}
-            <figcaption className={styles.caption}>{caption}</figcaption>
           </figure>
           <Suitcase role="region" aria-labelledby="home-bag-title">
             <div className={styles.bagHead}>
@@ -210,6 +233,7 @@ export function HomePhone({
             weather={weather}
             model={model}
             empty={weatherEmpty}
+            exclusive
           />
         </div>
       ) : null}
@@ -229,11 +253,25 @@ export function HomePhone({
             </Link>
           </div>
           {later.length > 0 ? (
-            <HomeUpcoming trips={later} today={today} label="Future trips" />
+            <HomeUpcoming
+              trips={later}
+              today={today}
+              label="Future trips"
+              actions={{ onEdit, onArchive, onRemove }}
+            />
           ) : (
             <p className={styles.note}>No other trips planned yet.</p>
           )}
-          <Link className={styles.pastLink} href="/stamps">
+          <Link
+            className={styles.pastLink}
+            href="/?tab=stamps"
+            onClick={(event) => {
+              // Home's own Stamps panel; the Stamps screen stays one tap away in the navigation.
+              if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+              event.preventDefault();
+              setPanel("stamps");
+            }}
+          >
             Past trips are with your stamps ›
           </Link>
         </div>

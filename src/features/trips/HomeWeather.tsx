@@ -21,7 +21,10 @@ function CityRows({
   weatherItems,
   pending,
   tripId,
+  exclusive,
 }: {
+  /** Phone: one city open at a time (#376 part 2 section 6); the laptop lets each city open on its own. */
+  exclusive: boolean;
   rows: readonly CityWeather[];
   weatherLabel: string | null;
   weatherItems: number;
@@ -32,10 +35,15 @@ function CityRows({
   const base = useId();
   // Only the cities the person has toggled are stored; the rest follow the alert rule (an alert city opens itself).
   const [toggled, setToggled] = useState<Readonly<Record<number, boolean>>>({});
+  // Exclusive: the one open city, undefined until the person picks (then the first alert city is open), null when all are shut.
+  const [only, setOnly] = useState<number | null | undefined>(undefined);
+  const firstAlert = rows.find((row) => row.alert && row.tiles.length > 0)?.stopIndex ?? null;
   return (
     <ul className={styles.cityList}>
       {rows.map((row) => {
-        const open = toggled[row.stopIndex] ?? row.alert;
+        const open = exclusive
+          ? (only === undefined ? firstAlert : only) === row.stopIndex
+          : (toggled[row.stopIndex] ?? row.alert);
         const panel = `${base}-panel-${row.stopIndex}`;
         const heading = alertHeading(weatherLabel, row.condition);
         // "N to review" while changes wait for a decision, "Rain · N added" once they are in the bag (spec decision 5).
@@ -69,7 +77,11 @@ function CityRows({
                   className={styles.cityButton}
                   aria-expanded={open}
                   aria-controls={panel}
-                  onClick={() => setToggled((now) => ({ ...now, [row.stopIndex]: !open }))}
+                  onClick={() =>
+                    exclusive
+                      ? setOnly(open ? null : row.stopIndex)
+                      : setToggled((now) => ({ ...now, [row.stopIndex]: !open }))
+                  }
                 >
                   {text}
                   <span className={styles.cityState}>
@@ -121,7 +133,10 @@ export function HomeWeather({
   weather,
   model,
   empty = null,
+  exclusive = false,
 }: {
+  /** The phone Home keeps one city open at a time. */
+  exclusive?: boolean;
   trip: LifecycleTrip;
   today: string;
   weather: HeroWeather;
@@ -149,6 +164,7 @@ export function HomeWeather({
           weatherItems={weatherItems}
           pending={pending}
           tripId={trip.id}
+          exclusive={exclusive}
         />
       </div>
     );

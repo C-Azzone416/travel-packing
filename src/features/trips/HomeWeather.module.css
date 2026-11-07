@@ -95,11 +95,17 @@
 }
 .dayGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(auto-fit, minmax(56px, 1fr));
+  gap: 4px;
   margin: 0;
   padding: 0 12px 12px;
   list-style: none;
+}
+@media (min-width: 1024px) {
+  .dayGrid {
+    grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+    gap: 6px;
+  }
 }
 .dayGrid > li {
   min-width: 0;

@@ -91,7 +91,12 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
         const settings = await weatherSource.getSettings();
         if (!settings.weatherOptIn) return answer({ phase: "off" });
         const result = await weatherSource.getTripWeather(heroId);
-        if (result.kind !== "ready") return answer({ phase: "unavailable" });
+        // A 200 whose stops are all unavailable has no weather in it: that is "unavailable", not a forecast.
+        if (
+          result.kind !== "ready" ||
+          (result.stops.length > 0 && result.stops.every((stop) => stop.status !== "ok"))
+        )
+          return answer({ phase: "unavailable" });
         const stops = heroTrip ? stopsOrDestination(heroTrip) : [];
         const today = getToday();
         // Skipped suggestions stay out of the count; if they cannot be read, nothing is skipped.

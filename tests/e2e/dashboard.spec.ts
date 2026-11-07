@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
-import { chooseFromMenu, openPastAndArchive } from "./helpers/menu";
+import { chooseFromMenu, futureTab, openPastAndArchive, planATrip } from "./helpers/menu";
+import { planAndCreate } from "./helpers/plan";
 import { DEVICE, phoneHomeLayout } from "./helpers/device";
 
 // Home is the laptop suitcase view from 1024px (#387) and the phone suitcase below it (#388); this spec runs on the phone Home
@@ -69,6 +70,60 @@ test("Recently deleted offers Undo remove, with no retention period shown", asyn
   await expect(page.getByText(/30 days|retention/i)).toHaveCount(0);
   await page.getByRole("button", { name: "Undo remove: San Diego" }).click();
   await expect(page.getByText("Nothing recently deleted.")).toBeVisible();
+});
+
+/** A second upcoming trip, so San Diego stays the next one and London is a Future row. */
+async function addLondon(page: Page) {
+  await planATrip(page);
+  await planAndCreate(page, {
+    query: "lon",
+    option: /England/,
+    start: "2026-11-12",
+    end: "2026-11-16",
+  });
+  await expect(page.getByRole("tablist", { name: "Trip sections" })).toBeVisible();
+  await futureTab(page).click();
+  await expect(page.getByRole("button", { name: "More actions for London" })).toBeVisible();
+}
+
+test("a later trip's menu archives it and leaves the next trip alone; Copy trip is there", async ({
+  page,
+}) => {
+  await openDashboard(page);
+  await addLondon(page);
+  await page.getByRole("button", { name: "More actions for London" }).click();
+  await expect(page.getByRole("menuitem")).toHaveText([
+    "Edit trip",
+    "Copy trip",
+    "Archive",
+    "Remove",
+  ]);
+  await expect(page.getByRole("menuitem", { name: "Copy trip" })).toHaveAttribute(
+    "href",
+    /\/trips\/new\?copy=/,
+  );
+  await page.getByRole("menuitem", { name: "Archive", exact: true }).click();
+  await expect(futureTab(page)).toContainText("0 trips");
+  await expect(tag(page, "San Diego")).toBeVisible();
+  await openPastAndArchive(page);
+  await expect(card(page, "London")).toBeVisible();
+});
+
+test("a later trip's menu removes it after confirming, with the next trip untouched", async ({
+  page,
+}) => {
+  await openDashboard(page);
+  await addLondon(page);
+  await page.getByRole("button", { name: "More actions for London" }).click();
+  await page.getByRole("menuitem", { name: "Remove", exact: true }).click();
+  await page
+    .getByRole("dialog", { name: "Remove London?" })
+    .getByRole("button", { name: "Remove trip" })
+    .click();
+  await expect(futureTab(page)).toContainText("0 trips");
+  await expect(tag(page, "San Diego")).toBeVisible();
+  await page.locator(".toast-region").getByRole("button", { name: "Undo" }).click();
+  await expect(futureTab(page)).toContainText("1 trip");
 });
 
 test("the tag's menu opens Past & archive, and ?view=archive no longer does", async ({ page }) => {
