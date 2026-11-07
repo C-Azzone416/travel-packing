@@ -20,6 +20,21 @@ export interface EndpointsTouched {
   home: boolean;
 }
 
+const firstArrive = (stops: readonly { arrive: string }[]) => stops[0]?.arrive ?? "";
+const lastLeave = (stops: readonly { leave: string }[]) => stops[stops.length - 1]?.leave ?? "";
+
+/** The one invariant: an endpoint stays the person's only while it still differs from the baseline's. Applied after every draft change and rebase. */
+export function settleTouched(
+  touched: EndpointsTouched,
+  draft: readonly DraftStop[],
+  baseline: readonly { arrive: string; leave: string }[],
+): EndpointsTouched {
+  return {
+    leave: touched.leave && firstArrive(draft) !== firstArrive(baseline),
+    home: touched.home && lastLeave(draft) !== lastLeave(baseline),
+  };
+}
+
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 /**
@@ -31,47 +46,34 @@ export function reconcileStops(
   base: readonly DraftStop[],
   draft: readonly DraftStop[],
   fresh: readonly TripStop[],
-  touched?: EndpointsTouched,
+  touched: EndpointsTouched,
 ): DraftStop[] {
   if (same(base, draft)) return [...fresh];
-  const firstArrive = (stops: readonly DraftStop[]) => stops[0]?.arrive ?? "";
-  const lastLeave = (stops: readonly DraftStop[]) => stops[stops.length - 1]?.leave ?? "";
   // Which places, in order, with the nights at each stop but the last (the last stop's nights are Leave and Come home's business).
   const shape = (stops: readonly DraftStop[]) =>
     stops.map((stop, at) => [
       stop.location?.id ?? null,
       at < stops.length - 1 ? daysBetween(stop.arrive, stop.leave) : null,
     ]);
-  if (!same(shape(base), shape(draft))) {
-    // The stop group is the person's, as a unit. Leave and Come home are still their own fields: one the person did not change
-    // takes the server's date. Leave is applied first (it moves the whole list); Come home then sets the last stop's end. If the
-    // person's stops cannot fit the server's end date (it would leave the last stop with too few nights), they keep the end their
-    // list gives: the conflicting endpoint stays theirs.
-    // Which of the two the person actually edited comes from the sheet (set only by the Leave and Come home controls), not from
-    // the draft's dates: adding, removing or reordering stops moves them on its own. A field never edited takes the server's date.
-    const leaveTouched = (touched?.leave ?? true) && firstArrive(base) !== firstArrive(draft);
-    const homeTouched = (touched?.home ?? false) && lastLeave(base) !== lastLeave(draft);
-    let mine: DraftStop[] = [...draft];
-    const wantStart = leaveTouched ? firstArrive(draft) : (fresh[0]?.arrive ?? "");
-    const wantEnd = homeTouched ? lastLeave(draft) : (fresh[fresh.length - 1]?.leave ?? "");
-    if (wantStart && wantStart !== firstArrive(mine)) mine = setFirstArrive(mine, wantStart);
-    const at = mine.length - 1;
-    if (wantEnd && at >= 0 && wantEnd !== lastLeave(mine)) {
-      const minNights = mine.length > 1 ? 1 : 0;
-      if (daysBetween(mine[at].arrive, wantEnd) >= minNights) mine = setLeave(mine, at, wantEnd);
-    }
-    return mine;
+  // The stop group, if touched, is the person's as a unit; otherwise the fresh route is the start. Either way Leave and Come home
+  // are their own fields, and whose date wins comes ONLY from the flags (the person used that control and it still differs from
+  // the baseline): an endpoint they did not edit takes the server's date. Leave is applied first (it moves the whole list); Come
+  // home then sets the last stop's end. A server end the person's stops cannot fit (too few nights for the last stop) is skipped:
+  // the list keeps the end its own nights give. The person's own Come home is always kept (validation reports a bad one).
+  const stopsTouched = !same(shape(base), shape(draft));
+  const leaveTouched = touched.leave && firstArrive(base) !== firstArrive(draft);
+  const homeTouched = touched.home && lastLeave(base) !== lastLeave(draft);
+  let mine: DraftStop[] = stopsTouched ? [...draft] : [...fresh];
+  const wantStart = leaveTouched ? firstArrive(draft) : (fresh[0]?.arrive ?? "");
+  const wantEnd = homeTouched ? lastLeave(draft) : (fresh[fresh.length - 1]?.leave ?? "");
+  if (wantStart && wantStart !== firstArrive(mine)) mine = setFirstArrive(mine, wantStart);
+  const at = mine.length - 1;
+  if (wantEnd && at >= 0 && wantEnd !== lastLeave(mine)) {
+    const minNights = mine.length > 1 ? 1 : 0;
+    if (homeTouched || daysBetween(mine[at].arrive, wantEnd) >= minNights)
+      mine = setLeave(mine, at, wantEnd);
   }
-  let next: DraftStop[] = [...fresh];
-  if (firstArrive(base) !== firstArrive(draft)) next = setFirstArrive(next, firstArrive(draft));
-  // Come home counts as the person's when the last stop's nights changed; a Leave edit moves it too, but keeps the nights.
-  const lastNights = (stops: readonly DraftStop[]) =>
-    stops.length > 0
-      ? daysBetween(stops[stops.length - 1].arrive, stops[stops.length - 1].leave)
-      : 0;
-  if (lastNights(base) !== lastNights(draft) && next.length > 0)
-    next = setLeave(next, next.length - 1, lastLeave(draft));
-  return next;
+  return mine;
 }
 
 /** Each preference key and the travel mode on its own: the person's value if they changed it, else the fresh one. */
@@ -79,7 +81,7 @@ export function reconcile(
   base: EditFields,
   draft: EditFields,
   fresh: { stops: readonly TripStop[]; config: TripConfig; travelMode: TravelMode | null },
-  touched?: EndpointsTouched,
+  touched: EndpointsTouched,
 ): EditFields {
   const config = { ...fresh.config };
   for (const key of Object.keys(config) as (keyof TripConfig)[]) {

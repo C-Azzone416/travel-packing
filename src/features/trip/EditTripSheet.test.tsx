@@ -971,6 +971,67 @@ describe("EditTripSheet: Route & dates", () => {
       expect(field("Come home")).toBe("2026-10-31");
     });
 
+    function renderRefreshing(initial: LifecycleTrip, reload: LifecycleTrip) {
+      const onSaveRoute = vi.fn<(stops: TripStop[], basedOn?: string) => Promise<SaveResult>>(
+        async () => ({ updatedAt: "T9" }),
+      );
+      function Refreshing() {
+        const [trip, setTrip] = useState(initial);
+        return (
+          <>
+            <button type="button" onClick={() => setTrip(reload)}>
+              saved elsewhere
+            </button>
+            <EditTripSheet
+              trip={trip}
+              initialTab="route"
+              today="2026-10-01"
+              onClose={() => {}}
+              onSaveRoute={onSaveRoute}
+              onSetTravelMode={async () => ({})}
+              onApplyPreferences={async () => "ok"}
+            />
+          </>
+        );
+      }
+      renderInApp(<Refreshing />);
+      return onSaveRoute;
+    }
+    const save = () => screen.getByRole("button", { name: /^Save \d+ changes?$/ });
+
+    it("a departure-only edit keeps the concurrent Come home, also after the return was put back by hand", async () => {
+      const user = userEvent.setup();
+      const onSaveRoute = renderRefreshing(
+        oneStop("2026-10-23", "2026-10-27", "T1"),
+        oneStop("2026-10-23", "2026-10-31", "T2"),
+      );
+      setDate("Leave", "2026-10-22");
+      setDate("Come home", "2026-10-27"); // the baseline date again: not an edit
+      elsewhere();
+      expect(field("Leave")).toBe("2026-10-22");
+      expect(field("Come home")).toBe("2026-10-31");
+      await user.click(save());
+      const [sent, basedOn] = onSaveRoute.mock.calls[0];
+      expect([sent[0].arrive, sent[0].leave, basedOn]).toEqual(["2026-10-22", "2026-10-31", "T2"]);
+    });
+
+    it("a stop edit that puts the return back at the baseline settles it, so removing a stop later takes the concurrent return", async () => {
+      const user = userEvent.setup();
+      const onSaveRoute = renderRefreshing(
+        oneStop("2026-10-23", "2026-10-27", "T1"),
+        oneStop("2026-10-23", "2026-10-31", "T2"),
+      );
+      setDate("Come home", "2026-10-26");
+      await addLisbon(user); // Lisbon's default night: the return is back at the Oct 27 baseline
+      expect(field("Come home")).toBe("2026-10-27");
+      await user.click(screen.getByRole("button", { name: "Remove San Diego" }));
+      elsewhere();
+      expect(field("Come home")).toBe("2026-10-31");
+      await user.click(save());
+      expect(onSaveRoute.mock.calls[0][0].at(-1)?.leave).toBe("2026-10-31");
+      expect(onSaveRoute.mock.calls[0][1]).toBe("T2");
+    });
+
     it("Leave: an active Leave edit survives a stop removal and a concurrent earlier Leave", async () => {
       const user = userEvent.setup();
       function Active() {

@@ -44,7 +44,7 @@ import {
   stopProblems,
 } from "@/features/trips/stops-draft";
 import { localToday } from "@/lib/today";
-import { reconcile, type EndpointsTouched } from "./edit-reconcile";
+import { reconcile, settleTouched, type EndpointsTouched } from "./edit-reconcile";
 import { changeCount, editChanges, saveLabel, type ChangeRow } from "./edit-diff";
 import styles from "./EditTripSheet.module.css";
 
@@ -179,12 +179,7 @@ export function EditTripSheet({
     );
     setBaseline(fresh);
     // An endpoint the server now agrees with is settled: it stays the person's only while the new baseline still differs from it.
-    const edge = (list: readonly DraftStop[], which: "arrive" | "leave") =>
-      list[which === "arrive" ? 0 : list.length - 1]?.[which];
-    setTouched((was) => ({
-      leave: was.leave && edge(next.stops as DraftStop[], "arrive") !== edge(fresh.stops, "arrive"),
-      home: was.home && edge(next.stops as DraftStop[], "leave") !== edge(fresh.stops, "leave"),
-    }));
+    setTouched((was) => settleTouched(was, next.stops, fresh.stops));
     setStops(next.stops as DraftStop[]);
     setPrefs(next.config);
     setMode(next.travelMode);
@@ -233,14 +228,12 @@ export function EditTripSheet({
   const lastNights = stops[last] ? nightsAt(stops[last]) : null;
   const canShorten = lastNights !== null && lastNights > (stops.length > 1 ? 1 : 0);
 
-  // Leave / Come home are the person's edit only while they differ from the baseline: putting a date back clears the intent.
-  function editLeave(next: DraftStop[]) {
-    setTouched((was) => ({ ...was, leave: next[0]?.arrive !== baseline.stops[0]?.arrive }));
-    setStops(next);
-  }
-  function editHome(next: DraftStop[]) {
-    const end = (list: readonly { leave: string }[]) => list[list.length - 1]?.leave;
-    setTouched((was) => ({ ...was, home: end(next) !== end(baseline.stops) }));
+  // ONE invariant, applied after every draft change: an endpoint is the person's edit only if they used its control AND it still
+  // differs from the baseline. The date controls mark the field first; stop edits only ever settle (they never mark).
+  function applyStops(next: DraftStop[], edited?: "leave" | "home") {
+    setTouched((was) =>
+      settleTouched({ ...was, ...(edited ? { [edited]: true } : {}) }, next, baseline.stops),
+    );
     setStops(next);
   }
 
@@ -423,7 +416,7 @@ export function EditTripSheet({
             </p>
             <StopRows
               stops={stops}
-              onChange={(next) => setStops(next)}
+              onChange={(next) => applyStops(next)}
               provider={provider}
               fallbackProvider={fallback}
               allowCustom={allowCustom}
@@ -437,7 +430,7 @@ export function EditTripSheet({
                 type="date"
                 value={stops[0]?.arrive ?? ""}
                 onChange={(event) =>
-                  editLeave(snapContiguous(setFirstArrive(stops, event.target.value)))
+                  applyStops(snapContiguous(setFirstArrive(stops, event.target.value)), "leave")
                 }
               />
             </label>
@@ -447,7 +440,7 @@ export function EditTripSheet({
                 type="date"
                 value={stops[last]?.leave ?? ""}
                 min={stops[last]?.arrive || undefined}
-                onChange={(event) => editHome(setLeave(stops, last, event.target.value))}
+                onChange={(event) => applyStops(setLeave(stops, last, event.target.value), "home")}
               />
             </label>
           </div>
@@ -457,7 +450,7 @@ export function EditTripSheet({
               className={styles.step}
               aria-label="One night fewer"
               disabled={!canShorten}
-              onClick={() => editHome(shiftEnd(stops, -1))}
+              onClick={() => applyStops(shiftEnd(stops, -1), "home")}
             >
               <Icon name="minus" size={16} />
             </button>
@@ -466,7 +459,7 @@ export function EditTripSheet({
               type="button"
               className={styles.step}
               aria-label="One night more"
-              onClick={() => editHome(shiftEnd(stops, 1))}
+              onClick={() => applyStops(shiftEnd(stops, 1), "home")}
             >
               <Icon name="plus" size={16} />
             </button>
