@@ -9,15 +9,14 @@ export interface ThemePickerProps {
 }
 
 /**
- * The Theme radiogroup (#139 §4). Native radio inputs, each in a label whose text names the theme, so the accessible
- * name comes from the words and the arrow keys, Space and focus all work with no script. The swatch trio (accent,
- * second accent, surface) is drawn from the theme's own tokens through data-scheme and is decorative.
+ * Three native radio cards. The miniature suitcase in each card is scoped to that scheme's own tokens, so it remains
+ * truthful without hard-coded colours; arrow keys, Space and focus remain native.
  */
 export function ThemePicker({ value, onChange }: ThemePickerProps) {
   const name = useId();
   return (
     <>
-      <div className="theme-options" role="radiogroup" aria-label="Theme">
+      <div className="theme-options" role="radiogroup" aria-label="Colour scheme">
         {APPEARANCE_OPTIONS.map((option) => (
           <label key={option.id} className="appearance-option">
             <input
@@ -28,12 +27,12 @@ export function ThemePicker({ value, onChange }: ThemePickerProps) {
               onChange={() => onChange(option.id)}
             />
             <span className="appearance-swatches" data-scheme={option.id} aria-hidden="true">
-              <i />
-              <i />
-              <i />
+              <i className="appearance-swatch-accent" />
+              <i className="appearance-swatch-gold" />
             </span>
             <span className="appearance-copy">
               <strong>{option.name}</strong>
+              {option.id === "ocean" ? <small>Default</small> : null}
               <span>{option.description}</span>
             </span>
             <span className="appearance-check" aria-hidden="true">

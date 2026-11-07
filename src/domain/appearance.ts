@@ -57,9 +57,9 @@ export interface AppearanceOption {
 }
 
 export const APPEARANCE_OPTIONS: readonly AppearanceOption[] = [
-  { id: "ocean", name: "Ocean", description: "Deep navy, sea teal and copper" },
-  { id: "evergreen", name: "Evergreen", description: "Forest green, gold and terracotta" },
-  { id: "dusk", name: "Dusk", description: "Indigo, coral and amber" },
+  { id: "ocean", name: "Ocean", description: "Blue-grey and terracotta" },
+  { id: "evergreen", name: "Evergreen", description: "Forest green and clay" },
+  { id: "dusk", name: "Dusk", description: "Violet and coral" },
 ];
 
 export function appearanceName(appearance: Appearance): string {
