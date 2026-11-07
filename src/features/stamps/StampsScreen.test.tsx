@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
-import { act, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { renderInApp } from "@/test/providers";
+import { SaveStatusProvider, ConnectedSaveChip } from "@/components/shell/SaveStatus";
+import { ToastProvider } from "@/components/ui/Toast";
 import { sampleLifecycleState, SAMPLE_LOCATIONS } from "@/features/trips/fixtures";
 import {
   buildTrip,
@@ -12,7 +14,7 @@ import {
 } from "@/domain/trip-lifecycle";
 import type { TripConfig } from "@/domain/trip";
 import type { SampleLocation } from "@/domain/trip-stops";
-import { createMemoryTripsSource } from "@/features/trips/trips-source";
+import { createMemoryTripsSource, type TripsSource } from "@/features/trips/trips-source";
 import { TripsSourceProvider } from "@/features/trips/TripsSourceProvider";
 import { StampsScreen } from "./StampsScreen";
 
@@ -61,6 +63,35 @@ const withTrips = (...trips: LifecycleTrip[]): LifecycleState => ({
   ...emptyLifecycleState(),
   trips,
 });
+
+const PORTO = "Porto, Oct 2026, 1 trip";
+
+/** A state with one completed Porto trip, the newer result in the superseded-load tests. */
+function porto(): LifecycleState {
+  const trip = syntheticTrip("porto-now", "Porto", "2026-10-01", "2026-10-03", {
+    id: "pt-porto",
+    city: "Porto",
+    region: "Porto District",
+    country: "Portugal",
+    countryCode: "PT",
+    label: "Porto, Porto District, Portugal",
+  });
+  return withTrips(trip);
+}
+
+/** The same providers renderInApp wraps around a screen, so a rerender keeps them. */
+function appTree(source: TripsSource, today: () => string) {
+  return (
+    <ToastProvider>
+      <SaveStatusProvider>
+        <ConnectedSaveChip />
+        <TripsSourceProvider source={source}>
+          <StampsScreen getToday={today} />
+        </TripsSourceProvider>
+      </SaveStatusProvider>
+    </ToastProvider>
+  );
+}
 
 describe("Stamps screen", () => {
   it("loads the sticker suitcase, completed totals, dashed upcoming sticker and past trip", async () => {
@@ -269,26 +300,57 @@ describe("Stamps screen", () => {
     expect(source.load).toHaveBeenCalledTimes(2);
   });
 
-  it("ignores a failed load that finishes after the screen has gone", async () => {
-    let fail!: () => void;
-    const gate = new Promise<void>((done) => (fail = done));
-    const base = memory();
-    const { unmount } = setup({
-      ...base,
-      load: async () => (await gate, Promise.reject(new Error("down"))),
+  it("a failed load that settles after a newer load has started cannot replace the newer state", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((done) => (release = done));
+    let calls = 0;
+    const source = {
+      ...memory(),
+      load: async () => {
+        calls += 1;
+        if (calls === 1) {
+          await gate;
+          throw new Error("down");
+        }
+        return porto();
+      },
+    };
+    const { rerender } = render(appTree(source, () => "2026-10-16"));
+    rerender(appTree(source, () => "2026-10-16"));
+    expect(await screen.findByRole("button", { name: PORTO })).toBeTruthy();
+    await act(async () => {
+      release();
+      await new Promise((done) => setTimeout(done, 0));
     });
-    unmount();
-    await act(async () => fail());
+    expect(calls).toBe(2);
     expect(screen.queryByText("Couldn’t load your stamps.")).toBeNull();
+    expect(screen.getByRole("button", { name: PORTO })).toBeTruthy();
   });
 
-  it("ignores a successful load that finishes after the screen has gone", async () => {
-    let resolve!: () => void;
-    const gate = new Promise<void>((done) => (resolve = done));
-    const base = memory();
-    const { unmount } = setup({ ...base, load: async () => (await gate, base.load()) });
-    unmount();
-    await act(async () => resolve());
-    expect(screen.queryByRole("heading", { name: "Past trips", level: 2 })).toBeNull();
+  it("a successful load that settles after a newer load has started cannot replace the newer state", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((done) => (release = done));
+    let calls = 0;
+    const source = {
+      ...memory(),
+      load: async () => {
+        calls += 1;
+        if (calls === 1) {
+          await gate;
+          return sampleLifecycleState();
+        }
+        return porto();
+      },
+    };
+    const { rerender } = render(appTree(source, () => "2026-10-16"));
+    rerender(appTree(source, () => "2026-10-16"));
+    expect(await screen.findByRole("button", { name: PORTO })).toBeTruthy();
+    await act(async () => {
+      release();
+      await new Promise((done) => setTimeout(done, 0));
+    });
+    expect(calls).toBe(2);
+    expect(screen.queryByRole("button", { name: /Lisbon, Sep 2026/ })).toBeNull();
+    expect(screen.getByRole("button", { name: PORTO })).toBeTruthy();
   });
 });
