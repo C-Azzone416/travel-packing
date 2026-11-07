@@ -676,21 +676,11 @@ for (const fixture of [F2, F7, F9]) {
 // wrap inside itself when it is wider than the line, or it pushes the page sideways at 320px with larger text. The days
 // are chosen from today's date so the run crosses a month end; leave 13 is used by no other fixture, so the app's
 // weather cache never serves this trip another test's numbers.
-// #447: the app caches typical (archive) weather by place and date range, and every trip's typical run starts on the same
-// day (today + 16), so two trips with the SAME end day share a cache entry whatever their start. The month-end crossing moves
-// with today's date, so on some dates it landed on `back: 25` (the straddle fixtures) and this trip was served "varied"
-// numbers (High 92) instead of the scorching 3-digit ones. The end day therefore skips every end day another fixture uses.
-const OTHER_FIXTURE_END_DAYS = new Set([
-  // every `back` / last `leave` used by trip-daily-forecast.spec.ts, hero-daily-forecast.spec.ts and helpers/hero-weather.ts
-  2,
-  4, 5, 8, 10, 12, 15, 16, 17, 18, 22, 25, 30,
-]);
 function longTypicalFixture(): Fixture {
   const dayAt = (offset: number) => new Date(Date.now() + offset * 86_400_000).getUTCDate();
   let boundary = 18;
   while (dayAt(boundary) !== 1) boundary++;
-  let back = boundary + 1;
-  while (OTHER_FIXTURE_END_DAYS.has(back)) back++;
+  const back = boundary + 1;
   return {
     name: "FL long typical run, 3-digit F",
     stays: [{ leave: 13, back }],
