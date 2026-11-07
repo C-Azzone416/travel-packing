@@ -106,7 +106,6 @@ export function HomePhone({
                   <span className="sr-only">{countdown.spoken}</span>
                 </>
               ) : null}
-              <span className={styles.menuGap} aria-hidden="true" />
             </div>
           </div>
         </LuggageTag>

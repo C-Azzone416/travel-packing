@@ -25,27 +25,25 @@
   top: 12px;
   right: 10px;
 }
-.menuGap {
-  flex: none;
-  width: 44px;
-  height: 44px;
-}
 .tagRow {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
-  justify-content: space-between;
   gap: 8px 12px;
   min-width: 0;
+  /* Room for the menu button that sits over the tag's top right corner. */
+  padding-inline-end: 48px;
 }
+/* The copy takes the row; it never gets narrower than its longest word, so the countdown wraps below it on a narrow
+   screen instead of squeezing the name into pieces. A word longer than the whole row still breaks (break-word). */
 .tagCopy {
   flex: 1 1 0;
-  min-width: 0;
+  min-width: min(min-content, 100%);
 }
 .tagSide {
   flex: none;
   display: flex;
   align-items: flex-start;
-  gap: 4px;
 }
 .chip {
   margin: 0;
@@ -56,29 +54,29 @@
   letter-spacing: 0.1em;
   line-height: 1.3;
   text-transform: uppercase;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .name {
   margin: 2px 0 0;
   color: var(--ink);
   font-family: var(--font-display);
   font-weight: 800;
-  font-size: 40px;
+  font-size: clamp(24px, 8vw, 40px);
   line-height: 1;
   letter-spacing: -0.02em;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .name[data-size="l"] {
-  font-size: 32px;
+  font-size: clamp(22px, 7vw, 32px);
 }
 .name[data-size="m"] {
-  font-size: 26px;
+  font-size: clamp(20px, 6vw, 26px);
   line-height: 1.05;
 }
 .sub {
   margin-inline-start: 8px;
   font-weight: 700;
-  font-size: 18px;
+  font-size: clamp(14px, 4.4vw, 18px);
   letter-spacing: 0;
 }
 .pills {
