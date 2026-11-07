@@ -838,6 +838,71 @@ describe("EditTripSheet: Route & dates", () => {
     expect(onSaveRoute.mock.calls[0][0][1].leave).toBe("2026-10-29");
   });
 
+  it("a Come home or Leave put back to its saved date is no longer the person's: a later stop edit takes the concurrent dates", async () => {
+    const user = userEvent.setup();
+    const lisbon = {
+      ...base().stops[0].location,
+      id: "pt-lisbon",
+      city: "Lisbon",
+      label: "Lisbon, Portugal",
+    };
+    const twoStops = (start: string, end: string): LifecycleTrip => ({
+      ...base(),
+      start,
+      end,
+      stops: [
+        { ...base().stops[0], arrive: start, leave: "2026-10-26" },
+        { location: lisbon, arrive: "2026-10-26", leave: end },
+      ],
+    });
+    const onSaveRoute = vi.fn<(stops: TripStop[], basedOn?: string) => Promise<SaveResult>>(
+      async () => ({ updatedAt: "T3" }),
+    );
+    function Reverting({ elsewhereTrip }: { elsewhereTrip: LifecycleTrip }) {
+      const [trip, setTrip] = useState(twoStops("2026-10-23", "2026-10-29"));
+      return (
+        <>
+          <button type="button" onClick={() => setTrip({ ...elsewhereTrip, updatedAt: "T2" })}>
+            saved elsewhere
+          </button>
+          <EditTripSheet
+            trip={trip}
+            initialTab="route"
+            today="2026-10-01"
+            onClose={() => {}}
+            onSaveRoute={onSaveRoute}
+            onSetTravelMode={async () => ({})}
+            onApplyPreferences={async () => "ok"}
+          />
+        </>
+      );
+    }
+    const setDate = (label: string, value: string) =>
+      fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    // Come home: 30 Oct, back to 29 Oct; remove Lisbon; the server's trip now ends 31 Oct.
+    const { unmount } = renderInApp(
+      <Reverting elsewhereTrip={twoStops("2026-10-23", "2026-10-31")} />,
+    );
+    setDate("Come home", "2026-10-30");
+    setDate("Come home", "2026-10-29");
+    await user.click(screen.getByRole("button", { name: "Remove Lisbon" }));
+    elsewhere();
+    expect((screen.getByLabelText("Come home") as HTMLInputElement).value).toBe("2026-10-31");
+    await user.click(screen.getByRole("button", { name: /^Save \d+ changes?$/ }));
+    expect(onSaveRoute.mock.calls[0][1]).toBe("T2");
+    expect(onSaveRoute.mock.calls[0][0][0].leave).toBe("2026-10-31");
+    unmount();
+    // Leave: 24 Oct, back to 23 Oct; remove San Diego; the server's trip now starts 21 Oct.
+    renderInApp(<Reverting elsewhereTrip={twoStops("2026-10-21", "2026-10-29")} />);
+    setDate("Leave", "2026-10-24");
+    setDate("Leave", "2026-10-23");
+    await user.click(screen.getByRole("button", { name: "Remove San Diego" }));
+    const leaveAfterRemoval = (screen.getByLabelText("Leave") as HTMLInputElement).value;
+    elsewhere();
+    expect(leaveAfterRemoval).not.toBe("");
+    expect((screen.getByLabelText("Leave") as HTMLInputElement).value).toBe("2026-10-21");
+  });
+
   it("an untouched route follows the server; the dot and count clear when nothing of the person's remains", async () => {
     renderInApp(
       <Harness
