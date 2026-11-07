@@ -2156,8 +2156,10 @@ input:disabled {
     flex-direction: column;
     padding-block: 8px;
   }
+  /* The field stacks here: its flex-basis of 0 would be a height of 0 in a column, hiding the city. */
   .home-city-field > span:first-child {
     width: 100%;
+    flex: none;
   }
 }
 /* Save status (#298): one row, the same height in every state, so nothing below it moves. */
