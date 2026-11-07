@@ -672,17 +672,17 @@ for (const fixture of [F2, F7, F9]) {
   });
 }
 
-// QA #359: a long typical segment ("Nov 14–Dec 2: High 104° ·": a cross-month run, 3-digit Fahrenheit) must be allowed to
-// wrap inside itself when it is wider than the line, or it pushes the page sideways at 320px with larger text. The days
-// are chosen from today's date so the run crosses a month end; leave 13 is used by no other fixture, so the app's
-// weather cache never serves this trip another test's numbers.
+// QA #359: a long typical segment (a cross-month run with high, low, and rain detail) must be allowed to wrap inside
+// itself when it is wider than the line, or it pushes the page sideways at 320px with larger text. The days are chosen
+// from today's date so the run crosses a month end; the assertion pins the full detail and minimum length without
+// depending on whether an equivalent cached synthetic range has a two- or three-digit Fahrenheit high.
 function longTypicalFixture(): Fixture {
   const dayAt = (offset: number) => new Date(Date.now() + offset * 86_400_000).getUTCDate();
   let boundary = 18;
   while (dayAt(boundary) !== 1) boundary++;
   const back = boundary + 1;
   return {
-    name: "FL long typical run, 3-digit F",
+    name: "FL long typical run",
     stays: [{ leave: 13, back }],
     cards: 3,
     more: 0,
@@ -698,8 +698,9 @@ async function openLongTypical(page: Page) {
   await openBand(page, fixture);
   const line = page.locator(".hero-typical-line > span").last();
   await expect(line).toContainText(
-    /Other \d+ days · [A-Z][a-z]{2} \d+–[A-Z][a-z]{2} \d+: High 1\d\d° /,
+    /Other \d+ days · [A-Z][a-z]{2} \d+–[A-Z][a-z]{2} \d+: High \d{2,3}° · Low \d{2,3}° · (?:Rain on \d+ of \d+ days|Rarely rains)/,
   );
+  expect((await line.textContent())?.length ?? 0).toBeGreaterThan(60);
   return fixture;
 }
 test("a long typical segment wraps inside itself at 320px with 200% text: no sideways scroll", async ({
