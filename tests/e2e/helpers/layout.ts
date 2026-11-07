@@ -13,7 +13,8 @@ export async function expectWholeWords(locator: Locator, label: string): Promise
     while (node) {
       const text = node.textContent ?? "";
       // Visually hidden text (a 1px clipped box) is read aloud, not seen: it has no lines to break.
-      let hidden = false;
+      // A cube tile's note is one line cut with an ellipsis by design, never wrapped.
+      let hidden = node.parentElement?.closest("[data-note]") != null;
       for (let el = node.parentElement; el && el !== root.parentElement; el = el.parentElement) {
         const box = el.getBoundingClientRect();
         if (box.width <= 2 && box.height <= 2) hidden = true;
