@@ -120,6 +120,39 @@ test(
       "autocomplete",
       "current-password",
     );
+    const password = dialog.getByLabel("Current password");
+    const passwordToggle = dialog.getByRole("button", { name: "Show password" });
+    await password.fill("synthetic-close-account-password");
+    await expect(password).toHaveValue("synthetic-close-account-password");
+    const passwordBox = (await password.boundingBox())!;
+    const toggleBox = (await passwordToggle.boundingBox())!;
+    const passwordContentRight = await password.evaluate((input) => {
+      const rect = input.getBoundingClientRect();
+      const style = getComputedStyle(input);
+      return (
+        rect.right -
+        Number.parseFloat(style.paddingRight) -
+        Number.parseFloat(style.borderRightWidth)
+      );
+    });
+    expect(
+      passwordContentRight,
+      "Close Account password text ends before Show",
+    ).toBeLessThanOrEqual(toggleBox.x + 0.5);
+    expect(toggleBox.x, "Close Account Show starts inside the field").toBeGreaterThanOrEqual(
+      passwordBox.x,
+    );
+    expect(
+      toggleBox.x + toggleBox.width,
+      "Close Account Show ends inside the field",
+    ).toBeLessThanOrEqual(passwordBox.x + passwordBox.width);
+    expect(toggleBox.y, "Close Account Show starts inside the field height").toBeGreaterThanOrEqual(
+      passwordBox.y,
+    );
+    expect(
+      toggleBox.y + toggleBox.height,
+      "Close Account Show ends inside the field height",
+    ).toBeLessThanOrEqual(passwordBox.y + passwordBox.height);
     await expect(dialog.getByLabel("Type DELETE to confirm")).toBeVisible();
     await expectAccessible(page, "close account confirmation sheet");
     const overflow = await dialog.evaluate((node) => node.scrollWidth - node.clientWidth);

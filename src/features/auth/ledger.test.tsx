@@ -3,8 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createFakeAuth } from "@/server/auth/__fixtures__/fake-auth";
 import { parseAllowlist } from "@/server/auth/allowlist";
 
-// Field Ledger on the signed-out screens (#204): every one sits under the same brand-only bar, with a screen-name eyebrow
-// instead of the app name, in a flat card, and "Show password" is an in-field text toggle.
+// Open suitcase on the signed-out screens (#424): every state shares the same brand-only bar and decorative lid while
+// keeping its own screen-name eyebrow, one semantic h1 and the established in-field password toggle.
 const fake = createFakeAuth();
 vi.mock("@/server/auth/auth-runtime", () => ({
   getAuth: async () => ({
@@ -90,11 +90,17 @@ describe.each(SCREENS)("the %s screen", (_name, markup, eyebrow) => {
     expect(html).not.toContain('class="topbar');
   });
 
-  it(`names itself in the eyebrow ("${eyebrow}"), not the app, and the card is the flat Ledger card`, async () => {
+  it(`uses the shared decorative suitcase and names the panel "${eyebrow}" with one h1`, async () => {
     const html = await markup();
-    expect(html).toContain(`<p class="eyebrow">${eyebrow}</p>`);
-    expect(html).not.toContain('<p class="eyebrow">Packed Smart</p>');
-    expect(html).toContain('class="card padded auth-card"');
+    const panel = html.slice(html.indexOf('class="auth-panel"'));
+    expect(html).toContain('class="auth-suitcase"');
+    expect(html).toMatch(/class="auth-lid"[^>]*aria-hidden="true"/);
+    expect(html).toContain('data-sticker="ready"');
+    expect(panel).toContain(`<p class="eyebrow">${eyebrow}</p>`);
+    expect(panel).not.toContain('<p class="eyebrow">Packed Smart</p>');
+    expect(panel).toContain('class="auth-card"');
+    expect(html).not.toContain('class="card padded auth-card"');
+    expect(html.match(/<h1/g)).toHaveLength(1);
   });
 });
 
