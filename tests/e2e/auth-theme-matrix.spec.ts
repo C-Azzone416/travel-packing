@@ -252,13 +252,32 @@ test("a long visible password stays clear of Show at 195px", async ({ page }) =>
   const toggle = page.getByRole("button", { name: "Show password" });
   await field.fill("a-very-long-visible-password-that-must-not-run-under-show");
   await toggle.click();
+  const fieldBox = (await field.boundingBox())!;
   const toggleBox = (await toggle.boundingBox())!;
-  const contentRight = await field.evaluate((input) => {
+  const content = await field.evaluate((input) => {
     const rect = input.getBoundingClientRect();
-    return rect.right - Number.parseFloat(getComputedStyle(input).paddingRight);
+    const style = getComputedStyle(input);
+    const paddingLeft = Number.parseFloat(style.paddingLeft);
+    const paddingRight = Number.parseFloat(style.paddingRight);
+    const borderLeft = Number.parseFloat(style.borderLeftWidth);
+    const borderRight = Number.parseFloat(style.borderRightWidth);
+    return {
+      right: rect.right - paddingRight - borderRight,
+      width: rect.width - paddingLeft - paddingRight - borderLeft - borderRight,
+    };
   });
-  expect(contentRight, "password text ends before the toggle").toBeLessThanOrEqual(
+  expect(content.right, "password text ends before the toggle").toBeLessThanOrEqual(
     toggleBox.x + 0.5,
   );
+  expect(content.width, "password keeps useful entry width").toBeGreaterThanOrEqual(40);
+  expect(toggleBox.x, "toggle starts inside the field").toBeGreaterThanOrEqual(fieldBox.x);
+  expect(toggleBox.y, "toggle starts inside the field").toBeGreaterThanOrEqual(fieldBox.y);
+  expect(toggleBox.x + toggleBox.width, "toggle ends inside the field").toBeLessThanOrEqual(
+    fieldBox.x + fieldBox.width,
+  );
+  expect(
+    toggleBox.y + toggleBox.height,
+    "toggle bottom stays inside the field",
+  ).toBeLessThanOrEqual(fieldBox.y + fieldBox.height);
   expect(await sidewaysScroll(page), "no sideways scroll").toBeLessThanOrEqual(0);
 });

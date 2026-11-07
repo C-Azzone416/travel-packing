@@ -1932,21 +1932,21 @@ input:disabled {
   opacity: 0.7;
 }
 /* "Show password" is a text toggle inside the field's right edge (#204): link colour, a 44px target, aria-pressed.
-   Match the auth-input selector's specificity and reserve the full fixed label, including at 195px. */
+   Match the auth-input selector's specificity and reserve the fixed label for every shared PasswordField. */
 .password-row {
   position: relative;
 }
-.auth-card .password-row input {
+.field .password-row input {
   width: 100%;
   padding-right: 132px;
 }
 .password-toggle {
   position: absolute;
-  top: 0;
+  top: 50%;
   right: 0;
   min-width: 56px;
   min-height: 44px;
-  margin: 4px;
+  margin: 0 4px;
   padding: 0 8px;
   border: 0;
   border-radius: 10px;
@@ -1957,6 +1957,7 @@ input:disabled {
   font-weight: 700;
   text-decoration: underline;
   text-underline-offset: 3px;
+  transform: translateY(-50%);
   cursor: pointer;
 }
 .auth-error {
@@ -2211,6 +2212,17 @@ input:disabled {
 }
 
 @media (max-width: 359px) {
+  /* At the 195px floor the fixed label wraps inside a compact target, leaving useful password-entry width. */
+  .field .password-row input {
+    padding-left: 10px;
+    padding-right: 72px;
+  }
+  .password-toggle {
+    width: 60px;
+    min-width: 60px;
+    padding-inline: 4px;
+    line-height: 1.05;
+  }
   .auth-brandbar {
     padding-inline: 8px;
   }
