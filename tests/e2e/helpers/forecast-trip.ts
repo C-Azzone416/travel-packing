@@ -19,13 +19,22 @@ export interface Stay {
   back?: number;
 }
 
+/** A fake-geocoder place other than London (its own coordinates mean its own weather cache entries). */
+export interface WeatherPlace {
+  query: string;
+  option: RegExp;
+  name: string;
+}
+
 /** Signs in, creates a London trip with weather on (`stays` are day offsets from today), and opens its packing page. */
-export async function createWeatherTrip(page: Page, stays: Stay[]) {
+export async function createWeatherTrip(page: Page, stays: Stay[], place?: WeatherPlace) {
   await signInAsOwner(page);
   await planATrip(page);
   await expect(page.getByRole("heading", { name: "Plan a trip", level: 1 })).toBeVisible();
   const stops = stays.map((_, at) =>
-    at === 0 ? { query: "london", option: /England/ } : { query: "london", option: /Ontario/ },
+    at === 0
+      ? { query: place?.query ?? "london", option: place?.option ?? /England/ }
+      : { query: "london", option: /Ontario/ },
   );
   // The first arrival, the first stop's Leave (the day the trip ends for one stop), then each later stop's Leave.
   const dates = [
@@ -44,6 +53,6 @@ export async function createWeatherTrip(page: Page, stays: Stay[]) {
   await page.getByRole("button", { name: "Get weather" }).click();
   await expect(page.getByRole("checkbox", { name: /Weather suggestions/ })).toBeChecked();
   await reviewAndCreate(page);
-  await openTripFromHome(page, "London");
+  await openTripFromHome(page, place?.name ?? "London");
   await page.waitForURL(/\/trips\/(?!new)[^/?#]+(\?cube=\w+)?$/);
 }
