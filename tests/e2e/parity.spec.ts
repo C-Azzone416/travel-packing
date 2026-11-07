@@ -187,7 +187,7 @@ test("a removed optional item stays removed through later recalculations", async
     .click();
   await page.getByRole("dialog").getByRole("button", { name: "Remove item" }).click();
   await expectNoItem(page, "nice-shoes");
-  await setPreference(page, "Laundry access", true);
+  await setPreference(page, "Laundry on this trip", true);
   await expectNoItem(page, "nice-shoes");
   await setPreference(page, "Nice outfits", false);
   await setPreference(page, "Nice outfits", true);

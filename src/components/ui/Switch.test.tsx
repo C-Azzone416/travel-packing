@@ -42,4 +42,19 @@ describe("Switch", () => {
       screen.getByRole("switch", { name: "Plain" }).getAttribute("aria-describedby"),
     ).toBeNull();
   });
+
+  it("shows a marker before the title without changing its accessible name", () => {
+    render(
+      <Switch
+        label="Laundry"
+        marker={<svg data-testid="mark" />}
+        checked={false}
+        onChange={() => {}}
+      />,
+    );
+    expect(screen.getByRole("switch", { name: "Laundry" })).toBeTruthy();
+    expect(screen.getByTestId("mark").closest(".switch-marker")?.getAttribute("aria-hidden")).toBe(
+      "true",
+    );
+  });
 });

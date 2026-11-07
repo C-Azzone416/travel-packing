@@ -6,7 +6,7 @@ import { renderInApp } from "@/test/providers";
 import type { LifecycleState } from "@/domain/trip-lifecycle";
 import { sampleLifecycleState } from "./fixtures";
 import { TripsDashboard } from "./TripsDashboard";
-import { createMemoryTripsSource, type TripsSource } from "./trips-source";
+import { createMemoryTripsSource, TripsSourceError, type TripsSource } from "./trips-source";
 
 const push = vi.fn();
 vi.mock("next/navigation", () => ({ usePathname: () => "/", useRouter: () => ({ push }) }));
@@ -427,10 +427,146 @@ describe("Edit trip", () => {
     const hero = await screen.findByRole("article", { name: "San Diego" });
     await user.click(within(hero).getByRole("button", { name: "Edit trip: San Diego" }));
     const sheet = await screen.findByRole("dialog", { name: "Edit trip" });
-    await user.click(within(sheet).getByRole("button", { name: "Save route" }));
+    await user.click(within(sheet).getByRole("button", { name: "One night more" }));
+    await user.click(within(sheet).getByRole("button", { name: /^Save \d+ changes?$/ }));
     await waitFor(() => expect(setStops).toHaveBeenCalledOnce());
     expect(setStops.mock.calls[0][0]).toBe("san-diego");
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit trip" })).toBeNull());
+  });
+
+  it("saves how you are getting there on its own, then closes", async () => {
+    const setTravelMode = vi.fn();
+    const { user } = setup(undefined, (base) => ({
+      ...base,
+      setTravelMode: async (id, mode) => {
+        setTravelMode(id, mode);
+        return base.setTravelMode(id, mode);
+      },
+    }));
+    const hero = await screen.findByRole("article", { name: "San Diego" });
+    await user.click(within(hero).getByRole("button", { name: "Edit trip: San Diego" }));
+    const sheet = await screen.findByRole("dialog", { name: "Edit trip" });
+    await user.click(within(sheet).getByRole("radio", { name: "Drive" }));
+    await user.click(within(sheet).getByRole("button", { name: "Save 1 change" }));
+    await waitFor(() => expect(setTravelMode).toHaveBeenCalledWith("san-diego", "drive"));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit trip" })).toBeNull());
+  });
+
+  it("says so and stays open when the travel mode does not save", async () => {
+    const { user } = setup(undefined, (base) => ({
+      ...base,
+      setTravelMode: () => Promise.reject(new Error("down")),
+    }));
+    const hero = await screen.findByRole("article", { name: "San Diego" });
+    await user.click(within(hero).getByRole("button", { name: "Edit trip: San Diego" }));
+    const sheet = await screen.findByRole("dialog", { name: "Edit trip" });
+    await user.click(within(sheet).getByRole("radio", { name: "Drive" }));
+    await user.click(within(sheet).getByRole("button", { name: "Save 1 change" }));
+    expect(await within(sheet).findByText(/Couldn’t save how you’re getting there/)).toBeTruthy();
+  });
+
+  describe("the sheet's saves are chained on their own versions (#389 round 2)", () => {
+    const open = async (user: ReturnType<typeof userEvent.setup>) => {
+      const hero = await screen.findByRole("article", { name: "San Diego" });
+      await user.click(within(hero).getByRole("button", { name: "Edit trip: San Diego" }));
+      return screen.findByRole("dialog", { name: "Edit trip" });
+    };
+
+    it("the preferences are based on the route save's own version, not on a later reload's", async () => {
+      const basedOn: (string | undefined)[] = [];
+      const { user } = setup(undefined, (base) => ({
+        ...base,
+        setStops: async (id, stops, based) => {
+          basedOn.push(based);
+          const change = await base.setStops(id, stops);
+          return { ...change, trip: { ...change.trip, updatedAt: "route-result" } };
+        },
+        load: async () => {
+          const state = await base.load();
+          return {
+            ...state,
+            trips: state.trips.map((trip) => ({ ...trip, updatedAt: "another-edit-after-route" })),
+          };
+        },
+        updatePreferences: async (id, config, based) => {
+          basedOn.push(based);
+          return base.updatePreferences(id, config);
+        },
+      }));
+      const sheet = await open(user);
+      await user.click(within(sheet).getByRole("button", { name: "One night more" }));
+      await user.click(within(sheet).getByRole("button", { name: /Packing preferences/ }));
+      await user.click(within(sheet).getByRole("switch", { name: "Laundry on this trip" }));
+      await user.click(within(sheet).getByRole("button", { name: /^Save \d+ changes?$/ }));
+      await waitFor(() => expect(basedOn).toHaveLength(2));
+      expect(basedOn[1]).toBe("route-result");
+    });
+
+    it("a write that committed but whose reload failed still chains its version and says the list could not refresh", async () => {
+      const basedOn: (string | undefined)[] = [];
+      let reloads = 0;
+      const { user } = setup(undefined, (base) => ({
+        ...base,
+        setTravelMode: async (id, mode) => {
+          const change = await base.setTravelMode(id, mode);
+          return { ...change, trip: { ...change.trip, updatedAt: "mode-result" } };
+        },
+        load: async () => {
+          if (++reloads > 1) throw new Error("offline"); // the first load is the page's own
+          return base.load();
+        },
+        updatePreferences: async (id, config, based) => {
+          basedOn.push(based);
+          return base.updatePreferences(id, config);
+        },
+      }));
+      const sheet = await open(user);
+      await user.click(within(sheet).getByRole("radio", { name: "Drive" }));
+      await user.click(within(sheet).getByRole("button", { name: /Packing preferences/ }));
+      await user.click(within(sheet).getByRole("switch", { name: "Laundry on this trip" }));
+      await user.click(within(sheet).getByRole("button", { name: /^Save \d+ changes?$/ }));
+      await waitFor(() => expect(basedOn).toEqual(["mode-result"]));
+      expect(await screen.findByText(/Saved, but couldn’t refresh your trips/)).toBeTruthy();
+      // It was not reported as a rejected save.
+      expect(screen.queryByText(/Couldn’t save how you’re getting there/)).toBeNull();
+    });
+
+    it("a preference write that committed but whose reload failed closes the sheet and says the list could not refresh", async () => {
+      let reloads = 0;
+      const written = vi.fn();
+      const { user } = setup(undefined, (base) => ({
+        ...base,
+        updatePreferences: async (id, config, based) => {
+          written(config);
+          return base.updatePreferences(id, config, based);
+        },
+        load: async () => {
+          if (++reloads > 1) throw new Error("offline"); // the first load is the page's own
+          return base.load();
+        },
+      }));
+      const sheet = await open(user);
+      await user.click(within(sheet).getByRole("button", { name: /Packing preferences/ }));
+      await user.click(within(sheet).getByRole("switch", { name: "Laundry on this trip" }));
+      await user.click(within(sheet).getByRole("button", { name: /^Save \d+ changes?$/ }));
+      await waitFor(() => expect(written).toHaveBeenCalledTimes(1));
+      expect(await screen.findByText(/Saved, but couldn’t refresh your trips/)).toBeTruthy();
+      await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit trip" })).toBeNull());
+      expect(screen.queryByText(/Nothing changed/)).toBeNull();
+    });
+
+    it("a rejected stale route save reloads the list and tells the sheet it is stale", async () => {
+      const { user } = setup(undefined, (base) => ({
+        ...base,
+        setStops: () => Promise.reject(new TripsSourceError("STALE")),
+      }));
+      const sheet = await open(user);
+      await user.click(within(sheet).getByRole("button", { name: "One night more" }));
+      await user.click(within(sheet).getByRole("button", { name: /^Save \d+ changes?$/ }));
+      expect(
+        await within(sheet).findByText(/Your list changed while you were editing/),
+      ).toBeTruthy();
+    });
   });
 
   it("keeps the sheet open and offers Save again when the save fails", async () => {
@@ -441,7 +577,8 @@ describe("Edit trip", () => {
     const hero = await screen.findByRole("article", { name: "San Diego" });
     await user.click(within(hero).getByRole("button", { name: "Edit trip: San Diego" }));
     const sheet = await screen.findByRole("dialog", { name: "Edit trip" });
-    await user.click(within(sheet).getByRole("button", { name: "Save route" }));
+    await user.click(within(sheet).getByRole("button", { name: "One night more" }));
+    await user.click(within(sheet).getByRole("button", { name: /^Save \d+ changes?$/ }));
     await act(async () => {});
     expect(screen.getByRole("dialog", { name: "Edit trip" })).toBeTruthy();
     expect(within(sheet).getByText(/Couldn’t save the route/)).toBeTruthy();

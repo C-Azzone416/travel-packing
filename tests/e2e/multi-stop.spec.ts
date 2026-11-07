@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { showEditChanges } from "./helpers/preferences";
 import { expectAccessible } from "./helpers/a11y";
 import { chooseFromMenu } from "./helpers/menu";
 import { signInAsOwner } from "./helpers/auth";
@@ -78,12 +79,14 @@ test("edit the route down to 2 stops, then copy the trip to new dates", async ({
 
   await page.getByRole("button", { name: "Edit trip" }).click();
   const sheet = page.getByRole("dialog", { name: "Edit trip" });
-  await expect(sheet.getByRole("group", { name: /^Stop \d$/ })).toHaveCount(3);
+  await expect(sheet.getByRole("button", { name: /^Remove (Lisbon|Paris|Rome)$/ })).toHaveCount(3);
   await sheet.getByRole("button", { name: "Remove Paris" }).click();
-  await sheet.getByRole("button", { name: "Remove", exact: true }).click();
-  // Rome moved up: it now arrives the day Lisbon is left.
-  await expect(sheet.getByLabel("Arrive, Stop 2")).toHaveValue("2026-11-15");
-  await sheet.getByRole("button", { name: "Save route" }).click();
+  await showEditChanges(sheet);
+  // The live panel says Paris goes, and the trip is shorter; Rome moved up to the day Lisbon is left.
+  await expect(sheet.getByText("removed", { exact: true })).toBeVisible();
+  await expect(sheet.getByText("Dates", { exact: true })).toBeVisible();
+  await expect(sheet.getByText("Items you packed for it stay ticked")).toBeVisible();
+  await sheet.getByRole("button", { name: /^Save \d+ changes$/ }).click();
   await expect(sheet).toHaveCount(0);
   await expect(page.getByRole("status", { name: "Packing updates" })).toHaveText("Route updated.");
 

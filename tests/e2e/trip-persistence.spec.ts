@@ -114,7 +114,7 @@ test("changing a Ready trip revokes Ready, and that is stored too", async ({ pag
   await openLisbon(page);
   await page.getByRole("button", { name: "Edit preferences" }).click();
   const dialog = page.getByRole("dialog", { name: "Edit trip" });
-  await dialog.getByRole("switch", { name: "Laundry access" }).uncheck();
+  await dialog.getByRole("switch", { name: "Laundry on this trip" }).uncheck();
   await reviewAndApply(page, dialog);
   await expect(page.getByText("You’re ready to go.")).toHaveCount(0);
   await page.reload();

@@ -56,10 +56,10 @@ describe("ModalSheet suitcase layout (#421)", () => {
     expect(phone).toContain("--modal-foot-bottom: max(var(--modal-pad), var(--safe-bottom));");
     const pinned = [
       ...css.matchAll(
-        /(\.staple-editor-actions|\.modal:has\(\.save-list-form\) \.modal-actions|\.modal:has\(\.edit-tabs\) \.modal-actions|\.modal:has\(\.feedback-form\) \.modal-actions)\s*{([^}]*)}/g,
+        /(\.staple-editor-actions|\.modal:has\(\.save-list-form\) \.modal-actions|\.modal:has\(\.feedback-form\) \.modal-actions)\s*{([^}]*)}/g,
       ),
     ];
-    expect(pinned).toHaveLength(4);
+    expect(pinned).toHaveLength(3);
     for (const [, selector, body] of pinned) {
       expect(body, selector).toContain("calc(var(--modal-pad-bottom) * -1)");
       expect(body, selector).not.toMatch(/\* -1\) calc\(var\(--modal-pad\) \* -1\)/);
