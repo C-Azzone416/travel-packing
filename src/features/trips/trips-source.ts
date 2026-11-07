@@ -26,6 +26,7 @@ import {
   markNotReady,
   markReady,
   setPacked,
+  setPackedMany,
   togglePacked,
   undoBagPlacement,
   type CommandResult,
@@ -106,6 +107,11 @@ export interface TripsSource {
   upsertStaple(staple: Staple): Promise<Staple[]>;
   /** Sets one item's packed count (clamped to 0..qty). The screen sends one of these per item after taps settle. */
   setPacked(tripId: string, itemId: string, packed: number): Promise<TripChange>;
+  /** Several packed counts as one change (All in, and its Undo): all are saved or none (#386). */
+  setPackedMany(
+    tripId: string,
+    entries: readonly { itemId: string; packed: number }[],
+  ): Promise<TripChange>;
   togglePacked(tripId: string, itemId: string): Promise<TripChange>;
   incrementPacked(tripId: string, itemId: string): Promise<TripChange>;
   decrementPacked(tripId: string, itemId: string): Promise<TripChange>;
@@ -322,6 +328,7 @@ export function createMemoryTripsSource(
       return currentStaples;
     },
     setPacked: (id, itemId, packed) => command(id, (trip) => setPacked(trip, itemId, packed)),
+    setPackedMany: (id, entries) => command(id, (trip) => setPackedMany(trip, entries)),
     togglePacked: (id, itemId) => command(id, (trip) => togglePacked(trip, itemId)),
     incrementPacked: (id, itemId) => command(id, (trip) => incrementPacked(trip, itemId)),
     decrementPacked: (id, itemId) => command(id, (trip) => decrementPacked(trip, itemId)),

@@ -4,7 +4,7 @@ import { signInAsOwner } from "./helpers/auth";
 
 // The laptop (>= 1024px) Packing view (#385): header counts, cube rail and open cube, one tick per item, the filters, Edit
 // list, the laundry toggle, keyboard, accessibility and overflow. The weather review rows are in packing-laptop-weather.spec.ts
-// (they need the second app). Below 1024px the page is unchanged until #386; its flows run in the other trip specs.
+// (they need the second app). Below 1024px the page is the phone layout (packing-phone.spec.ts); its flows run in the other trip specs.
 const NOW = new Date("2026-10-16T12:00:00");
 test.use({ viewport: { width: 1280, height: 900 } });
 
@@ -210,11 +210,16 @@ for (const width of [1024, 1100, 1180, 1280, 1440]) {
   });
 }
 
-test("below 1024px the page is still the current one", async ({ page }) => {
-  await page.setViewportSize({ width: 1000, height: 900 });
+test("below 1024px the page is the phone layout, and from 1024px the laptop one", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1023, height: 900 });
   await page.clock.setFixedTime(NOW);
   await signInAsOwner(page);
   await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
-  await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
-  await expect(page.locator("[data-packing-layout]")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Pack mode", level: 1 })).toBeVisible();
+  await expect(page.locator('[data-packing-layout="phone"]')).toHaveCount(1);
+  await page.setViewportSize({ width: 1024, height: 900 });
+  await expect(page.getByRole("heading", { name: "Packing", level: 1 })).toBeVisible();
+  await expect(page.locator('[data-packing-layout="laptop"]')).toHaveCount(1);
 });

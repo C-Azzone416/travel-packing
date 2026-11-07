@@ -155,6 +155,14 @@ export async function setPackedAction(
   return command((context) => service.setPackedItem(context, { tripId, itemId, packed }));
 }
 
+/** "All in" and its Undo (#386): several packed counts, saved together or not at all. */
+export async function setPackedManyAction(
+  tripId: string,
+  entries: readonly { itemId: string; packed: number }[],
+): Promise<TripCommandResult> {
+  return command((context) => service.setPackedItems(context, { tripId, entries }));
+}
+
 export async function togglePackedAction(
   tripId: string,
   itemId: string,

@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
-import { DEVICE, legacyPackingLayout } from "./helpers/device";
+import { DEVICE } from "./helpers/device";
 
 // Field Ledger polish (#160): small layout facts that only a rendered page can show.
 test.beforeEach(async ({ page }) => {
@@ -75,26 +75,4 @@ test("Staples: a group's count shares the heading's row", async ({ page }) => {
   // The count's box sits within the heading's row, not above or below it.
   expect(count!.y).toBeGreaterThanOrEqual(head!.y - 2);
   expect(count!.y + count!.height).toBeLessThanOrEqual(head!.y + head!.height + 2);
-});
-
-test("packing: the back link leaves a visible space between the arrow and its text", async ({
-  page,
-}) => {
-  await legacyPackingLayout(page);
-  await page.goto("/");
-  await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
-  await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
-  const gap = await page.evaluate(() => {
-    const link = document.querySelector(".back-link") as HTMLElement;
-    const arrow = link.querySelector("span") as HTMLElement;
-    const text = [...link.childNodes].find(
-      (node) => node.nodeType === 3 && (node.textContent ?? "").trim(),
-    ) as Text;
-    const range = document.createRange();
-    const start = (text.textContent ?? "").search(/\S/);
-    range.setStart(text, start);
-    range.setEnd(text, start + 1);
-    return range.getBoundingClientRect().left - arrow.getBoundingClientRect().right;
-  });
-  expect(gap).toBeGreaterThanOrEqual(4);
 });

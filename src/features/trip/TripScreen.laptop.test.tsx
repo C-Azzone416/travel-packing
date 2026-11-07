@@ -568,6 +568,8 @@ describe("the forecast and the weather review rows", () => {
     const review = within(card).getByRole("button", { name: /\d+ to review/ });
     expect(review.getAttribute("aria-expanded")).toBe("false");
     expect(screen.getByText(/\d+ new to review/)).toBeTruthy();
+    // The forecast is Open-Meteo's: its attribution is on the card block.
+    expect(screen.getByRole("link", { name: "Weather data by Open-Meteo.com" })).toBeTruthy();
     // Nothing in the bag count changed: suggestions are not items.
   });
 
@@ -765,6 +767,7 @@ describe("the toiletry bag step and what sits under the suitcase", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     await user.click(screen.getByRole("button", { name: "Edit trip" }));
     expect(await screen.findByRole("dialog")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Change theme" })).toBeNull();
   });
 
   it("shows the Ready card for a Ready trip, and the review prompt once everything is checked", async () => {

@@ -47,6 +47,7 @@ import {
   saveAsListAction,
   reviewWeatherAgainAction,
   setPackedAction,
+  setPackedManyAction,
   setStampLabelsAction,
   setThemeAction,
   skipWeatherAction,
@@ -530,6 +531,7 @@ describe("owner gate", () => {
     as(OTHER_OWNER);
     const attempts: [string, () => Promise<TripCommandResult>][] = [
       ["setPacked", () => setPackedAction(trip.id, "socks", 3)],
+      ["setPackedMany", () => setPackedManyAction(trip.id, [{ itemId: "socks", packed: 3 }])],
       ["toggle", () => togglePackedAction(trip.id, "socks")],
       ["increment", () => incrementPackedAction(trip.id, "socks")],
       ["decrement", () => decrementPackedAction(trip.id, "socks")],
@@ -648,6 +650,34 @@ describe("cube actions (#385)", () => {
       ok: false,
       code: "NOT_FOUND",
     });
+  });
+});
+
+describe("setPackedManyAction (All in and Undo, #386)", () => {
+  it("saves several counts together and returns the trip and signals in the screen's shape", async () => {
+    const trip = await seedTrip(db(), OWNER.userId);
+    const open = trip.items.filter((entry) => entry.packed < entry.qty).slice(0, 2);
+    const result = await setPackedManyAction(
+      trip.id,
+      open.map((entry) => ({ itemId: entry.id, packed: entry.qty })),
+    );
+    if (!result.ok) throw new Error(`expected ok, got ${result.code}`);
+    for (const entry of open)
+      expect(result.trip.items.find((one) => one.id === entry.id)?.packed).toBe(entry.qty);
+    expect(result.signals).toMatchObject({ promptBagPlacement: expect.any(Boolean) });
+  });
+
+  it("says NOT_FOUND for a trip that is not there, REJECTED for an item that is not on it, and fails an empty list", async () => {
+    const trip = await seedTrip(db(), OWNER.userId);
+    expect(await setPackedManyAction(MISSING, [{ itemId: "x", packed: 1 }])).toEqual({
+      ok: false,
+      code: "NOT_FOUND",
+    });
+    expect(await setPackedManyAction(trip.id, [{ itemId: "no-such-item", packed: 1 }])).toEqual({
+      ok: false,
+      code: "REJECTED",
+    });
+    expect(await setPackedManyAction(trip.id, [])).toMatchObject({ ok: false });
   });
 });
 

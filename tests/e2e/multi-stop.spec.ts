@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { expectAccessible } from "./helpers/a11y";
 import { chooseFromMenu } from "./helpers/menu";
 import { signInAsOwner } from "./helpers/auth";
+import { expectPacking } from "./helpers/packing";
 import { DEVICE, legacyPackingLayout } from "./helpers/device";
 import { pickRoute, reviewAndCreate, setRouteDates, toList, toWhen } from "./helpers/plan";
 
@@ -45,7 +46,6 @@ test(
   "create a 3-stop trip: the route and dates persist across a reload",
   DEVICE,
   async ({ page }) => {
-    await legacyPackingLayout(page);
     await openDashboard(page);
     await createThreeStopTrip(page);
     await expect(page.getByLabel("Arrive, Stop 2")).toHaveValue("2026-11-15");
@@ -63,16 +63,11 @@ test(
     await trip(page, "Lisbon → Paris → Rome")
       .getByRole("link", { name: /(Continue|Keep) packing/ })
       .click();
-    await expect(
-      page.getByRole("heading", { name: "Lisbon → Paris → Rome", level: 1 }),
-    ).toBeVisible();
-    // The title is the route, so the header does not repeat it as a chip.
-    await expect(page.locator(".route-chip")).toHaveCount(0);
+    await expectPacking(page);
   },
 );
 
 test("edit the route down to 2 stops, then copy the trip to new dates", async ({ page }) => {
-  await legacyPackingLayout(page);
   await openDashboard(page);
   await createThreeStopTrip(page);
   await toList(page);
@@ -90,13 +85,13 @@ test("edit the route down to 2 stops, then copy the trip to new dates", async ({
   await expect(sheet.getByLabel("Arrive, Stop 2")).toHaveValue("2026-11-15");
   await sheet.getByRole("button", { name: "Save route" }).click();
   await expect(sheet).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "Lisbon → Rome", level: 1 })).toBeVisible();
+  await expect(page.getByRole("status", { name: "Packing updates" })).toHaveText("Route updated.");
 
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Lisbon → Rome", level: 1 })).toBeVisible();
-  await expect(page.locator(".route-chip")).toHaveCount(0);
+  await expectPacking(page);
 
   await page.goto("/");
+  await expect(page.getByRole("article", { name: "Lisbon → Rome" })).toBeVisible();
   await chooseFromMenu(page, "Lisbon → Rome", "Copy trip");
   await expect(page.getByRole("button", { name: "Remove Rome" })).toBeVisible();
   await toWhen(page);

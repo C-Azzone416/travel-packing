@@ -14,6 +14,7 @@ import {
   removeItem,
   revokeReadyForChange,
   setPacked,
+  setPackedMany,
   togglePacked,
   undoBagPlacement,
   type ChecklistChange,
@@ -224,6 +225,57 @@ describe("packed changes", () => {
     const result = ok(togglePacked(start, "shirt")).trip;
     expect(result.destination).toBe("Sample City");
     expect((result.items[0] as PackableItem & { name: string }).name).toBe("Shirt");
+  });
+});
+
+describe("setPackedMany (All in and its Undo, #386)", () => {
+  it("applies every entry as one change, clamping each to its quantity", () => {
+    const start = trip([shirt(1), socks(0), brush(0)]);
+    const result = ok(
+      setPackedMany(start, [
+        { itemId: "shirt", packed: 3 },
+        { itemId: "socks", packed: 9 },
+        { itemId: "brush", packed: 1 },
+      ]),
+    );
+    expect(result.trip.items.map((item) => item.packed)).toEqual([3, 2, 1]);
+  });
+
+  it("is all or nothing: an unknown item rejects the whole change and returns the trip untouched", () => {
+    const start = trip([shirt(1), socks(0)]);
+    const result = setPackedMany(start, [
+      { itemId: "shirt", packed: 3 },
+      { itemId: "nope", packed: 1 },
+    ]);
+    expect(result).toEqual({ ok: false, reason: "ITEM_NOT_FOUND", trip: start });
+    expect(packedOf(start, "shirt")).toBe(1);
+  });
+
+  it("an empty list changes nothing", () => {
+    const start = trip([shirt(1)]);
+    expect(ok(setPackedMany(start, [])).trip).toBe(start);
+  });
+
+  it("combines the signals: finishing the Bathroom contents offers the bag, and everything packed offers the review", () => {
+    const start = trip([shirt(3), brush(0), paste(0)]);
+    const result = ok(
+      setPackedMany(start, [
+        { itemId: "brush", packed: 1 },
+        { itemId: "paste", packed: 1 },
+      ]),
+    );
+    expect(result.signals).toEqual({ promptBagPlacement: true, reviewPrompt: false });
+    const finish = ok(setPackedMany(trip([shirt(2), socks(2)]), [{ itemId: "shirt", packed: 3 }]));
+    expect(finish.signals.reviewPrompt).toBe(true);
+    expect(ok(setPackedMany(packedPlain({ ready: true }), [])).signals.reviewPrompt).toBe(false);
+  });
+
+  it("unpacking (Undo) revokes Ready and invalidates a placed bag, like unticking", () => {
+    const start = packedWithBag({ ready: true });
+    const result = ok(setPackedMany(start, [{ itemId: "brush", packed: 0 }])).trip;
+    expect(result.ready).toBe(false);
+    expect(result.toiletryBagPacked).toBe(false);
+    expect(packedOf(result, "shirt")).toBe(3);
   });
 });
 
