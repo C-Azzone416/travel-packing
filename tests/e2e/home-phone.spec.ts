@@ -127,6 +127,43 @@ test.describe("pills and panels", DEVICE, () => {
     expect(await overflow(page)).toBeLessThanOrEqual(0);
   });
 
+  for (const width of [195, 390] as const) {
+    test(`at ${width} a Future row's open menu stays on screen and above the tag after it`, async ({
+      page,
+    }) => {
+      await openHome(page, 390);
+      for (const [query, option, start, end] of [
+        ["lon", /England/, "2026-12-17", "2026-12-20"],
+        ["paris", /France/, "2027-01-10", "2027-01-13"],
+      ] as const) {
+        await planATrip(page);
+        await planAndCreate(page, { query, option, start, end });
+      }
+      await page.setViewportSize({ width, height: 844 });
+      await page.goto("/");
+      await pill(page, /^Future/).click();
+      await page
+        .getByRole("button", { name: /^More actions for / })
+        .nth(1)
+        .click();
+      const panel = page.getByRole("menu").first();
+      await expect(panel).toBeVisible();
+      const box = (await panel.boundingBox())!;
+      expect(box.x, "the open menu must not run off the left edge").toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(width);
+      // The point in the middle of each item reaches the menu, not the tag drawn after the row.
+      const items = await panel.getByRole("menuitem").all();
+      for (const entry of items) {
+        const at = (await entry.boundingBox())!;
+        const reaches = await page.evaluate(
+          ([x, y]) => !!document.elementFromPoint(x, y)?.closest('[role="menu"]'),
+          [at.x + at.width / 2, at.y + at.height / 2],
+        );
+        expect(reaches, "a later tag must not paint over the open menu").toBe(true);
+      }
+    });
+  }
+
   test("the chosen pill is in the address: a link, a reload and Back all land on it", async ({
     page,
   }) => {

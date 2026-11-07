@@ -125,6 +125,19 @@ const rainyStop = (stopIndex: number): StopWeather =>
       sunshineHours: 5,
     })),
   }) as StopWeather;
+/** A dry, hot, high-UV forecast: it suggests sun items, but has no rain or snow. */
+const dryHotStop = (stopIndex: number): StopWeather =>
+  ({
+    ...rainyStop(stopIndex),
+    days: rainyStop(stopIndex).days.map((day) => ({
+      ...day,
+      highC: 34,
+      lowC: 22,
+      precipProbability: 0,
+      uvIndexMax: 10,
+      sunshineHours: 12,
+    })),
+  }) as StopWeather;
 const bareTrip = () => trip({ items: [item("tops", "Clothing", 3, 0)] });
 
 const later = (id: string, name: string, start: string) =>
@@ -205,6 +218,44 @@ describe("HomePhone", () => {
         .getAttribute("aria-expanded"),
     ).toBe("false");
     expect(within(panel).getByText(/\d+ to review/)).toBeTruthy();
+  });
+
+  it("counts the changes to review on a dry, high-UV city too, and opens that city", async () => {
+    const user = userEvent.setup();
+    setup({
+      trip: bareTrip(),
+      weather: {
+        phase: "ready",
+        city: [city("Lisbon", false)],
+        review: { stops: [dryHotStop(0)], suppressed: {} },
+      },
+    });
+    // The pill and the city row agree: there are changes to review, though nothing is rainy.
+    await user.click(screen.getByRole("tab", { name: "Weather ALERT" }));
+    const panel = screen.getByRole("tabpanel");
+    const row = within(panel).getByRole("button", { name: /Lisbon/ });
+    expect(row.getAttribute("aria-expanded")).toBe("true");
+    expect(row.textContent).toMatch(/\d+ to review/);
+  });
+
+  it("never alerts before the forecast opens, and says N/A when the usual row has no observations", () => {
+    const far = setup({
+      today: FAR_TODAY,
+      trip: bareTrip(),
+      weather: {
+        phase: "ready",
+        usual: [{ city: "Lisbon", unavailable: false }] as never,
+        review: { stops: [dryHotStop(0), rainyStop(1)], suppressed: {} },
+      },
+    });
+    expect(screen.getByRole("tab", { name: "Weather Usual" })).toBeTruthy();
+    expect(screen.queryByText(/Weather alert/)).toBeNull();
+    far.unmount();
+    setup({
+      today: FAR_TODAY,
+      weather: { phase: "ready", usual: [{ city: "Lisbon", unavailable: true }] as never },
+    });
+    expect(screen.getByRole("tab", { name: "Weather N/A" })).toBeTruthy();
   });
 
   it("does not alert for rain that is already on the list, and clears once the last suggestion is resolved", () => {

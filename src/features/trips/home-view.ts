@@ -489,11 +489,11 @@ export function homeModel(trip: LifecycleTrip, weather: HeroWeather, today: stri
   const rows = weather.phase === "ready" ? (weather.city ?? []) : [];
   const cities = alertCities(rows);
   const firstAlert = rows.find((row) => row.alert)?.stopIndex ?? 0;
-  const pending = pendingByStop(
-    trip,
-    weather.phase === "ready" ? weather.review : undefined,
-    firstAlert,
-  );
+  // Before the forecast opens there is only typical weather: it never makes suggestions, so nothing is pending (#408).
+  const pending =
+    phase === "far"
+      ? {}
+      : pendingByStop(trip, weather.phase === "ready" ? weather.review : undefined, firstAlert);
   const cubes = cubeSummaries(trip, { cities });
   const totals = bagTotals(cubes);
   return {
@@ -544,7 +544,11 @@ export function weatherPillSub(
   switch (weather.phase) {
     case "ready":
       if (model.phase === "far")
-        return { text: (weather.usual?.length ?? 0) > 0 ? "Usual" : "N/A", alert: false };
+        // Usual needs observations: an unavailable placeholder row is not weather.
+        return {
+          text: (weather.usual ?? []).some((row) => !row.unavailable) ? "Usual" : "N/A",
+          alert: false,
+        };
       return { text: model.rows.length > 0 ? "Clear" : "N/A", alert: false };
     case "off":
       return { text: "Off", alert: false };

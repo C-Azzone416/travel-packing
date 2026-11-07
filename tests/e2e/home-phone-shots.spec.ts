@@ -68,5 +68,7 @@ test("home-p-ocean: the phone Home at 390 and 195", async ({ page }) => {
 
   await page.getByRole("tab", { name: /^Future/ }).click();
   await expect(page.getByRole("list", { name: "Future trips" })).toBeVisible();
+  await page.getByRole("button", { name: /^More actions for Springfield/ }).click();
+  await expect(page.getByRole("menu")).toBeVisible();
   await shot(page, "home-p-ocean-195-future");
 });

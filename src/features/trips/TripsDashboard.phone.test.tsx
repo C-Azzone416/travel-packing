@@ -243,6 +243,18 @@ describe("the Weather pill and its panel", () => {
     expect(screen.getByText("Weather is unavailable right now.")).toBeTruthy();
   });
 
+  it("does not say Usual over nothing: a far trip, weather turned off mid-load (200, no stops), is N/A", async () => {
+    const base = memory(sampleLifecycleState());
+    renderInApp(
+      <TripsDashboard
+        source={weatherSource(base, undefined, { kind: "ready", stops: [] } as never)}
+        getToday={() => "2026-08-01"}
+      />,
+    );
+    expect(await within(await tabsReady()).findByRole("tab", { name: "Weather N/A" })).toBeTruthy();
+    expect(within(tabs()).queryByRole("tab", { name: "Weather Usual" })).toBeNull();
+  });
+
   it("treats a thrown weather read as unavailable", async () => {
     setup(undefined, (base) => ({
       ...base,

@@ -37,22 +37,29 @@ function CityRows({
   const [toggled, setToggled] = useState<Readonly<Record<number, boolean>>>({});
   // Exclusive: the one open city, undefined until the person picks (then the first alert city is open), null when all are shut.
   const [only, setOnly] = useState<number | null | undefined>(undefined);
-  const firstAlert = rows.find((row) => row.alert && row.tiles.length > 0)?.stopIndex ?? null;
+  // The city to open first: one with changes to review, else one with rain or snow.
+  const firstAlert =
+    rows.find((row) => (pending[row.stopIndex] ?? 0) > 0 && row.tiles.length > 0)?.stopIndex ??
+    rows.find((row) => row.alert && row.tiles.length > 0)?.stopIndex ??
+    null;
   return (
     <ul className={styles.cityList}>
       {rows.map((row) => {
+        const waiting = pending[row.stopIndex] ?? 0;
         const open = exclusive
           ? (only === undefined ? firstAlert : only) === row.stopIndex
-          : (toggled[row.stopIndex] ?? row.alert);
+          : (toggled[row.stopIndex] ?? (row.alert || waiting > 0));
         const panel = `${base}-panel-${row.stopIndex}`;
         const heading = alertHeading(weatherLabel, row.condition);
         // "N to review" while changes wait for a decision, "Rain · N added" once they are in the bag (spec decision 5).
-        const waiting = pending[row.stopIndex] ?? 0;
-        const state = row.alert
-          ? waiting > 0
+        // The review count is for any change waiting on this city (a dry, high-UV day suggests things too); the added-items
+        // line stays for a rain or snow city whose changes are already in the bag.
+        const state =
+          waiting > 0
             ? `${waiting} to review`
-            : `${heading} · ${weatherItems} added`
-          : null;
+            : row.alert
+              ? `${heading} · ${weatherItems} added`
+              : null;
         const text = (
           <span className={styles.cityText}>
             <strong>

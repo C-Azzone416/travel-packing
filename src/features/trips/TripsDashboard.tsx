@@ -91,11 +91,9 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
         const settings = await weatherSource.getSettings();
         if (!settings.weatherOptIn) return answer({ phase: "off" });
         const result = await weatherSource.getTripWeather(heroId);
-        // A 200 whose stops are all unavailable has no weather in it: that is "unavailable", not a forecast.
-        if (
-          result.kind !== "ready" ||
-          (result.stops.length > 0 && result.stops.every((stop) => stop.status !== "ok"))
-        )
+        // A 200 with no stop, or only unavailable ones, has no weather in it: "unavailable", not a forecast (an opt-out
+        // between the settings and the weather requests answers 200 with an empty list).
+        if (result.kind !== "ready" || result.stops.every((stop) => stop.status !== "ok"))
           return answer({ phase: "unavailable" });
         const stops = heroTrip ? stopsOrDestination(heroTrip) : [];
         const today = getToday();

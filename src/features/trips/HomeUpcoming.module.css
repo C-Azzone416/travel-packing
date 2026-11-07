@@ -60,6 +60,15 @@
   right: 6px;
   transform: translateY(-50%);
 }
+/* The slot's transform makes its own stacking context: while its menu is open it sits above the tags after it. */
+.menuSlot:has([aria-expanded="true"]) {
+  z-index: 5;
+}
+/* The shared panel's 200px minimum beats its viewport cap at 195px and runs off the left edge: cap the minimum too. */
+.menuSlot :global(.more-menu-panel) {
+  min-width: min(200px, calc(100vw - 48px));
+  max-width: calc(100vw - 48px);
+}
 .miniRow[data-menu="true"] {
   padding-inline-end: 40px;
 }
