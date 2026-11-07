@@ -45,7 +45,7 @@ export async function createWeatherTrip(page: Page, stays: Stay[]) {
   await expect(page.getByRole("checkbox", { name: /Weather suggestions/ })).toBeChecked();
   await reviewAndCreate(page);
   await page
-    .getByRole("link", { name: /^(Continue|Keep) packing: London/ })
+    .getByRole("link", { name: /^(Continue packing|Start packing|Open list|Keep packing): London/ })
     .first()
     .click();
   await page.waitForURL(/\/trips\/(?!new)[^/?#]+$/);
