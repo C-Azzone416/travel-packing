@@ -2530,22 +2530,6 @@ a.back {
   color: var(--muted);
 }
 
-/* ---- Field Ledger dashboard (#143, spec §4). Roles only; the stamp slot belongs to FL-c (#144). */
-.ledger-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 16px;
-  margin: 12px 2px 16px;
-}
-.ledger-head h1 {
-  margin-bottom: 0;
-  font-size: clamp(38px, 5vw, 68px);
-}
-.ledger-head h1:focus {
-  outline: none;
-}
 .weather-note {
   color: var(--muted);
 }
@@ -2554,18 +2538,6 @@ a.back {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-}
-
-@media (max-width: 720px) {
-  .ledger-head {
-    display: grid;
-  }
-  .ledger-head h1 {
-    font-size: 40px;
-  }
-  .ledger-head .button {
-    width: 100%;
-  }
 }
 
 /* The ⋯ menu (#155): a 44px button and a role="menu" panel under it, right-aligned (open upward when low). */

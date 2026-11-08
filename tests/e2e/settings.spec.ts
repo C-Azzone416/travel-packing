@@ -339,7 +339,7 @@ test("the colour scheme applies at once and persists across reload, navigation a
 
   await page
     .getByRole("navigation", { name: "Primary navigation" })
-    .getByRole("link", { name: "Staples" })
+    .getByRole("link", { name: "Staples", exact: true })
     .click();
   await expect(html).toHaveAttribute("data-scheme", "evergreen");
 

@@ -55,7 +55,7 @@ describe("TripsScreen", () => {
         within(screen.getByRole("dialog")).getByRole("button", { name: "Remove trip" }),
       );
       await waitFor(() => expect(screen.getByText("San Diego removed")).toBeTruthy());
-      await user.click(screen.getByRole("button", { name: "Past & archive 1" }));
+      await user.click(screen.getByRole("button", { name: "Past & archive" }));
       expect(screen.getByRole("button", { name: "Undo remove: San Diego" })).toBeTruthy();
     } finally {
       vi.useRealTimers();

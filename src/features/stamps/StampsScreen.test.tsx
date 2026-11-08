@@ -16,7 +16,8 @@ import type { TripConfig } from "@/domain/trip";
 import type { SampleLocation } from "@/domain/trip-stops";
 import { createMemoryTripsSource, type TripsSource } from "@/features/trips/trips-source";
 import { TripsSourceProvider } from "@/features/trips/TripsSourceProvider";
-import { StampsScreen } from "./StampsScreen";
+import { StampsScreen, StampsContent, StickerTeaser } from "./StampsScreen";
+import { stampsView } from "./stamps-view";
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/stamps" }));
 
@@ -352,5 +353,47 @@ describe("Stamps screen", () => {
     expect(calls).toBe(2);
     expect(screen.queryByRole("button", { name: /Lisbon, Sep 2026/ })).toBeNull();
     expect(screen.getByRole("button", { name: PORTO })).toBeTruthy();
+  });
+});
+
+describe("Stamps selected from the address and the Home teaser (#409)", () => {
+  it("opens with the trip named in ?trip= selected, whatever the filter would have chosen", async () => {
+    window.history.replaceState(null, "", "/stamps?trip=san-diego");
+    try {
+      setup();
+      expect(await screen.findByRole("article", { name: "Selected trip: San Diego" })).toBeTruthy();
+    } finally {
+      window.history.replaceState(null, "", "/");
+    }
+  });
+
+  it("selects the given trip first in StampsContent, and falls back to the latest past trip", () => {
+    const { unmount } = render(
+      <StampsContent state={sampleLifecycleState()} today="2026-10-16" initialTripId="lisbon" />,
+    );
+    expect(screen.getByRole("article", { name: "Selected trip: Lisbon" })).toBeTruthy();
+    unmount();
+    render(
+      <StampsContent state={sampleLifecycleState()} today="2026-10-16" initialTripId="missing" />,
+    );
+    expect(screen.getByRole("article", { name: "Selected trip: Lisbon" })).toBeTruthy();
+  });
+
+  it("the teaser draws decorative stickers, two totals and the one link", () => {
+    const view = stampsView(sampleLifecycleState().trips, "2026-10-16", "rolling");
+    render(
+      <StickerTeaser
+        stickers={view.stickers.filter((sticker) => !sticker.upcoming)}
+        inked={view.inked}
+        filterLabel={view.filterLabel}
+        totals={{ trips: view.totals.trips, nights: view.totals.nights }}
+      />,
+    );
+    expect(screen.getByRole("heading", { name: "Stickers · Last 12 months" })).toBeTruthy();
+    expect(screen.getByText("1 inked")).toBeTruthy();
+    expect(screen.queryAllByRole("button")).toHaveLength(0);
+    expect(document.querySelectorAll('[data-decorative="true"]')).toHaveLength(1);
+    expect(within(screen.getByLabelText("Travel totals")).getAllByRole("term")).toHaveLength(2);
+    expect(screen.getByRole("link", { name: "All stamps ›" }).getAttribute("href")).toBe("/stamps");
   });
 });

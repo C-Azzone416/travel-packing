@@ -28,6 +28,7 @@ import { toSuggestions } from "@/features/trip/packing/packing-model";
 import { defaultFormatRange } from "@/domain/weather/recommend";
 import { displayTemperature, weatherRowView } from "@/features/trip/weather-view";
 import type { TemperatureUnit } from "@/server/data/weather-store";
+import { stampsView, type PastTripView, type StickerView } from "@/features/stamps/stamps-view";
 
 // ---------------------------------------------------------------- cubes
 
@@ -562,4 +563,49 @@ export function weatherPillSub(
 /** "1 trip", "2 trips". */
 export function tripCount(count: number): string {
   return `${count} ${count === 1 ? "trip" : "trips"}`;
+}
+
+// ---------------------------------------------------------------- no trip coming up (#409)
+
+/** How many stickers and recent trips the returning Home shows (spec #393 part 1 section 2.1 B). */
+export const TEASER_STICKERS = 6;
+export const RECENT_TRIPS = 3;
+
+export interface NoTripModel {
+  /** first = the account has no completed trip yet; returning = at least one trip is behind it. */
+  kind: "first" | "returning";
+  eyebrow: string;
+  title: string;
+  lede: string;
+  /** The most recent stickers (last 12 months), newest first. */
+  stickers: StickerView[];
+  /** All stickers in the window, for the "N inked" count. */
+  inked: number;
+  filterLabel: string;
+  totals: { trips: number; nights: number };
+  /** The most recent completed trips of any age, newest first. */
+  recent: PastTripView[];
+}
+
+/**
+ * What the Home shows when no trip is coming up. A completed trip (its end date passed, archived or not) makes the account
+ * "returning"; trips that are only archived ahead of their dates do not (an archived trip with no inked sticker is first run).
+ */
+export function noTripModel(trips: readonly LifecycleTrip[], today: string): NoTripModel {
+  const rolling = stampsView(trips, today, "rolling");
+  const all = stampsView(trips, today, "all");
+  const returning = all.pastTrips.length > 0;
+  return {
+    kind: returning ? "returning" : "first",
+    eyebrow: returning ? "WELCOME BACK" : "WELCOME",
+    title: returning ? "Where to next?" : "Where to first?",
+    lede: returning
+      ? "Your Staples are ready to start the list."
+      : "Plan a trip and Packed Smart builds your list from your Staples and the weather.",
+    stickers: rolling.stickers.filter((sticker) => !sticker.upcoming).slice(0, TEASER_STICKERS),
+    inked: rolling.inked,
+    filterLabel: rolling.filterLabel,
+    totals: { trips: rolling.totals.trips, nights: rolling.totals.nights },
+    recent: all.pastTrips.slice(0, RECENT_TRIPS),
+  };
 }

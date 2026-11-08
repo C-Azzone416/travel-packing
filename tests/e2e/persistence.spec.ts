@@ -38,7 +38,7 @@ test("an archived trip is still archived after a reload, and restoring it persis
   await expect(sanDiegoHeading(page)).toHaveCount(0);
 
   await page.reload();
-  await expect(page.getByText("No upcoming trips.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Where to (first|next)\?$/ })).toBeVisible();
   await openPastAndArchive(page);
   await expect(card(page, "San Diego").getByText("Archived trip")).toBeVisible();
 
@@ -81,7 +81,7 @@ test("changes are there in a brand-new session (another device)", async ({ page,
     await device.clock.setFixedTime(NOW);
     await signIn(device, ownerEmailFor(test.info().project.name));
     await expect(device).toHaveURL(/\/$/);
-    await expect(device.getByText("No upcoming trips.")).toBeVisible();
+    await expect(device.getByRole("heading", { name: /^Where to (first|next)\?$/ })).toBeVisible();
     await openPastAndArchive(device);
     await expect(card(device, "San Diego").getByText("Archived trip")).toBeVisible();
   } finally {
@@ -104,7 +104,7 @@ test("a second user sees none of the owner's trips, before or after the owner ch
     await second.clock.setFixedTime(NOW);
     await signIn(second, SECOND_EMAIL);
     await expect(second).toHaveURL(/\/$/);
-    await expect(second.getByText("No upcoming trips.")).toBeVisible();
+    await expect(second.getByRole("heading", { name: /^Where to (first|next)\?$/ })).toBeVisible();
     await expect(sanDiegoHeading(second)).toHaveCount(0);
 
     // The owner removes a trip; the second user's view is unaffected and shows nothing of it.
@@ -112,9 +112,12 @@ test("a second user sees none of the owner's trips, before or after the owner ch
     await page.getByRole("dialog").getByRole("button", { name: "Remove trip" }).click();
     await expect(sanDiegoHeading(page)).toHaveCount(0);
 
+    // Still the first-run Home after a reload: none of the owner's trips or removed trips reach this account, so there is no
+    // Past & archive to open (the owner's Undo remove is not theirs to see).
     await second.reload();
-    await openPastAndArchive(second);
-    await expect(second.getByRole("button", { name: "Undo remove: San Diego" })).toHaveCount(0);
+    await expect(second.getByRole("heading", { name: "Where to first?" })).toBeVisible();
+    await expect(second.getByRole("button", { name: /Past & archive/ })).toHaveCount(0);
+    await expect(second.getByText("San Diego")).toHaveCount(0);
     await expect(second.getByText("Lisbon")).toHaveCount(0);
   } finally {
     await other.close();

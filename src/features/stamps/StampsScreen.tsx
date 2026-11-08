@@ -27,25 +27,16 @@ const FILTERS: readonly StampFilter[] = ["rolling", "year", "all"];
 
 function Sticker({
   sticker,
-  selected,
+  selected = false,
   onSelect,
 }: {
   sticker: StickerView;
-  selected: boolean;
-  onSelect: () => void;
+  selected?: boolean;
+  /** Without it the sticker is decorative (the Home's teaser): a span the keyboard and screen readers skip. */
+  onSelect?: () => void;
 }) {
-  return (
-    <button
-      type="button"
-      className={styles.stickerButton}
-      aria-label={sticker.accessibleName}
-      aria-pressed={selected}
-      data-upcoming={sticker.upcoming || undefined}
-      data-shape={sticker.shape}
-      data-colour={sticker.colour}
-      onClick={onSelect}
-      style={{ "--sticker-tilt": `${sticker.tilt}deg` } as React.CSSProperties}
-    >
+  const body = (
+    <>
       <span
         className={styles.stickerRegion}
         title={sticker.region}
@@ -59,7 +50,77 @@ function Sticker({
           ×{sticker.completedCount}
         </span>
       ) : null}
+    </>
+  );
+  const common = {
+    className: styles.stickerButton,
+    "data-upcoming": sticker.upcoming || undefined,
+    "data-shape": sticker.shape,
+    "data-colour": sticker.colour,
+    style: { "--sticker-tilt": `${sticker.tilt}deg` } as React.CSSProperties,
+  };
+  return onSelect ? (
+    <button
+      type="button"
+      {...common}
+      aria-label={sticker.accessibleName}
+      aria-pressed={selected}
+      onClick={onSelect}
+    >
+      {body}
     </button>
+  ) : (
+    <span {...common} aria-hidden="true" data-decorative="true">
+      {body}
+    </span>
+  );
+}
+
+/**
+ * The Home's Stamps teaser (#409): the dark sticker suitcase with the latest stickers, two totals and a link to Stamps.
+ * It draws the same stickers as the Stamps screen, but decoratively: the link is the one control.
+ */
+export function StickerTeaser({
+  stickers,
+  inked,
+  filterLabel: label,
+  totals,
+}: {
+  stickers: readonly StickerView[];
+  inked: number;
+  filterLabel: string;
+  totals: { trips: number; nights: number };
+}) {
+  return (
+    <Suitcase interior="dark" inset="stamps" className={`${styles.stickerCase} ${styles.teaser}`}>
+      <div className={styles.caseHead}>
+        <h2>Stickers · {label}</h2>
+        <strong>{inked} inked</strong>
+      </div>
+      {stickers.length ? (
+        <div className={styles.stickerGrid} aria-hidden="true">
+          {stickers.map((sticker) => (
+            <Sticker key={sticker.key} sticker={sticker} />
+          ))}
+        </div>
+      ) : (
+        <p className={styles.noStickers}>No stickers in this window yet.</p>
+      )}
+      <dl className={styles.totals} aria-label="Travel totals">
+        {[
+          [totals.trips, "trips"],
+          [totals.nights, "nights away"],
+        ].map(([value, text]) => (
+          <div key={text}>
+            <dt>{text}</dt>
+            <dd>{value}</dd>
+          </div>
+        ))}
+      </dl>
+      <Link className={styles.teaserLink} href="/stamps">
+        All stamps ›
+      </Link>
+    </Suitcase>
   );
 }
 
@@ -129,13 +190,16 @@ export function StampsContent({
   state,
   today,
   embedded = false,
+  initialTripId = null,
 }: {
   state: LifecycleState;
   today: string;
   embedded?: boolean;
+  /** The trip to select first (`/stamps?trip=<id>`, from the Home's recent trips). */
+  initialTripId?: string | null;
 }) {
-  const [filter, setFilter] = useState<StampFilter>("rolling");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<StampFilter>(initialTripId ? "all" : "rolling");
+  const [selectedId, setSelectedId] = useState<string | null>(initialTripId);
 
   const view = useMemo(() => stampsView(state.trips, today, filter), [state, today, filter]);
   const visibleIds = useMemo(
@@ -286,5 +350,7 @@ export function StampsScreen({ getToday = localToday }: { getToday?: () => strin
     );
   }
 
-  return <StampsContent state={load.state} today={load.today} />;
+  // The trips have loaded in the browser by now, so reading the address cannot disagree with the server's markup.
+  const initialTripId = new URLSearchParams(window.location.search).get("trip");
+  return <StampsContent state={load.state} today={load.today} initialTripId={initialTripId} />;
 }

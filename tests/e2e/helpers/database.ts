@@ -288,3 +288,14 @@ export async function seedSavedList(
     await pool.end();
   }
 }
+
+/** Delete every trip the owner has (the seeded samples too), so the Home is the first-run Home (#409). */
+export async function clearOwnerTrips(ownerId: string): Promise<void> {
+  const pool = new Pool({ connectionString: E2E_DATABASE_URL, max: 1 });
+  try {
+    const db = drizzle(pool, { schema }) as unknown as Db;
+    await db.delete(schema.trips).where(eq(schema.trips.ownerId, ownerId));
+  } finally {
+    await pool.end();
+  }
+}
