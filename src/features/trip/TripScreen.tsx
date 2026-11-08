@@ -122,6 +122,16 @@ export function TripScreen({
   const [bannerDismissed, setBannerDismissed] = useState(false);
   // The review sheet has its own bag step, so the "Toiletry bag in suitcase?" prompt stays out of its way.
   const reviewOpenRef = useRef(openReview);
+  // Rows whose Retry is in flight (see retryRow).
+  const retryingRef = useRef(new Set<string>());
+  const [retrying, setRetrying] = useState<readonly string[]>([]);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const laptop = useMinWidth(LAPTOP_MIN_WIDTH);
   const weatherRequest = useRef(0);
   const bagPromptDismissed = useRef(false);
@@ -616,13 +626,21 @@ export function TripScreen({
 
   const tickItem = (item: TripItem, packed: boolean) => setCount(item, packed ? item.qty : 0);
 
+  // Rows whose Retry is in flight. A ref guards a double press (state would not update between two clicks); the state shows
+  // "Saving…" and hides the button. A retry never queues a second write for the row while the first is pending.
   const retryRow = (id: string) => {
+    if (retryingRef.current.has(id)) return;
     // The retry button only renders while a failure is recorded for this row.
     const failed = retries.current.get(id) as {
       write: () => Promise<TripChange>;
       options: ActOptions;
     };
-    void act(failed.write, failed.options);
+    retryingRef.current.add(id);
+    setRetrying([...retryingRef.current]);
+    void act(failed.write, failed.options).finally(() => {
+      retryingRef.current.delete(id);
+      setRetrying([...retryingRef.current]);
+    });
   };
 
   const editItem = (id: string) => {
@@ -737,8 +755,13 @@ export function TripScreen({
     reviewOpenRef.current = false;
     setReviewOpen(false);
     setReviewFailure(null);
-    // Arrived by ?review=1 or the /review redirect: put the plain trip address back.
-    if (window.location.search.includes("review=")) {
+    // Arrived by ?review=1 or the /review redirect: put the plain trip address back. Only while this screen is still the one on
+    // the page and only for ITS trip: a write that settles after the person has gone to another trip must not rewrite that URL.
+    if (
+      mounted.current &&
+      window.location.search.includes("review=") &&
+      decodeURIComponent(window.location.pathname) === `/trips/${tripId}`
+    ) {
       window.history.replaceState(null, "", `/trips/${tripId}`);
     }
   };
@@ -852,7 +875,7 @@ export function TripScreen({
           trip={trip}
           busy={submitting}
           onTick={tickItem}
-          pending={Object.keys(tapped)}
+          pending={[...Object.keys(tapped).filter((id) => !failedRows.has(id)), ...retrying]}
           failedRows={failedRows}
           failure={reviewFailure}
           onRetry={retryRow}

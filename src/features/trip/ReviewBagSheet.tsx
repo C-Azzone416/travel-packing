@@ -145,11 +145,11 @@ export function ReviewBagSheet({
                     {trip.config.laundry && item.laundryHalves ? (
                       <LaundryMarker aria-hidden={undefined} />
                     ) : null}
-                    {failedRows.has(item.id) ? null : pending.includes(item.id) ? (
+                    {pending.includes(item.id) ? (
                       <span className={styles.saving}>Saving…</span>
                     ) : null}
                   </label>
-                  {failedRows.has(item.id) ? (
+                  {failedRows.has(item.id) && !pending.includes(item.id) ? (
                     <span className={styles.unsaved} role="alert">
                       Not saved
                       <button

@@ -74,13 +74,13 @@ function setup(
   const base = memory(options);
   const source = (options.wrap ? { ...base, ...options.wrap(base) } : base) as TripsSource;
   const user = userEvent.setup();
-  renderInApp(
+  const view = renderInApp(
     <TripsSourceProvider source={source}>
       <TripScreen tripId="san-diego" openReview={options.openReview} />
     </TripsSourceProvider>,
   );
   const trip = () => base.snapshot().trips.find((entry) => entry.id === "san-diego")!;
-  return { user, source: base, trip };
+  return { user, source: base, trip, view };
 }
 
 const title = () => screen.findByRole("heading", { level: 1 });
@@ -365,5 +365,76 @@ describe.each([
     );
     await user.click(ready);
     expect(trip().ready).toBe(false);
+  });
+});
+
+describe("round 3: retry and URL clean-up are scoped", () => {
+  beforeEach(() => {
+    layout.laptop = true;
+  });
+
+  it("a double press on a row's Retry sends ONE write, shows Saving…, and hides the button until it settles", async () => {
+    const retry = deferred<void>();
+    let calls = 0;
+    const { user, trip } = setup({
+      short: 1,
+      openReview: true,
+      wrap: (base) => ({
+        setPacked: async (id: string, itemId: string, packed: number) => {
+          if (++calls === 1) throw new Error("offline");
+          await retry.promise;
+          return base.setPacked(id, itemId, packed);
+        },
+      }),
+    });
+    const dialog = await sheet();
+    const first = trip().items[0];
+    await user.click(within(dialog).getAllByRole("checkbox")[0]);
+    const button = await within(dialog).findByRole("button", {
+      name: new RegExp(`^Retry ${first.name}`),
+    });
+    fireEvent.click(button);
+    fireEvent.click(button);
+    expect(await within(dialog).findByText("Saving…")).toBeTruthy();
+    expect(
+      within(dialog).queryByRole("button", { name: new RegExp(`^Retry ${first.name}`) }),
+    ).toBeNull();
+    expect(calls).toBe(2);
+    retry.resolve();
+    await waitFor(() => expect(trip().items[0].packed).toBe(first.qty));
+    expect(calls).toBe(2);
+    expect(within(dialog).queryByText(/Not saved/)).toBeNull();
+  });
+
+  it("a Ready write that settles after the screen is gone does not rewrite another trip's ?review URL", async () => {
+    const gate = deferred<void>();
+    window.history.replaceState(null, "", "/trips/san-diego?review=1");
+    const { user, view } = setup({
+      bag: true,
+      openReview: true,
+      wrap: (base) => ({
+        markReady: async (id: string) => {
+          await gate.promise;
+          return base.markReady(id);
+        },
+      }),
+    });
+    const dialog = await sheet();
+    await user.click(within(dialog).getByRole("button", { name: "I’m ready to go" }));
+    view.unmount();
+    window.history.replaceState(null, "", "/trips/lisbon?review=1");
+    gate.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(window.location.pathname + window.location.search).toBe("/trips/lisbon?review=1");
+  });
+
+  it("while still mounted, a settled Ready write strips ?review only from its own trip's address", async () => {
+    window.history.replaceState(null, "", "/trips/san-diego?review=1");
+    const { user, trip } = setup({ bag: true, openReview: true });
+    const dialog = await sheet();
+    await user.click(within(dialog).getByRole("button", { name: "I’m ready to go" }));
+    await waitFor(() => expect(trip().ready).toBe(true));
+    await waitFor(() => expect(window.location.search).toBe(""));
+    expect(window.location.pathname).toBe("/trips/san-diego");
   });
 });
