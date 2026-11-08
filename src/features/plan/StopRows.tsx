@@ -169,6 +169,8 @@ export function StopRows({
             <li
               key={key}
               data-stop-key={key}
+              data-arrive={stop.arrive || undefined}
+              data-leave={stop.leave || undefined}
               className={styles.stopRow}
               data-over={over === index && dragging !== index ? "" : undefined}
               data-dragging={dragging === index ? "" : undefined}

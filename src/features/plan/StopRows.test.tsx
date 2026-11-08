@@ -67,6 +67,10 @@ describe("StopRows", () => {
     const list = screen.getByRole("list");
     const first = within(list).getAllByRole("listitem")[0];
     expect(within(first).getByText(/^London · .+ · .+$/)).toBeTruthy();
+    expect([first.getAttribute("data-arrive"), first.getAttribute("data-leave")]).toEqual([
+      "2026-11-10",
+      "2026-11-12",
+    ]);
     expect(
       Array.from(first.querySelectorAll('[aria-hidden="true"]')).map((node) => node.textContent),
     ).toContain("London");

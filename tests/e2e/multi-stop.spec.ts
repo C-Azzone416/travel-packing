@@ -70,6 +70,11 @@ test(
     await expect(dates.getByLabel("Leave")).toHaveValue("2026-11-12");
     await expect(dates.getByLabel("Come home")).toHaveValue("2026-11-22");
     // Each stop's own dates: Paris is entered on 15 Nov and Rome on 18 Nov.
+    await expect(stopRow("Lisbon")).toHaveAttribute("data-arrive", "2026-11-12");
+    await expect(stopRow("Paris")).toHaveAttribute("data-arrive", "2026-11-15");
+    await expect(stopRow("Paris")).toHaveAttribute("data-leave", "2026-11-18");
+    await expect(stopRow("Rome")).toHaveAttribute("data-arrive", "2026-11-18");
+    await expect(stopRow("Rome")).toHaveAttribute("data-leave", "2026-11-22");
     await expect(stopRow("Lisbon")).toContainText("12–15");
     await expect(stopRow("Paris")).toContainText("15–18");
     await expect(stopRow("Rome")).toContainText("18–22");
