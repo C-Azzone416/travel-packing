@@ -96,6 +96,21 @@ describe("TripCard wording for upcoming and archived-future cards (unchanged)", 
     expect(screen.getByRole("link", { name: `Keep packing: ${trip.destination}` })).toBeTruthy();
   });
 
+  it("every item packed but the toiletry bag not placed says Bag next, not 0 left (#456)", () => {
+    const allIn = {
+      ...trip,
+      ready: false,
+      toiletryBagPacked: false,
+      items: trip.items.map((item) => ({ ...item, packed: item.qty })),
+    };
+    renderCard("upcoming", false, allIn);
+    expect(within(article()).getByText("Bag next")).toBeTruthy();
+    expect(within(article()).queryByText(/left to pack/)).toBeNull();
+    expect(progressFor(trip.destination).getAttribute("aria-valuetext")).toMatch(
+      /^Packed \d+ of \d+ \(100%\)\. Toiletry bag next$/,
+    );
+  });
+
   it("an upcoming Ready card says Ready to go", () => {
     renderCard("upcoming", false, { ...trip, ready: true });
     expect(within(article()).getByText("Ready to go")).toBeTruthy();

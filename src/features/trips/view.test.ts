@@ -54,6 +54,16 @@ describe("tripCardView", () => {
     });
   });
 
+  it("bagNext: all items packed, bag not placed, not Ready (#456)", () => {
+    const items = sanDiego().items.map((item) => ({ ...item, packed: item.qty }));
+    const base = withPatch(sanDiego(), { items, ready: false, toiletryBagPacked: false });
+    expect(tripCardView(base, TODAY, "upcoming").bagNext).toBe(true);
+    expect(
+      tripCardView(withPatch(base, { toiletryBagPacked: true }), TODAY, "upcoming").bagNext,
+    ).toBe(false);
+    expect(tripCardView(sanDiego(), TODAY, "upcoming").bagNext).toBe(false);
+  });
+
   it("describes a past, packed and Ready trip", () => {
     const view = tripCardView(lisbon(), TODAY, "archive");
     expect(view).toMatchObject({

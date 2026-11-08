@@ -57,7 +57,9 @@ export function allPacked(trip: ReadinessTrip): boolean {
 
 /**
  * Packed totals are QUANTITY: the sum of item quantities, and how many of those are packed (#376, #456). The toiletry bag
- * placement is a separate Ready step (see allPacked), never an "item", so it adds no unit here.
+ * placement is a separate Ready step (see allPacked), never an "item", so it adds no unit here. So packed === total means
+ * every ITEM is packed, not that the trip can be Ready: UI that shows "all packed" must still check allPacked/ready for the
+ * bag (trip cards say "Bag next"), and must not add the bag unit back.
  */
 export function packedTotals(trip: ReadinessTrip): { packed: number; total: number } {
   return trip.items.reduce(
