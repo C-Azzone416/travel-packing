@@ -900,3 +900,66 @@
     transition: none;
   }
 }
+
+/* ---- Tablet (768-1023, #414): the laptop structure inside the phone shell. The page is a 960 container; the rail is
+   clamp(200px, 28vw, 260px) and the phone action bar ("All in" / "Next: <cube>") is the panel's sticky footer. ---- */
+.page[data-packing-layout="tablet"] {
+  max-width: 960px;
+}
+.page[data-packing-layout="tablet"] .case {
+  grid-template-columns: clamp(200px, 28vw, 260px) minmax(0, 1fr);
+  /* Room for the floating tab bar under the suitcase. */
+  min-height: 0;
+}
+.tabletBar {
+  position: sticky;
+  bottom: calc(var(--sticky-bottom) + 8px);
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+  margin-top: auto;
+  padding-top: 8px;
+  background: var(--paper2);
+}
+.tabletAllIn,
+.tabletNext {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 52px;
+  border-radius: 999px;
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+.tabletAllIn {
+  flex: 0 0 auto;
+  min-width: 82px;
+  padding: 0 18px;
+  border: 2px solid var(--tint);
+  background: var(--paper);
+  color: var(--ink);
+}
+.tabletAllIn:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.tabletNext {
+  flex: 1 1 120px;
+  min-width: 0;
+  padding: 6px 16px;
+  border: 0;
+  background: var(--dark);
+  color: var(--onDark);
+}
+.tabletAllIn:focus-visible,
+.tabletNext:focus-visible {
+  outline: 3px solid var(--info);
+  outline-offset: 2px;
+}

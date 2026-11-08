@@ -442,24 +442,30 @@ test(
   },
 );
 
-test("1023px is the phone layout and 1024px the laptop one, which is unchanged", async ({
+test("767px is the phone layout, 768 to 1023px the tablet one, and 1024px the laptop one", async ({
   page,
 }) => {
-  await open(page, { width: 1023, height: 900 });
+  await open(page, { width: 767, height: 900 });
   await expect(phoneLayout(page)).toHaveCount(1);
+  expect(await sideways(page)).toBeLessThanOrEqual(0);
+  await page.setViewportSize({ width: 768, height: 900 });
+  await expect(page.locator('[data-packing-layout="tablet"]')).toHaveCount(1);
+  await expect(phoneLayout(page)).toHaveCount(0);
+  await page.setViewportSize({ width: 1023, height: 900 });
+  await expect(page.locator('[data-packing-layout="tablet"]')).toHaveCount(1);
   expect(await sideways(page)).toBeLessThanOrEqual(0);
   await page.setViewportSize({ width: 1024, height: 900 });
   await expect(page.getByRole("heading", { name: "Packing", level: 1 })).toBeVisible();
   await expect(page.locator('[data-packing-layout="laptop"]')).toHaveCount(1);
-  await expect(phoneLayout(page)).toHaveCount(0);
+  await expect(page.locator('[data-packing-layout="tablet"]')).toHaveCount(0);
   expect(await sideways(page)).toBeLessThanOrEqual(0);
-  // The phone layout is back below the line, with the same cube open and nothing lost.
-  await page.setViewportSize({ width: 1000, height: 900 });
+  // The phone layout is back below 768, with the same cube open and nothing lost.
+  await page.setViewportSize({ width: 700, height: 900 });
   await expect(phoneLayout(page)).toHaveCount(1);
 });
 
-test("601 to 1023px: the phone layout stays in a column capped at 640px", async ({ page }) => {
-  await open(page, { width: 900, height: 900 });
+test("601 to 767px: the phone layout stays in a column capped at 640px", async ({ page }) => {
+  await open(page, { width: 700, height: 900 });
   const box = (await phoneLayout(page).boundingBox())!;
   expect(box.width).toBeLessThanOrEqual(641);
 });

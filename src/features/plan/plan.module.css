@@ -915,6 +915,10 @@
   box-sizing: border-box;
   min-height: 100dvh;
   min-width: 0;
+  /* Tablet and wide phones (601-1023, #414): the phone flow in a centred 640 column. */
+  width: 100%;
+  max-width: 640px;
+  margin-inline: auto;
   padding: calc(env(safe-area-inset-top, 0px) + 12px) 0
     calc(env(safe-area-inset-bottom, 0px) + 12px);
   color: var(--ink);

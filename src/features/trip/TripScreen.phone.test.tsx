@@ -141,12 +141,14 @@ const cubeLive = () => screen.getByRole("status", { name: "Cube" });
 const allIn = () => screen.getByRole("button", { name: /^All in/ });
 
 describe("the layout switch", () => {
-  it("draws the phone layout below 1024px, including 1023, and the laptop layout from 1024", async () => {
+  it("draws the phone layout below 768px, the tablet one from 768 to 1023 and the laptop one from 1024", async () => {
     for (const [at, layout] of [
       [390, "phone"],
       [320, "phone"],
       [195, "phone"],
-      [1023, "phone"],
+      [767, "phone"],
+      [768, "tablet"],
+      [1023, "tablet"],
       [1024, "laptop"],
     ] as const) {
       width = at;
@@ -353,6 +355,54 @@ describe("the filter pills, the pencil and the suitcase", () => {
     await user.click(screen.getByRole("button", { name: "Edit list" }));
     await user.click(bar().getByRole("button", { name: /Toiletries/ }));
     expect(panel().getAttribute("data-editing")).toBeNull();
+  });
+});
+
+describe("the tablet action bar (768-1023px, #414)", () => {
+  const tabletPanel = () => within(document.querySelector("[data-cube]") as HTMLElement);
+  const tabletReady = async () => {
+    width = 800;
+    const made = setup();
+    await screen.findByRole("heading", { name: "Packing", level: 1 });
+    return made;
+  };
+
+  it("keeps All in and Next in the panel, packs the cube in one change and moves focus to Next", async () => {
+    const { user, base } = await tabletReady();
+    const views = buildCubeViews(tripOf(base));
+    expect(tabletPanel().getByRole("button", { name: `Next: ${views[1].label}` })).toBeTruthy();
+    await user.click(tabletPanel().getByRole("button", { name: /^All in/ }));
+    await waitFor(() =>
+      expect(
+        buildCubeViews(tripOf(base))[0].items.every((entry) => entry.packed >= entry.qty),
+      ).toBe(true),
+    );
+    expect(document.activeElement).toBe(tabletPanel().getByRole("button", { name: /^Next: / }));
+    expect(
+      tabletPanel()
+        .getByRole("button", { name: /^All in/ })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+  });
+
+  it("Next opens the following cube and, on the last one, Done goes Home", async () => {
+    const { user, base } = await tabletReady();
+    const views = buildCubeViews(tripOf(base));
+    await user.click(tabletPanel().getByRole("button", { name: /^Next: / }));
+    expect(panel().getAttribute("data-cube")).toBe(views[1].cube);
+    await user.click(
+      within(screen.getByRole("navigation", { name: "Cubes" })).getByRole("button", {
+        name: new RegExp(`^${views[views.length - 1].label}`),
+      }),
+    );
+    expect(tabletPanel().getByRole("link", { name: "Done" }).getAttribute("href")).toBe("/");
+  });
+
+  it("is not drawn on the laptop layout", async () => {
+    width = 1280;
+    setup();
+    await screen.findByRole("heading", { name: "Packing", level: 1 });
+    expect(screen.queryByRole("button", { name: /^All in/ })).toBeNull();
   });
 });
 

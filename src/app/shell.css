@@ -136,6 +136,25 @@ main {
   }
 }
 
+/* Tablet containers (#414, spec #393 part 2 section 5.1). 601-767: every screen is the phone layout in a centred 640 column.
+   768-1023: a 960 container (Packing, Staples, Stamps, Settings use it; Home, Plan and Edit trip keep their own 640 column). */
+@media (min-width: 601px) and (max-width: 767px) {
+  main > section,
+  main > .screen {
+    width: 100%;
+    max-width: 640px;
+    margin-inline: auto;
+  }
+}
+@media (min-width: 768px) and (max-width: 1023px) {
+  main > section,
+  main > .screen {
+    width: 100%;
+    max-width: 960px;
+    margin-inline: auto;
+  }
+}
+
 /* ---------- Phone and tablet: the floating tab bar (below 1024px) ---------- */
 @media (max-width: 1023px) {
   /* Two classes, so these beat `.bottom-nav a` and `.nav-signout` below. */
