@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { AuthShell } from "./AuthShell";
 import { useHeadingFocus } from "./hooks";
 
@@ -28,13 +27,13 @@ export function AuthCard({
   const ownRef = useHeadingFocus(0);
   return (
     <AuthShell banner={banner}>
-      <Card as="section" padded className="auth-card" aria-labelledby={titleId}>
+      <section className="auth-card" aria-labelledby={titleId}>
         <p className="eyebrow">{eyebrow}</p>
         <h1 id={titleId} ref={headingRef ?? ownRef} tabIndex={-1}>
           {title}
         </h1>
         {children}
-      </Card>
+      </section>
     </AuthShell>
   );
 }

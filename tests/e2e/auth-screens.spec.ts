@@ -160,14 +160,14 @@ test.describe("sign-up and verification", () => {
     await expect(page).toHaveURL(/\/sign-in$/);
     // ...and the password the owner chooses later is not on the account yet, so it does not work either.
     await signIn(page, email, SET_PASSWORD);
-    await expect(page.locator("form p[role='alert']")).toContainText(
+    await expect(page.locator(".auth-card > p[role='alert']")).toContainText(
       "Email or password is incorrect.",
     );
 
     // 5. The owner uses the emailed link and chooses a password. The attacker's is gone for good.
     await finishSetup(page, email, NEW_PASSWORD);
     await signIn(page, email, ATTACKER_PASSWORD);
-    await expect(page.locator("form p[role='alert']")).toContainText(
+    await expect(page.locator(".auth-card > p[role='alert']")).toContainText(
       "Email or password is incorrect.",
     );
     await signIn(page, email, NEW_PASSWORD);
@@ -365,7 +365,7 @@ test.describe("forgot and reset password", () => {
     await expect(page).toHaveURL(/\/sign-in$/);
 
     await signIn(page, email, SET_PASSWORD);
-    await expect(page.locator("form p[role='alert']")).toContainText(
+    await expect(page.locator(".auth-card > p[role='alert']")).toContainText(
       "Email or password is incorrect.",
     );
     await signIn(page, email, NEW_PASSWORD);
@@ -581,11 +581,13 @@ test.describe("accessibility and screenshots", DEVICE, () => {
     await check("link-invalid", "setup link not valid");
 
     await signIn(page, "nobody@example.test", "not-the-password");
-    await expect(page.locator("form p[role='alert']")).toContainText(
+    await expect(page.locator(".auth-card > p[role='alert']")).toContainText(
       "If you just signed up, check your email for a link to finish setting up",
     );
     await expect(
-      page.locator("form p[role='alert']").getByRole("link", { name: "reset your password" }),
+      page
+        .locator(".auth-card > p[role='alert']")
+        .getByRole("link", { name: "reset your password" }),
     ).toHaveAttribute("href", "/forgot-password");
     await check("sign-in-error-hint", "sign-in with the generic error and its hint");
 

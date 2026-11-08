@@ -6,25 +6,68 @@ import { PALETTES, chooseThemeAndSignOut } from "./helpers/appearance";
 import { E2E_PASSWORD, OTHER_EMAIL, newcomerEmailFor, signIn, signInAsOwner } from "./helpers/auth";
 import { nextNewcomerSlot, resetAccount } from "./helpers/inbox";
 
-// Field Ledger on the signed-out screens (#204), in every theme, reached through a real Settings choice and sign-out (#283): sign-in (error and focused field), sign-up, verify, forgot password
-// (and its sent state), reset and set password, an invalid link, finish setup and access-denied. Each shows the brand-only bar at the
-// app header's height, a flat card with the 4px accent rule and no blur, and no sideways scroll; axe checks colour contrast in the
-// theme. Axe runs in every theme at 1280 and in one theme at 390 (the layout is the same in each; the width only changes where
-// things sit), as in theme-matrix.spec.ts. AUTH_SHOTS=<folder> writes a screenshot of every cell, in all eight (theme, width) pairs,
-// for design's rendered review. One browser project runs it (Chromium); the phone width is a viewport, not WebKit.
+// Open AuthSuitcase on every signed-out state (#424), in every theme, reached through a real Settings choice and sign-out
+// (#283). Axe runs in every theme at 1280 and in one theme at 390. AUTH_SHOTS=<folder> writes every reviewed state; without
+// that opt-in, the suite records no broad screenshot matrix.
 const THEMES = ["ocean", "evergreen", "dusk"] as const;
 const SHOTS = process.env.AUTH_SHOTS;
-const BAR_HEIGHT = { 1280: 68, 390: 60 } as const;
 // Only the shape of a link token matters here (the page shows the form for any well-formed one); built like the other specs do.
 const TOKEN = "a".repeat(48);
 
-const CELLS = [
-  ...THEMES.map((theme) => ({ theme, width: 1280 as const, axe: true })),
-  ...THEMES.map((theme) => ({ theme, width: 390 as const, axe: theme === "ocean" })),
-].filter((cell) => cell.axe || SHOTS);
+const CELLS = SHOTS
+  ? THEMES.flatMap((theme) =>
+      ([195, 390, 1024, 1280] as const).map((width) => ({
+        theme,
+        width,
+        axe: width === 1280 || (theme === "ocean" && width === 390),
+      })),
+    )
+  : [
+      ...THEMES.map((theme) => ({ theme, width: 1280 as const, axe: true })),
+      { theme: "ocean" as const, width: 390 as const, axe: true },
+    ];
 
 const sidewaysScroll = (page: Page) =>
   page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+
+async function expectDuskStickerContrast(page: Page, label: string) {
+  const result = await page.locator(".auth-sticker").evaluate((sticker) => {
+    const parse = (colour: string) =>
+      colour
+        .match(/[\d.]+/g)!
+        .slice(0, 3)
+        .map(Number);
+    const luminance = (colour: string) => {
+      const channels = parse(colour).map((channel) => {
+        const value = channel / 255;
+        return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+    };
+    const ratio = (foreground: string, background: string) => {
+      const light = Math.max(luminance(foreground), luminance(background));
+      const dark = Math.min(luminance(foreground), luminance(background));
+      return (light + 0.05) / (dark + 0.05);
+    };
+    const probe = document.createElement("span");
+    probe.style.color = "var(--ink)";
+    document.body.append(probe);
+    const expectedInk = getComputedStyle(probe).color;
+    probe.remove();
+    const background = getComputedStyle(sticker).backgroundColor;
+    const samples = Object.fromEntries(
+      ["small", "strong"].map((selector) => {
+        const foreground = getComputedStyle(sticker.querySelector(selector)!).color;
+        return [selector, { foreground, ratio: ratio(foreground, background) }];
+      }),
+    );
+    return { expectedInk, samples };
+  });
+  for (const [selector, sample] of Object.entries(result.samples)) {
+    expect(sample.foreground, `${label}: ${selector} uses --ink`).toBe(result.expectedInk);
+    expect(sample.ratio, `${label}: ${selector} contrast`).toBeGreaterThanOrEqual(4.5);
+  }
+}
 
 let email: string;
 test.beforeEach(({}, testInfo) => {
@@ -33,7 +76,7 @@ test.beforeEach(({}, testInfo) => {
 });
 
 for (const { theme, width, axe } of CELLS) {
-  test(`${theme} at ${width}px: every signed-out screen is a Ledger screen`, async ({ page }) => {
+  test(`${theme} at ${width}px: every signed-out screen uses AuthSuitcase`, async ({ page }) => {
     test.setTimeout(90_000);
     await page.setViewportSize({ width, height: width < 700 ? 844 : 900 });
     await page.emulateMedia({ reducedMotion: "reduce" });
@@ -45,27 +88,27 @@ for (const { theme, width, axe } of CELLS) {
 
     const check = async (name: string) => {
       await expect(page.locator("html")).toHaveAttribute("data-scheme", theme);
-      // The brand-only bar: circle and wordmark, no link, no navigation, the app header's height.
+      // The brand-only bar has the app's suitcase mark and no interactive content.
       const bar = page.locator("header.auth-brandbar");
       await expect(bar).toBeVisible();
       await expect(bar.getByText("Packed Smart")).toBeVisible();
       await expect(bar.getByRole("link")).toHaveCount(0);
-      await expect(page.getByRole("navigation")).toHaveCount(0);
-      expect(
-        (await bar.boundingBox())?.height,
-        `${name}: the bar is ${BAR_HEIGHT[width]}px tall`,
-      ).toBe(BAR_HEIGHT[width]);
-      // A flat card: the 4px accent rule on top, a hairline, and no shadow.
+      await expect(bar.getByRole("button")).toHaveCount(0);
+      // The decorative lid never adds a second heading or accessibility noise. The panel is flat inside the case.
+      const suitcase = page.locator(".auth-suitcase");
+      const lid = page.locator(".auth-lid");
       const card = page.locator(".auth-card");
-      await expect(card).toHaveCSS("border-top-width", "4px");
+      await expect(suitcase).toBeVisible();
+      await expect(lid).toHaveAttribute("aria-hidden", "true");
+      await expect(lid).toContainText("READY TOGO!");
+      await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+      await expect(card).toHaveCSS("border-top-width", "0px");
       await expect(card).toHaveCSS("box-shadow", "none");
-      // Top-aligned under the bar: the card does not float in the middle of the screen.
-      const top = (await card.boundingBox())?.y ?? 0;
-      const barBottom = BAR_HEIGHT[width];
-      expect(
-        top - barBottom,
-        `${name}: the card sits ${width < 700 ? 64 : 96}px under the bar`,
-      ).toBe(width < 700 ? 64 : 96);
+      if (theme === "dusk") await expectDuskStickerContrast(page, name);
+      const lidBox = (await lid.boundingBox())!;
+      const panelBox = (await page.locator(".auth-panel").boundingBox())!;
+      if (width < 1024) expect(panelBox.y, `${name}: panel below lid`).toBeGreaterThan(lidBox.y);
+      else expect(panelBox.x, `${name}: panel beside lid`).toBeGreaterThan(lidBox.x);
       expect(await sidewaysScroll(page), `${name}: no sideways scroll`).toBeLessThanOrEqual(0);
       if (axe) await expectAccessible(page, `${theme} ${width} ${name}`);
       if (SHOTS) {
@@ -80,6 +123,7 @@ for (const { theme, width, axe } of CELLS) {
     await test.step("sign-in", async () => {
       await page.goto("/sign-in");
       await check("sign-in");
+      await expect(page.locator(".auth-sign-up-link")).toHaveText("New here? Create an account");
       // The toggle is inside the field, at its right edge, and a 44px target.
       const toggle = page.getByRole("button", { name: "Show password" });
       const field = page.getByLabel("Password");
@@ -89,6 +133,24 @@ for (const { theme, width, axe } of CELLS) {
       expect(toggleBox.x).toBeGreaterThanOrEqual(fieldBox.x);
       expect(toggleBox.x + toggleBox.width).toBeLessThanOrEqual(fieldBox.x + fieldBox.width + 1);
       expect(toggleBox.y).toBeGreaterThanOrEqual(fieldBox.y - 1);
+      if (width === 195) {
+        await field.fill("a-very-long-visible-password-that-must-not-run-under-show");
+        await toggle.click();
+        const contentRight = await field.evaluate((input) => {
+          const rect = input.getBoundingClientRect();
+          return rect.right - Number.parseFloat(getComputedStyle(input).paddingRight);
+        });
+        expect(contentRight, "password text ends before the toggle").toBeLessThanOrEqual(
+          toggleBox.x + 0.5,
+        );
+        if (SHOTS) {
+          await page.screenshot({
+            path: join(SHOTS, `${theme}-${width}-sign-in-long-password.png`),
+            fullPage: true,
+          });
+        }
+        await toggle.click();
+      }
     });
     await test.step("sign-in with an error", async () => {
       await page.getByLabel("Email").fill("nobody@example.test");
@@ -150,3 +212,103 @@ for (const { theme, width, axe } of CELLS) {
     });
   });
 }
+
+test("AuthSuitcase geometry holds from 195px through 1440px", async ({ page }) => {
+  for (const [width, cubeCount] of [
+    [195, 3],
+    [320, 3],
+    [390, 4],
+    [768, 5],
+    [1024, 5],
+    [1440, 5],
+  ] as const) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/sign-in");
+    await expect(page.getByRole("heading", { level: 1, name: "Welcome back" })).toBeVisible();
+    expect(await sidewaysScroll(page), `${width}: no sideways scroll`).toBeLessThanOrEqual(0);
+    expect(
+      await page
+        .locator(".auth-cube")
+        .evaluateAll(
+          (cubes) => cubes.filter((cube) => getComputedStyle(cube).display !== "none").length,
+        ),
+      `${width}: responsive cube count`,
+    ).toBe(cubeCount);
+    for (const selector of [".auth-suitcase", ".auth-lid", ".auth-panel"]) {
+      const box = (await page.locator(selector).boundingBox())!;
+      expect(box.x, `${width}: ${selector} starts in viewport`).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width, `${width}: ${selector} ends in viewport`).toBeLessThanOrEqual(
+        width + 0.5,
+      );
+    }
+  }
+});
+
+test("the sign-in Password input is as tall as Email at 1280 and 390", async ({ page }) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/sign-in");
+    const email = (await page.getByLabel("Email").boundingBox())!;
+    const password = (await page.getByLabel("Password", { exact: true }).boundingBox())!;
+    expect(password.height, `${width}: Password is as tall as Email`).toBe(email.height);
+  }
+});
+
+test("a long visible password stays clear of Show at 195px", async ({ page }) => {
+  await page.setViewportSize({ width: 195, height: 844 });
+  await page.goto("/sign-in");
+  await expect(page.locator(".auth-sign-up-link")).toHaveText("New here? Create an account");
+  const field = page.getByLabel("Password");
+  const toggle = page.getByRole("button", { name: "Show password" });
+  await field.fill("a-very-long-visible-password-that-must-not-run-under-show");
+  await toggle.click();
+  const fieldBox = (await field.boundingBox())!;
+  const toggleBox = (await toggle.boundingBox())!;
+  const content = await field.evaluate((input) => {
+    const rect = input.getBoundingClientRect();
+    const style = getComputedStyle(input);
+    const paddingLeft = Number.parseFloat(style.paddingLeft);
+    const paddingRight = Number.parseFloat(style.paddingRight);
+    const borderLeft = Number.parseFloat(style.borderLeftWidth);
+    const borderRight = Number.parseFloat(style.borderRightWidth);
+    return {
+      right: rect.right - paddingRight - borderRight,
+      width: rect.width - paddingLeft - paddingRight - borderLeft - borderRight,
+    };
+  });
+  expect(content.right, "password text ends before the toggle").toBeLessThanOrEqual(
+    toggleBox.x + 0.5,
+  );
+  expect(content.width, "password keeps useful entry width").toBeGreaterThanOrEqual(40);
+  expect(toggleBox.x, "toggle starts inside the field").toBeGreaterThanOrEqual(fieldBox.x);
+  expect(toggleBox.y, "toggle starts inside the field").toBeGreaterThanOrEqual(fieldBox.y);
+  expect(toggleBox.x + toggleBox.width, "toggle ends inside the field").toBeLessThanOrEqual(
+    fieldBox.x + fieldBox.width,
+  );
+  expect(
+    toggleBox.y + toggleBox.height,
+    "toggle bottom stays inside the field",
+  ).toBeLessThanOrEqual(fieldBox.y + fieldBox.height);
+  // The label's own painted text (every wrapped line, via a Range) must sit inside the button and the field, not just the box.
+  const label = await toggle.evaluate((button) => {
+    const range = document.createRange();
+    range.selectNodeContents(button);
+    const rects = [...range.getClientRects()];
+    return {
+      left: Math.min(...rects.map((rect) => rect.left)),
+      right: Math.max(...rects.map((rect) => rect.right)),
+    };
+  });
+  expect(label.left, "Show password text starts inside the button").toBeGreaterThanOrEqual(
+    toggleBox.x - 0.5,
+  );
+  expect(label.right, "Show password text ends inside the button").toBeLessThanOrEqual(
+    toggleBox.x + toggleBox.width + 0.5,
+  );
+  expect(label.right, "Show password text ends inside the field").toBeLessThanOrEqual(
+    fieldBox.x + fieldBox.width - 1,
+  );
+  expect(toggleBox.width, "toggle target width").toBeGreaterThanOrEqual(56);
+  expect(toggleBox.height, "toggle target height").toBeGreaterThanOrEqual(44);
+  expect(await sidewaysScroll(page), "no sideways scroll").toBeLessThanOrEqual(0);
+});

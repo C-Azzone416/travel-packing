@@ -38,6 +38,24 @@ describe("SignUpForm", () => {
     expect(document.activeElement).toBe(screen.getByRole("heading", { level: 1 }));
   });
 
+  it("focuses its heading without scrolling the surrounding suitcase", () => {
+    const panel = { scrollTop: 96 };
+    const closest = vi
+      .spyOn(HTMLElement.prototype, "closest")
+      .mockImplementation((selector) =>
+        selector === ".auth-panel" ? (panel as unknown as HTMLElement) : null,
+      );
+    const focus = vi.spyOn(HTMLElement.prototype, "focus");
+    try {
+      render_();
+      expect(panel.scrollTop).toBe(0);
+      expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+    } finally {
+      focus.mockRestore();
+      closest.mockRestore();
+    }
+  });
+
   it("submits the fields and shows field problems under their fields, linked and marked invalid", async () => {
     const action = render_(
       vi.fn(async () =>
@@ -271,9 +289,12 @@ describe("ForgotForm", () => {
       forgot({ sent: { email: "any@example.test", cooldownSeconds: 30 } }),
     );
     render(<ForgotForm action={action} resendAction={resend} />);
+    const panel = document.querySelector(".auth-panel") as HTMLElement;
+    panel.scrollTop = 96;
     await userEvent.setup().type(screen.getByLabelText("Email"), "any@example.test");
     await userEvent.setup().click(screen.getByRole("button", { name: "Send reset link" }));
     const heading = await screen.findByRole("heading", { level: 1, name: "Check your email" });
+    expect(panel.scrollTop).toBe(0);
     expect(
       screen.getByText(
         "If there's an account for any@example.test, we've sent a link to reset your password. It expires in 1 hour.",

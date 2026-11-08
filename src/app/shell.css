@@ -4,6 +4,9 @@
    The tab bar and the top menu are the same <nav>: it is `display: contents` from 1024px, so its children join the header row. */
 
 .app-shell {
+  /* #424 darkens links only on the signed-out paper2 panel. Keep the existing app-shell role on its varied surfaces;
+     the full palette contrast audit remains tracked in #377. */
+  --link: var(--dark);
   min-height: 100vh;
   padding-bottom: calc(var(--sticky-bottom) + 16px);
 }
