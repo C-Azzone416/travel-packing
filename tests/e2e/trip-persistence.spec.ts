@@ -64,9 +64,12 @@ test("a check and an uncheck are stored", async ({ page }) => {
 
 test("a tick shows at once and is stored as ONE write for the whole quantity", async ({ page }) => {
   await openSanDiego(page);
+  // Opening the screen also fires READ actions (weather settings, suggestions, the forecast) a little AFTER the screen shows,
+  // and they are POSTs to the same URL (#478). Count only the calls that carry this item, so a late read is not a "write".
   const writes: string[] = [];
   page.on("request", (request) => {
-    if (isAction(request)) writes.push(request.url());
+    if (isAction(request) && (request.postData() ?? "").includes('"socks"'))
+      writes.push(request.url());
   });
   const socks = (await showItem(page, "socks")).getByRole("checkbox");
   await expect(socks).not.toBeChecked();
