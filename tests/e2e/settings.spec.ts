@@ -121,38 +121,62 @@ test(
       "current-password",
     );
     const password = dialog.getByLabel("Current password");
-    const passwordToggle = dialog.getByRole("button", { name: "Show password" });
     await password.fill("synthetic-close-account-password");
     await expect(password).toHaveValue("synthetic-close-account-password");
-    const passwordBox = (await password.boundingBox())!;
-    const toggleBox = (await passwordToggle.boundingBox())!;
-    const passwordContentRight = await password.evaluate((input) => {
-      const rect = input.getBoundingClientRect();
+    // Both rects are read in ONE evaluate once the sheet's entrance has settled (two reads raced the animation).
+    await password.evaluate(
+      (input) =>
+        new Promise<void>((resolve) => {
+          const key = () => {
+            const rect = input.getBoundingClientRect();
+            return `${rect.x}:${rect.y}:${rect.width}:${rect.height}`;
+          };
+          let last = key();
+          let stable = 0;
+          const tick = () => {
+            const now = key();
+            stable = now === last ? stable + 1 : 0;
+            last = now;
+            if (stable >= 5) resolve();
+            else requestAnimationFrame(tick);
+          };
+          requestAnimationFrame(tick);
+        }),
+    );
+    const geometry = await password.evaluate((input) => {
+      const field = input.getBoundingClientRect();
+      const toggle = input
+        .closest(".password-row")!
+        .querySelector("button")!
+        .getBoundingClientRect();
       const style = getComputedStyle(input);
-      return (
-        rect.right -
-        Number.parseFloat(style.paddingRight) -
-        Number.parseFloat(style.borderRightWidth)
-      );
+      return {
+        field,
+        toggle,
+        contentRight:
+          field.right -
+          Number.parseFloat(style.paddingRight) -
+          Number.parseFloat(style.borderRightWidth),
+      };
     });
     expect(
-      passwordContentRight,
+      geometry.contentRight,
       "Close Account password text ends before Show",
-    ).toBeLessThanOrEqual(toggleBox.x + 0.5);
-    expect(toggleBox.x, "Close Account Show starts inside the field").toBeGreaterThanOrEqual(
-      passwordBox.x,
+    ).toBeLessThanOrEqual(geometry.toggle.x + 0.5);
+    expect(geometry.toggle.x, "Close Account Show starts inside the field").toBeGreaterThanOrEqual(
+      geometry.field.x,
+    );
+    expect(geometry.toggle.right, "Close Account Show ends inside the field").toBeLessThanOrEqual(
+      geometry.field.right,
     );
     expect(
-      toggleBox.x + toggleBox.width,
-      "Close Account Show ends inside the field",
-    ).toBeLessThanOrEqual(passwordBox.x + passwordBox.width);
-    expect(toggleBox.y, "Close Account Show starts inside the field height").toBeGreaterThanOrEqual(
-      passwordBox.y,
-    );
+      geometry.toggle.y,
+      "Close Account Show starts inside the field height",
+    ).toBeGreaterThanOrEqual(geometry.field.y);
     expect(
-      toggleBox.y + toggleBox.height,
+      geometry.toggle.bottom,
       "Close Account Show ends inside the field height",
-    ).toBeLessThanOrEqual(passwordBox.y + passwordBox.height);
+    ).toBeLessThanOrEqual(geometry.field.bottom);
     await expect(dialog.getByLabel("Type DELETE to confirm")).toBeVisible();
     await expectAccessible(page, "close account confirmation sheet");
     const overflow = await dialog.evaluate((node) => node.scrollWidth - node.clientWidth);
