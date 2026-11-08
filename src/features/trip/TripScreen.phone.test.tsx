@@ -26,9 +26,16 @@ vi.mock("next/navigation", () => ({
 
 // The viewport width the test pretends to have: a `(min-width: Npx)` query matches when the width is at least N.
 let width = 390;
+// Resizes the pretend window and tells every `matchMedia` listener, the way a rotation or a split-view change does.
+const listeners = new Set<() => void>();
+const resizeTo = (next: number) => {
+  width = next;
+  act(() => listeners.forEach((listener) => listener()));
+};
 const realMatchMedia = window.matchMedia;
 beforeEach(() => {
   width = 390;
+  listeners.clear();
   window.matchMedia = ((query: string) => {
     const min = Number(/min-width: (\d+)px/.exec(query)?.[1] ?? 0);
     return {
@@ -36,8 +43,8 @@ beforeEach(() => {
         return width >= min;
       },
       media: query,
-      addEventListener: () => {},
-      removeEventListener: () => {},
+      addEventListener: (_type: string, listener: () => void) => listeners.add(listener),
+      removeEventListener: (_type: string, listener: () => void) => listeners.delete(listener),
     };
   }) as unknown as typeof window.matchMedia;
 });
@@ -141,12 +148,14 @@ const cubeLive = () => screen.getByRole("status", { name: "Cube" });
 const allIn = () => screen.getByRole("button", { name: /^All in/ });
 
 describe("the layout switch", () => {
-  it("draws the phone layout below 1024px, including 1023, and the laptop layout from 1024", async () => {
+  it("draws the phone layout below 768px, the tablet one from 768 to 1023 and the laptop one from 1024", async () => {
     for (const [at, layout] of [
       [390, "phone"],
       [320, "phone"],
       [195, "phone"],
-      [1023, "phone"],
+      [767, "phone"],
+      [768, "tablet"],
+      [1023, "tablet"],
       [1024, "laptop"],
     ] as const) {
       width = at;
@@ -353,6 +362,100 @@ describe("the filter pills, the pencil and the suitcase", () => {
     await user.click(screen.getByRole("button", { name: "Edit list" }));
     await user.click(bar().getByRole("button", { name: /Toiletries/ }));
     expect(panel().getAttribute("data-editing")).toBeNull();
+  });
+});
+
+describe("the tablet action bar (768-1023px, #414)", () => {
+  const tabletPanel = () => within(document.querySelector("[data-cube]") as HTMLElement);
+  const tabletReady = async () => {
+    width = 800;
+    const made = setup();
+    await screen.findByRole("heading", { name: "Packing", level: 1 });
+    return made;
+  };
+
+  it("keeps All in and Next in the panel, packs the cube in one change and moves focus to Next", async () => {
+    const { user, base } = await tabletReady();
+    const views = buildCubeViews(tripOf(base));
+    expect(tabletPanel().getByRole("button", { name: `Next: ${views[1].label}` })).toBeTruthy();
+    await user.click(tabletPanel().getByRole("button", { name: /^All in/ }));
+    await waitFor(() =>
+      expect(
+        buildCubeViews(tripOf(base))[0].items.every((entry) => entry.packed >= entry.qty),
+      ).toBe(true),
+    );
+    expect(document.activeElement).toBe(tabletPanel().getByRole("button", { name: /^Next: / }));
+    expect(
+      tabletPanel()
+        .getByRole("button", { name: /^All in/ })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+  });
+
+  it("Next opens the following cube and, on the last one, Done goes Home", async () => {
+    const { user, base } = await tabletReady();
+    const views = buildCubeViews(tripOf(base));
+    await user.click(tabletPanel().getByRole("button", { name: /^Next: / }));
+    expect(panel().getAttribute("data-cube")).toBe(views[1].cube);
+    await user.click(
+      within(screen.getByRole("navigation", { name: "Cubes" })).getByRole("button", {
+        name: new RegExp(`^${views[views.length - 1].label}`),
+      }),
+    );
+    expect(tabletPanel().getByRole("link", { name: "Done" }).getAttribute("href")).toBe("/");
+  });
+
+  it("keeps the open cube and its filter when the window crosses 768px, both ways", async () => {
+    width = 767;
+    const { user } = setup();
+    await ready();
+    await user.click(bar().getByRole("button", { name: /Toiletries/ }));
+    await user.click(screen.getByRole("button", { name: /^To pack/ }));
+    resizeTo(768);
+    await screen.findByRole("heading", { name: "Packing", level: 1 });
+    expect(panel().getAttribute("data-cube")).toBe("toiletries");
+    expect(screen.getByRole("button", { name: /^To pack/ }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    resizeTo(700);
+    await ready();
+    expect(panel().getAttribute("data-cube")).toBe("toiletries");
+    expect(screen.getByRole("button", { name: /^To pack/ }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+  });
+
+  it("does not send All in twice when the window crosses 768px while it is still saving", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const setPackedMany = vi.fn();
+    width = 767;
+    const { user } = setup({
+      wrap: (source) => ({
+        setPackedMany: async (...args: Parameters<typeof source.setPackedMany>) => {
+          setPackedMany(args[1]);
+          await gate;
+          return source.setPackedMany(...args);
+        },
+      }),
+    });
+    await ready();
+    await user.click(allIn());
+    await waitFor(() => expect(setPackedMany).toHaveBeenCalledTimes(1));
+    resizeTo(768);
+    await screen.findByRole("heading", { name: "Packing", level: 1 });
+    const again = tabletPanel().getByRole("button", { name: /^All in/ });
+    expect(again.hasAttribute("disabled")).toBe(true);
+    await user.click(again);
+    expect(setPackedMany).toHaveBeenCalledTimes(1);
+    release();
+  });
+
+  it("is not drawn on the laptop layout", async () => {
+    width = 1280;
+    setup();
+    await screen.findByRole("heading", { name: "Packing", level: 1 });
+    expect(screen.queryByRole("button", { name: /^All in/ })).toBeNull();
   });
 });
 
@@ -771,6 +874,17 @@ describe("a day trip (#412)", () => {
   it("offers no Morning of switch in Edit list", async () => {
     const { user } = setup({ wrap: dayTrip });
     await ready();
+    await user.click(screen.getByRole("button", { name: "Edit list" }));
+    expect(screen.queryByRole("switch", { name: /Morning of/ })).toBeNull();
+    expect(document.body.textContent).not.toContain("Morning of");
+  });
+
+  it("at tablet width, the laptop-style header and Edit list also leave out Laundry and Morning of", async () => {
+    width = 800;
+    const { user } = setup({ wrap: dayTrip });
+    await screen.findByRole("heading", { name: "Packing", level: 1 });
+    expect(document.querySelector('[data-packing-layout="tablet"]')).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^Laundry/ })).toBeNull();
     await user.click(screen.getByRole("button", { name: "Edit list" }));
     expect(screen.queryByRole("switch", { name: /Morning of/ })).toBeNull();
     expect(document.body.textContent).not.toContain("Morning of");

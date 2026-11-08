@@ -582,3 +582,22 @@
     min-height: 0;
   }
 }
+
+/* Tablet (768-1023, #414): the sticker suitcase takes the 960 container, stickers four across, totals four in a row, and the past
+   trips in two columns below. (The Home's embedded Stamps keeps the Home's width.) */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .root:not(.embedded) {
+    max-width: none;
+    margin-inline: 0;
+  }
+  .root:not(.embedded) .stickerGrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .root:not(.embedded) .totals {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .root:not(.embedded) .tripList {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+}

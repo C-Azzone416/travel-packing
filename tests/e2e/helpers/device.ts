@@ -6,8 +6,9 @@ import { test, type Page } from "@playwright/test";
 // layout, touch target size, overflow, the bottom navigation and sheets, accessibility at a phone size, or the golden path.
 export const DEVICE = { tag: "@device" } as const;
 
-/** Just under the laptop breakpoint (1024px, #376): the widest the phone layouts (phone Home, phone Pack mode) are drawn. */
-export const PHONE_LAYOUT_VIEWPORT = { width: 1000, height: 900 } as const;
+/** Inside the phone-in-a-640-column band (601-767px, #414): the widest the phone layouts (phone Home, phone Pack mode) are drawn;
+ * 768-1023 is the tablet Packing. */
+export const PHONE_LAYOUT_VIEWPORT = { width: 700, height: 900 } as const;
 
 /**
  * Runs the rest of a desktop test on the phone layouts (below 1024px): the phone Home with its four pills (#388) and the phone

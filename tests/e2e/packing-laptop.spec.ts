@@ -210,10 +210,10 @@ for (const width of [1024, 1100, 1180, 1280, 1440]) {
   });
 }
 
-test("below 1024px the page is the phone layout, and from 1024px the laptop one", async ({
+test("below 768px the page is the phone layout, and from 1024px the laptop one", async ({
   page,
 }) => {
-  await page.setViewportSize({ width: 1023, height: 900 });
+  await page.setViewportSize({ width: 767, height: 900 });
   await page.clock.setFixedTime(NOW);
   await signInAsOwner(page);
   await page.getByRole("link", { name: "Continue packing: San Diego" }).click();

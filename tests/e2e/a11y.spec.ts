@@ -34,7 +34,7 @@ test.describe("signed out", DEVICE, () => {
 
   test("sign-in with an error", async ({ page }) => {
     await signIn(page, "owner@example.test", "wrong-password");
-    await expect(page.locator("form p[role='alert']")).toContainText("incorrect");
+    await expect(page.locator(".auth-card > p[role='alert']")).toContainText("incorrect");
     await expectAccessible(page, "sign-in error");
   });
 

@@ -1011,3 +1011,16 @@
   font-size: var(--fs-meta);
   font-weight: 600;
 }
+
+/* Tablet (768-1023, #414): the phone structure with the cube cards in two columns (the page container is 960). */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .sections {
+    display: block;
+    column-count: 2;
+    column-gap: 12px;
+  }
+  .cubeCard {
+    break-inside: avoid;
+    margin-bottom: 12px;
+  }
+}

@@ -48,6 +48,8 @@ export interface CubePanelProps {
   onAdd: (cube: Cube, name: string) => Promise<AddOutcome>;
   /** The toiletry bag step, shown at the foot of the Toiletries cube. */
   extra?: ReactNode;
+  /** The tablet action bar (#414): drawn last, sticky at the foot of the panel. */
+  bar?: ReactNode;
   panelId: string;
   titleId: string;
   /**
@@ -339,6 +341,7 @@ export function CubePanel({
   onMorningOf,
   onAdd,
   extra,
+  bar,
   panelId,
   titleId,
   layout = "laptop",
@@ -446,6 +449,7 @@ export function CubePanel({
       ) : (
         footer
       )}
+      {bar}
     </section>
   );
 }

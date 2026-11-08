@@ -101,3 +101,11 @@
     max-width: 100%;
   }
 }
+
+/* Tablet (768-1023, #414): Future rows two across inside the 640 column. */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .upList {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+}

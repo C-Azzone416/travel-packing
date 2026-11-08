@@ -5,18 +5,11 @@ import { useEffect, useId, useRef, useState } from "react";
 import { CubeChip, PackedRibbon, Suitcase } from "@/components/suitcase";
 import { cx } from "@/components/suitcase/cx";
 import { Icon } from "@/components/ui/Icon";
-import type { Cube } from "@/domain/cubes";
 import { laundryControlVisible } from "@/domain/short-trip";
 import { CubePanel, FilterBar } from "./CubePanel";
 import { PackedBanner } from "./PackedBanner";
 import type { PackingLaptopProps } from "./PackingLaptop";
-import {
-  buildCubeViews,
-  headline,
-  isPacked,
-  type CubeFilter,
-  type CubeView,
-} from "./packing-model";
+import { buildCubeViews, headline, isPacked, type CubeView } from "./packing-model";
 import { useTextZoomed } from "./use-text-zoomed";
 import styles from "./packing-phone.module.css";
 
@@ -30,7 +23,6 @@ export interface PackingPhoneProps extends Omit<PackingLaptopProps, "onEditTrip"
 // and the action bar ("All in ✓" and "Next: <cube>"). Like the laptop view it only draws: the screen owns every save.
 export function PackingPhone({
   trip,
-  openCube,
   failedRows,
   laundryBusy,
   onLaundry,
@@ -42,6 +34,7 @@ export function PackingPhone({
   onMorningOf,
   onAdd,
   onAllIn,
+  viewState,
   forecast,
   toiletryExtra,
   below,
@@ -55,11 +48,9 @@ export function PackingPhone({
   const views = buildCubeViews(trip);
   // Laundry is offered only where it would change a quantity (a short trip hides it, #412).
   const laundryVisible = laundryControlVisible(trip);
-  const [chosen, setChosen] = useState<Cube | undefined>(openCube);
-  const [filters, setFilters] = useState<Partial<Record<Cube, CubeFilter>>>({});
-  const [editing, setEditing] = useState(false);
+  const { chosen, setChosen, filters, setFilters, editing, setEditing, packing, setPacking } =
+    viewState;
   const [said, setSaid] = useState("");
-  const [packing, setPacking] = useState(false);
   const panelId = useId();
   const titleId = useId();
   const switched = useRef(false);

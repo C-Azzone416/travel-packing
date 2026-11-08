@@ -23,6 +23,7 @@
   --goldSoft: #e9dcbc;
   --good: #2d6674;
   --info: #3b7f91;
+  --link: #316a7c;
   --onDark: #fff8eb;
   --onDarkMuted: #c6d5d8;
   --ghost: #8fa1a8;
@@ -49,6 +50,7 @@
   --goldSoft: #ecdcae;
   --good: #4f7f5c;
   --info: #3f7a8c;
+  --link: #376a75;
   --onDark: #f6f1e2;
   --onDarkMuted: #b9c9bd;
   --ghost: #8f998f;
@@ -75,6 +77,7 @@
   --goldSoft: #f3dcae;
   --good: #5c8f7b;
   --info: #5866a8;
+  --link: #4e5892;
   --onDark: #fbf3ec;
   --onDarkMuted: #c8c4da;
   --ghost: #9a96ab;
@@ -91,7 +94,6 @@
   --bg: var(--page);
   --surface: var(--paper);
   --line-strong: var(--ghost);
-  --link: var(--dark);
   --accent-2: var(--accent);
   --header: var(--dark);
   --header-ink: var(--onDark);

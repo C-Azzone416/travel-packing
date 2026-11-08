@@ -81,6 +81,7 @@ export function ReviewBagSheet({
     <ModalSheet
       open
       variant="side"
+      tabletSheet
       showClose
       title="Review your bag"
       description={tripDisplayName(trip)}
