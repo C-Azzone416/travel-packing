@@ -47,7 +47,7 @@ export function WelcomeHomeCard({ model }: { model: WelcomeHomeModel }) {
 
   return (
     <div className={styles.wrap}>
-      <section className={styles.card} aria-labelledby="welcome-home-title" data-welcome-home>
+      <section className={styles.card} aria-label="Welcome home" data-welcome-home>
         <span className={styles.press} data-inked={inked || undefined}>
           <Sticker sticker={{ ...model.sticker, upcoming: !inked }} className={styles.sticker} />
         </span>

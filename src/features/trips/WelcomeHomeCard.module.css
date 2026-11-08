@@ -26,6 +26,8 @@
   place-items: center;
   width: 84px;
   height: 84px;
+  /* The sticker is decoration (aria-hidden); at very large text its letters are cut here, never pushed past the card. */
+  overflow: clip;
   animation: press 600ms ease-out;
 }
 @keyframes press {
@@ -81,15 +83,21 @@
 .actions {
   grid-column: 1 / -1;
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
+  min-width: 0;
+  max-width: 100%;
 }
 .see {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
   display: inline-flex;
   flex: 1 1 auto;
   align-items: center;
   justify-content: center;
   min-height: 46px;
-  padding: 0 20px;
+  padding: 6px 20px;
   border-radius: 999px;
   background: var(--dark);
   color: var(--onDark);

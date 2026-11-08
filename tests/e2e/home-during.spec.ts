@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
 import { DEVICE } from "./helpers/device";
-import { expectWholeWords, overflow } from "./helpers/layout";
+import { enlargeText, expectWholeWords, overflow } from "./helpers/layout";
 
 // The Home while the trip is on and after it (#410; spec #393 part 1 sections 2.2 and 2.3). The seed has San Diego
 // (2026-10-23 to 2026-10-27, so five days) and Lisbon (ended 2026-09-07). Every test fixes the clock: the day of the trip and
@@ -187,5 +187,22 @@ test.describe("phone (195)", DEVICE, () => {
     await open(page, 195, NEXT_DAY);
     await expectWholeWords(page.locator("[data-welcome-home]"), "195 Welcome home");
     expect(await overflow(page)).toBeLessThanOrEqual(0);
+  });
+
+  test("Welcome home at 200% text stays inside, with both buttons reachable", async ({ page }) => {
+    await open(page, 195, NEXT_DAY);
+    const card = page.locator("[data-welcome-home]");
+    await enlargeText(page, card.getByRole("heading"));
+    await expectWholeWords(card, "195 Welcome home at 200% text");
+    // The card itself stays inside the 195px viewport. (The returning Home below it already runs 25px wide at 200% text:
+    // its recent-trip rows, not this card; a follow-up of #409.)
+    const box = (await card.boundingBox())!;
+    expect(box.x + box.width).toBeLessThanOrEqual(195);
+    for (const name of ["See stamps", "Dismiss"]) {
+      const target = (await card
+        .getByRole(name === "Dismiss" ? "button" : "link", { name })
+        .boundingBox())!;
+      expect(target.x + target.width).toBeLessThanOrEqual(box.x + box.width + 1);
+    }
   });
 });
