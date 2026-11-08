@@ -115,6 +115,7 @@ describe.each([
     const { user, trip } = setup({ openReview: true });
     const dialog = await sheet();
     expect(within(dialog).getByText("FINAL CHECK")).toBeTruthy();
+    expect(within(dialog).getByText("San Diego")).toBeTruthy();
     expect(within(dialog).getByRole("heading", { name: "Clothing", level: 3 })).toBeTruthy();
     expect(within(dialog).getByRole("heading", { name: "Toiletries", level: 3 })).toBeTruthy();
     expect(within(dialog).getAllByRole("checkbox").length).toBe(trip().items.length);

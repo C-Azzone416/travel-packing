@@ -5,6 +5,7 @@ import { LaundryMarker } from "@/components/suitcase";
 import { ModalSheet } from "@/components/ui/ModalSheet";
 import type { TripItem } from "@/domain/trip";
 import type { LifecycleTrip } from "@/domain/trip-lifecycle";
+import { tripDisplayName } from "@/domain/trip-route";
 import { buildCubeViews, checkboxName, isPacked } from "./packing/packing-model";
 import { readyBlocker } from "./review-view";
 import { bagGate } from "./trip-view";
@@ -70,8 +71,8 @@ export function ReviewBagSheet({
       open
       variant="side"
       showClose
-      eyebrow="FINAL CHECK"
       title="Review your bag"
+      description={tripDisplayName(trip)}
       onClose={onClose}
       actions={
         <div className={styles.footer}>
@@ -99,38 +100,41 @@ export function ReviewBagSheet({
         </div>
       }
     >
-      <p className={styles.callout}>
-        Nothing becomes Ready automatically. Make corrections here, then confirm when it looks
-        right.
-      </p>
-      {views.map((view) => (
-        <section key={view.cube} className={styles.group} aria-labelledby={`review-${view.cube}`}>
-          <h3 id={`review-${view.cube}`} className={styles.cube}>
-            {view.label}
-          </h3>
-          <ul className={styles.rows}>
-            {view.items.map((item) => (
-              <li key={item.id} className={styles.row} data-item-id={item.id}>
-                <label className={styles.label}>
-                  <input
-                    type="checkbox"
-                    checked={isPacked(item)}
-                    aria-label={checkboxName(item)}
-                    onChange={(event) => onTick(item, event.target.checked)}
-                  />
-                  <span className={styles.name}>{item.name}</span>
-                  {item.qty > 1 ? <span className={styles.qty}>× {item.qty}</span> : null}
-                  {trip.config.laundry && item.laundryHalves ? (
-                    <LaundryMarker aria-hidden={undefined} />
-                  ) : null}
-                </label>
-              </li>
-            ))}
-          </ul>
-          {view.cube === "toiletries" ? gateRow : null}
-        </section>
-      ))}
-      {views.some((view) => view.cube === "toiletries") ? null : gateRow}
+      <div className={styles.body} data-review-body="">
+        <p className={styles.eyebrow}>FINAL CHECK</p>
+        <p className={styles.callout}>
+          Nothing becomes Ready automatically. Make corrections here, then confirm when it looks
+          right.
+        </p>
+        {views.map((view) => (
+          <section key={view.cube} className={styles.group} aria-labelledby={`review-${view.cube}`}>
+            <h3 id={`review-${view.cube}`} className={styles.cube}>
+              {view.label}
+            </h3>
+            <ul className={styles.rows}>
+              {view.items.map((item) => (
+                <li key={item.id} className={styles.row} data-item-id={item.id}>
+                  <label className={styles.label}>
+                    <input
+                      type="checkbox"
+                      checked={isPacked(item)}
+                      aria-label={checkboxName(item)}
+                      onChange={(event) => onTick(item, event.target.checked)}
+                    />
+                    <span className={styles.name}>{item.name}</span>
+                    {item.qty > 1 ? <span className={styles.qty}>× {item.qty}</span> : null}
+                    {trip.config.laundry && item.laundryHalves ? (
+                      <LaundryMarker aria-hidden={undefined} />
+                    ) : null}
+                  </label>
+                </li>
+              ))}
+            </ul>
+            {view.cube === "toiletries" ? gateRow : null}
+          </section>
+        ))}
+        {views.some((view) => view.cube === "toiletries") ? null : gateRow}
+      </div>
     </ModalSheet>
   );
 }
