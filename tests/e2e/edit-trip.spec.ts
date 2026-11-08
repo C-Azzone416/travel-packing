@@ -304,12 +304,14 @@ test("stops can be moved with buttons and removed, and the panel says what each 
   await expect(dialog.getByText("No changes yet.", { exact: true })).toBeVisible();
 });
 
-test("the old review address forwards to the trip with ?review=1", async ({ page }) => {
+test("the old review address forwards to the trip with ?review=1 and the Review your bag sheet open", async ({
+  page,
+}) => {
   await openSanDiego(page);
   const id = new URL(page.url()).pathname.split("/").pop();
   await page.goto(`/trips/${id}/review`);
   await expect(page).toHaveURL(new RegExp(`/trips/${id}\\?review=1$`));
-  await expect(page.getByRole("heading", { name: "Review your bag", level: 1 })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Review your bag" })).toBeVisible();
 });
 
 test(
