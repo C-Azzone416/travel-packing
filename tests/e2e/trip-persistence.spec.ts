@@ -13,6 +13,7 @@ import {
 import { phoneHomeLayout } from "./helpers/device";
 import { reviewAndApply } from "./helpers/preferences";
 import { openPastAndArchive } from "./helpers/menu";
+import { serverActionId } from "./helpers/server-action";
 
 // The phone Home (#388) and the phone Pack mode (#386) are drawn below 1024px: this spec's flow starts on the Home and does not
 // depend on the laptop layouts, so it runs there.
@@ -64,12 +65,24 @@ test("a check and an uncheck are stored", async ({ page }) => {
 
 test("a tick shows at once and is stored as ONE write for the whole quantity", async ({ page }) => {
   await openSanDiego(page);
-  // Opening the screen also fires READ actions (weather settings, suggestions, the forecast) a little AFTER the screen shows,
-  // and they are POSTs to the same URL (#478). Count only the calls that carry this item, so a late read is not a "write".
+  // Opening the screen also fires READ actions a little AFTER the screen shows, and they are POSTs to the same URL (#478). They are
+  // excluded by their action id (never by a guess at the body), so ANY other POST, to this item or another, counts as a write.
+  const reads = new Set(
+    [
+      ["src/features/trips/trip-actions.ts", "getTripAction"],
+      ["src/features/trips/trip-actions.ts", "listStaplesAction"],
+      ["src/features/trips/trip-actions.ts", "getHomeCityAction"],
+      ["src/features/trips/trip-actions.ts", "getStaplesSetupAction"],
+      ["src/features/trips/trip-actions.ts", "listWeatherSuggestionsAction"],
+      ["src/features/settings/weather-actions.ts", "getWeatherSettingsAction"],
+      ["src/features/trips/actions.ts", "loadTripsAction"],
+    ].map(([file, name]) => serverActionId(file, name)),
+  );
+  const setPacked = serverActionId("src/features/trips/trip-actions.ts", "setPackedAction");
   const writes: string[] = [];
   page.on("request", (request) => {
-    if (isAction(request) && (request.postData() ?? "").includes('"socks"'))
-      writes.push(request.url());
+    const action = request.headers()["next-action"] ?? "";
+    if (isAction(request) && !reads.has(action)) writes.push(action);
   });
   const socks = (await showItem(page, "socks")).getByRole("checkbox");
   await expect(socks).not.toBeChecked();
@@ -77,7 +90,7 @@ test("a tick shows at once and is stored as ONE write for the whole quantity", a
   await expect(socks).toBeChecked();
   await expect.poll(() => writes.length).toBe(1);
   await page.waitForTimeout(600);
-  expect(writes).toHaveLength(1);
+  expect(writes).toEqual([setPacked]);
   await page.reload();
   await expect((await showItem(page, "socks")).getByRole("checkbox")).toBeChecked();
 });
