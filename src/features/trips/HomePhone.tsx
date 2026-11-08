@@ -7,6 +7,7 @@ import { MoreMenu } from "@/components/ui/MoreMenu";
 import {
   CountdownBadge,
   CubeTile,
+  DayBadge,
   LuggageTag,
   PackedRibbon,
   PillTabs,
@@ -92,8 +93,19 @@ export function HomePhone({
     return () => window.removeEventListener("popstate", onPop);
   }, []);
   const model = homeModel(trip, weather, today);
-  const { name, nights, hero, countdown, totals, cubes, label, next, caption, pendingCities } =
-    model;
+  const {
+    name,
+    nights,
+    hero,
+    countdown,
+    dayBadge,
+    totals,
+    cubes,
+    label,
+    next,
+    caption,
+    pendingCities,
+  } = model;
   const stamps = useMemo(() => stampsView(state.trips, today, "rolling").inked, [state, today]);
   const weatherSub = weatherPillSub(weather, model);
   const packed = packedState(trip);
@@ -116,9 +128,9 @@ export function HomePhone({
         <LuggageTag role="region" aria-labelledby="home-trip-title" className={styles.tag}>
           <div className={styles.tagRow}>
             <div className={styles.tagCopy}>
-              <p className={styles.chip}>
-                {packed === "ready" ? "READY" : "NEXT TRIP"} · {tagDatesShort(trip, today)} ·{" "}
-                {nights} {nights === 1 ? "night" : "nights"}
+              <p className={styles.chip} data-on-now={dayBadge ? "" : undefined}>
+                {dayBadge ? "ON NOW" : packed === "ready" ? "READY" : "NEXT TRIP"} ·{" "}
+                {tagDatesShort(trip, today)} · {nights} {nights === 1 ? "night" : "nights"}
               </p>
               <h2 id="home-trip-title" className={styles.name} data-size={hero.size}>
                 {hero.title}
@@ -131,6 +143,9 @@ export function HomePhone({
               </h2>
             </div>
             <div className={styles.tagSide}>
+              {dayBadge ? (
+                <DayBadge day={dayBadge.day} of={dayBadge.of} last={dayBadge.last} />
+              ) : null}
               {countdown ? (
                 <>
                   <CountdownBadge days={countdown.days} />
@@ -233,10 +248,12 @@ export function HomePhone({
             </ul>
             <Link
               className={styles.primary}
-              href={packed === "packed" ? reviewHref(trip.id) : packingHref(trip.id, next)}
-              aria-label={`${packed === "packed" ? "Review your bag" : label}: ${name}`}
+              href={
+                packed === "packed" && !dayBadge ? reviewHref(trip.id) : packingHref(trip.id, next)
+              }
+              aria-label={`${packed === "packed" && !dayBadge ? "Review your bag" : label}: ${name}`}
             >
-              {packed === "packed" ? "Review your bag" : label}
+              {packed === "packed" && !dayBadge ? "Review your bag" : label}
             </Link>
           </Suitcase>
         </div>

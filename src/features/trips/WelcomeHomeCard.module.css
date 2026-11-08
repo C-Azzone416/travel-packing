@@ -1,0 +1,180 @@
+/* The Welcome home card (#410; spec #393 part 1 section 2.3). Above the Home, the width of its content: 1200px laptop, 640px phone. */
+.wrap {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 640px;
+  min-width: 0;
+  margin: 0 auto 16px;
+}
+.card {
+  box-sizing: border-box;
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px 16px;
+  padding: 14px 16px;
+  border: 2px solid var(--gold);
+  border-radius: 24px;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--darkEdge) 14%, transparent);
+}
+/* The sticker presses once as it inks: scale 0.92, 1.05, 1 over the same 600 ms as the colour change. */
+.press {
+  display: grid;
+  place-items: center;
+  width: 84px;
+  height: 84px;
+  animation: press 600ms ease-out;
+}
+@keyframes press {
+  0% {
+    scale: 0.92;
+  }
+  60% {
+    scale: 1.05;
+  }
+  100% {
+    scale: 1;
+  }
+}
+.sticker.sticker {
+  width: 68px;
+  height: 68px;
+  padding: 5px;
+  cursor: default;
+  transition:
+    background-color 600ms ease-out,
+    color 600ms ease-out,
+    border-color 600ms ease-out,
+    box-shadow 600ms ease-out;
+}
+.sticker.sticker strong {
+  font-size: 20px;
+}
+.copy {
+  min-width: 0;
+}
+.eyebrow {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+.title {
+  margin: 2px 0 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+.line {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.4;
+}
+.actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+.see {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  display: inline-flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  padding: 6px 20px;
+  border-radius: 999px;
+  background: var(--dark);
+  color: var(--onDark);
+  font-size: 16px;
+  font-weight: 700;
+  text-align: center;
+  text-decoration: none;
+}
+.close {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 2px solid var(--tint);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+.see:focus-visible,
+.close:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 2px;
+}
+@media (min-width: 1024px) {
+  .wrap {
+    max-width: 1200px;
+    margin-bottom: 28px;
+  }
+  .card {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 20px;
+    padding: 16px 20px;
+  }
+  .press {
+    width: 108px;
+    height: 108px;
+  }
+  .sticker.sticker {
+    width: 96px;
+    height: 96px;
+    padding: 9px;
+  }
+  .sticker.sticker strong {
+    font-size: 24px;
+  }
+  .title {
+    font-size: 26px;
+  }
+  .actions {
+    grid-column: auto;
+    align-items: center;
+  }
+  .see {
+    flex: none;
+    min-height: 44px;
+  }
+  .close {
+    width: 40px;
+    height: 40px;
+  }
+}
+@media (max-width: 239px) {
+  /* The sticker is decoration (aria-hidden); at very large text its letters are cut here, never pushed past the card. */
+  .press {
+    overflow: clip;
+  }
+  .card {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: start;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .press {
+    animation: none;
+  }
+  .sticker.sticker {
+    transition: none;
+  }
+}

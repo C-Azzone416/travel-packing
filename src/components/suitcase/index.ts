@@ -12,4 +12,5 @@ export { Stepper } from "./Stepper";
 export { LaundryMarker, MorningOfMarker } from "./Markers";
 export { WeatherDayTile, precipPercent } from "./WeatherDayTile";
 export { CountdownBadge, countdownLabel } from "./CountdownBadge";
+export { DayBadge } from "./DayBadge";
 export { PackedRibbon, type PackedRibbonProps } from "./PackedRibbon";
