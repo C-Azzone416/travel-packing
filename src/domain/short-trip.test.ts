@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { calculateSuggestions as suggest, stapleContext, stapleQuantity } from "./calc";
+import { recalculateSuggestions } from "./item-ops";
 import { isDayTrip, laundryChangesQuantity, laundryControlVisible } from "./short-trip";
 import type { Trip, TripConfig, TripItem } from "./trip";
 
@@ -106,5 +107,54 @@ describe("the laundry control rule", () => {
   it("judges an edited config, not only the saved one (Edit trip)", () => {
     const night = tripOf("2030-03-14", "2030-03-15", CONFIG, true);
     expect(laundryControlVisible({ ...night, end: "2030-03-14" })).toBe(false);
+  });
+});
+
+describe("only rows the trip really has count (#412)", () => {
+  it("a fixed list of Towels gets no laundry control, even on a long trip: the calculator's own tops are not on it", () => {
+    const long = tripOf("2030-03-14", "2030-03-24", CONFIG, false);
+    const fixed = {
+      ...long,
+      items: [
+        {
+          id: "saved:l1:towel",
+          name: "Towels",
+          category: "Accessories",
+          qty: 2,
+          packed: 0,
+          section: "main",
+        },
+      ] as TripItem[],
+    };
+    expect(laundryChangesQuantity(fixed)).toBe(false);
+    expect(laundryControlVisible(fixed)).toBe(false);
+  });
+});
+
+describe("a day trip's return outfit (#412)", () => {
+  it("an existing trip keeps the return rows it has, edited or not, when recalculated", () => {
+    const night = tripOf("2030-03-14", "2030-03-15", CONFIG, false);
+    const rows: TripItem[] = [
+      {
+        id: "return-top",
+        name: "My own top",
+        category: "Return outfit",
+        qty: 2,
+        packed: 1,
+        section: "return",
+        userEdited: true,
+      },
+      {
+        id: "return-socks",
+        name: "Socks",
+        category: "Return outfit",
+        qty: 1,
+        packed: 0,
+        section: "return",
+      },
+    ];
+    const day = { ...night, end: night.start, items: [...night.items, ...rows] };
+    const next = recalculateSuggestions(day, { ...CONFIG, laundry: true }, suggest);
+    expect(next.items.filter((item) => item.section === "return")).toEqual(rows);
   });
 });

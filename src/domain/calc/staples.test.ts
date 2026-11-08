@@ -47,6 +47,13 @@ describe("personalized trip generation", () => {
     expect(items.every((item) => item.packed === 0)).toBe(true);
   });
 
+  it("a fresh day trip has no return outfit rows; one night does (#412)", () => {
+    const rows = (start: string, end: string) =>
+      buildTripItems({ ...base, start, end }, []).items.filter((item) => item.section === "return");
+    expect(rows("2026-03-14", "2026-03-14")).toHaveLength(0);
+    expect(rows("2026-03-14", "2026-03-15")).toHaveLength(4);
+  });
+
   it("keeps the dedicated return outfit separate and optional", () => {
     expect(buildTripItems(base, []).items.filter((item) => item.section === "return")).toHaveLength(
       4,

@@ -242,9 +242,10 @@ function PlanBody({ from, trips, staples, home, lists, allowCustom, today, rende
         : null,
     [draft, copyCandidate, laundry, staples, today],
   );
+  // Judged on what will be created: the chosen list (or the Staples) with the chosen copy's preferences (#412).
   const effect = useMemo(
-    () => laundryEffect(baseDraft, staples, today),
-    [baseDraft, staples, today],
+    () => laundryEffect(finalDraft, staples, today, listDetail ?? undefined),
+    [finalDraft, staples, today, listDetail],
   );
   const unit = "settings" in weather ? weather.settings.temperatureUnit : "F";
   const weatherRows = useMemo(

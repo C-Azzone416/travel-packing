@@ -79,7 +79,9 @@ export function dayMonth(value: string): string {
   return date ? `${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]}` : "";
 }
 
-const dateRange = (start: string, end: string) => `${dayMonth(start)} – ${dayMonth(end)}`;
+// One date for a day trip (#412): "23 Oct", never "23 Oct – 23 Oct".
+const dateRange = (start: string, end: string) =>
+  start === end ? dayMonth(start) : `${dayMonth(start)} – ${dayMonth(end)}`;
 const nightsWord = nightsText;
 const onOff = (value: boolean) => (value ? "on" : "off");
 

@@ -20,6 +20,8 @@ for (const width of [1280, 390]) {
     ).toBeVisible();
     await create(page, width);
     await expect(page.getByRole("button", { name: /^Laundry/ })).toHaveCount(0);
+    // A fresh day trip has no dedicated return outfit.
+    await expect(page.getByText("return outfit")).toHaveCount(0);
     await page.getByRole("button", { name: "Edit list" }).click();
     await expect(page.getByRole("switch", { name: /Morning of/ })).toHaveCount(0);
     await expect(page.getByText("Morning of")).toHaveCount(0);
@@ -43,6 +45,9 @@ for (const width of [1280, 390]) {
   test(`a one-night trip at ${width}: singular copy, Morning of stays`, async ({ page }) => {
     test.skip(test.info().project.name === "phone", "the width is set per test, on desktop");
     await planAndOpen(page, DAY, NEXT_DAY);
+    await expect(
+      page.getByText("Underwear, socks and other per-day items counted for 1 night"),
+    ).toBeVisible();
     await create(page, width);
     await expect(page.locator("body")).not.toContainText("1 nights");
     await expect(page.locator("body")).not.toContainText("0 nights");

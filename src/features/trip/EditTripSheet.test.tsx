@@ -625,6 +625,50 @@ describe("EditTripSheet: Route & dates", () => {
     expect(toggle(dialog(), "Laundry on this trip").disabled).toBe(false);
   });
 
+  it("a NEW laundry opt-in that becomes ineffective is neither listed nor saved; the Dates row says one date (#412)", async () => {
+    const { user, dialog, onApplyPreferences, onSaveRoute } = setup({ tab: "route" });
+    await user.click(within(dialog()).getByRole("button", { name: /Packing preferences/ }));
+    await user.click(toggle(dialog(), "Laundry on this trip"));
+    expect(toggle(dialog(), "Laundry on this trip").checked).toBe(true);
+    const less = within(dialog()).getByRole("button", { name: "One night fewer" });
+    for (let i = 0; i < 4; i += 1) await user.click(less);
+    // Disabled, and off as far as the list and the save are concerned.
+    expect(toggle(dialog(), "Laundry on this trip").disabled).toBe(true);
+    expect(toggle(dialog(), "Laundry on this trip").checked).toBe(false);
+    const text = rowsOf(dialog()).map((row) => row.textContent ?? "");
+    expect(text.some((row) => row.startsWith("Laundry"))).toBe(false);
+    const dates = text.find((row) => row.startsWith("Dates"))!;
+    expect(dates).not.toMatch(/(\d+ \w+) – \1/);
+    const tick = within(dialog()).queryByRole("checkbox", { name: /packed|understand|OK/i });
+    if (tick) await user.click(tick);
+    await user.click(saveButton(dialog()));
+    await waitFor(() => expect(onSaveRoute).toHaveBeenCalled());
+    expect(onApplyPreferences.mock.calls.every(([config]) => config.laundry === false)).toBe(true);
+  });
+
+  it("How we count follows the dates being edited, not the saved ones (#412)", async () => {
+    const { user, dialog } = setup({ tab: "route" });
+    const line = () => within(dialog()).getByText(/How we count:/).parentElement?.textContent ?? "";
+    expect(line()).toMatch(/5 days away/);
+    const less = within(dialog()).getByRole("button", { name: "One night fewer" });
+    for (let i = 0; i < 4; i += 1) await user.click(less);
+    expect(line()).toMatch(/A day trip/);
+  });
+
+  it("a SAVED laundry-on can still be turned off on a day trip (#412)", async () => {
+    const trip = base();
+    const { user, dialog, onApplyPreferences } = setup({
+      trip: { ...trip, config: { ...trip.config, laundry: true } },
+    });
+    await user.click(within(dialog()).getByRole("button", { name: "Route & dates" }));
+    const less = within(dialog()).getByRole("button", { name: "One night fewer" });
+    for (let i = 0; i < 4; i += 1) await user.click(less);
+    expect(toggle(dialog(), "Laundry on this trip").disabled).toBe(false);
+    await user.click(toggle(dialog(), "Laundry on this trip"));
+    expect(toggle(dialog(), "Laundry on this trip").checked).toBe(false);
+    expect(onApplyPreferences).not.toHaveBeenCalled();
+  });
+
   it("a Come home before Leave is a problem in words, and Save waits", async () => {
     const { user, dialog } = setup({ tab: "route" });
     fireEvent.change(within(dialog()).getByLabelText("Come home"), {

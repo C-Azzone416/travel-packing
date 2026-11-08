@@ -9,6 +9,7 @@ import {
 } from "@/domain/calc";
 import { CUBES, CUBE_LABELS, canCarryLaundryFlag, itemCube, type Cube } from "@/domain/cubes";
 import { canonicalItemId } from "@/domain/item-identity";
+import { nightsText } from "@/domain/trip-route";
 import { TOILETRY_GROUP_ID } from "@/domain/toiletry-bag";
 import type { Staple } from "@/domain/trip";
 import { DEFAULT_TRIP_CONFIG } from "@/features/trips/draft";
@@ -176,8 +177,7 @@ export function previewStaples(
 export const scalesWithTrip = (staple: Pick<Staple, "cadence">): boolean =>
   staple.cadence !== "per trip";
 
-export const nightsLabel = (nights: number): string =>
-  `${nights} ${nights === 1 ? "night" : "nights"}`;
+export const nightsLabel = nightsText;
 export const itemsLabel = (count: number): string => `${count} ${count === 1 ? "item" : "items"}`;
 export const stapleCount = (count: number): string =>
   `${count} ${count === 1 ? "staple" : "staples"}`;

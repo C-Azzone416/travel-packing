@@ -381,6 +381,35 @@ describe("laundry", () => {
     );
   });
 
+  it("is judged on the chosen saved list: a fixed list of Towels has no laundry effect, however long the trip (#412)", () => {
+    const list = {
+      id: "l1",
+      name: "Fixed",
+      items: [{ id: "towel", name: "Towels", category: "Accessories", qty: 2 }],
+    } as unknown as Parameters<typeof laundryEffect>[3];
+    const long = withChoices(draftFor("2026-11-12", "2026-11-22"), {
+      copy: null,
+      listId: "l1",
+      laundry: false,
+    });
+    expect(laundryEffect(long, SYNTHETIC_STAPLES, today, list)).toBeNull();
+    // The same trip from the Staples does have one.
+    expect(laundryEffect(long, SYNTHETIC_STAPLES, today)).not.toBeNull();
+  });
+
+  it("is judged on a copied trip's preferences: one night with the return outfit off still halves tops (#412)", () => {
+    const night = draftFor("2026-11-12", "2026-11-13");
+    const plain = withChoices(night, { copy: null, listId: null, laundry: false });
+    expect(laundryEffect(plain, SYNTHETIC_STAPLES, today)).toBeNull();
+    const source = sampleLifecycleState().trips[0];
+    const copied = withChoices(night, {
+      copy: { ...source, config: { ...source.config, returnOutfit: false } },
+      listId: null,
+      laundry: false,
+    });
+    expect(laundryEffect(copied, SYNTHETIC_STAPLES, today)?.name).toBe("Everyday tops");
+  });
+
   it("has no effect while the trip is not complete", () => {
     expect(laundryEffect(draftFor("", ""), STAPLES, today)).toBeNull();
   });

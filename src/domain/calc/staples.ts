@@ -247,7 +247,8 @@ export function buildTripItems(
     ...(entry.optional ? { optional: true } : {}),
     ...(entry.groupId ? { groupId: entry.groupId } : {}),
   }));
-  if (config.returnOutfit !== false) items.push(...returnOutfitItems());
+  // A day trip has no return outfit: you are home the same day (#412). Existing trips keep the rows they already have.
+  if (config.returnOutfit !== false && computed.days > 1) items.push(...returnOutfitItems());
 
   for (const staple of staples) {
     const identity = canonicalItemId(staple.id);

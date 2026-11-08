@@ -299,11 +299,18 @@ export function laundryEffect(
   draft: TripDraft,
   staples: readonly Staple[],
   today: string,
+  /** The chosen saved list: it stands in for the Staples, so the effect is judged on ITS rows (#412). */
+  list?: PreviewInput["list"],
 ): LaundryEffect | null {
   const quantities = (laundry: boolean) => {
     const built = previewTrip({
-      draft: { ...draft, config: { ...draft.config, laundry }, savedListId: null },
+      draft: {
+        ...draft,
+        config: { ...draft.config, laundry },
+        ...(list ? {} : { savedListId: null }),
+      },
       staples,
+      list,
       today,
     });
     return new Map((built?.items ?? []).map((item) => [item.id, item]));

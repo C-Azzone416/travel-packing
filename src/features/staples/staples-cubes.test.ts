@@ -246,6 +246,7 @@ describe("Smart cadence", () => {
 
 describe("labels", () => {
   it("pluralises", () => {
+    expect(nightsLabel(0)).toBe("day trip");
     expect(nightsLabel(1)).toBe("1 night");
     expect(nightsLabel(4)).toBe("4 nights");
     expect(itemsLabel(1)).toBe("1 item");

@@ -24,7 +24,9 @@ export function laundryChangesQuantity(
   const flipped = recalculateSuggestions(base, { ...config, laundry: !config.laundry }, suggest);
   const same = recalculateSuggestions(base, config, suggest);
   const after = new Map(flipped.items.map((item) => [item.id, item.qty]));
-  return same.items.some((item) => after.get(item.id) !== item.qty);
+  // Only rows the trip actually has: the calculator can synthesize Smart rows in both runs that the list never contained.
+  const present = new Set(trip.items.map((item) => item.id));
+  return same.items.some((item) => present.has(item.id) && after.get(item.id) !== item.qty);
 }
 
 /**
