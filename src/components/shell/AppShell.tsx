@@ -2,13 +2,14 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { ToastProvider } from "@/components/ui/Toast";
 import { FeedbackAccessProvider } from "@/features/feedback/FeedbackAccess";
-import { FeedbackButton } from "@/features/feedback/FeedbackButton";
+import { FeedbackReportHost } from "@/features/feedback/FeedbackReportHost";
 import { FeedbackNotice } from "@/features/feedback/FeedbackNotice";
 import { AppLocationProvider } from "@/features/trips/AppLocationProvider";
 import { providerEnabled } from "@/server/locations/provider-config";
 import { TripsSourceProvider } from "@/features/trips/TripsSourceProvider";
 import { StaplesSetupGate, type StaplesSetupActions } from "@/features/staples/StaplesSetupGate";
 import { Nav } from "./Nav";
+import { NavIcon } from "./NavIcon";
 import { PreviewBanner } from "./PreviewBanner";
 import { RouteFocus } from "./RouteFocus";
 import { ConnectedSaveChip, SaveStatusProvider } from "./SaveStatus";
@@ -36,19 +37,20 @@ export function AppShell({ children, signOut, email, setupActions }: AppShellPro
               <div className="app-shell">
                 <header className="topbar">
                   <div className="topbar-inner">
-                    <Link className="brand-button" href="/" aria-label="Packed Smart: go to trips">
-                      <span className="brand-mark" aria-hidden="true" />
+                    <Link className="shell-brand" href="/" aria-label="Packed Smart: go to trips">
+                      <span className="shell-brand-mark" aria-hidden="true">
+                        <NavIcon name="trips" />
+                      </span>
                       <strong>Packed Smart</strong>
                     </Link>
                     <Nav signOut={signOut} email={email} />
                     <div className="topbar-end">
-                      <FeedbackButton />
-                      {/* Status appears after Feedback so the primary action keeps its anchored position. */}
                       <ConnectedSaveChip />
                     </div>
                   </div>
                 </header>
                 <FeedbackNotice />
+                <FeedbackReportHost />
                 <main id="main" tabIndex={-1}>
                   {setupActions ? (
                     <StaplesSetupGate actions={setupActions}>{children}</StaplesSetupGate>

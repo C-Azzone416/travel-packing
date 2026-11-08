@@ -8,6 +8,7 @@ import {
   forgetFeedbackEnrollment,
   goToTrips,
   openSettingsFromNav,
+  pressSignOut,
 } from "./helpers/feedback";
 
 // The warning before Sign out when feedback is still waiting on this device (#325, design's spec). Real app, real SDK outbox; the
@@ -28,7 +29,7 @@ async function withWaitingReports(page: Page, count: number) {
   await goToTrips(page);
   await fakeFramebriar.setOffline(true);
   for (let n = 1; n <= count; n++) {
-    await page.locator(".feedback-button").click();
+    await page.locator(".nav-feedback").click();
     const sheet = page.getByRole("dialog", { name: "Send feedback" });
     // Playwright's WebKit cannot store a picture in IndexedDB, so on the phone the saved report is notes-only.
     if (test.info().project.name === "phone")
@@ -40,9 +41,9 @@ async function withWaitingReports(page: Page, count: number) {
   }
 }
 
-const nav = (page: Page) => page.getByRole("navigation", { name: "Primary navigation" });
+// On a phone Sign out is the Settings row (the tab bar's 4th slot is Feedback, #293); from 721px it is also in the header.
 const openFromNav = async (page: Page) => {
-  await nav(page).getByRole("button", { name: "Sign out" }).click();
+  await pressSignOut(page);
   await expect(page.getByRole("dialog", { name: TITLE })).toBeVisible();
 };
 
@@ -178,7 +179,8 @@ test(
   DEVICE,
   async ({ page }) => {
     await withWaitingReports(page, 1);
-    const signOutButton = nav(page).getByRole("button", { name: "Sign out" });
+    await openSettingsFromNav(page);
+    const signOutButton = page.getByRole("main").getByRole("button", { name: "Sign out" });
     await signOutButton.click();
     const dialog = page.getByRole("dialog", { name: TITLE });
     await expect(
@@ -272,6 +274,6 @@ test(
 
 test("nothing unsent: Sign out stays one tap, no sheet", async ({ page }) => {
   await signInAsOwner(page);
-  await nav(page).getByRole("button", { name: "Sign out" }).click();
+  await pressSignOut(page);
   await expect(page).toHaveURL(/\/sign-in$/);
 });

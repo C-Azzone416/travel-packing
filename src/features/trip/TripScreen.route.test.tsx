@@ -49,40 +49,24 @@ function setup(id: string, fail = false, title?: string) {
   return { user, source: base };
 }
 
-describe("the route on the trip header", () => {
-  it("does not repeat the route as a chip when the title is the route", async () => {
-    setup("tour");
-    await screen.findByRole("heading", { name: "San Diego → Lisbon", level: 1 });
-    expect(document.querySelector(".route-chip")).toBeNull();
-  });
-
-  it("shows a route chip with the full route when the title is something else", async () => {
-    setup("tour", false, "Autumn tour");
-    await screen.findByRole("heading", { name: "Autumn tour", level: 1 });
-    const chip = document.querySelector(".route-chip") as HTMLElement;
-    expect(chip.textContent).toContain("Route: San Diego, then Lisbon.");
-    expect(chip.querySelector(".route-text")?.getAttribute("title")).toBe("San Diego → Lisbon");
-  });
-
-  it("shows no route chip for a single destination", async () => {
-    setup("san-diego");
-    await screen.findByRole("heading", { name: "San Diego", level: 1 });
-    expect(document.querySelector(".route-chip")).toBeNull();
-  });
-});
+const SAVE = { name: /^Save \d+ changes?$/ };
 
 describe("Edit trip: Route & dates", () => {
-  it("opens the stop cards on the trip's stops and saves a changed route", async () => {
+  it("opens the stops on the trip's route and saves a changed Come home date", async () => {
     const { user, source } = setup("tour");
-    await screen.findByRole("heading", { name: "San Diego → Lisbon", level: 1 });
+    await screen.findByRole("heading", { name: "Pack mode", level: 1 });
     await user.click(screen.getByRole("button", { name: "Edit trip" }));
     const dialog = screen.getByRole("dialog", { name: "Edit trip" });
-    expect(within(dialog).getAllByRole("group", { name: /^Stop \d$/ })).toHaveLength(2);
+    expect(within(dialog).getAllByRole("listitem").length).toBeGreaterThanOrEqual(2);
+    expect(within(dialog).getByText("San Diego")).toBeTruthy();
+    expect(within(dialog).getByText("Lisbon")).toBeTruthy();
 
-    fireEvent.change(within(dialog).getByLabelText("Leave, Stop 2"), {
+    fireEvent.change(within(dialog).getByLabelText("Come home"), {
       target: { value: "2026-10-31" },
     });
-    await user.click(within(dialog).getByRole("button", { name: "Save route" }));
+    // The live panel says what the new date does before anything is saved.
+    expect(within(dialog).getByText("Dates")).toBeTruthy();
+    await user.click(within(dialog).getByRole("button", SAVE));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit trip" })).toBeNull());
     const saved = (await source.getTrip("tour"))!;
     expect(saved).toMatchObject({ end: "2026-10-31", days: 9 });
@@ -93,16 +77,16 @@ describe("Edit trip: Route & dates", () => {
 
   it("opens a single-destination trip as one plain destination and can add a stop", async () => {
     const { user, source } = setup("san-diego");
-    await screen.findByRole("heading", { name: "San Diego", level: 1 });
+    await screen.findByRole("heading", { name: "Pack mode", level: 1 });
     await user.click(screen.getByRole("button", { name: "Edit trip" }));
     const dialog = screen.getByRole("dialog", { name: "Edit trip" });
-    await user.click(within(dialog).getByRole("button", { name: "+ Add another stop" }));
+    await user.click(within(dialog).getByRole("button", { name: "Add a stop" }));
     await user.type(
       within(dialog).getByRole("combobox", { name: "Destination search, Stop 2" }),
       "paris",
     );
     await user.click(within(screen.getByRole("listbox")).getAllByRole("option")[0]);
-    await user.click(within(dialog).getByRole("button", { name: "Save route" }));
+    await user.click(within(dialog).getByRole("button", SAVE));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit trip" })).toBeNull());
     expect((await source.getTrip("san-diego")).stops.map((s) => s.location.city)).toEqual([
       "San Diego",
@@ -112,40 +96,55 @@ describe("Edit trip: Route & dates", () => {
 
   it("does not save while the route has problems, and says what to fix", async () => {
     const { user, source } = setup("san-diego");
-    await screen.findByRole("heading", { name: "San Diego", level: 1 });
+    await screen.findByRole("heading", { name: "Pack mode", level: 1 });
     await user.click(screen.getByRole("button", { name: "Edit trip" }));
     const dialog = screen.getByRole("dialog", { name: "Edit trip" });
-    await user.click(within(dialog).getByRole("button", { name: "+ Add another stop" }));
-    await user.click(within(dialog).getByRole("button", { name: "Save route" }));
+    await user.click(within(dialog).getByRole("button", { name: "Add a stop" }));
     expect(within(dialog).getByText("Pick a place for Stop 2, or choose Custom.")).toBeTruthy();
-    expect(within(dialog).getAllByText("Fix 1 thing above to continue.").length).toBeGreaterThan(0);
+    expect(within(dialog).getByText("Fix 1 thing above to save.")).toBeTruthy();
+    expect(
+      (within(dialog).getByRole("button", { name: "Save changes" }) as HTMLButtonElement).disabled,
+    ).toBe(true);
     expect((await source.getTrip("san-diego")).stops).toHaveLength(1);
   });
 
-  it("Cancel discards the edit", async () => {
+  it("Cancel discards the edit, without asking: nothing was saved", async () => {
     const { user, source } = setup("tour");
-    await screen.findByRole("heading", { name: "San Diego → Lisbon", level: 1 });
+    await screen.findByRole("heading", { name: "Pack mode", level: 1 });
     await user.click(screen.getByRole("button", { name: "Edit trip" }));
     const dialog = screen.getByRole("dialog", { name: "Edit trip" });
     await user.click(within(dialog).getByRole("button", { name: "Remove Lisbon" }));
-    await user.click(within(dialog).getByRole("button", { name: "Remove" }));
-    // There is something to lose, so Cancel asks first, in the footer.
+    expect(within(dialog).getByRole("button", SAVE)).toBeTruthy();
     await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
-    expect(within(dialog).getByText("Discard your changes?")).toBeTruthy();
-    await user.click(within(dialog).getByRole("button", { name: "Discard" }));
     expect(screen.queryByRole("dialog", { name: "Edit trip" })).toBeNull();
     expect((await source.getTrip("tour")).stops).toHaveLength(2);
   });
 
   it("keeps the sheet open with a message when the save does not go through, and clears it on close", async () => {
     const { user } = setup("tour", true);
-    await screen.findByRole("heading", { name: "San Diego → Lisbon", level: 1 });
+    await screen.findByRole("heading", { name: "Pack mode", level: 1 });
     await user.click(screen.getByRole("button", { name: "Edit trip" }));
     const dialog = screen.getByRole("dialog", { name: "Edit trip" });
-    await user.click(within(dialog).getByRole("button", { name: "Save route" }));
+    await user.click(within(dialog).getByRole("button", { name: "Remove Lisbon" }));
+    await user.click(within(dialog).getByRole("button", SAVE));
     expect(await within(dialog).findByText(/Couldn’t save the route/)).toBeTruthy();
     await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
     await user.click(screen.getByRole("button", { name: "Edit trip" }));
     expect(screen.queryByText(/Couldn’t save the route/)).toBeNull();
+  });
+
+  it("saves how you are getting there and announces it", async () => {
+    const { user, source } = setup("tour");
+    await screen.findByRole("heading", { name: "Pack mode", level: 1 });
+    await user.click(screen.getByRole("button", { name: "Edit trip" }));
+    const dialog = screen.getByRole("dialog", { name: "Edit trip" });
+    await user.click(within(dialog).getByRole("radio", { name: "Drive" }));
+    expect(within(dialog).getAllByText("Getting there")).toHaveLength(2); // the label and the changes row
+    await user.click(within(dialog).getByRole("button", { name: "Save 1 change" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit trip" })).toBeNull());
+    expect((await source.getTrip("tour")).travelMode).toBe("drive");
+    expect(screen.getByRole("status", { name: "Packing updates" }).textContent).toBe(
+      "Getting there updated.",
+    );
   });
 });

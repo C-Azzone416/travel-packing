@@ -1,3 +1,4 @@
+import * as service from "@/server/data/service";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMigratedDb, resetData } from "@/server/db/__fixtures__/db";
 import type { Db } from "@/server/db/retention";
@@ -22,11 +23,14 @@ vi.mock("next/navigation", () => ({
 import {
   acceptWeatherAction,
   addItemAction,
+  moveItemToCubeAction,
+  setMorningOfAction,
   applyWeatherReviewAction,
   addToiletryItemAction,
   confirmBagPlacementAction,
   decrementPackedAction,
   editItemAction,
+  getHomeCityAction,
   getTripAction,
   getStaplesSetupAction,
   incrementPackedAction,
@@ -43,6 +47,7 @@ import {
   saveAsListAction,
   reviewWeatherAgainAction,
   setPackedAction,
+  setPackedManyAction,
   setStampLabelsAction,
   setThemeAction,
   skipWeatherAction,
@@ -94,6 +99,31 @@ describe("reads", () => {
     as(OTHER_OWNER);
     expect(await getTripAction(trip.id)).toEqual({ ok: false, code: "NOT_FOUND" });
     expect(await getTripAction("not-a-uuid")).toEqual({ ok: false, code: "INVALID_INPUT" });
+  });
+
+  it("getHomeCityAction is empty until a home city is set, then returns it to its owner only", async () => {
+    expect(await getHomeCityAction()).toEqual({ ok: true, home: null });
+    await service.setHomeCity(makeContext(db(), fake), { location: { id: "pt-lisbon" } });
+    const result = await getHomeCityAction();
+    if (!result.ok) throw new Error("expected ok");
+    expect(result.home?.location).toMatchObject({ id: "pt-lisbon", city: "Lisbon" });
+    as(OTHER_OWNER);
+    expect(await getHomeCityAction()).toEqual({ ok: true, home: null });
+  });
+
+  it("cross-user: getHomeCityAction returns each owner their own home city, never the other's", async () => {
+    await service.setHomeCity(makeContext(db(), fake), { location: { id: "pt-lisbon" } });
+    as(OTHER_OWNER);
+    await service.setHomeCity(makeContext(db(), fake), { location: { id: "us-co-denver" } });
+    expect(await getHomeCityAction()).toMatchObject({
+      ok: true,
+      home: { location: { city: "Denver" } },
+    });
+    as(OWNER);
+    expect(await getHomeCityAction()).toMatchObject({
+      ok: true,
+      home: { location: { city: "Lisbon" } },
+    });
   });
 
   it("listStaplesAction returns an empty list for a new owner without seeding defaults", async () => {
@@ -341,6 +371,34 @@ describe("item and preference commands", () => {
     expect(read.trip.items.some((entry) => entry.id === "razor")).toBe(false);
   });
 
+  it("upsertStapleAction and saveStaplesSetupAction keep the cube and the laundry flag", async () => {
+    const tees = {
+      id: "tops",
+      name: "Tees",
+      qty: 2,
+      cadence: "per night",
+      category: "Clothing",
+      packLast: false,
+      laundryHalves: true,
+      cube: "misc",
+    } as const;
+    const upserted = await upsertStapleAction(tees);
+    if (!upserted.ok) throw new Error(`expected ok, got ${upserted.code}`);
+    expect(upserted.staples.find((entry) => entry.id === "tops")).toEqual(tees);
+    const cleared = await upsertStapleAction({
+      ...tees,
+      laundryHalves: undefined,
+      cube: undefined,
+    });
+    if (!cleared.ok) throw new Error(`expected ok, got ${cleared.code}`);
+    expect(cleared.staples.find((entry) => entry.id === "tops")).not.toHaveProperty(
+      "laundryHalves",
+    );
+    const setup = await saveStaplesSetupAction([tees]);
+    if (!setup.ok) throw new Error(`expected ok, got ${setup.code}`);
+    expect(setup.staples).toEqual([tees]);
+  });
+
   it("upsertStapleAction rejects bad input, and another owner's staples are separate", async () => {
     const bad = {
       id: "x",
@@ -473,6 +531,7 @@ describe("owner gate", () => {
     as(OTHER_OWNER);
     const attempts: [string, () => Promise<TripCommandResult>][] = [
       ["setPacked", () => setPackedAction(trip.id, "socks", 3)],
+      ["setPackedMany", () => setPackedManyAction(trip.id, [{ itemId: "socks", packed: 3 }])],
       ["toggle", () => togglePackedAction(trip.id, "socks")],
       ["increment", () => incrementPackedAction(trip.id, "socks")],
       ["decrement", () => decrementPackedAction(trip.id, "socks")],
@@ -559,6 +618,66 @@ describe("owner gate", () => {
     const read = await getTripAction(trip.id);
     if (!read.ok) throw new Error("expected ok");
     for (const id of ids) expect(read.trip.items.find((entry) => entry.id === id)!.packed).toBe(1);
+  });
+});
+
+describe("cube actions (#385)", () => {
+  it("add into a cube, move an item, and flag Morning of, in the screen's shape", async () => {
+    const trip = await seedTrip(db(), OWNER.userId);
+    const added = await addItemAction(trip.id, {
+      name: "Pillow",
+      category: "Accessories",
+      neededQty: 1,
+      cube: "tech",
+    });
+    if (!added.ok) throw new Error(`expected ok, got ${added.code}`);
+    expect(added.trip.items.find((entry) => entry.name === "Pillow")?.cube).toBe("tech");
+    const item = trip.items[0];
+    const moved = await moveItemToCubeAction(trip.id, item.id, "misc");
+    if (!moved.ok) throw new Error(`expected ok, got ${moved.code}`);
+    expect(moved.trip.items.find((entry) => entry.id === item.id)?.cube).toBe("misc");
+    const flagged = await setMorningOfAction(trip.id, "misc", true);
+    if (!flagged.ok) throw new Error(`expected ok, got ${flagged.code}`);
+    expect(flagged.trip.morningOfCubes).toContain("misc");
+  });
+
+  it("says NOT_FOUND for a trip that is not there", async () => {
+    expect(await moveItemToCubeAction(MISSING, "x", "tech")).toEqual({
+      ok: false,
+      code: "NOT_FOUND",
+    });
+    expect(await setMorningOfAction(MISSING, "tech", true)).toEqual({
+      ok: false,
+      code: "NOT_FOUND",
+    });
+  });
+});
+
+describe("setPackedManyAction (All in and Undo, #386)", () => {
+  it("saves several counts together and returns the trip and signals in the screen's shape", async () => {
+    const trip = await seedTrip(db(), OWNER.userId);
+    const open = trip.items.filter((entry) => entry.packed < entry.qty).slice(0, 2);
+    const result = await setPackedManyAction(
+      trip.id,
+      open.map((entry) => ({ itemId: entry.id, packed: entry.qty })),
+    );
+    if (!result.ok) throw new Error(`expected ok, got ${result.code}`);
+    for (const entry of open)
+      expect(result.trip.items.find((one) => one.id === entry.id)?.packed).toBe(entry.qty);
+    expect(result.signals).toMatchObject({ promptBagPlacement: expect.any(Boolean) });
+  });
+
+  it("says NOT_FOUND for a trip that is not there, REJECTED for an item that is not on it, and fails an empty list", async () => {
+    const trip = await seedTrip(db(), OWNER.userId);
+    expect(await setPackedManyAction(MISSING, [{ itemId: "x", packed: 1 }])).toEqual({
+      ok: false,
+      code: "NOT_FOUND",
+    });
+    expect(await setPackedManyAction(trip.id, [{ itemId: "no-such-item", packed: 1 }])).toEqual({
+      ok: false,
+      code: "REJECTED",
+    });
+    expect(await setPackedManyAction(trip.id, [])).toMatchObject({ ok: false });
   });
 });
 

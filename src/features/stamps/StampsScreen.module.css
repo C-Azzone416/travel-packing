@@ -1,0 +1,627 @@
+.root {
+  width: 100%;
+  max-width: 640px;
+  min-width: 0;
+  margin-inline: auto;
+  animation: none;
+}
+.root h1 {
+  margin-bottom: 6px;
+  font-size: 28px;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+.pageHead,
+.layout,
+.past,
+.stickerCase,
+.stickerGrid,
+.tripCopy {
+  min-width: 0;
+}
+.pageHead {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 24px;
+  padding-inline: 4px;
+}
+.pageHead :global(.lede) {
+  margin: 0;
+  max-width: 62ch;
+  font-size: 15px;
+  line-height: 1.45;
+}
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.filters button {
+  min-height: 44px;
+  padding: 8px 16px;
+  border: 2px solid var(--tint);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink);
+  font-weight: 600;
+  cursor: pointer;
+}
+.filters button[aria-pressed="true"] {
+  border-color: var(--dark);
+  background: var(--dark);
+  color: var(--onDark);
+}
+.layout {
+  display: grid;
+  gap: 28px;
+}
+.stickerCase :global([data-interior="dark"]) {
+  min-height: 520px;
+  display: flex;
+  flex-direction: column;
+}
+.caseHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.caseHead p {
+  margin: 0;
+  color: var(--onDarkMuted);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+.caseHead strong {
+  flex: none;
+  font-family: var(--font-display), var(--font-body), sans-serif;
+  font-size: 26px;
+  line-height: 1;
+  font-variant-numeric: lining-nums;
+}
+.stickerGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(108px, 100%), 1fr));
+  align-items: center;
+  justify-items: center;
+  gap: 22px 12px;
+  padding: 4px 0 28px;
+}
+.stickerButton {
+  --sticker-fill: var(--accent);
+  position: relative;
+  width: 96px;
+  height: 96px;
+  display: grid;
+  place-content: center;
+  gap: 1px;
+  padding: 9px;
+  border: 3px solid var(--onDark);
+  outline: 2px solid color-mix(in srgb, var(--darkEdge) 30%, transparent);
+  outline-offset: -6px;
+  background: var(--sticker-fill);
+  color: var(--onDark);
+  box-shadow: 0 7px 12px color-mix(in srgb, var(--darkEdge) 30%, transparent);
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+  transform: rotate(var(--sticker-tilt));
+}
+.stickerButton[data-shape="circle"] {
+  border-radius: 50%;
+  transform: none;
+}
+.stickerButton[data-shape="rounded"] {
+  border-radius: 18px;
+}
+.stickerButton[data-shape="squared"] {
+  border-radius: 7px;
+}
+.stickerButton[data-colour="dark2"] {
+  --sticker-fill: var(--dark2);
+}
+.stickerButton[data-colour="good"] {
+  --sticker-fill: var(--good);
+}
+.stickerButton[data-colour="info"] {
+  --sticker-fill: var(--info);
+}
+.stickerButton[data-colour="goldDeep"] {
+  --sticker-fill: var(--goldDeep);
+}
+.stickerButton[data-upcoming="true"] {
+  border-style: dashed;
+  border-color: var(--ghost);
+  outline: 0;
+  background: transparent;
+  color: var(--ghost);
+  box-shadow: none;
+}
+.stickerButton[aria-pressed="true"] {
+  box-shadow:
+    0 0 0 4px var(--gold),
+    0 7px 12px color-mix(in srgb, var(--darkEdge) 30%, transparent);
+}
+.stickerButton:focus-visible {
+  outline: 3px solid var(--onDark);
+  outline-offset: 4px;
+}
+.stickerRegion,
+.stickerMonth {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  color: currentColor;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: 0.08em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.stickerRegion::before,
+.stickerCode::before,
+.stickerMonth::before {
+  content: attr(data-text);
+}
+.stickerCode {
+  display: block;
+  font-family: var(--font-display), var(--font-body), sans-serif;
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: lining-nums;
+}
+.repeatBadge {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  min-width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding-inline: 5px;
+  border: 2px solid var(--dark);
+  border-radius: 999px;
+  background: var(--gold);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+  transform: rotate(calc(-1 * var(--sticker-tilt)));
+}
+.noStickers {
+  margin: 22px 0 auto;
+  color: var(--onDarkMuted);
+  text-align: center;
+}
+.totals {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: auto 0 0;
+}
+.totals div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 5px;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--dark2);
+}
+.totals dt {
+  color: var(--onDarkMuted);
+  font-size: 14px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.totals dd {
+  margin: 0;
+  font-family: var(--font-display), var(--font-body), sans-serif;
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: lining-nums;
+}
+.caseNote {
+  margin: 16px 0 0;
+  color: var(--onDarkMuted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+.past h2 {
+  margin-bottom: 12px;
+  font-family: var(--font-display), var(--font-body), sans-serif;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.15;
+}
+.selectedCard {
+  margin-bottom: 10px;
+  padding: 20px;
+  border-radius: 18px;
+  background: var(--dark);
+  color: var(--onDark);
+}
+.selectedCard h3 {
+  margin: 0 0 8px;
+  font-family: var(--font-display), var(--font-body), sans-serif;
+  font-size: 24px;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+.selectedCard p {
+  margin-bottom: 14px;
+  color: var(--onDarkMuted);
+  font-size: 14px;
+  line-height: 1.35;
+}
+.selectedEyebrow {
+  --trip-sticker: var(--onDarkMuted);
+  margin-bottom: 8px !important;
+  padding-left: 8px;
+  border-left: 4px solid var(--trip-sticker);
+  color: var(--onDarkMuted) !important;
+  font-size: 11px !important;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.selectedActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.selectedActions :global(.button) {
+  min-height: 44px;
+  border-color: var(--paper);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 15px;
+}
+.openTrip {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
+  border: 1.5px solid var(--onDarkMuted);
+  border-radius: 999px;
+  color: var(--onDark);
+  font-size: 15px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.tripList {
+  display: grid;
+  gap: 8px;
+}
+.tripRow {
+  min-width: 0;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 14px;
+  border: 2px solid transparent;
+  border-radius: 16px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tripRow[data-selected="true"] {
+  border-color: var(--gold);
+  background: var(--paper2);
+}
+.tripCode {
+  --trip-sticker: var(--dark2);
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--trip-sticker);
+  color: var(--onDark);
+  font-size: 12px;
+  font-weight: 800;
+}
+.tripCode[data-colour="accent"],
+.selectedEyebrow[data-colour="accent"] {
+  --trip-sticker: var(--accent);
+}
+.tripCode[data-colour="dark2"],
+.selectedEyebrow[data-colour="dark2"] {
+  --trip-sticker: var(--dark2);
+}
+.tripCode[data-colour="good"],
+.selectedEyebrow[data-colour="good"] {
+  --trip-sticker: var(--good);
+}
+.tripCode[data-colour="info"],
+.selectedEyebrow[data-colour="info"] {
+  --trip-sticker: var(--info);
+}
+.tripCode[data-colour="goldDeep"],
+.selectedEyebrow[data-colour="goldDeep"] {
+  --trip-sticker: var(--goldDeep);
+}
+.tripCopy {
+  display: grid;
+  gap: 2px;
+}
+.tripCopy strong {
+  font-family: var(--font-display), var(--font-body), sans-serif;
+  font-size: 19px;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+.tripCopy span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.tripPacked {
+  color: var(--good);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.emptyCard {
+  padding: 20px;
+  border-radius: 16px;
+  background: var(--paper);
+  color: var(--muted);
+}
+.emptyCard p {
+  margin-bottom: 14px;
+}
+.loadingCase {
+  min-height: 420px;
+  margin-top: 24px;
+  border: 9px solid var(--dark);
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--dark) 85%, var(--dark2));
+  animation: pulse 1.2s ease-in-out infinite alternate;
+}
+@keyframes pulse {
+  to {
+    opacity: 0.72;
+  }
+}
+@media (max-width: 359px) {
+  .filters button {
+    flex: 1 1 120px;
+    padding-inline: 10px;
+  }
+  .caseHead {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .stickerGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .tripRow {
+    grid-template-columns: 42px minmax(0, 1fr);
+  }
+  .tripCode {
+    width: 42px;
+    height: 42px;
+  }
+  .tripPacked {
+    grid-column: 2;
+    white-space: normal;
+  }
+}
+@media (max-width: 239px) {
+  .stickerGrid,
+  .totals {
+    grid-template-columns: 1fr;
+  }
+  .stickerButton {
+    width: 88px;
+    height: 88px;
+  }
+  .selectedActions > * {
+    width: 100%;
+  }
+}
+@media (min-width: 1024px) {
+  .root {
+    max-width: none;
+    margin-inline: 0;
+  }
+  .root h1 {
+    font-size: 40px;
+    line-height: 1.05;
+  }
+  .pageHead {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    margin-bottom: 28px;
+    padding-inline: 0;
+  }
+  .pageHead :global(.lede) {
+    font-size: 16px;
+  }
+  .filters {
+    justify-content: flex-end;
+  }
+  .layout {
+    grid-template-columns: minmax(0, 792px) minmax(0, 380px);
+    align-items: stretch;
+  }
+  .stickerCase,
+  .stickerCase > :global(div),
+  .stickerCase :global([data-interior="dark"]) {
+    min-height: 100%;
+  }
+  .stickerCase :global([data-interior="dark"]) {
+    min-height: 690px;
+  }
+  .caseHead {
+    margin-bottom: 26px;
+  }
+  .caseHead p {
+    font-size: 12px;
+    letter-spacing: 0.12em;
+  }
+  .caseHead strong {
+    font-size: 28px;
+  }
+  .stickerGrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 34px 18px;
+  }
+  .stickerButton {
+    width: 112px;
+    height: 112px;
+  }
+  .stickerButton[data-shape="rounded"] {
+    border-radius: 20px;
+  }
+  .stickerCode {
+    font-size: 34px;
+  }
+  .stickerButton[data-shape="rounded"] .stickerCode,
+  .stickerButton[data-shape="squared"] .stickerCode {
+    font-size: 32px;
+  }
+  .stickerRegion,
+  .stickerMonth {
+    font-size: 10px;
+  }
+  .totals {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .totals div {
+    padding: 16px;
+  }
+  .totals dd {
+    font-size: 28px;
+  }
+  .past h2 {
+    font-size: 26px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .loadingCase {
+    animation: none;
+  }
+}
+
+/* Inside the Home's Stamps pill (#388): no page heading, and the width belongs to the Home. */
+.embedded {
+  max-width: none;
+  margin-inline: 0;
+}
+.embedded .pageHead {
+  padding-inline: 0;
+  margin-bottom: 16px;
+}
+
+/* The Home's Stamps teaser (#409): fewer, smaller stickers (3 columns, 72px laptop), two totals, a link. */
+.teaser .caseHead h2 {
+  margin: 0;
+  color: var(--onDarkMuted);
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+.teaser .stickerButton {
+  cursor: default;
+}
+.teaserLink {
+  display: inline-block;
+  margin-top: 16px;
+  color: var(--onDark);
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+@media (min-width: 1024px) {
+  .teaser .caseHead h2 {
+    font-size: 12px;
+    letter-spacing: 0.12em;
+  }
+  .teaser .stickerGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 22px 12px;
+  }
+  .teaser .stickerButton {
+    width: min(72px, 100%);
+    height: auto;
+    aspect-ratio: 1;
+    padding: 6px;
+  }
+  .teaser .stickerCode,
+  .teaser .stickerButton[data-shape="rounded"] .stickerCode,
+  .teaser .stickerButton[data-shape="squared"] .stickerCode {
+    font-size: 22px;
+  }
+  .teaser .totals {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .stickerCase.teaser,
+  .stickerCase.teaser :global([data-interior="dark"]) {
+    min-height: 0;
+  }
+}
+
+/* Tablet (768-1023, #414): the sticker suitcase takes the 960 container, stickers four across, totals four in a row, and the past
+   trips in two columns below. (The Home's embedded Stamps keeps the Home's width.) */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .root:not(.embedded) {
+    max-width: none;
+    margin-inline: 0;
+  }
+  .root:not(.embedded) .stickerGrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .root:not(.embedded) .totals {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .root:not(.embedded) .tripList {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+}
+
+/* 1024-1179 (#469; spec #393 part 2 section 5.3): the past-trips column is 340 wide (380 from 1180). */
+@media (min-width: 1024px) and (max-width: 1179px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr) 340px;
+  }
+  /* The packed count moves under the dates when the card is under 360 wide (it follows the column, not the window). */
+  .past {
+    container-type: inline-size;
+  }
+  @container (max-width: 359px) {
+    .tripRow {
+      grid-template-columns: 42px minmax(0, 1fr);
+    }
+    .tripCode {
+      width: 42px;
+      height: 42px;
+    }
+    .tripPacked {
+      grid-column: 2;
+      white-space: normal;
+    }
+  }
+}

@@ -4,7 +4,7 @@ import { readAppearance } from "@/server/data/appearance-store";
 import { getDataContext } from "@/server/data/runtime";
 import * as service from "@/server/data/service";
 
-/** The signed-in person's saved theme, or Base when nobody is signed in, nothing is saved, or the read fails. */
+/** The signed-in person's saved theme, or Ocean when nobody is signed in, nothing is saved, or the read fails. */
 export async function readSavedAppearance(): Promise<Appearance> {
   try {
     const context = await getDataContext();
@@ -30,9 +30,9 @@ export async function readAppearanceForUser(userId: string): Promise<Appearance 
 }
 
 /**
- * The theme to render this request with. Signed in: the cookie mirror wins when present (an unknown value means Base),
+ * The theme to render this request with. Signed in: the cookie mirror wins when present (an unknown value means Ocean),
  * so the first paint needs no database read; with no mirror (a new device, or just after sign-in) the saved theme is
- * read. Signed out: the anonymous palette cookie (#283), else Base; the mirror is ignored. Never an auth decision.
+ * read. Signed out: the anonymous palette cookie (#283), else Ocean; the mirror is ignored. Never an auth decision.
  */
 export async function appearanceForRequest(
   cookieValue: string | undefined,

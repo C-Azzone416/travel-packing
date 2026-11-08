@@ -2,7 +2,7 @@ import type { ThemeId } from "../themes";
 import { hasUsableWeather, recommendPacking } from "../weather/recommend";
 import type { DayWeather } from "../weather/types";
 import { tripDays } from "./dates";
-import { dailyDaysFor } from "./daily-days";
+import { dailyDaysFor, nightsFor } from "./daily-days";
 
 export interface CalcConfig {
   start: string;
@@ -40,13 +40,13 @@ export interface Suggestion {
 
 export interface Suggestions {
   days: number;
+  /** Nights away: days - 1 (0 for a same-day trip). What a "per night" Staple multiplies by (#378). */
+  nights: number;
   dailyDays: number;
   items: Suggestion[];
 }
 
-export { RETURN_OFF_POLICY, type ReturnOffPolicy } from "./return-policy";
-
-export { dailyDaysFor };
+export { dailyDaysFor, nightsFor };
 
 export function calculateSuggestions(config: CalcConfig, weather?: WeatherInput): Suggestions {
   const days = tripDays(config.start, config.end);
@@ -109,5 +109,5 @@ export function calculateSuggestions(config: CalcConfig, weather?: WeatherInput)
     }
   }
 
-  return { days, dailyDays, items: items.filter((item) => item.qty > 0) };
+  return { days, nights: nightsFor(days), dailyDays, items: items.filter((item) => item.qty > 0) };
 }

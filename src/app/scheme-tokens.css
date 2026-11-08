@@ -1,0 +1,149 @@
+/* Suitcase colour schemes (#380, epic #375). Ocean is the default. The three blocks below are tokens.css from the design
+   files VERBATIM (Caroline, 2026-11-04); do not edit a value here without her. The server sets data-scheme on <html> from
+   the account or the anonymous cookie before first paint. With no attribute (or an unknown one) the :root block applies,
+   which is Ocean. data-scheme on any element scopes a scheme to it, which is how the Settings picker draws each swatch.
+   Colour contrast of this palette is tracked in #377. */
+:root,
+[data-scheme="ocean"] {
+  --dark: #142b3b;
+  --dark2: #1f3d50;
+  --darkEdge: #0c1d29;
+  --ink: #162b3d;
+  --muted: #4c6372;
+  --line: #b7c5c5;
+  --line2: #d3dddc;
+  --page: #dce5e5;
+  --paper: #f7f1e5;
+  --paper2: #ece6d8;
+  --tint: #e3ecec;
+  --accent: #b66c4d;
+  --accentSoft: #f3e0d6;
+  --gold: #d7c095;
+  --goldDeep: #a88a4f;
+  --goldSoft: #e9dcbc;
+  --good: #2d6674;
+  --info: #3b7f91;
+  --link: #316a7c;
+  --onDark: #fff8eb;
+  --onDarkMuted: #c6d5d8;
+  --ghost: #8fa1a8;
+  --sea: #c9dadb;
+  --seaLine: #b5c9cb;
+  --coast: #9fb3b5;
+}
+[data-scheme="evergreen"] {
+  --dark: #1f3a30;
+  --dark2: #2b4a3e;
+  --darkEdge: #142820;
+  --ink: #1d2a24;
+  --muted: #5a6a60;
+  --line: #c9c6b4;
+  --line2: #e0ddd0;
+  --page: #eeebe0;
+  --paper: #fbf9f2;
+  --paper2: #f1ede1;
+  --tint: #e4ebe2;
+  --accent: #c0612f;
+  --accentSoft: #f6e2d4;
+  --gold: #d4a644;
+  --goldDeep: #a57c22;
+  --goldSoft: #ecdcae;
+  --good: #4f7f5c;
+  --info: #3f7a8c;
+  --link: #376a75;
+  --onDark: #f6f1e2;
+  --onDarkMuted: #b9c9bd;
+  --ghost: #8f998f;
+  --sea: #d5e3e3;
+  --seaLine: #c3d4d3;
+  --coast: #a9b39f;
+}
+[data-scheme="dusk"] {
+  --dark: #2f2d4f;
+  --dark2: #3d3a63;
+  --darkEdge: #211f3a;
+  --ink: #262438;
+  --muted: #625f78;
+  --line: #cfc9d3;
+  --line2: #e4dfe6;
+  --page: #efeaee;
+  --paper: #fdfafb;
+  --paper2: #f4eff2;
+  --tint: #e8e6f1;
+  --accent: #e06c55;
+  --accentSoft: #fbe1da;
+  --gold: #e9b65c;
+  --goldDeep: #b98428;
+  --goldSoft: #f3dcae;
+  --good: #5c8f7b;
+  --info: #5866a8;
+  --link: #4e5892;
+  --onDark: #fbf3ec;
+  --onDarkMuted: #c8c4da;
+  --ghost: #9a96ab;
+  --sea: #dfe0ee;
+  --seaLine: #cfd0e3;
+  --coast: #b3b0c6;
+}
+
+/* Role aliases (#380). The screens that predate the redesign bind to these role names (--bg, --surface, --header, ...);
+   each one points at a palette token above, so a scheme switch reaches every screen until its redesign lands. New code
+   binds to the palette tokens directly. --ink, --muted and --line come straight from the palette. Not on a [data-scheme]
+   element: roles resolve from the page's scheme. */
+:root {
+  --bg: var(--page);
+  --surface: var(--paper);
+  --line-strong: var(--ghost);
+  --accent-2: var(--accent);
+  --header: var(--dark);
+  --header-ink: var(--onDark);
+  --header-muted: var(--onDarkMuted);
+  --focus-on-header: var(--onDark);
+  --action: var(--dark);
+  --action-ink: var(--onDark);
+  --action-border: var(--darkEdge);
+  --progress: var(--dark);
+  --track: var(--tint);
+  --notice: var(--gold);
+  --notice-ink: var(--ink);
+  --weather-pill: var(--goldSoft);
+  --weather-pill-ink: var(--ink);
+  --complete: var(--good);
+  --complete-ink: var(--onDark);
+  --control-bg: var(--paper);
+  --popover: var(--paper);
+  --selection-surface: color-mix(in srgb, var(--dark) 10%, transparent);
+  --status-surface: color-mix(in srgb, var(--good) 13%, transparent);
+  --detail-surface: color-mix(in srgb, var(--gold) 30%, transparent);
+  --weather-surface: color-mix(in srgb, var(--paper) 80%, transparent);
+  --ledger-rule: color-mix(in srgb, var(--dark) 9%, transparent);
+  --ledger-shadow: color-mix(in srgb, var(--darkEdge) 14%, transparent);
+}
+
+/* Semantic colours: the same in all three schemes, never an accent value. These are the app's existing error, warning
+   and success colours (the ready/remaining status pair plus the error banner). */
+:root {
+  --danger: #9b3d46;
+  --danger-surface: #f8e9eb;
+  --danger-border: #e4b8bd;
+  --warn: #b4774f;
+  --success: #185b56;
+  --status-ready-bg: #d4eadf;
+  --status-ready-text: #185b56;
+  --status-ready-border: #aed2c0;
+  --status-remaining-bg: #f6decb;
+  --status-remaining-text: #704322;
+  --status-remaining-border: #e8c4a8;
+
+  --button-radius: 4px;
+  --control-radius: 4px;
+  --state-radius: 50%;
+}
+
+/* The two rings under every annotation stroke (#266, design's spec section 2): a near-black line outside, then a white halo, then the
+   ink. They are the same in every theme on purpose: the stroke must show on a light, a dark and a mid-grey picture, which is
+   independent of the app's colours. The ink hexes themselves live in annotation-model.ts because they are painted into a PNG. */
+:root {
+  --ink-edge-outer: #111111;
+  --ink-edge-halo: #ffffff;
+}

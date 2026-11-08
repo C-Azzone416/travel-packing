@@ -11,8 +11,11 @@
 import { sql } from "drizzle-orm";
 import { THEME_IDS } from "../../domain/themes";
 import { STAPLES_SETUP_STATES } from "../../domain/staples-setup";
+import { CUBES, NEVER_LAUNDRY_IDS } from "../../domain/cubes";
+import { MAX_TRIP_NAME_LENGTH, TRAVEL_MODES } from "../../domain/trip-route";
 export { STAPLES_SETUP_STATES } from "../../domain/staples-setup";
 import {
+  type AnyPgColumn,
   boolean,
   check,
   date,
@@ -31,7 +34,9 @@ import {
 } from "drizzle-orm/pg-core";
 
 export const ITEM_SECTIONS = ["main", "return", "packlast"] as const;
-export const STAPLE_CADENCES = ["per day", "per trip", "smart"] as const;
+/** "smart" stays for old trip snapshots and the occasion-driven Nice attire staples; see docs/schema.md (#378). */
+export const STAPLE_CADENCES = ["per day", "per trip", "smart", "per night"] as const;
+export { CUBES };
 export const TEMPERATURE_UNITS = ["F", "C"] as const;
 export const WEATHER_STATUSES = ["pending", "accepted", "skipped"] as const;
 /** Category strings the domain uses. "Clothing" is the single semantic name (the prototype's "Clothes" was normalized to it). */
@@ -54,12 +59,59 @@ export const itemSection = pgEnum("item_section", ITEM_SECTIONS);
 export const stapleCadence = pgEnum("staple_cadence", STAPLE_CADENCES);
 export const weatherStatus = pgEnum("weather_status", WEATHER_STATUSES);
 export const itemCategory = pgEnum("item_category", ITEM_CATEGORIES);
+/** The suitcase cubes that group a trip's list (#378). Categories stay for compatibility; cubes drive grouping. */
+export const itemCube = pgEnum("item_cube", CUBES);
+/** How the trip gets there (#379). Nullable on trips: a trip that never chose one claims none. */
+export const travelMode = pgEnum("travel_mode", TRAVEL_MODES);
 export const staplesSetupState = pgEnum("staples_setup_state", STAPLES_SETUP_STATES);
-/** The six built-in trip theme images (#48), shared with the domain so the two can never drift apart. */
+/** Legacy trip-theme values retained for stored-record and schema compatibility after the #392 UI removal. */
 export const tripTheme = pgEnum("trip_theme", THEME_IDS);
 
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
 const updatedAt = () => timestamp("updated_at", { withTimezone: true }).notNull().defaultNow();
+
+/**
+ * The checks shared by the optional city-level places stored as flat columns (users.home_*, trips.origin_*; #379): a place
+ * is all-or-nothing (a city, or nothing at all), coordinates come as a pair and only with a provider place, the provider and
+ * its place id come as a pair, the country code is two letters, and the city is not blank.
+ */
+function placeChecks(
+  name: string,
+  c: {
+    city: AnyPgColumn;
+    provider: AnyPgColumn;
+    placeId: AnyPgColumn;
+    countryCode: AnyPgColumn;
+    latitude: AnyPgColumn;
+    longitude: AnyPgColumn;
+    others: AnyPgColumn[];
+  },
+) {
+  const othersNull = sql.join(
+    c.others.map((column) => sql`${column} is null`),
+    sql` and `,
+  );
+  return [
+    check(`${name}_city_not_blank`, sql`${c.city} is null or btrim(${c.city}) <> ''`),
+    check(`${name}_city_short`, sql`${c.city} is null or char_length(${c.city}) <= 80`),
+    check(
+      `${name}_all_or_nothing`,
+      sql`${c.city} is not null or (${othersNull} and ${c.provider} is null and ${c.placeId} is null and ${c.countryCode} is null and ${c.latitude} is null and ${c.longitude} is null)`,
+    ),
+    check(`${name}_latitude_range`, sql`${c.latitude} between -90 and 90`),
+    check(`${name}_longitude_range`, sql`${c.longitude} between -180 and 180`),
+    check(`${name}_coordinates_pair`, sql`(${c.latitude} is null) = (${c.longitude} is null)`),
+    check(
+      `${name}_coordinates_need_provider`,
+      sql`${c.latitude} is null or ${c.provider} is not null`,
+    ),
+    check(`${name}_provider_pair`, sql`(${c.provider} is null) = (${c.placeId} is null)`),
+    check(
+      `${name}_country_code_length`,
+      sql`${c.countryCode} is null or char_length(${c.countryCode}) = 2`,
+    ),
+  ];
+}
 
 /** App-side mirror of the auth user (id comes from the auth provider, #9). Owner of every other row. */
 export const users = pgTable(
@@ -80,11 +132,42 @@ export const users = pgTable(
     /** Independent of item count: an intentionally empty skipped/completed list is still initialized. */
     staplesSetupState: staplesSetupState("staples_setup_state").notNull().default("incomplete"),
     staplesReminderDismissed: boolean("staples_reminder_dismissed").notNull().default(false),
+    /**
+     * The account's ONE home city (#379), city level only, in the same shape as a trip stop. Every column is null when none
+     * is set. The default "From" for new trips. Owner-only, removed with the account (the users row), never logged.
+     * Coordinates are rounded to 2 decimals (about 1 km) before storage, like stops. Privacy class: trips.location_*.
+     */
+    homeCity: text("home_city"),
+    homeLocationId: text("home_location_id"),
+    homeLocationLabel: text("home_location_label"),
+    homeLocationProvider: text("home_location_provider"),
+    homeLocationPlaceId: text("home_location_place_id"),
+    homeLocationRegion: text("home_location_region"),
+    homeLocationCountry: text("home_location_country"),
+    homeLocationCountryCode: text("home_location_country_code"),
+    homeLatitude: numeric("home_latitude", { precision: 5, scale: 2 }),
+    homeLongitude: numeric("home_longitude", { precision: 5, scale: 2 }),
+    homeTimezone: text("home_timezone"),
     createdAt: createdAt(),
   },
   (table) => [
     check("users_temperature_unit_known", sql`${table.temperatureUnit} in ('F', 'C')`),
     unique("users_id_generation_unique").on(table.id, table.generation),
+    ...placeChecks("users_home", {
+      city: table.homeCity,
+      provider: table.homeLocationProvider,
+      placeId: table.homeLocationPlaceId,
+      countryCode: table.homeLocationCountryCode,
+      latitude: table.homeLatitude,
+      longitude: table.homeLongitude,
+      others: [
+        table.homeLocationId,
+        table.homeLocationLabel,
+        table.homeLocationRegion,
+        table.homeLocationCountry,
+        table.homeTimezone,
+      ],
+    }),
   ],
 );
 
@@ -131,6 +214,9 @@ export const staples = pgTable(
     category: itemCategory("category").notNull(),
     qty: integer("qty").notNull(),
     cadence: stapleCadence("cadence").notNull(),
+    /** "↻ Fewer with laundry": halves the quantity, rounding up, when the trip has laundry. */
+    laundryHalves: boolean("laundry_halves").notNull().default(false),
+    cube: itemCube("cube").notNull().default("misc"),
     packLast: boolean("pack_last").notNull().default(false),
     groupId: text("group_id"),
     version: integer("version").notNull().default(1),
@@ -141,6 +227,10 @@ export const staples = pgTable(
     unique("staples_owner_semantic_unique").on(table.ownerId, table.semanticId),
     check("staples_qty_positive", sql`${table.qty} >= 1`),
     check("staples_version_positive", sql`${table.version} >= 1`),
+    check(
+      "staples_laundry_not_underwear_socks",
+      sql`not ${table.laundryHalves} or ${table.semanticId} not in (${sql.raw(NEVER_LAUNDRY_IDS.map((id) => `'${id}'`).join(", "))})`,
+    ),
     check("staples_name_not_blank", sql`btrim(${table.name}) <> ''`),
     check(
       "staples_group_known",
@@ -232,6 +322,26 @@ export const trips = pgTable(
      */
     stampLabel1: text("stamp_label_1"),
     stampLabel2: text("stamp_label_2"),
+    /**
+     * Where the trip starts from (#379): the same city-level place shape as a stop, all null when there is none. New trips
+     * default it to the account's home city at creation; it is then the trip's own copy (changing home later does not move
+     * existing trips). Same privacy class as the stops; removed with the trip.
+     */
+    originCity: text("origin_city"),
+    originLocationId: text("origin_location_id"),
+    originLocationLabel: text("origin_location_label"),
+    originLocationProvider: text("origin_location_provider"),
+    originLocationPlaceId: text("origin_location_place_id"),
+    originLocationRegion: text("origin_location_region"),
+    originLocationCountry: text("origin_location_country"),
+    originLocationCountryCode: text("origin_location_country_code"),
+    originLatitude: numeric("origin_latitude", { precision: 5, scale: 2 }),
+    originLongitude: numeric("origin_longitude", { precision: 5, scale: 2 }),
+    originTimezone: text("origin_timezone"),
+    /** Fly / Drive / Train or other. Null = never chosen (existing trips): the UI shows no mode instead of claiming one. */
+    travelMode: travelMode("travel_mode"),
+    /** The owner's own name for the trip; null = display the stops ("Lisbon & Porto"). Trimmed, 1 to 60 characters. */
+    name: text("name"),
     /** Recoverable delete: set = "recently deleted". Null = live. */
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: createdAt(),
@@ -260,6 +370,25 @@ export const trips = pgTable(
       "trips_stamp_label_2_format",
       sql`${table.stampLabel2} is null or ${table.stampLabel2} ~ '^[A-Z0-9]{3}$'`,
     ),
+    check(
+      "trips_name_valid",
+      sql`${table.name} is null or (btrim(${table.name}) = ${table.name} and char_length(${table.name}) between 1 and ${sql.raw(String(MAX_TRIP_NAME_LENGTH))})`,
+    ),
+    ...placeChecks("trips_origin", {
+      city: table.originCity,
+      provider: table.originLocationProvider,
+      placeId: table.originLocationPlaceId,
+      countryCode: table.originLocationCountryCode,
+      latitude: table.originLatitude,
+      longitude: table.originLongitude,
+      others: [
+        table.originLocationId,
+        table.originLocationLabel,
+        table.originLocationRegion,
+        table.originLocationCountry,
+        table.originTimezone,
+      ],
+    }),
     check("trips_latitude_range", sql`${table.latitude} between -90 and 90`),
     check("trips_longitude_range", sql`${table.longitude} between -180 and 180`),
     // Coordinates come as a pair, and only with a provider place: a curated trip has none.
@@ -358,6 +487,11 @@ export const tripPreferences = pgTable(
     occasionCount: integer("occasion_count").notNull().default(1),
     reuseNice: boolean("reuse_nice").notNull().default(false),
     returnOutfit: boolean("return_outfit").notNull().default(true),
+    /** Cubes whose items are packed the morning of departure. Toiletries is on by default (the toiletry bag). */
+    morningOfCubes: itemCube("morning_of_cubes")
+      .array()
+      .notNull()
+      .default(sql`'{toiletries}'::item_cube[]`),
     /** Remembered copies of calculated items across Nice outfits off/on (domain: suggestionMemory). */
     suggestionMemory: jsonb("suggestion_memory")
       .notNull()
@@ -398,6 +532,10 @@ export const tripItems = pgTable(
     userEdited: boolean("user_edited").notNull().default(false),
     /** A copied rule snapshot for Staple-derived rows. Null means a generic or manual trip item. */
     stapleCadence: stapleCadence("staple_cadence"),
+    /** Snapshot of the Staple's per-unit quantity and ↻ flag, so recalculation can re-derive a Staple row. */
+    stapleQty: integer("staple_qty"),
+    laundryHalves: boolean("laundry_halves").notNull().default(false),
+    cube: itemCube("cube").notNull().default("misc"),
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: createdAt(),
   },
@@ -411,6 +549,10 @@ export const tripItems = pgTable(
     // Target of the progress table's composite key, which carries qty so packed <= qty is a plain CHECK.
     unique("trip_items_progress_key").on(table.id, table.tripId, table.ownerId, table.qty),
     check("trip_items_qty_positive", sql`${table.qty} >= 1`),
+    check(
+      "trip_items_staple_qty_positive",
+      sql`${table.stapleQty} is null or ${table.stapleQty} >= 1`,
+    ),
     check("trip_items_name_not_blank", sql`btrim(${table.name}) <> ''`),
     check(
       "trip_items_group_known",

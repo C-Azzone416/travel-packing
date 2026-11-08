@@ -2,34 +2,37 @@ import { expect, test } from "@playwright/test";
 import { expectAccessible } from "./helpers/a11y";
 import { ownerEmailFor, signInAsOwner } from "./helpers/auth";
 import { DEVICE } from "./helpers/device";
+import { feedbackOff } from "./helpers/feedback";
 
-// Sign out from the main navigation (#117, design on #117): the 4th item after Settings on the phone's bottom bar and at the end
-// of the desktop rail, one tap and no confirm, with the signed-in address only as its tooltip.
+// Sign out in the main navigation (#117, #293). Where feedback is off (production) it is the 4th tab on a phone, after Settings;
+// where feedback is on, the 4th tab is Feedback and Sign out is the Settings row on a phone. From 1024px the header holds it either way.
 test(
-  "Sign out is in the main nav, on both sizes, and one tap ends the session",
+  "feedback off: Sign out is the 4th tab, one tap ends the session",
   DEVICE,
   async ({ page }, testInfo) => {
+    await feedbackOff(page);
     await signInAsOwner(page);
     const nav = page.getByRole("navigation", { name: "Primary navigation" });
-    // Visible without opening Settings.
     const signOut = nav.getByRole("button", { name: "Sign out" });
     await expect(signOut).toBeVisible();
+    await expect(nav.getByRole("button")).toHaveCount(1);
+    await expect(nav.locator(".nav-feedback")).toHaveCount(0);
     await expect(signOut).toHaveAttribute(
       "title",
       `Signed in as ${ownerEmailFor(testInfo.project.name)}`,
     );
     // Four items, never the current page, the same hit size as the links.
-    await expect(nav.getByRole("link")).toHaveCount(3);
+    const phone = testInfo.project.name === "phone";
+    await expect(nav.getByRole("link")).toHaveCount(phone ? 3 : 4);
     await expect(signOut).not.toHaveAttribute("aria-current", /.+/);
     const box = await signOut.boundingBox();
     expect(Math.round(box!.height)).toBeGreaterThanOrEqual(44);
-    const link = await nav.getByRole("link", { name: "Settings" }).boundingBox();
-    expect(Math.round(box!.height)).toBe(Math.round(link!.height));
-    // Keyboard: it is reachable by tabbing from the last link.
-    await nav.getByRole("link", { name: "Settings" }).focus();
-    await page.keyboard.press("Tab");
-    await expect(signOut).toBeFocused();
-    await expectAccessible(page, "dashboard with Sign out in the nav");
+    if (phone) {
+      // On a phone the tab and the link are the same 48px pill; on a laptop Sign out is a text link in the bar.
+      const link = await nav.getByRole("link", { name: "Settings" }).boundingBox();
+      expect(Math.round(box!.height)).toBe(Math.round(link!.height));
+    }
+    await expectAccessible(page, "dashboard with Sign out as the 4th tab");
 
     await signOut.click();
     await expect(page).toHaveURL(/\/sign-in/);
@@ -38,3 +41,28 @@ test(
     await expect(page).toHaveURL(/\/sign-in/);
   },
 );
+
+test(
+  "feedback on, on a phone: the 4th tab is Feedback, and Sign out is in Settings",
+  DEVICE,
+  async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 700 });
+    await signInAsOwner(page);
+    const nav = page.getByRole("navigation", { name: "Primary navigation" });
+    await expect(nav.getByRole("button", { name: "Send feedback report" })).toBeVisible();
+    // The wide-screen copy is not drawn, so it is not a tab stop or in the accessibility tree.
+    await expect(nav.getByRole("button", { name: "Sign out" })).toHaveCount(0);
+    await nav.getByRole("link", { name: "Settings" }).click();
+    await page.getByRole("main").getByRole("button", { name: "Sign out" }).click();
+    await expect(page).toHaveURL(/\/sign-in/);
+  },
+);
+
+test("from 1024px the header holds Sign out, one tap ends the session", async ({ page }) => {
+  await signInAsOwner(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const nav = page.getByRole("navigation", { name: "Primary navigation" });
+  await expect(nav.getByRole("button", { name: "Send feedback report" })).toBeVisible();
+  await nav.getByRole("button", { name: "Sign out" }).click();
+  await expect(page).toHaveURL(/\/sign-in/);
+});

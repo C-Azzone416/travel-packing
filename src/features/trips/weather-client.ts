@@ -1,4 +1,5 @@
 import type { StopWeather } from "@/domain/weather/types";
+import { localToday } from "@/lib/today";
 
 export type WeatherFetchResult =
   { kind: "ready"; stops: StopWeather[] } | { kind: "offline" } | { kind: "unavailable" };
@@ -17,9 +18,12 @@ function validStopWeather(value: unknown): value is StopWeather {
 export async function fetchTripWeather(
   tripId: string,
   doFetch: typeof fetch = fetch,
+  today: string = localToday(),
 ): Promise<WeatherFetchResult> {
   try {
-    const response = await doFetch(`/api/weather?tripId=${encodeURIComponent(tripId)}`, {
+    // The device's local date decides which days are forecast; the server checks it before believing it.
+    const query = `tripId=${encodeURIComponent(tripId)}&today=${encodeURIComponent(today)}`;
+    const response = await doFetch(`/api/weather?${query}`, {
       cache: "no-store",
       credentials: "same-origin",
     });

@@ -1,18 +1,31 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { recalculateSuggestions } from "@/domain/item-ops";
+import { laundryChangesQuantity } from "@/domain/short-trip";
 import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import { ModalSheet } from "@/components/ui/ModalSheet";
 import { Switch } from "@/components/ui/Switch";
 import { calculateSuggestions } from "@/domain/calc";
-import { FeedbackEditorEntry } from "@/features/feedback/FeedbackEditorEntry";
 import { curatedLocationProvider } from "@/domain/location-provider";
-import { previewRecalculation, type RecalcPreview } from "@/domain/recalc-preview";
-import type { Trip, TripConfig } from "@/domain/trip";
-import type { DraftStop } from "@/domain/trip-lifecycle";
+import type { TripConfig } from "@/domain/trip";
+import type { DraftStop, LifecycleTrip } from "@/domain/trip-lifecycle";
+import { tripDisplayName, type TravelMode } from "@/domain/trip-route";
 import type { TripStop } from "@/domain/trip-stops";
+import { FeedbackEditorEntry } from "@/features/feedback/FeedbackEditorEntry";
+import { StopRows } from "@/features/plan/StopRows";
+import { TravelModeControl } from "@/features/plan/steps";
+import planStyles from "@/features/plan/plan.module.css";
 import { useLocationProvider } from "@/features/trips/LocationProviderContext";
-import { StopList } from "@/features/trips/StopList";
 import { tripMathLine } from "@/features/trips/count-copy";
 import {
   clampOccasions,
@@ -22,560 +35,565 @@ import {
   NICE_OUTFITS_DESCRIPTION,
   returnOutfitHelp,
 } from "@/features/trips/draft";
-import { fixSummary, stopProblems } from "@/features/trips/stops-draft";
+import {
+  fixSummary,
+  formatNights,
+  nightsAt,
+  setFirstArrive,
+  setLeave,
+  shiftEnd,
+  snapContiguous,
+  stopProblems,
+} from "@/features/trips/stops-draft";
+import { localToday } from "@/lib/today";
+import { reconcile, settleTouched, type EndpointsTouched } from "./edit-reconcile";
+import { changeCount, editChanges, saveLabel, type ChangeRow } from "./edit-diff";
+import styles from "./EditTripSheet.module.css";
+
+/** The line under a disabled laundry row: no marked Staple would change on a trip this short (#412). */
+export const NO_LAUNDRY_EFFECT = "No effect on a trip this short.";
 
 export type EditTripTab = "route" | "preferences";
 export type ApplyOutcome = "ok" | "stale" | "failed";
+/** What a host reports after one of the sheet's saves: the trip's new save time (the next save is based on it), or null for a failure. */
+export type SaveResult = { updatedAt?: string } | "stale" | null;
 
 export interface EditTripSheetProps {
-  /** The trip as saved: its route, its preferences and its list (the review is computed from it). */
-  trip: Trip;
+  /** The trip as saved: its route, its preferences and its list (the live changes are computed from it). */
+  trip: LifecycleTrip;
+  /** The section that starts open. */
   initialTab: EditTripTab;
   allowCustom?: boolean;
+  /** The device-local date, for the "forecast appears" line. Default: today. */
+  today?: string;
   onClose: () => void;
-  /** Save the route. Resolves true once saved. The sheet stays open when the preferences tab still has unsaved changes. */
-  onSaveRoute: (stops: TripStop[]) => Promise<boolean>;
-  /** Apply the reviewed preferences, based on the trip's `updatedAt` the review was computed from. */
+  /** Save the route. Resolves the new save time, or null when it failed (nothing changed). */
+  onSaveRoute: (stops: TripStop[], basedOn: string | undefined) => Promise<SaveResult>;
+  /** Save how the trip is travelled. */
+  onSetTravelMode: (mode: TravelMode, basedOn: string | undefined) => Promise<SaveResult>;
+  /** Apply the preferences, based on the trip's `updatedAt` the live changes were computed from. */
   onApplyPreferences: (config: TripConfig, basedOn: string | undefined) => Promise<ApplyOutcome>;
 }
 
-const TABS: { id: EditTripTab; label: string }[] = [
-  { id: "route", label: "Route & dates" },
-  { id: "preferences", label: "Packing preferences" },
-];
+type Notice = null | "route-failed" | "travel-failed" | "failed" | "stale";
 
-const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+const isEqual = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
-function sameStops(a: readonly DraftStop[], b: readonly TripStop[]): boolean {
-  return JSON.stringify(a) === JSON.stringify(b);
+const NOTICES: Record<Exclude<Notice, null>, string> = {
+  "route-failed": "Couldn’t save the route. Nothing changed. Press Save to try again.",
+  "travel-failed":
+    "Couldn’t save how you’re getting there. Nothing changed. Press Save to try again.",
+  failed: "Couldn’t apply the changes. Nothing changed. Your selections are kept.",
+  stale:
+    "Your list changed while you were editing. The changes below are up to date. Check them, then save.",
+};
+
+/** The old value struck, an arrow, then the new one; read as "was X, now Y" by a screen reader. */
+function Change({ row }: { row: ChangeRow }) {
+  return (
+    <li className={styles.row} data-kind={row.kind}>
+      <span className={styles.rowLabel}>{row.label}</span>
+      <span className={styles.rowValue}>
+        {row.from ? (
+          <>
+            <del className={styles.old}>{row.from}</del>
+            <span aria-hidden="true"> → </span>
+            <span className="sr-only"> changes to </span>
+          </>
+        ) : null}
+        <ins className={styles.new}>{row.to}</ins>
+      </span>
+      {row.sub ? <span className={styles.rowSub}>{row.sub}</span> : null}
+    </li>
+  );
 }
 
-function sameConfig(a: TripConfig, b: TripConfig): boolean {
-  return JSON.stringify(a) === JSON.stringify(b);
+function Section({
+  id,
+  title,
+  open,
+  dirty,
+  onToggle,
+  children,
+}: {
+  id: string;
+  title: string;
+  open: boolean;
+  dirty: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <section className={styles.section} data-open={open ? "" : undefined}>
+      <h3 className={styles.sectionHead}>
+        <button
+          type="button"
+          id={`${id}-head`}
+          className={styles.sectionButton}
+          aria-expanded={open}
+          aria-controls={`${id}-body`}
+          onClick={onToggle}
+        >
+          <span>{title}</span>
+          {dirty ? (
+            <span className={styles.dot} role="img" aria-label="edited, not saved yet" />
+          ) : null}
+          <Icon name={open ? "caretUp" : "caretDown"} size={18} className={styles.caret} />
+        </button>
+      </h3>
+      <div id={`${id}-body`} role="region" aria-labelledby={`${id}-head`} hidden={!open}>
+        {children}
+      </div>
+    </section>
+  );
 }
 
-// Edit trip (#203, design's spec): the route and dates and the packing preferences in one sheet, each tab keeping its own
-// unsaved draft. Changing preferences recalculates the suggested items, so "Review changes" first shows what that does (it is
-// computed from the same recalculation the server runs); applying is a second, deliberate step. Cancel, Escape and × leave
-// the trip untouched, asking first when there is something to lose.
+// Edit trip (#389; spec #376 part 3 section 1.6): a side sheet from 1024px, a full screen below. Two collapsible sections, Route &
+// dates (the stops, Leave and Come home, Getting there) and Packing preferences, a dot on each edited one, and a live "What
+// changes in your list" panel beside the edits instead of a separate review step. Save N changes saves everything at once, in
+// the order the server needs (route, how you're travelling, preferences), each based on the save time the one before returned.
+// Cancel, Escape and × leave the trip untouched: nothing is saved until Save.
 export function EditTripSheet({
   trip,
   initialTab,
   allowCustom,
+  today,
   onClose,
   onSaveRoute,
+  onSetTravelMode,
   onApplyPreferences,
 }: EditTripSheetProps) {
   const provider = useLocationProvider();
   const ids = useId();
-  const [tab, setTab] = useState<EditTripTab>(initialTab);
-  // The route tab's draft. A saved route (the trip's stops changed under us) is its new starting point, so the draft is reset
-  // while rendering, the documented way to adjust state to a changed prop.
-  const [route, setRoute] = useState<{
-    base: readonly TripStop[];
-    draft: DraftStop[];
-    attempted: boolean;
-  }>({
-    base: trip.stops,
-    draft: trip.stops,
-    attempted: false,
-  });
-  if (!sameStops(route.base, trip.stops))
-    setRoute({ base: trip.stops, draft: trip.stops, attempted: false });
-  const routeDraft = route.draft;
-  const attempted = route.attempted;
-  const setRouteDraft = (draft: DraftStop[]) => setRoute((current) => ({ ...current, draft }));
-  const setAttempted = (value: boolean) =>
-    setRoute((current) => ({ ...current, attempted: value }));
+  const [stops, setStops] = useState<DraftStop[]>(trip.stops);
   const [prefs, setPrefs] = useState<TripConfig>(trip.config);
-  const [step, setStep] = useState<"edit" | "review">("edit");
+  const [mode, setMode] = useState<TravelMode | null>(trip.travelMode ?? null);
+  // What the drafts were last in step with. When the trip changes under the sheet (a save by another device, or our own partial
+  // save), each field is rebased: the person's value if they changed it from this baseline, the fresh server value otherwise
+  // (edit-reconcile.ts). Adjusted while rendering, the documented way to react to a changed prop.
+  const fresh = { stops: trip.stops, config: trip.config, travelMode: trip.travelMode ?? null };
+  const [baseline, setBaseline] = useState(fresh);
+  // Whether the person used the Leave or Come home controls (a stop edit moves those dates too, but that is not their edit).
+  const [touched, setTouched] = useState<EndpointsTouched>({ leave: false, home: false });
+  if (!isEqual(baseline, fresh)) {
+    const next = reconcile(
+      { stops: baseline.stops, config: baseline.config, travelMode: baseline.travelMode },
+      { stops, config: prefs, travelMode: mode },
+      fresh,
+      touched,
+    );
+    setBaseline(fresh);
+    // An endpoint the server now agrees with is settled: it stays the person's only while the new baseline still differs from it.
+    setTouched((was) => settleTouched(was, next.stops, fresh.stops));
+    setStops(next.stops as DraftStop[]);
+    setPrefs(next.config);
+    setMode(next.travelMode);
+  }
+  const [open, setOpen] = useState<Record<EditTripTab, boolean>>({
+    route: initialTab === "route",
+    preferences: initialTab === "preferences",
+  });
   const [acknowledged, setAcknowledged] = useState(false);
-  const [discarding, setDiscarding] = useState(false);
+  const [movesOpen, setMovesOpen] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState<null | "route-failed" | "failed" | "stale">(null);
-  const reviewHeading = useRef<HTMLHeadingElement>(null);
+  const [notice, setNotice] = useState<Notice>(null);
   const failureRef = useRef<HTMLDivElement>(null);
-  const tabRefs = useRef<Partial<Record<EditTripTab, HTMLButtonElement | null>>>({});
   const niceHintId = `${ids}-nice-hint`;
+  const now = today ?? localToday();
+  const fallback = provider === curatedLocationProvider ? undefined : curatedLocationProvider;
 
-  const problems = stopProblems(routeDraft);
-  const routeDirty = !sameStops(routeDraft, trip.stops);
-  const prefsDirty = !sameConfig(prefs, trip.config);
-  const dirty = routeDirty || prefsDirty;
-
-  const preview: RecalcPreview | null = useMemo(
-    () => (step === "review" ? previewRecalculation(trip, prefs, calculateSuggestions) : null),
-    [step, trip, prefs],
+  // Laundry is a real choice only where it would change a quantity on the trip as edited here (#412): a day trip, or nothing
+  // to halve, leaves the row disabled. A SAVED laundry-on keeps it switchable so it can be turned off; a new opt-in that has
+  // become ineffective (enabled, then the trip was shortened) counts as off, so it is neither listed nor saved.
+  // The items the route edit will save (a day trip lengthened has tops it did not have), so laundry is judged on those.
+  const routeTrip = useMemo(() => {
+    const start = stops[0]?.arrive || trip.start;
+    const end = stops[stops.length - 1]?.leave || trip.end;
+    if (isEqual(stops, trip.stops) || stopProblems(stops).length > 0)
+      return { ...trip, start, end };
+    return recalculateSuggestions(
+      { ...trip, stops: stops as TripStop[], start, end },
+      trip.config,
+      calculateSuggestions,
+    );
+  }, [trip, stops]);
+  const laundryUseful = useMemo(
+    () => trip.config.laundry || laundryChangesQuantity(routeTrip, prefs),
+    [trip.config.laundry, routeTrip, prefs],
   );
+  const effectivePrefs = useMemo(
+    () => (laundryUseful || !prefs.laundry ? prefs : { ...prefs, laundry: false }),
+    [laundryUseful, prefs],
+  );
+
+  const draft = useMemo(
+    () => ({ stops, config: effectivePrefs, travelMode: mode }),
+    [stops, effectivePrefs, mode],
+  );
+  const changes = useMemo(
+    () => editChanges(trip, draft, calculateSuggestions, now),
+    [trip, draft, now],
+  );
+  const { rows } = changes;
+  const count = rows.length;
+  const needsTick = changes.needsAcknowledgement;
+  // Something differs from the saved trip, even if it is not complete enough to list yet (a stop with no place).
+  const edited = count > 0 || changes.dirty.route || changes.dirty.preferences;
+  const canSave = count > 0 && changes.valid && (!needsTick || acknowledged) && !busy;
+  // Phone: the list of changes starts open while it is short; the person's own choice wins from then on.
+  const [autoOpen, setAutoOpen] = useState(true);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const rowsRef = useRef<HTMLDivElement>(null);
+  const listOpen = movesOpen ?? autoOpen;
+
+  const nights = nightsAt({
+    arrive: stops[0]?.arrive ?? "",
+    leave: stops[stops.length - 1]?.leave ?? "",
+  });
+  // "How we count" follows the dates being edited, not only the saved ones.
+  const draftStart = stops[0]?.arrive || trip.start;
+  const draftEnd = stops[stops.length - 1]?.leave || trip.end;
   const mathDays = useMemo(
-    () => calculateSuggestions({ ...prefs, start: trip.start, end: trip.end }),
-    [prefs, trip.start, trip.end],
+    () => calculateSuggestions({ ...prefs, start: draftStart, end: draftEnd }),
+    [prefs, draftStart, draftEnd],
   );
-
   const patch = (next: Partial<TripConfig>) => setPrefs((current) => ({ ...current, ...next }));
+  const problems = stopProblems(stops);
+  const last = stops.length - 1;
+  const lastNights = stops[last] ? nightsAt(stops[last]) : null;
+  const canShorten = lastNights !== null && lastNights > (stops.length > 1 ? 1 : 0);
 
-  function requestClose() {
-    if (busy) return;
-    if (dirty) setDiscarding(true);
-    else onClose();
+  // ONE invariant, applied after every draft change: an endpoint is the person's edit only if they used its control AND it still
+  // differs from the baseline. The date controls mark the field first; stop edits only ever settle (they never mark).
+  function applyStops(next: DraftStop[], edited?: "leave" | "home") {
+    setTouched((was) =>
+      settleTouched({ ...was, ...(edited ? { [edited]: true } : {}) }, next, baseline.stops),
+    );
+    setStops(next);
   }
 
-  function selectTab(next: EditTripTab) {
-    setTab(next);
-    setStep("edit");
-    setNotice(null);
-  }
-
-  function onTabKey(event: KeyboardEvent<HTMLButtonElement>, index: number) {
-    const move = { ArrowRight: 1, ArrowLeft: -1, Home: -index, End: TABS.length - 1 - index }[
-      event.key as "ArrowRight"
-    ];
-    if (move === undefined) return;
-    event.preventDefault();
-    const target = TABS[(index + move + TABS.length) % TABS.length].id;
-    selectTab(target);
-    tabRefs.current[target]?.focus();
-  }
-
-  async function saveRoute() {
-    if (problems.length) {
-      setAttempted(true);
-      return;
-    }
-    setBusy(true);
-    setNotice(null);
-    const saved = await onSaveRoute(routeDraft as TripStop[]);
-    setBusy(false);
-    if (!saved) {
-      setNotice("route-failed");
-      return;
-    }
-    // The route is saved; unsaved packing changes are not lost with it.
-    if (prefsDirty) {
-      setAttempted(false);
-      setTab("preferences");
-    } else onClose();
-  }
-
-  function review() {
-    setNotice(null);
+  function undoAll() {
+    setTouched({ leave: false, home: false });
+    setStops(trip.stops);
+    setPrefs(trip.config);
+    setMode(trip.travelMode ?? null);
     setAcknowledged(false);
-    setStep("review");
-    // The review heading takes focus once it is on screen.
-    setTimeout(() => reviewHeading.current?.focus(), 0);
+    setNotice(null);
   }
 
-  async function apply() {
-    if (!preview || busy) return;
-    if (preview.needsAcknowledgement && !acknowledged) return;
+  async function save() {
+    if (busy) return;
+    if (problems.length) return;
     setBusy(true);
     setNotice(null);
-    const outcome = await onApplyPreferences(prefs, trip.updatedAt);
+    // Each save is based on the save time the one before it returned, so the preferences are still checked against the list the
+    // person was shown.
+    let basedOn = trip.updatedAt;
+    if (changes.routeChanged) {
+      const saved = await onSaveRoute(stops as TripStop[], basedOn);
+      if (!saved || saved === "stale") {
+        setBusy(false);
+        setNotice(saved === "stale" ? "stale" : "route-failed");
+        return;
+      }
+      basedOn = saved.updatedAt ?? basedOn;
+    }
+    if (changes.travelChanged && mode) {
+      const saved = await onSetTravelMode(mode, basedOn);
+      if (!saved || saved === "stale") {
+        setBusy(false);
+        setNotice(saved === "stale" ? "stale" : "travel-failed");
+        return;
+      }
+      basedOn = saved.updatedAt ?? basedOn;
+    }
+    if (changes.applyPreferences) {
+      const outcome = await onApplyPreferences(effectivePrefs, basedOn);
+      setBusy(false);
+      if (outcome !== "ok") {
+        setNotice(outcome);
+        return;
+      }
+    }
     setBusy(false);
-    if (outcome === "ok") onClose();
-    else if (outcome === "stale") {
-      setNotice("stale");
-      setStep("edit");
-    } else setNotice("failed");
+    onClose();
   }
 
-  const footer = discarding ? (
-    <>
-      <p className="edit-trip-discard" role="alert">
-        Discard your changes?
-      </p>
-      <Button variant="secondary" onClick={() => setDiscarding(false)}>
-        Keep editing
-      </Button>
-      <Button variant="danger" onClick={onClose}>
-        Discard
-      </Button>
-    </>
-  ) : step === "review" ? (
-    <>
-      <Button
-        disabled={busy || (preview?.needsAcknowledgement === true && !acknowledged)}
-        aria-busy={busy}
-        onClick={() => void apply()}
-      >
-        {busy ? "Applying…" : "Apply changes"}
-      </Button>
-      <Button
-        variant="secondary"
-        disabled={busy}
-        onClick={() => {
-          setStep("edit");
-          setNotice(null);
-        }}
-      >
-        Back to preferences
-      </Button>
-      <Button variant="ghost" disabled={busy} onClick={requestClose}>
-        Cancel
-      </Button>
-    </>
-  ) : tab === "route" ? (
-    <>
-      <Button disabled={busy} aria-busy={busy} onClick={() => void saveRoute()}>
-        {busy ? "Saving…" : "Save route"}
-      </Button>
-      <Button variant="secondary" disabled={busy} onClick={requestClose}>
-        Cancel
-      </Button>
-    </>
-  ) : (
-    <>
-      <Button disabled={!prefsDirty} onClick={review} aria-describedby={`${ids}-nochange`}>
-        Review changes
-      </Button>
-      <Button variant="secondary" onClick={requestClose}>
-        Cancel
-      </Button>
-      {prefsDirty ? null : (
-        <span id={`${ids}-nochange`} className="tiny muted edit-trip-nochange">
-          No changes to apply
-        </span>
-      )}
-    </>
-  );
+  // #376 §1.6: the list starts folded away if the open panel would cover more than 45% of the screen. The height it would have
+  // open is what is not the list now plus the list's natural height (the list is only hidden, never removed, so it can be read).
+  useLayoutEffect(() => {
+    if (movesOpen !== null) return;
+    const measure = () => {
+      const panel = panelRef.current;
+      const list = rowsRef.current;
+      if (!panel || !list) return;
+      const expanded = panel.offsetHeight - list.offsetHeight + list.scrollHeight;
+      setAutoOpen(expanded <= window.innerHeight * 0.45);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [movesOpen, rows, notice, needsTick, changes.notes.length, problems.length]);
 
-  const failureMessage =
-    notice === "route-failed"
-      ? "Couldn’t save the route. Nothing changed. Press Save route to try again."
-      : notice === "failed"
-        ? "Couldn’t apply the changes. Nothing changed. Your selections are kept."
-        : null;
-
-  // The failure sits outside the scrolling body, just above the pinned footer; make sure it is in view when it appears.
+  const message = notice ? NOTICES[notice] : null;
+  // The failure sits just above the pinned panel; make sure it is in view when it appears.
   useEffect(() => {
-    if (failureMessage) failureRef.current?.scrollIntoView?.({ block: "nearest" });
-  }, [failureMessage]);
+    if (message) failureRef.current?.scrollIntoView?.({ block: "nearest" });
+  }, [message]);
+
+  const panel = (
+    <div ref={panelRef} className={styles.panel}>
+      {message ? (
+        <p ref={failureRef} className={styles.failure} role="alert">
+          {message}
+        </p>
+      ) : null}
+      <div className={styles.panelHead}>
+        <h3 id={`${ids}-changes`} className={styles.panelTitle}>
+          <span className={styles.panelTitleWide}>What changes in your list</span>
+          <span className={styles.panelTitleNarrow}>
+            {count === 0 ? "No changes yet" : changeCount(count)}
+          </span>
+        </h3>
+        {count > 0 ? (
+          <button
+            type="button"
+            className={styles.moves}
+            aria-expanded={listOpen}
+            aria-controls={`${ids}-rows`}
+            onClick={() => setMovesOpen(!listOpen)}
+          >
+            See what moves <Icon name={listOpen ? "caretUp" : "caretDown"} size={16} />
+          </button>
+        ) : null}
+        {edited ? (
+          <button type="button" className={styles.undo} disabled={busy} onClick={undoAll}>
+            Undo all
+          </button>
+        ) : null}
+      </div>
+      <p className="sr-only" role="status" aria-label="Changes summary">
+        {count === 0 ? "Nothing to save yet." : `${changeCount(count)} to save.`}
+      </p>
+      <div
+        ref={rowsRef}
+        id={`${ids}-rows`}
+        className={styles.rows}
+        data-open={listOpen ? "" : undefined}
+      >
+        {count === 0 ? (
+          <p className={styles.empty}>No changes yet.</p>
+        ) : (
+          <ul aria-label="What changes in your list" className={styles.list}>
+            {rows.map((row) => (
+              <Change key={row.id} row={row} />
+            ))}
+          </ul>
+        )}
+        {changes.notes.map((note) => (
+          <p key={note} className={styles.note}>
+            {note}
+          </p>
+        ))}
+        <p className={styles.note}>
+          Items you added or edited yourself stay as they are. Packed items stay ticked.
+        </p>
+      </div>
+      {needsTick && count > 0 ? (
+        <label className={styles.ack}>
+          <input
+            type="checkbox"
+            checked={acknowledged}
+            onChange={(event) => setAcknowledged(event.target.checked)}
+          />
+          <span>I understand packed counts above will change.</span>
+        </label>
+      ) : null}
+      {problems.length ? (
+        <p className={styles.failure} role="status">
+          {fixSummary(problems.length).replace("to continue", "to save")}
+        </p>
+      ) : null}
+      <div className={styles.buttons}>
+        <Button variant="secondary" disabled={busy} onClick={onClose}>
+          Cancel
+        </Button>
+        <Button disabled={!canSave} aria-busy={busy} onClick={() => void save()}>
+          {busy ? "Saving…" : saveLabel(count)}
+        </Button>
+      </div>
+    </div>
+  );
 
   return (
     <ModalSheet
       open
+      variant="side"
+      tabletModal
       showClose
       headerAction={<FeedbackEditorEntry busy={busy} />}
       title="Edit trip"
-      description="Route, dates and packing preferences for this trip."
-      onClose={requestClose}
-      actions={footer}
+      description={tripDisplayName(trip)}
+      onClose={() => !busy && onClose()}
+      dismissOnBackdrop={!edited}
+      actions={panel}
     >
-      <div className="edit-body">
-        <div className="edit-tabs" role="tablist" aria-label="What to edit">
-          {TABS.map((entry, index) => {
-            const changed = entry.id === "route" ? routeDirty : prefsDirty;
-            return (
-              <button
-                key={entry.id}
-                ref={(node) => {
-                  tabRefs.current[entry.id] = node;
-                }}
-                type="button"
-                role="tab"
-                id={`${ids}-tab-${entry.id}`}
-                aria-selected={tab === entry.id}
-                aria-controls={`${ids}-panel-${entry.id}`}
-                tabIndex={tab === entry.id ? 0 : -1}
-                disabled={busy}
-                onClick={() => selectTab(entry.id)}
-                onKeyDown={(event) => onTabKey(event, index)}
-              >
-                {entry.label}
-                {changed ? (
-                  <span className="edit-tab-dot" role="img" aria-label="unsaved changes" />
-                ) : null}
-              </button>
-            );
-          })}
-        </div>
-
-        <div
-          role="tabpanel"
-          id={`${ids}-panel-route`}
-          aria-labelledby={`${ids}-tab-route`}
-          hidden={tab !== "route"}
+      <div className={styles.body} data-edit-body="" inert={busy}>
+        <Section
+          id={`${ids}-route`}
+          title="Route & dates"
+          open={open.route}
+          dirty={changes.dirty.route}
+          onToggle={() => setOpen((current) => ({ ...current, route: !current.route }))}
         >
-          <StopList
-            stops={routeDraft}
-            onChange={setRouteDraft}
-            provider={provider}
-            fallbackProvider={
-              provider === curatedLocationProvider ? undefined : curatedLocationProvider
-            }
-            allowCustom={allowCustom}
-            attempted={attempted}
-            headingLevel={3}
-          />
-          <p className="tiny muted">Your list is recalculated for the new dates.</p>
-          {attempted && problems.length ? (
-            <p className="tiny field-error">{fixSummary(problems.length)}</p>
-          ) : null}
-        </div>
-
-        <div
-          role="tabpanel"
-          id={`${ids}-panel-preferences`}
-          aria-labelledby={`${ids}-tab-preferences`}
-          hidden={tab !== "preferences"}
-        >
-          {step === "edit" ? (
-            <div className="edit-prefs">
-              {notice === "stale" ? (
-                <p className="field-error" role="alert">
-                  Your list changed while you were reviewing. Review again.
-                </p>
-              ) : null}
-              <fieldset className="pref-group">
-                <legend>Clothing counts</legend>
-                <Switch
-                  label="Laundry access"
-                  description="Reduce repeatable everyday clothing."
-                  checked={prefs.laundry}
-                  onChange={(laundry) => patch({ laundry })}
-                />
-                <Switch
-                  label="One spare underwear + socks"
-                  description="Added to the bag count, not the return outfit."
-                  checked={prefs.spare}
-                  onChange={(spare) => patch({ spare })}
-                />
-                <Switch
-                  label="Dedicated return travel outfit"
-                  description={returnOutfitHelp(prefs.returnOutfit)}
-                  checked={prefs.returnOutfit}
-                  onChange={(returnOutfit) => patch({ returnOutfit })}
-                />
-              </fieldset>
-              <fieldset className="pref-group">
-                <legend>Nice outfits</legend>
-                <Switch
-                  label="Nice outfits"
-                  description={NICE_OUTFITS_DESCRIPTION}
-                  checked={prefs.niceAttire}
-                  onChange={(niceAttire) => patch({ niceAttire })}
-                />
-                {prefs.niceAttire ? null : (
-                  <p id={niceHintId} className="tiny muted nice-hint">
-                    {NICE_OFF_HINT}
-                  </p>
-                )}
-                <div className="two-col occasion-row">
-                  <label className="field">
-                    Occasions
-                    <input
-                      type="number"
-                      min={MIN_OCCASIONS}
-                      max={MAX_OCCASIONS}
-                      value={prefs.occasionCount}
-                      disabled={!prefs.niceAttire}
-                      aria-describedby={prefs.niceAttire ? undefined : niceHintId}
-                      onChange={(event) =>
-                        patch({ occasionCount: clampOccasions(event.target.valueAsNumber) })
-                      }
-                    />
-                  </label>
-                  <Switch
-                    label="Reuse one nice look"
-                    description="Repeat the same pieces."
-                    checked={prefs.reuseNice}
-                    disabled={!prefs.niceAttire}
-                    describedBy={prefs.niceAttire ? undefined : niceHintId}
-                    onChange={(reuseNice) => patch({ reuseNice })}
-                  />
-                </div>
-              </fieldset>
-              <p className="tiny muted" aria-live="polite">
-                <strong>How we count:</strong>{" "}
-                {tripMathLine(mathDays.days, mathDays.dailyDays, prefs.returnOutfit)}
-              </p>
-            </div>
-          ) : preview ? (
-            <ReviewChanges
-              preview={preview}
-              headingRef={reviewHeading}
-              acknowledged={acknowledged}
-              onAcknowledge={setAcknowledged}
+          <div className={styles.group} role="group" aria-labelledby={`${ids}-stops`}>
+            <p id={`${ids}-stops`} className={planStyles.eyebrow}>
+              Stops
+            </p>
+            <StopRows
+              stops={stops}
+              onChange={(next) => applyStops(next)}
+              provider={provider}
+              fallbackProvider={fallback}
+              allowCustom={allowCustom}
+              attempted={false}
+              describePlace
             />
-          ) : null}
-        </div>
-      </div>
-      {failureMessage ? (
-        <div ref={failureRef} className="field-error edit-failure" role="alert">
-          {failureMessage}
-          {step === "review" && notice === "failed" ? (
-            <>
-              {" "}
-              <Button variant="secondary" small disabled={busy} onClick={() => void apply()}>
-                Try again
-              </Button>
-            </>
-          ) : null}
-        </div>
-      ) : null}
-    </ModalSheet>
-  );
-}
+          </div>
+          <div className={planStyles.twoCol}>
+            <label className={planStyles.field}>
+              Leave
+              <input
+                type="date"
+                value={stops[0]?.arrive ?? ""}
+                onChange={(event) =>
+                  applyStops(snapContiguous(setFirstArrive(stops, event.target.value)), "leave")
+                }
+              />
+            </label>
+            <label className={planStyles.field}>
+              Come home
+              <input
+                type="date"
+                value={stops[last]?.leave ?? ""}
+                min={stops[last]?.arrive || undefined}
+                onChange={(event) => applyStops(setLeave(stops, last, event.target.value), "home")}
+              />
+            </label>
+          </div>
+          <div className={styles.nightsRow}>
+            <button
+              type="button"
+              className={styles.step}
+              aria-label="One night fewer"
+              disabled={!canShorten}
+              onClick={() => applyStops(shiftEnd(stops, -1), "home")}
+            >
+              <Icon name="minus" size={16} />
+            </button>
+            {nights !== null ? <span className={styles.nights}>{formatNights(nights)}</span> : null}
+            <button
+              type="button"
+              className={styles.step}
+              aria-label="One night more"
+              onClick={() => applyStops(shiftEnd(stops, 1), "home")}
+            >
+              <Icon name="plus" size={16} />
+            </button>
+          </div>
+          {problems.map((problem) => (
+            <p key={`${problem.stopIndex}-${problem.field}`} className={planStyles.error}>
+              {problem.field === "place"
+                ? problem.message
+                : `${stops[problem.stopIndex].location?.city ?? `Stop ${problem.stopIndex + 1}`}: ${problem.message}`}
+            </p>
+          ))}
+          <div className={styles.group} role="group" aria-labelledby={`${ids}-how`}>
+            <p id={`${ids}-how`} className={planStyles.eyebrow}>
+              Getting there
+            </p>
+            <TravelModeControl value={mode} onChange={setMode} />
+          </div>
+        </Section>
 
-interface ReviewProps {
-  preview: RecalcPreview;
-  headingRef: React.RefObject<HTMLHeadingElement | null>;
-  acknowledged: boolean;
-  onAcknowledge: (value: boolean) => void;
-}
-
-/** "Review changes to your list": what applying will do, in plain words, grouped. Every line comes from the preview. */
-function ReviewChanges({ preview, headingRef, acknowledged, onAcknowledge }: ReviewProps) {
-  const ackId = useId();
-  const { updated, removed, added, stays, suppressed, packedReduced } = preview;
-  const chips = [
-    updated.length ? `${updated.length} updated` : null,
-    removed.length ? `${removed.length} removed` : null,
-    added.length ? `${added.length} added` : null,
-    `${stays.length} stay as you left them`,
-  ].filter((chip): chip is string => chip !== null);
-  const sentence = [
-    updated.length ? `${updated.length} updated` : null,
-    removed.length ? `${removed.length} removed` : null,
-    added.length ? `${added.length} added` : null,
-    `${stays.length} unchanged`,
-  ]
-    .filter((part): part is string => part !== null)
-    .join(", ");
-  const nothing = updated.length === 0 && removed.length === 0 && added.length === 0;
-
-  return (
-    <div className="review-changes">
-      <h3 ref={headingRef} tabIndex={-1}>
-        Review changes to your list
-      </h3>
-      <p className="muted">
-        You changed your preferences, so we’ll recalculate the suggested items. Anything you added
-        or edited stays exactly as it is.
-      </p>
-      <ul className="review-chips" aria-hidden="true">
-        {chips.map((chip) => (
-          <li key={chip}>{chip}</li>
-        ))}
-      </ul>
-      <p className="sr-only" role="status">
-        {sentence}
-      </p>
-
-      {nothing ? <p>Nothing in your list changes except the preference.</p> : null}
-
-      {updated.length ? (
-        <section className="review-group" aria-labelledby={`${ackId}-updated`}>
-          <h4 id={`${ackId}-updated`}>Updated suggestions</h4>
-          <ul>
-            {updated.map((line) => (
-              <li key={line.id}>
-                <span>
-                  {line.name}:{" "}
-                  <strong>
-                    {line.fromQty} → {line.toQty}
-                  </strong>
-                </span>
-                {line.packedFrom !== undefined ? (
-                  <span className="tag warn-tag">
-                    Packed {line.packedFrom} → {line.packedTo}
-                  </span>
-                ) : null}
-                {line.packedFrom !== undefined ? (
-                  <p className="tiny muted">
-                    The new target is lower than what you’ve packed, so the packed count is lowered
-                    to the new target.
-                  </p>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
-      {removed.length ? (
-        <section className="review-group" aria-labelledby={`${ackId}-removed`}>
-          <h4 id={`${ackId}-removed`}>Removed because of your new preferences</h4>
-          <ul>
-            {removed.map((line) => (
-              <li key={line.id}>
-                <span>
-                  {line.name} (target {line.qty}, {line.packed} packed)
-                </span>
-                {line.packed > 0 ? <span className="tag warn-tag">Packed</span> : null}
-                {line.edited ? <span className="tag">Edited</span> : null}
-              </li>
-            ))}
-          </ul>
+        <Section
+          id={`${ids}-prefs`}
+          title="Packing preferences"
+          open={open.preferences}
+          dirty={changes.dirty.preferences}
+          onToggle={() => setOpen((current) => ({ ...current, preferences: !current.preferences }))}
+        >
+          <div className={styles.prefs}>
+            <fieldset className="pref-group">
+              <legend>Clothing counts</legend>
+              <Switch
+                label="Laundry on this trip"
+                marker={<Icon name="refresh" size={16} />}
+                description={
+                  laundryUseful ? "Halves anything marked ↻ in your Staples." : NO_LAUNDRY_EFFECT
+                }
+                checked={effectivePrefs.laundry}
+                disabled={!laundryUseful}
+                onChange={(laundry) => patch({ laundry })}
+              />
+              <Switch
+                label="One spare underwear + socks"
+                description="Added to the bag count, not the return outfit."
+                checked={prefs.spare}
+                onChange={(spare) => patch({ spare })}
+              />
+              <Switch
+                label="Dedicated return travel outfit"
+                description={returnOutfitHelp(prefs.returnOutfit)}
+                checked={prefs.returnOutfit}
+                onChange={(returnOutfit) => patch({ returnOutfit })}
+              />
+            </fieldset>
+            <fieldset className="pref-group">
+              <legend>Nice outfits</legend>
+              <Switch
+                label="Nice outfits"
+                description={NICE_OUTFITS_DESCRIPTION}
+                checked={prefs.niceAttire}
+                onChange={(niceAttire) => patch({ niceAttire })}
+              />
+              {prefs.niceAttire ? null : (
+                <p id={niceHintId} className="tiny muted nice-hint">
+                  {NICE_OFF_HINT}
+                </p>
+              )}
+              <div className={`${planStyles.twoCol} occasion-row`}>
+                <label className={planStyles.field}>
+                  Occasions
+                  <input
+                    type="number"
+                    min={MIN_OCCASIONS}
+                    max={MAX_OCCASIONS}
+                    value={prefs.occasionCount}
+                    disabled={!prefs.niceAttire}
+                    aria-describedby={prefs.niceAttire ? undefined : niceHintId}
+                    onChange={(event) =>
+                      patch({ occasionCount: clampOccasions(event.target.valueAsNumber) })
+                    }
+                  />
+                </label>
+                <Switch
+                  label="Reuse one nice look"
+                  description="Repeat the same pieces."
+                  checked={prefs.reuseNice}
+                  disabled={!prefs.niceAttire}
+                  describedBy={prefs.niceAttire ? undefined : niceHintId}
+                  onChange={(reuseNice) => patch({ reuseNice })}
+                />
+              </div>
+            </fieldset>
+          </div>
           <p className="tiny muted">
-            These are remembered. Turn the preference back on and they return with your edits and
-            packed counts.
+            <strong>How we count:</strong>{" "}
+            {tripMathLine(mathDays.days, mathDays.dailyDays, prefs.returnOutfit)}
           </p>
-        </section>
-      ) : null}
-
-      {added.length ? (
-        <section className="review-group" aria-labelledby={`${ackId}-added`}>
-          <h4 id={`${ackId}-added`}>New suggestions</h4>
-          <ul>
-            {added.map((line) => (
-              <li key={line.id}>
-                {line.name}
-                {line.optional ? " (optional)" : ""}
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
-      <details className="review-group review-stay">
-        <summary>
-          Stay as you left them <span className="tiny muted">{count(stays.length, "item")}</span>
-        </summary>
-        <ul>
-          {stays.map((line) => (
-            <li key={line.id}>
-              {line.name} <span className="tiny muted">({line.why})</span>
-            </li>
-          ))}
-          {suppressed.map((line) => (
-            <li key={`suppressed-${line.id}`}>
-              Not re-added: {line.name} <span className="tiny muted">(you removed it)</span>
-            </li>
-          ))}
-        </ul>
-      </details>
-
-      {preview.readyWillRevoke || preview.bagWillReset ? (
-        <div className="review-also">
-          <h4>Also changes</h4>
-          {preview.readyWillRevoke ? (
-            <p>
-              <strong>Ready turns off.</strong> Check the list, then mark it Ready again.
-            </p>
-          ) : null}
-          {preview.bagWillReset ? (
-            <p>
-              <strong>Toiletry bag placement resets</strong> because Bathroom items changed:{" "}
-              {preview.bathroomChanges.join(", ")}.
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-
-      {preview.needsAcknowledgement ? (
-        <label className="review-ack">
-          <input
-            type="checkbox"
-            checked={acknowledged}
-            onChange={(event) => onAcknowledge(event.target.checked)}
-          />
-          <span>
-            I understand packed counts above will change
-            {packedReduced.length === 0 ? " and packed or edited items will be removed" : ""}.
-          </span>
-        </label>
-      ) : null}
-    </div>
+        </Section>
+      </div>
+    </ModalSheet>
   );
 }

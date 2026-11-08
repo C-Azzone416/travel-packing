@@ -23,6 +23,7 @@ describe("formatDays", () => {
 describe("formatRange", () => {
   it("formats an inclusive range as short month and day, timezone-safe", () => {
     expect(formatRange({ start: "2026-10-23", end: "2026-10-27" })).toBe("Oct 23 – Oct 27");
+    expect(formatRange({ start: "2026-10-23", end: "2026-10-23" })).toBe("Oct 23");
     expect(formatRange({ start: "2026-12-30", end: "2027-01-02" })).toBe("Dec 30 – Jan 2");
   });
 
@@ -43,9 +44,9 @@ describe("tripCardView", () => {
       past: false,
       ready: false,
       packed: 6,
-      total: 32,
-      remaining: 26,
-      percent: 19,
+      total: 33,
+      remaining: 27,
+      percent: 18,
       range: "Oct 23 – Oct 27",
       days: 5,
       canArchive: true,
@@ -182,7 +183,7 @@ describe("quickViewModel", () => {
     ]);
     const clothing = model.categories[0].rows;
     expect(clothing.find((row) => row.name === "Underwear")?.detail).toBe("3 left");
-    expect(clothing.find((row) => row.name === "Everyday tops")?.detail).toBe("2 left");
+    expect(clothing.find((row) => row.name === "Everyday tops")?.detail).toBe("3 left");
     expect(clothing.some((row) => row.name === "Sleepwear")).toBe(false);
   });
 
@@ -277,39 +278,7 @@ describe("route display (epic #107)", () => {
   });
 });
 
-describe("Field Ledger dashboard view models (#143)", () => {
-  it("counts days to go, nights and the range from today", async () => {
-    const { departureView } = await import("./view");
-    expect(departureView(sanDiego(), TODAY)).toMatchObject({
-      daysToGo: 7,
-      daysLabel: "days to go",
-      startShort: "Oct 23",
-      range: "Oct 23 – Oct 27",
-      nights: 4,
-      nightsLabel: "4 nights",
-    });
-    expect(departureView(sanDiego(), "2026-10-22")).toMatchObject({
-      daysToGo: 1,
-      daysLabel: "day to go",
-    });
-    expect(departureView(sanDiego(), "2026-10-25")).toMatchObject({
-      daysToGo: 0,
-      daysLabel: "under way",
-    });
-    expect(departureView({ start: "2026-10-23", end: "2026-10-24" }, TODAY).nightsLabel).toBe(
-      "1 night",
-    );
-  });
-
-  it("labels the journeys ahead", async () => {
-    const { journeysAheadLabel } = await import("./view");
-    expect([0, 1, 3].map(journeysAheadLabel)).toEqual([
-      "No journeys ahead",
-      "1 journey ahead",
-      "3 journeys ahead",
-    ]);
-  });
-
+describe("Dashboard view models (#143)", () => {
   it("builds one compact weather cell per stay that has weather, in the person's unit", async () => {
     const { weatherCells } = await import("./view");
     const stop = (city: string, arrive: string, leave: string) => ({

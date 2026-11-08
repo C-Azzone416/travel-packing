@@ -21,16 +21,21 @@ import {
   confirmBagPlacementAction,
   decrementPackedAction,
   editItemAction,
+  getHomeCityAction,
   getTripAction,
   incrementPackedAction,
   listStaplesAction,
   listWeatherSuggestionsAction,
   markNotReadyAction,
   markReadyAction,
+  moveItemToCubeAction,
   removeItemAction,
   reviewWeatherAgainAction,
+  setMorningOfAction,
   setPackedAction,
+  setPackedManyAction,
   setStopsAction,
+  setTravelModeAction,
   setStampLabelsAction,
   setThemeAction,
   skipWeatherAction,
@@ -47,6 +52,7 @@ import {
 import { fetchTripWeather } from "./weather-client";
 import { previewWeatherAction } from "./weather-preview-action";
 import type { TripStop } from "@/domain/trip-stops";
+import { localToday } from "@/lib/today";
 
 const TripsSourceContext = createContext<TripsSource | null>(null);
 
@@ -80,15 +86,19 @@ export function TripsSourceProvider({
         },
         {
           getTrip: getTripAction,
+          getHomeCity: getHomeCityAction,
           listStaples: listStaplesAction,
           upsertStaple: upsertStapleAction,
           setPacked: setPackedAction,
+          setPackedMany: setPackedManyAction,
           togglePacked: togglePackedAction,
           incrementPacked: incrementPackedAction,
           decrementPacked: decrementPackedAction,
           editItem: editItemAction,
           removeItem: removeItemAction,
           addToiletryItem: addToiletryItemAction,
+          moveItemToCube: moveItemToCubeAction,
+          setMorningOf: setMorningOfAction,
           addItem: addItemAction,
           saveAsList: saveAsListAction,
           confirmBagPlacement: confirmBagPlacementAction,
@@ -102,6 +112,7 @@ export function TripsSourceProvider({
           setTheme: setThemeAction,
           setStampLabels: setStampLabelsAction,
           setStops: setStopsAction,
+          setTravelMode: setTravelModeAction,
         },
         {
           getSettings: getWeatherSettingsAction,
@@ -121,6 +132,7 @@ export function TripsSourceProvider({
                   ? {}
                   : { longitude: stop.location.longitude }),
               })),
+              localToday(),
             ),
           createTripWithReview: createTripWithWeatherAction,
           listSuggestions: listWeatherSuggestionsAction,

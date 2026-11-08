@@ -57,6 +57,51 @@ const PLACES = {
   ],
 };
 
+// Lisbon and Porto, for the multi-stop screenshots (#390): Lisbon is hot and dry, Porto cool and rainy.
+PLACES.lisbon = [
+  {
+    id: 2267057,
+    name: "Lisbon",
+    latitude: 38.71667,
+    longitude: -9.13333,
+    country: "Portugal",
+    country_code: "PT",
+    admin1: "Lisbon",
+    admin2: "Lisbon",
+    timezone: "Europe/Lisbon",
+  },
+];
+PLACES.porto = [
+  {
+    id: 2735943,
+    name: "Porto",
+    latitude: 41.14961,
+    longitude: -8.61099,
+    country: "Portugal",
+    country_code: "PT",
+    admin1: "Porto",
+    admin2: "Porto",
+    timezone: "Europe/Lisbon",
+  },
+];
+
+// A place of its own for the long-typical hero fixture (#447): the app's weather cache key is the ROUNDED coordinates plus
+// the first and last historical sample dates, so a fixture that shares London's coordinates can be served another test's
+// cached numbers on some dates (e.g. any run containing both Dec 31 and Jan 1 maps to the same 5-year sample range).
+PLACES.cairo = [
+  {
+    id: 360630,
+    name: "Cairo",
+    latitude: 30.04442,
+    longitude: 31.23571,
+    country: "Egypt",
+    country_code: "EG",
+    admin1: "Cairo",
+    admin2: "Cairo",
+    timezone: "Africa/Cairo",
+  },
+];
+
 PLACES.countryless = [
   {
     ...PLACES.london[0],
@@ -84,7 +129,8 @@ const weatherState = { variant: "base", fail: false };
 const SCORCHING = { high: 40, low: 31, prob: 0, mm: 0, uv: 11, sun: 12 * 3600 };
 
 function profileFor(latitude) {
-  const first = Math.abs(Number(latitude) - 51.51) < 0.5;
+  const latitudeNow = Number(latitude);
+  const first = Math.abs(latitudeNow - 51.51) < 0.5 || Math.abs(latitudeNow - 38.72) < 0.5;
   if (weatherState.variant === "scorching") return SCORCHING;
   const hot = weatherState.variant === "dry" || first;
   return hot ? HOT_DRY : COOL_WET;

@@ -6,6 +6,7 @@ import { TripsSourceProvider } from "@/features/trips/TripsSourceProvider";
 import TripsPage, { metadata as tripsMetadata } from "./page";
 import SettingsPage, { metadata as settingsMetadata } from "./settings/page";
 import StaplesPage, { metadata as staplesMetadata } from "./staples/page";
+import StampsPage, { metadata as stampsMetadata } from "./stamps/page";
 import { metadata as rootMetadata, viewport } from "./layout";
 
 const push = vi.fn();
@@ -14,10 +15,11 @@ vi.mock("next/headers", () => ({
   headers: async () => new Headers(),
   cookies: async () => ({ get: () => undefined }),
 }));
+vi.mock("@/features/trips/home-maps", () => ({ homeMaps: async () => ({}) }));
 vi.mock("./fonts", () => ({ fontClassNames: "" }));
 vi.mock("@/features/settings/saved-appearance", () => ({
-  readSavedAppearance: async () => "base",
-  appearanceForRequest: async () => "base",
+  readSavedAppearance: async () => "ocean",
+  appearanceForRequest: async () => "ocean",
 }));
 vi.mock("@/features/settings/appearance-actions", () => ({
   updateAppearanceAction: async (appearance: string) => ({ ok: true, appearance }),
@@ -50,8 +52,23 @@ describe("screens", () => {
         </SaveStatusProvider>
       </ToastProvider>,
     );
-    expect(html).toContain("<h1>Every trip starts here</h1>");
+    expect(html).toMatch(/<h1[^>]*>Staples<\/h1>/);
     expect(html).toContain('aria-label="Loading staples"');
+  });
+
+  it("Stamps renders its screen, starting in its loading state", () => {
+    const html = renderToStaticMarkup(
+      <ToastProvider>
+        <SaveStatusProvider>
+          <TripsSourceProvider>
+            <StampsPage />
+          </TripsSourceProvider>
+        </SaveStatusProvider>
+      </ToastProvider>,
+    );
+    expect(html).toMatch(/<h1[^>]*>Stamps<\/h1>/);
+    expect(html).toContain('aria-label="Loading stamps"');
+    expect(stampsMetadata.title).toBe("Stamps");
   });
 
   it("Settings renders the signed-in account and a Sign out button", async () => {
@@ -66,13 +83,11 @@ describe("screens", () => {
     expect(html).not.toContain("Close account");
   });
 
-  it("Trips renders the dashboard, starting in its loading state", () => {
+  it("Trips renders the dashboard, starting in its loading state", async () => {
     const html = renderToStaticMarkup(
       <ToastProvider>
         <SaveStatusProvider>
-          <TripsSourceProvider>
-            <TripsPage />
-          </TripsSourceProvider>
+          <TripsSourceProvider>{await TripsPage()}</TripsSourceProvider>
         </SaveStatusProvider>
       </ToastProvider>,
     );
@@ -96,6 +111,6 @@ describe("root layout metadata", () => {
   });
 
   it("sets the brand theme color", () => {
-    expect(viewport.themeColor).toBe("#e9e3d6");
+    expect(viewport.themeColor).toBe("#dce5e5");
   });
 });

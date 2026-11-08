@@ -1,7 +1,14 @@
 import { expect, test, type Page } from "@playwright/test";
 import { ownerEmailFor, signInAsOwner } from "./helpers/auth";
 import { seedSavedList } from "./helpers/database";
-import { DEVICE } from "./helpers/device";
+import { DEVICE, phoneHomeLayout } from "./helpers/device";
+import { expectPacking, itemRow, openEditor, showItem } from "./helpers/packing";
+
+// The phone Home (#388) and the phone Pack mode (#386) are drawn below 1024px: this spec's flow starts on the Home and does not
+// depend on the laptop layouts, so it runs there.
+test.beforeEach(async ({ page }) => {
+  await phoneHomeLayout(page);
+});
 
 // Saved lists (#167), against the real database: the Staples | Saved lists tab, the lists page, rename, delete and the
 // list editor. Lists are made from a trip's packing screen in a later mission, so these tests seed them directly.
@@ -42,13 +49,11 @@ test("the Staples | Saved lists switcher moves between the two pages, and the na
   await expect(
     page
       .getByRole("navigation", { name: "Primary navigation" })
-      .getByRole("link", { name: "Staples" }),
+      .getByRole("link", { name: "Staples", exact: true }),
   ).toHaveAttribute("aria-current", "page");
   await expect(page).toHaveTitle(/Saved lists/);
-  await tabs.getByRole("link", { name: "Staples" }).click();
-  await expect(
-    page.getByRole("heading", { name: "Every trip starts here", level: 1 }),
-  ).toBeVisible();
+  await tabs.getByRole("link", { name: "Staples", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Staples", level: 1 })).toBeVisible();
 });
 
 test("shows a card per list with its count, last change and categories, newest first; no Add button", async ({
@@ -199,7 +204,7 @@ async function openSanDiego(page: Page) {
   await signInAsOwner(page);
   await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
   await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
-  await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
+  await expectPacking(page);
 }
 
 test("Save as a list: name it, untick an item, save, follow the link, and the list holds name, category and quantity only", async ({
@@ -232,8 +237,8 @@ test("Save as a list: name it, untick an item, save, follow the link, and the li
   await expect(page.getByRole("main").getByText(/packed/i)).toHaveCount(0);
   // The trip is exactly as it was.
   await page.goto(trip);
-  await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
-  await expect(page.locator('[data-item-id="sunglasses"]')).toBeVisible();
+  await expectPacking(page);
+  await expect(await showItem(page, "sunglasses")).toBeVisible();
 });
 
 test("Save as a list: a taken name is refused, and two matching rows go through the duplicate prompt (keep both is two rows)", async ({
@@ -241,19 +246,14 @@ test("Save as a list: a taken name is refused, and two matching rows go through 
 }) => {
   await openSanDiego(page);
   // Make two rows that read the same: rename Sunglasses to Everyday glasses (same category), for this trip only.
-  await page
-    .locator('[data-item-id="sunglasses"]')
-    .getByRole("button", { name: /^Sunglasses / })
-    .click();
+  await openEditor(page, "sunglasses");
   const editor = page.getByRole("dialog", { name: "Edit item" });
   await editor.getByLabel("Item name").fill("Everyday glasses");
   await editor
     .getByRole("button", { name: /Update this trip|Save/ })
     .first()
     .click();
-  await expect(
-    page.locator('[data-item-id="sunglasses"]').getByText("Everyday glasses"),
-  ).toBeVisible();
+  await expect(itemRow(page, "sunglasses").getByText("Everyday glasses")).toBeVisible();
 
   await page.getByRole("button", { name: "Save as a list" }).click();
   let sheet = page.getByRole("dialog", { name: "Save as a list" });

@@ -85,9 +85,21 @@ export interface ModalSheetProps {
   showClose?: boolean;
   /** A small control beside the close button in the head (the trip editor's Feedback entry, #296). Absent: the head is unchanged. */
   headerAction?: ReactNode;
+  /**
+   * "side": a right-anchored panel from 1024px up and a full screen below it (Edit trip, #389). Default "dialog": the bottom
+   * sheet on phones and the centred dialog from 660px. Focus, Escape and the backdrop behave the same in both.
+   */
+  variant?: "dialog" | "side";
+  /**
+   * "side" only: keep the panel a 560px right-anchored sheet from 768 to 1023px instead of a full screen (Review your bag on a
+   * tablet, #414). Edit trip stays full screen there until its centred modal lands (#469).
+   */
+  tabletSheet?: boolean;
+  /** "side" only: a centred 560px modal from 768 to 1023px instead of a full screen (Edit trip, #469). Below 768 and from 1024 it is unchanged. */
+  tabletModal?: boolean;
 }
 
-// Bottom sheet on phones, centered dialog from 660px. Traps focus, closes on
+// Bottom sheet on phones, centered dialog from 601px. Traps focus, closes on
 // Escape or a backdrop press, and returns focus to whatever opened it.
 export function ModalSheet({
   open,
@@ -100,6 +112,9 @@ export function ModalSheet({
   dismissOnBackdrop = true,
   showClose = false,
   headerAction,
+  variant = "dialog",
+  tabletSheet = false,
+  tabletModal = false,
 }: ModalSheetProps) {
   const titleId = useId();
   const descriptionId = useId();
@@ -187,7 +202,7 @@ export function ModalSheet({
   return createPortal(
     <div
       ref={backdropRef}
-      className="modal-backdrop"
+      className={variant === "side" ? "modal-backdrop modal-backdrop-side" : "modal-backdrop"}
       data-testid="modal-backdrop"
       onMouseDown={(event) => {
         if (event.target !== event.currentTarget) return;
@@ -198,7 +213,11 @@ export function ModalSheet({
     >
       <div
         ref={dialogRef}
-        className="modal"
+        className={
+          variant === "side"
+            ? `modal modal-side${tabletSheet ? " modal-tablet" : ""}${tabletModal ? " modal-centred" : ""}`
+            : "modal"
+        }
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -206,6 +225,7 @@ export function ModalSheet({
         tabIndex={-1}
         onKeyDown={onKeyDown}
       >
+        <div className="modal-grabber" aria-hidden="true" />
         <div className="modal-head">
           <div>
             {eyebrow ? <p className="tiny muted modal-eyebrow">{eyebrow}</p> : null}

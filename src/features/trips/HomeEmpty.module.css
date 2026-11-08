@@ -1,0 +1,353 @@
+/* Home with no trip coming up (#409; spec on #393 part 1 section 2.1). Phone values first, laptop (>= 1024px) below. */
+.page {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  margin-inline: auto;
+}
+.column {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+/* One column until the laptop breakpoint: the laptop markup stays on screen for a frame while a narrowing window re-renders
+   as the phone Home, and it must not overflow then. */
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 36px;
+  align-items: start;
+}
+.left,
+.right {
+  min-width: 0;
+  display: grid;
+  gap: 16px;
+}
+
+/* ---- Hero card ---- */
+.hero {
+  box-sizing: border-box;
+  min-width: 0;
+  padding: 20px;
+  border-radius: 24px;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 14px 24px -16px color-mix(in srgb, var(--darkEdge) 40%, transparent);
+}
+.eyebrow {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.title {
+  margin: 8px 0 0;
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1.05;
+  overflow-wrap: break-word;
+}
+.lede {
+  margin: 10px 0 0;
+  max-width: 520px;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1.45;
+}
+.buttons {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+}
+.plan {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: 50px;
+  border-radius: 999px;
+  text-align: center;
+  font-size: 17px;
+  font-weight: 700;
+}
+.staples {
+  justify-self: center;
+  padding: 6px 0;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+  text-align: center;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ---- Dashed rows (nudge, stamps links) ---- */
+.dashed {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 2px dashed var(--line);
+  border-radius: 16px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-align: center;
+  text-decoration: none;
+  overflow-wrap: break-word;
+}
+.archive {
+  justify-self: center;
+  padding: 8px 4px;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.dashed:focus-visible,
+.staples:focus-visible,
+.archive:focus-visible,
+.recent:focus-visible {
+  outline: 3px solid var(--info);
+  outline-offset: 2px;
+}
+
+/* ---- Empty suitcase ---- */
+.bagHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.bagCount {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+}
+.cubes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cube {
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 56px;
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 2px dashed var(--line);
+  border-radius: 14px;
+  background: transparent;
+  color: var(--muted);
+}
+.cubeName {
+  font-weight: 700;
+  font-size: 15px;
+  line-height: 1.2;
+  overflow-wrap: break-word;
+}
+.cubeCount {
+  font-size: 14px;
+}
+
+/* ---- Recent trips ---- */
+.recentHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.recentTitle {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+.recentList {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+}
+.recent {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  border-radius: 18px;
+}
+.recentRow {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.code {
+  --trip-sticker: var(--dark2);
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--trip-sticker);
+  color: var(--onDark);
+  font-size: 12px;
+  font-weight: 800;
+}
+.code[data-colour="accent"] {
+  --trip-sticker: var(--accent);
+}
+.code[data-colour="good"] {
+  --trip-sticker: var(--good);
+}
+.code[data-colour="info"] {
+  --trip-sticker: var(--info);
+}
+.code[data-colour="goldDeep"] {
+  --trip-sticker: var(--goldDeep);
+}
+.recentCopy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.recentCopy strong {
+  font-family: var(--font-display);
+  font-size: 18px;
+  line-height: 1.15;
+  overflow-wrap: break-word;
+}
+.recentCopy span {
+  color: var(--muted);
+  font-size: 13px;
+  overflow-wrap: break-word;
+}
+.recentPacked {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+/* 195px and 200% text: the sticker, the trip copy and the count stack, so the copy has the row's full width. Beside the
+   sticker it had about 70px, and a 36px name (#463) cannot wrap inside that without breaking mid-word. */
+@media (max-width: 359px) {
+  /* 195px with doubled text (#467): "Where" is about 141px at 44px, wider than the 123px inner width, so it broke mid-word.
+     At 18px (36px doubled) it is about 115px and every word stays whole. */
+  .title {
+    font-size: 18px;
+  }
+  .recentRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .code {
+    width: 40px;
+    height: 40px;
+  }
+  .recentPacked {
+    white-space: normal;
+  }
+  /* 195px with doubled text (#471): the suitcase frame takes 21px a side, so a cube is 121px and "Documents" (165px at
+     30px) overflowed the page by 19px. The cubes reach 8px into the frame's padding, the cube keeps 4px inside its border,
+     and the names drop to 11px (22px doubled, about 121px for "Documents"). Whole words still fit; nothing wraps mid-word.
+     Columns follow the text size, with at most two tracks: each track's minimum is max(5.5em, 50% - 3px), capped at 100%.
+     Normal text (16px): 5.5em is 88px, so two 1fr tracks fit from 240px (2 x 88 + 6px gap = 182px, the cube width there)
+     and one track below that. Doubled text doubles 5.5em to 176px, wider than any two-track row in the band, so one
+     full-width track; "Documents" needs 133px with its padding. An odd fifth tile (Misc) stays one tile wide in two columns.
+     Tiles keep the 4px inline padding. */
+  .cubes {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, max(5.5em, calc(50% - 3px))), 1fr));
+    margin-inline: -8px;
+  }
+  .cube {
+    padding-inline: 4px;
+  }
+  .cubeName {
+    font-size: 11px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .grid {
+    grid-template-columns: minmax(0, 4fr) minmax(0, 3fr);
+  }
+  .page[data-kind="first"] {
+    max-width: 720px;
+  }
+  .page[data-kind="returning"] {
+    max-width: 1200px;
+  }
+  .column,
+  .left {
+    gap: 28px;
+  }
+  .hero {
+    padding: 28px 32px;
+  }
+  .title {
+    font-size: 40px;
+  }
+  .buttons {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+  }
+  .plan {
+    min-height: 48px;
+    padding-inline: 24px;
+  }
+  .staples {
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    min-height: 48px;
+    padding: 6px 24px;
+    border: 2px solid var(--tint);
+    border-radius: 999px;
+    background: var(--paper);
+    font-size: 17px;
+    font-weight: 700;
+    text-decoration: none;
+  }
+  .dashed {
+    min-height: 44px;
+  }
+  .recentTitle {
+    font-size: 26px;
+  }
+  .recentRow {
+    min-height: 64px;
+  }
+}
+@media (min-width: 1024px) and (max-width: 1100px) {
+  .grid {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  }
+}

@@ -51,6 +51,18 @@ describe("ModalSheet", () => {
     expect(screen.getByText("This can be undone.")).toBeTruthy();
   });
 
+  it("includes a decorative suitcase grabber without adding an accessible control", async () => {
+    render(<Harness />);
+    await userEvent.click(screen.getByRole("button", { name: "Open" }));
+    const grabber = screen.getByRole("dialog").querySelector(".modal-grabber");
+    expect(grabber).not.toBeNull();
+    expect(grabber?.getAttribute("aria-hidden")).toBe("true");
+    expect(screen.getAllByRole("button").map((button) => button.textContent)).toEqual([
+      "Open",
+      "Confirm",
+    ]);
+  });
+
   it("omits aria-describedby without a description", async () => {
     render(<Harness />);
     await userEvent.click(screen.getByRole("button", { name: "Open" }));
@@ -519,5 +531,45 @@ describe("data-sheet-open on <body> (#341)", () => {
     expect(document.body.hasAttribute("data-sheet-open")).toBe(true);
     unmount();
     expect(document.body.hasAttribute("data-sheet-open")).toBe(false);
+  });
+
+  it("the side variant is the same dialog with the side-sheet classes (Edit trip, #389)", () => {
+    render(
+      <ModalSheet open variant="side" title="Edit trip" onClose={() => {}}>
+        x
+      </ModalSheet>,
+    );
+    const dialog = screen.getByRole("dialog", { name: "Edit trip" });
+    expect(dialog.className).toBe("modal modal-side");
+    expect(dialog.parentElement?.className).toBe("modal-backdrop modal-backdrop-side");
+  });
+
+  it("tabletModal adds the centred-modal class to the side variant only (Edit trip, #469)", () => {
+    render(
+      <ModalSheet open variant="side" tabletModal title="Edit trip" onClose={() => {}}>
+        x
+      </ModalSheet>,
+    );
+    expect(screen.getByRole("dialog", { name: "Edit trip" }).className).toBe(
+      "modal modal-side modal-centred",
+    );
+  });
+
+  it("tabletModal does nothing on the default dialog", () => {
+    render(
+      <ModalSheet open tabletModal title="Plain" onClose={() => {}}>
+        x
+      </ModalSheet>,
+    );
+    expect(screen.getByRole("dialog", { name: "Plain" }).className).toBe("modal");
+  });
+
+  it("the default variant keeps the plain dialog classes", () => {
+    render(
+      <ModalSheet open title="Plain" onClose={() => {}}>
+        x
+      </ModalSheet>,
+    );
+    expect(screen.getByRole("dialog", { name: "Plain" }).className).toBe("modal");
   });
 });

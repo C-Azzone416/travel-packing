@@ -24,14 +24,14 @@ beforeEach(() => {
 });
 
 describe("the anonymous palette cookie", () => {
-  it.each(["base", "ocean", "terracotta", "violet"] as const)("round-trips %s", async (id) => {
+  it.each(["ocean", "evergreen", "dusk"] as const)("round-trips %s", async (id) => {
     await rememberAnonymousAppearance(id);
     await expect(readAnonymousAppearance()).resolves.toBe(id);
     expect(jar.get("anon-appearance")?.value).toBe(id);
   });
 
   it("is httpOnly, Lax, site-wide and lasts one year (31536000 seconds)", async () => {
-    await rememberAnonymousAppearance("violet");
+    await rememberAnonymousAppearance("dusk");
     expect(jar.get("anon-appearance")?.options).toMatchObject({
       httpOnly: true,
       sameSite: "lax",
@@ -48,13 +48,23 @@ describe("the anonymous palette cookie", () => {
     expect(jar.get("anon-appearance")?.options).toMatchObject({ secure: true });
   });
 
-  it.each([undefined, "", "neon", "OCEAN", "ocean ", "ocean-2", "violet;x=1", "{}"])(
-    "reads %j as no palette (Base)",
+  it.each([undefined, "", "neon", "OCEAN", "ocean ", "ocean-2", "dusk;x=1", "{}"])(
+    "reads %j as no palette (Ocean)",
     async (value) => {
       if (value !== undefined) jar.set("anon-appearance", { value });
       await expect(readAnonymousAppearance()).resolves.toBeUndefined();
     },
   );
+
+  it.each([
+    ["base", "ocean"],
+    ["ocean", "ocean"],
+    ["terracotta", "evergreen"],
+    ["violet", "dusk"],
+  ])("reads an old cookie holding %s as %s", async (value, expected) => {
+    jar.set("anon-appearance", { value });
+    await expect(readAnonymousAppearance()).resolves.toBe(expected);
+  });
 
   it("never writes a value that is not a palette id", async () => {
     await rememberAnonymousAppearance("neon" as never);

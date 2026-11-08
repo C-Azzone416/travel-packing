@@ -1,0 +1,85 @@
+/* Suitcase (#381; spec on #376 part 2 section 1). Phone values first, laptop (>= 1024px) below. */
+.suitcase {
+  --rim: 9px;
+  --radius-out: 22px;
+  --radius-in: 14px;
+  --handle-w: min(80px, 40%);
+  --handle-h: 16px;
+  --handle-stroke: 6px;
+  --handle-radius: 10px;
+  --pad-home: 12px;
+  --pad-staples: 9px;
+  --pad-stamps: 16px;
+  box-sizing: border-box;
+  padding-top: var(--handle-h);
+  min-width: 0;
+}
+.rim {
+  position: relative;
+  box-sizing: border-box;
+  border: var(--rim) solid var(--dark);
+  border-radius: var(--radius-out);
+  background: var(--dark);
+  box-shadow:
+    0 0 0 1px var(--darkEdge),
+    0 22px 30px -18px color-mix(in srgb, var(--darkEdge) 45%, transparent);
+}
+/* The handle sits on the top edge of the rim, centred, open in the middle (no bottom edge). */
+.handle {
+  position: absolute;
+  bottom: calc(100% + var(--rim));
+  left: 50%;
+  box-sizing: border-box;
+  width: var(--handle-w);
+  height: var(--handle-h);
+  transform: translateX(-50%);
+  border: var(--handle-stroke) solid var(--dark);
+  border-bottom: 0;
+  border-radius: var(--handle-radius) var(--handle-radius) 0 0;
+}
+/* Centred under the handle, starting at the rim edge, hanging into the case (#411). */
+.ribbon {
+  position: absolute;
+  z-index: 1;
+  top: calc(-1 * var(--rim));
+  left: 50%;
+  transform: translateX(-50%);
+}
+.interior {
+  box-sizing: border-box;
+  min-width: 0;
+  border-radius: var(--radius-in);
+}
+.paper {
+  background: var(--paper2);
+}
+.dark {
+  background: var(--dark);
+  color: var(--onDark);
+}
+.none {
+  padding: 0;
+}
+.home {
+  padding: var(--pad-home);
+}
+.staples {
+  padding: var(--pad-staples);
+}
+.stamps {
+  padding: var(--pad-stamps);
+}
+@media (min-width: 1024px) {
+  .suitcase {
+    --rim: 14px;
+    --radius-out: 32px;
+    --radius-in: 20px;
+    --handle-w: min(120px, 40%);
+    --handle-h: 22px;
+    --handle-stroke: 8px;
+    --handle-radius: 12px;
+    --pad-home: 20px;
+    --pad-staples: 14px;
+    --pad-stamps: 24px;
+  }
+}

@@ -1,0 +1,1036 @@
+/* The Staples screen (#384; spec on #376 part 3 section 1.5 and part 2). Phone first; the laptop layout starts at 1024px,
+   the one breakpoint of the redesign. Colours are the scheme tokens only. */
+/* The app's body keeps a 320px minimum (the app-wide fix is #332). Staples must not scroll sideways down to 195px, so while
+   it is on screen the minimum is lifted. */
+:global(body):has(.screen) {
+  min-width: 0;
+}
+.screen :global(.staples-tabs) {
+  max-width: none;
+  margin: 0 0 -4px;
+}
+.screen {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+.head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: 12px;
+  row-gap: 4px;
+  min-width: 0;
+}
+.title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-page-title);
+  line-height: var(--lh-page-title);
+  font-weight: var(--fw-heading-xl);
+  letter-spacing: var(--tracking-title);
+  color: var(--ink);
+}
+.headCount {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-body);
+  font-weight: 600;
+}
+.lede {
+  display: none;
+  grid-column: 1 / -1;
+  max-width: 760px;
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: var(--fs-lede);
+  line-height: var(--lh-lede);
+}
+.countRules {
+  grid-column: 1 / -1;
+  min-width: 0;
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  line-height: 1.45;
+}
+.countRules summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--link);
+  font-weight: 700;
+  cursor: pointer;
+}
+.countRules summary::after {
+  content: "▾";
+  margin-inline-start: 8px;
+  color: currentcolor;
+  line-height: 1;
+}
+.countRules[open] summary::after {
+  transform: rotate(180deg);
+}
+.countRules summary:focus-visible {
+  border-radius: 4px;
+  outline: 3px solid var(--info);
+  outline-offset: 2px;
+}
+.countRules[open] summary {
+  margin-bottom: 4px;
+}
+.countRules ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-inline-start: 20px;
+}
+.countRules li {
+  padding-inline-start: 2px;
+}
+.countRules li strong {
+  margin-inline-end: 6px;
+  color: var(--ink);
+}
+.countRules li span,
+.countRules p {
+  overflow-wrap: normal;
+  word-break: normal;
+}
+.countRules p {
+  margin: 8px 0 0;
+}
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+  min-width: 0;
+}
+.case {
+  margin-top: 14px; /* room for the handle */
+  min-width: 0;
+}
+.sections {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 9px;
+  margin-top: 9px;
+  min-width: 0;
+}
+
+/* ---- Add row ---- */
+.add {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+.addField,
+.addSelect {
+  box-sizing: border-box;
+  width: auto;
+  min-height: 0;
+  height: 44px; /* the render draws 40; a phone target is 44 */
+  min-width: 0;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-weight: 500;
+}
+.addField {
+  flex: 1 1 0;
+}
+.addField::placeholder {
+  color: var(--ghost);
+}
+.addSelect {
+  display: none;
+  flex: none;
+  max-width: 40%;
+  cursor: pointer;
+}
+.addButton {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--onDark);
+  font-family: var(--font-body);
+  font-size: var(--fs-button);
+  font-weight: 700;
+  cursor: pointer;
+}
+.addLabel {
+  display: none;
+}
+.addField:focus-visible,
+.addSelect:focus-visible,
+.addButton:focus-visible,
+.cubeCard button:focus-visible,
+.cubeCard select:focus-visible {
+  outline: 3px solid var(--info);
+  outline-offset: 2px;
+}
+.addField:focus-visible,
+.addSelect:focus-visible,
+.addButton:focus-visible {
+  outline-color: var(--onDark);
+}
+.addError {
+  grid-column: 1 / -1;
+  margin: 8px 4px 0;
+  color: var(--onDark);
+  font-size: var(--fs-meta);
+}
+.addError button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* ---- Cube card ---- */
+.cubeCard {
+  box-sizing: border-box;
+  min-width: 0;
+  padding: 12px 14px;
+  border-radius: 20px;
+  background: var(--paper2);
+  color: var(--ink);
+}
+.cubeHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  column-gap: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line2);
+}
+.cubeName {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-section-l);
+  font-weight: var(--fw-heading);
+  line-height: var(--lh-section);
+  overflow-wrap: anywhere;
+}
+.cubeCount {
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+}
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.item {
+  border-bottom: 1px solid var(--line2);
+}
+.item:last-child {
+  border-bottom: 0;
+}
+.empty {
+  margin: 0;
+  padding: 12px 0 4px;
+  color: var(--muted);
+  font-size: var(--fs-meta);
+}
+
+/* ---- Row ---- */
+.row {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 46px;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font-family: var(--font-body);
+  text-align: start;
+  cursor: pointer;
+}
+.rowName {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.packLast {
+  display: block;
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+}
+.cadence {
+  flex: none;
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  font-weight: 400;
+  white-space: nowrap;
+}
+.count {
+  flex: none;
+  min-width: 2.2em;
+  text-align: end;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.was {
+  margin-inline-end: 6px;
+  color: var(--muted);
+  font-weight: 400;
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+.now {
+  text-decoration: none;
+}
+
+/* ---- Inline editor (laptop) ---- */
+.editor {
+  display: grid;
+  gap: 10px;
+  padding: 4px 0 14px;
+}
+.editorRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.cubeSelect {
+  box-sizing: border-box;
+  width: auto;
+  min-height: 0;
+  height: 31px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0 12px;
+  border: 2px solid var(--tint);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 500;
+}
+.laundryPill {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 41px;
+  padding: 0 16px;
+  border: 2px solid var(--tint);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  cursor: pointer;
+}
+.laundryPill[aria-checked="true"] {
+  border-color: var(--dark);
+  background: var(--dark);
+  color: var(--onDark);
+}
+.laundryPill:disabled {
+  cursor: default;
+  color: var(--muted);
+  background: var(--tint);
+  border-color: var(--tint);
+}
+.hint {
+  margin: 0;
+  flex-basis: 100%;
+  color: var(--muted);
+  font-size: var(--fs-meta);
+}
+.remove {
+  min-height: 44px;
+  padding: 0 8px;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-family: var(--font-body);
+  font-size: var(--fs-meta);
+  font-weight: 700;
+  cursor: pointer;
+}
+.packLastSwitch {
+  width: 100%;
+  font-size: var(--fs-meta);
+}
+.packLastHint {
+  margin: -6px 0 0;
+  color: var(--muted);
+  font-size: var(--fs-micro);
+}
+
+/* ---- Sheet (phone) ---- */
+/* The sheet's fields scroll inside the dialog; the heading and the Remove / Done row stay put, so both are reachable on a
+   short or very narrow screen (the dialog itself would otherwise scroll the actions out of view). */
+:global(.modal):has(.sheet) {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+:global(.modal):has(.sheet) :global(.modal-head),
+:global(.modal):has(.sheet) :global(.modal-actions) {
+  flex: none;
+}
+.sheet {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  grid-auto-rows: max-content;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+.eyebrow {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: var(--fs-eyebrow);
+  font-weight: 700;
+  letter-spacing: var(--tracking-eyebrow);
+  line-height: var(--lh-eyebrow);
+  text-transform: uppercase;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+/* A native radio as a chip: the input stays focusable and operable, the label is the chip. */
+.radioChip {
+  position: relative;
+  display: inline-flex;
+}
+.radioChip input {
+  min-height: 0;
+  border: 0;
+  padding: 0;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.radioChip span {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  min-height: 37px;
+  max-width: 100%;
+  padding: 6px 18px;
+  border: 2px solid var(--tint);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 17px;
+  font-weight: 600;
+}
+.radioChip input:checked + span {
+  border-color: var(--dark);
+  background: var(--dark);
+  color: var(--onDark);
+}
+.radioChip input:focus-visible + span {
+  outline: 3px solid var(--info);
+  outline-offset: 2px;
+}
+.laundryRow {
+  box-sizing: border-box;
+  /* A grid, not a flex row: a button that is a flex container sized its height from one line of text, so a pill whose label
+     wraps at 195px let the label spill out of it. */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 52px;
+  margin-top: 8px;
+  padding: 8px 18px;
+  border: 2px solid var(--tint);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 17px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.laundryText {
+  min-width: 0;
+}
+.laundryRow svg {
+  flex: none;
+}
+.laundryRow > span:first-child {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  text-align: start;
+  line-height: 1.2;
+}
+.laundryRow > span:last-child {
+  flex: none;
+}
+.laundryRow[aria-checked="true"] {
+  border-color: var(--dark);
+  background: var(--dark);
+  color: var(--onDark);
+}
+.laundryRow:disabled {
+  cursor: default;
+  color: var(--muted);
+  background: var(--tint);
+  border-color: var(--tint);
+}
+.sheetActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  width: 100%;
+}
+.sheetRemove,
+.sheetDone {
+  min-height: 50px;
+  border-radius: 999px;
+  font-family: var(--font-body);
+  font-size: var(--fs-button);
+  font-weight: 700;
+  cursor: pointer;
+}
+.sheetRemove {
+  flex: none;
+  padding: 0 24px;
+  border: 2px solid var(--tint);
+  background: var(--paper);
+  color: var(--accent);
+}
+.sheetDone {
+  flex: 1 1 100px;
+  border: 0;
+  background: var(--dark);
+  color: var(--onDark);
+}
+.sheet button:focus-visible,
+.sheetActions button:focus-visible,
+.editor button:focus-visible,
+.editor select:focus-visible {
+  outline: 3px solid var(--info);
+  outline-offset: 2px;
+}
+
+/* ---- Preview: the dock on a phone, the panel on a laptop ---- */
+.preview {
+  box-sizing: border-box;
+  position: sticky;
+  bottom: calc(var(--sticky-bottom) + 12px);
+  z-index: 5;
+  min-width: 0;
+  padding: 8px 14px 10px;
+  border-radius: 20px;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 10px 24px -12px var(--darkEdge);
+}
+.previewTop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+.dockTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  font-weight: 600;
+  cursor: pointer;
+}
+.dockTitle:focus-visible {
+  outline: 3px solid var(--info);
+  outline-offset: 2px;
+}
+.big {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--ink);
+}
+.bigNumber {
+  font-family: var(--font-display);
+  font-size: var(--fs-big-number);
+  font-weight: var(--fw-heading-xl);
+  line-height: 1;
+  font-variant-numeric: lining-nums;
+}
+.bigUnit {
+  color: var(--muted);
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: var(--fw-heading);
+}
+.previewEyebrow {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-eyebrow);
+  font-weight: 700;
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+}
+.sliderRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin-top: 12px;
+  font-size: var(--fs-body);
+  font-weight: 600;
+}
+.sliderValue {
+  font-weight: 700;
+}
+.slider {
+  --fill: 0%;
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  min-height: 0;
+  height: 28px;
+  margin: 2px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+.slider::-webkit-slider-runnable-track {
+  height: 8px;
+  border: 1px solid var(--line2);
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--dark) var(--fill), var(--tint) var(--fill));
+}
+.slider::-moz-range-track {
+  height: 8px;
+  border: 1px solid var(--line2);
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--dark) var(--fill), var(--tint) var(--fill));
+}
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: -7px;
+  border: 3px solid var(--paper);
+  border-radius: 50%;
+  background: var(--dark);
+  box-shadow: 0 0 0 1px var(--dark);
+}
+.slider::-moz-range-thumb {
+  box-sizing: border-box;
+  width: 20px;
+  height: 20px;
+  border: 3px solid var(--paper);
+  border-radius: 50%;
+  background: var(--dark);
+  box-shadow: 0 0 0 1px var(--dark);
+}
+.slider:focus-visible {
+  outline: 3px solid var(--info);
+  outline-offset: 2px;
+}
+.switchRow {
+  box-sizing: border-box;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  font-size: var(--fs-body);
+  font-weight: 600;
+  cursor: pointer;
+}
+.switchInput {
+  min-height: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  z-index: 1;
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  width: 42px;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.switchTrack {
+  pointer-events: none;
+  position: relative;
+  flex: none;
+  width: 42px;
+  height: 24px;
+  border-radius: 12px;
+  background: var(--line);
+}
+.switchTrack::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  inset-inline-start: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--paper);
+  transition: transform 0.12s ease-out;
+}
+.switchInput:checked + .switchTrack {
+  background: var(--good);
+}
+.switchInput:checked + .switchTrack::after {
+  transform: translateX(18px);
+}
+.switchInput:focus-visible + .switchTrack {
+  outline: 3px solid var(--info);
+  outline-offset: 2px;
+}
+.note {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: var(--fs-lede);
+  line-height: 1.35;
+}
+.laptopOnly {
+  display: none;
+}
+.scales,
+.byCube {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.scales {
+  display: grid;
+  gap: 6px;
+}
+.scaleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 10px;
+  background: var(--tint);
+  font-size: 15px;
+}
+.scaleRow > span:first-child {
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.scaleCount {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+.byCube li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line2);
+  font-size: 15px;
+  font-weight: 500;
+}
+.byCube li:last-child {
+  border-bottom: 0;
+}
+.byCube b {
+  font-weight: 700;
+}
+.footnote {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  line-height: 1.4;
+}
+.panelBlock {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+/* ---- Loading and error ---- */
+.skeleton {
+  height: 44px;
+  margin: 10px 0;
+  border-radius: 12px;
+  background: var(--tint);
+}
+.state {
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--paper);
+  color: var(--ink);
+}
+.stateButton {
+  min-height: 44px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--dark);
+  color: var(--onDark);
+  font-family: var(--font-body);
+  font-size: var(--fs-button);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* The phone dock is drawn about 125px tall (st-p): a one-line note and a shorter switch row. */
+.dockBody .note {
+  margin-top: 0;
+  font-size: 12px;
+  line-height: 1.3;
+}
+.dockBody .switchRow {
+  min-height: 36px;
+}
+.dockBody .slider {
+  height: 22px;
+}
+
+@media (max-width: 359px) {
+  .laundryRow {
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: 26px;
+    font-size: 15px;
+  }
+  .laundryRow > span:first-child {
+    gap: 6px;
+  }
+  .laundryRow svg {
+    display: none;
+  }
+  .head {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .addSelect {
+    display: none;
+  }
+  .row {
+    flex-wrap: wrap;
+  }
+}
+
+/* ---- Laptop ---- */
+@media (min-width: 1024px) {
+  .screen {
+    gap: 12px;
+  }
+  .screen :global(.staples-tabs) {
+    margin-bottom: -8px;
+  }
+  .lede {
+    display: block;
+  }
+  .headCount {
+    display: none;
+  }
+  .layout {
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: 28px;
+  }
+  .case {
+    margin-top: 20px;
+  }
+  .sections {
+    display: block;
+    column-count: 2;
+    column-gap: 12px;
+    margin-top: 12px;
+  }
+  .cubeCard {
+    break-inside: avoid;
+    margin-bottom: 12px;
+    padding: 14px 18px;
+    border-radius: 18px;
+  }
+  .add {
+    gap: 8px;
+  }
+  .addField,
+  .addSelect {
+    height: 43px;
+  }
+  .addSelect {
+    display: block;
+  }
+  .addButton {
+    width: auto;
+    padding: 0 22px;
+  }
+  .addLabel {
+    display: inline;
+  }
+  .row {
+    min-height: 45px;
+    gap: 12px;
+  }
+  .rowName {
+    font-weight: 600;
+  }
+  .cadence {
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    height: 30px;
+    padding: 0 14px;
+    border: 2px solid var(--tint);
+    border-radius: 999px;
+    background: var(--paper);
+    color: var(--ink);
+    font-size: var(--fs-micro);
+    font-weight: 600;
+  }
+  .cadenceScaled {
+    border: 1.5px solid var(--dark);
+    background: var(--tint);
+  }
+  .preview {
+    position: sticky;
+    top: 20px;
+    bottom: auto;
+    padding: 18px;
+    border-radius: 22px;
+    box-shadow: none;
+  }
+  .laptopOnly {
+    display: block;
+  }
+  .bigNumber {
+    font-size: 36px;
+  }
+  .bigUnit {
+    font-size: 20px;
+  }
+}
+
+/* ---- Rename ---- */
+.nameField {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.nameLabel {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: var(--fs-eyebrow);
+  font-weight: 700;
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+}
+.nameInput {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 0;
+  height: 44px;
+  padding: 0 16px;
+  border: 2px solid var(--tint);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+}
+.nameInput[aria-invalid="true"] {
+  border-color: var(--accent);
+}
+.nameInput:focus-visible {
+  outline: 3px solid var(--info);
+  outline-offset: 2px;
+}
+.nameProblem {
+  margin: 0;
+  color: var(--accent);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+}
+
+/* Tablet (768-1023, #414): the phone structure with the cube cards in two columns (the page container is 960). */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .sections {
+    display: block;
+    column-count: 2;
+    column-gap: 12px;
+  }
+  .cubeCard {
+    break-inside: avoid;
+    margin-bottom: 12px;
+  }
+}
+
+/* 1024-1179 (#469; spec #393 part 2 section 5.3): one column of cube cards and a 300px preview panel; from 1180 the laptop values. */
+@media (min-width: 1024px) and (max-width: 1179px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr) 300px;
+  }
+  .sections {
+    column-count: 1;
+  }
+}

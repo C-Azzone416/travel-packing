@@ -1,7 +1,6 @@
 "use client";
 
 import { useId, useRef, useState, type FormEvent } from "react";
-import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/Button";
 import { ADD_ITEM_NAME_MAX, ADD_ITEM_QTY_MAX, ADDABLE_CATEGORIES } from "@/domain/item-ops";
 import type { TripItem } from "@/domain/trip";
@@ -21,10 +20,6 @@ export interface AddItemInlineProps {
   onBathroom: (name: string, qty: number) => void;
   /** The item is already on the list: open its quantity editor. */
   onEditExisting: (itemId: string) => void;
-  /** "hero": the dashboard hero's action row (the toggle is one of its buttons, the form takes the next row). */
-  variant?: "packing" | "hero";
-  /** Where the form is drawn when it must sit apart from its button (the hero's full-width row under the actions). */
-  formHost?: HTMLElement | null;
 }
 
 const CATEGORY_CHOICES = [...ADDABLE_CATEGORIES, BATHROOM_CHOICE] as const;
@@ -40,8 +35,6 @@ export function AddItemInline({
   onAdd,
   onBathroom,
   onEditExisting,
-  variant = "packing",
-  formHost = null,
 }: AddItemInlineProps) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
@@ -105,16 +98,17 @@ export function AddItemInline({
   const existing = existingId ? items.find((item) => item.id === existingId) : null;
 
   const formEl = (
-    <form className="add-item-form" id={panelId} onSubmit={submit} noValidate>
+    <form className="add-item-form" id={panelId} onSubmit={submit} noValidate autoComplete="off">
       <div className="add-item-field">
         <label className="field">
           Item name
           <input
             ref={nameInput}
-            name="name"
+            name="packing-item-name"
             value={name}
             maxLength={ADD_ITEM_NAME_MAX}
             placeholder="Camera"
+            autoComplete="off"
             autoFocus
             aria-invalid={problems.name === true}
             aria-describedby={problems.name ? `${panelId}-name` : undefined}
@@ -210,7 +204,7 @@ export function AddItemInline({
   );
 
   return (
-    <div className={variant === "hero" ? "add-item hero" : "add-item"}>
+    <div className="add-item">
       <Button
         ref={toggle}
         variant="secondary"
@@ -220,7 +214,7 @@ export function AddItemInline({
       >
         ＋ Add item
       </Button>
-      {open && formHost ? createPortal(formEl, formHost) : open ? formEl : null}
+      {open ? formEl : null}
     </div>
   );
 }

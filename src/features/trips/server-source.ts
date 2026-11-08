@@ -3,15 +3,18 @@
 
 import type { LifecycleState, LifecycleTrip, TripDraft } from "@/domain/trip-lifecycle";
 import type { CreateTripActionResult, TripsActionResult } from "./actions";
+import type { Cube } from "@/domain/cubes";
 import type { ItemEdit } from "@/domain/item-ops";
 import type { ThemeId } from "@/domain/themes";
 import type { Scope, Staple, TripConfig } from "@/domain/trip";
+import type { TravelMode } from "@/domain/trip-route";
 import type { TripStop } from "@/domain/trip-stops";
 import type {
   AcceptedWeatherDecision,
   AddItemActionResult,
   SaveAsListActionResult,
   SkippedWeatherDecision,
+  HomeCityResult,
   StaplesReadResult,
   TripCommandResult,
   TripReadResult,
@@ -42,14 +45,22 @@ export interface TripsActions {
 export interface TripActions {
   getTrip(tripId: string): Promise<TripReadResult>;
   listStaples(): Promise<StaplesReadResult>;
+  /** The account's home city, the default "From" of a new trip. Left out by fakes that have none. */
+  getHomeCity?(): Promise<HomeCityResult>;
   upsertStaple(staple: Staple): Promise<StaplesReadResult>;
   setPacked(tripId: string, itemId: string, packed: number): Promise<TripCommandResult>;
+  setPackedMany(
+    tripId: string,
+    entries: readonly { itemId: string; packed: number }[],
+  ): Promise<TripCommandResult>;
   togglePacked(tripId: string, itemId: string): Promise<TripCommandResult>;
   incrementPacked(tripId: string, itemId: string): Promise<TripCommandResult>;
   decrementPacked(tripId: string, itemId: string): Promise<TripCommandResult>;
   editItem(tripId: string, itemId: string, edit: ItemEdit): Promise<TripCommandResult>;
   removeItem(tripId: string, itemId: string, scope: Scope): Promise<TripCommandResult>;
   addToiletryItem(tripId: string, item: NewToiletryItem): Promise<TripCommandResult>;
+  moveItemToCube(tripId: string, itemId: string, cube: Cube): Promise<TripCommandResult>;
+  setMorningOf(tripId: string, cube: Cube, on: boolean): Promise<TripCommandResult>;
   addItem(tripId: string, item: NewCustomItem): Promise<AddItemActionResult>;
   saveAsList(tripId: string, name: string, itemIds: string[]): Promise<SaveAsListActionResult>;
   confirmBagPlacement(tripId: string): Promise<TripCommandResult>;
@@ -70,7 +81,12 @@ export interface TripActions {
     slot1: string | null,
     slot2: string | null,
   ): Promise<TripCommandResult>;
-  setStops(tripId: string, stops: TripStop[]): Promise<TripCommandResult>;
+  setStops(tripId: string, stops: TripStop[], basedOn?: string): Promise<TripCommandResult>;
+  setTravelMode(
+    tripId: string,
+    travelMode: TravelMode,
+    basedOn?: string,
+  ): Promise<TripCommandResult>;
 }
 
 export interface WeatherActions {
@@ -160,12 +176,15 @@ export function createServerTripsSource(
     listStaples: () => unwrapStaples(trip.listStaples()),
     upsertStaple: (staple) => unwrapStaples(trip.upsertStaple(staple)),
     setPacked: (id, itemId, packed) => unwrapChange(trip.setPacked(id, itemId, packed)),
+    setPackedMany: (id, entries) => unwrapChange(trip.setPackedMany(id, entries)),
     togglePacked: (id, itemId) => unwrapChange(trip.togglePacked(id, itemId)),
     incrementPacked: (id, itemId) => unwrapChange(trip.incrementPacked(id, itemId)),
     decrementPacked: (id, itemId) => unwrapChange(trip.decrementPacked(id, itemId)),
     editItem: (id, itemId, edit) => unwrapChange(trip.editItem(id, itemId, edit)),
     removeItem: (id, itemId, scope) => unwrapChange(trip.removeItem(id, itemId, scope)),
     addToiletryItem: (id, item) => unwrapChange(trip.addToiletryItem(id, item)),
+    moveItemToCube: (id, itemId, cube) => unwrapChange(trip.moveItemToCube(id, itemId, cube)),
+    setMorningOf: (id, cube, on) => unwrapChange(trip.setMorningOf(id, cube, on)),
     saveAsList: async (id, name, itemIds) => {
       const result = await trip.saveAsList(id, name, itemIds);
       if (!result.ok) {
@@ -191,8 +210,18 @@ export function createServerTripsSource(
       unwrapChange(trip.updatePreferences(id, config, basedOn)),
     setTheme: (id, theme) => unwrapChange(trip.setTheme(id, theme)),
     setStampLabels: (id, slot1, slot2) => unwrapChange(trip.setStampLabels(id, slot1, slot2)),
-    setStops: (id, stops) => unwrapChange(trip.setStops(id, stops)),
+    setStops: (id, stops, basedOn) => unwrapChange(trip.setStops(id, stops, basedOn)),
+    setTravelMode: (id, mode, basedOn) => unwrapChange(trip.setTravelMode(id, mode, basedOn)),
   };
+
+  if (trip.getHomeCity) {
+    const getHomeCity = trip.getHomeCity.bind(trip);
+    source.homeCity = async () => {
+      const result = await getHomeCity();
+      if (!result.ok) throw new TripsSourceError(result.code);
+      return result.home;
+    };
+  }
 
   if (weather) {
     source.weather = {

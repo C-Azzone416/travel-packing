@@ -4,7 +4,7 @@ import TripPage, { metadata } from "./page";
 
 describe("/trips/[id]", () => {
   it("is titled 'Packing list' and renders the trip screen for the id in the URL", async () => {
-    expect(metadata.title).toBe("Packing list");
+    expect(metadata).toEqual({ title: "Packing list" });
     const element = (await TripPage({
       params: Promise.resolve({ id: "san-diego" }),
     })) as ReactElement<{ tripId: string }>;
@@ -22,5 +22,24 @@ describe("/trips/[id]", () => {
     expect((await render()).props.openItemId).toBeUndefined();
     expect((await render({ edit: ["a", "b"] })).props.openItemId).toBeUndefined();
     expect((await render({ edit: "" })).props.openItemId).toBeUndefined();
+  });
+
+  it("?review=1 (where /trips/[id]/review forwards) opens the Review-your-bag sheet on the Packing screen", async () => {
+    const element = (await TripPage({
+      params: Promise.resolve({ id: "san-diego" }),
+      searchParams: Promise.resolve({ review: "1" }),
+    })) as ReactElement<{ tripId: string; openReview?: boolean }>;
+    expect(element.props.tripId).toBe("san-diego");
+    expect(element.props.openReview).toBe(true);
+  });
+
+  it("any other ?review value, or none, leaves the sheet closed", async () => {
+    for (const review of ["0", "", ["1", "1"], undefined]) {
+      const element = (await TripPage({
+        params: Promise.resolve({ id: "san-diego" }),
+        searchParams: Promise.resolve({ review }),
+      })) as ReactElement<{ openReview?: boolean }>;
+      expect(element.props.openReview).toBe(false);
+    }
   });
 });

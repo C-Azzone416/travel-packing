@@ -149,7 +149,28 @@ describe("previewWeatherAction", () => {
       stops: [{ stopIndex: 0, status: "ok", days: [] }],
     });
     expect(fakes.consume).toHaveBeenCalledWith("owner");
-    expect(fakes.getStopWeather).toHaveBeenCalledWith(stop);
+    expect(fakes.getStopWeather).toHaveBeenCalledWith(stop, {
+      today: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+    });
+  });
+
+  it("passes only a device date within a day of the server's, else the server's date (#361)", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-12T12:00:00Z"));
+    try {
+      await previewWeatherAction([stop], "2026-11-13");
+      await previewWeatherAction([stop], "2026-11-20");
+      await previewWeatherAction([stop], "not a date");
+      await previewWeatherAction([stop]);
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(fakes.getStopWeather.mock.calls.map(([, options]) => options)).toEqual([
+      { today: "2026-11-13" },
+      { today: "2026-11-12" },
+      { today: "2026-11-12" },
+      { today: "2026-11-12" },
+    ]);
   });
 
   it("keeps custom stops and provider failures unavailable without failing the preview", async () => {

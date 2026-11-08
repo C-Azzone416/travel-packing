@@ -33,6 +33,7 @@ const PROTECTED_PAGES = [
   "/trips",
   "/trips/abc",
   "/staples",
+  "/stamps",
   "/settings",
   "/anything/else",
   "/sign-in/extra",

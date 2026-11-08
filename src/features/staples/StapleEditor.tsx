@@ -7,6 +7,7 @@ import { Switch } from "@/components/ui/Switch";
 import { TOILETRY_GROUP_ID } from "@/domain/toiletry-bag";
 import type { Staple } from "@/domain/trip";
 import { supportsSmartQuantity } from "@/domain/calc";
+import { cubeForItem } from "@/domain/cubes";
 import {
   categoryFor,
   findDuplicate,
@@ -15,6 +16,7 @@ import {
   sectionOf,
   type Section,
 } from "./staples-view";
+import { STAPLE_COUNT_RULES, stapleCountRuleDescription } from "./staple-count-rules";
 
 export const MAX_STAPLE_QTY = 30;
 
@@ -77,6 +79,9 @@ export function StapleEditor({
       category: categoryFor(staple?.category ?? null, section),
       packLast,
       ...(placement === "toiletry" ? { groupId: TOILETRY_GROUP_ID } : {}),
+      // The laundry flag and cube are kept as they were; their controls arrive with the Staples redesign (#384).
+      ...(staple?.laundryHalves && cadence !== "smart" ? { laundryHalves: true } : {}),
+      ...(staple?.cube && staple.cube !== cubeForItem(staple) ? { cube: staple.cube } : {}),
     });
   }
 
@@ -112,14 +117,15 @@ export function StapleEditor({
       description="Set a fixed, per-day, or supported Smart default."
       onClose={onClose}
     >
-      <form className="staple-editor-form" onSubmit={submit} noValidate>
+      <form className="staple-editor-form" onSubmit={submit} noValidate autoComplete="off">
         <div className="form-grid staple-editor-fields">
           <label className="field">
             Item name
             <input
-              name="name"
+              name="packing-item-name"
               value={name}
               maxLength={50}
+              autoComplete="off"
               aria-invalid={problem === "name" || duplicate !== undefined}
               aria-describedby={
                 problem === "name"
@@ -176,32 +182,23 @@ export function StapleEditor({
           <fieldset className="scope-choice">
             <legend>How the quantity works</legend>
             <div className="choice-stack">
-              {(["per trip", "per day", "smart"] as const).map((value) => (
-                <label className="choice" key={value}>
+              {STAPLE_COUNT_RULES.map((rule) => (
+                <label className="choice" key={rule.cadence}>
                   <input
                     type="radio"
                     name={radioName}
-                    value={value}
-                    checked={cadence === value}
-                    disabled={value === "smart" && !smartSupported}
-                    onChange={() => setCadence(value)}
+                    value={rule.cadence}
+                    checked={cadence === rule.cadence}
+                    disabled={rule.cadence === "smart" && !smartSupported}
+                    onChange={() => setCadence(rule.cadence)}
                   />
                   <span>
-                    <strong>
-                      {value === "per day"
-                        ? "Per day"
-                        : value === "per trip"
-                          ? "Fixed per trip"
-                          : "Smart"}
-                    </strong>
+                    <strong>{rule.label}</strong>
                     <small>
-                      {value === "per day"
-                        ? "Multiplies by every calendar day, including travel days. Laundry does not change it."
-                        : value === "per trip"
-                          ? "The same amount on every trip."
-                          : smartSupported
-                            ? "Uses the shared clothing rules, including trip preferences."
-                            : "Available only for supported clothing staples."}
+                      {stapleCountRuleDescription(rule.cadence, {
+                        laundryHalves: Boolean(staple?.laundryHalves),
+                        smartSupported,
+                      })}
                     </small>
                   </span>
                 </label>

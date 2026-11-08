@@ -1,7 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useFeedbackTab } from "@/features/feedback/FeedbackAccess";
+import { FeedbackTabItem } from "@/features/feedback/FeedbackTabItem";
+import { NavPill } from "@/components/suitcase";
+import { NavIcon } from "./NavIcon";
 import { isActive, NAV_ITEMS } from "./nav-items";
 import { useSignOut } from "./use-sign-out";
 
@@ -12,57 +15,48 @@ export interface NavProps {
   email?: string | null;
 }
 
-// Arrow leaving a bracket, drawn here (a font glyph can show as a box or an emoji). Same 18px as the other glyphs.
-function SignOutIcon() {
-  return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path d="M9 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h4" />
-      <path d="m16 8 4 4-4 4M20 12H9" />
-    </svg>
-  );
-}
-
-// Fixed bottom bar on phones, compact vertical rail from 900px (CSS only).
+// One <nav>, two layouts (CSS only, one switch at 1024px, #383). Below it: the floating tab bar at the bottom, with four slots (the
+// three phone links, then Feedback when feedback is on for this person (#293), otherwise Sign out, which also lives in Settings).
+// From 1024px: the nav box dissolves into the top menu, so the pills (Trips, Staples, Stamps, Settings) sit beside the brand and
+// Feedback and Sign out sit at the right edge, both always.
 export function Nav({ signOut, email }: NavProps = {}) {
   const pathname = usePathname();
   const signOutGuard = useSignOut(signOut);
+  const feedback = useFeedbackTab();
+  const signedIn = Boolean(signOut && email);
+  const signOutForm = (wide: boolean) => (
+    // One tap with nothing unsent; with unsent feedback the warning sheet opens first (#325). Never the current page.
+    <form
+      action={signOutGuard.action}
+      className={wide ? "nav-signout nav-signout-wide" : "nav-signout"}
+    >
+      <button type="submit" tabIndex={0} title={`Signed in as ${email}`}>
+        <NavIcon name="signout" />
+        <span className="nav-label">Sign out</span>
+      </button>
+    </form>
+  );
   return (
     <nav className="bottom-nav" aria-label="Primary navigation">
       {NAV_ITEMS.map((item) => (
-        <Link
+        <NavPill
           key={item.href}
           href={item.href}
-          aria-current={isActive(item, pathname) ? "page" : undefined}
+          active={isActive(item, pathname)}
+          className={item.laptopOnly ? "nav-link nav-laptop-only" : "nav-link"}
         >
-          <span aria-hidden="true">{item.glyph}</span>
-          {item.label}
-        </Link>
+          {item.icon ? <NavIcon name={item.icon} /> : null}
+          <span className="nav-label">{item.label}</span>
+        </NavPill>
       ))}
-      {signOut && email ? (
-        // One tap with nothing unsent; with unsent feedback the warning sheet opens first (#325). Never the current page.
+      {signedIn && feedback.enabled ? (
         <>
-          <form action={signOutGuard.action} className="nav-signout">
-            <button type="submit" tabIndex={0} title={`Signed in as ${email}`}>
-              <span aria-hidden="true">
-                <SignOutIcon />
-              </span>
-              Sign out
-            </button>
-          </form>
-          {signOutGuard.sheet}
+          <FeedbackTabItem disabled={feedback.disabled} onOpen={feedback.open} />
+          {signOutForm(true)}
         </>
       ) : null}
+      {signedIn && !feedback.enabled ? signOutForm(false) : null}
+      {signedIn ? signOutGuard.sheet : null}
     </nav>
   );
 }

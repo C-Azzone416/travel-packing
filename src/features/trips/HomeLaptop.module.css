@@ -1,0 +1,276 @@
+/* Home, laptop (#387; spec on #376 part 3 section 1.1). Rendered only from 1024px up. */
+.page {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 1200px;
+  min-width: 0;
+  margin-inline: auto;
+}
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 4fr) minmax(0, 3fr);
+  gap: 36px;
+  align-items: start;
+}
+@media (max-width: 1100px) {
+  .grid {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  }
+}
+.left,
+.right {
+  min-width: 0;
+  display: grid;
+  gap: 16px;
+}
+.right {
+  gap: 28px;
+}
+
+/* ---- Map card ---- */
+.mapCard {
+  margin: 0;
+  box-sizing: border-box;
+  padding: 14px;
+  border-radius: 24px;
+  background: var(--paper);
+  color: var(--ink);
+  min-width: 0;
+}
+.mapFallback {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 2.6;
+  min-height: 160px;
+  border-radius: 16px;
+  background: var(--sea);
+  color: var(--ink);
+  font-size: 14px;
+}
+.caption {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+/* ---- Suitcase ---- */
+.bagHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.eyebrow {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.bigCount {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 2px 0 0;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 38px;
+  line-height: 1;
+  color: var(--ink);
+}
+.bigOf {
+  font-weight: 700;
+  font-size: 22px;
+  color: var(--muted);
+}
+.primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: 48px;
+  padding: 0 28px;
+  border-radius: 999px;
+  background: var(--dark);
+  color: var(--onDark);
+  font-family: var(--font-body);
+  font-size: 17px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.primary:hover {
+  background: var(--dark2);
+}
+.primary:focus-visible,
+.link:focus-visible {
+  outline: 3px solid var(--info);
+  outline-offset: 2px;
+}
+.cubes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* 1024-1099 (#469; spec #393 part 2 section 5.3): two columns, so a tile is not under 150px; three from 1100. */
+@media (min-width: 1024px) and (max-width: 1099px) {
+  .cubes {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.cubes > li {
+  min-width: 0;
+  display: flex;
+}
+.cubes > li > * {
+  flex: 1;
+}
+/* A narrow tile (1024 to about 1100px) puts the count under the name instead of squeezing the name: a name never breaks
+   inside a word. The li is the container, so this follows the tile, not the window. */
+.cubes > li {
+  container-type: inline-size;
+}
+@container (max-width: 170px) {
+  .cubes > li > * {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "name" "count" "bar" "note";
+    row-gap: 4px;
+  }
+}
+
+/* ---- Luggage tag ---- */
+.tagTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.chip {
+  display: inline-block;
+  max-width: 100%;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--tint);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+/* ON NOW (#410): the one coloured chip on the page while the trip is on. */
+.chip[data-on-now] {
+  background: var(--accent);
+  color: var(--onDark);
+}
+.chipDate {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.name {
+  margin: 14px 0 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 72px;
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+.name[data-size="l"] {
+  font-size: 56px;
+}
+.name[data-size="m"] {
+  font-size: 40px;
+  line-height: 1;
+}
+.sub {
+  margin: 6px 0 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 32px;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+.facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin-top: 18px;
+  color: var(--muted);
+  font-size: 15px;
+}
+.factsText {
+  margin: 0;
+}
+
+/* ---- Upcoming ---- */
+.upHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 16px;
+}
+.upTitle {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 26px;
+  line-height: 1.15;
+}
+.link {
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: underline;
+}
+.plan {
+  margin-inline-start: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ink);
+}
+@media (max-width: 1100px) {
+  .upHead {
+    column-gap: 12px;
+  }
+  .upTitle {
+    font-size: 23px;
+  }
+}
+
+/* ---- No next trip (placeholder until #409) ---- */
+.empty {
+  box-sizing: border-box;
+  max-width: 560px;
+  padding: 28px;
+  border-radius: 24px;
+  background: var(--paper);
+  color: var(--ink);
+}
+.emptyTitle {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 26px;
+}
+.emptyText {
+  margin: 0 0 18px;
+  color: var(--muted);
+  font-size: 16px;
+}

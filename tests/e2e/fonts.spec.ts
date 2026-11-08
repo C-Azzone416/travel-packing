@@ -50,8 +50,8 @@ test("Gdańsk Łódź Plzeň İzmir resolve to the ledger font, and latin-ext lo
   await client.send("CSS.enable");
   const { root } = await client.send("DOM.getDocument", { depth: -1 });
   for (const [id, name] of [
-    ["body", "Barlow"],
-    ["display", "Bricolage"],
+    ["body", "DM Sans"],
+    ["display", "Fraunces"],
   ]) {
     const { nodeId } = await client.send("DOM.querySelector", {
       nodeId: root.nodeId,

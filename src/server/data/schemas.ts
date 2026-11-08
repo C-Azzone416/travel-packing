@@ -6,6 +6,7 @@ import { ADDABLE_CATEGORIES } from "../../domain/item-ops";
 import { APPEARANCES } from "../../domain/appearance";
 import { THEME_IDS } from "../../domain/themes";
 import { MAX_STOPS } from "../../domain/trip-stops";
+import { MAX_TRIP_NAME_LENGTH, TRAVEL_MODES } from "../../domain/trip-route";
 import {
   ITEM_CATEGORIES,
   STAPLE_CADENCES,
@@ -14,6 +15,7 @@ import {
   WEATHER_STATUSES,
 } from "../db/schema";
 import { supportsSmartQuantity } from "../../domain/calc";
+import { CUBES, canCarryLaundryFlag } from "../../domain/cubes";
 
 export const tripId = z.uuid();
 /** The six built-in themes, and nothing else: an unknown value is INVALID_INPUT (#48). */
@@ -52,6 +54,14 @@ export const setPackedInput = z.object({
   itemId,
   packed: z.number().int().min(0).max(999),
 });
+/** "All in" and its Undo: up to 200 items' packed counts in one change. */
+export const setPackedManyInput = z.object({
+  tripId,
+  entries: z
+    .array(z.object({ itemId, packed: z.number().int().min(0).max(999) }))
+    .min(1)
+    .max(200),
+});
 export const editItemInput = z.object({ tripId, itemId, name, qty, timing, scope });
 export const removeItemInput = z.object({ tripId, itemId, scope });
 export const addToiletryItemInput = z.object({
@@ -67,7 +77,13 @@ export const addItemInput = z.object({
   name,
   category: z.enum(ADDABLE_CATEGORIES),
   neededQty: qty,
+  /** Packing's "Edit list" puts the new item straight into the open cube. */
+  cube: z.enum(CUBES).optional(),
 });
+/** Move one item to another cube (#385). Only the cube changes. */
+export const moveItemToCubeInput = z.object({ tripId, itemId, cube: z.enum(CUBES) });
+/** Turn a cube's "Morning of" flag on or off for one trip (#385). */
+export const setMorningOfInput = z.object({ tripId, cube: z.enum(CUBES), on: z.boolean() });
 // ---------------------------------------------------------------- saved lists (#167)
 const savedListId = z.uuid();
 const savedListName = z.string().trim().min(1).max(60);
@@ -147,9 +163,24 @@ const routeFields = {
   stops: stopsSelection.optional(),
 };
 
+/** Fly / Drive / Train or other (#379). null clears the choice. */
+export const travelMode = z.enum(TRAVEL_MODES);
+/** The owner's own trip name: trimmed, at most 60 characters. Blank is allowed and stored as no name (the stops are shown). */
+export const tripName = z.string().trim().max(MAX_TRIP_NAME_LENGTH);
+/**
+ * The optional trip fields (#379). `origin` is a place id like a stop's (resolved server-side, never trusted); left out it
+ * defaults to the account's home city, null means no origin. `travelMode` and `name` left out mean none (a copy keeps the source's mode).
+ */
+const travelFields = {
+  origin: locationSelection.nullable().optional(),
+  travelMode: travelMode.nullable().optional(),
+  name: tripName.nullable().optional(),
+};
+
 export const createTripInput = z
   .object({
     ...routeFields,
+    ...travelFields,
     config: tripConfig,
     /** Travel when left out. */
     theme: theme.optional(),
@@ -161,6 +192,7 @@ export const copyTripInput = z
   .object({
     sourceId: tripId,
     ...routeFields,
+    ...travelFields,
     /** The preferences chosen on the copy's Shape step. The source trip's own when left out. */
     config: tripConfig.optional(),
     /** The source trip's theme when left out. */
@@ -168,7 +200,27 @@ export const copyTripInput = z
   })
   .superRefine(oneRouteForm);
 /** Replace the stops of a saved trip. */
-export const setStopsInput = z.object({ tripId, stops: stopsSelection });
+export const setStopsInput = z.object({
+  tripId,
+  stops: stopsSelection,
+  /** The trip's `updatedAt` the editor was based on (#389); if the trip was saved since, nothing is applied (STALE). */
+  basedOn: z.string().max(40).optional(),
+});
+/** Change a saved trip's origin, travel mode and/or name; a field left out is unchanged, null clears it. At least one is required. */
+export const updateTripTravelInput = z
+  .object({
+    tripId,
+    ...travelFields,
+    /** The trip's `updatedAt` the editor was based on (#389); if the trip was saved since, nothing is applied (STALE). */
+    basedOn: z.string().max(40).optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.origin === undefined && value.travelMode === undefined && value.name === undefined) {
+      ctx.addIssue({ code: "custom", path: ["origin"], message: "Nothing to change" });
+    }
+  });
+/** The account's home city: a place id (resolved server-side), or null to clear it. */
+export const setHomeCityInput = z.object({ location: locationSelection.nullable() });
 export const setThemeInput = z.object({ tripId, theme });
 /** Both stamp slots at once (#151): the typed text, or null for automatic. The service trims, upper-cases and validates. */
 export const setStampLabelsInput = z.object({
@@ -186,8 +238,17 @@ export const stapleInput = z
     cadence: z.enum(STAPLE_CADENCES),
     packLast: z.boolean(),
     groupId: z.literal(TOILETRY_GROUP).optional(),
+    laundryHalves: z.boolean().optional(),
+    cube: z.enum(CUBES).optional(),
   })
   .superRefine((value, ctx) => {
+    if (value.laundryHalves && !canCarryLaundryFlag(value.semanticId)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["laundryHalves"],
+        message: "Underwear and socks are always one per day",
+      });
+    }
     if (
       value.cadence === "smart" &&
       (!supportsSmartQuantity(value.semanticId) ||
@@ -262,8 +323,10 @@ export const createTripWithWeatherInput = z
     mode: z.enum(["create", "copy"]),
     sourceId: tripId.nullable(),
     ...routeFields,
+    ...travelFields,
     config: tripConfig,
-    theme,
+    /** Legacy compatibility override. New Plan clients omit it. */
+    theme: theme.optional(),
     accepted: z.array(weatherAcceptedChange).max(20),
   })
   .superRefine((value, ctx) => {

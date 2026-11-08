@@ -24,6 +24,8 @@ const EXPECTED_TAGS = [
   "0011_framebriar_enrollment",
   "0012_icy_leech",
   "0013_flimsy_redwing",
+  "0014_suitcase_cubes_laundry",
+  "0015_suitcase_home_origin_mode_name",
 ];
 
 // One in-memory Postgres for the file; each test starts from an empty public schema.
@@ -99,9 +101,11 @@ describe("migrateUp", () => {
     ]);
     expect(await userTypes()).toEqual([
       "item_category",
+      "item_cube",
       "item_section",
       "staple_cadence",
       "staples_setup_state",
+      "travel_mode",
       "trip_theme",
       "weather_status",
     ]);

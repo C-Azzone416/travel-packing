@@ -3,6 +3,8 @@ import { useId, type ReactNode } from "react";
 export interface SwitchProps {
   label: string;
   description?: ReactNode;
+  /** A small mark before the title (the laundry ↻); hidden from assistive tech, the label already says it. */
+  marker?: ReactNode;
   checked: boolean;
   onChange: (checked: boolean) => void;
   disabled?: boolean;
@@ -15,6 +17,7 @@ export interface SwitchProps {
 export function Switch({
   label,
   description,
+  marker,
   checked,
   onChange,
   disabled = false,
@@ -25,7 +28,14 @@ export function Switch({
   return (
     <div className="toggle-row">
       <div>
-        <strong id={labelId}>{label}</strong>
+        <strong id={labelId}>
+          {marker ? (
+            <span className="switch-marker" aria-hidden="true">
+              {marker}
+            </span>
+          ) : null}
+          {label}
+        </strong>
         {description ? <p id={descriptionId}>{description}</p> : null}
       </div>
       <label className="switch">

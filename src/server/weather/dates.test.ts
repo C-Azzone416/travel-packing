@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   addDays,
+  isForecastable,
   isForecastDay,
   MAX_STOP_SPAN_DAYS,
   monthDay,
   parseDay,
+  resolveClientToday,
   sameCalendarDay,
   stopDays,
 } from "./dates";
@@ -45,6 +47,41 @@ describe("weather date helpers", () => {
     expect(isForecastDay("2026-06-17", "2026-06-01")).toBe(false);
     expect(isForecastDay("2026-05-31", "2026-06-01")).toBe(false);
     expect(isForecastDay("bad", "2026-06-01")).toBe(false);
+  });
+
+  it("calls a day forecast only inside both the device window and the GMT-anchored provider window", () => {
+    // Device UTC+10 is a day ahead of GMT: its 16th day is beyond what the provider forecasts.
+    expect(isForecastable("2026-06-17", "2026-06-02", "2026-06-01")).toBe(false);
+    expect(isForecastable("2026-06-16", "2026-06-02", "2026-06-01")).toBe(true);
+    // Device UTC-7 is a day behind GMT: the provider also serves GMT yesterday, which is the device's today.
+    expect(isForecastable("2026-06-01", "2026-06-01", "2026-06-02")).toBe(true);
+    expect(isForecastable("2026-06-16", "2026-06-01", "2026-06-02")).toBe(true);
+    expect(isForecastable("2026-06-17", "2026-06-01", "2026-06-02")).toBe(false);
+    // Never before the device's today, never more than a day before GMT, never unparseable.
+    expect(isForecastable("2026-05-31", "2026-06-01", "2026-06-02")).toBe(false);
+    expect(isForecastable("2026-06-01", "2026-06-03", "2026-06-03")).toBe(false);
+    // A device date more than a day behind GMT never reaches the provider's GMT-1 floor.
+    expect(isForecastable("2026-06-01", "2026-06-01", "2026-06-03")).toBe(false);
+    expect(isForecastable("2026-06-02", "2026-06-01", "2026-06-03")).toBe(true);
+    expect(isForecastable("bad", "2026-06-01", "2026-06-01")).toBe(false);
+    expect(isForecastable("2026-06-01", "2026-06-01", "bad")).toBe(false);
+  });
+
+  it("believes a client date only if strict YYYY-MM-DD within one day of the server's GMT date", () => {
+    const server = new Date("2026-06-01T12:00:00Z");
+    expect(resolveClientToday("2026-06-01", server)).toBe("2026-06-01");
+    expect(resolveClientToday("2026-05-31", server)).toBe("2026-05-31");
+    expect(resolveClientToday("2026-06-02", server)).toBe("2026-06-02");
+    // outside one day
+    expect(resolveClientToday("2026-06-03", server)).toBe("2026-06-01");
+    expect(resolveClientToday("2026-05-30", server)).toBe("2026-06-01");
+    // malformed, not a real day, missing
+    expect(resolveClientToday("2026-6-1", server)).toBe("2026-06-01");
+    expect(resolveClientToday("2026-02-30", server)).toBe("2026-06-01");
+    expect(resolveClientToday("2026-06-01T00:00:00Z", server)).toBe("2026-06-01");
+    expect(resolveClientToday("", server)).toBe("2026-06-01");
+    expect(resolveClientToday(null, server)).toBe("2026-06-01");
+    expect(resolveClientToday(undefined, server)).toBe("2026-06-01");
   });
 
   it("builds historical dates safely, including leap day", () => {

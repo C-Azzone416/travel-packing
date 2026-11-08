@@ -6,12 +6,14 @@
 // dashboard's: UNAUTHENTICATED -> sign-in, FORBIDDEN -> access denied (redirects), anything else is a code.
 
 import { redirect } from "next/navigation";
+import type { Cube } from "@/domain/cubes";
 import type { ItemEdit } from "@/domain/item-ops";
 import type { Signals } from "@/domain/readiness";
 import type { ThemeId } from "@/domain/themes";
 import type { Staple, TripConfig, Scope } from "@/domain/trip";
 import type { StaplesSetup } from "@/domain/staples-setup";
 import type { LifecycleTrip } from "@/domain/trip-lifecycle";
+import type { TravelMode, TripOrigin } from "@/domain/trip-route";
 import type { TripStop } from "@/domain/trip-stops";
 import type { WeatherAppliedChange } from "@/domain/weather/apply";
 import { ACCESS_DENIED_PATH, SIGN_IN_PATH } from "@/server/auth/proxy-handler";
@@ -25,6 +27,7 @@ import type { WeatherSuggestionState } from "@/server/data/weather-store";
 
 export type TripReadResult = { ok: true; trip: LifecycleTrip } | { ok: false; code: ErrorCode };
 export type StaplesReadResult = { ok: true; staples: Staple[] } | { ok: false; code: ErrorCode };
+export type HomeCityResult = { ok: true; home: TripOrigin | null } | { ok: false; code: ErrorCode };
 export type StaplesSetupResult = ({ ok: true } & StaplesSetup) | { ok: false; code: ErrorCode };
 export type TripCommandResult =
   { ok: true; trip: LifecycleTrip; signals: Signals } | { ok: false; code: ErrorCode };
@@ -77,6 +80,14 @@ export async function listStaplesAction(): Promise<StaplesReadResult> {
   ) as Promise<StaplesReadResult>;
 }
 
+/** The account's home city: the default "From" of a new trip (#390). Null when none is set. */
+export async function getHomeCityAction(): Promise<HomeCityResult> {
+  return withContext(
+    (context) => service.getHomeCity(context),
+    (home) => ({ ok: true as const, home }),
+  ) as Promise<HomeCityResult>;
+}
+
 /** Create or update one staple. The server validates every field; changes apply to future trips only. */
 export async function upsertStapleAction(staple: Staple): Promise<StaplesReadResult> {
   return withContext(
@@ -89,6 +100,8 @@ export async function upsertStapleAction(staple: Staple): Promise<StaplesReadRes
         cadence: staple.cadence,
         packLast: staple.packLast,
         ...(staple.groupId ? { groupId: staple.groupId } : {}),
+        ...(staple.laundryHalves ? { laundryHalves: true } : {}),
+        ...(staple.cube ? { cube: staple.cube } : {}),
       }),
     (staples) => ({ ok: true as const, staples }),
   ) as Promise<StaplesReadResult>;
@@ -119,6 +132,8 @@ export async function saveStaplesSetupAction(staples: Staple[]): Promise<Staples
         cadence: staple.cadence,
         packLast: staple.packLast,
         ...(staple.groupId ? { groupId: staple.groupId } : {}),
+        ...(staple.laundryHalves ? { laundryHalves: true } : {}),
+        ...(staple.cube ? { cube: staple.cube } : {}),
       })),
     }),
   );
@@ -138,6 +153,14 @@ export async function setPackedAction(
   packed: number,
 ): Promise<TripCommandResult> {
   return command((context) => service.setPackedItem(context, { tripId, itemId, packed }));
+}
+
+/** "All in" and its Undo (#386): several packed counts, saved together or not at all. */
+export async function setPackedManyAction(
+  tripId: string,
+  entries: readonly { itemId: string; packed: number }[],
+): Promise<TripCommandResult> {
+  return command((context) => service.setPackedItems(context, { tripId, entries }));
 }
 
 export async function togglePackedAction(
@@ -186,6 +209,24 @@ export async function removeItemAction(
   return command((context) => service.removeItemFromTrip(context, { tripId, itemId, scope }));
 }
 
+/** Move one item to another cube (#385). Only the cube changes. */
+export async function moveItemToCubeAction(
+  tripId: string,
+  itemId: string,
+  cube: Cube,
+): Promise<TripCommandResult> {
+  return command((context) => service.moveItemInTrip(context, { tripId, itemId, cube }));
+}
+
+/** Flag or unflag a cube "Morning of" for this trip (#385). */
+export async function setMorningOfAction(
+  tripId: string,
+  cube: Cube,
+  on: boolean,
+): Promise<TripCommandResult> {
+  return command((context) => service.setTripMorningOf(context, { tripId, cube, on }));
+}
+
 export async function addToiletryItemAction(
   tripId: string,
   item: NewToiletryItem,
@@ -218,6 +259,7 @@ export async function addItemAction(
     name: item.name,
     category: item.category,
     neededQty: item.neededQty,
+    ...(item.cube ? { cube: item.cube } : {}),
   });
   if (result.ok) {
     return {
@@ -307,17 +349,32 @@ export async function updatePreferencesAction(
 export async function setStopsAction(
   tripId: string,
   stops: TripStop[],
+  basedOn?: string,
 ): Promise<TripCommandResult> {
   return withContext(
     (context) =>
       service.setTripStops(context, {
         tripId,
+        ...(basedOn ? { basedOn } : {}),
         stops: stops.map((stop) => ({
           location: { id: stop.location.id },
           arrive: stop.arrive,
           leave: stop.leave,
         })),
       }),
+    (trip) => ({ ok: true as const, trip: toLifecycleTrip(trip), signals: NO_SIGNALS }),
+  ) as Promise<TripCommandResult>;
+}
+
+/** Change the trip's travel mode (Fly / Drive / Train or other). Owner-scoped; the origin and name are left alone. */
+export async function setTravelModeAction(
+  tripId: string,
+  travelMode: TravelMode,
+  basedOn?: string,
+): Promise<TripCommandResult> {
+  return withContext(
+    (context) =>
+      service.updateTripTravel(context, { tripId, travelMode, ...(basedOn ? { basedOn } : {}) }),
     (trip) => ({ ok: true as const, trip: toLifecycleTrip(trip), signals: NO_SIGNALS }),
   ) as Promise<TripCommandResult>;
 }

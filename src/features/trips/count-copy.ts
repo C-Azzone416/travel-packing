@@ -1,82 +1,43 @@
-// The plain-language words for the everyday count (design's final copy on #128). Pure text built from numbers the calculator
-// already produces: it changes no count, and it stays correct whichever way the return-day decision (#25) goes.
+// The plain-language words for the everyday count (design's final copy on #128, reworded for #295). Pure text built from numbers
+// the calculator already produces: it changes no count. The travel outfit is what you wear on the way there: worn, not packed.
 
-import { RETURN_OFF_POLICY, type ReturnOffPolicy } from "@/domain/calc";
+import { dailyDaysFor } from "@/domain/calc";
 
 /** "1 day" / "5 days" with a number in front. */
 const daysOf = (count: number, noun: string) => `${count} ${count === 1 ? "day" : "days"} ${noun}`;
 
-/** The heading on the live card: "5 days of everyday clothes", "1 day of everyday clothes", or the zero case. */
-export function everydayHeading(everydayDays: number): string {
-  return everydayDays === 0
-    ? "No everyday clothes to pack"
-    : `${daysOf(everydayDays, "of everyday clothes")}`;
-}
+const WORN_NOT_PACKED = "Your travel outfit is worn, not packed.";
+const DAY_TRIP =
+  "A day trip: you wear one outfit all day, so there are no everyday clothes to pack.";
+const NOTHING_LEFT = "That leaves no everyday clothes to pack.";
 
-/** The three tiles: days away, the one outfit worn on the way there, and what is held back for the trip home. */
-export function countTiles(
-  days: number,
-  everydayDays: number,
-  returnOutfit: boolean,
-  policy: ReturnOffPolicy = RETURN_OFF_POLICY,
-): { value: number; label: string }[] {
-  // Days held back for the way home: whatever is left after the worn day and the everyday days (never below 0).
-  const home = Math.max(0, days - 1 - everydayDays);
-  // "Set aside for the trip home": 1 with the return outfit on, 0 with it off (the return day is then an everyday day).
-  // "Return day, not counted" belongs to the unused exclude-return-day variant only.
-  const homeLabel =
-    !returnOutfit && policy === "exclude-return-day"
-      ? "Return day, not counted"
-      : "Set aside for the trip home";
-  return [
-    { value: days, label: "Days away" },
-    { value: 1, label: "Worn on the way there" },
-    { value: home, label: homeLabel },
-  ];
-}
-
-/** The sum on its own: "7 days away − 1 worn − 1 return day = 5 days of everyday clothes." (null when nothing is left to pack). */
+/** The sum on its own: "7 days away − 1 for home = 6 days of everyday clothes." (null when there is no sum: a day trip or bad dates). */
 export function countEquation(
   days: number,
   everydayDays: number,
   returnOutfit: boolean,
-  policy: ReturnOffPolicy = RETURN_OFF_POLICY,
 ): string | null {
-  if (everydayDays === 0) return null;
-  const heldBack = returnOutfit
-    ? " − 1 for home"
-    : policy === "exclude-return-day"
-      ? " − 1 return day"
-      : "";
-  return `${daysOf(days, "away")} − 1 worn${heldBack} = ${daysOf(everydayDays, "of everyday clothes")}.`;
+  if (days < 2) return null;
+  const heldBack = returnOutfit ? " − 1 for home" : ", none held back for home";
+  return `${daysOf(days, "away")}${heldBack} = ${daysOf(everydayDays, "of everyday clothes")}.`;
 }
 
-/** The callout body after "How we count:". Three variants, plus the very short trip with no sum. */
-export function countCallout(
-  days: number,
-  everydayDays: number,
-  returnOutfit: boolean,
-  policy: ReturnOffPolicy = RETURN_OFF_POLICY,
-): string {
-  const worn = "You wear one outfit on the way there, so it isn't packed.";
-  const middle = returnOutfit
-    ? "The trip home gets its own set, packed separately."
-    : policy === "exclude-return-day"
-      ? "With no separate return outfit, your return day isn't added to the count either."
-      : "With no separate return outfit, your return day is packed like any other day.";
-  const sum = countEquation(days, everydayDays, returnOutfit, policy);
-  return `${worn} ${middle} ${sum ?? "That leaves no everyday clothes to pack."}`;
+/** The trip screen's "Trip math" line: the sum plus the travel-outfit sentence, or the short-trip sentence. */
+export function tripMathLine(days: number, everydayDays: number, returnOutfit: boolean): string {
+  if (days === 1) return DAY_TRIP;
+  const equation = countEquation(days, everydayDays, returnOutfit);
+  return equation ? `${equation} ${WORN_NOT_PACKED}` : NOTHING_LEFT;
 }
 
-/** The trip screen's "Trip math" line: the sum, or the short-trip sentence. */
-export function tripMathLine(
-  days: number,
-  everydayDays: number,
-  returnOutfit: boolean,
-  policy: ReturnOffPolicy = RETURN_OFF_POLICY,
-): string {
-  return (
-    countEquation(days, everydayDays, returnOutfit, policy) ??
-    "That leaves no everyday clothes to pack."
-  );
+/** True when a saved trip's stored count is not what today's rule gives (saved before #295): its sum would show wrong arithmetic. */
+export function countedWithEarlierRule(trip: {
+  days: number;
+  dailyDays: number;
+  config: { returnOutfit: boolean };
+}): boolean {
+  return trip.dailyDays !== dailyDaysFor(trip.days, trip.config.returnOutfit);
 }
+
+/** The Trip math line for a trip saved under the earlier counting rule: no sum is shown until its preferences are saved again. */
+export const STALE_COUNT_NOTE =
+  "This list was counted with the earlier rule. Edit preferences to update it.";

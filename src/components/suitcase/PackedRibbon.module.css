@@ -1,0 +1,44 @@
+/* The ribbon on the suitcase handle (#411). Phone values first, laptop (>= 1024px) below. */
+.ribbon {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: var(--gold);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: 0 2px 0 color-mix(in srgb, var(--darkEdge) 25%, transparent);
+  animation: ribbon-drop 250ms ease-out;
+}
+.ribbon[data-tone="good"] {
+  background: var(--good);
+  color: var(--onDark);
+}
+@keyframes ribbon-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ribbon {
+    animation: none;
+  }
+}
+@media (min-width: 1024px) {
+  .ribbon {
+    height: 28px;
+    font-size: 14px;
+  }
+}

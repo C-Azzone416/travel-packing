@@ -1,23 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { calculateSuggestions } from "@/domain/calc";
-import { LOCATIONS } from "@/domain/locations";
-import { selectDraftLocation, setDraftConfig } from "@/domain/trip-lifecycle";
 import { sampleLifecycleState } from "./fixtures";
 import {
   clampOccasions,
-  continueBlocker,
   copyDraft,
   DEFAULT_TRIP_CONFIG,
-  describeChanges,
-  isDirty,
   MAX_OCCASIONS,
   MIN_OCCASIONS,
   newDraft,
   returnOutfitHelp,
   withDates,
 } from "./draft";
-
-const london = LOCATIONS.find((entry) => entry.id === "gb-eng-london")!;
 
 describe("drafts", () => {
   it("a new draft has no destination, no dates and the defaults: return outfit on, Nice outfits off (#205)", () => {
@@ -99,91 +91,14 @@ describe("withDates", () => {
   });
 });
 
-describe("continueBlocker", () => {
-  it("asks for a destination first, then for dates, then lets the user continue", () => {
-    const draft = newDraft();
-    expect(continueBlocker(draft)).toBe("Choose a destination from the list to continue.");
-    const withPlace = selectDraftLocation(draft, london);
-    expect(continueBlocker(withPlace)).toBe("Choose your departure and return dates to continue.");
-    expect(continueBlocker({ ...withPlace, start: "2026-11-12" })).toBe(
-      "Choose your departure and return dates to continue.",
-    );
-    expect(continueBlocker({ ...withPlace, start: "bad", end: "2026-11-16" })).toBe(
-      "Choose your departure and return dates to continue.",
-    );
-    expect(continueBlocker({ ...withPlace, start: "2026-11-12", end: "2026-11-16" })).toBeNull();
-  });
-});
-
-describe("isDirty", () => {
-  const initial = newDraft();
-
-  it("is false for an untouched draft and true once anything changes", () => {
-    expect(isDirty(initial, initial, "")).toBe(false);
-    expect(isDirty(initial, initial, "   ")).toBe(false);
-    expect(isDirty(initial, initial, "lon")).toBe(true);
-    expect(isDirty(selectDraftLocation(initial, london), initial, "")).toBe(true);
-    expect(isDirty({ ...initial, start: "2026-11-12" }, initial, "")).toBe(true);
-    expect(
-      isDirty(setDraftConfig(initial, { ...initial.config, laundry: true }), initial, ""),
-    ).toBe(true);
-  });
-
-  it("ignores key order inside the preferences", () => {
-    const reordered = {
-      ...initial,
-      config: Object.fromEntries(Object.entries(initial.config).reverse()) as typeof initial.config,
-    };
-    expect(isDirty(reordered, initial, "")).toBe(false);
-  });
-});
-
-describe("describeChanges", () => {
-  const range = { start: "2026-11-12", end: "2026-11-18" };
-  const calc = (patch: object) =>
-    calculateSuggestions({ ...DEFAULT_TRIP_CONFIG, ...range, ...patch });
-
-  it("names changed quantities", () => {
-    expect(
-      describeChanges(
-        calc({ laundry: false, niceAttire: false }),
-        calc({ laundry: true, niceAttire: false }),
-      ),
-    ).toBe("Everyday tops: 3, Everyday bottoms: 2");
-  });
-
-  it("reports items that disappeared as 0 and items that appeared with their quantity", () => {
-    const withNice = calc({ niceAttire: true });
-    const without = calc({ niceAttire: false });
-    expect(describeChanges(withNice, without)).toContain("Dress shoes: 0");
-    expect(describeChanges(without, withNice)).toContain("Dress shoes: 1");
-  });
-
-  it("says so when nothing changed", () => {
-    expect(describeChanges(calc({}), calc({}))).toBe("List unchanged");
-  });
-});
-
 describe("returnOutfitHelp", () => {
   it("describes the dedicated outfit when on", () => {
     expect(returnOutfitHelp(true)).toBe(
       "A fresh top, bottoms, underwear and socks for the trip home. It replaces one everyday outfit, for your return day.",
     );
-    expect(returnOutfitHelp(true, "add-return-day-back")).toBe(
-      "A fresh top, bottoms, underwear and socks for the trip home. It replaces one everyday outfit, for your return day.",
-    );
   });
 
-  it("when off, matches what the calculator actually does under each policy (#25)", () => {
-    expect(returnOutfitHelp(false, "exclude-return-day")).toBe(
-      "No separate return outfit. Your return day is not added to the everyday count.",
-    );
-    expect(returnOutfitHelp(false, "add-return-day-back")).toBe(
-      "Your return day is packed like any other day.",
-    );
-  });
-
-  it("defaults to the policy currently in force", () => {
-    expect(returnOutfitHelp(false)).toBe(returnOutfitHelp(false, "add-return-day-back"));
+  it("when off, says the return day is packed like any other day (#25, #295)", () => {
+    expect(returnOutfitHelp(false)).toBe("Your return day is packed like any other day.");
   });
 });

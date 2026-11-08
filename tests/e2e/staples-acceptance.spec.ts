@@ -14,10 +14,11 @@ import {
 // Rendered review matrix for #223. It is opt-in so the ordinary suite proves behavior without writing a large
 // evidence archive. STAPLES_SHOTS=<folder> captures every requested synthetic state at both review widths.
 const SHOTS = process.env.STAPLES_SHOTS;
-const THEMES: readonly Appearance[] = ["base", "ocean", "terracotta", "violet"];
+const THEMES: readonly Appearance[] = ["ocean", "evergreen", "dusk"];
 const CELLS = THEMES.flatMap((theme) => [1280, 390].map((width) => ({ theme, width })));
 
-const alternateTheme = (theme: Appearance): Appearance => (theme === "base" ? "ocean" : "base");
+const alternateTheme = (theme: Appearance): Appearance =>
+  theme === "ocean" ? "evergreen" : "ocean";
 
 async function chooseThemeThroughSettings(page: Page, theme: Appearance) {
   await page
@@ -25,7 +26,7 @@ async function chooseThemeThroughSettings(page: Page, theme: Appearance) {
     .getByRole("link", { name: "Settings" })
     .click();
   await page.getByRole("radio", { name: new RegExp(appearanceName(theme)) }).check();
-  await expect(page.locator("html")).toHaveAttribute("data-appearance", theme);
+  await expect(page.locator("html")).toHaveAttribute("data-scheme", theme);
   await expect(page.getByText(`Current theme: ${appearanceName(theme)}`)).toBeVisible();
   await expect(page.getByText(/^Last saved /)).toBeVisible();
 }
@@ -98,7 +99,7 @@ for (const { theme, width } of CELLS) {
     await shot("save-error-selections-retained");
     await page.unroute("**/*");
     await page.getByRole("button", { name: "Try save again" }).click();
-    await expect(page.getByRole("heading", { name: "Your travel ledger" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^Where to (first|next)\?$/ })).toBeVisible();
 
     // A migrated account keeps its existing Staples and gets an invitation to review, not fresh defaults.
     await setStaplesSetupLifecycle(setupOwner, "skipped");
@@ -126,7 +127,7 @@ for (const { theme, width } of CELLS) {
     await page.getByRole("button", { name: "Skip for now" }).click();
     await expect(page.getByRole("complementary", { name: "Staples setup reminder" })).toBeVisible();
     await shot("reminder-shown");
-    await page.getByRole("link", { name: "Staples" }).click();
+    await page.getByRole("link", { name: "Staples", exact: true }).click();
     await expect(page.getByText("Your Staples list is intentionally empty.")).toBeVisible();
     await shot("skipped-empty-staples");
 

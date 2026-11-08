@@ -15,7 +15,7 @@ import {
 // these are skipped, so the normal run neither writes files nor pays for them. The states the server decides are shown by answering the
 // status route with each state (the screen reads nothing else); the saved-report and sign-out states are the real flow.
 const SHOTS = process.env.FEEDBACK_STATE_SHOTS;
-const THEMES = ["base", "ocean", "terracotta", "violet"] as const;
+const THEMES = ["ocean", "evergreen", "dusk"] as const;
 const WIDTHS = [390, 1280] as const;
 const FAR = "2099-01-01T00:00:00.000Z";
 const SERVER_STATES = [
@@ -52,7 +52,7 @@ for (const theme of THEMES) {
         .addCookies([{ name: "appearance", value: theme, url: "http://localhost:3100" }]);
 
       await openSettingsFromNav(page);
-      await expect(page.locator("html")).toHaveAttribute("data-appearance", theme);
+      await expect(page.locator("html")).toHaveAttribute("data-scheme", theme);
       await shot(page, `${tag}-settings-not-connected`);
       await connectFeedback(page);
       await shot(page, `${tag}-settings-connected`);

@@ -4,12 +4,21 @@
 // Date normalization, the forecast label, and the item list come from the calculator module
 // (src/domain/calc). Only the id generator and "today" are injected: the domain has no hidden clock.
 
-import { buildTripItems, forecastLabel, normalizeTripDates, parseDate } from "./calc";
+import { DEFAULT_MORNING_OF_CUBES } from "./cubes";
+import {
+  FORECAST_WINDOW_DAYS,
+  buildTripItems,
+  forecastLabel,
+  normalizeTripDates,
+  parseDate,
+} from "./calc";
 import type { StampLabels } from "./stamps";
 import { DEFAULT_THEME, type ThemeId } from "./themes";
 import { TOILETRY_GROUP_ID } from "./toiletry-bag";
+import type { TravelMode, TripOrigin } from "./trip-route";
 import type { Staple, Trip, TripConfig, TripItem } from "./trip";
 import {
+  addDays,
   daysBetween,
   routeLabel,
   shiftStops,
@@ -26,10 +35,16 @@ export interface LifecycleTrip extends Trip {
   location: SampleLocation | null;
   copiedFrom: string | null;
   archived: boolean;
-  /** The trip's picture (#48). */
+  /** Legacy stored value retained until a separate data migration removes the compatibility column. */
   theme: ThemeId;
   /** The owner's stamp label overrides (#151); absent or [null, null] = automatic. A new or copied trip never has them. */
   stampLabels?: StampLabels;
+  /** Where the trip starts from and returns to (#379); absent or null = none (every trip from before it). */
+  origin?: TripOrigin | null;
+  /** Fly / Drive / Train or other; absent or null = never chosen. */
+  travelMode?: TravelMode | null;
+  /** The owner's own name for the trip; absent or null = show the stops (`tripDisplayName`). */
+  name?: string | null;
 }
 
 /** A stop being drafted: its place is unconfirmed until the person picks one. */
@@ -53,13 +68,20 @@ export interface TripDraft {
   start: string;
   end: string;
   config: TripConfig;
-  /** Chosen on step 1; Travel until changed, and a copy starts from the source trip's theme. */
-  theme: ThemeId;
   /**
    * The one saved list this new trip starts from (#170), or absent for today's staples plus recommendations. Only a
    * new (not copied) trip can have one. Just the id: the server loads the list itself, owner-scoped.
    */
   savedListId?: string | null;
+  /**
+   * Where the trip leaves from and returns to (#390). Absent = the account's home city (the server fills it in); null = no
+   * origin. Only the place id goes to the server, which resolves the place itself.
+   */
+  origin?: SampleLocation | null;
+  /** Fly / Drive / Train or other. Absent = none chosen (a copy then keeps its source's). */
+  travelMode?: TravelMode | null;
+  /** The owner's own name for the trip; blank or absent shows the stops. */
+  name?: string | null;
 }
 
 export interface DeletedTrip {
@@ -123,12 +145,7 @@ function withStops(draft: TripDraft, stops: DraftStop[]): TripDraft {
 }
 
 /** Start a new draft. Dates are normalized (a return before departure becomes departure). */
-export function startDraft(
-  config: TripConfig,
-  start: string,
-  end: string,
-  theme: ThemeId = DEFAULT_THEME,
-): TripDraft {
+export function startDraft(config: TripConfig, start: string, end: string): TripDraft {
   const dates = normalizeTripDates(start, end);
   return {
     mode: "create",
@@ -137,28 +154,24 @@ export function startDraft(
     start: dates.start,
     end: dates.end,
     config: { ...config },
-    theme,
   };
 }
 
 /**
- * Start a copy draft: the source's preference config and theme are carried over. A single-stop source asks for a
+ * Start a copy draft: the source's preference config is carried over. Its stored legacy theme is compatibility data,
+ * not editable draft state; the persistence layer preserves it when the copy is saved. A single-stop source asks for a
  * location and dates anew; a multi-stop source keeps its route, every stop shifted by the same offset so the first
  * arrival lands on `start` (`end` then follows from the stops).
  */
 export function startCopyDraft(source: LifecycleTrip, start: string, end: string): TripDraft {
   const draft: TripDraft = {
-    ...startDraft(source.config, start, end, source.theme),
+    ...startDraft(source.config, start, end),
     mode: "copy",
     sourceId: source.id,
   };
   const stops = source.stops ?? [];
   if (stops.length < 2 || !parseDate(start)) return draft;
   return withStops(draft, shiftStops(stops, daysBetween(stops[0].arrive, start)));
-}
-
-export function setDraftTheme(draft: TripDraft, theme: ThemeId): TripDraft {
-  return { ...draft, theme };
 }
 
 /** Start from this saved list (or, with null, from staples and recommendations again). A copy never has one. */
@@ -279,6 +292,7 @@ export function buildTrip(
     days: built.days,
     dailyDays: built.dailyDays,
     items,
+    morningOfCubes: [...DEFAULT_MORNING_OF_CUBES],
     suggestionMemory: {},
     suppressedSuggestions: {},
     toiletryBagPacked: false,
@@ -304,6 +318,8 @@ export function saveDraft(
   deps: TripBuilderDeps,
   /** A saved list's items (#170): the trip starts from exactly these, with no staples or length-based items. */
   listItems?: readonly TripItem[],
+  /** Stored-data compatibility only: copies keep their source value; new trips default to Travel. */
+  compatibilityTheme?: ThemeId,
 ): LifecycleResult {
   const draft = state.draft;
   if (!draft) return { ok: false, reason: "NO_DRAFT", state };
@@ -321,6 +337,10 @@ export function saveDraft(
     return { ok: false, reason: "INVALID_DATES", state };
   }
   const dates = tripDatesFromStops(confirmed);
+  const theme =
+    compatibilityTheme ??
+    state.trips.find((trip) => trip.id === draft.sourceId)?.theme ??
+    DEFAULT_THEME;
 
   const trip = buildTrip(
     routeLabel(confirmed),
@@ -331,7 +351,7 @@ export function saveDraft(
     staples,
     deps,
     draft.sourceId,
-    draft.theme,
+    theme,
     confirmed,
     listItems,
   );
@@ -354,6 +374,34 @@ export function classifyTrip(
 ): TripClassification {
   if (trip.archived) return "archived";
   return isPastTrip(trip, today) ? "past" : "upcoming";
+}
+
+/**
+ * Where a trip is in time (Suitcase P3, #408). One function for every screen:
+ * - `far`: the first day is beyond the forecast window (more than 15 days out), so there is no forecast yet;
+ * - `soon`: 1 to 15 days out;
+ * - `leaving`: the start day (a day trip is `leaving` and then `past`, never `during`);
+ * - `during`: after the start day, up to and including the end day;
+ * - `past`: the day after the end date (the same rule as `isPastTrip`, #26).
+ * `today` is the device-local date (`localToday`). A trip with an unparseable start or `today` is `soon` (the neutral
+ * treatment, no Usual weather); an unparseable or earlier end counts as the start day.
+ */
+export type TripPhase = "far" | "soon" | "leaving" | "during" | "past";
+
+export function tripPhase(trip: Pick<LifecycleTrip, "start" | "end">, today: string): TripPhase {
+  if (!parseDate(trip.start) || !parseDate(today)) return "soon";
+  const toStart = daysBetween(today, trip.start);
+  if (toStart >= FORECAST_WINDOW_DAYS) return "far";
+  if (toStart > 0) return "soon";
+  if (toStart === 0) return "leaving";
+  const lastDay =
+    daysBetween(trip.start, trip.end) > 0 && parseDate(trip.end) ? trip.end : trip.start;
+  return daysBetween(lastDay, today) > 0 ? "past" : "during";
+}
+
+/** The day the forecast reaches the trip's first day: start minus 15 days. Null when the start is not a date. */
+export function forecastOpensOn(start: string): string | null {
+  return parseDate(start) ? addDays(start, 1 - FORECAST_WINDOW_DAYS) : null;
 }
 
 export function upcomingTrips(trips: LifecycleTrip[], today: string): LifecycleTrip[] {

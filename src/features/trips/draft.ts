@@ -1,12 +1,7 @@
 // Pure helpers for the create/copy flow. A draft lives only in component state: nothing is
 // persisted until the explicit Save, so cancelling can never leave a trace.
 
-import {
-  normalizeTripDates,
-  RETURN_OFF_POLICY,
-  type ReturnOffPolicy,
-  type Suggestions,
-} from "@/domain/calc";
+import { normalizeTripDates } from "@/domain/calc";
 import {
   startCopyDraft,
   startDraft,
@@ -15,7 +10,6 @@ import {
   type TripDraft,
 } from "@/domain/trip-lifecycle";
 import type { TripConfig } from "@/domain/trip";
-import { fixSummary, stopProblems } from "./stops-draft";
 
 // The defaults for a brand-new trip (#205): return outfit on, Nice outfits OFF (occasions and reuse stay inert until it is turned on).
 export const DEFAULT_TRIP_CONFIG: TripConfig = {
@@ -64,46 +58,6 @@ export function withDates(draft: TripDraft, start: string, end: string): DatesCh
   };
 }
 
-/** Why Continue is unavailable, in words, or null when the first step is complete. */
-export function continueBlocker(draft: TripDraft): string | null {
-  if (draft.stops && draft.stops.length > 1) {
-    const problems = stopProblems(draft.stops);
-    return problems.length ? fixSummary(problems.length) : null;
-  }
-  if (!draft.location) return "Choose a destination from the list to continue.";
-  if (!draft.start || !draft.end || !normalizeTripDates(draft.start, draft.end).valid) {
-    return "Choose your departure and return dates to continue.";
-  }
-  return null;
-}
-
-/** True when the user changed anything from where the draft started (drives the discard prompt). */
-export function isDirty(draft: TripDraft, initial: TripDraft, query: string): boolean {
-  return (
-    query.trim() !== "" ||
-    JSON.stringify({ ...draft, config: sortKeys(draft.config) }) !==
-      JSON.stringify({ ...initial, config: sortKeys(initial.config) })
-  );
-}
-
-function sortKeys<T extends object>(value: T): T {
-  return Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b))) as T;
-}
-
-/** "Everyday tops: 3, Socks: 5" for what changed between two calculations, for a polite live region. */
-export function describeChanges(before: Suggestions, after: Suggestions): string {
-  const was = new Map(before.items.map((item) => [item.id, item.qty]));
-  const now = new Map(after.items.map((item) => [item.id, item.qty]));
-  const changes: string[] = [];
-  for (const item of after.items) {
-    if (was.get(item.id) !== item.qty) changes.push(`${item.name}: ${item.qty}`);
-  }
-  for (const item of before.items) {
-    if (!now.has(item.id)) changes.push(`${item.name}: 0`);
-  }
-  return changes.length ? changes.join(", ") : "List unchanged";
-}
-
 /** The description under the Nice outfits switch: the Shape step and the Edit trip preferences use this one text (#203, design on #213). */
 export const NICE_OUTFITS_DESCRIPTION =
   "Adds planned occasion looks on top of your everyday outfits, plus optional Dress shoes.";
@@ -112,11 +66,9 @@ export const NICE_OUTFITS_DESCRIPTION =
 export const NICE_OFF_HINT = "Turn on Nice outfits to set occasions.";
 
 /** Helper text under the return-outfit switch. The "off" wording must match what the calculator does (#25). */
-export function returnOutfitHelp(on: boolean, policy: ReturnOffPolicy = RETURN_OFF_POLICY): string {
+export function returnOutfitHelp(on: boolean): string {
   if (on) {
     return "A fresh top, bottoms, underwear and socks for the trip home. It replaces one everyday outfit, for your return day.";
   }
-  return policy === "add-return-day-back"
-    ? "Your return day is packed like any other day."
-    : "No separate return outfit. Your return day is not added to the everyday count.";
+  return "Your return day is packed like any other day.";
 }

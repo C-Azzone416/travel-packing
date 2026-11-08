@@ -1,8 +1,23 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
-import { chooseFromMenu } from "./helpers/menu";
-import { DEVICE } from "./helpers/device";
+import { chooseFromMenu, planATrip, openPastAndArchive, openTripFromHome } from "./helpers/menu";
+import { DEVICE, phoneHomeLayout } from "./helpers/device";
+import {
+  expectItem,
+  expectNoItem,
+  expectPacking,
+  openCube,
+  openEditor,
+  showItem,
+  tick,
+} from "./helpers/packing";
 import { reviewAndApply } from "./helpers/preferences";
+import { planAndCreate, pickPlace, toWhen } from "./helpers/plan";
+
+// Home is the laptop suitcase view from 1024px (#387); this spec's subject is the page below it, so it runs there.
+test.beforeEach(async ({ page }) => {
+  await phoneHomeLayout(page);
+});
 
 // Parity with the approved prototype's browser test (reference/prototype/tests/browser.test.mjs), on the production app
 // and its real database. Most scenarios are covered by the feature specs; docs/parity.md maps EVERY prototype scenario to
@@ -19,7 +34,7 @@ async function openDashboard(page: Page) {
 async function openSanDiego(page: Page) {
   await openDashboard(page);
   await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
-  await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
+  await expectPacking(page);
 }
 
 const row = (page: Page, id: string) => page.locator(`[data-item-id="${id}"]`);
@@ -34,15 +49,23 @@ async function setPreference(page: Page, name: string, on: boolean) {
   await reviewAndApply(page, dialog);
 }
 
-test("home: the headline, three navigation items, one upcoming trip with a 'left to pack' badge, and history kept apart", async ({
+test("home: the headline, four navigation items (Stamps joins the laptop menu), the next trip's tag with its Pack count, and history kept apart", async ({
   page,
 }) => {
   await openDashboard(page);
-  await expect(page.getByRole("heading", { name: "Your travel ledger", level: 1 })).toBeVisible();
-  await expect(nav(page).getByRole("link")).toHaveCount(3);
-  await expect(page.getByRole("article")).toHaveCount(1);
-  await expect(page.getByRole("article")).toContainText(/\d+ left/);
-  await page.getByRole("button", { name: /Past & archive/ }).click();
+  await expect(page.getByRole("heading", { name: "Trips", level: 1 })).toBeAttached();
+  // The laptop menu has the fourth item (Stamps); the tab bar below 1024px has three. Check it at laptop width, then go back.
+  const before = page.viewportSize();
+  if (test.info().project.name === "desktop") {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await expect(nav(page).getByRole("link")).toHaveCount(4);
+    if (before) await page.setViewportSize(before);
+  }
+  // One next trip on a luggage tag, the pills with its Pack count, and no history cards on the Home itself.
+  await expect(page.getByRole("region", { name: "San Diego" })).toHaveCount(1);
+  await expect(page.getByRole("tab", { name: /^Pack \d+\/\d+$/ })).toBeVisible();
+  await expect(page.getByRole("article")).toHaveCount(0);
+  await openPastAndArchive(page);
   await expect(page.getByRole("article")).toHaveCount(1);
   await expect(page.getByText("Past trip").first()).toBeVisible();
   await expect(page.locator(".status-pill.ready")).toBeVisible();
@@ -66,7 +89,9 @@ test("dates: a later departure pulls the return forward and becomes its minimum"
   page,
 }) => {
   await openDashboard(page);
-  await page.getByRole("link", { name: /Plan a trip/ }).click();
+  await planATrip(page);
+  await pickPlace(page, "lon", /England/);
+  await toWhen(page);
   await page.getByLabel("Leave", { exact: true }).fill("2026-11-12");
   await page.getByLabel("Return", { exact: true }).fill("2026-11-16");
   await page.getByLabel("Leave", { exact: true }).fill("2026-12-20");
@@ -74,107 +99,103 @@ test("dates: a later departure pulls the return forward and becomes its minimum"
   await expect(page.getByLabel("Return", { exact: true })).toHaveAttribute("min", "2026-12-20");
 });
 
-test("staples: four sections in order, the Bathroom note, Pack last as a badge only, and the seven flagged defaults", async ({
+test("staples: five cubes in order, Pack last as a badge only, and the seven flagged defaults", async ({
   page,
 }) => {
   await openDashboard(page);
   await page.goto("/staples");
-  await expect(
-    page.getByRole("heading", { name: "Every trip starts here", level: 1 }),
-  ).toBeVisible();
-  await expect(page.getByText("My staples", { exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { level: 2 })).toHaveText([
+  await expect(page.getByRole("heading", { name: "Staples", level: 1 })).toBeVisible();
+  const cubes = page.locator("section[aria-labelledby^='staples-']");
+  await expect(cubes.getByRole("heading", { level: 2 })).toHaveText([
     "Clothing",
-    "Bathroom",
+    "Toiletries",
     "Tech",
-    "Other essentials",
+    "Documents",
+    "Misc",
   ]);
-  await expect(page.getByText(/normal Toiletries checkboxes/)).toBeVisible();
   await expect(page.getByText("Pack last defaults")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
   const glasses = page.locator("[data-staple-id]").filter({ hasText: "Everyday glasses" });
   const sunglasses = page.locator("[data-staple-id]").filter({ hasText: "Sunglasses" });
   await expect(glasses).toHaveCount(1);
   await expect(glasses).toContainText("Pack last");
   await expect(sunglasses).toHaveCount(1);
   await expect(sunglasses).not.toContainText("Pack last");
-  const edits = page.getByRole("button", { name: /^Edit / });
-  await expect(edits).toHaveCount(await page.locator("[data-staple-id]").count());
-
-  await page.getByRole("button", { name: "Pack last" }).click();
-  const rows = page.locator("[data-staple-id]");
-  await expect(rows).toHaveCount(7);
-  for (const tag of await rows.locator(".timing-tag").all())
-    await expect(tag).toHaveText("Pack last");
-  await expect(rows.locator(".timing-tag")).toHaveCount(7);
-  await expect(page.getByRole("heading", { level: 2 })).toHaveText([
-    "Bathroom",
-    "Tech",
-    "Other essentials",
-  ]);
+  // Every staple opens its editor from its row.
+  const rowButtons = page.locator("[data-staple-id] > button");
+  await expect(rowButtons).toHaveCount(await page.locator("[data-staple-id]").count());
+  const flagged = page.locator("[data-staple-id]").filter({ hasText: "Pack last" });
+  await expect(flagged).toHaveCount(7);
 });
 
-test("packing screen: the return travel outfit, Laptop under Pack last, no umbrella before the weather review, and a Pack last Bathroom item only in Toiletries", async ({
+test("packing screen: the return travel outfit, no umbrella before the weather review, and a Bathroom item flagged Pack last only in Toiletries", async ({
   page,
 }) => {
   await openSanDiego(page);
-  await expect(page.getByRole("heading", { name: /Return travel outfit/ })).toBeVisible();
-  const packLast = page.locator("#block-packlast");
-  await expect(packLast.getByText("Laptop", { exact: true })).toBeVisible();
-  await expect(page.getByText("Compact umbrella")).toHaveCount(0);
-  // Deliberate difference from the prototype (which showed the toothbrush in both views): one canonical row, in Toiletries,
-  // carrying the Pack last badge (the screen says so: "Bathroom items flagged Pack last stay in Toiletries").
+  await expectItem(page, "return-top");
+  await expect(
+    (await showItem(page, "return-top")).getByRole("checkbox", { name: /return outfit$/ }),
+  ).toHaveCount(1);
+  await expectNoItem(page, "weather-umbrella");
+  // Deliberate difference from the prototype (which showed the toothbrush in both views): one canonical row, in Toiletries.
+  await openCube(page, "Toiletries");
   await expect(row(page, "last-toothbrush")).toHaveCount(1);
-  await expect(row(page, "last-toothbrush")).toContainText("Pack last");
-  await expect(packLast.locator('[data-item-id="last-toothbrush"]')).toHaveCount(0);
+  const all = await page
+    .locator("[data-item-id]")
+    .evaluateAll((nodes) => nodes.map((n) => n.getAttribute("data-item-id")));
+  expect(all.filter((id) => id === "last-toothbrush")).toHaveLength(1);
 });
 
 test("Nice outfits: switching off hides generic Nice clothing, switching back on restores edits and progress without personal assumptions", async ({
   page,
 }) => {
   await openSanDiego(page);
-  await expect(row(page, "nice-shoes")).toHaveCount(1);
-  await expect(row(page, "nice-makeup")).toHaveCount(0);
-  await expect(row(page, "nice-undergarments")).toHaveCount(0);
+  await expectItem(page, "nice-shoes");
+  await expectNoItem(page, "nice-makeup");
+  await expectNoItem(page, "nice-undergarments");
 
-  await row(page, "nice-shoes").locator(".item-body").click();
+  await openEditor(page, "nice-shoes");
   const dialog = page.getByRole("dialog", { name: "Edit item" });
   await dialog.getByRole("spinbutton", { name: "Quantity" }).fill("2");
   await dialog.getByRole("button", { name: "Save item" }).click();
-  await row(page, "nice-shoes")
-    .getByRole("button", { name: "Increase packed Dress shoes" })
-    .click();
-  await expect(row(page, "nice-shoes")).toContainText("1 of 2 packed");
+  await expect(dialog).toHaveCount(0);
+  // The cube stays in Edit list after its item sheet closes; return to the checklist before ticking it.
+  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await tick(page, "nice-shoes");
+  await expect(
+    row(page, "nice-shoes").getByRole("checkbox", { name: "Dress shoes, 2" }),
+  ).toBeChecked();
 
   for (let round = 0; round < 2; round += 1) {
     await setPreference(page, "Nice outfits", false);
-    await expect(row(page, "nice-shoes")).toHaveCount(0);
-    await expect(row(page, "nice-makeup")).toHaveCount(0);
-    await expect(row(page, "nice-undergarments")).toHaveCount(0);
+    await expectNoItem(page, "nice-shoes");
+    await expectNoItem(page, "nice-makeup");
+    await expectNoItem(page, "nice-undergarments");
     await setPreference(page, "Nice outfits", true);
-    await expect(row(page, "nice-shoes")).toHaveCount(1);
-    await expect(row(page, "nice-shoes")).toContainText("1 of 2 packed");
-    await expect(row(page, "nice-makeup")).toHaveCount(0);
-    await expect(row(page, "nice-undergarments")).toHaveCount(0);
+    await expectItem(page, "nice-shoes");
+    await expect(
+      (await showItem(page, "nice-shoes")).getByRole("checkbox", { name: "Dress shoes, 2" }),
+    ).toBeChecked();
+    await expectNoItem(page, "nice-makeup");
+    await expectNoItem(page, "nice-undergarments");
   }
 });
 
 test("a removed optional item stays removed through later recalculations", async ({ page }) => {
   await openSanDiego(page);
-  await row(page, "nice-shoes").locator(".item-body").click();
+  await openEditor(page, "nice-shoes");
   await page
     .getByRole("dialog", { name: "Edit item" })
     .getByRole("button", { name: "Remove item" })
     .click();
   await page.getByRole("dialog").getByRole("button", { name: "Remove item" }).click();
-  await expect(row(page, "nice-shoes")).toHaveCount(0);
-  await setPreference(page, "Laundry access", true);
-  await expect(row(page, "nice-shoes")).toHaveCount(0);
+  await expectNoItem(page, "nice-shoes");
+  await setPreference(page, "Laundry on this trip", true);
+  await expectNoItem(page, "nice-shoes");
   await setPreference(page, "Nice outfits", false);
   await setPreference(page, "Nice outfits", true);
-  await expect(row(page, "nice-shoes")).toHaveCount(0);
+  await expectNoItem(page, "nice-shoes");
   await page.reload();
-  await expect(row(page, "nice-shoes")).toHaveCount(0);
+  await expectNoItem(page, "nice-shoes");
 });
 
 test("copy: a remembered Bathroom item travels to the copy, with nothing checked, no assumed Makeup, and the source unchanged", async ({
@@ -182,32 +203,41 @@ test("copy: a remembered Bathroom item travels to the copy, with nothing checked
 }) => {
   await openSanDiego(page);
   // Remember a new Bathroom staple from this trip.
+  await openCube(page, "Toiletries");
   await page.getByRole("button", { name: "＋ Add a Bathroom item" }).click();
   const add = page.getByRole("dialog", { name: "Add a Bathroom item" });
   await add.getByLabel("Item name").fill("Face wash");
   await add.getByRole("radio", { name: /Remember for future trips/ }).check();
   await add.getByRole("button", { name: "Add toiletry item" }).click();
   await expect(page.getByText("Face wash", { exact: true })).toBeVisible();
-  await page.getByRole("link", { name: "All trips" }).click();
-  const source = page.getByRole("article", { name: "San Diego" });
+  await page.goto("/");
+  await expect(page.getByRole("tablist", { name: "Trip sections" })).toBeVisible();
+  const source = page.getByRole("region", { name: "San Diego" });
   const before = await source.innerText();
+  // The source trip's packed/total quantities (the Pack pill): a copy must not change them.
+  const packBefore = await page.getByRole("tab", { name: /^Pack \d+\/\d+$/ }).innerText();
 
   await chooseFromMenu(page, "San Diego", "Copy trip");
-  await page.getByRole("combobox", { name: "Destination search" }).fill("paris");
-  await page.getByRole("option", { name: /Paris/ }).click();
-  await page.getByLabel("Leave", { exact: true }).fill("2026-12-04");
-  await page.getByLabel("Return", { exact: true }).fill("2026-12-08");
-  await page.getByRole("button", { name: "Continue to packing preferences" }).click();
-  await page.getByRole("button", { name: "Save trip" }).click();
-  await expect(page.getByRole("article", { name: "Paris" })).toBeVisible();
-  expect(await page.getByRole("article", { name: "San Diego" }).innerText()).toBe(before);
+  await planAndCreate(page, {
+    query: "paris",
+    option: /Paris/,
+    start: "2026-12-04",
+    end: "2026-12-08",
+  });
+  // Paris is a later trip: the Future pill lists it, and the next trip's tag is unchanged.
+  await page.getByRole("tab", { name: /^Future/ }).click();
+  await expect(page.getByRole("link", { name: /Paris/ })).toBeVisible();
+  expect(await source.innerText()).toBe(before);
+  await page.getByRole("tab", { name: /^Pack/ }).click();
+  expect(await page.getByRole("tab", { name: /^Pack \d+\/\d+$/ }).innerText()).toBe(packBefore);
 
-  await page.getByRole("link", { name: /(Continue|Keep) packing: Paris/ }).click();
-  await expect(page.getByRole("heading", { name: "Paris", level: 1 })).toBeVisible();
+  await openTripFromHome(page, "Paris");
+  await expectPacking(page);
+  await expectNoItem(page, "nice-makeup");
+  await expectItem(page, "nice-shoes");
+  await openCube(page, "Toiletries");
   await expect(page.getByText("Face wash", { exact: true })).toBeVisible();
-  await expect(row(page, "nice-makeup")).toHaveCount(0);
-  await expect(row(page, "nice-shoes")).toHaveCount(1);
-  await expect(page.locator(".pack-row.complete")).toHaveCount(0);
+  await expect(page.locator("[data-item-id] input:checked")).toHaveCount(0);
   await expect(page.getByText("Toiletry bag is in the suitcase")).toHaveCount(0);
   await expect(page.getByText("Toiletry bag not ready to place")).toBeVisible();
 });
@@ -225,7 +255,7 @@ test("a tour of every screen raises no uncaught browser errors", DEVICE, async (
     // is the browser unloading the page, not an error in the app. Let them finish before the next hard navigation.
     await page.waitForLoadState("networkidle");
   }
-  await page.getByRole("link", { name: /Plan a trip/ }).click();
+  await planATrip(page);
   await page.getByRole("combobox", { name: "Destination search" }).fill("lon");
   await expect(page.getByRole("option").first()).toBeVisible();
   expect(errors).toEqual([]);

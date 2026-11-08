@@ -10,15 +10,17 @@ import {
 } from "@/features/settings/weather-actions";
 import { closeAccountAction } from "@/features/settings/close-account-actions";
 import { accountClosureEnabled } from "@/server/auth/account-closure-rollout";
+import { getHomeCityAction, updateHomeCityAction } from "@/features/settings/home-actions";
 
 export const metadata: Metadata = { title: "Settings" };
 
 export default async function SettingsPage() {
   // The proxy already keeps signed-out visitors out; this only reads whose account to show.
-  const [session, weather, appearance] = await Promise.all([
+  const [session, weather, appearance, home] = await Promise.all([
     (await getAuth()).provider.getSession(),
     getWeatherSettingsAction(),
     readSavedAppearance(),
+    getHomeCityAction(),
   ]);
   return (
     <SettingsScreen
@@ -28,6 +30,8 @@ export default async function SettingsPage() {
       updateWeather={updateWeatherSettingsAction}
       initialAppearance={appearance}
       updateAppearance={updateAppearanceAction}
+      initialHome={home.ok ? home.home : null}
+      updateHomeCity={updateHomeCityAction}
       accountClosureEnabled={accountClosureEnabled()}
       closeAccount={closeAccountAction}
     />

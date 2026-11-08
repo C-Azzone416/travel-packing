@@ -15,7 +15,7 @@ async function chooseThemeThroughSettings(page: Page, theme: Appearance) {
     .getByRole("link", { name: "Settings" })
     .click();
   await page.getByRole("radio", { name: new RegExp(appearanceName(theme)) }).check();
-  await expect(page.locator("html")).toHaveAttribute("data-appearance", theme);
+  await expect(page.locator("html")).toHaveAttribute("data-scheme", theme);
   await expect(page.getByText(`Current theme: ${appearanceName(theme)}`)).toBeVisible();
   await expect(page.getByText(/^Last saved /)).toBeVisible();
 }
@@ -43,11 +43,11 @@ test("captures the reviewed Staples resilience states", async ({ page }, testInf
   const email = ownerEmailFor("desktop");
   const ownerId = `e2e-${email}`;
   await resetOwnerData(ownerId);
-  await setOwnerAppearance(ownerId, "violet");
+  await setOwnerAppearance(ownerId, "dusk");
   await signIn(page, email);
 
   const loadFailureCells: readonly { theme: Appearance; width: 1280 | 390 }[] = [
-    { theme: "base", width: 1280 },
+    { theme: "ocean", width: 1280 },
     { theme: "ocean", width: 390 },
   ];
   for (const { theme, width } of loadFailureCells) {
@@ -56,19 +56,19 @@ test("captures the reviewed Staples resilience states", async ({ page }, testInf
     await abortNextAction(page);
     await page.goto("/");
     await expect(page.getByRole("status", { name: "Staples setup unavailable" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Your travel ledger" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^Where to (first|next)\?$/ })).toBeVisible();
     await page.screenshot({
       path: join(SHOTS!, `${theme}-${width}-setup-read-failure.png`),
       fullPage: true,
     });
     await page.unroute("**/*");
     await page.reload();
-    await expect(page.getByRole("heading", { name: "Your travel ledger" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^Where to (first|next)\?$/ })).toBeVisible();
   }
 
   const dismissFailureCells: readonly { theme: Appearance; width: 1280 | 390 }[] = [
-    { theme: "violet", width: 1280 },
-    { theme: "terracotta", width: 390 },
+    { theme: "dusk", width: 1280 },
+    { theme: "evergreen", width: 390 },
   ];
   for (const { theme, width } of dismissFailureCells) {
     await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });

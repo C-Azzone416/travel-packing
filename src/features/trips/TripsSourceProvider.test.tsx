@@ -23,6 +23,7 @@ const actions = vi.hoisted(() => {
     createTripAction: vi.fn().mockResolvedValue({ ok: true, trip }),
     createTripWithWeatherAction: vi.fn().mockResolvedValue({ ok: true, trip }),
     getTripAction: vi.fn().mockResolvedValue({ ok: true, trip }),
+    getHomeCityAction: vi.fn().mockResolvedValue({ ok: true, home: null }),
     listStaplesAction: vi.fn().mockResolvedValue({ ok: true, staples: [] }),
     upsertStapleAction: vi.fn().mockResolvedValue({ ok: true, staples: [] }),
     listWeatherSuggestionsAction: vi.fn().mockResolvedValue({ ok: true, suggestions: [] }),
@@ -42,12 +43,15 @@ const actions = vi.hoisted(() => {
     commands: Object.fromEntries(
       [
         "setPackedAction",
+        "setPackedManyAction",
         "togglePackedAction",
         "incrementPackedAction",
         "decrementPackedAction",
         "editItemAction",
         "removeItemAction",
         "addToiletryItemAction",
+        "moveItemToCubeAction",
+        "setMorningOfAction",
         "addItemAction",
         "saveAsListAction",
         "confirmBagPlacementAction",
@@ -61,6 +65,7 @@ const actions = vi.hoisted(() => {
         "setThemeAction",
         "setStampLabelsAction",
         "setStopsAction",
+        "setTravelModeAction",
       ].map(command),
     ),
   };
@@ -73,6 +78,7 @@ vi.mock("./actions", () => ({
 }));
 vi.mock("./trip-actions", () => ({
   getTripAction: actions.getTripAction,
+  getHomeCityAction: actions.getHomeCityAction,
   listStaplesAction: actions.listStaplesAction,
   upsertStapleAction: actions.upsertStapleAction,
   listWeatherSuggestionsAction: actions.listWeatherSuggestionsAction,
@@ -175,6 +181,7 @@ describe("TripsSourceProvider", () => {
       ["undoRemove", (s) => s.undoRemove("a"), () => actions.dashboard.undoRemoveTripAction, ["a"]],
       ["createTrip", (s) => s.createTrip(draft), () => actions.createTripAction, [draft]],
       ["getTrip", (s) => s.getTrip("t"), () => actions.getTripAction, ["t"]],
+      ["homeCity", (s) => s.homeCity!(), () => actions.getHomeCityAction, []],
       ["listStaples", (s) => s.listStaples(), () => actions.listStaplesAction, []],
       ["upsertStaple", (s) => s.upsertStaple(staple), () => actions.upsertStapleAction, [staple]],
       [
@@ -182,6 +189,12 @@ describe("TripsSourceProvider", () => {
         (s) => s.setPacked("t", "i", 3),
         () => actions.commands.setPackedAction,
         ["t", "i", 3],
+      ],
+      [
+        "setPackedMany",
+        (s) => s.setPackedMany("t", [{ itemId: "i", packed: 3 }]),
+        () => actions.commands.setPackedManyAction,
+        ["t", [{ itemId: "i", packed: 3 }]],
       ],
       [
         "togglePacked",
@@ -218,6 +231,18 @@ describe("TripsSourceProvider", () => {
         (s) => s.addToiletryItem("t", toiletry),
         () => actions.commands.addToiletryItemAction,
         ["t", toiletry],
+      ],
+      [
+        "moveItemToCube",
+        (s) => s.moveItemToCube("t", "i", "tech"),
+        () => actions.commands.moveItemToCubeAction,
+        ["t", "i", "tech"],
+      ],
+      [
+        "setMorningOf",
+        (s) => s.setMorningOf("t", "tech", true),
+        () => actions.commands.setMorningOfAction,
+        ["t", "tech", true],
       ],
       [
         "addItem",
@@ -281,13 +306,25 @@ describe("TripsSourceProvider", () => {
         () => actions.commands.setStampLabelsAction,
         ["t", "ABC", null],
       ],
-      ["setStops", (s) => s.setStops("t", []), () => actions.commands.setStopsAction, ["t", []]],
+      [
+        "setStops",
+        (s) => s.setStops("t", [], "T1"),
+        () => actions.commands.setStopsAction,
+        ["t", [], "T1"],
+      ],
+      [
+        "setTravelMode",
+        (s) => s.setTravelMode("t", "drive", "T1"),
+        () => actions.commands.setTravelModeAction,
+        ["t", "drive", "T1"],
+      ],
     ];
 
     const everyAction = () => [
       actions.loadTripsAction,
       actions.createTripAction,
       actions.getTripAction,
+      actions.getHomeCityAction,
       actions.listStaplesAction,
       actions.upsertStapleAction,
       ...Object.values(actions.dashboard),
@@ -308,6 +345,8 @@ describe("TripsSourceProvider", () => {
       );
       actions.previewWeatherAction.mockClear();
       const place = { id: "x", city: "A", region: "", country: "", countryCode: "", label: "A" };
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(2030, 3, 20, 23, 30));
       await captured.weather!.previewDraft([
         {
           location: { ...place, latitude: 1.5, longitude: 2.5, city: "Secret name" },
@@ -316,17 +355,21 @@ describe("TripsSourceProvider", () => {
         },
         { location: place, arrive: "2030-05-03", leave: "2030-05-05" },
       ]);
-      expect(actions.previewWeatherAction).toHaveBeenCalledWith([
-        {
-          stopIndex: 0,
-          arrive: "2030-05-01",
-          leave: "2030-05-03",
-          includeLeave: false,
-          latitude: 1.5,
-          longitude: 2.5,
-        },
-        { stopIndex: 1, arrive: "2030-05-03", leave: "2030-05-05", includeLeave: true },
-      ]);
+      expect(actions.previewWeatherAction).toHaveBeenCalledWith(
+        [
+          {
+            stopIndex: 0,
+            arrive: "2030-05-01",
+            leave: "2030-05-03",
+            includeLeave: false,
+            latitude: 1.5,
+            longitude: 2.5,
+          },
+          { stopIndex: 1, arrive: "2030-05-03", leave: "2030-05-05", includeLeave: true },
+        ],
+        "2030-04-20",
+      );
+      vi.useRealTimers();
     });
 
     it("reads the owner's saved lists through the list and get actions, and turns a refusal into an error (#170)", async () => {

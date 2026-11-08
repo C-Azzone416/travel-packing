@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
-// Weather on the trip screen: the paths around the panel and the review sheet (loading failures, turning weather on
-// and off, what the review sends). The main happy paths are in TripScreen.test.tsx.
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+// Weather on the phone trip screen: the paths around the forecast card and its review rows (loading failures, turning weather
+// on and off, what Add and Dismiss send). The main happy paths are in TripScreen.test.tsx.
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DayWeather, StopWeather } from "@/domain/weather/types";
 import { sampleLifecycleState } from "@/features/trips/fixtures";
 import { createMemoryTripsSource, type TripsSource } from "@/features/trips/trips-source";
@@ -51,6 +51,8 @@ interface Options {
   applyFail?: boolean;
   /** The saved list already has a rain jacket from an earlier forecast. */
   rainJacket?: boolean;
+  /** Lisbon 3-5 Sep, then Porto 5-7 Sep (a changeover on the 5th). */
+  twoStops?: boolean;
 }
 function setup(options: Options = {}) {
   const memory = createMemoryTripsSource(sampleLifecycleState(), {
@@ -88,7 +90,18 @@ function setup(options: Options = {}) {
               },
             ]
           : trip.items,
-        stops: trip.stops.map((stop) => ({
+        stops: (options.twoStops
+          ? [
+              { ...trip.stops[0], arrive: "2026-09-03", leave: "2026-09-05" },
+              {
+                ...trip.stops[0],
+                arrive: "2026-09-05",
+                leave: "2026-09-07",
+                location: { ...trip.stops[0].location, city: "Porto", id: "porto" },
+              },
+            ]
+          : trip.stops
+        ).map((stop) => ({
           ...stop,
           location: { ...stop.location, latitude: 38.72, longitude: -9.14 },
         })),
@@ -116,14 +129,14 @@ function setup(options: Options = {}) {
   return { user, memory, getTripWeather, updateSettings, applyReview };
 }
 
-const ready = () => screen.findByRole("heading", { name: "Lisbon", level: 1 });
+const ready = () => screen.findByRole("heading", { name: "Pack mode", level: 1 });
 
 describe("loading weather", () => {
   it("shows no panel when the settings cannot be read, and the packing list still works", async () => {
     setup({ settingsFail: true });
     await ready();
     await waitFor(() => expect(document.querySelector(".weather-panel")).toBeNull());
-    expect(screen.getByRole("heading", { name: "Packing list" })).toBeTruthy();
+    expect(document.querySelector("section[data-cube] h2")?.textContent).toBe("Clothing");
   });
 
   it("says so when the person is offline", async () => {
@@ -170,23 +183,25 @@ describe("turning weather on and off", () => {
   });
 });
 
-describe("the review sheet", () => {
-  it("sends each kind of change as the person chose it, and the unchecked ones as skipped", async () => {
+describe("the review rows", () => {
+  const open = (user: ReturnType<typeof userEvent.setup>) =>
+    screen.findByRole("button", { name: /to review/ }).then((button) => user.click(button));
+
+  it("sends an added change as accepted and a dismissed one as skipped", async () => {
     const { user, applyReview } = setup({ weather: { kind: "ready", stops: rainy } });
     await ready();
-    await user.click(await screen.findByRole("button", { name: "Review changes" }));
-    const dialog = screen.getByRole("dialog", { name: "Weather changes" });
-    const boxes = within(dialog).getAllByRole("checkbox");
-    // "Select all" is first; uncheck the last change so it is skipped.
-    await user.click(boxes[boxes.length - 1]);
-    await user.click(within(dialog).getByRole("button", { name: /^Add selected/ }));
+    await open(user);
+    const rows = screen.getAllByRole("button", { name: /^Dismiss / });
+    expect(rows.length).toBeGreaterThan(1);
+    await user.click(rows[rows.length - 1]);
     await waitFor(() => expect(applyReview).toHaveBeenCalledTimes(1));
-    const [, accepted, skipped] = (
-      applyReview.mock.calls as unknown as [string, { kind: string }[], unknown[]][]
-    )[0];
-    expect(accepted.length).toBeGreaterThan(0);
-    expect(skipped).toHaveLength(1);
-    expect(new Set(accepted.map((change) => change.kind)).size).toBeGreaterThan(0);
+    await user.click(screen.getAllByRole("button", { name: /^Add / })[0]);
+    await waitFor(() => expect(applyReview).toHaveBeenCalledTimes(2));
+    const calls = applyReview.mock.calls as unknown as [string, { kind: string }[], unknown[]][];
+    expect(calls[0][1]).toEqual([]);
+    expect(calls[0][2]).toHaveLength(1);
+    expect(calls[1][1].length).toBe(1);
+    expect(calls[1][2]).toEqual([]);
   });
 
   it("offers the removal of a weather item the dry forecast no longer calls for", async () => {
@@ -195,80 +210,79 @@ describe("the review sheet", () => {
       rainJacket: true,
     });
     await ready();
-    await user.click(await screen.findByRole("button", { name: "Review changes" }));
-    const dialog = screen.getByRole("dialog", { name: "Weather changes" });
-
-    await user.click(within(dialog).getByRole("button", { name: /^Add selected/ }));
+    await open(user);
+    await user.click(screen.getByRole("button", { name: "Remove Rain jacket" }));
     await waitFor(() => expect(applyReview).toHaveBeenCalledTimes(1));
     const accepted = (applyReview.mock.calls as unknown as [string, { kind: string }[]][])[0][1];
-    expect(accepted.map((change) => change.kind)).toEqual(expect.arrayContaining(["remove"]));
+    expect(accepted.map((change) => change.kind)).toEqual(["remove"]);
   });
 
-  it("keeps the sheet open with a message when applying fails", async () => {
+  it("leaves the row in place and shows the Error chip when applying fails", async () => {
     const { user } = setup({ applyFail: true });
     await ready();
-    await user.click(await screen.findByRole("button", { name: "Review changes" }));
-    const dialog = screen.getByRole("dialog", { name: "Weather changes" });
-    await user.click(within(dialog).getByRole("button", { name: /^Add selected/ }));
-    expect(await within(dialog).findByText(/Couldn’t add those/)).toBeTruthy();
-    fireEvent.keyDown(dialog, { key: "Escape" });
+    await open(user);
+    await user.click(screen.getAllByRole("button", { name: /^Add / })[0]);
+    expect(await screen.findByRole("button", { name: "Not saved, retry" })).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: /^Add / }).length).toBeGreaterThan(0);
   });
 });
 
-describe("item weather pills", () => {
-  const jacket = () =>
-    document.querySelector('[data-item-id="weather-rain-jacket"]') as HTMLElement;
-  const pills = () => document.querySelectorAll(".weather-pill, .weather-note");
+describe("during the trip (#410)", () => {
+  afterEach(() => vi.useRealTimers());
 
-  it("shows the tag and reason under an item the live forecast calls for", async () => {
-    setup({ weather: { kind: "ready", stops: rainy }, rainJacket: true });
+  // Lisbon is 3-7 Sep 2026. The 4th was wet, the 5th (today) and on are dry.
+  const wetThenDry: StopWeather[] = [
+    {
+      stopIndex: 0,
+      status: "ok",
+      days: [
+        { ...hot, precipProbability: 0.8, precipMm: 12, highC: 15, lowC: 8 },
+        { ...hot, date: "2026-09-05" },
+      ],
+    },
+  ];
+
+  it("reviews only the days still ahead, as the Home counts them: a rain jacket for a wet day that is over is offered for removal", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-09-05T12:00:00") });
+    const { user, applyReview } = setup({
+      weather: { kind: "ready", stops: wetThenDry },
+      rainJacket: true,
+    });
     await ready();
-    await waitFor(() => expect(jacket().querySelector(".weather-pill")).not.toBeNull());
-    expect(jacket().querySelector(".weather-pill")?.textContent).toBe("Rain");
-    expect(jacket().querySelector(".weather-note")?.textContent).toMatch(/^Rain on 2 days/);
-    // Only items the forecast names get one: the plain staples do not.
-    expect(document.querySelectorAll(".weather-pill").length).toBeGreaterThan(0);
-    expect(document.querySelector('[data-item-id="underwear"] .weather-pill')).toBeNull();
+    await screen.findByRole("button", { name: /to review/ }).then((button) => user.click(button));
+    await user.click(screen.getByRole("button", { name: "Remove Rain jacket" }));
+    await waitFor(() => expect(applyReview).toHaveBeenCalledTimes(1));
   });
 
-  it("a stale item loses its pill when the forecast no longer calls for it", async () => {
-    setup({ weather: { kind: "ready", stops: dry }, rainJacket: true });
+  it("keeps the whole forecast in view before the trip: the wet day still calls for the jacket", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-09-01T12:00:00") });
+    const { user } = setup({ weather: { kind: "ready", stops: wetThenDry }, rainJacket: true });
     await ready();
-    // The dry forecast offers to remove the jacket (the panel has loaded), and the row carries no pill.
-    expect(await screen.findByRole("button", { name: "Review changes" })).toBeTruthy();
-    expect(jacket()).not.toBeNull();
-    expect(jacket().querySelector(".weather-pill")).toBeNull();
-    expect(jacket().querySelector(".weather-note")).toBeNull();
+    // The review disclosure is opened first, so an absent action means absent, not hidden.
+    const disclosure = await screen.findByRole("button", { name: /to review/ });
+    await user.click(disclosure);
+    expect(screen.getAllByRole("button", { name: /^(Add|Dismiss) / }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: "Remove Rain jacket" })).toBeNull();
   });
 
-  it("shows no pills when weather is off", async () => {
-    const { getTripWeather } = setup({ optedIn: false, rainJacket: true });
+  it("shows a change that names no stay under the stay the person is in, not the one already left", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-09-06T12:00:00") });
+    const day = (date: string, stopIndex: number) => ({ ...hot, date, stopIndex });
+    const { user } = setup({
+      twoStops: true,
+      rainJacket: true,
+      weather: {
+        kind: "ready",
+        stops: [
+          { stopIndex: 0, status: "ok", days: [day("2026-09-03", 0), day("2026-09-04", 0)] },
+          { stopIndex: 1, status: "ok", days: [day("2026-09-06", 1), day("2026-09-07", 1)] },
+        ],
+      },
+    });
     await ready();
-    expect(await screen.findByRole("button", { name: "Get weather" })).toBeTruthy();
-    expect(getTripWeather).not.toHaveBeenCalled();
-    expect(pills()).toHaveLength(0);
-  });
-
-  it("shows no pills when the weather service is unavailable", async () => {
-    setup({ weather: { kind: "unavailable" }, rainJacket: true });
-    await ready();
-    await screen.findByText("We couldn’t reach the weather service. Your list is unchanged.");
-    expect(pills()).toHaveLength(0);
-  });
-
-  it("shows no pills when the person is offline", async () => {
-    setup({ weather: { kind: "offline" }, rainJacket: true });
-    await ready();
-    await screen.findByText(/You’re offline\. Weather will load/);
-    expect(pills()).toHaveLength(0);
-  });
-
-  it("shows no pills when the answer has no usable day", async () => {
-    const empty: StopWeather[] = [{ stopIndex: 0, status: "ok", days: [] }];
-    setup({ weather: { kind: "ready", stops: empty }, rainJacket: true });
-    await ready();
-    await screen.findByRole("list", { name: "Weather by stop" }).catch(() => undefined);
-    await waitFor(() => expect(document.querySelector(".weather-panel")).not.toBeNull());
-    expect(pills()).toHaveLength(0);
+    await screen.findByRole("button", { name: /to review/ }).then((button) => user.click(button));
+    const forecast = screen.getByRole("button", { name: "Remove Rain jacket" }).closest("section")!;
+    expect(forecast.textContent).toContain("Porto, has changes to review");
+    expect(forecast.textContent).not.toContain("Lisbon, has changes to review");
   });
 });

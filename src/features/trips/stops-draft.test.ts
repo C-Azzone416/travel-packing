@@ -8,9 +8,9 @@ import {
   moveStop,
   nightsAt,
   removeStop,
-  routeSummary,
   setFirstArrive,
   setLeave,
+  shiftEnd,
   snapContiguous,
   stopProblems,
 } from "./stops-draft";
@@ -45,6 +45,7 @@ describe("nights", () => {
   });
 
   it("formats singular and plural", () => {
+    expect(formatNights(0)).toBe("day trip");
     expect(formatNights(1)).toBe("1 night");
     expect(formatNights(3)).toBe("3 nights");
   });
@@ -260,18 +261,30 @@ describe("summaries", () => {
     expect(fixSummary(1)).toBe("Fix 1 thing above to continue.");
     expect(fixSummary(2)).toBe("Fix 2 things above to continue.");
   });
+});
 
-  it("shows the route, range and nights once every place is picked", () => {
-    expect(routeSummary(ROUTE)).toBe("Alpha → Beta → Gamma · May 1 – May 9 · 8 nights");
+describe("shiftEnd (Come home a night later or earlier)", () => {
+  const route = [
+    stop("Lisbon", "2030-03-15", "2030-03-18"),
+    stop("Porto", "2030-03-18", "2030-03-23"),
+  ];
+
+  it("moves the last stop's Leave by one day and leaves the others alone", () => {
+    expect(shiftEnd(route, 1).map((entry) => entry.leave)).toEqual(["2030-03-18", "2030-03-24"]);
+    expect(shiftEnd(route, -1).map((entry) => entry.leave)).toEqual(["2030-03-18", "2030-03-22"]);
   });
 
-  it("asks for the missing places first", () => {
-    expect(routeSummary([ROUTE[0], { ...ROUTE[1], location: null }])).toBe(
-      "Pick a place for each stop to see your route.",
-    );
+  it("keeps a stop of a route at one night at least, but lets a single stop be a day trip", () => {
+    const short = [route[0], stop("Porto", "2030-03-18", "2030-03-19")];
+    expect(shiftEnd(short, -1)).toEqual(short);
+    const single = [stop("Lisbon", "2030-03-15", "2030-03-16")];
+    expect(shiftEnd(single, -1)[0].leave).toBe("2030-03-15");
+    expect(shiftEnd([stop("Lisbon", "2030-03-15", "2030-03-15")], -1)[0].leave).toBe("2030-03-15");
   });
 
-  it("shows just the route while dates are blank", () => {
-    expect(routeSummary([stop("A", "", ""), stop("B", "", "")])).toBe("A → B");
+  it("changes nothing while a date is blank, or when there is no stop", () => {
+    const blank = [stop("Lisbon", "2030-03-15", "")];
+    expect(shiftEnd(blank, 1)).toEqual(blank);
+    expect(shiftEnd([], 1)).toEqual([]);
   });
 });

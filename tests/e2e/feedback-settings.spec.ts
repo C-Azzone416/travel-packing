@@ -42,10 +42,8 @@ async function paintCanaries(page: Page, email: string) {
       p.textContent?.includes(address),
     );
     for (const row of rows) paint(row, "#ff00ff");
-    // An ordinary region that must stay in the picture: the Save status card, next to the Account card.
-    const heading = [...document.querySelectorAll("h2")].find(
-      (h) => h.textContent === "Save status",
-    );
+    // An ordinary region that must stay in the picture: the Saving card, next to the Account card.
+    const heading = document.querySelector("#settings-saving");
     const card = heading?.closest("section") ?? null;
     if (card) (card as HTMLElement).style.setProperty("background", "#00ffff", "important");
     return { emailRows: rows.length, ordinaryCard: card !== null };
@@ -100,7 +98,7 @@ const live = async (page: Page) => (await page.screenshot()).toString("base64");
  * to the top and the picture would not be of the scrolled position at all.
  */
 async function openFromHeader(page: Page) {
-  await page.locator(".feedback-button").evaluate((button) => (button as HTMLElement).click());
+  await page.locator(".nav-feedback").evaluate((button) => (button as HTMLElement).click());
   const dialog = page.getByRole("dialog", { name: "Send feedback" });
   await expect(dialog).toBeVisible();
   return dialog;
@@ -224,7 +222,7 @@ test(
   async ({ page }) => {
     await settingsReady(page);
     const card = page.locator(".feedback-send-action");
-    const header = page.locator(".feedback-button");
+    const header = page.locator(".nav-feedback");
     await expect(card).toHaveText("Send feedback");
     await expect(header).toBeEnabled();
 
@@ -286,7 +284,7 @@ test("opening the Close account dialog is a private surface: the page goes inert
   await expect(closing).toBeVisible();
   // Nothing outside the dialog can be pressed, so the Feedback controls cannot start a capture.
   const inert = await page.evaluate(
-    () => document.querySelector(".feedback-button")?.closest("[inert]") !== null,
+    () => document.querySelector(".nav-feedback")?.closest("[inert]") !== null,
   );
   expect(inert).toBe(true);
   expect(
@@ -307,7 +305,7 @@ test(
     await signInAsOwner(page);
     await openSettingsFromNav(page);
     await expect(page.locator(".feedback-send-action")).toHaveCount(0);
-    await expect(page.locator(".feedback-button")).toBeDisabled();
+    await expect(page.locator(".nav-feedback")).toBeDisabled();
     await expect(page.getByLabel("Invitation")).toBeVisible();
   },
 );

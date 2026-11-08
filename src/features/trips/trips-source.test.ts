@@ -88,6 +88,7 @@ describe("memory trips source", () => {
         ready: false,
         toiletryBagPacked: false,
         copiedFrom: null,
+        theme: "travel",
       });
       expect(trip.items.every((item) => item.packed === 0)).toBe(true);
       expect(trip.weather.label).toBe("Close forecast");
@@ -104,6 +105,7 @@ describe("memory trips source", () => {
       };
       const trip = await source.createTrip(draft);
       expect(trip.copiedFrom).toBe("san-diego");
+      expect(trip.theme).toBe(original.theme);
       expect(trip.items.every((item) => item.packed === 0)).toBe(true);
       expect(source.snapshot().trips.find((t) => t.id === "san-diego")).toEqual(original);
     });
@@ -392,7 +394,6 @@ describe("per-trip commands", () => {
         reuseNice: false,
         returnOutfit: true,
       },
-      theme: "travel",
     });
     expect(future.items.find((entry) => entry.id === "sunglasses")).toMatchObject({
       name: "Polarized sunglasses",
@@ -483,6 +484,19 @@ describe("per-trip commands", () => {
     expect(changed.items.find((entry) => entry.id === "underwear")?.packed).toBe(underwear);
     expect(changed.ready).toBe(false);
     await expect(source.updatePreferences("nope", next)).rejects.toThrow("NOT_FOUND");
+  });
+});
+
+describe("the home city in the memory source (#390)", () => {
+  const options = { now: () => 1, newId: () => "x", today: () => "2026-10-16" };
+  it("is none unless the source is given one", async () => {
+    expect(await createMemoryTripsSource(sampleLifecycleState(), options).homeCity?.()).toBeNull();
+  });
+
+  it("answers the home city it was given", async () => {
+    const home = { location: LOCATIONS.find((entry) => entry.id === "us-wa-seattle")! };
+    const source = createMemoryTripsSource(sampleLifecycleState(), { ...options, homeCity: home });
+    expect(await source.homeCity?.()).toBe(home);
   });
 });
 

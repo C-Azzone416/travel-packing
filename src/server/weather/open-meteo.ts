@@ -1,7 +1,7 @@
 import type { DayWeather, WeatherSource } from "@/domain/weather/types";
 import { round2 } from "@/server/locations/open-meteo";
 import { MemoryLruCache } from "./cache";
-import { formatDay, isForecastDay, sameCalendarDay, stopDays } from "./dates";
+import { formatDay, isForecastable, sameCalendarDay, stopDays } from "./dates";
 import type { WeatherProvider, WeatherStopInput } from "./provider";
 import { unavailableStop } from "./provider";
 import { logWeatherEvent } from "./safe-log";
@@ -205,13 +205,15 @@ export function createOpenMeteoWeatherProvider({
   }
 
   return {
-    async getStopWeather(stop: WeatherStopInput, { signal } = {}) {
+    async getStopWeather(stop: WeatherStopInput, { signal, today: clientToday } = {}) {
       if (!finite(stop.latitude) || !finite(stop.longitude)) return unavailableStop(stop.stopIndex);
       const dates = stopDays(stop.arrive, stop.leave, stop.includeLeave);
       if (!dates) return unavailableStop(stop.stopIndex);
-      const today = formatDay(now());
-      const forecastDates = dates.filter((date) => isForecastDay(date, today));
-      const typicalDates = dates.filter((date) => !isForecastDay(date, today));
+      const utcToday = formatDay(now());
+      const today = clientToday ?? utcToday;
+      const isForecast = (date: string) => isForecastable(date, today, utcToday);
+      const forecastDates = dates.filter(isForecast);
+      const typicalDates = dates.filter((date) => !isForecast(date));
 
       try {
         const forecastPromise =
@@ -255,7 +257,7 @@ export function createOpenMeteoWeatherProvider({
         const archiveByDate = new Map(archiveRecords.map((record) => [record.date, record]));
         const days: DayWeather[] = [];
         for (const date of dates) {
-          if (isForecastDay(date, today)) {
+          if (isForecast(date)) {
             const record = forecastByDate.get(date);
             if (!record) throw new Error("missing weather");
             // No probability from the model: a wet day (>= 1 mm, the same bar as typical data) is certain

@@ -15,14 +15,16 @@ import {
   saveStaplesSetupAction,
   skipStaplesSetupAction,
 } from "@/features/trips/trip-actions";
-import "./ledger-tokens.css";
+import "./scheme-tokens.css";
+import "./type-scale.css";
 import "./globals.css";
+import "./shell.css";
 
 // Screens set their own title; the template yields "Trips · Packed Smart".
 export const metadata: Metadata = {
   title: { default: "Packed Smart", template: "%s · Packed Smart" },
 };
-export const viewport: Viewport = { themeColor: "#e9e3d6" };
+export const viewport: Viewport = { themeColor: "#dce5e5" };
 
 const setupActions = {
   get: getStaplesSetupAction,
@@ -45,14 +47,14 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   // this header (and strips any client-supplied one), so it cannot be used to hide the shell on app pages.
   const authScreen = (await headers()).get(AUTH_SCREEN_HEADER) === "1";
   const email = authScreen ? null : await signedInEmail();
-  // The theme is rendered on <html> so the first paint is already themed; see ledger-tokens.css.
+  // The theme is rendered on <html> so the first paint is already themed; see scheme-tokens.css.
   const appearance = await appearanceForRequest(
     (await cookies()).get(APPEARANCE_COOKIE)?.value,
     email !== null,
     await readAnonymousAppearance(),
   );
   return (
-    <html lang="en" data-appearance={appearance} className={fontClassNames}>
+    <html lang="en" data-scheme={appearance} className={fontClassNames}>
       <body>
         {authScreen ? (
           children

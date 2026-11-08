@@ -8,7 +8,7 @@ import { connectFeedback, fakeFramebriar, openSettingsFromNav } from "./helpers/
 // FEEDBACK_SETTINGS_SHOTS=<folder>; without it these are skipped. Each state shows Settings itself and the screenshot the sheet
 // produces from it (the sheet's preview is the real sanitised capture).
 const SHOTS = process.env.FEEDBACK_SETTINGS_SHOTS;
-const THEMES = ["base", "ocean", "terracotta", "violet"] as const;
+const THEMES = ["ocean", "evergreen", "dusk"] as const;
 const WIDTHS = [390, 1280] as const;
 const CANVAS = /^Your screenshot\. Marks you draw are sent with it/;
 
@@ -60,7 +60,7 @@ for (const theme of THEMES) {
       // The picture the sheet makes: Account card at the top of the screen, so it and the cards under it are in the picture.
       await toAccount(page, "start");
       await shot(page, `${tag}-3-settings-scrolled-account`);
-      await page.locator(".feedback-button").evaluate((button) => (button as HTMLElement).click());
+      await page.locator(".nav-feedback").evaluate((button) => (button as HTMLElement).click());
       const dialog = page.getByRole("dialog", { name: "Send feedback" });
       await expect(dialog.getByRole("img", { name: CANVAS })).toBeVisible();
       await shot(page, `${tag}-4-sheet-from-settings`);
@@ -84,7 +84,7 @@ for (const theme of THEMES) {
       await expect(page.getByRole("alert").filter({ hasText: /./ }).first()).toBeVisible();
       await toAccount(page, "start");
       await shot(page, `${tag}-5-settings-error`);
-      await page.locator(".feedback-button").evaluate((button) => (button as HTMLElement).click());
+      await page.locator(".nav-feedback").evaluate((button) => (button as HTMLElement).click());
       const dialog = page.getByRole("dialog", { name: "Send feedback" });
       await expect(dialog.getByRole("img", { name: CANVAS })).toBeVisible();
       await shot(page, `${tag}-6-sheet-error`);
@@ -104,7 +104,7 @@ for (const theme of THEMES) {
         portal.setAttribute("data-feedback-sensitive-portal", "");
         document.body.append(portal);
       });
-      await page.locator(".feedback-button").evaluate((button) => (button as HTMLElement).click());
+      await page.locator(".nav-feedback").evaluate((button) => (button as HTMLElement).click());
       const dialog = page.getByRole("dialog", { name: "Send feedback" });
       await expect(dialog.locator(".feedback-no-shot")).toBeVisible();
       await dialog.getByLabel("What happened?").fill("Something private was open");
@@ -144,7 +144,7 @@ for (const theme of THEMES) {
       );
       await page.reload();
       await expect(page.locator(".feedback-send-action")).toHaveCount(0);
-      await expect(page.locator(".feedback-button")).toBeDisabled();
+      await expect(page.locator(".nav-feedback")).toBeDisabled();
       await page.locator("#settings-feedback").scrollIntoViewIfNeeded();
       await shot(page, `${tag}-9-settings-unavailable`);
     });

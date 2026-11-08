@@ -1,6 +1,7 @@
 // Staples persistence. Staples are independently versioned future-trip defaults; nothing here touches trip rows.
 
 import { and, eq, inArray } from "drizzle-orm";
+import { canCarryLaundryFlag, cubeForItem } from "../../domain/cubes";
 import { canonicalItemId } from "../../domain/item-identity";
 import { supportsSmartQuantity } from "../../domain/calc";
 import type { Staple } from "../../domain/trip";
@@ -22,7 +23,9 @@ function toStaple(row: StapleRow): Staple {
     qty: row.qty,
     cadence: row.cadence,
     packLast: row.packLast,
+    cube: row.cube,
   };
+  if (row.laundryHalves) staple.laundryHalves = true;
   if (row.groupId) staple.groupId = row.groupId;
   return staple;
 }
@@ -49,7 +52,9 @@ function sameStaple(a: Staple, b: Staple): boolean {
     a.qty === b.qty &&
     a.cadence === b.cadence &&
     a.packLast === b.packLast &&
-    (a.groupId ?? null) === (b.groupId ?? null)
+    (a.groupId ?? null) === (b.groupId ?? null) &&
+    Boolean(a.laundryHalves) === Boolean(b.laundryHalves) &&
+    (a.cube ?? cubeForItem(a)) === (b.cube ?? cubeForItem(b))
   );
 }
 
@@ -64,6 +69,10 @@ export async function saveStaples(db: Db, ownerId: string, next: Staple[]): Prom
     (staple) => staple.cadence === "smart" && !supportsSmartQuantity(staple.id),
   );
   if (unsupportedSmart) refuse(fail("INVALID_INPUT", { fields: ["staples.cadence"] }));
+  // Underwear and socks are one per day, always: the flag is refused, not silently dropped.
+  if (next.some((staple) => staple.laundryHalves && !canCarryLaundryFlag(staple.id))) {
+    refuse(fail("INVALID_INPUT", { fields: ["staples.laundryHalves"] }));
+  }
   const identities = next.map((staple) => canonicalItemId(staple.id));
   if (new Set(identities).size !== identities.length) {
     refuse(fail("INVALID_INPUT", { fields: ["staples.semanticId"] }));
@@ -91,6 +100,8 @@ export async function saveStaples(db: Db, ownerId: string, next: Staple[]): Prom
         cadence: staple.cadence,
         packLast: staple.packLast,
         groupId: staple.groupId ?? null,
+        laundryHalves: Boolean(staple.laundryHalves),
+        cube: staple.cube ?? cubeForItem(staple),
       };
       if (existing) {
         await tx

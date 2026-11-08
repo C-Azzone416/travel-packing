@@ -13,7 +13,7 @@ import { createFakeOutbox, type FakeOutbox } from "@/test/fake-outbox";
 import { accountDatabaseName } from "./account-scope";
 import { feedbackBuildSha } from "./build-sha";
 import { FeedbackAccessProvider } from "./FeedbackAccess";
-import { FeedbackButton } from "./FeedbackButton";
+import { FeedbackTabHarness as FeedbackButton } from "@/test/feedback-tab";
 import { FeedbackNotice } from "./FeedbackNotice";
 import { disconnectText } from "./disconnect-copy";
 import { connectFailureText, expiryText, FeedbackSettings } from "./FeedbackSettings";
@@ -133,7 +133,7 @@ describe("the provider", () => {
     expect(h.server.calls).toEqual([]);
     expect(h.outbox.create).not.toHaveBeenCalled();
     expect(screen.queryByRole("heading", { name: "Send feedback to the developer" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Send feedback" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Send feedback report" })).toBeNull();
     expect(document.querySelector(".feedback-notice")).toBeNull();
   });
 
@@ -706,24 +706,31 @@ describe("the Feedback button", () => {
   it("is labelled, disabled unless connected, and offered on Settings too (#273)", async () => {
     const h = harness();
     const view = mount(h, <FeedbackButton />);
-    const button = await screen.findByRole("button", { name: "Send feedback" });
+    const button = await screen.findByRole("button", { name: "Send feedback report" });
     expect(button).toHaveProperty("disabled", true);
     h.server.state.status = "connected";
     await act(async () => window.dispatchEvent(new Event("pageshow")));
     await waitFor(() => expect(button).toHaveProperty("disabled", false));
     pathname = "/settings";
     view.rerender(providerFor(h, <FeedbackButton />));
-    expect(screen.getByRole("button", { name: "Send feedback" })).toHaveProperty("disabled", false);
+    expect(screen.getByRole("button", { name: "Send feedback report" })).toHaveProperty(
+      "disabled",
+      false,
+    );
     pathname = "/sign-in";
     view.rerender(providerFor(h, <FeedbackButton />));
-    expect(screen.queryByRole("button", { name: "Send feedback" })).toBeNull();
+    // Still in place (no shifting bar), but off.
+    expect(screen.getByRole("button", { name: "Send feedback report" })).toHaveProperty(
+      "disabled",
+      true,
+    );
   });
 
   it.each(["expired", "revoked", "needs_reconnect", "disabled", "unavailable"] as const)(
     "is disabled when the enrollment is %s",
     async (status) => {
       mount(harness({ status }), <FeedbackButton />);
-      const button = await screen.findByRole("button", { name: "Send feedback" });
+      const button = await screen.findByRole("button", { name: "Send feedback report" });
       await waitFor(() => expect(button).toHaveProperty("disabled", true));
     },
   );

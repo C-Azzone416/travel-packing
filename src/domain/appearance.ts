@@ -1,11 +1,20 @@
-// The four Field Ledger colour themes (#139). Pure: no storage, no DOM. The saved value is one of these ids; anything
-// else (a missing value, a stale cookie, a value from a newer build) means Base.
+// The three Suitcase colour schemes (#380, Ocean / Evergreen / Dusk). Pure: no storage, no DOM. The saved value is one of
+// these ids; anything else (a missing value, a stale cookie, a value from a newer build) means Ocean. The four older
+// Field Ledger ids (#139) still arrive from old accounts and cookies and are mapped by LEGACY_APPEARANCES.
 
-export const APPEARANCES = ["base", "ocean", "terracotta", "violet"] as const;
+export const APPEARANCES = ["ocean", "evergreen", "dusk"] as const;
 export type Appearance = (typeof APPEARANCES)[number];
-export const DEFAULT_APPEARANCE: Appearance = "base";
+export const DEFAULT_APPEARANCE: Appearance = "ocean";
 
-/** The cookie that mirrors the owner setting so the server can set data-appearance before first paint. */
+/** Field Ledger ids that may still be stored in an account or a cookie, and the scheme each one becomes. */
+export const LEGACY_APPEARANCES: Readonly<Record<string, Appearance>> = {
+  base: "ocean",
+  ocean: "ocean",
+  terracotta: "evergreen",
+  violet: "dusk",
+};
+
+/** The cookie that mirrors the owner setting so the server can set data-scheme before first paint. */
 export const APPEARANCE_COOKIE = "appearance";
 /** One year, in seconds. */
 export const APPEARANCE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
@@ -26,9 +35,19 @@ export function isAppearance(value: unknown): value is Appearance {
   return typeof value === "string" && (APPEARANCES as readonly string[]).includes(value);
 }
 
-/** Any value that is not one of the four ids is Base. */
+/**
+ * A stored value (account column, mirror cookie or anonymous cookie) as a current scheme id: a current id as is, a
+ * legacy Field Ledger id mapped through LEGACY_APPEARANCES, anything else undefined.
+ */
+export function migrateAppearance(value: unknown): Appearance | undefined {
+  if (isAppearance(value)) return value;
+  if (typeof value !== "string" || !Object.hasOwn(LEGACY_APPEARANCES, value)) return undefined;
+  return LEGACY_APPEARANCES[value];
+}
+
+/** Any value that is neither a current nor a legacy id is Ocean. */
 export function parseAppearance(value: unknown): Appearance {
-  return isAppearance(value) ? value : DEFAULT_APPEARANCE;
+  return migrateAppearance(value) ?? DEFAULT_APPEARANCE;
 }
 
 export interface AppearanceOption {
@@ -38,18 +57,13 @@ export interface AppearanceOption {
 }
 
 export const APPEARANCE_OPTIONS: readonly AppearanceOption[] = [
-  { id: "base", name: "Base palette", description: "Clay primary · ochre secondary" },
-  { id: "ocean", name: "Deep Ocean", description: "Teal primary · copper secondary" },
-  {
-    id: "terracotta",
-    name: "Terracotta & Slate",
-    description: "Terracotta primary · slate secondary",
-  },
-  { id: "violet", name: "Ink Violet & Slate", description: "Violet primary · slate secondary" },
+  { id: "ocean", name: "Ocean", description: "Blue-grey and terracotta" },
+  { id: "evergreen", name: "Evergreen", description: "Forest green and clay" },
+  { id: "dusk", name: "Dusk", description: "Violet and coral" },
 ];
 
 export function appearanceName(appearance: Appearance): string {
-  return APPEARANCE_OPTIONS.find((option) => option.id === appearance)?.name ?? "Base palette";
+  return APPEARANCE_OPTIONS.find((option) => option.id === appearance)?.name ?? "Ocean";
 }
 
 /** The cookie string for document.cookie (the server sets the same cookie through Next's cookie API). */

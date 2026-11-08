@@ -93,10 +93,28 @@ function props(over: Partial<WeatherPanelProps> = {}): WeatherPanelProps {
     onDecline: vi.fn(),
     onTurnOn: vi.fn(),
     onRefresh: vi.fn(),
-    onReview: vi.fn(),
     ...over,
   };
 }
+
+describe("WeatherPanel short stays (#412)", () => {
+  it("says 'day trip' for a same-day stop and '1 night' for one night, never '0 nights'", () => {
+    const oneDay: TripStop[] = [{ ...stops[0], arrive: "2031-04-03", leave: "2031-04-03" }];
+    const { unmount } = render(
+      <WeatherPanel {...props({ stops: oneDay, state: { kind: "ready", stops: [weather[0]] } })} />,
+    );
+    expect(screen.getByText(/· day trip$/)).toBeTruthy();
+    expect(screen.queryByText(/0 nights/)).toBeNull();
+    unmount();
+    const oneNight: TripStop[] = [{ ...stops[0], arrive: "2031-04-03", leave: "2031-04-04" }];
+    render(
+      <WeatherPanel
+        {...props({ stops: oneNight, state: { kind: "ready", stops: [weather[0]] } })}
+      />,
+    );
+    expect(screen.getByText(/· 1 night$/)).toBeTruthy();
+  });
+});
 
 describe("WeatherPanel", () => {
   it("asks for opt-in inline with exact privacy copy and actions", async () => {
@@ -128,8 +146,8 @@ describe("WeatherPanel", () => {
     expect(screen.queryByRole("button", { name: "Get weather" })).toBeNull();
   });
 
-  it("renders one accessible row per stop, units, source copy, rain and review count", async () => {
-    const input = props({ changesCount: 2 });
+  it("renders one accessible row per stop, units, source copy and rain, and refreshes", async () => {
+    const input = props();
     render(<WeatherPanel {...input} />);
     expect(screen.getByRole("list", { name: "Weather by stop" }).children).toHaveLength(2);
     expect(screen.getByText("High 86° · Low 68° · No rain expected")).toBeTruthy();
@@ -138,10 +156,7 @@ describe("WeatherPanel", () => {
     expect(screen.getByText("Other 2 days: High 57° · Low 37° · Rain on 2 of 2 days")).toBeTruthy();
     expect(screen.queryByText("Later days are typical for these dates.")).toBeNull();
     expect(screen.queryByText("Typical for these dates")).toBeNull();
-    expect(screen.getByText("2 weather changes to review")).toBeTruthy();
-    await userEvent.click(screen.getByRole("button", { name: "Review changes" }));
     await userEvent.click(screen.getByRole("button", { name: "Refresh weather" }));
-    expect(input.onReview).toHaveBeenCalledTimes(1);
     expect(input.onRefresh).toHaveBeenCalledTimes(1);
   });
 
@@ -187,9 +202,8 @@ describe("WeatherPanel", () => {
     ).toBeTruthy();
   });
 
-  it("words the review count in the singular, and keeps Celsius unlabelled by a unit letter", () => {
-    render(<WeatherPanel {...props({ changesCount: 1, unit: "C" })} />);
-    expect(screen.getByText("1 weather change to review")).toBeTruthy();
+  it("keeps Celsius unlabelled by a unit letter", () => {
+    render(<WeatherPanel {...props({ unit: "C" })} />);
     expect(screen.getByText("High 30° · Low 20° · No rain expected")).toBeTruthy();
     expect(screen.getByLabelText("Weather in degrees Celsius")).toBeTruthy();
   });

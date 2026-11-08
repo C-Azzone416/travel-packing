@@ -277,7 +277,7 @@ describe("setTripStops", () => {
       start: "2030-05-02",
       end: "2030-05-05",
       days: 4,
-      dailyDays: 2,
+      dailyDays: 3,
       locationId: "beta",
     });
     expect(await ctx.client.query(`SELECT count(*)::int AS n FROM trip_stops`)).toMatchObject({
@@ -286,14 +286,14 @@ describe("setTripStops", () => {
     expect(data(await service.getTrip(context(), { tripId: trip.id }))).toEqual(next);
   });
 
-  it("keeps dailyDays in step with the return outfit after a route edit (#205): days - 1 when it is off, days - 2 when on", async () => {
+  it("keeps dailyDays in step with the return outfit after a route edit (#205): days when it is off, days - 1 when on", async () => {
     const stops = [
       { location: { id: "beta" }, arrive: "2030-05-02", leave: "2030-05-04" },
       { location: { id: "alpha" }, arrive: "2030-05-04", leave: "2030-05-07" },
     ];
     for (const [returnOutfit, dailyDays] of [
-      [false, 5],
-      [true, 4],
+      [false, 6],
+      [true, 5],
     ] as const) {
       const trip = data(await create({ config: { ...CONFIG, returnOutfit } }));
       const next = data(await service.setTripStops(context(), { tripId: trip.id, stops }));
@@ -806,38 +806,63 @@ describe("applyTripWeatherReview", () => {
   });
 });
 
-describe("appearance (colour theme)", () => {
-  it("reads as Base until a theme is chosen, then returns the choice", async () => {
-    expect(data(await service.getAppearance(context()))).toBe("base");
-    expect(data(await service.updateAppearance(context(), { appearance: "ocean" }))).toBe("ocean");
+describe("appearance (colour scheme)", () => {
+  it("reads as Ocean until a scheme is chosen, then returns the choice", async () => {
     expect(data(await service.getAppearance(context()))).toBe("ocean");
-    expect(data(await service.updateAppearance(context(), { appearance: "base" }))).toBe("base");
+    expect(data(await service.updateAppearance(context(), { appearance: "evergreen" }))).toBe(
+      "evergreen",
+    );
+    expect(data(await service.getAppearance(context()))).toBe("evergreen");
+    expect(data(await service.updateAppearance(context(), { appearance: "ocean" }))).toBe("ocean");
   });
 
-  it("reads an unknown stored value as Base", async () => {
+  it("reads an unknown stored value as Ocean", async () => {
     data(await service.getAppearance(context()));
     await ctx.client.exec(`UPDATE "users" SET "appearance" = 'neon'`);
-    expect(data(await service.getAppearance(context()))).toBe("base");
+    expect(data(await service.getAppearance(context()))).toBe("ocean");
   });
 
-  it("refuses an unknown theme and leaves the saved one alone", async () => {
-    data(await service.updateAppearance(context(), { appearance: "violet" }));
-    for (const bad of [{ appearance: "neon" }, { appearance: "" }, {}, { appearance: 3 }]) {
+  it("reads an old stored id as its new scheme, and the next save rewrites the stored value", async () => {
+    data(await service.getAppearance(context()));
+    for (const [stored, scheme] of [
+      ["base", "ocean"],
+      ["ocean", "ocean"],
+      ["terracotta", "evergreen"],
+      ["violet", "dusk"],
+    ]) {
+      await ctx.client.exec(`UPDATE "users" SET "appearance" = '${stored}'`);
+      expect(data(await service.getAppearance(context()))).toBe(scheme);
+    }
+    await ctx.client.exec(`UPDATE "users" SET "appearance" = 'violet'`);
+    data(await service.updateAppearance(context(), { appearance: "dusk" }));
+    const rows = await ctx.client.query(`SELECT "appearance" FROM "users"`);
+    expect(rows.rows).toEqual([{ appearance: "dusk" }]);
+  });
+
+  it("refuses an unknown or old-style scheme and leaves the saved one alone", async () => {
+    data(await service.updateAppearance(context(), { appearance: "dusk" }));
+    for (const bad of [
+      { appearance: "neon" },
+      { appearance: "violet" },
+      { appearance: "" },
+      {},
+      { appearance: 3 },
+    ]) {
       expect(errorOf(await service.updateAppearance(context(), bad))?.code).toBe("INVALID_INPUT");
     }
-    expect(data(await service.getAppearance(context()))).toBe("violet");
+    expect(data(await service.getAppearance(context()))).toBe("dusk");
   });
 
   it("belongs to the signed-in owner only", async () => {
-    data(await service.updateAppearance(context(), { appearance: "terracotta" }));
+    data(await service.updateAppearance(context(), { appearance: "evergreen" }));
     as(OTHER_OWNER);
-    expect(data(await service.getAppearance(context()))).toBe("base");
-    data(await service.updateAppearance(context(), { appearance: "ocean" }));
+    expect(data(await service.getAppearance(context()))).toBe("ocean");
+    data(await service.updateAppearance(context(), { appearance: "dusk" }));
     as(OWNER);
-    expect(data(await service.getAppearance(context()))).toBe("terracotta");
+    expect(data(await service.getAppearance(context()))).toBe("evergreen");
     as(null);
     expect(errorOf(await service.getAppearance(context()))?.code).toBe("UNAUTHENTICATED");
-    expect(errorOf(await service.updateAppearance(context(), { appearance: "base" }))?.code).toBe(
+    expect(errorOf(await service.updateAppearance(context(), { appearance: "ocean" }))?.code).toBe(
       "UNAUTHENTICATED",
     );
   });

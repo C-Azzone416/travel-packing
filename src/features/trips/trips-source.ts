@@ -3,14 +3,17 @@
 // (togglePackedItem, editTripItem, ...), and each returns the changed trip plus the domain's signals.
 
 import { calculateSuggestions, SYNTHETIC_STAPLES, tripDays } from "@/domain/calc";
+import type { Cube } from "@/domain/cubes";
 import {
   acceptWeather,
   addCustomItem,
   addToiletryItem,
   editItem,
+  moveItemToCube,
   recalculateSuggestions,
   removeTripItem,
   reviewWeatherAgain,
+  setMorningOf,
   skipWeather,
   type ItemEdit,
   type ItemOpResult,
@@ -23,6 +26,7 @@ import {
   markNotReady,
   markReady,
   setPacked,
+  setPackedMany,
   togglePacked,
   undoBagPlacement,
   type CommandResult,
@@ -30,7 +34,7 @@ import {
 } from "@/domain/readiness";
 import { categoryCounts, listNameTaken, tripItemsFromList } from "@/domain/saved-lists";
 import { automaticStamps, normaliseStampLabel } from "@/domain/stamps";
-import { isThemeId, type ThemeId } from "@/domain/themes";
+import { DEFAULT_THEME, isThemeId, type ThemeId } from "@/domain/themes";
 import type { Scope, Staple, TripConfig } from "@/domain/trip";
 import {
   archiveTrip,
@@ -43,6 +47,7 @@ import {
   type LifecycleTrip,
   type TripDraft,
 } from "@/domain/trip-lifecycle";
+import { TRAVEL_MODES, type TravelMode, type TripOrigin } from "@/domain/trip-route";
 import { routeLabel, tripDatesFromStops, validateStops, type TripStop } from "@/domain/trip-stops";
 import { localToday } from "@/lib/today";
 import type { SavedListDetail, SavedListSummary } from "@/server/data/service";
@@ -63,6 +68,8 @@ export interface NewCustomItem {
   name: string;
   category: string;
   neededQty: number;
+  /** Put it straight into this cube (Packing's "Edit list"). Absent: the cube the category implies. */
+  cube?: Cube;
 }
 
 /** The owner's saved lists, for the create flow's "Start from a saved list" step (#170). Absent on sources without them. */
@@ -89,6 +96,9 @@ export interface TripsSource {
   /** Persist a finished draft as a new trip. Rejects (and changes nothing) if the draft is incomplete. */
   createTrip(draft: TripDraft): Promise<LifecycleTrip>;
 
+  /** The account's home city (the default "From" of a new trip), or null. Absent on sources without one. */
+  homeCity?(): Promise<TripOrigin | null>;
+
   /** One live trip. Rejects with NOT_FOUND for an id that is not there. */
   getTrip(tripId: string): Promise<LifecycleTrip>;
   /** The owner's staples (what "Remember for future trips" changes). */
@@ -97,12 +107,21 @@ export interface TripsSource {
   upsertStaple(staple: Staple): Promise<Staple[]>;
   /** Sets one item's packed count (clamped to 0..qty). The screen sends one of these per item after taps settle. */
   setPacked(tripId: string, itemId: string, packed: number): Promise<TripChange>;
+  /** Several packed counts as one change (All in, and its Undo): all are saved or none (#386). */
+  setPackedMany(
+    tripId: string,
+    entries: readonly { itemId: string; packed: number }[],
+  ): Promise<TripChange>;
   togglePacked(tripId: string, itemId: string): Promise<TripChange>;
   incrementPacked(tripId: string, itemId: string): Promise<TripChange>;
   decrementPacked(tripId: string, itemId: string): Promise<TripChange>;
   editItem(tripId: string, itemId: string, edit: ItemEdit): Promise<TripChange>;
   removeItem(tripId: string, itemId: string, scope: Scope): Promise<TripChange>;
   addToiletryItem(tripId: string, input: NewToiletryItem): Promise<TripChange>;
+  /** Move one item to another cube (#385). Only the cube changes; packed counts and Ready are untouched. */
+  moveItemToCube(tripId: string, itemId: string, cube: Cube): Promise<TripChange>;
+  /** Flag or unflag a cube "Morning of" for this trip (#385). */
+  setMorningOf(tripId: string, cube: Cube, on: boolean): Promise<TripChange>;
   /**
    * Add a custom item of any addable category (#147). Rejects with message EXISTS when the trip already has it
    * (same normalised name and category; nothing is added), or INVALID_INPUT / NOT_FOUND / the error code.
@@ -125,7 +144,7 @@ export interface TripsSource {
    * suggestions). `basedOn` is the trip's `updatedAt` the person reviewed; if it changed since, this rejects with STALE.
    */
   updatePreferences(tripId: string, config: TripConfig, basedOn?: string): Promise<TripChange>;
-  /** Change the trip's picture (#48). Only the six built-in themes are accepted; nothing else about the trip changes. */
+  /** Compatibility write for the six legacy stored theme values retained after the #392 UI removal. */
   setTheme(tripId: string, theme: ThemeId): Promise<TripChange>;
   /**
    * Set or clear the route stamps' labels (#151): the typed text per slot (trimmed, upper-cased, exactly 3 of A-Z and 0-9),
@@ -134,7 +153,9 @@ export interface TripsSource {
    */
   setStampLabels(tripId: string, slot1: string | null, slot2: string | null): Promise<TripChange>;
   /** Replace the trip's route (1-6 stops). Dates, day counts and calculated items follow; rejects an invalid route. */
-  setStops(tripId: string, stops: TripStop[]): Promise<TripChange>;
+  setStops(tripId: string, stops: TripStop[], basedOn?: string): Promise<TripChange>;
+  /** Change how the trip is travelled (Fly / Drive / Train or other); the origin and the name are left alone. */
+  setTravelMode(tripId: string, mode: TravelMode, basedOn?: string): Promise<TripChange>;
   savedLists?: SavedListsCapability;
   /** Live weather integration exists on the real source. Memory/unit sources may leave it out. */
   weather?: {
@@ -170,6 +191,8 @@ export interface MemorySourceOptions {
   staples?: readonly Staple[];
   /** The owner's saved lists (#170). Left out, the source has none and the create flow shows no list step. */
   savedLists?: readonly SavedListDetail[];
+  /** The account's home city (#390). Left out, the source has none: it answers null. */
+  homeCity?: TripOrigin | null;
 }
 
 const summaryOf = (
@@ -196,6 +219,7 @@ export function createMemoryTripsSource(
     today = localToday,
     staples = SYNTHETIC_STAPLES,
     savedLists,
+    homeCity = null,
   }: MemorySourceOptions,
 ): TripsSource & { snapshot(): LifecycleState; staplesSnapshot(): Staple[] } {
   let state = initial;
@@ -270,6 +294,7 @@ export function createMemoryTripsSource(
     staplesSnapshot: () => currentStaples,
     ...(lists ? { savedLists: lists } : {}),
     load: async () => state,
+    homeCity: async () => homeCity,
     archive: (id) => apply(archiveTrip(state, id)),
     restore: (id) => apply(restoreTrip(state, id)),
     remove: (id) => apply(removeTrip(state, id, now())),
@@ -284,6 +309,7 @@ export function createMemoryTripsSource(
         [...currentStaples],
         { newId, today: today() },
         list ? tripItemsFromList(list) : undefined,
+        draft.mode === "copy" && draft.sourceId ? find(draft.sourceId).theme : DEFAULT_THEME,
       );
       if (!result.ok) throw new TripsSourceError(result.reason);
       state = { ...result.state, draft: null };
@@ -304,6 +330,7 @@ export function createMemoryTripsSource(
       return currentStaples;
     },
     setPacked: (id, itemId, packed) => command(id, (trip) => setPacked(trip, itemId, packed)),
+    setPackedMany: (id, entries) => command(id, (trip) => setPackedMany(trip, entries)),
     togglePacked: (id, itemId) => command(id, (trip) => togglePacked(trip, itemId)),
     incrementPacked: (id, itemId) => command(id, (trip) => incrementPacked(trip, itemId)),
     decrementPacked: (id, itemId) => command(id, (trip) => decrementPacked(trip, itemId)),
@@ -313,6 +340,17 @@ export function createMemoryTripsSource(
       itemOp(id, (trip, owned) => removeTripItem(trip, owned, itemId, scope)),
     addToiletryItem: (id, input) =>
       itemOp(id, (trip, owned) => addToiletryItem(trip, owned, { ...input, id: newId() })),
+    moveItemToCube: (id, itemId, cube) =>
+      direct(id, (trip) => {
+        const moved = moveItemToCube(trip, itemId, cube);
+        if (!moved.ok) {
+          throw new TripsSourceError(
+            moved.reason === "ITEM_NOT_FOUND" ? "NOT_FOUND" : "INVALID_INPUT",
+          );
+        }
+        return moved.trip;
+      }),
+    setMorningOf: (id, cube, on) => direct(id, (trip) => setMorningOf(trip, cube, on)),
     addItem: (id, input) =>
       direct(id, (trip) => {
         const added = addCustomItem(trip, {
@@ -320,6 +358,7 @@ export function createMemoryTripsSource(
           name: input.name,
           category: input.category,
           neededQty: input.neededQty,
+          ...(input.cube ? { cube: input.cube } : {}),
         });
         if (!added.ok) {
           throw new TripsSourceError(added.reason === "EXISTS" ? "EXISTS" : "INVALID_INPUT");
@@ -352,8 +391,10 @@ export function createMemoryTripsSource(
           throw new TripsSourceError("STALE");
         return recalculateSuggestions(trip, config, calculateSuggestions);
       }),
-    setStops: (id, stops) =>
+    setStops: (id, stops, basedOn) =>
       direct(id, (trip) => {
+        if (basedOn !== undefined && trip.updatedAt !== undefined && basedOn !== trip.updatedAt)
+          throw new TripsSourceError("STALE");
         if (!validateStops(stops).ok) throw new TripsSourceError("INVALID_INPUT");
         const { start, end } = tripDatesFromStops(stops);
         const moved = recalculateSuggestions(
@@ -375,6 +416,15 @@ export function createMemoryTripsSource(
           ],
         };
       }),
+    setTravelMode: (id, mode, basedOn) => {
+      if (!TRAVEL_MODES.includes(mode))
+        return Promise.reject(new TripsSourceError("INVALID_INPUT"));
+      return direct(id, (trip) => {
+        if (basedOn !== undefined && trip.updatedAt !== undefined && basedOn !== trip.updatedAt)
+          throw new TripsSourceError("STALE");
+        return { ...trip, travelMode: mode };
+      });
+    },
     setTheme: (id, theme) => {
       if (!isThemeId(theme)) return Promise.reject(new TripsSourceError("INVALID_INPUT"));
       return direct(id, (trip) => ({ ...trip, theme }));

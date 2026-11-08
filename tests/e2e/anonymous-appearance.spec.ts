@@ -49,10 +49,10 @@ for (const palette of PALETTES) {
 
     // A reload of the sign-in page, then each route fetched directly: the server HTML carries the palette.
     await page.reload();
-    await expect(page.locator("html")).toHaveAttribute("data-appearance", palette.id);
+    await expect(page.locator("html")).toHaveAttribute("data-scheme", palette.id);
     for (const route of ROUTES) {
       const tag = htmlTag(await (await page.request.get(route)).text());
-      expect(tag, `server HTML for ${route}`).toContain(`data-appearance="${palette.id}"`);
+      expect(tag, `server HTML for ${route}`).toContain(`data-scheme="${palette.id}"`);
     }
 
     // First painted frame: no JavaScript at all (so no hydration), same cookies. The attribute and the colours are right.
@@ -65,7 +65,7 @@ for (const palette of PALETTES) {
       const plain = await bare.newPage();
       for (const route of ROUTES) {
         await plain.goto(route);
-        await expect(plain.locator("html"), route).toHaveAttribute("data-appearance", palette.id);
+        await expect(plain.locator("html"), route).toHaveAttribute("data-scheme", palette.id);
         const accent = await plain.evaluate(() =>
           getComputedStyle(document.documentElement).getPropertyValue("--accent").trim(),
         );
@@ -78,12 +78,12 @@ for (const palette of PALETTES) {
     // Direct navigation in the real browser too.
     for (const route of PUBLIC_PATHS) {
       await page.goto(route);
-      await expect(page.locator("html"), route).toHaveAttribute("data-appearance", palette.id);
+      await expect(page.locator("html"), route).toHaveAttribute("data-scheme", palette.id);
     }
   });
 }
 
-test("fallbacks: no cookie, an unknown, malformed or newer-build value all render Base", async ({
+test("fallbacks: no cookie, an unknown, malformed or newer-build value all render Ocean", async ({
   page,
   context,
 }, testInfo) => {
@@ -93,50 +93,50 @@ test("fallbacks: no cookie, an unknown, malformed or newer-build value all rende
     if (value !== undefined) await context.addCookies([{ name: ANONYMOUS_COOKIE, value, url }]);
     for (const route of ["/sign-in", "/close-account/complete"]) {
       const tag = htmlTag(await (await page.request.get(route)).text());
-      expect(tag, `${route} with ${JSON.stringify(value)}`).toContain('data-appearance="base"');
+      expect(tag, `${route} with ${JSON.stringify(value)}`).toContain('data-scheme="ocean"');
     }
   }
   // A hand-set account mirror does nothing for a signed-out visitor.
   await context.clearCookies();
-  await context.addCookies([{ name: "appearance", value: "ocean", url }]);
+  await context.addCookies([{ name: "appearance", value: "dusk", url }]);
   expect(htmlTag(await (await page.request.get("/sign-in")).text())).toContain(
-    'data-appearance="base"',
+    'data-scheme="ocean"',
   );
 });
 
-test("account A (terracotta) signs out, B (violet) signs in and gets violet at once; each account keeps its own", async ({
+test("account A (evergreen) signs out, B (dusk) signs in and gets dusk at once; each account keeps its own", async ({
   page,
   context,
 }, testInfo) => {
   test.setTimeout(120_000);
   const html = page.locator("html");
-  const terracotta = PALETTES[2];
+  const evergreen = PALETTES[1];
   const emailA = ownerEmailFor(testInfo.project.name);
   const idB = `e2e-${SECOND_EMAIL}`;
   await ensureExistingOwner(idB);
-  await setOwnerAppearance(idB, "violet");
+  await setOwnerAppearance(idB, "dusk");
 
   await signInAsOwner(page);
-  await chooseThemeAndSignOut(page, context, terracotta);
+  await chooseThemeAndSignOut(page, context, evergreen);
   await page.goto("/sign-in");
-  await expect(html).toHaveAttribute("data-appearance", "terracotta");
+  await expect(html).toHaveAttribute("data-scheme", "evergreen");
 
-  // B's saved violet wins at once (the very first page after sign-in), and refreshes the anonymous palette.
+  // B's saved dusk wins at once (the very first page after sign-in), and refreshes the anonymous palette.
   await signIn(page, SECOND_EMAIL);
   await expect(page).toHaveURL(/\/$/);
-  await expect(html).toHaveAttribute("data-appearance", "violet");
-  await expect.poll(async () => (await anonymousCookie(context))?.value).toBe("violet");
+  await expect(html).toHaveAttribute("data-scheme", "dusk");
+  await expect.poll(async () => (await anonymousCookie(context))?.value).toBe("dusk");
   await signOutFromSettings(page);
-  await expect(html).toHaveAttribute("data-appearance", "violet");
+  await expect(html).toHaveAttribute("data-scheme", "dusk");
   const tag = htmlTag(await (await page.request.get("/forgot-password")).text());
-  expect(tag).toContain('data-appearance="violet"');
+  expect(tag).toContain('data-scheme="dusk"');
 
-  // A signs back in while the anonymous palette is violet: A's own terracotta wins and is not overwritten.
+  // A signs back in while the anonymous palette is dusk: A's own evergreen wins and is not overwritten.
   await signIn(page, emailA);
   await expect(page).toHaveURL(/\/$/);
-  await expect(html).toHaveAttribute("data-appearance", "terracotta");
-  await expect.poll(async () => (await anonymousCookie(context))?.value).toBe("terracotta");
+  await expect(html).toHaveAttribute("data-scheme", "evergreen");
+  await expect.poll(async () => (await anonymousCookie(context))?.value).toBe("evergreen");
   await page.goto("/settings");
-  await expect(page.getByRole("radio", { name: terracotta.radio })).toBeChecked();
-  await chooseTheme(page, context, terracotta);
+  await expect(page.getByRole("radio", { name: evergreen.radio })).toBeChecked();
+  await chooseTheme(page, context, evergreen);
 });

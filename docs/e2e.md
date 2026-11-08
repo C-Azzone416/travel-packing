@@ -33,30 +33,30 @@ npm run test:e2e -- --project=phone        # just the phone specs (WebKit)
 E2E_PREBUILT=1 npm run test:e2e            # start the existing build instead of building again
 ```
 
-## What runs on `phone`, and why (83 tests)
+## What runs on `phone`, and why
 
-| Spec                          | Tests | Why it is device-sensitive                                                                                                                                  |
-| ----------------------------- | ----: | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `a11y.spec.ts`                |    34 | axe on every screen and state at phone size, incl. 320px and 200% text; all but the keyboard-only group (no keyboard on a phone)                            |
-| `golden-path.spec.ts`         |     1 | **The golden path**: sign in, create a trip, pack it, review the bag, mark it Ready, still Ready after a reload                                             |
-| `shell.spec.ts`               |     5 | navigation, 44px targets, no sideways scroll at 320px, bottom bar vs side rail, screenshots                                                                 |
-| `auth.spec.ts`                |     5 | the sign-in screens: no app chrome, 44px targets, field widths, screenshots                                                                                 |
-| `auth-screens.spec.ts`        |     6 | the account screens: reachable and outside the shell, 44px targets, axe and screenshots of every state, the numeric-keypad code field                       |
-| `dashboard.spec.ts`           |     4 | 320px with a quick view, 44px controls, the hero on phones, screenshots                                                                                     |
-| `trip-screen.spec.ts`         |     4 | rows 44px and 320px, the sheet's close button and the bag button not wrapping, screenshots                                                                  |
-| `review.spec.ts`              |     2 | 44px targets, screenshots                                                                                                                                   |
-| `staples.spec.ts`             |     2 | 44px targets, screenshots                                                                                                                                   |
-| `create-flow.spec.ts`         |     2 | switches 44px and no sideways scroll at 320px, screenshots                                                                                                  |
-| `trip-themes.spec.ts`         |     2 | the picker at 320px, screenshots                                                                                                                            |
-| `trip-persistence.spec.ts`    |     2 | the theme sheet (a bottom sheet on phones): where it sits, focus returning to the button                                                                    |
-| `location-modes.spec.ts`      |     2 | the picker's spacing keeps the focus ring uncovered, screenshots                                                                                            |
-| `settings.spec.ts`            |     1 | Settings copy and layout at both sizes                                                                                                                      |
-| `feedback-connection.spec.ts` |     3 | Settings and the access notice at phone size (a bottom navigation, full-width buttons), axe, and no Feedback entry point on the sign-in and account screens |
-| `feedback-report.spec.ts`     |     2 | the review sheet as a bottom sheet, and the real screenshot capture in WebKit, saved offline and delivered on reconnect                                     |
-| `parity.spec.ts`              |     1 | a tour of every screen raises no browser errors in the Safari engine                                                                                        |
+| Spec                            | Tests | Why it is device-sensitive                                                                                                                                  |
+| ------------------------------- | ----: | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `a11y.spec.ts`                  |    34 | axe on every screen and state at phone size, incl. 320px and 200% text; all but the keyboard-only group (no keyboard on a phone)                            |
+| `golden-path.spec.ts`           |     1 | **The golden path**: sign in, create a trip, pack it, review the bag, mark it Ready, still Ready after a reload                                             |
+| `shell.spec.ts`                 |     5 | navigation, 44px targets, no sideways scroll at 320px, bottom bar vs side rail, screenshots                                                                 |
+| `auth.spec.ts`                  |     5 | the sign-in screens: no app chrome, 44px targets, field widths, screenshots                                                                                 |
+| `auth-screens.spec.ts`          |     6 | the account screens: reachable and outside the shell, 44px targets, axe and screenshots of every state, the numeric-keypad code field                       |
+| `dashboard.spec.ts`             |     4 | 320px with a quick view, 44px controls, the hero on phones, screenshots                                                                                     |
+| `trip-screen.spec.ts`           |     4 | rows 44px and 320px, the sheet's close button and the bag button not wrapping, Edit list on a phone                                                         |
+| `packing-phone.spec.ts`         |       | Pack mode (#386): the cube bar, All in and Next, the fixed-height layout and its fallback, 390/320/195 at 100% and 200% text, 1023 vs 1024                  |
+| `packing-phone-weather.spec.ts` |       | the one-city forecast card with its dot and review rows (second app)                                                                                        |
+| `review.spec.ts`                |     2 | 44px targets, screenshots                                                                                                                                   |
+| `staples.spec.ts`               |     2 | 44px targets, screenshots                                                                                                                                   |
+| `create-flow.spec.ts`           |     2 | switches 44px and no sideways scroll at 320px, screenshots                                                                                                  |
+| `location-modes.spec.ts`        |     2 | the picker's spacing keeps the focus ring uncovered, screenshots                                                                                            |
+| `settings.spec.ts`              |     1 | Settings copy and layout at both sizes                                                                                                                      |
+| `feedback-connection.spec.ts`   |     3 | Settings and the access notice at phone size (a bottom navigation, full-width buttons), axe, and no Feedback entry point on the sign-in and account screens |
+| `feedback-report.spec.ts`       |     2 | the review sheet as a bottom sheet, and the real screenshot capture in WebKit, saved offline and delivered on reconnect                                     |
+| `parity.spec.ts`                |     1 | a tour of every screen raises no browser errors in the Safari engine                                                                                        |
 
 Not on phone (desktop only): create, copy, archive, remove, pack, review and Ready logic, persistence, location-provider
-behaviour, security headers, auth logic, keyboard-only checks, and the theme-art crops.
+behaviour, security headers, auth logic and keyboard-only checks.
 
 ## Tests that branch on the project
 
@@ -65,7 +65,6 @@ Every test that reads `testInfo.project.name === "phone"` (or `"desktop"`) is ta
 | Test                                                                      | Branch                                                                                                                                            |
 | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `shell.spec.ts` navigation is a bottom bar on phones, a rail on desktop   | which navigation is shown                                                                                                                         |
-| `trip-persistence.spec.ts` changing the theme from the trip header        | the sheet is inside the viewport on phone only                                                                                                    |
 | `auth-screens.spec.ts` controls are 44px targets on phone                 | phone-only size assertion                                                                                                                         |
 | `review.spec.ts` every control on the review is a 44px target on phone    | phone-only size assertion                                                                                                                         |
 | `settings.spec.ts` no Offline, Waiting or simulated-sync copy             | layout differs by size                                                                                                                            |
@@ -73,7 +72,6 @@ Every test that reads `testInfo.project.name === "phone"` (or `"desktop"`) is ta
 | `staples.spec.ts` controls are 44px targets on phone                      | phone-only size assertion                                                                                                                         |
 | `dashboard.spec.ts` on phones the hero sun clears the hero text           | skipped on desktop (`test.skip(project !== "phone")`)                                                                                             |
 | `feedback-report.spec.ts` capture, save offline, deliver                  | Playwright's WebKit keeps storage in memory and cannot store a picture in IndexedDB (real Safari can), so on phone the saved report is notes-only |
-| `theme-art.spec.ts` theme art crops                                       | desktop only by design ("one set is enough"); never on phone                                                                                      |
 
 The tests that name the project only to build a unique email or a screenshot file name (`ownerEmailFor(project.name)`) are unaffected.
 

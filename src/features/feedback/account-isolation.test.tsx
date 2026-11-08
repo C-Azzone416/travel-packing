@@ -21,7 +21,7 @@ import {
   type AccountChannel,
   type CreateOutbox,
 } from "./FeedbackAccess";
-import { FeedbackButton } from "./FeedbackButton";
+import { FeedbackTabHarness as FeedbackButton } from "@/test/feedback-tab";
 import { COPY } from "./FeedbackSheet";
 import { FeedbackSettings } from "./FeedbackSettings";
 
@@ -32,12 +32,12 @@ vi.mock("@/features/feedback/screenshot-capture", () => ({
   captureScreenshot: async () => null,
 }));
 
-/** The header's Feedback button: the Settings card has its own "Send feedback" action with the same name (#273). */
+/** The tab bar's Feedback item: the Settings card has its own "Send feedback" action (#273). */
 async function findHeaderButton() {
   return waitFor(() => {
     const found = screen
-      .getAllByRole("button", { name: "Send feedback" })
-      .find((button) => button.classList.contains("feedback-button"));
+      .getAllByRole("button", { name: /^Send feedback/ })
+      .find((button) => button.classList.contains("nav-feedback"));
     if (!found) throw new Error("no header button yet");
     return found;
   });
@@ -234,7 +234,7 @@ describe("a session that has ended", () => {
     server.state.session = "out";
     await pageshow();
     await waitFor(() =>
-      expect(screen.queryAllByRole("button", { name: "Send feedback" })).toHaveLength(0),
+      expect(screen.queryAllByRole("button", { name: "Send feedback report" })).toHaveLength(0),
     );
     expect(screen.queryByRole("heading", { name: "Send feedback to the developer" })).toBeNull();
     expect(outboxes.boxes.get(OUTBOX_KEY_A)!.box.stop).toHaveBeenCalled();
@@ -246,7 +246,7 @@ describe("a session that has ended", () => {
     const server = createFakeFeedbackServer({ status: "connected", session: "forbidden" });
     mount({ server });
     await waitFor(() => expect(server.count("status")).toBe(1));
-    expect(screen.queryAllByRole("button", { name: "Send feedback" })).toHaveLength(0);
+    expect(screen.queryAllByRole("button", { name: "Send feedback report" })).toHaveLength(0);
   });
 });
 
@@ -372,7 +372,7 @@ describe("Settings sign-out clears the same way as the nav (#327)", () => {
         ok: true as const,
         settings: { weatherOptIn: false, temperatureUnit: "F" as const },
       })}
-      initialAppearance="base"
+      initialAppearance="ocean"
       updateAppearance={async (appearance) => ({ ok: true as const, appearance })}
       accountClosureEnabled={false}
       closeAccount={async () => ({ error: null, fieldErrors: {} })}

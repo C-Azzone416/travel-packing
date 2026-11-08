@@ -1,0 +1,37 @@
+.badge {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  min-height: 30px;
+  padding: 4px 14px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--onDark);
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.2;
+  max-width: 100%;
+  white-space: nowrap;
+}
+/* 239px and below: the badge may wrap onto a second line instead of running past the tag. */
+@media (max-width: 239px) {
+  .badge {
+    white-space: normal;
+    border-radius: 16px;
+  }
+}
+/* The "12 days to go" form: the numeral is Fraunces, lining figures, larger than the words. */
+.numeral {
+  margin-inline-end: 0.25em;
+  font-family: var(--font-display);
+  font-size: 1.4em;
+  font-weight: 800;
+  font-variant-numeric: lining-nums;
+  line-height: 1;
+}
+/* "Day 3 of 5" (DayBadge, #410): a little air before the large numeral, which sits close to the word before it. */
+.dayNumeral {
+  margin-inline-start: 0.1em;
+}

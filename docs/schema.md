@@ -57,8 +57,26 @@ database refusing to store a cross-owner link.
 
 - `trip_items` has **no foreign key to `staples`**. Editing or deleting a staple never touches a trip row
   (tested). The `semantic_id` ("underwear", "weather-umbrella", ...) is plain text copied at trip creation.
-  `staple_cadence` snapshots the rule (`per trip`, `per day`, or `smart`) only for rows generated from a Staple,
-  so later preference recalculation never imports current account defaults into an existing trip.
+  `staple_cadence` snapshots the rule (`per trip`, `per day`, `per night`, or legacy `smart`) only for rows generated
+  from a Staple, with `staple_qty` (the per-unit quantity) and `laundry_halves` (the effective "fewer with laundry"
+  flag) so a recalculation re-derives the row without reading later account defaults. `smart` stays in the enum for
+  old trip snapshots and the occasion-driven Nice attire / sleepwear Staples (#378).
+- **Cubes (#378).** `item_cube` (`clothing`, `toiletries`, `tech`, `documents`, `misc`, `weather`) groups a list.
+  `staples.cube` and `trip_items.cube` hold it (default `misc` for raw inserts; the app always writes the real one;
+  migration 0014 backfilled from category, see `src/domain/cubes.ts`). Categories stay for compatibility. "Morning of"
+  is `trip_preferences.morning_of_cubes` (default `{toiletries}`); a cube holding a Pack last item reads as flagged.
+  `staples.laundry_halves` halves a quantity, rounding up, when the trip has laundry; the check
+  `staples_laundry_not_underwear_socks` keeps it off underwear and socks. Later migrations must not use the
+  `per night` enum value in the same transaction as 0014 (`ALTER TYPE ... ADD VALUE`); the migrator runs each file in one.
+- **Home city, origin, mode, name (#379).** `users.home_*` holds the account's ONE home city (city level, the same place
+  shape as a stop: city, location id/label, region, country, country code, provider and place id, latitude/longitude at 2
+  decimals, timezone; all null = none). It is the default "From" for new trips. `trips.origin_*` is the same shape: a new
+  trip copies the home city at creation and then owns it (changing home later never moves existing trips). Both carry the
+  all-or-nothing, coordinate-pair, provider-pair and country-code checks (`placeChecks` in `schema.ts`). `trips.travel_mode`
+  (`travel_mode` enum: `fly`, `drive`, `other`) is NULLABLE: trips from before 0015 never chose one, and the UI shows no
+  mode for them instead of claiming Fly. `trips.name` is the owner's optional title (trimmed, 1-60 characters,
+  `trips_name_valid`); null shows the stops ("Lisbon & Porto"; `tripDisplayName`). A copy takes the source's mode, the
+  current home city as origin, and no name. Airport codes in the route are derived on read, never stored.
 - `trip_items.id` is a per-trip immutable uuid. `(trip_id, semantic_id)` is unique, so two items with similar
   names (everyday vs return underwear) never merge: they have different semantic ids.
 - `staples` is unique on `(owner_id, semantic_id)` and carries `version`, bumped by the data layer on each edit.
@@ -75,21 +93,21 @@ so quantity edits succeed instead of failing the cascade.
 
 ## Constraints
 
-| Rule                                   | Where                                                                                      |
-| -------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `qty >= 1`                             | `staples_qty_positive`, `saved_list_items_qty_positive`, `trip_items_qty_positive`         |
-| `0 <= packed <= qty`                   | `trip_item_progress_packed_range`                                                          |
-| `occasion_count` 1..8                  | `trip_preferences_occasion_count_range`                                                    |
-| `end_date >= start_date`               | `trips_dates_ordered`                                                                      |
-| Stamp label overrides (#151)           | `trips_stamp_label_1_format`, `trips_stamp_label_2_format`: null or exactly 3 of `A-Z0-9`  |
-| `days >= 1`, `0 <= daily_days <= days` | `trips_days_positive`, `trips_daily_days_range`                                            |
-| Non-blank names / destination          | `*_not_blank`                                                                              |
-| `group_id` is null or `toiletry-bag`   | `staples_group_known`, `trip_items_group_known`                                            |
-| Stop `leave_date >= arrive_date`       | `trip_stops_dates_ordered` (a night per stop on multi-stop trips: `validateStops`)         |
-| Stop place rules                       | `trip_stops_*` mirror the `trips_*` location checks                                        |
-| Temperature unit `F` or `C`            | `users_temperature_unit_known`                                                             |
-| Enums                                  | `item_section`, `staple_cadence`, `staples_setup_state`, `weather_status`, `item_category` |
-| Non-null owner on every row            | `owner_id NOT NULL` + FK to `users`                                                        |
+| Rule                                   | Where                                                                                                   |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `qty >= 1`                             | `staples_qty_positive`, `saved_list_items_qty_positive`, `trip_items_qty_positive`                      |
+| `0 <= packed <= qty`                   | `trip_item_progress_packed_range`                                                                       |
+| `occasion_count` 1..8                  | `trip_preferences_occasion_count_range`                                                                 |
+| `end_date >= start_date`               | `trips_dates_ordered`                                                                                   |
+| Stamp label overrides (#151)           | `trips_stamp_label_1_format`, `trips_stamp_label_2_format`: null or exactly 3 of `A-Z0-9`               |
+| `days >= 1`, `0 <= daily_days <= days` | `trips_days_positive`, `trips_daily_days_range`                                                         |
+| Non-blank names / destination          | `*_not_blank`                                                                                           |
+| `group_id` is null or `toiletry-bag`   | `staples_group_known`, `trip_items_group_known`                                                         |
+| Stop `leave_date >= arrive_date`       | `trip_stops_dates_ordered` (a night per stop on multi-stop trips: `validateStops`)                      |
+| Stop place rules                       | `trip_stops_*` mirror the `trips_*` location checks                                                     |
+| Temperature unit `F` or `C`            | `users_temperature_unit_known`                                                                          |
+| Enums                                  | `item_section`, `staple_cadence`, `staples_setup_state`, `weather_status`, `item_category`, `item_cube` |
+| Non-null owner on every row            | `owner_id NOT NULL` + FK to `users`                                                                     |
 
 `item_category` lists the strings the domain uses. The semantic category for everyday clothing is the single value
 `Clothing` (the plan's name); the prototype's calculator label `Clothes` was normalized to it (PM decision), and a
@@ -99,28 +117,31 @@ test fails if any category the calculator or synthetic fixture Staples produce i
 
 These reveal where and when someone travels. Keep them out of logs, analytics, fixtures, and client bundles.
 
-| Column                                                                           | Why                                                                               |
-| -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `trips.start_date`, `trips.end_date`                                             | Exact travel dates                                                                |
-| `trips.destination`                                                              | Destination city                                                                  |
-| `trips.location_id`, `trips.location_label`                                      | City / region / country                                                           |
-| `trips.location_provider`, `trips.location_place_id`                             | Which provider place was chosen                                                   |
-| `trips.location_region`, `trips.location_country`, `trips.location_country_code` | Region / country                                                                  |
-| `trips.latitude`, `trips.longitude`                                              | **Most sensitive.** About 1 km (rounded to 2 decimals before storage)             |
-| `trips.timezone`                                                                 | Narrows the destination                                                           |
-| `trips.stamp_label_1`, `trips.stamp_label_2`                                     | Optional 3-character stamp text the owner typed (#151); null = automatic          |
-| `trip_stops.city`, `trip_stops.location_*`                                       | Same class as `trips.location_*`: where the person goes, per stop                 |
-| `trip_stops.latitude`, `trip_stops.longitude`                                    | **Most sensitive**, as on trips (2 decimals; only for a provider place)           |
-| `trip_stops.arrive_date`, `trip_stops.leave_date`                                | Exact travel dates, per stop                                                      |
-| `trip_stops.timezone`                                                            | Narrows the destination                                                           |
-| `weather_suggestions.rule_signature`                                             | Short name of the rule that fired. Never raw weather                              |
-| `users.weather_opt_in`, `users.temperature_unit`                                 | Settings only; opt-in gates sending coordinates and dates to the weather provider |
-| `trips.days`, `trips.daily_days`                                                 | Reveal trip length                                                                |
-| `trips.copied_from`                                                              | Links trips to each other                                                         |
-| `trips.deleted_at`                                                               | Deletion time                                                                     |
-| `trip_items.name` (and staple names)                                             | Packing habits                                                                    |
-| `trip_preferences.*`                                                             | Packing habits                                                                    |
-| `weather_suggestions.label`                                                      | Tied to a trip's timing                                                           |
+| Column                                                                           | Why                                                                                                                                                 |
+| -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `trips.start_date`, `trips.end_date`                                             | Exact travel dates                                                                                                                                  |
+| `trips.destination`                                                              | Destination city                                                                                                                                    |
+| `trips.location_id`, `trips.location_label`                                      | City / region / country                                                                                                                             |
+| `trips.location_provider`, `trips.location_place_id`                             | Which provider place was chosen                                                                                                                     |
+| `trips.location_region`, `trips.location_country`, `trips.location_country_code` | Region / country                                                                                                                                    |
+| `trips.latitude`, `trips.longitude`                                              | **Most sensitive.** About 1 km (rounded to 2 decimals before storage)                                                                               |
+| `trips.timezone`                                                                 | Narrows the destination                                                                                                                             |
+| `trips.stamp_label_1`, `trips.stamp_label_2`                                     | Optional 3-character stamp text the owner typed (#151); null = automatic                                                                            |
+| `trip_stops.city`, `trip_stops.location_*`                                       | Same class as `trips.location_*`: where the person goes, per stop                                                                                   |
+| `trip_stops.latitude`, `trip_stops.longitude`                                    | **Most sensitive**, as on trips (2 decimals; only for a provider place)                                                                             |
+| `users.home_*`                                                                   | The account's home city: **where the person lives** (city level; coordinates 2 decimals). Owner-only, removed with the account, never logged (#379) |
+| `trips.origin_*`                                                                 | Where the trip starts: usually the home city, so the same class                                                                                     |
+| `trips.travel_mode`, `trips.name`                                                | How and what the owner called the trip (#379)                                                                                                       |
+| `trip_stops.arrive_date`, `trip_stops.leave_date`                                | Exact travel dates, per stop                                                                                                                        |
+| `trip_stops.timezone`                                                            | Narrows the destination                                                                                                                             |
+| `weather_suggestions.rule_signature`                                             | Short name of the rule that fired. Never raw weather                                                                                                |
+| `users.weather_opt_in`, `users.temperature_unit`                                 | Settings only; opt-in gates sending coordinates and dates to the weather provider                                                                   |
+| `trips.days`, `trips.daily_days`                                                 | Reveal trip length                                                                                                                                  |
+| `trips.copied_from`                                                              | Links trips to each other                                                                                                                           |
+| `trips.deleted_at`                                                               | Deletion time                                                                                                                                       |
+| `trip_items.name` (and staple names)                                             | Packing habits                                                                                                                                      |
+| `trip_preferences.*`                                                             | Packing habits                                                                                                                                      |
+| `weather_suggestions.label`                                                      | Tied to a trip's timing                                                                                                                             |
 
 `users.id` and `owner_id` identify the account holder.
 

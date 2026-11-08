@@ -2,6 +2,7 @@ import { daysBetween, type TripStop } from "@/domain/trip-stops";
 import { defaultFormatRange, WEATHER_RULES } from "@/domain/weather/recommend";
 import type { DayWeather, StopWeather, WeatherSource } from "@/domain/weather/types";
 import type { TemperatureUnit } from "@/server/data/weather-store";
+import { localToday } from "@/lib/today";
 
 export type Glyph = "sun" | "rain" | "snow";
 
@@ -109,12 +110,6 @@ const MONTHS = [
   "December",
 ];
 
-/**
- * Today as a calendar date in UTC, the same clock the server uses to choose forecast days. Late in the evening in the
- * Americas this is already tomorrow's date. #26 (Caroline's timezone decision) may change this; a test pins it for now.
- */
-export const todayUtc = (): string => new Date().toISOString().slice(0, 10);
-
 const GLYPH_WORD: Record<Glyph, string> = {
   sun: "sunny",
   rain: "rain likely",
@@ -185,7 +180,7 @@ export function weatherRowView(
   stop: TripStop,
   weather: StopWeather,
   unit: TemperatureUnit = "C",
-  today: string = todayUtc(),
+  today: string = localToday(),
 ): WeatherRowView | null {
   if (weather.status !== "ok" || weather.days.length === 0) return null;
   const days = weather.days;
