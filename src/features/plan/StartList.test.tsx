@@ -43,6 +43,7 @@ const base: StartListProps = {
   laundry: false,
   onLaundry: () => undefined,
   laundryText: "Laundry text",
+  laundryShown: true,
   weather: { kind: "hidden" },
   weatherAdds: null,
   useWeather: true,
@@ -78,6 +79,19 @@ describe("StartList", () => {
       screen.getByText("Underwear, socks and other per-day items counted for 1 night"),
     ).toBeTruthy();
     expect(screen.getByText("12")).toBeTruthy();
+  });
+
+  it("hides the laundry card when laundry would change nothing, and counts a day trip in words (#412)", () => {
+    const { rerender } = render(
+      <StartList {...base} laundryShown={false} nights={0} staplesTotal={5} />,
+    );
+    expect(screen.queryByText(/I’ll have laundry/)).toBeNull();
+    expect(screen.queryByText("On this trip")).toBeNull();
+    expect(
+      screen.getByText("Underwear, socks and other per-day items counted for a day trip"),
+    ).toBeTruthy();
+    rerender(<StartList {...base} laundryShown nights={2} />);
+    expect(screen.getByText(/I’ll have laundry/)).toBeTruthy();
   });
 
   it("shows no footer line until there is a preview", () => {

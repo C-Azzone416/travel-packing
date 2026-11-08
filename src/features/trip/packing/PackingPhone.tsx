@@ -6,6 +6,7 @@ import { CubeChip, PackedRibbon, Suitcase } from "@/components/suitcase";
 import { cx } from "@/components/suitcase/cx";
 import { Icon } from "@/components/ui/Icon";
 import type { Cube } from "@/domain/cubes";
+import { laundryControlVisible } from "@/domain/short-trip";
 import { CubePanel, FilterBar } from "./CubePanel";
 import { PackedBanner } from "./PackedBanner";
 import type { PackingLaptopProps } from "./PackingLaptop";
@@ -52,6 +53,8 @@ export function PackingPhone({
   onDismissBanner,
 }: PackingPhoneProps) {
   const views = buildCubeViews(trip);
+  // Laundry is offered only where it would change a quantity (a short trip hides it, #412).
+  const laundryVisible = laundryControlVisible(trip);
   const [chosen, setChosen] = useState<Cube | undefined>(openCube);
   const [filters, setFilters] = useState<Partial<Record<Cube, CubeFilter>>>({});
   const [editing, setEditing] = useState(false);
@@ -114,19 +117,21 @@ export function PackingPhone({
             Pack mode
           </h1>
           <div className={styles.headEnd}>
-            <button
-              type="button"
-              className={cx(
-                styles.laundry,
-                trip.config.laundry ? styles.laundryOn : styles.laundryOff,
-              )}
-              aria-pressed={trip.config.laundry}
-              disabled={laundryBusy}
-              onClick={() => onLaundry(!trip.config.laundry)}
-            >
-              <Icon name="refresh" size={16} />
-              {trip.config.laundry ? "Laundry on" : "Laundry off"}
-            </button>
+            {laundryVisible ? (
+              <button
+                type="button"
+                className={cx(
+                  styles.laundry,
+                  trip.config.laundry ? styles.laundryOn : styles.laundryOff,
+                )}
+                aria-pressed={trip.config.laundry}
+                disabled={laundryBusy}
+                onClick={() => onLaundry(!trip.config.laundry)}
+              >
+                <Icon name="refresh" size={16} />
+                {trip.config.laundry ? "Laundry on" : "Laundry off"}
+              </button>
+            ) : null}
             <p className={styles.count} data-all-packed={state !== "open" ? "true" : undefined}>
               <span aria-hidden="true">
                 <span className={styles.countNow}>{totals.packed}</span>

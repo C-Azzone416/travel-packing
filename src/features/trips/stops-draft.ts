@@ -3,6 +3,7 @@
 // unless the person changes a Leave date. No React, no clock.
 
 import { parseDate } from "@/domain/calc";
+import { nightsText } from "@/domain/trip-route";
 import type { DraftStop } from "@/domain/trip-lifecycle";
 import { addDays, daysBetween, MAX_STOPS } from "@/domain/trip-stops";
 import { formatShortDate } from "./view";
@@ -14,9 +15,9 @@ export function nightsAt(stop: Pick<DraftStop, "arrive" | "leave">): number | nu
   return valid(stop.arrive) && valid(stop.leave) ? daysBetween(stop.arrive, stop.leave) : null;
 }
 
-/** "1 night" / "3 nights". */
+/** "1 night" / "3 nights" / "day trip". */
 export function formatNights(nights: number): string {
-  return nights === 1 ? "1 night" : `${nights} nights`;
+  return nightsText(nights);
 }
 
 export const canAddStop = (stops: readonly DraftStop[]) => stops.length < MAX_STOPS;

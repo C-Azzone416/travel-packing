@@ -368,6 +368,7 @@ function PlanBody({ from, trips, staples, home, lists, allowCustom, today, rende
             laundry={laundry}
             onLaundry={setLaundry}
             laundryText={laundryLine(effect, laundry)}
+            laundryShown={laundry || effect !== null}
             weather={weather}
             weatherAdds={adds}
             useWeather={useWeather}

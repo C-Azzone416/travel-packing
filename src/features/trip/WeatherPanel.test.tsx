@@ -97,6 +97,25 @@ function props(over: Partial<WeatherPanelProps> = {}): WeatherPanelProps {
   };
 }
 
+describe("WeatherPanel short stays (#412)", () => {
+  it("says 'day trip' for a same-day stop and '1 night' for one night, never '0 nights'", () => {
+    const oneDay: TripStop[] = [{ ...stops[0], arrive: "2031-04-03", leave: "2031-04-03" }];
+    const { unmount } = render(
+      <WeatherPanel {...props({ stops: oneDay, state: { kind: "ready", stops: [weather[0]] } })} />,
+    );
+    expect(screen.getByText(/· day trip$/)).toBeTruthy();
+    expect(screen.queryByText(/0 nights/)).toBeNull();
+    unmount();
+    const oneNight: TripStop[] = [{ ...stops[0], arrive: "2031-04-03", leave: "2031-04-04" }];
+    render(
+      <WeatherPanel
+        {...props({ stops: oneNight, state: { kind: "ready", stops: [weather[0]] } })}
+      />,
+    );
+    expect(screen.getByText(/· 1 night$/)).toBeTruthy();
+  });
+});
+
 describe("WeatherPanel", () => {
   it("asks for opt-in inline with exact privacy copy and actions", async () => {
     const input = props({ state: { kind: "prompt" } });

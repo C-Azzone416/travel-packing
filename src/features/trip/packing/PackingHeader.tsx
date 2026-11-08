@@ -12,6 +12,8 @@ export interface PackingHeaderProps {
   headline: Headline;
   /** The trip's laundry preference. */
   laundry: boolean;
+  /** The toggle is drawn only when laundry would change a quantity (or is already on): short trips hide it (#412). */
+  laundryVisible?: boolean;
   /** A laundry change is being saved: the toggle waits. */
   laundryBusy?: boolean;
   onLaundry: (next: boolean) => void;
@@ -33,6 +35,7 @@ export function PackingHeader({
   tripName,
   headline,
   laundry,
+  laundryVisible = true,
   laundryBusy = false,
   onLaundry,
   onEditTrip,
@@ -103,16 +106,18 @@ export function PackingHeader({
             </button>
           </>
         ) : null}
-        <button
-          type="button"
-          className={cx(styles.action, laundry ? styles.actionOn : styles.actionOff)}
-          aria-pressed={laundry}
-          disabled={laundryBusy}
-          onClick={() => onLaundry(!laundry)}
-        >
-          <Icon name="refresh" size={16} />
-          {laundry ? "Laundry on" : "Laundry off"}
-        </button>
+        {laundryVisible ? (
+          <button
+            type="button"
+            className={cx(styles.action, laundry ? styles.actionOn : styles.actionOff)}
+            aria-pressed={laundry}
+            disabled={laundryBusy}
+            onClick={() => onLaundry(!laundry)}
+          >
+            <Icon name="refresh" size={16} />
+            {laundry ? "Laundry on" : "Laundry off"}
+          </button>
+        ) : null}
         <Link href="/staples" className={cx(styles.action, styles.actionOff)}>
           Edit Staples
         </Link>

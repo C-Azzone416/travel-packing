@@ -379,6 +379,29 @@ describe("Stamps selected from the address and the Home teaser (#409)", () => {
     expect(screen.getByRole("article", { name: "Selected trip: Lisbon" })).toBeTruthy();
   });
 
+  it("the teaser says '1 night away' for one night and 'nights away' otherwise (#412)", () => {
+    const view = stampsView(sampleLifecycleState().trips, "2026-10-16", "rolling");
+    const { unmount } = render(
+      <StickerTeaser
+        stickers={[]}
+        inked={0}
+        filterLabel={view.filterLabel}
+        totals={{ trips: 1, nights: 1 }}
+      />,
+    );
+    expect(screen.getByText("night away")).toBeTruthy();
+    unmount();
+    render(
+      <StickerTeaser
+        stickers={[]}
+        inked={0}
+        filterLabel={view.filterLabel}
+        totals={{ trips: 1, nights: 0 }}
+      />,
+    );
+    expect(screen.getByText("nights away")).toBeTruthy();
+  });
+
   it("the teaser draws decorative stickers, two totals and the one link", () => {
     const view = stampsView(sampleLifecycleState().trips, "2026-10-16", "rolling");
     render(

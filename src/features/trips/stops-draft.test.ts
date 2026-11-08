@@ -45,6 +45,7 @@ describe("nights", () => {
   });
 
   it("formats singular and plural", () => {
+    expect(formatNights(0)).toBe("day trip");
     expect(formatNights(1)).toBe("1 night");
     expect(formatNights(3)).toBe("3 nights");
   });

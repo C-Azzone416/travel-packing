@@ -607,8 +607,22 @@ describe("EditTripSheet: Route & dates", () => {
     await user.click(more);
     expect(within(dialog()).getByText("5 nights")).toBeTruthy();
     for (let i = 0; i < 5; i += 1) await user.click(less);
-    expect(within(dialog()).getByText("0 nights")).toBeTruthy();
+    expect(within(dialog()).getByText("day trip")).toBeTruthy();
     expect(less.disabled).toBe(true);
+  });
+
+  it("cut down to a day trip, the laundry row is disabled and says why; longer again, it works (#412)", async () => {
+    const { user, dialog } = setup({ tab: "route" });
+    const less = within(dialog()).getByRole("button", { name: "One night fewer" });
+    const more = within(dialog()).getByRole("button", { name: "One night more" });
+    await user.click(within(dialog()).getByRole("button", { name: /Packing preferences/ }));
+    expect(toggle(dialog(), "Laundry on this trip").disabled).toBe(false);
+    expect(within(dialog()).queryByText("No effect on a trip this short.")).toBeNull();
+    for (let i = 0; i < 4; i += 1) await user.click(less);
+    expect(toggle(dialog(), "Laundry on this trip").disabled).toBe(true);
+    expect(within(dialog()).getByText("No effect on a trip this short.")).toBeTruthy();
+    for (let i = 0; i < 4; i += 1) await user.click(more);
+    expect(toggle(dialog(), "Laundry on this trip").disabled).toBe(false);
   });
 
   it("a Come home before Leave is a problem in words, and Save waits", async () => {

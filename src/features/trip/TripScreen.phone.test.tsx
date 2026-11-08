@@ -747,3 +747,32 @@ describe("the tools under the suitcase", () => {
     expect(await screen.findByRole("heading", { name: "That trip isn’t available" })).toBeTruthy();
   });
 });
+
+describe("a day trip (#412)", () => {
+  const dayTrip = (base: ReturnType<typeof memory>) => ({
+    getTrip: async (id: string) => {
+      const trip = await base.getTrip(id);
+      return { ...trip, end: trip.start };
+    },
+  });
+
+  it("hides the Laundry toggle when it would change nothing", async () => {
+    setup({ wrap: dayTrip });
+    await ready();
+    expect(screen.queryByRole("button", { name: /^Laundry/ })).toBeNull();
+  });
+
+  it("keeps the Laundry toggle when laundry is already on, so it can be turned off", async () => {
+    setup({ tripId: "lisbon", wrap: dayTrip });
+    await ready();
+    expect(screen.getByRole("button", { name: "Laundry on" })).toBeTruthy();
+  });
+
+  it("offers no Morning of switch in Edit list", async () => {
+    const { user } = setup({ wrap: dayTrip });
+    await ready();
+    await user.click(screen.getByRole("button", { name: "Edit list" }));
+    expect(screen.queryByRole("switch", { name: /Morning of/ })).toBeNull();
+    expect(document.body.textContent).not.toContain("Morning of");
+  });
+});

@@ -13,6 +13,7 @@ import {
   filterCounts,
   filterItems,
   HINT,
+  HINT_DAY_TRIP,
   isPacked,
   moveTargets,
   panelFooter,
@@ -349,7 +350,9 @@ export function CubePanel({
   const footerText = panelFooter(view, shown.length);
   // The hint ("Tick as you pack ...") is for the laptop; a phone shows only the lines that report a state.
   const footer =
-    phone && footerText === HINT ? null : <p className={styles.footer}>{footerText}</p>;
+    phone && (footerText === HINT || footerText === HINT_DAY_TRIP) ? null : (
+      <p className={styles.footer}>{footerText}</p>
+    );
   return (
     <section
       id={panelId}
@@ -418,25 +421,27 @@ export function CubePanel({
           {extra ? null : (
             <AddRow cube={view.cube} label={view.label} onAdd={onAdd} onEditItem={onEditItem} />
           )}
-          <div className={styles.morningRow}>
-            <label className={styles.morningLabel} htmlFor={switchId}>
-              <strong>Morning of</strong>
-              <span>
-                {lockedOn
-                  ? "A Pack last item is in this cube."
-                  : "Pack this cube the morning you leave."}
-              </span>
-            </label>
-            <input
-              id={switchId}
-              type="checkbox"
-              role="switch"
-              className={styles.switch}
-              checked={view.morningOf}
-              disabled={lockedOn}
-              onChange={(event) => onMorningOf(view.cube, event.target.checked)}
-            />
-          </div>
+          {view.morningOfAvailable ? (
+            <div className={styles.morningRow}>
+              <label className={styles.morningLabel} htmlFor={switchId}>
+                <strong>Morning of</strong>
+                <span>
+                  {lockedOn
+                    ? "A Pack last item is in this cube."
+                    : "Pack this cube the morning you leave."}
+                </span>
+              </label>
+              <input
+                id={switchId}
+                type="checkbox"
+                role="switch"
+                className={styles.switch}
+                checked={view.morningOf}
+                disabled={lockedOn}
+                onChange={(event) => onMorningOf(view.cube, event.target.checked)}
+              />
+            </div>
+          ) : null}
         </div>
       ) : (
         footer

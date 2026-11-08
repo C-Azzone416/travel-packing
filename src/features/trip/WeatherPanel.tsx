@@ -1,5 +1,6 @@
 "use client";
 
+import { nightsText } from "@/domain/trip-route";
 import { useId, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -35,7 +36,7 @@ function ForecastStay({ view, unit }: { view: WeatherRowView; unit: TemperatureU
       <div className="weather-place">
         <h3>{view.city}</h3>
         <p className="tiny muted">
-          {view.dates} · {view.nights} {view.nights === 1 ? "night" : "nights"}
+          {view.dates} · {nightsText(view.nights)}
         </p>
       </div>
       <div className="weather-part">
@@ -283,7 +284,7 @@ export function WeatherPanel({
                 <div className="weather-place">
                   <h3>{view.city}</h3>
                   <p className="tiny muted">
-                    {view.dates} · {view.nights} {view.nights === 1 ? "night" : "nights"}
+                    {view.dates} · {nightsText(view.nights)}
                   </p>
                 </div>
                 <div className="weather-range">

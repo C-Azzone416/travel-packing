@@ -9,6 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { laundryControlVisible } from "@/domain/short-trip";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { ModalSheet } from "@/components/ui/ModalSheet";
@@ -47,6 +48,9 @@ import { localToday } from "@/lib/today";
 import { reconcile, settleTouched, type EndpointsTouched } from "./edit-reconcile";
 import { changeCount, editChanges, saveLabel, type ChangeRow } from "./edit-diff";
 import styles from "./EditTripSheet.module.css";
+
+/** The line under a disabled laundry row: no marked Staple would change on a trip this short (#412). */
+export const NO_LAUNDRY_EFFECT = "No effect on a trip this short.";
 
 export type EditTripTab = "route" | "preferences";
 export type ApplyOutcome = "ok" | "stale" | "failed";
@@ -221,6 +225,20 @@ export function EditTripSheet({
   const mathDays = useMemo(
     () => calculateSuggestions({ ...prefs, start: trip.start, end: trip.end }),
     [prefs, trip.start, trip.end],
+  );
+  // Laundry is a real choice only where it would change a quantity on the trip as edited here (#412): a day trip, or no
+  // marked Staples, leaves the row disabled. A trip that already has laundry on keeps it switchable so it can be turned off.
+  const laundryUseful = useMemo(
+    () =>
+      laundryControlVisible(
+        {
+          ...trip,
+          start: stops[0]?.arrive || trip.start,
+          end: stops[stops.length - 1]?.leave || trip.end,
+        },
+        prefs,
+      ),
+    [trip, stops, prefs],
   );
   const patch = (next: Partial<TripConfig>) => setPrefs((current) => ({ ...current, ...next }));
   const problems = stopProblems(stops);
@@ -493,8 +511,11 @@ export function EditTripSheet({
               <Switch
                 label="Laundry on this trip"
                 marker={<Icon name="refresh" size={16} />}
-                description="Halves anything marked ↻ in your Staples."
+                description={
+                  laundryUseful ? "Halves anything marked ↻ in your Staples." : NO_LAUNDRY_EFFECT
+                }
                 checked={prefs.laundry}
+                disabled={!laundryUseful}
                 onChange={(laundry) => patch({ laundry })}
               />
               <Switch
