@@ -17,10 +17,13 @@ export function countdownLabel(days: number): string {
 export function CountdownBadge({
   days,
   toGo = false,
+  dayTrip = false,
   className,
 }: {
   days: number;
   toGo?: boolean;
+  /** A one-day trip on its day reads "Today", not "Leaves today". */
+  dayTrip?: boolean;
   className?: string;
 }) {
   const whole = wholeDays(days);
@@ -35,7 +38,7 @@ export function CountdownBadge({
   if (toGo) {
     return (
       <span className={cx(styles.badge, className)} data-countdown="to-go">
-        Leaves today
+        {dayTrip ? "Today" : "Leaves today"}
       </span>
     );
   }

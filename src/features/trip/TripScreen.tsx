@@ -18,6 +18,7 @@ import { useTripsSource } from "@/features/trips/TripsSourceProvider";
 import { AddToiletryForm } from "./AddToiletryForm";
 import { automaticStamps } from "@/domain/stamps";
 import { localToday } from "@/lib/today";
+import { fallbackReviewStop, weatherForReview } from "./weather-remaining";
 import { LAPTOP_MIN_WIDTH, useMinWidth } from "@/lib/use-min-width";
 import { SaveAsListSheet, type SaveOutcome } from "./SaveAsListSheet";
 import {
@@ -437,8 +438,12 @@ export function TripScreen({
   const editing =
     dialog?.kind === "edit" ? trip.items.find((entry) => entry.id === dialog.itemId) : undefined;
   const weatherStops = trip.stops ?? [];
-  const weatherDays =
-    weather?.panel.kind === "ready" ? weather.panel.stops.flatMap((stop) => stop.days) : [];
+  // While the trip is on, only the days still ahead are reviewed: the same calculation the Home counts with (#410).
+  const reviewedStops =
+    weather?.panel.kind === "ready"
+      ? weatherForReview(trip, weatherStops, weather.panel.stops, localToday())
+      : [];
+  const weatherDays = reviewedStops.flatMap((stop) => stop.days);
   const weatherRecommendation = recommendPacking({
     days: weatherDays,
     dayStopNames: weatherStops.map((stop) => stop.location.city),
@@ -520,10 +525,8 @@ export function TripScreen({
   const cubeName = (cube: Cube) =>
     cubeViews.find((view) => view.cube === cube)?.label ?? CUBE_LABELS[cube];
   const stopNames = weatherStops.map((stop) => stop.location.city);
-  const firstForecastStop =
-    weather?.panel.kind === "ready"
-      ? (weather.panel.stops.find((stop) => stop.days.length > 0)?.stopIndex ?? 0)
-      : 0;
+  // A change that names no stop goes to the first stay with days to review: while the trip is on, one still ahead.
+  const firstForecastStop = fallbackReviewStop(reviewedStops);
   const suggestions = toSuggestions(
     weatherChanges,
     stopNames,

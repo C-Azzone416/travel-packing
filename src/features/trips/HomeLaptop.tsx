@@ -7,6 +7,7 @@ import { MoreMenu } from "@/components/ui/MoreMenu";
 import {
   CountdownBadge,
   CubeTile,
+  DayBadge,
   LuggageTag,
   PackedRibbon,
   Suitcase,
@@ -55,7 +56,8 @@ export function HomeLaptop({
   headingRef,
 }: HomeLaptopProps) {
   const model = homeModel(trip, weather, today);
-  const { name, stops, nights, hero, countdown, totals, cubes, label, next, caption } = model;
+  const { name, stops, nights, hero, countdown, dayBadge, totals, cubes, label, next, caption } =
+    model;
   const packed = packedState(trip);
 
   return (
@@ -95,10 +97,14 @@ export function HomeLaptop({
               </div>
               <Link
                 className={styles.primary}
-                href={packed === "packed" ? reviewHref(trip.id) : packingHref(trip.id, next)}
-                aria-label={`${packed === "packed" ? "Review your bag" : label}: ${name}`}
+                href={
+                  packed === "packed" && !dayBadge
+                    ? reviewHref(trip.id)
+                    : packingHref(trip.id, next)
+                }
+                aria-label={`${packed === "packed" && !dayBadge ? "Review your bag" : label}: ${name}`}
               >
-                {packed === "packed" ? "Review your bag" : label}
+                {packed === "packed" && !dayBadge ? "Review your bag" : label}
               </Link>
             </div>
             <ul className={styles.cubes} aria-label="Cubes">
@@ -122,8 +128,8 @@ export function HomeLaptop({
         <div className={styles.right}>
           <LuggageTag role="region" aria-labelledby="home-trip-title">
             <div className={styles.tagTop}>
-              <p className={styles.chip}>
-                {packed === "ready" ? "READY" : "NEXT TRIP"} ·{" "}
+              <p className={styles.chip} data-on-now={dayBadge ? "" : undefined}>
+                {dayBadge ? "ON NOW" : packed === "ready" ? "READY" : "NEXT TRIP"} ·{" "}
                 <span className={styles.chipDate}>{tagDates(trip, today)}</span>
               </p>
               <MoreMenu
@@ -153,9 +159,12 @@ export function HomeLaptop({
               </p>
             ) : null}
             <div className={styles.facts}>
+              {dayBadge ? (
+                <DayBadge day={dayBadge.day} of={dayBadge.of} last={dayBadge.last} />
+              ) : null}
               {countdown ? (
                 <>
-                  <CountdownBadge days={countdown.days} toGo />
+                  <CountdownBadge days={countdown.days} toGo dayTrip={countdown.dayTrip} />
                   <span className="sr-only">{countdown.spoken}</span>
                 </>
               ) : null}

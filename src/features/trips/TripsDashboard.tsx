@@ -10,6 +10,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useSaveStatus } from "@/components/shell/SaveStatus";
 import {
   pastAndArchivedTrips,
+  tripPhase,
   upcomingTrips,
   type LifecycleState,
   type LifecycleTrip,
@@ -18,6 +19,9 @@ import { localToday } from "@/lib/today";
 import { EditTripSheet, type ApplyOutcome, type SaveResult } from "@/features/trip/EditTripSheet";
 import { HomeLaptop } from "./HomeLaptop";
 import { HomeEmpty } from "./HomeEmpty";
+import { weatherForReview } from "@/features/trip/weather-remaining";
+import { WelcomeHomeCard } from "./WelcomeHomeCard";
+import { welcomeHomeModel } from "./welcome-home";
 import { HomePhone } from "./HomePhone";
 import type { HomeMaps } from "./home-map-types";
 import { cityWeather, noTripModel, usualRows, type HeroWeather } from "./home-view";
@@ -87,6 +91,15 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
     const answer = (value: HeroWeather) => {
       if (!cancelled) setFetched({ key: weatherKey, value });
     };
+    // No usable weather at all: while the trip is on, the stay the person is in still gets its row ("You're here", no tiles).
+    const outage = (): HeroWeather => {
+      const today = getToday();
+      if (heroTrip && tripPhase(heroTrip, today) === "during") {
+        const city = cityWeather(stopsOrDestination(heroTrip), [], "F", today, true);
+        if (city.length > 0) return { phase: "ready", city };
+      }
+      return { phase: "unavailable" };
+    };
     void (async () => {
       try {
         const settings = await weatherSource.getSettings();
@@ -95,19 +108,24 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
         // A 200 with no stop, or only unavailable ones, has no weather in it: "unavailable", not a forecast (an opt-out
         // between the settings and the weather requests answers 200 with an empty list).
         if (result.kind !== "ready" || result.stops.every((stop) => stop.status !== "ok"))
-          return answer({ phase: "unavailable" });
+          return answer(outage());
         const stops = heroTrip ? stopsOrDestination(heroTrip) : [];
         const today = getToday();
+        // While the trip is on, only the days from today on count: the rows, and the suggestions still to review.
+        const during = heroTrip ? tripPhase(heroTrip, today) === "during" : false;
+        const ahead = heroTrip
+          ? weatherForReview(heroTrip, stops, result.stops, today)
+          : result.stops;
         // Skipped suggestions stay out of the count; if they cannot be read, nothing is skipped.
         const skipped = await Promise.resolve()
           .then(() => weatherSource.listSuggestions(heroId))
           .catch(() => []);
         answer({
           phase: "ready",
-          city: cityWeather(stops, result.stops, settings.temperatureUnit, today),
+          city: cityWeather(stops, result.stops, settings.temperatureUnit, today, during),
           usual: usualRows(stops, result.stops, settings.temperatureUnit, today),
           review: {
-            stops: result.stops,
+            stops: ahead,
             suppressed: Object.fromEntries(
               skipped
                 .filter((entry) => entry.status === "skipped")
@@ -116,7 +134,7 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
           },
         });
       } catch {
-        answer({ phase: "unavailable" });
+        answer(outage());
       }
     })();
     return () => {
@@ -393,6 +411,7 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
     const now = routeSignature(tripRoutePoints(trip), trip.travelMode);
     return drawn && drawn.signature === now ? drawn.node : null;
   };
+  const welcome = welcomeHomeModel(state.trips, today);
   const editTarget = state.trips.find((trip) => trip.id === editing) ?? null;
 
   return (
@@ -442,6 +461,7 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
         </>
       ) : (
         <>
+          {welcome ? <WelcomeHomeCard key={welcome.tripId} model={welcome} /> : null}
           {hero && laptop ? (
             <HomeLaptop
               trip={hero}

@@ -36,6 +36,14 @@
   background: var(--paper);
   color: var(--ink);
 }
+/* No weather for the stay (#410): the dashed "not live" box of Usual weather, never the solid forecast border. */
+.cityRow[data-unavailable="true"] {
+  border: 2px dashed var(--line);
+}
+/* The city and its "not available" line are two lines, not one run-on sentence. */
+.cityRow[data-unavailable="true"] .cityText strong {
+  display: block;
+}
 .cityRow[data-alert="true"] {
   border-color: var(--accent);
   background: var(--accentSoft);
@@ -127,4 +135,15 @@
   margin: 0;
   color: var(--muted);
   font-size: 14px;
+}
+
+/* "You're here" (#410): words before the city name, not colour alone. */
+.here {
+  display: block;
+  color: var(--good);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  text-transform: uppercase;
 }

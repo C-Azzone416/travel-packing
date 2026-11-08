@@ -171,6 +171,17 @@ export async function setOwnerAppearance(ownerId: string, appearance: string): P
   }
 }
 
+/** Turn weather on for the account, as Settings does (the weather service itself is up to the spec: mock /api/weather). */
+export async function setOwnerWeatherOptIn(ownerId: string, weatherOptIn: boolean): Promise<void> {
+  const pool = new Pool({ connectionString: E2E_DATABASE_URL, max: 1 });
+  try {
+    const db = drizzle(pool, { schema }) as unknown as Db;
+    await db.update(schema.users).set({ weatherOptIn }).where(eq(schema.users.id, ownerId));
+  } finally {
+    await pool.end();
+  }
+}
+
 /** Set the owner's home city (the default From of Plan a trip, #379), or clear it with null. */
 export async function setOwnerHomeCity(
   ownerId: string,

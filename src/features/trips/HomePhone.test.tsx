@@ -77,6 +77,7 @@ const city = (name: string, alert: boolean): CityWeather => ({
   condition: alert ? "rain" : null,
   tiles: [tile(1, alert), tile(2, alert)],
   more: alert ? 3 : 0,
+  here: false,
 });
 
 const FAR_TODAY = "2026-11-02";

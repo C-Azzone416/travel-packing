@@ -255,14 +255,17 @@ describe("tag text", () => {
   it("counts down in whole days, says Leaves today, and has no badge once started", () => {
     expect(countdownFor({ start: "2027-03-14" }, "2027-03-02")).toEqual({
       days: 12,
+      dayTrip: false,
       spoken: "12 days to go",
     });
     expect(countdownFor({ start: "2027-03-14" }, "2027-03-13")).toEqual({
       days: 1,
+      dayTrip: false,
       spoken: "1 day to go",
     });
     expect(countdownFor({ start: "2027-03-14" }, "2027-03-14")).toEqual({
       days: 0,
+      dayTrip: false,
       spoken: "Leaves today",
     });
     expect(countdownFor({ start: "2027-03-14" }, "2027-03-15")).toBeNull();

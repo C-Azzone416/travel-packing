@@ -25,12 +25,15 @@ type Load =
 
 const FILTERS: readonly StampFilter[] = ["rolling", "year", "all"];
 
-function Sticker({
+export function Sticker({
   sticker,
   selected = false,
   onSelect,
+  className,
 }: {
   sticker: StickerView;
+  /** An extra class from the screen that draws it (the Home's Welcome home card sizes it). */
+  className?: string;
   selected?: boolean;
   /** Without it the sticker is decorative (the Home's teaser): a span the keyboard and screen readers skip. */
   onSelect?: () => void;
@@ -53,7 +56,7 @@ function Sticker({
     </>
   );
   const common = {
-    className: styles.stickerButton,
+    className: className ? `${styles.stickerButton} ${className}` : styles.stickerButton,
     "data-upcoming": sticker.upcoming || undefined,
     "data-shape": sticker.shape,
     "data-colour": sticker.colour,
