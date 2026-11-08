@@ -16,11 +16,9 @@ import { sampleLifecycleState } from "@/features/trips/fixtures";
 import { createMemoryTripsSource } from "@/features/trips/trips-source";
 import {
   aboutItems,
-  firstOpenStep,
   formatPlanRange,
   howBlocker,
   howSummary,
-  isReachable,
   laundryEffect,
   laundryLine,
   moveStopTo,
@@ -120,21 +118,6 @@ describe("blockers", () => {
     expect(stepBlocker(draft, "list")).toBeNull();
     expect(stepBlocker(draft, "review")).toBeNull();
     expect(stepBlocker(draft, "how")).not.toBeNull();
-  });
-
-  it("finds the first open step and which steps may be opened", () => {
-    const empty = startDraft(DEFAULT_TRIP_CONFIG, "", "");
-    expect(firstOpenStep(empty)).toBe("where");
-    const placed = draftFor("", "");
-    expect(firstOpenStep(placed)).toBe("when");
-    const dated = draftFor("2026-11-12", "2026-11-16");
-    expect(firstOpenStep(dated)).toBe("how");
-    expect(firstOpenStep({ ...dated, travelMode: "fly" })).toBe("review");
-    expect(isReachable(empty, "where")).toBe(true);
-    expect(isReachable(empty, "when")).toBe(false);
-    expect(isReachable(dated, "how")).toBe(true);
-    expect(isReachable(dated, "list")).toBe(false);
-    expect(isReachable({ ...dated, travelMode: "fly" }, "review")).toBe(true);
   });
 });
 

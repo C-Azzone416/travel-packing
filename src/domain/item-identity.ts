@@ -21,7 +21,3 @@ const ALIASES: Readonly<Record<string, string>> = {
 export function canonicalItemId(semanticId: string): string {
   return ALIASES[semanticId] ?? semanticId;
 }
-
-export function sameItemIdentity(a: string, b: string): boolean {
-  return canonicalItemId(a) === canonicalItemId(b);
-}

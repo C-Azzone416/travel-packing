@@ -8,15 +8,6 @@ export type Section = (typeof SECTIONS)[number];
 
 export type StapleFilter = "all" | "packlast";
 
-const DESCRIPTIONS: Record<Section, string> = {
-  Clothing: "Everyday pieces that seed every new trip.",
-  Bathroom:
-    "These appear as normal Toiletries checkboxes; bag placement stays a separate confirmation.",
-  Tech: "Devices and their shared charging kit.",
-  "Other essentials": "Recurring essentials for every new trip.",
-};
-export const sectionDescription = (section: Section): string => DESCRIPTIONS[section];
-
 /** Which section a staple belongs in. Pack last is a timing flag, never a section of its own. */
 export function sectionOf(staple: Pick<Staple, "category" | "groupId">): Section {
   switch (staple.category.trim().toLowerCase()) {
@@ -34,26 +25,6 @@ export function sectionOf(staple: Pick<Staple, "category" | "groupId">): Section
       return "Other essentials";
   }
 }
-
-export interface SectionView {
-  section: Section;
-  staples: Staple[];
-}
-
-/**
- * The sections to show. Under All every section is shown (an empty one says so); under Pack last, only sections that
- * have a Pack last staple.
- */
-export function groupStaples(staples: readonly Staple[], filter: StapleFilter): SectionView[] {
-  const visible = filter === "packlast" ? staples.filter((staple) => staple.packLast) : staples;
-  return SECTIONS.map((section) => ({
-    section,
-    staples: visible.filter((staple) => sectionOf(staple) === section),
-  })).filter((view) => filter === "all" || view.staples.length > 0);
-}
-
-export const countLabel = (count: number): string =>
-  `${count} ${count === 1 ? "staple" : "staples"}`;
 
 /** The staple that already has this name (ignoring case and surrounding space), other than `exceptId`. */
 export function findDuplicate(

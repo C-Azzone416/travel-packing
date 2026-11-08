@@ -42,11 +42,11 @@ E2E_PREBUILT=1 npm run test:e2e            # start the existing build instead of
 | `shell.spec.ts`                 |     5 | navigation, 44px targets, no sideways scroll at 320px, bottom bar vs side rail, screenshots                                                                 |
 | `auth.spec.ts`                  |     5 | the sign-in screens: no app chrome, 44px targets, field widths, screenshots                                                                                 |
 | `auth-screens.spec.ts`          |     6 | the account screens: reachable and outside the shell, 44px targets, axe and screenshots of every state, the numeric-keypad code field                       |
-| `dashboard.spec.ts`             |     4 | 320px with a quick view, 44px controls, the hero on phones, screenshots                                                                                     |
+| `dashboard.spec.ts`             |     4 | Home at 320px with a quick view, 44px controls on the ⋯ menu and tabs, screenshots                                                                          |
 | `trip-screen.spec.ts`           |     4 | rows 44px and 320px, the sheet's close button and the bag button not wrapping, Edit list on a phone                                                         |
 | `packing-phone.spec.ts`         |       | Pack mode (#386): the cube bar, All in and Next, the fixed-height layout and its fallback, 390/320/195 at 100% and 200% text, 1023 vs 1024                  |
 | `packing-phone-weather.spec.ts` |       | the one-city forecast card with its dot and review rows (second app)                                                                                        |
-| `review.spec.ts`                |     2 | 44px targets, screenshots                                                                                                                                   |
+| `review.spec.ts`                |     2 | the Review bag sheet: 44px targets, screenshots                                                                                                             |
 | `staples.spec.ts`               |     2 | 44px targets, screenshots                                                                                                                                   |
 | `create-flow.spec.ts`           |     2 | switches 44px and no sideways scroll at 320px, screenshots                                                                                                  |
 | `location-modes.spec.ts`        |     2 | the picker's spacing keeps the focus ring uncovered, screenshots                                                                                            |
@@ -66,11 +66,10 @@ Every test that reads `testInfo.project.name === "phone"` (or `"desktop"`) is ta
 | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `shell.spec.ts` navigation is a bottom bar on phones, a rail on desktop   | which navigation is shown                                                                                                                         |
 | `auth-screens.spec.ts` controls are 44px targets on phone                 | phone-only size assertion                                                                                                                         |
-| `review.spec.ts` every control on the review is a 44px target on phone    | phone-only size assertion                                                                                                                         |
+| `review.spec.ts` every control in the sheet is a 44px target on phone     | phone-only size assertion                                                                                                                         |
 | `settings.spec.ts` no Offline, Waiting or simulated-sync copy             | layout differs by size                                                                                                                            |
 | `trip-screen.spec.ts` a sheet can be closed with its visible close button | the bag button fills the card on phone only                                                                                                       |
 | `staples.spec.ts` controls are 44px targets on phone                      | phone-only size assertion                                                                                                                         |
-| `dashboard.spec.ts` on phones the hero sun clears the hero text           | skipped on desktop (`test.skip(project !== "phone")`)                                                                                             |
 | `feedback-report.spec.ts` capture, save offline, deliver                  | Playwright's WebKit keeps storage in memory and cannot store a picture in IndexedDB (real Safari can), so on phone the saved report is notes-only |
 
 The tests that name the project only to build a unique email or a screenshot file name (`ownerEmailFor(project.name)`) are unaffected.

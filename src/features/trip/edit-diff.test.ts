@@ -6,14 +6,7 @@ import { setPacked } from "@/domain/readiness";
 import type { LifecycleTrip } from "@/domain/trip-lifecycle";
 import { addDays, daysBetween, type TripStop } from "@/domain/trip-stops";
 import { sampleLifecycleState } from "@/features/trips/fixtures";
-import {
-  changeCount,
-  dayMonth,
-  editChanges,
-  routeNights,
-  saveLabel,
-  type EditDraft,
-} from "./edit-diff";
+import { changeCount, dayMonth, editChanges, saveLabel, type EditDraft } from "./edit-diff";
 
 const TODAY = "2026-10-16";
 const base = (): LifecycleTrip => sampleLifecycleState().trips[0]; // San Diego, 2026-10-23 to 2026-10-27
@@ -361,11 +354,5 @@ describe("labels and small helpers", () => {
   it("formats a day and month, blank for a bad date", () => {
     expect(dayMonth("2026-03-14")).toBe("14 Mar");
     expect(dayMonth("nope")).toBe("");
-  });
-
-  it("nights of a route, null while the dates are blank or there is no route", () => {
-    expect(routeNights([])).toBeNull();
-    expect(routeNights([{ location: null, arrive: "2026-03-14", leave: "2026-03-26" }])).toBe(12);
-    expect(routeNights([{ location: null, arrive: "", leave: "" }])).toBeNull();
   });
 });

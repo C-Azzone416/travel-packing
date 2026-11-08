@@ -165,7 +165,7 @@ for (const firstRun of [true, false]) {
 
 // The first-run empty suitcase (#471): with doubled text its cube names ("Documents") must not push the page sideways,
 // every word across the whole Home must wrap whole, and each name must sit inside its own tile. The widths cover the
-// one-column band (195, 256, 270, 320) and the three-column edge (359).
+// one-column band (195), the two-column widths (256, 270, 320) and the widest two-column edge (359).
 // Each cube's name text, measured by its Range rects, must sit inside its own tile.
 const spilledNames = (page: Page) =>
   page.locator("[data-empty-suitcase] li").evaluateAll((cubes) =>

@@ -3,11 +3,8 @@ import { SYNTHETIC_STAPLES } from "@/domain/calc";
 import type { Staple } from "@/domain/trip";
 import {
   categoryFor,
-  countLabel,
   findDuplicate,
-  groupStaples,
   newStapleId,
-  sectionDescription,
   sectionOf,
   SECTIONS,
   unitLabel,
@@ -44,44 +41,8 @@ describe("sectionOf", () => {
   });
 });
 
-describe("groupStaples", () => {
-  it("shows the four sections in their fixed order under All, empty ones included", () => {
-    const views = groupStaples([staple({ category: "Tech" })], "all");
-    expect(views.map((view) => view.section)).toEqual([...SECTIONS]);
-    expect(views.map((view) => view.staples.length)).toEqual([0, 0, 1, 0]);
-  });
-
-  it("under Pack last keeps only Pack last staples and hides sections left empty", () => {
-    const views = groupStaples(SYNTHETIC_STAPLES, "packlast");
-    expect(views.map((view) => view.section)).toEqual(["Bathroom", "Tech", "Other essentials"]);
-    expect(views.flatMap((view) => view.staples).every((entry) => entry.packLast)).toBe(true);
-    expect(
-      views.find((view) => view.section === "Other essentials")!.staples.map((s) => s.id),
-    ).toEqual(["last-glasses"]);
-  });
-
-  it("shows nothing under Pack last when no staple has the flag", () => {
-    expect(groupStaples([staple({})], "packlast")).toEqual([]);
-  });
-
-  it("keeps the default set's counts per section", () => {
-    const counts = Object.fromEntries(
-      groupStaples(SYNTHETIC_STAPLES, "all").map((view) => [view.section, view.staples.length]),
-    );
-    expect(counts).toEqual({ Clothing: 3, Bathroom: 4, Tech: 2, "Other essentials": 2 });
-  });
-});
-
 describe("small helpers", () => {
-  it("describes each section, and the Bathroom one keeps bag placement separate", () => {
-    for (const section of SECTIONS) expect(sectionDescription(section).length).toBeGreaterThan(10);
-    expect(sectionDescription("Bathroom")).toContain("bag placement stays a separate confirmation");
-  });
-
-  it("counts with the right plural and labels units", () => {
-    expect(countLabel(1)).toBe("1 staple");
-    expect(countLabel(0)).toBe("0 staples");
-    expect(countLabel(3)).toBe("3 staples");
+  it("labels units", () => {
     expect(unitLabel({ qty: 2, cadence: "per day" })).toBe("2 per day");
   });
 
