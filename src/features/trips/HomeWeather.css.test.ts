@@ -12,4 +12,10 @@ describe("the unavailable stay row (#410)", () => {
       css.indexOf(".cityRow {"),
     );
   });
+
+  it("puts the city name on its own line above the unavailable message", () => {
+    expect(css).toMatch(
+      /\.cityRow\[data-unavailable="true"\] \.cityText strong\s*\{[^}]*display:\s*block/,
+    );
+  });
 });

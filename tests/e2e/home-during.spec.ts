@@ -223,5 +223,31 @@ test.describe("phone (195)", DEVICE, () => {
     await expect(panel).toContainText("Weather isn't available for San Diego right now.");
     await expect(panel).not.toContainText("tap a place for daily");
     await expect(panel.locator("li").first()).toHaveCSS("border-top-style", "dashed");
+    // The city and its message are separate lines (boxes), not one run-on sentence, and no word breaks inside itself.
+    const city = (await panel.locator("li strong").first().boundingBox())!;
+    const message = (await panel
+      .getByText("Weather isn't available for San Diego right now.")
+      .boundingBox())!;
+    expect(message.y).toBeGreaterThanOrEqual(city.y + city.height - 1);
+    await expectWholeWords(panel, "390 unavailable row");
+  });
+
+  test("195: the unavailable row keeps whole words, city above message", async ({ page }) => {
+    await page.route("**/api/weather**", (route) => route.fulfill({ status: 503, body: "{}" }));
+    await page.setViewportSize({ width: 195, height: 844 });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.clock.setFixedTime(DAY_3);
+    await signInAsOwner(page);
+    await setOwnerWeatherOptIn(`e2e-${ownerEmailFor(test.info().project.name)}`, true);
+    await page.reload();
+    await page.getByRole("tab", { name: "Weather N/A" }).click();
+    const panel = page.getByRole("tabpanel");
+    const city = (await panel.locator("li strong").first().boundingBox())!;
+    const message = (await panel
+      .getByText("Weather isn't available for San Diego right now.")
+      .boundingBox())!;
+    expect(message.y).toBeGreaterThanOrEqual(city.y + city.height - 1);
+    await expectWholeWords(panel, "195 unavailable row");
+    expect(await overflow(page)).toBeLessThanOrEqual(0);
   });
 });

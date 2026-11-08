@@ -40,6 +40,10 @@
 .cityRow[data-unavailable="true"] {
   border: 2px dashed var(--line);
 }
+/* The city and its "not available" line are two lines, not one run-on sentence. */
+.cityRow[data-unavailable="true"] .cityText strong {
+  display: block;
+}
 .cityRow[data-alert="true"] {
   border-color: var(--accent);
   background: var(--accentSoft);
