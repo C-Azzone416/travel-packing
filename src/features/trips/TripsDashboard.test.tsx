@@ -655,6 +655,34 @@ describe("the Home with no trip coming up (#409)", () => {
     expect(screen.queryByRole("link", { name: NUDGE })).toBeNull();
   });
 
+  it("never holds the trip list behind the home-city read", async () => {
+    const gate = deferred<typeof SEATTLE | null>();
+    const reads = vi.fn(() => gate.promise);
+    const source = { ...sourceWith(sampleLifecycleState(), null), homeCity: reads };
+    renderInApp(<TripsDashboard source={source} getToday={TODAY} />);
+    // The trips render while the read is still pending; with a trip to show it is not even asked.
+    expect(await screen.findByRole("heading", { name: "San Diego" })).toBeTruthy();
+    expect(reads).not.toHaveBeenCalled();
+    gate.resolve(null);
+  });
+
+  it("asks for the home city only after the trips loaded, and shows the list-first Home meanwhile", async () => {
+    const trips = deferred<LifecycleState>();
+    const gate = deferred<typeof SEATTLE | null>();
+    const base = sourceWith(emptyState(), null);
+    const reads = vi.fn(() => gate.promise);
+    const source = { ...base, load: () => trips.promise, homeCity: reads };
+    renderInApp(<TripsDashboard source={source} getToday={TODAY} />);
+    await act(async () => undefined);
+    expect(reads).not.toHaveBeenCalled();
+    trips.resolve(emptyState());
+    expect(await screen.findByRole("heading", { name: "Where to first?" })).toBeTruthy();
+    expect(reads).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("link", { name: NUDGE })).toBeNull();
+    gate.resolve(null);
+    expect(await screen.findByRole("link", { name: NUDGE })).toBeTruthy();
+  });
+
   it("is the returning welcome once every trip is behind it, with the archive one tap away", async () => {
     const state = sampleLifecycleState();
     state.trips = state.trips.filter((trip) => trip.id === "lisbon");

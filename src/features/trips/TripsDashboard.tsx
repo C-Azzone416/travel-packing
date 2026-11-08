@@ -125,23 +125,21 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
     // weatherKey stands for the hero and its stops: a changed route is a new question for the weather service.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [source, weatherKey]);
-  // Whether the account has a home city, for the first-run nudge. Asked once, when the Home opens (not when the trips run
-  // out, so no read lands in the middle of a later archive or remove). Unknown until answered, and a failed or missing answer
-  // stays unknown: the nudge is a hint, so it never guesses.
+  // Whether the account has a home city, for the first-run nudge. It is a hint: it is asked only after the trips have loaded
+  // (server actions queue one after another, so it must never stand in front of the list) and only when the Home opens
+  // with no trip to show, once (not when the trips run out later, so no read lands in the middle of an archive or remove).
+  // Unknown until answered, and a failed or missing answer stays unknown: the nudge never guesses.
   const [homeCityUnset, setHomeCityUnset] = useState(false);
+  const homeCityAsked = useRef(false);
+  const loaded = load.phase === "ready";
   useEffect(() => {
-    if (!source.homeCity) return;
-    let cancelled = false;
+    if (!loaded || heroId !== null || homeCityAsked.current || !source.homeCity) return;
+    homeCityAsked.current = true;
     source
       .homeCity()
-      .then((home) => {
-        if (!cancelled) setHomeCityUnset(home === null);
-      })
+      .then((home) => setHomeCityUnset(home === null))
       .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [source]);
+  }, [loaded, heroId, source]);
   const weather: HeroWeather =
     !weatherKey || !source.weather
       ? { phase: "none" }
