@@ -133,8 +133,10 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
   const homeCityAsked = useRef(false);
   const loaded = load.phase === "ready";
   useEffect(() => {
-    if (!loaded || heroId !== null || homeCityAsked.current || !source.homeCity) return;
+    if (!loaded || homeCityAsked.current) return;
+    // Decided once, on the first loaded Home: trips running out later (an archive, a remove) never start a read.
     homeCityAsked.current = true;
+    if (heroId !== null || !source.homeCity) return;
     source
       .homeCity()
       .then((home) => setHomeCityUnset(home === null))

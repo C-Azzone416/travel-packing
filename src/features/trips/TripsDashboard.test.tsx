@@ -683,6 +683,18 @@ describe("the Home with no trip coming up (#409)", () => {
     expect(await screen.findByRole("link", { name: NUDGE })).toBeTruthy();
   });
 
+  it("does not read the home city when the trips run out after the Home opened with a trip", async () => {
+    const reads = vi.fn(async () => null);
+    const source = { ...sourceWith(sampleLifecycleState(), null), homeCity: reads };
+    const { user } = (() => ({ user: userEvent.setup() }))();
+    renderInApp(<TripsDashboard source={source} getToday={TODAY} />);
+    await screen.findByRole("heading", { name: "San Diego" });
+    await user.click(screen.getByRole("button", { name: "More actions for San Diego" }));
+    await user.click(screen.getByRole("menuitem", { name: "Archive" }));
+    await screen.findByRole("heading", { name: "Where to next?" });
+    expect(reads).not.toHaveBeenCalled();
+  });
+
   it("is the returning welcome once every trip is behind it, with the archive one tap away", async () => {
     const state = sampleLifecycleState();
     state.trips = state.trips.filter((trip) => trip.id === "lisbon");
