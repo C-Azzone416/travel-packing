@@ -31,3 +31,7 @@
   font-variant-numeric: lining-nums;
   line-height: 1;
 }
+/* "Day 3 of 5" (DayBadge, #410): a little air before the large numeral, which sits close to the word before it. */
+.dayNumeral {
+  margin-inline-start: 0.1em;
+}

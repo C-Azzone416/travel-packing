@@ -23,7 +23,7 @@ export function DayBadge({
   }
   return (
     <span className={cx(styles.badge, className)} data-day-badge="day">
-      Day <span className={styles.numeral}>{day}</span> of {of}
+      Day <span className={cx(styles.numeral, styles.dayNumeral)}>{day}</span> of {of}
     </span>
   );
 }
