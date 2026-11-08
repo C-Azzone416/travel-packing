@@ -1,7 +1,7 @@
 // Pure view-models for the trips dashboard. No React, no clock: `today` is passed in.
 
 import { parseDate } from "@/domain/calc";
-import { packedTotals } from "@/domain/readiness";
+import { allPacked, packedTotals } from "@/domain/readiness";
 import { isPastTrip, classifyTrip, type LifecycleTrip } from "@/domain/trip-lifecycle";
 import { toiletryBagState, toiletryItems, TOILETRY_GROUP_ID } from "@/domain/toiletry-bag";
 import type { TripItem } from "@/domain/trip";
@@ -47,6 +47,8 @@ export interface TripCardView {
   packed: number;
   total: number;
   remaining: number;
+  /** Every item is packed but the toiletry bag is not placed yet: not Ready, and not "0 left". */
+  bagNext: boolean;
   percent: number;
   range: string;
   days: number;
@@ -72,6 +74,7 @@ export function tripCardView(trip: LifecycleTrip, today: string, view: TripListV
     packed: totals.packed,
     total: totals.total,
     remaining: totals.total - totals.packed,
+    bagNext: totals.total > 0 && totals.packed >= totals.total && !trip.ready && !allPacked(trip),
     percent: totals.total ? Math.round((totals.packed / totals.total) * 100) : 0,
     range: formatRange(trip),
     days: trip.days,

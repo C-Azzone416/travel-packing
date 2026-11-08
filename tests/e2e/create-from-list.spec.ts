@@ -89,18 +89,18 @@ test("with saved lists: choose one, see the count, and the new trip is exactly t
   await expect(await showByName(page, "Shorts")).toBeVisible();
 });
 
-test("the preview counts the list: its items, and the toiletry bag", async ({ page }) => {
+test("the preview counts the list: its items by quantity", async ({ page }) => {
   await openDashboard(page);
   await seedBeach();
   await startStep(page);
   await laptopPlanLayout(page); // the live preview panel is the laptop Plan layout
   await savedListCard(page).check();
   await page.getByRole("radio", { name: /Beach week/ }).check();
-  // 2 towels + 3 shorts + 1 toothbrush, and the bag that holds the toothbrush.
+  // 2 towels + 3 shorts + 1 toothbrush,.
   await expect(
     page
       .getByRole("complementary", { name: "Live preview of your trip" })
-      .getByText("About 7 items to start"),
+      .getByText("About 6 items to start"),
   ).toBeVisible();
 });
 

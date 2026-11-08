@@ -617,7 +617,7 @@ describe("Start from a saved list", () => {
     );
     const tag = screen.getByRole("complementary", { name: "Live preview of your trip" });
     await waitFor(() =>
-      expect(within(tag).getByRole("status").textContent).toContain("About 4 items to start"),
+      expect(within(tag).getByRole("status").textContent).toContain("About 3 items to start"),
     );
     expect(screen.queryByRole("checkbox", { name: /Copy a past trip/ })).toBeNull();
     await user.click(next());

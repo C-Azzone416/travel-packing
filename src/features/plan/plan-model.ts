@@ -229,7 +229,7 @@ export function previewTrip({
   );
   if (!saved.ok) return null;
   const trip = list ? saved.trip : applyWeatherChanges(saved.trip, accepted);
-  // The same total the packing screen counts against: the toiletry bag is one more thing to put in the suitcase.
+  // The same quantity total the packing screen counts against (#456); the toiletry bag is not an item.
   return { ...summarizeItems(trip.items), total: packedTotals(trip).total };
 }
 

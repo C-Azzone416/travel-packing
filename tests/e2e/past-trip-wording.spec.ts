@@ -11,7 +11,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 // Historical wording for past trip cards (#301). A fixed clock: San Diego is upcoming (Oct 23–27), Lisbon is past
-// (Sep 3–7) and seeded fully packed and Ready (29 of 29, the bag included). Trips are stored in the e2e database,
+// (Sep 3–7) and seeded fully packed and Ready (28 of 28, the bag included). Trips are stored in the e2e database,
 // so each test starts from the freshly seeded owner.
 //
 // The "Review bag" link is the separate commit (b691527). Its assertions live only in the last describe block, so a
@@ -89,7 +89,7 @@ test(
     // Past, seeded Ready: Marked Ready with the counts.
     await expectPastCard(page, "Lisbon", {
       chip: "Marked Ready",
-      valueText: "Marked Ready, packed 29 of 29 (100%)",
+      valueText: "Marked Ready, packed 28 of 28 (100%)",
       progress: "100% packed",
     });
 
@@ -97,15 +97,15 @@ test(
     await uncheckOneOnLisbon(page);
     await pastCard(page, "Lisbon");
     const bar = await progressbar(page, "Lisbon").getAttribute("aria-valuetext");
-    const match = /^Packed (\d+) of 29 \((\d+)%\)$/.exec(bar ?? "");
+    const match = /^Packed (\d+) of 28 \((\d+)%\)$/.exec(bar ?? "");
     expect(match, `partly packed copy, got ${bar}`).not.toBeNull();
     await expectPastCard(page, "Lisbon", {
-      chip: `Packed ${match![1]} of 29`,
+      chip: `Packed ${match![1]} of 28`,
       valueText: bar!,
       progress: `${match![2]}% packed`,
     });
 
-    // Past, fully packed and not Ready: pack everything again (the trip stays out of Ready), then All 29 packed.
+    // Past, fully packed and not Ready: pack everything again (the trip stays out of Ready), then All 28 packed.
     await openLisbonReview(page);
     const unpacked = reviewSheet(page).getByRole("checkbox", { checked: false });
     while ((await unpacked.count()) > 0) {
@@ -120,8 +120,8 @@ test(
     }
     await page.goto("/");
     await expectPastCard(page, "Lisbon", {
-      chip: "All 29 packed",
-      valueText: "All 29 packed (100%)",
+      chip: "All 28 packed",
+      valueText: "All 28 packed (100%)",
       progress: "100% packed",
     });
   },

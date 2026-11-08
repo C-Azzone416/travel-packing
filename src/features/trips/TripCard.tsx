@@ -60,6 +60,8 @@ export function TripCard({ trip, view, busy, onArchive, onRestore, onRemove }: T
     <StatusBadge status={past.ready ? "ready" : "remaining"}>{past.chip}</StatusBadge>
   ) : view.ready ? (
     <StatusBadge status="ready">Ready to go</StatusBadge>
+  ) : view.bagNext ? (
+    <StatusBadge status="remaining">Bag next</StatusBadge>
   ) : (
     <StatusBadge status="remaining">{view.remaining} left to pack</StatusBadge>
   );
@@ -101,7 +103,13 @@ export function TripCard({ trip, view, busy, onArchive, onRestore, onRemove }: T
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={view.percent}
-          aria-valuetext={past ? past.valueText : `${view.percent}% packed`}
+          aria-valuetext={
+            past
+              ? past.valueText
+              : view.bagNext
+                ? `Packed ${view.packed} of ${view.total} (100%). Toiletry bag next`
+                : `${view.percent}% packed`
+          }
         >
           <span style={{ width: `${view.percent}%` }} />
         </div>

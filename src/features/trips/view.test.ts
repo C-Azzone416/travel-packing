@@ -44,14 +44,24 @@ describe("tripCardView", () => {
       past: false,
       ready: false,
       packed: 6,
-      total: 33,
-      remaining: 27,
-      percent: 18,
+      total: 32,
+      remaining: 26,
+      percent: 19,
       range: "Oct 23 – Oct 27",
       days: 5,
       canArchive: true,
       canRestore: false,
     });
+  });
+
+  it("bagNext: all items packed, bag not placed, not Ready (#456)", () => {
+    const items = sanDiego().items.map((item) => ({ ...item, packed: item.qty }));
+    const base = withPatch(sanDiego(), { items, ready: false, toiletryBagPacked: false });
+    expect(tripCardView(base, TODAY, "upcoming").bagNext).toBe(true);
+    expect(
+      tripCardView(withPatch(base, { toiletryBagPacked: true }), TODAY, "upcoming").bagNext,
+    ).toBe(false);
+    expect(tripCardView(sanDiego(), TODAY, "upcoming").bagNext).toBe(false);
   });
 
   it("describes a past, packed and Ready trip", () => {
