@@ -244,6 +244,16 @@ test("AuthSuitcase geometry holds from 195px through 1440px", async ({ page }) =
   }
 });
 
+test("the sign-in Password input is as tall as Email at 1280 and 390", async ({ page }) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/sign-in");
+    const email = (await page.getByLabel("Email").boundingBox())!;
+    const password = (await page.getByLabel("Password", { exact: true }).boundingBox())!;
+    expect(password.height, `${width}: Password is as tall as Email`).toBe(email.height);
+  }
+});
+
 test("a long visible password stays clear of Show at 195px", async ({ page }) => {
   await page.setViewportSize({ width: 195, height: 844 });
   await page.goto("/sign-in");

@@ -1842,9 +1842,12 @@ input:disabled {
 }
 .field .password-row input {
   width: 100%;
-  /* Never shorter than the 44px toggle, whatever the font's line height (fallback fonts are shorter). */
-  min-height: 48px;
   padding-right: 132px;
+}
+/* Never shorter than the 44px toggle, whatever the font's line height (fallback fonts are shorter). Deliberately lower
+   specificity than `.auth-card .field input`, so the auth card's own 52px/50px minimum still wins there. */
+.password-row input {
+  min-height: 48px;
 }
 .password-toggle {
   position: absolute;
