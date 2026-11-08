@@ -2116,14 +2116,15 @@ input:disabled {
 }
 
 @media (max-width: 359px) {
-  /* At the 195px floor the fixed label wraps inside a compact target, leaving useful password-entry width. */
+  /* At the 195px floor the fixed label wraps to two lines; the target is wide enough for the longer word ("password") and the entry reserves matching space, leaving useful password-entry width. */
   .field .password-row input {
-    padding-left: 10px;
-    padding-right: 72px;
+    padding-left: 8px;
+    padding-right: 76px;
   }
   .password-toggle {
-    width: 60px;
-    min-width: 60px;
+    width: 72px;
+    min-width: 72px;
+    margin-inline: 2px;
     padding-inline: 4px;
     line-height: 1.05;
   }

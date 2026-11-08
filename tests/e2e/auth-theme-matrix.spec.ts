@@ -279,5 +279,26 @@ test("a long visible password stays clear of Show at 195px", async ({ page }) =>
     toggleBox.y + toggleBox.height,
     "toggle bottom stays inside the field",
   ).toBeLessThanOrEqual(fieldBox.y + fieldBox.height);
+  // The label's own painted text (every wrapped line, via a Range) must sit inside the button and the field, not just the box.
+  const label = await toggle.evaluate((button) => {
+    const range = document.createRange();
+    range.selectNodeContents(button);
+    const rects = [...range.getClientRects()];
+    return {
+      left: Math.min(...rects.map((rect) => rect.left)),
+      right: Math.max(...rects.map((rect) => rect.right)),
+    };
+  });
+  expect(label.left, "Show password text starts inside the button").toBeGreaterThanOrEqual(
+    toggleBox.x - 0.5,
+  );
+  expect(label.right, "Show password text ends inside the button").toBeLessThanOrEqual(
+    toggleBox.x + toggleBox.width + 0.5,
+  );
+  expect(label.right, "Show password text ends inside the field").toBeLessThanOrEqual(
+    fieldBox.x + fieldBox.width - 1,
+  );
+  expect(toggleBox.width, "toggle target width").toBeGreaterThanOrEqual(56);
+  expect(toggleBox.height, "toggle target height").toBeGreaterThanOrEqual(44);
   expect(await sidewaysScroll(page), "no sideways scroll").toBeLessThanOrEqual(0);
 });
