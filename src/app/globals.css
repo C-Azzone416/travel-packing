@@ -4132,9 +4132,10 @@ a.back {
   }
 }
 
-/* 1024-1179 (#469; spec #393 part 2 section 5.3): the Edit trip side sheet is 420 wide (560 from 1180). */
+/* 1024-1179 (#469; spec #393 part 2 section 5.3): the Edit trip side sheet is 420 wide (560 from 1180). Edit trip only: Review your
+   bag keeps its 560. */
 @media (min-width: 1024px) and (max-width: 1179px) {
-  .modal.modal-side {
+  .modal.modal-side.modal-centred {
     width: min(100%, 420px);
   }
 }

@@ -1084,4 +1084,7 @@
   .layout {
     grid-template-columns: minmax(0, 1fr) 400px;
   }
+  .tagTitle {
+    font-size: 32px;
+  }
 }

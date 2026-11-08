@@ -44,3 +44,16 @@ test("plan-sl-ocean-1100", async ({ page }) => {
   ).toBeVisible();
   await shot(page, "plan-sl-ocean-1100");
 });
+
+test("home-sl-ocean-1024", async ({ page }) => {
+  await start(page, 1024, 900);
+  await expect(page.getByRole("region", { name: "San Diego" })).toBeVisible();
+  await shot(page, "home-sl-ocean-1024");
+});
+
+test("stamps-sl-ocean-1100", async ({ page }) => {
+  await start(page, 1100, 900);
+  await page.goto("/stamps");
+  await expect(page.locator("button[class*='tripRow']").first()).toBeVisible();
+  await shot(page, "stamps-sl-ocean-1100");
+});

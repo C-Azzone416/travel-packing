@@ -76,6 +76,21 @@ test("1100px: Edit trip is a 420px sheet on the right, full height", async ({ pa
   expect(d.height).toBeGreaterThanOrEqual(899.5);
 });
 
+test("Review your bag keeps its 560px sheet at 1100 (the 420 rule is Edit trip only)", async ({
+  page,
+}) => {
+  await start(page, 1100);
+  const link = page.getByRole("link", { name: "Continue packing: San Diego" });
+  const href = (await link.getAttribute("href"))!;
+  await page.goto(`${href.split("?")[0]}?review=1`);
+  const dialog = page.getByRole("dialog", { name: "Review your bag" });
+  await expect(dialog).toBeVisible();
+  await inject(page);
+  const d = await box(dialog);
+  expect(d.width).toBeGreaterThanOrEqual(559.5);
+  expect(d.width).toBeLessThanOrEqual(560.5);
+});
+
 test.describe("small laptop, 1024 to 1179", () => {
   test("Staples: one column of cube cards and a 300px preview at 1100, laptop values at 1180", async ({
     page,
@@ -126,6 +141,60 @@ test.describe("small laptop, 1024 to 1179", () => {
     expect(b.width).toBeGreaterThanOrEqual(399.5);
     expect(b.width).toBeLessThanOrEqual(400.5);
     expect(await overflow(page)).toBeLessThanOrEqual(0);
+  });
+
+  for (const [width, cols] of [
+    [1024, 2],
+    [1099, 2],
+    [1100, 3],
+  ] as const) {
+    test(`Home: the cube grid has ${cols} columns at ${width}`, async ({ page }) => {
+      await start(page, width);
+      const tiles = page.locator("[class*='cubes'] > li");
+      await expect(tiles.first()).toBeVisible();
+      await inject(page);
+      const xs = await tiles.evaluateAll((els) =>
+        els.map((e) => Math.round(e.getBoundingClientRect().left)),
+      );
+      expect(new Set(xs).size).toBe(cols);
+    });
+  }
+
+  for (const [width, moved] of [
+    [1024, true],
+    [1099, true],
+    [1100, true],
+    [1180, false],
+  ] as const) {
+    test(`Stamps: the packed count is ${moved ? "under the dates" : "in its own column"} at ${width}`, async ({
+      page,
+    }) => {
+      await start(page, width);
+      await page.goto("/stamps");
+      const row = page.locator("button[class*='tripRow']").first();
+      await expect(row).toBeVisible();
+      await inject(page);
+      const { copy, packed } = await row.evaluate((el) => ({
+        copy: el.children[1].getBoundingClientRect().left,
+        packed: el.children[2].getBoundingClientRect().left,
+      }));
+      if (moved) expect(Math.abs(packed - copy)).toBeLessThanOrEqual(1);
+      else expect(packed).toBeGreaterThan(copy + 20);
+    });
+  }
+
+  test("Plan a trip: the preview title is 32px at 1100 and 38px at 1180", async ({ page }) => {
+    await start(page, 1100);
+    await page.goto("/trips/new");
+    const title = page
+      .getByRole("complementary", { name: "Live preview of your trip" })
+      .locator("[class*='tagTitle']");
+    await expect(title).toBeVisible();
+    await inject(page);
+    const size = () => title.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+    expect(await size()).toBe(32);
+    await page.setViewportSize({ width: 1180, height: 900 });
+    expect(await size()).toBe(38);
   });
 
   test("Top bar: nav pills pad 14 from 1024 to 1099 and 16 from 1100, no overflow", async ({

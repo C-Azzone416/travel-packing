@@ -607,4 +607,21 @@
   .layout {
     grid-template-columns: minmax(0, 1fr) 340px;
   }
+  /* The packed count moves under the dates when the card is under 360 wide (it follows the column, not the window). */
+  .past {
+    container-type: inline-size;
+  }
+  @container (max-width: 359px) {
+    .tripRow {
+      grid-template-columns: 42px minmax(0, 1fr);
+    }
+    .tripCode {
+      width: 42px;
+      height: 42px;
+    }
+    .tripPacked {
+      grid-column: 2;
+      white-space: normal;
+    }
+  }
 }
