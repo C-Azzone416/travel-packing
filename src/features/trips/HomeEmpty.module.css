@@ -10,9 +10,11 @@
   gap: 16px;
   min-width: 0;
 }
+/* One column until the laptop breakpoint: the laptop markup stays on screen for a frame while a narrowing window re-renders
+   as the phone Home, and it must not overflow then. */
 .grid {
   display: grid;
-  grid-template-columns: minmax(0, 4fr) minmax(0, 3fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 36px;
   align-items: start;
 }
@@ -268,6 +270,9 @@
 }
 
 @media (min-width: 1024px) {
+  .grid {
+    grid-template-columns: minmax(0, 4fr) minmax(0, 3fr);
+  }
   .page[data-kind="first"] {
     max-width: 720px;
   }

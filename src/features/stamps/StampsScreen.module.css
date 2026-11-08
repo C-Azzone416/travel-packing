@@ -564,8 +564,9 @@
     gap: 22px 12px;
   }
   .teaser .stickerButton {
-    width: 72px;
-    height: 72px;
+    width: min(72px, 100%);
+    height: auto;
+    aspect-ratio: 1;
     padding: 6px;
   }
   .teaser .stickerCode,
