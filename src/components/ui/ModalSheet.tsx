@@ -95,6 +95,8 @@ export interface ModalSheetProps {
    * tablet, #414). Edit trip stays full screen there until its centred modal lands (#469).
    */
   tabletSheet?: boolean;
+  /** "side" only: a centred 560px modal from 768 to 1023px instead of a full screen (Edit trip, #469). Below 768 and from 1024 it is unchanged. */
+  tabletModal?: boolean;
 }
 
 // Bottom sheet on phones, centered dialog from 601px. Traps focus, closes on
@@ -112,6 +114,7 @@ export function ModalSheet({
   headerAction,
   variant = "dialog",
   tabletSheet = false,
+  tabletModal = false,
 }: ModalSheetProps) {
   const titleId = useId();
   const descriptionId = useId();
@@ -211,7 +214,9 @@ export function ModalSheet({
       <div
         ref={dialogRef}
         className={
-          variant === "side" ? `modal modal-side${tabletSheet ? " modal-tablet" : ""}` : "modal"
+          variant === "side"
+            ? `modal modal-side${tabletSheet ? " modal-tablet" : ""}${tabletModal ? " modal-centred" : ""}`
+            : "modal"
         }
         role="dialog"
         aria-modal="true"

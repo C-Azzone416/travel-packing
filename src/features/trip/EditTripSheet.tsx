@@ -394,6 +394,7 @@ export function EditTripSheet({
     <ModalSheet
       open
       variant="side"
+      tabletModal
       showClose
       headerAction={<FeedbackEditorEntry busy={busy} />}
       title="Edit trip"
