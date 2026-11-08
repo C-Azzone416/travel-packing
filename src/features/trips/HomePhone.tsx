@@ -4,7 +4,14 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type ReactNode, type Ref } from "react";
 import { Icon } from "@/components/ui/Icon";
 import { MoreMenu } from "@/components/ui/MoreMenu";
-import { CountdownBadge, CubeTile, LuggageTag, PillTabs, Suitcase } from "@/components/suitcase";
+import {
+  CountdownBadge,
+  CubeTile,
+  DayBadge,
+  LuggageTag,
+  PillTabs,
+  Suitcase,
+} from "@/components/suitcase";
 import type { LifecycleState, LifecycleTrip } from "@/domain/trip-lifecycle";
 import { StampsContent } from "@/features/stamps/StampsScreen";
 import { stampsView } from "@/features/stamps/stamps-view";
@@ -84,8 +91,20 @@ export function HomePhone({
     return () => window.removeEventListener("popstate", onPop);
   }, []);
   const model = homeModel(trip, weather, today);
-  const { name, nights, hero, countdown, totals, cubes, label, next, caption, pendingCities } =
-    model;
+  const {
+    name,
+    nights,
+    hero,
+    countdown,
+    dayBadge,
+    chip,
+    totals,
+    cubes,
+    label,
+    next,
+    caption,
+    pendingCities,
+  } = model;
   const stamps = useMemo(() => stampsView(state.trips, today, "rolling").inked, [state, today]);
   const weatherSub = weatherPillSub(weather, model);
   const weatherEmpty = (
@@ -107,9 +126,8 @@ export function HomePhone({
         <LuggageTag role="region" aria-labelledby="home-trip-title" className={styles.tag}>
           <div className={styles.tagRow}>
             <div className={styles.tagCopy}>
-              <p className={styles.chip}>
-                NEXT TRIP · {tagDatesShort(trip, today)} · {nights}{" "}
-                {nights === 1 ? "night" : "nights"}
+              <p className={styles.chip} data-on-now={dayBadge ? "" : undefined}>
+                {chip} · {tagDatesShort(trip, today)} · {nights} {nights === 1 ? "night" : "nights"}
               </p>
               <h2 id="home-trip-title" className={styles.name} data-size={hero.size}>
                 {hero.title}
@@ -122,6 +140,9 @@ export function HomePhone({
               </h2>
             </div>
             <div className={styles.tagSide}>
+              {dayBadge ? (
+                <DayBadge day={dayBadge.day} of={dayBadge.of} last={dayBadge.last} />
+              ) : null}
               {countdown ? (
                 <>
                   <CountdownBadge days={countdown.days} />

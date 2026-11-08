@@ -4,7 +4,7 @@ import Link from "next/link";
 import type { ReactNode, Ref } from "react";
 import { Icon } from "@/components/ui/Icon";
 import { MoreMenu } from "@/components/ui/MoreMenu";
-import { CountdownBadge, CubeTile, LuggageTag, Suitcase } from "@/components/suitcase";
+import { CountdownBadge, CubeTile, DayBadge, LuggageTag, Suitcase } from "@/components/suitcase";
 import type { LifecycleTrip } from "@/domain/trip-lifecycle";
 import { tripFacts } from "@/domain/trip-route";
 import { homeModel, packingHref, tagDates, type HeroWeather } from "./home-view";
@@ -48,7 +48,20 @@ export function HomeLaptop({
   headingRef,
 }: HomeLaptopProps) {
   const model = homeModel(trip, weather, today);
-  const { name, stops, nights, hero, countdown, totals, cubes, label, next, caption } = model;
+  const {
+    name,
+    stops,
+    nights,
+    hero,
+    countdown,
+    dayBadge,
+    chip,
+    totals,
+    cubes,
+    label,
+    next,
+    caption,
+  } = model;
 
   return (
     <div className={styles.page} aria-busy={busy}>
@@ -106,8 +119,8 @@ export function HomeLaptop({
         <div className={styles.right}>
           <LuggageTag role="region" aria-labelledby="home-trip-title">
             <div className={styles.tagTop}>
-              <p className={styles.chip}>
-                NEXT TRIP · <span className={styles.chipDate}>{tagDates(trip, today)}</span>
+              <p className={styles.chip} data-on-now={dayBadge ? "" : undefined}>
+                {chip} · <span className={styles.chipDate}>{tagDates(trip, today)}</span>
               </p>
               <MoreMenu
                 subject={name}
@@ -136,6 +149,9 @@ export function HomeLaptop({
               </p>
             ) : null}
             <div className={styles.facts}>
+              {dayBadge ? (
+                <DayBadge day={dayBadge.day} of={dayBadge.of} last={dayBadge.last} />
+              ) : null}
               {countdown ? (
                 <>
                   <CountdownBadge days={countdown.days} toGo />

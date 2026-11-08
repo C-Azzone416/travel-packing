@@ -76,6 +76,7 @@ const city = (name: string, alert: boolean): CityWeather => ({
   condition: alert ? "rain" : null,
   tiles: [tile(1, alert), tile(2, alert)],
   more: alert ? 3 : 0,
+  here: false,
 });
 
 function setup(props: Partial<HomeLaptopProps> = {}) {

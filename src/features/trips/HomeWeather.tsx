@@ -62,6 +62,7 @@ function CityRows({
               : null;
         const text = (
           <span className={styles.cityText}>
+            {row.here ? <span className={styles.here}>You&apos;re here</span> : null}
             <strong>
               {row.city} · {row.range}
             </strong>{" "}

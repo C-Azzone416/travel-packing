@@ -10,6 +10,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useSaveStatus } from "@/components/shell/SaveStatus";
 import {
   pastAndArchivedTrips,
+  tripPhase,
   upcomingTrips,
   type LifecycleState,
   type LifecycleTrip,
@@ -18,9 +19,17 @@ import { localToday } from "@/lib/today";
 import { EditTripSheet, type ApplyOutcome, type SaveResult } from "@/features/trip/EditTripSheet";
 import { HomeLaptop } from "./HomeLaptop";
 import { HomeEmpty } from "./HomeEmpty";
+import { WelcomeHomeCard } from "./WelcomeHomeCard";
+import { welcomeHomeModel } from "./welcome-home";
 import { HomePhone } from "./HomePhone";
 import type { HomeMaps } from "./home-map-types";
-import { cityWeather, noTripModel, usualRows, type HeroWeather } from "./home-view";
+import {
+  cityWeather,
+  noTripModel,
+  remainingWeather,
+  usualRows,
+  type HeroWeather,
+} from "./home-view";
 import { LAPTOP_MIN_WIDTH, useMinWidth } from "@/lib/use-min-width";
 import { routeSignature, stopsOrDestination, tripRoutePoints } from "@/domain/trip-route";
 import { TripCard } from "./TripCard";
@@ -98,16 +107,19 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
           return answer({ phase: "unavailable" });
         const stops = heroTrip ? stopsOrDestination(heroTrip) : [];
         const today = getToday();
+        // While the trip is on, only the days from today on count: the rows, and the suggestions still to review.
+        const during = heroTrip ? tripPhase(heroTrip, today) === "during" : false;
+        const ahead = during ? remainingWeather(stops, result.stops, today) : result.stops;
         // Skipped suggestions stay out of the count; if they cannot be read, nothing is skipped.
         const skipped = await Promise.resolve()
           .then(() => weatherSource.listSuggestions(heroId))
           .catch(() => []);
         answer({
           phase: "ready",
-          city: cityWeather(stops, result.stops, settings.temperatureUnit, today),
+          city: cityWeather(stops, result.stops, settings.temperatureUnit, today, during),
           usual: usualRows(stops, result.stops, settings.temperatureUnit, today),
           review: {
-            stops: result.stops,
+            stops: ahead,
             suppressed: Object.fromEntries(
               skipped
                 .filter((entry) => entry.status === "skipped")
@@ -393,6 +405,7 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
     const now = routeSignature(tripRoutePoints(trip), trip.travelMode);
     return drawn && drawn.signature === now ? drawn.node : null;
   };
+  const welcome = welcomeHomeModel(state.trips, today);
   const editTarget = state.trips.find((trip) => trip.id === editing) ?? null;
 
   return (
@@ -442,6 +455,7 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
         </>
       ) : (
         <>
+          {welcome ? <WelcomeHomeCard key={welcome.tripId} model={welcome} /> : null}
           {hero && laptop ? (
             <HomeLaptop
               trip={hero}

@@ -163,6 +163,11 @@
   line-height: 1.3;
   overflow-wrap: anywhere;
 }
+/* ON NOW (#410): the one coloured chip on the page while the trip is on. */
+.chip[data-on-now] {
+  background: var(--accent);
+  color: var(--onDark);
+}
 .chipDate {
   font-weight: 600;
   letter-spacing: 0.02em;

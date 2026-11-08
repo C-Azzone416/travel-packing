@@ -262,10 +262,7 @@ export interface Countdown {
   spoken: string;
 }
 
-/**
- * The countdown, or null once the trip has started (the during-trip badge is #410).
- * TODO(#408/#410): tripPhase decides this; until then a started trip shows the tag without a badge.
- */
+/** The countdown, or null once the trip has started (homeModel shows the during-trip day badge, #410, instead). */
 export function countdownFor(trip: Pick<LifecycleTrip, "start">, today: string): Countdown | null {
   const days = daysBetween(today, trip.start);
   if (days < 0) return null;
@@ -273,6 +270,31 @@ export function countdownFor(trip: Pick<LifecycleTrip, "start">, today: string):
     days,
     spoken: days === 0 ? "Leaves today" : days === 1 ? "1 day to go" : `${days} days to go`,
   };
+}
+
+export interface DayBadgeModel {
+  /** 1-based day of the trip. */
+  day: number;
+  /** Days in the trip, first and last day included. */
+  of: number;
+  last: boolean;
+  /** "Day 3 of 11", or "Last day": what the badge says. */
+  text: string;
+}
+
+/**
+ * The during-trip badge (#410, spec #393 section 2.2): "Day 3 of 11", then "Last day" on the end date. Null in every other
+ * phase (a one-day trip is `leaving`, then `past`, never `during`). `today` is the device-local date (#26).
+ */
+export function dayBadgeFor(
+  trip: Pick<LifecycleTrip, "start" | "end">,
+  today: string,
+): DayBadgeModel | null {
+  if (tripPhase(trip, today) !== "during") return null;
+  const of = daysBetween(trip.start, trip.end) + 1;
+  const day = Math.min(of, daysBetween(trip.start, today) + 1);
+  const last = day >= of;
+  return { day, of, last, text: last ? "Last day" : `Day ${day} of ${of}` };
 }
 
 export interface UpcomingRow {
@@ -325,18 +347,57 @@ export interface CityWeather {
   tiles: DayTile[];
   /** Forecast days beyond the seven shown. */
   more: number;
+  /** During the trip: the stay the person is in now ("You're here", #410). */
+  here: boolean;
 }
 
 const MAX_TILES = 7;
 const RAIN_PERCENT = WEATHER_RULES.rainProbability * 100;
 
-/** One entry per stop that has weather; a stop without any is left out. */
-export function cityWeather(
+/**
+ * The stay the person is in on `today` (arrive <= today < leave; the last stay also on its leave day), or null. A stay's
+ * leave day is the next one's arrival, so the later stay wins on a changeover day.
+ */
+export function hereStopIndex(stops: readonly TripStop[], today: string): number | null {
+  const inside = (stop: TripStop) => stop.arrive <= today && today < stop.leave;
+  const at = stops.findIndex(inside);
+  if (at >= 0) return at;
+  const last = stops.length - 1;
+  return last >= 0 && stops[last].arrive <= today && today === stops[last].leave ? last : null;
+}
+
+/**
+ * The weather still ahead (#410): days before `today` are dropped (never shown as typical), and so is a stay that is over
+ * (it ended before today, or today is its leave day and the next stay has begun). Stop indexes are kept.
+ */
+export function remainingWeather(
   stops: readonly TripStop[],
   weather: readonly StopWeather[],
+  today: string,
+): StopWeather[] {
+  const here = hereStopIndex(stops, today);
+  return weather
+    .filter((entry) => {
+      const stop = stops[entry.stopIndex];
+      return !stop || stop.leave > today || entry.stopIndex === here;
+    })
+    .map((entry) => ({ ...entry, days: entry.days.filter((day) => day.date >= today) }));
+}
+
+/**
+ * One entry per stop that has weather; a stop without any is left out. `during` is the trip being on now: only the days
+ * from today on are shown, the stays behind the person are gone (so the stay they are in is first, in trip order) and that
+ * one says "You're here".
+ */
+export function cityWeather(
+  stops: readonly TripStop[],
+  weatherIn: readonly StopWeather[],
   unit: TemperatureUnit,
   today: string,
+  during = false,
 ): CityWeather[] {
+  const weather = during ? remainingWeather(stops, weatherIn, today) : weatherIn;
+  const hereAt = during ? hereStopIndex(stops, today) : null;
   const rows: CityWeather[] = [];
   stops.forEach((stop, index) => {
     const found = weather.find((entry) => entry.stopIndex === index);
@@ -383,6 +444,7 @@ export function cityWeather(
         rain: day.rainPercent >= RAIN_PERCENT,
       })),
       more: Math.max(0, forecast.length - MAX_TILES),
+      here: index === hereAt,
     });
   });
   return rows;
@@ -504,6 +566,10 @@ export function homeModel(trip: LifecycleTrip, weather: HeroWeather, today: stri
     nights,
     hero: heroName(trip),
     countdown: phase === "during" || phase === "past" ? null : countdownFor(trip, today),
+    /** "Day 3 of 11" / "Last day" while the trip is on; it takes the countdown's place on the tag. */
+    dayBadge: dayBadgeFor(trip, today),
+    /** The tag's chip word: ON NOW while the trip is on (#410), else NEXT TRIP. */
+    chip: phase === "during" ? "ON NOW" : "NEXT TRIP",
     rows,
     /** Cities with a rainy (or snowy) day: they are outlined and open themselves. */
     cities,

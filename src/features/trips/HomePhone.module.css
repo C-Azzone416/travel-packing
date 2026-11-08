@@ -56,6 +56,11 @@
   text-transform: uppercase;
   overflow-wrap: break-word;
 }
+/* ON NOW (#410): the one coloured chip on the page while the trip is on. */
+.chip[data-on-now] {
+  background: var(--accent);
+  color: var(--onDark);
+}
 .name {
   margin: 2px 0 0;
   color: var(--ink);
