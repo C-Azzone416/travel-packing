@@ -3,7 +3,7 @@
 // on and off, what Add and Dismiss send). The main happy paths are in TripScreen.test.tsx.
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DayWeather, StopWeather } from "@/domain/weather/types";
 import { sampleLifecycleState } from "@/features/trips/fixtures";
 import { createMemoryTripsSource, type TripsSource } from "@/features/trips/trips-source";
@@ -51,6 +51,8 @@ interface Options {
   applyFail?: boolean;
   /** The saved list already has a rain jacket from an earlier forecast. */
   rainJacket?: boolean;
+  /** Lisbon 3-5 Sep, then Porto 5-7 Sep (a changeover on the 5th). */
+  twoStops?: boolean;
 }
 function setup(options: Options = {}) {
   const memory = createMemoryTripsSource(sampleLifecycleState(), {
@@ -88,7 +90,18 @@ function setup(options: Options = {}) {
               },
             ]
           : trip.items,
-        stops: trip.stops.map((stop) => ({
+        stops: (options.twoStops
+          ? [
+              { ...trip.stops[0], arrive: "2026-09-03", leave: "2026-09-05" },
+              {
+                ...trip.stops[0],
+                arrive: "2026-09-05",
+                leave: "2026-09-07",
+                location: { ...trip.stops[0].location, city: "Porto", id: "porto" },
+              },
+            ]
+          : trip.stops
+        ).map((stop) => ({
           ...stop,
           location: { ...stop.location, latitude: 38.72, longitude: -9.14 },
         })),
@@ -211,5 +224,65 @@ describe("the review rows", () => {
     await user.click(screen.getAllByRole("button", { name: /^Add / })[0]);
     expect(await screen.findByRole("button", { name: "Not saved, retry" })).toBeTruthy();
     expect(screen.getAllByRole("button", { name: /^Add / }).length).toBeGreaterThan(0);
+  });
+});
+
+describe("during the trip (#410)", () => {
+  afterEach(() => vi.useRealTimers());
+
+  // Lisbon is 3-7 Sep 2026. The 4th was wet, the 5th (today) and on are dry.
+  const wetThenDry: StopWeather[] = [
+    {
+      stopIndex: 0,
+      status: "ok",
+      days: [
+        { ...hot, precipProbability: 0.8, precipMm: 12, highC: 15, lowC: 8 },
+        { ...hot, date: "2026-09-05" },
+      ],
+    },
+  ];
+
+  it("reviews only the days still ahead, as the Home counts them: a rain jacket for a wet day that is over is offered for removal", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-09-05T12:00:00") });
+    const { user, applyReview } = setup({
+      weather: { kind: "ready", stops: wetThenDry },
+      rainJacket: true,
+    });
+    await ready();
+    await screen.findByRole("button", { name: /to review/ }).then((button) => user.click(button));
+    await user.click(screen.getByRole("button", { name: "Remove Rain jacket" }));
+    await waitFor(() => expect(applyReview).toHaveBeenCalledTimes(1));
+  });
+
+  it("keeps the whole forecast in view before the trip: the wet day still calls for the jacket", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-09-01T12:00:00") });
+    const { user } = setup({ weather: { kind: "ready", stops: wetThenDry }, rainJacket: true });
+    await ready();
+    // The review disclosure is opened first, so an absent action means absent, not hidden.
+    const disclosure = await screen.findByRole("button", { name: /to review/ });
+    await user.click(disclosure);
+    expect(screen.getAllByRole("button", { name: /^(Add|Dismiss) / }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: "Remove Rain jacket" })).toBeNull();
+  });
+
+  it("shows a change that names no stay under the stay the person is in, not the one already left", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-09-06T12:00:00") });
+    const day = (date: string, stopIndex: number) => ({ ...hot, date, stopIndex });
+    const { user } = setup({
+      twoStops: true,
+      rainJacket: true,
+      weather: {
+        kind: "ready",
+        stops: [
+          { stopIndex: 0, status: "ok", days: [day("2026-09-03", 0), day("2026-09-04", 0)] },
+          { stopIndex: 1, status: "ok", days: [day("2026-09-06", 1), day("2026-09-07", 1)] },
+        ],
+      },
+    });
+    await ready();
+    await screen.findByRole("button", { name: /to review/ }).then((button) => user.click(button));
+    const forecast = screen.getByRole("button", { name: "Remove Rain jacket" }).closest("section")!;
+    expect(forecast.textContent).toContain("Porto, has changes to review");
+    expect(forecast.textContent).not.toContain("Lisbon, has changes to review");
   });
 });

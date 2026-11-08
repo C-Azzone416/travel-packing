@@ -12,6 +12,9 @@ import {
   type Cube,
 } from "@/domain/cubes";
 import { tripPhase, type LifecycleTrip, type TripPhase } from "@/domain/trip-lifecycle";
+import { hereStopIndex, remainingWeather } from "@/features/trip/weather-remaining";
+
+export { hereStopIndex, remainingWeather };
 import { packingButtonLabel } from "@/lib/trip-phase-copy";
 import type { UsualWeatherRow } from "@/components/ui/UsualWeather";
 import {
@@ -175,6 +178,8 @@ export function firstOpenCube(cubes: readonly CubeSummary[]): Cube | null {
  * (Caroline's ruling on #338); the all-packed state is #411.
  */
 export function suitcaseButtonLabel(totals: BagTotals, ready: boolean, phase: TripPhase): string {
+  // While the trip is on, the list is what the person opens, whatever its packed state (#410).
+  if (phase === "during") return "Open list";
   if (ready) return "Review bag";
   return packingButtonLabel(totals.packed, phase);
 }
@@ -258,21 +263,56 @@ export function heroName(trip: LifecycleTrip): {
 export interface Countdown {
   /** Whole days to the first day; the badge is shown only for a trip that has not started. */
   days: number;
-  /** "12 days to go", "1 day to go", "Leaves today": what a screen reader hears. */
+  /** "12 days to go", "1 day to go", "Leaves today" ("Today" for a one-day trip): what a screen reader hears. */
   spoken: string;
+  /** A one-day trip on its day: the badge says "Today", not "Leaves today". */
+  dayTrip: boolean;
+}
+
+/** The countdown, or null once the trip has started (homeModel shows the during-trip day badge, #410, instead). */
+export function countdownFor(
+  trip: Pick<LifecycleTrip, "start"> & { end?: string },
+  today: string,
+): Countdown | null {
+  const days = daysBetween(today, trip.start);
+  if (days < 0) return null;
+  const dayTrip = days === 0 && trip.end === trip.start;
+  return {
+    days,
+    dayTrip,
+    spoken: dayTrip
+      ? "Today"
+      : days === 0
+        ? "Leaves today"
+        : days === 1
+          ? "1 day to go"
+          : `${days} days to go`,
+  };
+}
+
+export interface DayBadgeModel {
+  /** 1-based day of the trip. */
+  day: number;
+  /** Days in the trip, first and last day included. */
+  of: number;
+  last: boolean;
+  /** "Day 3 of 11", or "Last day": what the badge says. */
+  text: string;
 }
 
 /**
- * The countdown, or null once the trip has started (the during-trip badge is #410).
- * TODO(#408/#410): tripPhase decides this; until then a started trip shows the tag without a badge.
+ * The during-trip badge (#410, spec #393 section 2.2): "Day 3 of 11", then "Last day" on the end date. Null in every other
+ * phase (a one-day trip is `leaving`, then `past`, never `during`). `today` is the device-local date (#26).
  */
-export function countdownFor(trip: Pick<LifecycleTrip, "start">, today: string): Countdown | null {
-  const days = daysBetween(today, trip.start);
-  if (days < 0) return null;
-  return {
-    days,
-    spoken: days === 0 ? "Leaves today" : days === 1 ? "1 day to go" : `${days} days to go`,
-  };
+export function dayBadgeFor(
+  trip: Pick<LifecycleTrip, "start" | "end">,
+  today: string,
+): DayBadgeModel | null {
+  if (tripPhase(trip, today) !== "during") return null;
+  const of = daysBetween(trip.start, trip.end) + 1;
+  const day = Math.min(of, daysBetween(trip.start, today) + 1);
+  const last = day >= of;
+  return { day, of, last, text: last ? "Last day" : `Day ${day} of ${of}` };
 }
 
 export interface UpcomingRow {
@@ -325,23 +365,55 @@ export interface CityWeather {
   tiles: DayTile[];
   /** Forecast days beyond the seven shown. */
   more: number;
+  /** During the trip: the stay the person is in now ("You're here", #410). */
+  here: boolean;
+  /** No usable weather for this stay: the row says so instead of showing tiles. */
+  unavailable?: boolean;
+}
+
+function unavailableRow(stop: TripStop, stopIndex: number): CityWeather {
+  const city = stop.location.city;
+  return {
+    stopIndex,
+    city,
+    range: "",
+    summary: `Weather isn't available for ${city} right now.`,
+    source: "typical",
+    alert: false,
+    condition: null,
+    tiles: [],
+    more: 0,
+    here: true,
+    unavailable: true,
+  };
 }
 
 const MAX_TILES = 7;
 const RAIN_PERCENT = WEATHER_RULES.rainProbability * 100;
 
-/** One entry per stop that has weather; a stop without any is left out. */
+/**
+ * One entry per stop that has weather; a stop without any is left out. `during` is the trip being on now: only the days
+ * from today on are shown, the stays behind the person are gone (so the stay they are in is first, in trip order) and that
+ * one says "You're here".
+ */
 export function cityWeather(
   stops: readonly TripStop[],
-  weather: readonly StopWeather[],
+  weatherIn: readonly StopWeather[],
   unit: TemperatureUnit,
   today: string,
+  during = false,
 ): CityWeather[] {
+  const weather = during ? remainingWeather(stops, weatherIn, today) : weatherIn;
+  const hereAt = during ? hereStopIndex(stops, today) : null;
   const rows: CityWeather[] = [];
   stops.forEach((stop, index) => {
     const found = weather.find((entry) => entry.stopIndex === index);
     const row = found ? weatherRowView(stop, found, unit, today) : null;
-    if (!row) return;
+    if (!row) {
+      // The stay the person is in keeps its place and its "You're here" without weather (spec #393 section 2.2).
+      if (index === hereAt) rows.push(unavailableRow(stop, index));
+      return;
+    }
     const forecast = row.forecastDays;
     const part = row.forecast ?? {
       high: row.high,
@@ -383,6 +455,7 @@ export function cityWeather(
         rain: day.rainPercent >= RAIN_PERCENT,
       })),
       more: Math.max(0, forecast.length - MAX_TILES),
+      here: index === hereAt,
     });
   });
   return rows;
@@ -489,7 +562,8 @@ export function homeModel(trip: LifecycleTrip, weather: HeroWeather, today: stri
   const nights = Math.max(0, daysBetween(trip.start, trip.end));
   const rows = weather.phase === "ready" ? (weather.city ?? []) : [];
   const cities = alertCities(rows);
-  const firstAlert = rows.find((row) => row.alert)?.stopIndex ?? 0;
+  // A change that names no stop goes to a stop that is on screen: the first alert city, else the first row (never one already left).
+  const firstAlert = rows.find((row) => row.alert)?.stopIndex ?? rows[0]?.stopIndex ?? 0;
   // Before the forecast opens there is only typical weather: it never makes suggestions, so nothing is pending (#408).
   const pending =
     phase === "far"
@@ -504,6 +578,10 @@ export function homeModel(trip: LifecycleTrip, weather: HeroWeather, today: stri
     nights,
     hero: heroName(trip),
     countdown: phase === "during" || phase === "past" ? null : countdownFor(trip, today),
+    /** "Day 3 of 11" / "Last day" while the trip is on; it takes the countdown's place on the tag. */
+    dayBadge: dayBadgeFor(trip, today),
+    /** The tag's chip word: ON NOW while the trip is on (#410), else NEXT TRIP. */
+    chip: phase === "during" ? "ON NOW" : "NEXT TRIP",
     rows,
     /** Cities with a rainy (or snowy) day: they are outlined and open themselves. */
     cities,
@@ -550,7 +628,10 @@ export function weatherPillSub(
           text: (weather.usual ?? []).some((row) => !row.unavailable) ? "Usual" : "N/A",
           alert: false,
         };
-      return { text: model.rows.length > 0 ? "Clear" : "N/A", alert: false };
+      return {
+        text: model.rows.some((row) => !row.unavailable) ? "Clear" : "N/A",
+        alert: false,
+      };
     case "off":
       return { text: "Off", alert: false };
     case "loading":
