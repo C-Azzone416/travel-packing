@@ -51,6 +51,8 @@ interface Options {
   applyFail?: boolean;
   /** The saved list already has a rain jacket from an earlier forecast. */
   rainJacket?: boolean;
+  /** Lisbon 3-5 Sep, then Porto 5-7 Sep (a changeover on the 5th). */
+  twoStops?: boolean;
 }
 function setup(options: Options = {}) {
   const memory = createMemoryTripsSource(sampleLifecycleState(), {
@@ -88,7 +90,18 @@ function setup(options: Options = {}) {
               },
             ]
           : trip.items,
-        stops: trip.stops.map((stop) => ({
+        stops: (options.twoStops
+          ? [
+              { ...trip.stops[0], arrive: "2026-09-03", leave: "2026-09-05" },
+              {
+                ...trip.stops[0],
+                arrive: "2026-09-05",
+                leave: "2026-09-07",
+                location: { ...trip.stops[0].location, city: "Porto", id: "porto" },
+              },
+            ]
+          : trip.stops
+        ).map((stop) => ({
           ...stop,
           location: { ...stop.location, latitude: 38.72, longitude: -9.14 },
         })),
@@ -243,8 +256,33 @@ describe("during the trip (#410)", () => {
 
   it("keeps the whole forecast in view before the trip: the wet day still calls for the jacket", async () => {
     vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-09-01T12:00:00") });
-    setup({ weather: { kind: "ready", stops: wetThenDry }, rainJacket: true });
+    const { user } = setup({ weather: { kind: "ready", stops: wetThenDry }, rainJacket: true });
     await ready();
+    // The review disclosure is opened first, so an absent action means absent, not hidden.
+    const disclosure = await screen.findByRole("button", { name: /to review/ });
+    await user.click(disclosure);
+    expect(screen.getAllByRole("button", { name: /^(Add|Dismiss) / }).length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: "Remove Rain jacket" })).toBeNull();
+  });
+
+  it("shows a change that names no stay under the stay the person is in, not the one already left", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-09-06T12:00:00") });
+    const day = (date: string, stopIndex: number) => ({ ...hot, date, stopIndex });
+    const { user } = setup({
+      twoStops: true,
+      rainJacket: true,
+      weather: {
+        kind: "ready",
+        stops: [
+          { stopIndex: 0, status: "ok", days: [day("2026-09-03", 0), day("2026-09-04", 0)] },
+          { stopIndex: 1, status: "ok", days: [day("2026-09-06", 1), day("2026-09-07", 1)] },
+        ],
+      },
+    });
+    await ready();
+    await screen.findByRole("button", { name: /to review/ }).then((button) => user.click(button));
+    const forecast = screen.getByRole("button", { name: "Remove Rain jacket" }).closest("section")!;
+    expect(forecast.textContent).toContain("Porto, has changes to review");
+    expect(forecast.textContent).not.toContain("Lisbon, has changes to review");
   });
 });

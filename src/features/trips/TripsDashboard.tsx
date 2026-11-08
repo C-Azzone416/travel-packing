@@ -91,6 +91,15 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
     const answer = (value: HeroWeather) => {
       if (!cancelled) setFetched({ key: weatherKey, value });
     };
+    // No usable weather at all: while the trip is on, the stay the person is in still gets its row ("You're here", no tiles).
+    const outage = (): HeroWeather => {
+      const today = getToday();
+      if (heroTrip && tripPhase(heroTrip, today) === "during") {
+        const city = cityWeather(stopsOrDestination(heroTrip), [], "F", today, true);
+        if (city.length > 0) return { phase: "ready", city };
+      }
+      return { phase: "unavailable" };
+    };
     void (async () => {
       try {
         const settings = await weatherSource.getSettings();
@@ -99,7 +108,7 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
         // A 200 with no stop, or only unavailable ones, has no weather in it: "unavailable", not a forecast (an opt-out
         // between the settings and the weather requests answers 200 with an empty list).
         if (result.kind !== "ready" || result.stops.every((stop) => stop.status !== "ok"))
-          return answer({ phase: "unavailable" });
+          return answer(outage());
         const stops = heroTrip ? stopsOrDestination(heroTrip) : [];
         const today = getToday();
         // While the trip is on, only the days from today on count: the rows, and the suggestions still to review.
@@ -125,7 +134,7 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
           },
         });
       } catch {
-        answer({ phase: "unavailable" });
+        answer(outage());
       }
     })();
     return () => {

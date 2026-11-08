@@ -49,3 +49,11 @@ export function weatherForReview(
     ? remainingWeather(stops, weather, today)
     : [...weather];
 }
+
+/**
+ * The stay a change that names no stop is shown under: the first stay with days to review, so while the trip is on it is
+ * one still ahead (never one the person has left). Zero when none has days.
+ */
+export function fallbackReviewStop(reviewed: readonly StopWeather[]): number {
+  return reviewed.find((stop) => stop.days.length > 0)?.stopIndex ?? 0;
+}

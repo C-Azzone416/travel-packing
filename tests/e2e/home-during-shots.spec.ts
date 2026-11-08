@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 import { ownerEmailFor, signInAsOwner } from "./helpers/auth";
-import { setOwnerAppearance } from "./helpers/database";
+import { setOwnerAppearance, setOwnerWeatherOptIn } from "./helpers/database";
 
 // Rendered screenshots of the Home during the trip and the Welcome home card for design review (#410), Ocean only. Run with
 // HOME_SHOTS=<folder>; without it this is skipped. Synthetic data: the seeded San Diego trip (23-27 Oct 2026) with a fixed clock.
@@ -52,5 +52,17 @@ test.describe("phone", () => {
     await open(page, 390, "2026-10-27T12:00:00", "San Diego");
     await expect(page.getByText("Last day")).toBeVisible();
     await shot(page, "home-p-ocean-390-last-day");
+  });
+
+  test("home-p-ocean-390-during-unavailable", async ({ page }) => {
+    // Weather on, the service down: the stay the person is in still says "You're here", in the dashed "not live" row.
+    await page.route("**/api/weather**", (route) => route.fulfill({ status: 503, body: "{}" }));
+    await open(page, 390, "2026-10-25T12:00:00", "San Diego");
+    // Signing in resets the account (weather off), so the opt-in comes after it.
+    await setOwnerWeatherOptIn(ownerId(), true);
+    await page.reload();
+    await page.getByRole("tab", { name: "Weather N/A" }).click();
+    await expect(page.getByText("You're here")).toBeVisible();
+    await shot(page, "home-p-ocean-390-during-unavailable");
   });
 });

@@ -126,4 +126,62 @@ describe("TripsDashboard across a trip (#410)", () => {
     expect(panel.textContent).toContain("5 to review");
     expect(asked).toHaveBeenCalled();
   });
+
+  it("keeps the current city, 'You're here' and the city's unavailable line through a full weather outage (one stop)", async () => {
+    const listSuggestions = vi.fn(async () => []);
+    for (const getTripWeather of [
+      async () => ({ kind: "unavailable" }),
+      async () => ({ kind: "ready", stops: [{ stopIndex: 0, status: "unavailable", days: [] }] }),
+      async () => {
+        throw new Error("down");
+      },
+    ]) {
+      const { unmount } = renderOutage(getTripWeather, listSuggestions);
+      const tab = await screen.findByRole("tab", { name: "Weather N/A" });
+      await userEvent.click(tab);
+      const panel = screen.getByRole("tabpanel");
+      expect(panel.textContent).toContain("You're here");
+      expect(panel.textContent).toContain("Weather isn't available for San Diego right now.");
+      expect(panel.textContent).not.toContain("tap a place for daily");
+      expect(panel.querySelector("li")?.getAttribute("data-unavailable")).toBe("true");
+      unmount();
+    }
+    expect(listSuggestions).not.toHaveBeenCalled();
+  });
+
+  it("still says Weather is off, not an outage row, when weather is turned off", async () => {
+    setup("2026-10-25", false, (base) => ({
+      ...base,
+      weather: {
+        getSettings: async () => ({ weatherOptIn: false, temperatureUnit: "C" }),
+      } as unknown as TripsSource["weather"],
+    }));
+    await userEvent.click(await screen.findByRole("tab", { name: "Weather Off" }));
+    expect(screen.getByRole("tabpanel").textContent).not.toContain("You're here");
+  });
 });
+
+function renderOutage(
+  getTripWeather: () => Promise<unknown>,
+  listSuggestions: () => Promise<unknown[]>,
+) {
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: query.includes("reduce"),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  }));
+  const base = createMemoryTripsSource(sampleLifecycleState(), { now: () => 5_000 });
+  return renderInApp(
+    <TripsDashboard
+      source={{
+        ...base,
+        weather: {
+          getSettings: async () => ({ weatherOptIn: true, temperatureUnit: "C" }),
+          getTripWeather,
+          listSuggestions,
+        } as unknown as TripsSource["weather"],
+      }}
+      getToday={() => "2026-10-25"}
+    />,
+  );
+}

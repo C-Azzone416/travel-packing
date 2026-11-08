@@ -3,7 +3,7 @@ import type { LifecycleTrip } from "@/domain/trip-lifecycle";
 import type { SampleLocation, TripStop } from "@/domain/trip-stops";
 import type { StopWeather } from "@/domain/weather/types";
 import { sampleLifecycleState } from "./fixtures";
-import { weatherForReview } from "@/features/trip/weather-remaining";
+import { fallbackReviewStop, weatherForReview } from "@/features/trip/weather-remaining";
 import {
   cityWeather,
   countdownFor,
@@ -284,5 +284,31 @@ describe("a one-day trip on its day (#410, QA round 2)", () => {
       spoken: "Leaves today",
     });
     expect(countdownFor(day, "2027-03-12")?.dayTrip).toBe(false);
+  });
+});
+
+describe("fallbackReviewStop (#410, round 3)", () => {
+  const withDays = (stopIndex: number, dates: string[]): StopWeather => ({
+    stopIndex,
+    status: "ok",
+    days: dates.map((date) => ({
+      date,
+      stopIndex,
+      source: "forecast" as const,
+      highC: 20,
+      lowC: 10,
+      precipProbability: 0.1,
+      precipMm: 0,
+      snowCm: 0,
+      uvIndexMax: 3,
+      sunshineHours: 5,
+    })),
+  });
+  const all = [withDays(0, ["2027-03-15"]), withDays(1, ["2027-03-18"])];
+
+  it("is the first stay with days: the stay still ahead during the trip, the first stay otherwise", () => {
+    expect(fallbackReviewStop(weatherForReview(trip(), STOPS, all, "2027-03-18"))).toBe(1);
+    expect(fallbackReviewStop(weatherForReview(trip(), STOPS, all, "2027-03-10"))).toBe(0);
+    expect(fallbackReviewStop([])).toBe(0);
   });
 });

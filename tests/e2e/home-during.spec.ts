@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
-import { signInAsOwner } from "./helpers/auth";
+import { ownerEmailFor, signInAsOwner } from "./helpers/auth";
+import { setOwnerWeatherOptIn } from "./helpers/database";
 import { DEVICE } from "./helpers/device";
 import { enlargeText, expectWholeWords, overflow } from "./helpers/layout";
 
@@ -204,5 +205,23 @@ test.describe("phone (195)", DEVICE, () => {
         .boundingBox())!;
       expect(target.x + target.width).toBeLessThanOrEqual(box.x + box.width + 1);
     }
+  });
+
+  test("a weather outage keeps the current city, You're here and its unavailable line, dashed", async ({
+    page,
+  }) => {
+    await page.route("**/api/weather**", (route) => route.fulfill({ status: 503, body: "{}" }));
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.clock.setFixedTime(DAY_3);
+    await signInAsOwner(page);
+    await setOwnerWeatherOptIn(`e2e-${ownerEmailFor(test.info().project.name)}`, true);
+    await page.reload();
+    await page.getByRole("tab", { name: "Weather N/A" }).click();
+    const panel = page.getByRole("tabpanel");
+    await expect(panel).toContainText("You're here");
+    await expect(panel).toContainText("Weather isn't available for San Diego right now.");
+    await expect(panel).not.toContainText("tap a place for daily");
+    await expect(panel.locator("li").first()).toHaveCSS("border-top-style", "dashed");
   });
 });

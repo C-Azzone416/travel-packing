@@ -36,6 +36,10 @@
   background: var(--paper);
   color: var(--ink);
 }
+/* No weather for the stay (#410): the dashed "not live" box of Usual weather, never the solid forecast border. */
+.cityRow[data-unavailable="true"] {
+  border: 2px dashed var(--line);
+}
 .cityRow[data-alert="true"] {
   border-color: var(--accent);
   background: var(--accentSoft);

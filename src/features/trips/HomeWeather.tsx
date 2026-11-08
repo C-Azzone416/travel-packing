@@ -76,6 +76,7 @@ function CityRows({
             className={styles.cityRow}
             data-alert={row.alert}
             data-weather-source={row.source}
+            data-unavailable={row.unavailable || undefined}
           >
             {row.tiles.length === 0 ? (
               <div className={styles.cityStatic}>
@@ -170,7 +171,9 @@ export function HomeWeather({
   } else if (weather.phase === "ready" && rows.length > 0) {
     block = (
       <div className={styles.packFor}>
-        <h2 className={styles.eyebrow}>Pack for · tap a place for daily</h2>
+        <h2 className={styles.eyebrow}>
+          {rows.every((row) => row.unavailable) ? "Pack for" : "Pack for · tap a place for daily"}
+        </h2>
         <CityRows
           rows={rows}
           weatherLabel={weatherCube?.name ?? null}
