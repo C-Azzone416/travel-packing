@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SYNTHETIC_STAPLES } from "@/domain/calc";
+import { isToiletryItem } from "@/domain/toiletry-bag";
 import { packedTotals } from "@/domain/readiness";
 import type { Staple } from "@/domain/trip";
 import { LOCATIONS } from "@/domain/locations";
@@ -220,6 +221,17 @@ describe("the preview is the trip that gets created", () => {
         created.items.map((item) => [item.id, item.qty]),
       );
     }
+  });
+
+  // #456: "items" is the sum of item QUANTITIES; the toiletry bag placement is a Ready step, not an item, so it adds no unit.
+  it("the preview total is the sum of the item quantities, with no unit for the toiletry bag", () => {
+    const preview = previewTrip({
+      draft: draftFor("2026-11-12", "2026-11-16"),
+      staples: STAPLES,
+      today,
+    });
+    expect(preview!.items.some((item) => isToiletryItem(item))).toBe(true);
+    expect(preview!.total).toBe(preview!.items.reduce((n, item) => n + item.qty, 0));
   });
 
   it("laundry makes the trip smaller", () => {

@@ -172,10 +172,6 @@ test("create: where, when, how, the list, review -> the trip is on the dashboard
   await page.getByRole("checkbox", { name: /I’ll have laundry/ }).check();
   await expect.poll(count).toBeLessThan(without);
   const preview = await count();
-  // The preview counts the toiletry bag as one more thing for the suitcase (only when the list has toiletries); the phone Pack
-  // mode counts the list's own rows by quantity, so its total is the preview less that bag. Tracked in #456; the Toiletries cube
-  // is asserted below so this offset cannot hide a different difference.
-  const inTheBag = preview - 1;
   await nextButton(page).click();
   await createButton(page).click();
   await phoneHomeLayout(page);
@@ -187,10 +183,10 @@ test("create: where, when, how, the list, review -> the trip is on the dashboard
   await expect(london).toBeVisible();
   await expect(london).toContainText("12 NOV");
   await expect(london).not.toContainText("23 OCT");
-  // What the preview said is what was created, less the toiletry bag (#456), none packed (the trip's own page says so).
+  // What the preview said is what was created, none packed (the trip's own page says so).
   await london.click();
   await expect(page.getByRole("button", { name: /^Toiletries/ })).toBeVisible();
-  await expect(page.getByText(`0 of ${inTheBag} in the bag`)).toBeVisible();
+  await expect(page.getByText(`0 of ${preview} in the bag`)).toBeVisible();
   await page
     .getByRole("navigation", { name: "Primary navigation" })
     .getByRole("link", { name: "Trips" })
@@ -201,7 +197,7 @@ test("create: where, when, how, the list, review -> the trip is on the dashboard
   await page.reload();
   await expect(futureTab(page)).toContainText("1 trip");
   await (await futureRowNamed(page, "London")).click();
-  await expect(page.getByText(`0 of ${inTheBag} in the bag`)).toBeVisible();
+  await expect(page.getByText(`0 of ${preview} in the bag`)).toBeVisible();
   await page
     .getByRole("navigation", { name: "Primary navigation" })
     .getByRole("link", { name: "Trips" })

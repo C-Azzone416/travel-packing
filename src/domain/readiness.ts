@@ -55,17 +55,18 @@ export function allPacked(trip: ReadinessTrip): boolean {
   return itemsPacked && (toiletryItems(trip).length === 0 || trip.toiletryBagPacked);
 }
 
-/** Packed totals count the bag-placement gate as one extra unit when toiletries exist. */
+/**
+ * Packed totals are QUANTITY: the sum of item quantities, and how many of those are packed (#376, #456). The toiletry bag
+ * placement is a separate Ready step (see allPacked), never an "item", so it adds no unit here.
+ */
 export function packedTotals(trip: ReadinessTrip): { packed: number; total: number } {
-  const totals = trip.items.reduce(
+  return trip.items.reduce(
     (sum, item) => ({
       packed: sum.packed + Math.min(item.packed, item.qty),
       total: sum.total + item.qty,
     }),
     { packed: 0, total: 0 },
   );
-  if (toiletryItems(trip).length === 0) return totals;
-  return { packed: totals.packed + (trip.toiletryBagPacked ? 1 : 0), total: totals.total + 1 };
 }
 
 /** Restore invariants: the bag cannot stay placed without complete contents; Ready needs allPacked. */
