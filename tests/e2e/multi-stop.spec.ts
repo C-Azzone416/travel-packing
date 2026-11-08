@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { showEditChanges } from "./helpers/preferences";
 import { expectAccessible } from "./helpers/a11y";
 import { planATrip, futureRow, futureTab } from "./helpers/menu";
 import { signInAsOwner } from "./helpers/auth";
@@ -65,8 +66,18 @@ test(
     // The Home row shows the start; the whole route and its dates are in the Edit trip sheet.
     await page.getByRole("button", { name: "Edit trip" }).click();
     const dates = page.getByRole("dialog", { name: "Edit trip" });
-    await expect(dates.getByLabel("Arrive, Stop 2")).toHaveValue("2026-11-15");
-    await expect(dates.getByLabel("Arrive, Stop 3")).toHaveValue("2026-11-18");
+    const stopRow = (name: string) => dates.locator("li[data-stop-key]").filter({ hasText: name });
+    await expect(dates.getByLabel("Leave")).toHaveValue("2026-11-12");
+    await expect(dates.getByLabel("Come home")).toHaveValue("2026-11-22");
+    // Each stop's own dates: Paris is entered on 15 Nov and Rome on 18 Nov.
+    await expect(stopRow("Lisbon")).toHaveAttribute("data-arrive", "2026-11-12");
+    await expect(stopRow("Paris")).toHaveAttribute("data-arrive", "2026-11-15");
+    await expect(stopRow("Paris")).toHaveAttribute("data-leave", "2026-11-18");
+    await expect(stopRow("Rome")).toHaveAttribute("data-arrive", "2026-11-18");
+    await expect(stopRow("Rome")).toHaveAttribute("data-leave", "2026-11-22");
+    await expect(stopRow("Lisbon")).toContainText("12–15");
+    await expect(stopRow("Paris")).toContainText("15–18");
+    await expect(stopRow("Rome")).toContainText("18–22");
     await page.keyboard.press("Escape");
   },
 );
@@ -80,12 +91,14 @@ test("edit the route down to 2 stops, then copy the trip to new dates", async ({
 
   await page.getByRole("button", { name: "Edit trip" }).click();
   const sheet = page.getByRole("dialog", { name: "Edit trip" });
-  await expect(sheet.getByRole("group", { name: /^Stop \d$/ })).toHaveCount(3);
+  await expect(sheet.getByRole("button", { name: /^Remove (Lisbon|Paris|Rome)$/ })).toHaveCount(3);
   await sheet.getByRole("button", { name: "Remove Paris" }).click();
-  await sheet.getByRole("button", { name: "Remove", exact: true }).click();
-  // Rome moved up: it now arrives the day Lisbon is left.
-  await expect(sheet.getByLabel("Arrive, Stop 2")).toHaveValue("2026-11-15");
-  await sheet.getByRole("button", { name: "Save route" }).click();
+  await showEditChanges(sheet);
+  // The live panel says Paris goes, and the trip is shorter; Rome moved up to the day Lisbon is left.
+  await expect(sheet.getByText("removed", { exact: true })).toBeVisible();
+  await expect(sheet.getByText("Dates", { exact: true })).toBeVisible();
+  await expect(sheet.getByText("Items you packed for it stay ticked")).toBeVisible();
+  await sheet.getByRole("button", { name: /^Save \d+ changes$/ }).click();
   await expect(sheet).toHaveCount(0);
   await expect(page.getByRole("status", { name: "Packing updates" })).toHaveText("Route updated.");
 

@@ -21,7 +21,12 @@ import { automaticStamps } from "@/domain/stamps";
 import { localToday } from "@/lib/today";
 import { LAPTOP_MIN_WIDTH, useMinWidth } from "@/lib/use-min-width";
 import { SaveAsListSheet, type SaveOutcome } from "./SaveAsListSheet";
-import { EditTripSheet, type ApplyOutcome, type EditTripTab } from "./EditTripSheet";
+import {
+  EditTripSheet,
+  type ApplyOutcome,
+  type EditTripTab,
+  type SaveResult,
+} from "./EditTripSheet";
 import { ItemEditor } from "./ItemEditor";
 import { EditStampSheet } from "./EditStampSheet";
 import { bagGate, packedAnnouncement, showReviewPrompt } from "./trip-view";
@@ -329,6 +334,19 @@ export function TripScreen({
       document.querySelector<HTMLElement>("section[data-cube] h2")
     )?.focus();
   }, [dialog, load]);
+
+  /** A failed save from the Edit trip sheet: STALE (the trip changed since the sheet was based on it) shows the current trip first. */
+  function failedSave(error: unknown, resolve: (result: SaveResult) => void) {
+    if (!(error instanceof Error && error.message === "STALE")) return resolve(null);
+    void source
+      .getTrip(tripId)
+      .then((current) => {
+        confirmed.current = current;
+        setLoad({ phase: "ready", trip: current });
+      })
+      .catch(() => undefined)
+      .finally(() => resolve("stale"));
+  }
 
   const close = () => {
     setDialog(null);
@@ -901,17 +919,27 @@ export function TripScreen({
           trip={trip}
           initialTab={dialog.tab}
           onClose={close}
-          onSaveRoute={(stops) =>
-            new Promise<boolean>((resolve) => {
-              void act(() => source.setStops(tripId, stops), {
+          onSaveRoute={(stops, basedOn) =>
+            new Promise<SaveResult>((resolve) => {
+              void act(() => source.setStops(tripId, stops, basedOn), {
                 modal: true,
-                onFail: () => resolve(false),
+                onFail: (error) => failedSave(error, resolve),
                 announce: () => "Route updated.",
                 after: (change) => {
                   // New stops and dates are a new question for the weather service.
                   void loadWeather(change.trip, weather?.settings);
-                  resolve(true);
+                  resolve({ updatedAt: change.trip.updatedAt });
                 },
+              });
+            })
+          }
+          onSetTravelMode={(mode, basedOn) =>
+            new Promise<SaveResult>((resolve) => {
+              void act(() => source.setTravelMode(tripId, mode, basedOn), {
+                modal: true,
+                onFail: (error) => failedSave(error, resolve),
+                announce: () => "Getting there updated.",
+                after: (change) => resolve({ updatedAt: change.trip.updatedAt }),
               });
             })
           }

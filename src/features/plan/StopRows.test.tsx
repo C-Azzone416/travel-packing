@@ -18,10 +18,12 @@ const stop = (id: string | null, arrive = "", leave = ""): DraftStop => ({
 function Harness({
   initial,
   attempted = false,
+  describePlace,
   onChange,
 }: {
   initial: DraftStop[];
   attempted?: boolean;
+  describePlace?: boolean;
   onChange?: (stops: DraftStop[]) => void;
 }) {
   const [stops, setStops] = useState(initial);
@@ -29,6 +31,7 @@ function Harness({
     <StopRows
       stops={stops}
       attempted={attempted}
+      describePlace={describePlace}
       provider={curatedLocationProvider}
       onChange={(next) => {
         setStops(next);
@@ -57,6 +60,20 @@ describe("StopRows", () => {
     expect(within(list).getByText("10–12 Nov")).toBeTruthy();
     expect(within(list).getByText("12–15 Nov")).toBeTruthy();
     expect(within(list).getByRole("combobox", { name: "Destination search, Stop 3" })).toBeTruthy();
+  });
+
+  it("describePlace says each place with its region and country, once, for the screen reader", () => {
+    render(<Harness initial={THREE.slice(0, 2)} describePlace />);
+    const list = screen.getByRole("list");
+    const first = within(list).getAllByRole("listitem")[0];
+    expect(within(first).getByText(/^London · .+ · .+$/)).toBeTruthy();
+    expect([first.getAttribute("data-arrive"), first.getAttribute("data-leave")]).toEqual([
+      "2026-11-10",
+      "2026-11-12",
+    ]);
+    expect(
+      Array.from(first.querySelectorAll('[aria-hidden="true"]')).map((node) => node.textContent),
+    ).toContain("London");
   });
 
   it("shows no dates until the dates step is done", () => {

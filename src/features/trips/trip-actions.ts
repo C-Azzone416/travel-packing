@@ -13,7 +13,7 @@ import type { ThemeId } from "@/domain/themes";
 import type { Staple, TripConfig, Scope } from "@/domain/trip";
 import type { StaplesSetup } from "@/domain/staples-setup";
 import type { LifecycleTrip } from "@/domain/trip-lifecycle";
-import type { TripOrigin } from "@/domain/trip-route";
+import type { TravelMode, TripOrigin } from "@/domain/trip-route";
 import type { TripStop } from "@/domain/trip-stops";
 import type { WeatherAppliedChange } from "@/domain/weather/apply";
 import { ACCESS_DENIED_PATH, SIGN_IN_PATH } from "@/server/auth/proxy-handler";
@@ -349,17 +349,32 @@ export async function updatePreferencesAction(
 export async function setStopsAction(
   tripId: string,
   stops: TripStop[],
+  basedOn?: string,
 ): Promise<TripCommandResult> {
   return withContext(
     (context) =>
       service.setTripStops(context, {
         tripId,
+        ...(basedOn ? { basedOn } : {}),
         stops: stops.map((stop) => ({
           location: { id: stop.location.id },
           arrive: stop.arrive,
           leave: stop.leave,
         })),
       }),
+    (trip) => ({ ok: true as const, trip: toLifecycleTrip(trip), signals: NO_SIGNALS }),
+  ) as Promise<TripCommandResult>;
+}
+
+/** Change the trip's travel mode (Fly / Drive / Train or other). Owner-scoped; the origin and name are left alone. */
+export async function setTravelModeAction(
+  tripId: string,
+  travelMode: TravelMode,
+  basedOn?: string,
+): Promise<TripCommandResult> {
+  return withContext(
+    (context) =>
+      service.updateTripTravel(context, { tripId, travelMode, ...(basedOn ? { basedOn } : {}) }),
     (trip) => ({ ok: true as const, trip: toLifecycleTrip(trip), signals: NO_SIGNALS }),
   ) as Promise<TripCommandResult>;
 }

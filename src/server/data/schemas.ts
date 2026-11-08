@@ -200,10 +200,20 @@ export const copyTripInput = z
   })
   .superRefine(oneRouteForm);
 /** Replace the stops of a saved trip. */
-export const setStopsInput = z.object({ tripId, stops: stopsSelection });
+export const setStopsInput = z.object({
+  tripId,
+  stops: stopsSelection,
+  /** The trip's `updatedAt` the editor was based on (#389); if the trip was saved since, nothing is applied (STALE). */
+  basedOn: z.string().max(40).optional(),
+});
 /** Change a saved trip's origin, travel mode and/or name; a field left out is unchanged, null clears it. At least one is required. */
 export const updateTripTravelInput = z
-  .object({ tripId, ...travelFields })
+  .object({
+    tripId,
+    ...travelFields,
+    /** The trip's `updatedAt` the editor was based on (#389); if the trip was saved since, nothing is applied (STALE). */
+    basedOn: z.string().max(40).optional(),
+  })
   .superRefine((value, ctx) => {
     if (value.origin === undefined && value.travelMode === undefined && value.name === undefined) {
       ctx.addIssue({ code: "custom", path: ["origin"], message: "Nothing to change" });

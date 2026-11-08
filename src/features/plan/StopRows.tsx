@@ -20,6 +20,8 @@ export interface StopRowsProps {
   firstQuery?: string;
   /** Show every missing-place message (the person pressed Next with something missing). */
   attempted: boolean;
+  /** Say each place with its region and country (for the screen reader and tests), not only the city: two Londons differ there. */
+  describePlace?: boolean;
 }
 
 const queryOf = (location: SampleLocation) =>
@@ -36,6 +38,7 @@ export function StopRows({
   allowCustom,
   firstQuery = "",
   attempted,
+  describePlace = false,
 }: StopRowsProps) {
   const nextKey = useRef(stops.length);
   // A stable key per stop, so a search box keeps its text when stops above it are reordered or removed.
@@ -166,6 +169,8 @@ export function StopRows({
             <li
               key={key}
               data-stop-key={key}
+              data-arrive={stop.arrive || undefined}
+              data-leave={stop.leave || undefined}
               className={styles.stopRow}
               data-over={over === index && dragging !== index ? "" : undefined}
               data-dragging={dragging === index ? "" : undefined}
@@ -189,7 +194,18 @@ export function StopRows({
               <span className={styles.grip} aria-hidden="true">
                 ⋮⋮
               </span>
-              <span className={styles.stopName}>{name}</span>
+              {describePlace && stop.location.region ? (
+                <>
+                  <span className={styles.stopName} aria-hidden="true">
+                    {name}
+                  </span>
+                  <span className="sr-only" style={{ whiteSpace: "normal" }}>
+                    {`${name} · ${stop.location.region} · ${stop.location.country}`}
+                  </span>
+                </>
+              ) : (
+                <span className={styles.stopName}>{name}</span>
+              )}
               {range ? <span className={styles.stopDates}>{range}</span> : null}
               {!single ? (
                 <span className={styles.stopMoves}>
