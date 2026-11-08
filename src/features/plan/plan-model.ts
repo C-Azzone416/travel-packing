@@ -128,6 +128,8 @@ export function formatPlanRange(start: string, end: string): string {
   const from = parseDate(start);
   const to = parseDate(end);
   if (!from || !to) return "";
+  // A day trip has one date (#412): "Sat 14 Mar", never "Sat 14 – Sat 14 Mar".
+  if (start === end) return `${weekdayDay(from)} ${month(from)}`;
   const left = month(from) === month(to) ? weekdayDay(from) : `${weekdayDay(from)} ${month(from)}`;
   return `${left} – ${weekdayDay(to)} ${month(to)}`;
 }
@@ -138,6 +140,8 @@ export function stopRange(stop: Pick<DraftStop, "arrive" | "leave">): string {
   const to = parseDate(stop.leave);
   if (!from || !to) return "";
   const day = (date: Date) => String(date.getUTCDate());
+  // One date for a day trip (#412).
+  if (stop.arrive === stop.leave) return `${day(from)} ${month(from)}`;
   return month(from) === month(to)
     ? `${day(from)}–${day(to)} ${month(to)}`
     : `${day(from)} ${month(from)} – ${day(to)} ${month(to)}`;

@@ -143,6 +143,8 @@ describe("summaries", () => {
     expect(formatPlanRange("2026-03-14", "2026-03-24")).toBe("Sat 14 – Tue 24 Mar");
     expect(formatPlanRange("2026-03-28", "2026-04-07")).toBe("Sat 28 Mar – Tue 7 Apr");
     expect(formatPlanRange("", "2026-03-24")).toBe("");
+    // A day trip says its one date, and the When summary says "day trip" (#412).
+    expect(formatPlanRange("2026-03-14", "2026-03-14")).toBe("Sat 14 Mar");
     expect(formatPlanRange("2026-03-14", "nope")).toBe("");
   });
 
@@ -150,6 +152,8 @@ describe("summaries", () => {
     expect(stopRange({ arrive: "2026-03-15", leave: "2026-03-18" })).toBe("15–18 Mar");
     expect(stopRange({ arrive: "2026-03-30", leave: "2026-04-02" })).toBe("30 Mar – 2 Apr");
     expect(stopRange({ arrive: "", leave: "2026-03-18" })).toBe("");
+    // A day trip has one date (#412).
+    expect(stopRange({ arrive: "2026-03-15", leave: "2026-03-15" })).toBe("15 Mar");
   });
 
   it("summarizes where, when and how in the words of the design", () => {
@@ -166,6 +170,11 @@ describe("summaries", () => {
     expect(nightsOf(draft)).toBe(10);
     expect(tripLength(draft)).toBe(11);
     expect(placesOf(draft).map((entry) => entry.city)).toEqual(["Lisbon", "Paris"]);
+  });
+
+  it("a one-night and a day trip read '1 night' and 'Sat 14 Mar · day trip' (#412)", () => {
+    expect(whenSummary(draftFor("2026-03-14", "2026-03-15"))).toBe("Sat 14 – Sun 15 Mar · 1 night");
+    expect(whenSummary(draftFor("2026-03-14", "2026-03-14"))).toBe("Sat 14 Mar · day trip");
   });
 
   it("has no summary and no length until the dates are real", () => {
