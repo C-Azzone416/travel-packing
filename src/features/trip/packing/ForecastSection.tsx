@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Icon } from "@/components/ui/Icon";
 import { WeatherDayTile } from "@/components/suitcase";
 import type { WeatherIconName } from "@/components/suitcase/WeatherDayTile";
@@ -8,7 +8,7 @@ import { cx } from "@/components/suitcase/cx";
 import type { TripStop } from "@/domain/trip-stops";
 import type { StopWeather } from "@/domain/weather/types";
 import type { TemperatureUnit } from "@/server/data/weather-store";
-import type { WeatherPanelState } from "../WeatherPanel";
+import { Attribution, type WeatherPanelState } from "../WeatherPanel";
 import {
   displayTemperature,
   rainLine,
@@ -59,6 +59,166 @@ export function reviewHeading(suggestions: readonly Suggestion[]): string {
   return `New: ${tags.length ? tags.join(", ") : "weather changes"} · not on your list until you add them`;
 }
 
+/** The day tiles of one city (at most CARD_DAY_CAP), as a labelled list. */
+export function DayTiles({
+  days,
+  city,
+  compact = false,
+}: {
+  days: readonly DayView[];
+  city: string;
+  /** The phone card: tiles wrap from 56px wide (so they stack into rows at 195px) instead of 90px. */
+  compact?: boolean;
+}) {
+  return (
+    <ol
+      className={cx(styles.days, compact && styles.daysPhone)}
+      aria-label={`Daily forecast for ${city}`}
+    >
+      {days.slice(0, CARD_DAY_CAP).map((day) => (
+        <li key={day.date}>
+          <WeatherDayTile
+            day={day.parts.weekday}
+            date={String(day.parts.day)}
+            icon={ICON_FOR[day.glyph]}
+            high={day.high}
+            low={day.low}
+            precipProbability={day.rainPercent / 100}
+          />
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/**
+ * One city's pending weather changes, one row each ("Rain shell → Rain gear  + Add  Dismiss"). After a row is added or
+ * dismissed it is gone: focus goes to the next row's Add button, or to `fallbackFocus` (the city) when none is left.
+ */
+export function ReviewRegion({
+  id,
+  open,
+  suggestions,
+  busy,
+  onResolve,
+  fallbackFocus,
+  heading = reviewHeading(suggestions),
+}: {
+  id: string;
+  open: boolean;
+  suggestions: readonly Suggestion[];
+  busy: boolean;
+  onResolve: ForecastSectionProps["onResolve"];
+  fallbackFocus: RefObject<HTMLElement | null>;
+  /** The line above the rows; the phone words it shorter. */
+  heading?: string;
+}) {
+  const region = useRef<HTMLDivElement>(null);
+  const refocus = useRef(false);
+  const pending = suggestions.length;
+  useEffect(() => {
+    if (!refocus.current) return;
+    refocus.current = false;
+    const next = region.current?.querySelector<HTMLElement>("[data-suggestion-add]");
+    (next ?? fallbackFocus.current)?.focus();
+  }, [pending, fallbackFocus]);
+  return (
+    <div id={id} ref={region} className={styles.reviewRegion} hidden={!open || pending === 0}>
+      {pending > 0 ? (
+        <>
+          <p className={styles.reviewHeading}>{heading}</p>
+          <ul className={styles.suggestions}>
+            {suggestions.map((entry) => (
+              <li key={`${entry.change.semanticId}:${entry.change.ruleSignature}`}>
+                <span className={styles.suggestionText}>
+                  <strong>{entry.name}</strong>
+                  <span className={styles.suggestionTo}>
+                    <span aria-hidden="true">→</span> {entry.destination}
+                  </span>
+                </span>
+                <span className={styles.suggestionActions}>
+                  <button
+                    type="button"
+                    className={styles.add}
+                    data-suggestion-add
+                    disabled={busy}
+                    aria-label={`${entry.verb} ${entry.name}${entry.verb === "Add" ? ` to ${entry.destination}` : ""}`}
+                    onClick={() => {
+                      refocus.current = true;
+                      onResolve(entry, "add");
+                    }}
+                  >
+                    <Icon name={entry.verb === "Add" ? "plus" : "close"} size={14} />
+                    {entry.verb}
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.dismiss}
+                    disabled={busy}
+                    aria-label={`Dismiss ${entry.name}`}
+                    onClick={() => {
+                      refocus.current = true;
+                      onResolve(entry, "dismiss");
+                    }}
+                  >
+                    Dismiss
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+/** What a city shows under its head: the day tiles, a typical-weather line for a stay with no forecast days, or "unavailable". */
+export function CityBody({
+  view,
+  unit,
+  onRefresh,
+  compact = false,
+}: {
+  view: WeatherRowView | null;
+  unit: TemperatureUnit;
+  onRefresh: () => void;
+  compact?: boolean;
+}) {
+  const days = view?.forecastDays ?? [];
+  return (
+    <>
+      {!view ? (
+        <p className={styles.cityNote}>
+          Weather isn’t available for this stop right now.{" "}
+          <button type="button" className={styles.linkButton} onClick={onRefresh}>
+            Try again
+          </button>
+        </p>
+      ) : view.forecast ? (
+        <>
+          <DayTiles days={days} city={view.city} compact={compact} />
+          {days.length > CARD_DAY_CAP ? (
+            <p className={styles.cityNote}>
+              Showing the first {CARD_DAY_CAP} of {days.length} forecast days.
+            </p>
+          ) : null}
+        </>
+      ) : (
+        // A stay with no forecast days yet. #408 draws these as the dashed "Usual weather" rows.
+        <p className={cx(styles.cityNote, styles.usual)}>
+          Typical for these dates: High {displayTemperature(view.high, unit)}° · Low{" "}
+          {displayTemperature(view.low, unit)}° ·{" "}
+          {rainLine(
+            { high: view.high, low: view.low, rainDays: view.rainDays, totalDays: view.totalDays },
+            "Rarely rains",
+          )}
+        </p>
+      )}
+    </>
+  );
+}
+
 function CityCard({
   stop,
   weather,
@@ -84,21 +244,10 @@ function CityCard({
 }) {
   const base = useId();
   const heading = useRef<HTMLHeadingElement>(null);
-  const region = useRef<HTMLDivElement>(null);
   const view: WeatherRowView | null = weather ? weatherRowView(stop, weather, unit, today) : null;
   const pending = suggestions.length;
   const outlined = pending > 0;
-  const refocus = useRef(false);
 
-  // After a row is added or dismissed it is gone: focus goes to the next row's Add button, or to the city when none is left.
-  useEffect(() => {
-    if (!refocus.current) return;
-    refocus.current = false;
-    const next = region.current?.querySelector<HTMLElement>("[data-suggestion-add]");
-    (next ?? heading.current)?.focus();
-  }, [pending]);
-
-  const days = view?.forecastDays ?? [];
   const weight = Math.max(1, view?.nights ?? 1);
   return (
     <article
@@ -129,96 +278,15 @@ function CityCard({
           <span className={styles.noChanges}>No changes</span>
         )}
       </div>
-      {!view ? (
-        <p className={styles.cityNote}>
-          Weather isn’t available for this stop right now.{" "}
-          <button type="button" className={styles.linkButton} onClick={onRefresh}>
-            Try again
-          </button>
-        </p>
-      ) : view.forecast ? (
-        <>
-          <ol className={styles.days} aria-label={`Daily forecast for ${view.city}`}>
-            {days.slice(0, CARD_DAY_CAP).map((day) => (
-              <li key={day.date}>
-                <WeatherDayTile
-                  day={day.parts.weekday}
-                  date={String(day.parts.day)}
-                  icon={ICON_FOR[day.glyph]}
-                  high={day.high}
-                  low={day.low}
-                  precipProbability={day.rainPercent / 100}
-                />
-              </li>
-            ))}
-          </ol>
-          {days.length > CARD_DAY_CAP ? (
-            <p className={styles.cityNote}>
-              Showing the first {CARD_DAY_CAP} of {days.length} forecast days.
-            </p>
-          ) : null}
-        </>
-      ) : (
-        // A stay with no forecast days yet. #408 draws these as the dashed "Usual weather" rows.
-        <p className={cx(styles.cityNote, styles.usual)}>
-          Typical for these dates: High {displayTemperature(view.high, unit)}° · Low{" "}
-          {displayTemperature(view.low, unit)}° ·{" "}
-          {rainLine(
-            { high: view.high, low: view.low, rainDays: view.rainDays, totalDays: view.totalDays },
-            "Rarely rains",
-          )}
-        </p>
-      )}
-      <div
+      <CityBody view={view} unit={unit} onRefresh={onRefresh} />
+      <ReviewRegion
         id={`${base}-review`}
-        ref={region}
-        className={styles.reviewRegion}
-        hidden={!open || !outlined}
-      >
-        {outlined ? (
-          <>
-            <p className={styles.reviewHeading}>{reviewHeading(suggestions)}</p>
-            <ul className={styles.suggestions}>
-              {suggestions.map((entry) => (
-                <li key={`${entry.change.semanticId}:${entry.change.ruleSignature}`}>
-                  <span className={styles.suggestionText}>
-                    <strong>{entry.name}</strong>
-                    <span className={styles.suggestionTo}>
-                      <span aria-hidden="true">→</span> {entry.destination}
-                    </span>
-                  </span>
-                  <button
-                    type="button"
-                    className={styles.add}
-                    data-suggestion-add
-                    disabled={busy}
-                    aria-label={`${entry.verb} ${entry.name}${entry.verb === "Add" ? ` to ${entry.destination}` : ""}`}
-                    onClick={() => {
-                      refocus.current = true;
-                      onResolve(entry, "add");
-                    }}
-                  >
-                    <Icon name={entry.verb === "Add" ? "plus" : "close"} size={14} />
-                    {entry.verb}
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.dismiss}
-                    disabled={busy}
-                    aria-label={`Dismiss ${entry.name}`}
-                    onClick={() => {
-                      refocus.current = true;
-                      onResolve(entry, "dismiss");
-                    }}
-                  >
-                    Dismiss
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </>
-        ) : null}
-      </div>
+        open={open}
+        suggestions={suggestions}
+        busy={busy}
+        onResolve={onResolve}
+        fallbackFocus={heading}
+      />
     </article>
   );
 }
@@ -280,6 +348,7 @@ export function ForecastSection({
           />
         ))}
       </div>
+      <Attribution />
     </section>
   );
 }

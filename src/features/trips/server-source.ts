@@ -7,6 +7,7 @@ import type { Cube } from "@/domain/cubes";
 import type { ItemEdit } from "@/domain/item-ops";
 import type { ThemeId } from "@/domain/themes";
 import type { Scope, Staple, TripConfig } from "@/domain/trip";
+import type { TravelMode } from "@/domain/trip-route";
 import type { TripStop } from "@/domain/trip-stops";
 import type {
   AcceptedWeatherDecision,
@@ -48,6 +49,10 @@ export interface TripActions {
   getHomeCity?(): Promise<HomeCityResult>;
   upsertStaple(staple: Staple): Promise<StaplesReadResult>;
   setPacked(tripId: string, itemId: string, packed: number): Promise<TripCommandResult>;
+  setPackedMany(
+    tripId: string,
+    entries: readonly { itemId: string; packed: number }[],
+  ): Promise<TripCommandResult>;
   togglePacked(tripId: string, itemId: string): Promise<TripCommandResult>;
   incrementPacked(tripId: string, itemId: string): Promise<TripCommandResult>;
   decrementPacked(tripId: string, itemId: string): Promise<TripCommandResult>;
@@ -76,7 +81,12 @@ export interface TripActions {
     slot1: string | null,
     slot2: string | null,
   ): Promise<TripCommandResult>;
-  setStops(tripId: string, stops: TripStop[]): Promise<TripCommandResult>;
+  setStops(tripId: string, stops: TripStop[], basedOn?: string): Promise<TripCommandResult>;
+  setTravelMode(
+    tripId: string,
+    travelMode: TravelMode,
+    basedOn?: string,
+  ): Promise<TripCommandResult>;
 }
 
 export interface WeatherActions {
@@ -166,6 +176,7 @@ export function createServerTripsSource(
     listStaples: () => unwrapStaples(trip.listStaples()),
     upsertStaple: (staple) => unwrapStaples(trip.upsertStaple(staple)),
     setPacked: (id, itemId, packed) => unwrapChange(trip.setPacked(id, itemId, packed)),
+    setPackedMany: (id, entries) => unwrapChange(trip.setPackedMany(id, entries)),
     togglePacked: (id, itemId) => unwrapChange(trip.togglePacked(id, itemId)),
     incrementPacked: (id, itemId) => unwrapChange(trip.incrementPacked(id, itemId)),
     decrementPacked: (id, itemId) => unwrapChange(trip.decrementPacked(id, itemId)),
@@ -199,7 +210,8 @@ export function createServerTripsSource(
       unwrapChange(trip.updatePreferences(id, config, basedOn)),
     setTheme: (id, theme) => unwrapChange(trip.setTheme(id, theme)),
     setStampLabels: (id, slot1, slot2) => unwrapChange(trip.setStampLabels(id, slot1, slot2)),
-    setStops: (id, stops) => unwrapChange(trip.setStops(id, stops)),
+    setStops: (id, stops, basedOn) => unwrapChange(trip.setStops(id, stops, basedOn)),
+    setTravelMode: (id, mode, basedOn) => unwrapChange(trip.setTravelMode(id, mode, basedOn)),
   };
 
   if (trip.getHomeCity) {

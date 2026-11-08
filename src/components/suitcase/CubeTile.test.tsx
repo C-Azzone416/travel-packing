@@ -194,10 +194,20 @@ describe("hidden text stays inside its control", () => {
 describe("CubeChip", () => {
   it("shows the name, 9/14, and the Morning-of marker after the count", async () => {
     const onSelect = vi.fn();
-    render(<CubeChip name="Toiletries" packed={6} total={9} morningOf onSelect={onSelect} />);
+    render(
+      <CubeChip
+        name="Toiletries"
+        packed={6}
+        total={9}
+        morningOf
+        controls="panel-1"
+        onSelect={onSelect}
+      />,
+    );
     const chip = screen.getByRole("button", { name: /Toiletries/ });
     expect(chip.textContent).toContain("6/96 of 9 packedMorning of");
-    expect(chip.getAttribute("aria-pressed")).toBe("false");
+    expect(chip.getAttribute("aria-current")).toBeNull();
+    expect(chip.getAttribute("aria-controls")).toBe("panel-1");
     await userEvent.click(chip);
     expect(onSelect).toHaveBeenCalledOnce();
   });
@@ -205,7 +215,8 @@ describe("CubeChip", () => {
   it("the selected chip is dark and has no marker when the cube is not flagged", () => {
     render(<CubeChip name="Clothing" packed={1} total={2} selected />);
     const chip = screen.getByRole("button");
-    expect(chip.getAttribute("aria-pressed")).toBe("true");
+    expect(chip.getAttribute("aria-current")).toBe("true");
+    expect(chip.getAttribute("aria-pressed")).toBeNull();
     expect(chip.className).toContain("chipSelected");
     expect(screen.queryByText("Morning of")).toBeNull();
     expect(css).toMatch(

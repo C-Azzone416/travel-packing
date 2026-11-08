@@ -85,6 +85,23 @@ PLACES.porto = [
   },
 ];
 
+// A place of its own for the long-typical hero fixture (#447): the app's weather cache key is the ROUNDED coordinates plus
+// the first and last historical sample dates, so a fixture that shares London's coordinates can be served another test's
+// cached numbers on some dates (e.g. any run containing both Dec 31 and Jan 1 maps to the same 5-year sample range).
+PLACES.cairo = [
+  {
+    id: 360630,
+    name: "Cairo",
+    latitude: 30.04442,
+    longitude: 31.23571,
+    country: "Egypt",
+    country_code: "EG",
+    admin1: "Cairo",
+    admin2: "Cairo",
+    timezone: "Africa/Cairo",
+  },
+];
+
 PLACES.countryless = [
   {
     ...PLACES.london[0],

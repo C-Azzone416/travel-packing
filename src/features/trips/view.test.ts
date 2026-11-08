@@ -277,39 +277,7 @@ describe("route display (epic #107)", () => {
   });
 });
 
-describe("Field Ledger dashboard view models (#143)", () => {
-  it("counts days to go, nights and the range from today", async () => {
-    const { departureView } = await import("./view");
-    expect(departureView(sanDiego(), TODAY)).toMatchObject({
-      daysToGo: 7,
-      daysLabel: "days to go",
-      startShort: "Oct 23",
-      range: "Oct 23 – Oct 27",
-      nights: 4,
-      nightsLabel: "4 nights",
-    });
-    expect(departureView(sanDiego(), "2026-10-22")).toMatchObject({
-      daysToGo: 1,
-      daysLabel: "day to go",
-    });
-    expect(departureView(sanDiego(), "2026-10-25")).toMatchObject({
-      daysToGo: 0,
-      daysLabel: "under way",
-    });
-    expect(departureView({ start: "2026-10-23", end: "2026-10-24" }, TODAY).nightsLabel).toBe(
-      "1 night",
-    );
-  });
-
-  it("labels the journeys ahead", async () => {
-    const { journeysAheadLabel } = await import("./view");
-    expect([0, 1, 3].map(journeysAheadLabel)).toEqual([
-      "No journeys ahead",
-      "1 journey ahead",
-      "3 journeys ahead",
-    ]);
-  });
-
+describe("Dashboard view models (#143)", () => {
   it("builds one compact weather cell per stay that has weather, in the person's unit", async () => {
     const { weatherCells } = await import("./view");
     const stop = (city: string, arrive: string, leave: string) => ({

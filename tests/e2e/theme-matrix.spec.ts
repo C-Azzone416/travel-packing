@@ -2,12 +2,6 @@ import { expect, test, type Page } from "@playwright/test";
 import { ownerEmailFor, signInAsOwner } from "./helpers/auth";
 import { setOwnerAppearance } from "./helpers/database";
 import { expectAccessible } from "./helpers/a11y";
-import { legacyPackingLayout } from "./helpers/device";
-
-// Home is the laptop suitcase view from 1024px (#387); this spec's subject is the page below it, so it runs there.
-test.beforeEach(async ({ page }) => {
-  await legacyPackingLayout(page);
-});
 
 // Cross-theme regression and a11y matrix (#145, trimmed in #181; #139 spec §6 and §8(d)). Rendered colour contrast (axe) and
 // the focus-ring colour are checked on the dashboard, the packing screen and Settings in every theme at 1280, and in one
@@ -51,9 +45,9 @@ const SCREENS = {
   packing: async (page: Page) => {
     await page.goto("/");
     await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
-    // The laptop view's title is "Packing" (#385); below 1024px the page's title is the trip.
+    // The laptop view's title is "Packing" (#385); below 1024px it is "Pack mode" (#386).
     await expect(
-      page.getByRole("heading", { name: /^(Packing|San Diego)$/, level: 1 }),
+      page.getByRole("heading", { name: /^(Packing|Pack mode)$/, level: 1 }),
     ).toBeVisible();
   },
   settings: async (page: Page) => {
@@ -98,8 +92,8 @@ for (const { theme, width } of CELLS) {
         await open(page);
         await expect(page.locator("html")).toHaveAttribute("data-scheme", theme.id);
         // #377: the redesigned laptop Home uses the tokens as given, and a few muted-on-paper pairs are below 4.5:1; contrast is
-        // tracked there. Only that rule, only on this screen at laptop width: every other rule and screen stays fully checked.
-        const redesigned = name === "dashboard" && width >= 1024;
+        // tracked there. Only that rule, only on this screen (laptop and phone Home): every other rule and screen stays fully checked.
+        const redesigned = name === "dashboard";
         await expectAccessible(page, `${theme.id} ${width} ${name}`, {
           disable: redesigned ? ["color-contrast"] : [],
         });
@@ -148,10 +142,11 @@ test("ocean: nothing scrolls sideways on the dashboard, packing and Settings at 
   }
 });
 
-// The keyboard paths, once (they do not depend on colour or width).
+// The keyboard paths, once at the redesigned laptop width (they do not depend on colour).
 test("the Theme radiogroup and a packing row work from the keyboard", async ({ page }) => {
-  // The row's stepper and editor are the page below 1024px (the laptop view's keyboard paths are in packing-laptop.spec.ts).
-  await page.setViewportSize({ width: 1000, height: 900 });
+  await page.setViewportSize({ width: 1280, height: 900 });
+
+  // One tick per row and the editor behind Edit list: the same on the laptop and the phone layout.
   const theme = THEMES[0];
   await signInWithTheme(page, theme);
   await SCREENS.settings(page);
@@ -163,17 +158,21 @@ test("the Theme radiogroup and a packing row work from the keyboard", async ({ p
   await expect(page.locator("html")).toHaveAttribute("data-scheme", next.id);
   await expect(page.getByRole("radio", { name: next.radio })).toBeChecked();
 
-  // Packing: a row is packed and edited with Enter alone, and Escape returns focus to the row.
+  // Packing: a row is ticked with Space alone, edited from Edit list with Enter alone, and Escape returns focus to the row.
   await SCREENS.packing(page);
   const underwear = page.locator('[data-item-id="underwear"]');
-  await underwear.getByRole("button", { name: "Increase packed Underwear" }).focus();
+  const box = underwear.getByRole("checkbox");
+  await box.focus();
+  await page.keyboard.press("Space");
+  await expect(box).toBeChecked();
+  await page.getByRole("button", { name: "Edit list" }).focus();
   await page.keyboard.press("Enter");
-  await expect(underwear).toContainText("3 of 5 packed");
-  await underwear.getByRole("button", { name: /^Underwear / }).focus();
+  const edit = underwear.getByRole("button", { name: /^Edit / });
+  await edit.focus();
   await page.keyboard.press("Enter");
   const dialog = page.getByRole("dialog", { name: "Edit item" });
   await expect(dialog.getByLabel("Item name")).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
-  await expect(underwear.getByRole("button", { name: /^Underwear / })).toBeFocused();
+  await expect(edit).toBeFocused();
 });

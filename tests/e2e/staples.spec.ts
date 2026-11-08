@@ -1,7 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
-import { DEVICE, legacyPackingLayout } from "./helpers/device";
+import { expectPacking, showItem } from "./helpers/packing";
+import { DEVICE, phoneHomeLayout } from "./helpers/device";
 import { planAndCreate } from "./helpers/plan";
+import { planATrip, futureRow, openTripFromHome } from "./helpers/menu";
 
 // The Staples screen against a REAL Postgres (#18): what it shows after a reload is what was stored. Each test starts
 // from this project's freshly seeded owner (the default staples, San Diego partly packed, Lisbon Ready).
@@ -30,6 +32,40 @@ async function openStaples(page: Page) {
   await expect(section(page, "Clothing")).toBeVisible();
 }
 
+/** The phone Home (Future pill rows, packing links) is drawn below 1024px; the Staples screen is drawn at the laptop width. */
+async function underPhoneLayout<T>(page: Page, run: () => Promise<T>): Promise<T> {
+  const size = page.viewportSize();
+  await phoneHomeLayout(page);
+  try {
+    return await run();
+  } finally {
+    if (size) await page.setViewportSize(size);
+  }
+}
+
+async function expectWholeWords(locator: ReturnType<Page["locator"]>, label: string) {
+  const broken = await locator.evaluate((root) => {
+    const words: string[] = [];
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let node = walker.nextNode();
+    while (node) {
+      const text = node.textContent ?? "";
+      for (const match of text.matchAll(/[\p{L}\p{N}]+/gu)) {
+        const range = document.createRange();
+        range.setStart(node, match.index ?? 0);
+        range.setEnd(node, (match.index ?? 0) + match[0].length);
+        const rects = Array.from(range.getClientRects()).filter(
+          (rect) => rect.width > 0.5 && rect.height > 0.5,
+        );
+        if (rects.length > 1) words.push(match[0]);
+      }
+      node = walker.nextNode();
+    }
+    return words;
+  });
+  expect(broken, `${label}: words must wrap only at spaces`).toEqual([]);
+}
+
 async function newTrip(
   page: Page,
   destination: RegExp,
@@ -38,45 +74,35 @@ async function newTrip(
   expectedCount: number,
 ) {
   await page.goto("/");
-  await page.getByRole("link", { name: /Plan a trip/ }).click();
+  await planATrip(page);
   await planAndCreate(page, { query: "paris", option: destination, start: start, end: end });
-  // The trips are counted as headings on the ledger page (below 1024px); the laptop Home lists later trips as tags.
-  await underLegacyPacking(page, () =>
-    expect(page.getByRole("heading", { name: "Paris" })).toHaveCount(expectedCount),
+  // The trips are counted as rows under the Future pill (San Diego is the next trip on the fixed clock).
+  await underPhoneLayout(page, async () =>
+    expect(await futureRow(page, /Paris/)).toHaveCount(expectedCount),
   );
 }
 
-/** The trip's Packing page is the pre-redesign one below 1024px; the Staples screen is drawn at the laptop width. */
-async function underLegacyPacking<T>(page: Page, run: () => Promise<T>): Promise<T> {
-  const size = page.viewportSize();
-  await legacyPackingLayout(page);
-  try {
-    return await run();
-  } finally {
-    if (size) await page.setViewportSize(size);
-  }
-}
-
+/** The needed quantity of the underwear row on the trip's Packing page: the tick's name reads "Underwear, 5". */
 async function underwearQty(page: Page, tripName: string): Promise<number> {
-  return underLegacyPacking(page, () => underwearQtyOnPage(page, tripName));
+  return underPhoneLayout(page, () => underwearQtyOnPage(page, tripName));
 }
 
 async function underwearQtyOnPage(page: Page, tripName: string): Promise<number> {
-  await page
-    .getByRole("link", { name: new RegExp(`(Continue|Keep) packing: ${tripName}`) })
-    .click();
-  await expect(page.getByRole("heading", { name: tripName, level: 1 })).toBeVisible();
-  const text = await page
-    .locator('[data-item-id="underwear"] .qty-stepper span')
-    .first()
-    .innerText();
+  // A fresh Home opens on Pack (the next trip's link); the Future pill chosen earlier is in the address and would stay open.
+  await page.goto("/");
+  await openTripFromHome(page, tripName);
+  await expectPacking(page);
+  const box = (await showItem(page, "underwear")).getByRole("checkbox");
+  const name = (await box.getAttribute("aria-label")) ?? "";
   await page.goBack();
-  return Number(/of (\d+) packed/.exec(text)?.[1]);
+  return Number(/, (\d+)$/.exec(name)?.[1]);
 }
 
 test("edit a staple count: existing trips are unchanged, and the next new trip uses the new value", async ({
   page,
 }) => {
+  // Three trips are opened and two created, each through the phone Home's Future pill: more than the default 30 s.
+  test.slow();
   await openStaples(page);
   await page.goto("/");
   await newTrip(page, /Paris/, "2026-12-04", "2026-12-08", 1);
@@ -102,14 +128,17 @@ test("edit a staple count: existing trips are unchanged, and the next new trip u
   // A trip made after the edit uses it.
   await newTrip(page, /Paris/, "2026-12-04", "2026-12-08", 2);
   await page.goto("/");
-  const text = await underLegacyPacking(page, async () => {
-    const second = page.getByRole("link", { name: /Keep packing: Paris/ }).first();
-    await second.click();
-    await expect(page.getByRole("heading", { name: "Paris", level: 1 })).toBeVisible();
-    return await page.locator('[data-item-id="underwear"] .qty-stepper span').first().innerText();
-    // "N of M packed": M is the needed count for the trip.
+  const name = await underPhoneLayout(page, async () => {
+    await (await futureRow(page, /Paris/)).first().click();
+    await expectPacking(page);
+    return await (
+      await showItem(page, "underwear")
+    )
+      .getByRole("checkbox")
+      .getAttribute("aria-label");
   });
-  expect(Number(/of (\d+) packed/.exec(text)?.[1])).toBeGreaterThan(parisBefore);
+  // "Underwear, M": M is the needed count for the trip.
+  expect(Number(/, (\d+)$/.exec(name ?? "")?.[1])).toBeGreaterThan(parisBefore);
 });
 
 test("add a staple to a cube: it is stored, per trip, and Pack last starts off", async ({
@@ -306,6 +335,32 @@ test("screenshots of the staples screen", DEVICE, async ({ page }, testInfo) => 
   await page.getByRole("textbox", { name: "Staple name" }).fill("socks");
   await page.getByRole("button", { name: "Add staple" }).click();
   await shot("duplicate", false);
+});
+
+test("the count-rules disclosure stays reachable and wraps whole words at every review width", async ({
+  page,
+}) => {
+  await signInAsOwner(page);
+  for (const width of [195, 390, 1024, 1280]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto("/staples");
+    await expect(section(page, "Clothing")).toBeVisible();
+    const summary = page.getByText("How counts work", { exact: true });
+    const disclosure = summary.locator("xpath=ancestor::details");
+    await expect(disclosure).not.toHaveAttribute("open", "");
+    await expect(summary).toBeVisible();
+    expect((await summary.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await summary.click();
+    await expect(disclosure).toHaveAttribute("open", "");
+    await expect(disclosure.getByText("Fixed per trip", { exact: true })).toBeVisible();
+    await expect(disclosure.getByText(/Underwear and socks stay one per day/)).toBeVisible();
+    await expectWholeWords(disclosure, `count rules at ${width}px`);
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow, `count rules at ${width}px`).toBeLessThanOrEqual(0);
+    await expect(page.getByRole("region", { name: "Clothing" })).toBeVisible();
+  }
 });
 
 // Design's re-check of #384: the phone dock is drawn about 125px tall (st-p-ocean), and the staple sheet keeps Remove and Done

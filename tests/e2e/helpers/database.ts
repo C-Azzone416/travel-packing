@@ -39,6 +39,8 @@ export async function resetOwnerData(ownerId: string): Promise<void> {
         appearance: null,
         staplesSetupState: "completed",
         staplesReminderDismissed: false,
+        // The home city (#379) is the account's: no test inherits the one a previous test set.
+        ...homeToColumns(null),
       })
       .where(eq(schema.users.id, ownerId));
     await seedSyntheticData(db, ownerId, SAMPLE_TODAY);
@@ -282,6 +284,17 @@ export async function seedSavedList(
       );
     }
     return row.id;
+  } finally {
+    await pool.end();
+  }
+}
+
+/** Delete every trip the owner has (the seeded samples too), so the Home is the first-run Home (#409). */
+export async function clearOwnerTrips(ownerId: string): Promise<void> {
+  const pool = new Pool({ connectionString: E2E_DATABASE_URL, max: 1 });
+  try {
+    const db = drizzle(pool, { schema }) as unknown as Db;
+    await db.delete(schema.trips).where(eq(schema.trips.ownerId, ownerId));
   } finally {
     await pool.end();
   }

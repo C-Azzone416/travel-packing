@@ -26,6 +26,7 @@ import {
   markNotReady,
   markReady,
   setPacked,
+  setPackedMany,
   togglePacked,
   undoBagPlacement,
   type CommandResult,
@@ -46,7 +47,7 @@ import {
   type LifecycleTrip,
   type TripDraft,
 } from "@/domain/trip-lifecycle";
-import type { TripOrigin } from "@/domain/trip-route";
+import { TRAVEL_MODES, type TravelMode, type TripOrigin } from "@/domain/trip-route";
 import { routeLabel, tripDatesFromStops, validateStops, type TripStop } from "@/domain/trip-stops";
 import { localToday } from "@/lib/today";
 import type { SavedListDetail, SavedListSummary } from "@/server/data/service";
@@ -106,6 +107,11 @@ export interface TripsSource {
   upsertStaple(staple: Staple): Promise<Staple[]>;
   /** Sets one item's packed count (clamped to 0..qty). The screen sends one of these per item after taps settle. */
   setPacked(tripId: string, itemId: string, packed: number): Promise<TripChange>;
+  /** Several packed counts as one change (All in, and its Undo): all are saved or none (#386). */
+  setPackedMany(
+    tripId: string,
+    entries: readonly { itemId: string; packed: number }[],
+  ): Promise<TripChange>;
   togglePacked(tripId: string, itemId: string): Promise<TripChange>;
   incrementPacked(tripId: string, itemId: string): Promise<TripChange>;
   decrementPacked(tripId: string, itemId: string): Promise<TripChange>;
@@ -147,7 +153,9 @@ export interface TripsSource {
    */
   setStampLabels(tripId: string, slot1: string | null, slot2: string | null): Promise<TripChange>;
   /** Replace the trip's route (1-6 stops). Dates, day counts and calculated items follow; rejects an invalid route. */
-  setStops(tripId: string, stops: TripStop[]): Promise<TripChange>;
+  setStops(tripId: string, stops: TripStop[], basedOn?: string): Promise<TripChange>;
+  /** Change how the trip is travelled (Fly / Drive / Train or other); the origin and the name are left alone. */
+  setTravelMode(tripId: string, mode: TravelMode, basedOn?: string): Promise<TripChange>;
   savedLists?: SavedListsCapability;
   /** Live weather integration exists on the real source. Memory/unit sources may leave it out. */
   weather?: {
@@ -322,6 +330,7 @@ export function createMemoryTripsSource(
       return currentStaples;
     },
     setPacked: (id, itemId, packed) => command(id, (trip) => setPacked(trip, itemId, packed)),
+    setPackedMany: (id, entries) => command(id, (trip) => setPackedMany(trip, entries)),
     togglePacked: (id, itemId) => command(id, (trip) => togglePacked(trip, itemId)),
     incrementPacked: (id, itemId) => command(id, (trip) => incrementPacked(trip, itemId)),
     decrementPacked: (id, itemId) => command(id, (trip) => decrementPacked(trip, itemId)),
@@ -382,8 +391,10 @@ export function createMemoryTripsSource(
           throw new TripsSourceError("STALE");
         return recalculateSuggestions(trip, config, calculateSuggestions);
       }),
-    setStops: (id, stops) =>
+    setStops: (id, stops, basedOn) =>
       direct(id, (trip) => {
+        if (basedOn !== undefined && trip.updatedAt !== undefined && basedOn !== trip.updatedAt)
+          throw new TripsSourceError("STALE");
         if (!validateStops(stops).ok) throw new TripsSourceError("INVALID_INPUT");
         const { start, end } = tripDatesFromStops(stops);
         const moved = recalculateSuggestions(
@@ -405,6 +416,15 @@ export function createMemoryTripsSource(
           ],
         };
       }),
+    setTravelMode: (id, mode, basedOn) => {
+      if (!TRAVEL_MODES.includes(mode))
+        return Promise.reject(new TripsSourceError("INVALID_INPUT"));
+      return direct(id, (trip) => {
+        if (basedOn !== undefined && trip.updatedAt !== undefined && basedOn !== trip.updatedAt)
+          throw new TripsSourceError("STALE");
+        return { ...trip, travelMode: mode };
+      });
+    },
     setTheme: (id, theme) => {
       if (!isThemeId(theme)) return Promise.reject(new TripsSourceError("INVALID_INPUT"));
       return direct(id, (trip) => ({ ...trip, theme }));

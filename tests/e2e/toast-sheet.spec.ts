@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
 import { DEVICE } from "./helpers/device";
-import { chooseFromMenu } from "./helpers/menu";
+import { chooseFromMenu, openPastAndArchive } from "./helpers/menu";
 
 // #341: a toast must never sit on top of a sheet. While any ModalSheet is open a plain toast is held (clipped from view, timer paused)
 // and shows, with its full time, after the sheet closes. Real app and real stylesheet: the clip-path rule only exists here.
@@ -34,7 +34,7 @@ async function toastThenSheet(page: Page) {
   await page.getByRole("dialog").getByRole("button", { name: "Remove trip" }).click();
   const toast = page.locator(".toast-region .toast");
   await expect(toast).toContainText("San Diego removed");
-  await page.getByRole("button", { name: /Past & archive/ }).click();
+  await openPastAndArchive(page);
   await page.getByRole("button", { name: "Remove: Lisbon" }).click();
   await expect(page.getByRole("dialog", { name: "Remove Lisbon?" })).toBeVisible();
   return toast;

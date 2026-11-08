@@ -135,16 +135,19 @@ p {
   position: absolute;
   z-index: 100;
   left: 12px;
-  top: -80px;
+  top: 12px;
+  max-width: calc(100vw - 24px);
   padding: 12px 16px;
   border-radius: var(--control-radius);
   background: var(--ink);
   color: var(--surface);
   font-weight: 800;
   text-decoration: none;
+  overflow-wrap: anywhere;
+  transform: translateY(calc(-100% - 24px));
 }
 .skip-link:focus {
-  top: 12px;
+  transform: none;
 }
 
 .sr-only {
@@ -357,22 +360,34 @@ p {
   align-items: end;
   justify-items: center;
   padding: 18px;
-  background: color-mix(in srgb, var(--ink) 48%, transparent);
-  backdrop-filter: blur(4px);
+  background: color-mix(in srgb, var(--darkEdge) 55%, transparent);
 }
 .modal {
+  --modal-pad: 21px;
+  --modal-pad-bottom: var(--modal-pad);
+  /* Bottom clearance under pinned footer actions; phone sheets raise it to the safe-area inset. */
+  --modal-foot-bottom: 12px;
+  --modal-surface: var(--paper);
   width: min(100%, 560px);
   max-height: calc(100vh - 36px);
   overflow: auto;
-  padding: 21px;
+  padding: var(--modal-pad);
   border-radius: var(--control-radius);
-  background: var(--paper);
+  background: var(--modal-surface);
   box-shadow: 0 28px 80px var(--ledger-shadow);
   animation: modalIn 0.18s ease-out;
+}
+.modal-grabber {
+  display: none;
 }
 @keyframes modalIn {
   from {
     transform: translateY(18px);
+    opacity: 0.4;
+  }
+}
+@keyframes modalSheetIn {
+  from {
     opacity: 0.4;
   }
 }
@@ -451,6 +466,111 @@ p {
   margin-top: 18px;
 }
 
+/* The side sheet (Edit trip, #389; spec #376 part 2 section 8). From 1024px: a right-anchored 560px panel over a scrim, full
+   height, no radius. Below 1024px: a full screen with no scrim. Head and pinned footer stay in view; the body scrolls. */
+.modal-backdrop.modal-backdrop-side {
+  padding: 0;
+  align-items: stretch;
+  justify-items: end;
+  background: color-mix(in srgb, var(--darkEdge) 55%, transparent);
+  backdrop-filter: none;
+}
+.modal.modal-side .modal-grabber {
+  display: none;
+}
+.modal.modal-side {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: min(100%, 560px);
+  height: 100dvh;
+  max-height: none;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 0;
+  border-left: 1px solid var(--line);
+  background: var(--page);
+  box-shadow: none;
+  animation: none;
+}
+.modal-side .modal-head {
+  flex: none;
+  align-items: flex-start;
+  margin: 0;
+  padding: 24px 24px 12px;
+}
+.modal-side .modal-head > :first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.modal-side .modal-head h2 {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.modal-side .modal-head p {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1.1;
+  overflow-wrap: break-word;
+}
+.modal-side .modal-head-end {
+  margin: 0;
+}
+.modal-side .modal-close {
+  width: 44px;
+  height: 44px;
+  margin: 0;
+  border-color: transparent;
+  border-radius: 50%;
+  background: var(--paper);
+}
+.modal-side .modal-actions {
+  display: block;
+  flex: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line2);
+  background: var(--paper);
+}
+/* Beside the title the head buttons need room; on a very narrow screen they take their own line above it. */
+@media (max-width: 399px) {
+  .modal-side .modal-head {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+  .modal-side .modal-head-end {
+    align-self: flex-end;
+  }
+}
+@media (max-width: 1023px) {
+  .modal-backdrop.modal-backdrop-side {
+    background: var(--page);
+  }
+  .modal.modal-side {
+    width: 100%;
+    border-left: 0;
+  }
+  .modal-side .modal-head {
+    padding: 16px 16px 8px;
+  }
+  /* The phone panel is a rounded sheet: the strip behind it must not paint over its corners. */
+  .modal-side .modal-actions {
+    border-top: 0;
+    background: transparent;
+  }
+  .modal-side .modal-head p {
+    font-size: 28px;
+  }
+}
+
 /* Plain toasts sit above the nav; the assertive error region is separate. */
 .toast-region {
   position: fixed;
@@ -521,7 +641,36 @@ body[data-sheet-open] .toast-region {
   box-shadow: 0 8px 24px var(--ledger-shadow);
 }
 
-@media (min-width: 660px) {
+/* Suitcase sheets are attached to the bottom edge on phones. The grabber is decorative; the established close, Escape and
+   backdrop controls remain the ways to dismiss the dialog. */
+@media (max-width: 1023px) {
+  .modal-backdrop {
+    padding: 0;
+    align-items: end;
+  }
+  .modal {
+    --modal-pad: 18px;
+    --modal-pad-bottom: max(var(--modal-pad), var(--safe-bottom));
+    --modal-foot-bottom: max(var(--modal-pad), var(--safe-bottom));
+    --modal-surface: var(--page);
+    width: min(100%, 640px);
+    max-height: 90dvh;
+    padding: 0 var(--modal-pad) var(--modal-pad-bottom);
+    border-radius: 22px 22px 0 0;
+    /* A flush-bottom sheet cannot enter from below the viewport: geometry checks and hit testing run while this animation is active. */
+    animation-name: modalSheetIn;
+  }
+  .modal-grabber {
+    display: block;
+    flex: none;
+    width: 44px;
+    height: 6px;
+    margin: 12px auto 24px;
+    border-radius: 3px;
+    background: var(--line);
+  }
+}
+@media (min-width: 1024px) {
   .modal-backdrop {
     align-items: center;
   }
@@ -939,6 +1088,11 @@ input:disabled {
 .occasion-row {
   margin-top: 14px;
 }
+.occasion-row input:disabled {
+  background: var(--detail-surface);
+  color: var(--muted-text);
+  cursor: not-allowed;
+}
 .occasion-row .toggle-row {
   padding: 4px 0;
   border-bottom: 0;
@@ -1017,7 +1171,6 @@ input:disabled {
 }
 .weather-panel-head,
 .weather-opt-actions,
-.weather-review-banner,
 .weather-unavailable {
   display: flex;
   align-items: center;
@@ -1034,13 +1187,7 @@ input:disabled {
 .weather-attribution {
   color: var(--muted-text);
 }
-.weather-review-banner,
-.weather-ready-callout {
-  padding: 12px;
-  border-radius: var(--control-radius);
-  background: var(--status-remaining-bg);
-  color: var(--status-remaining-text);
-}
+
 .weather-list {
   display: grid;
   margin: 0;
@@ -1116,49 +1263,7 @@ input:disabled {
     animation: none;
   }
 }
-.weather-select-all,
-.weather-change-row {
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: start;
-  min-height: 56px;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--line);
-}
-.weather-select-all {
-  grid-template-columns: 28px minmax(0, 1fr);
-}
-.weather-select-all input,
-.weather-change-row input {
-  accent-color: var(--dark);
-  width: 22px;
-  height: 22px;
-  margin: 0;
-}
-.weather-change-copy,
-.weather-change-reason,
-.weather-change-caution {
-  display: block;
-}
-.weather-change-reason,
-.weather-change-caution,
-.weather-change-copy details {
-  margin-top: 4px;
-  color: var(--muted-text);
-  font-size: 14px;
-}
-.weather-change-tags {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 4px;
-}
-.review-skip-copy {
-  flex-basis: 100%;
-  margin: 0;
-  text-align: right;
-}
+
 @media (max-width: 659px) {
   .weather-row {
     grid-template-columns: minmax(0, 1fr) auto;
@@ -1175,24 +1280,12 @@ input:disabled {
   .weather-mixed {
     grid-column: 1 / -1;
   }
-  .weather-review-banner,
   .weather-opt-actions {
     align-items: stretch;
     flex-direction: column;
   }
-  .weather-review-banner .button,
   .weather-opt-actions .button {
     width: 100%;
-  }
-  .weather-change-row {
-    grid-template-columns: 28px minmax(0, 1fr);
-  }
-  .weather-change-tags {
-    grid-column: 2;
-    justify-content: flex-start;
-  }
-  .review-skip-copy {
-    text-align: left;
   }
 }
 .tag {
@@ -1207,20 +1300,6 @@ input:disabled {
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-}
-.review-group {
-  margin: 18px 0;
-}
-.review-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  padding: 11px 0;
-  border-bottom: 1px solid var(--line);
-}
-.review-row:last-child {
-  border: 0;
 }
 
 /* 8px between the label, the box, the helper line and what follows: the focus ring (3px + 2px offset) needs
@@ -1330,30 +1409,6 @@ input:disabled {
 
 /* ---- Trip screen / packing list (#16). Ported from the prototype; sizes follow design's #12 and #16 gaps. */
 
-.filters {
-  display: flex;
-  gap: 8px;
-  margin: 14px 0;
-}
-.filter {
-  min-height: 44px;
-  padding: 8px 14px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--control-radius);
-  background: transparent;
-  color: var(--ink);
-  font-size: 14px;
-  font-weight: 700;
-  cursor: pointer;
-}
-.filter.active {
-  border-color: var(--ink);
-  background: var(--ink);
-  color: var(--surface);
-}
-.list-section {
-  margin-top: 20px;
-}
 /* A group: 29px display heading, the muted "2 of 6 complete" at the right, a hairline rule under (audit 8). */
 .list-section-head {
   display: flex;
@@ -1371,121 +1426,14 @@ input:disabled {
   font-weight: 800;
   letter-spacing: -0.02em;
 }
-.list-section-count {
-  color: var(--muted);
-  font-size: 13px;
-  white-space: nowrap;
-}
-.list-section-sub {
-  margin: 6px 0 0;
-}
-/* The review has no heading between its title (h1) and its sections, so they are h2 in the outline but look the same. */
-.review-group .list-section-head h2 {
-  margin: 0;
-  font-size: 16px;
-  letter-spacing: normal;
-}
-.packing-list {
-  display: grid;
-  gap: 0;
-}
-/* The list sits flat on the page: no card around it (audit 18). */
-.packing-panel {
-  min-width: 0;
-}
 
-.pack-row {
-  display: grid;
-  grid-template-columns: 44px minmax(0, 1fr);
-  align-items: center;
-  gap: 8px 10px;
-  min-height: 62px;
-  padding: 9px 0;
-  border: 0;
-  border-bottom: 1px solid var(--line);
-  border-radius: 0;
-  background: none;
-}
-.pack-row .qty-stepper {
-  grid-column: 2;
-  justify-self: start;
-}
-.pack-row.complete .item-name {
-  text-decoration: line-through;
-}
-.item-body {
-  display: grid;
-  gap: 2px;
-  min-height: 44px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.item-name {
-  font-weight: 800;
-}
-.item-body .item-meta {
-  margin-top: 0;
-}
+/* The list sits flat on the page: no card around it (audit 18). */
+
 /* The "Pack last" badge never touches the name before it (design: 6 to 8 px). */
 .timing-tag {
   margin-left: 7px;
 }
-.qty-stepper {
-  display: grid;
-  grid-template-columns: 44px 38px 44px;
-  align-items: center;
-  text-align: center;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--control-radius);
-  overflow: hidden;
-}
-.qty-stepper button {
-  min-height: 44px;
-  border: 0;
-  background: transparent;
-  color: var(--ink);
-  cursor: pointer;
-  font-size: 18px;
-}
-.qty-stepper button[aria-disabled="true"] {
-  color: var(--line-strong);
-  cursor: not-allowed;
-}
-.qty-stepper span {
-  align-self: stretch;
-  display: grid;
-  place-items: center;
-  border-inline: 1px solid var(--line-strong);
-  font-size: 13px;
-  font-weight: 700;
-}
-.row-error {
-  grid-column: 2 / -1;
-  justify-self: start;
-  min-height: 44px;
-  padding: 0 4px;
-  border: 0;
-  background: none;
-  color: var(--status-remaining-text);
-  font-size: 12px;
-  font-weight: 850;
-  text-decoration: underline;
-  cursor: pointer;
-}
 
-.toiletry-section {
-  margin-top: 20px;
-}
-.toiletry-explainer {
-  margin: 0 0 14px;
-}
-.toiletry-section > .button {
-  margin-top: 12px;
-}
 .bag-placement {
   display: flex;
   align-items: center;
@@ -1518,40 +1466,6 @@ input:disabled {
 .bag-placement.complete {
   border-color: var(--status-ready-border);
   background: var(--status-ready-bg);
-}
-.review-prompt {
-  margin-top: 16px;
-  padding: 18px;
-  border-radius: var(--control-radius);
-  background: var(--ink);
-  color: var(--action-ink);
-}
-.review-prompt p {
-  color: var(--action-ink);
-}
-.review-prompt .button.secondary {
-  color: var(--ink);
-}
-.ready-card {
-  background: linear-gradient(135deg, var(--action), var(--action-border));
-  color: var(--action-ink);
-}
-.ready-card p {
-  color: var(--action-ink);
-}
-.ready-card .eyebrow {
-  color: var(--action-ink);
-}
-.button.ready-secondary {
-  border-color: color-mix(in srgb, var(--surface) 72%, transparent);
-  background: transparent;
-  color: var(--action-ink);
-}
-.button.ready-secondary:hover {
-  background: color-mix(in srgb, var(--surface) 12%, transparent);
-}
-.ready-card .button.secondary {
-  color: var(--ink);
 }
 
 .scope-choice {
@@ -1629,28 +1543,18 @@ input:disabled {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  margin: 0 -21px;
-  padding: 0 21px 4px;
+  margin: 0 calc(var(--modal-pad) * -1);
+  padding: 0 var(--modal-pad) 4px;
 }
 .staple-editor-actions {
   flex: none;
-  margin: 12px -21px -21px;
-  padding: 12px 21px;
+  margin: 12px calc(var(--modal-pad) * -1) calc(var(--modal-pad-bottom) * -1);
+  padding: 12px var(--modal-pad) var(--modal-foot-bottom);
   border-top: 1px solid var(--line);
-  background: var(--paper);
+  background: var(--modal-surface);
 }
 
 /* Wide enough for the name and the stepper side by side; below this the stepper sits under the name. */
-@media (min-width: 440px) {
-  .pack-row {
-    grid-template-columns: 44px minmax(0, 1fr) auto;
-  }
-
-  .pack-row .qty-stepper {
-    grid-column: auto;
-    justify-self: end;
-  }
-}
 
 @media (prefers-reduced-motion: reduce) {
   .spinner {
@@ -2398,14 +2302,6 @@ input:disabled {
   font-size: 12px;
   font-weight: 800;
 }
-.icon-button {
-  min-width: 44px;
-  min-height: 44px;
-  border: 1px solid var(--line);
-  border-radius: var(--control-radius);
-  background: white;
-  cursor: pointer;
-}
 .skeleton-row {
   height: 44px;
   margin: 10px 0;
@@ -2435,23 +2331,177 @@ input:disabled {
   cursor: pointer;
 }
 
-/* Settings (#19) */
-.settings-grid {
-  display: grid;
-  gap: 14px;
-  max-width: 760px;
-  margin-inline: auto;
+/* Settings suitcase (#413). The Suitcase primitive owns the rim; these cards are the cubes inside its dark interior. */
+.settings-screen {
+  min-width: 0;
 }
-/* On a wide screen the cards are a centred 760px column; the heading and lede share it (#178). Phone is unchanged. */
-@media (min-width: 900px) {
-  .settings-head {
-    max-width: 760px;
-    margin-inline: auto;
+.settings-head,
+.settings-suitcase {
+  width: min(100%, 880px);
+}
+.settings-head {
+  margin-inline: 0;
+  margin-bottom: 24px;
+}
+.settings-head .head-copy {
+  max-width: 560px;
+}
+.settings-head h1 {
+  font-size: 28px;
+}
+.settings-head .muted {
+  margin-top: 6px;
+  font-size: 15px;
+  line-height: 1.45;
+}
+.settings-cubes {
+  columns: 1;
+  column-gap: 12px;
+}
+.settings-cube {
+  container: settings-cube / inline-size;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  display: inline-block;
+  break-inside: avoid;
+  margin: 0 0 10px;
+  border: 0;
+  border-radius: 18px;
+  padding: 12px 14px;
+  background: var(--paper2);
+  color: var(--ink);
+  box-shadow: none;
+  vertical-align: top;
+}
+.card.padded.settings-cube {
+  padding: 12px 14px;
+}
+.settings-cube:last-child {
+  margin-bottom: 0;
+}
+.settings-cube h2 {
+  margin: 0 0 12px;
+  font-family: var(--font-display), var(--font-body), sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.15;
+}
+.settings-cube h3 {
+  margin: 12px 0 6px;
+  font-size: 17px;
+}
+.settings-cube-intro {
+  margin: -4px 0 0;
+  font-size: 15px;
+}
+.settings-help {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.4;
+}
+.settings-text-button {
+  min-height: 44px;
+  margin-top: 2px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.home-city-field {
+  width: 100%;
+  min-width: 0;
+  min-height: 47px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1.5px solid var(--line);
+  border-radius: 16px;
+  padding: 0 14px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-size: 17px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.home-city-field > span:first-child {
+  width: 0;
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.home-city-field > [data-text]::before {
+  content: attr(data-text);
+}
+.home-city-placeholder {
+  color: var(--muted);
+}
+.home-city-change {
+  flex: none;
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: underline;
+}
+.settings-cube .field-error {
+  margin-top: 8px;
+  color: var(--danger);
+  font-size: 14px;
+}
+.settings-cube [data-feedback-identity],
+.settings-cube [data-feedback-identity] strong,
+.appearance-copy strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.appearance-copy {
+  width: 100%;
+  overflow: hidden;
+}
+@media (min-width: 768px) {
+  .settings-cubes {
+    columns: 2;
+  }
+  .settings-cube {
+    margin-bottom: 12px;
+    padding: 14px 18px;
+  }
+  .card.padded.settings-cube {
+    padding: 14px 18px;
   }
 }
-.settings-grid h2 {
-  margin: 0 0 8px;
-  font-size: 18px;
+@media (min-width: 1024px) {
+  .settings-head h1 {
+    font-size: 40px;
+  }
+  .settings-head .muted {
+    font-size: 16px;
+  }
+}
+@media (max-width: 239px) {
+  .settings-cube {
+    padding-inline: 10px;
+  }
+  .home-city-field {
+    align-items: flex-start;
+    flex-direction: column;
+    padding-block: 8px;
+  }
+  /* The field stacks here: its flex-basis of 0 would be a height of 0 in a column, hiding the city. */
+  .home-city-field > span:first-child {
+    width: 100%;
+    flex: none;
+  }
 }
 /* Save status (#298): one row, the same height in every state, so nothing below it moves. */
 .save-status {
@@ -2507,9 +2557,9 @@ input:disabled {
   color: var(--muted);
 }
 .close-account-entry {
-  margin-top: 20px;
-  padding-top: 18px;
-  border-top: 1px solid var(--line);
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line2);
 }
 .close-account-entry h3,
 .close-account-entry p {
@@ -2532,7 +2582,7 @@ input:disabled {
 }
 /* The sign-out warning (#325). Up to 659px (the bottom-sheet band) the three choices stack full width, Send now on top; from 660px
    they are one right-aligned row that wraps to full-width stacks rather than overlap. The backdrop already covers the bottom nav
-   (z-index 50); the extra bottom padding keeps the footer clear of the phone's safe-area inset. */
+   (z-index 50); ModalSheet's phone padding keeps the footer clear of the safe-area inset. */
 .sign-out-guard {
   display: grid;
   gap: 10px;
@@ -2540,9 +2590,6 @@ input:disabled {
 .sign-out-guard p {
   margin: 0;
   overflow-wrap: anywhere;
-}
-.modal-backdrop:has(.sign-out-guard) {
-  padding-bottom: max(18px, var(--safe-bottom));
 }
 .modal:has(.sign-out-guard) .modal-actions .button {
   min-width: 0;
@@ -2565,7 +2612,11 @@ input:disabled {
   border: 0;
 }
 .temperature-units legend {
-  font-weight: 800;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 .temperature-unit-options {
   display: grid;
@@ -2578,9 +2629,9 @@ input:disabled {
   display: grid;
   min-height: 44px;
   place-items: center;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--control-radius);
-  background: transparent;
+  border: 2px solid var(--tint);
+  border-radius: 999px;
+  background: var(--paper);
   color: var(--ink);
   font-weight: 700;
   cursor: pointer;
@@ -2595,15 +2646,15 @@ input:disabled {
   cursor: pointer;
 }
 .temperature-unit-options label:has(input:checked) {
-  border-color: var(--ink);
-  background: var(--ink);
-  color: var(--surface);
+  border-color: var(--dark);
+  background: var(--dark);
+  color: var(--onDark);
 }
 /* Disabled (weather off): the choices dim, but the selected unit stays at full strength so it can still be read. */
-.temperature-unit-options label:has(input:disabled):not(:has(input:checked)) {
-  opacity: 0.55;
-}
 .temperature-unit-options label:has(input:disabled) {
+  border-color: var(--line);
+  background: var(--paper);
+  color: var(--ghost);
   cursor: not-allowed;
 }
 .weather-credit {
@@ -2619,12 +2670,6 @@ input:disabled {
   color: var(--muted-text);
   box-shadow: none;
   cursor: default;
-}
-/* Review: the reason sits on its own line under the Ready button, and the back arrow is a link that looks like the
-   shared back button on every other screen. */
-.review-actions .ready-blocker {
-  flex: 1 0 100%;
-  margin: 0;
 }
 a.back {
   display: inline-grid;
@@ -2657,110 +2702,12 @@ a.back {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
 }
-.head-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 10px;
-}
-.head-actions .button {
-  min-height: 44px;
-}
-.stop-list {
-  display: grid;
-  gap: 12px;
-}
-.stop-card {
-  display: grid;
-  gap: 12px;
-}
-.stop-card [role="group"] {
-  display: grid;
-  gap: 12px;
-}
-.stop-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.stop-head h2,
-.stop-head h3 {
-  margin: 0;
-  flex: 1;
-  font-size: 16px;
-}
-.stop-number {
-  display: inline-grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: var(--seafoam-soft);
-  color: var(--ink);
-  font-weight: 800;
-}
-.stop-actions {
-  display: flex;
-  gap: 4px;
-}
-.stop-actions .icon-button {
-  min-width: 44px;
-  min-height: 44px;
-}
-.stop-actions .icon-button[aria-disabled="true"] {
-  opacity: 0.4;
-}
-.stop-actions .icon-button {
-  display: inline-grid;
-  place-items: center;
-}
-.stop-actions .icon-button.danger:hover {
-  color: var(--danger);
-}
-.stop-connector {
-  height: 26px;
-  margin: 0 0 6px 30px;
-  border-left: 2px dashed var(--muted-text);
-  font-size: 12px;
-  color: var(--muted-text);
-}
-.stop-connector span {
-  display: none;
-  padding-left: 10px;
-}
-@media (min-width: 900px) {
-  .stop-connector span {
-    display: inline;
-  }
-}
-.stop-dates input[readonly] {
-  background: var(--bg);
-}
-@media (min-width: 600px) {
-  .stop-dates {
-    grid-template-columns: 1fr 1fr auto;
-    align-items: end;
-  }
-}
-.nights-chip {
-  justify-self: start;
-  align-self: end;
-  padding: 3px 10px;
-  border-radius: var(--control-radius);
-  background: var(--seafoam-soft);
-  color: var(--ink);
-  font-size: 13px;
-  font-weight: 700;
-}
-.route-summary {
-  margin: 0;
-  padding: 12px;
-  border-radius: var(--control-radius);
-  background: var(--seafoam-soft);
-  color: var(--ink);
-  font-weight: 700;
-}
 
+.add-stop-row {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+}
 /* Weather polish (#117): reasons cut to two lines on a phone with a More button, a stacked review footer, the What's this? note. */
 .more-button {
   margin-left: 6px;
@@ -2779,22 +2726,6 @@ a.back {
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
-  }
-  .modal-actions:has(.review-skip-copy) {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .modal-actions:has(.review-skip-copy) .review-add {
-    order: 1;
-  }
-  .modal-actions:has(.review-skip-copy) .review-skip {
-    order: 2;
-  }
-  .modal-actions:has(.review-skip-copy) .review-skip-copy {
-    order: 3;
-  }
-  .modal-actions:has(.review-skip-copy) .button {
-    width: 100%;
   }
 }
 
@@ -2833,36 +2764,34 @@ a.back {
   margin-top: 4px;
 }
 
-/* Settings > Appearance > Theme (#142, spec §4): three native radios drawn as option cards, a 4px accent rule on the panel. */
-.appearance-panel {
-  border-top: 4px solid var(--dark);
-}
+/* Settings > Colour scheme (#413): native radio cards with token-scoped miniature suitcases. */
 .theme-options {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 12px;
-  margin: 16px 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 14px 0 0;
 }
-@media (min-width: 721px) {
+@container settings-cube (max-width: 329px) {
   .theme-options {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
   }
 }
 .appearance-option {
   position: relative;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 88px;
-  padding: 12px 16px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--control-radius);
-  background: var(--control-bg);
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-height: 120px;
+  padding: 10px;
+  border: 2px solid var(--tint);
+  border-radius: 16px;
+  background: var(--paper);
   color: var(--ink);
   cursor: pointer;
 }
 .appearance-option:hover {
-  background: var(--selection-surface);
+  border-color: var(--dark);
 }
 .appearance-option input {
   position: absolute;
@@ -2875,40 +2804,43 @@ a.back {
 }
 .appearance-option:has(input:checked) {
   border: 2px solid var(--dark);
-  padding: 11px 15px;
-  background: var(--selection-surface);
 }
 .appearance-option:has(input:focus-visible) {
   outline: 3px solid var(--accent-2);
   outline-offset: 3px;
 }
 .appearance-swatches {
-  display: flex;
-  flex: none;
+  position: relative;
+  box-sizing: border-box;
+  width: 56px;
+  height: 40px;
+  display: block;
+  border: 5px solid var(--dark);
+  border-radius: 10px;
+  background: var(--paper2);
 }
 .appearance-swatches i {
-  width: 22px;
-  height: 22px;
-  margin-left: -6px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--state-radius);
-}
-.appearance-swatches i:first-child {
-  margin-left: 0;
-  background: var(--dark);
+  position: absolute;
+  bottom: 6px;
+  width: 8px;
+  height: 8px;
+  border: 0;
+  border-radius: 50%;
 }
 /* The swatches read the palette tokens directly (never a role alias): a role alias is resolved on <html>, so inside a
    [data-scheme] swatch it would show the page's scheme, not the swatch's. */
-.appearance-swatches i:nth-child(2) {
+.appearance-swatch-accent {
+  left: 8px;
   background: var(--accent);
 }
-.appearance-swatches i:nth-child(3) {
-  background: var(--paper);
+.appearance-swatch-gold {
+  left: 22px;
+  background: var(--gold);
 }
 .appearance-copy {
   display: grid;
-  flex: 1;
   gap: 2px;
+  min-width: 0;
 }
 .appearance-copy strong {
   font-size: 17px;
@@ -2916,64 +2848,51 @@ a.back {
 }
 .appearance-copy span {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.appearance-copy small {
+  width: fit-content;
+  padding: 2px 5px;
+  border-radius: 999px;
+  background: var(--tint);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 .appearance-check {
+  position: absolute;
+  top: 8px;
+  right: 8px;
   display: none;
-  color: var(--dark);
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--dark);
+  color: var(--onDark);
+  font-size: 13px;
   font-weight: 800;
 }
 .appearance-option:has(input:checked) .appearance-check {
-  display: block;
+  display: grid;
 }
 .appearance-status {
-  margin-bottom: 0;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
 }
 
 /* Packing screen, Field Ledger (#144, spec §4). Role tokens only. */
-.progress-line {
-  margin: 6px 0 8px;
-  color: var(--ink);
-  font-size: 16px;
-  font-weight: 700;
-}
-
-.weather-review-banner {
-  background: var(--notice);
-  color: var(--notice-ink);
-}
 
 /* Row: state, name and note, stepper, Pack all / Packed, Edit target. The last three are fixed width, so a
    completed row never moves a column. */
-.check-state {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border: 2px solid var(--line-strong);
-  border-radius: var(--state-radius, 50%);
-  color: var(--complete-ink);
-  font-size: 14px;
-  font-weight: 900;
-}
-.pack-row.complete .check-state {
-  border-color: var(--complete);
-  background: var(--complete);
-}
-.pack-row.complete .item-name {
-  color: var(--muted);
-}
-.pack-all {
-  min-width: 0;
-  min-height: 44px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--button-radius, 4px);
-  background: transparent;
-  color: var(--ink);
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-}
+
 /* Edit target is a text link, not a button (audit 19). */
 .edit-target {
   min-width: 0;
@@ -2989,267 +2908,12 @@ a.back {
   text-decoration: underline;
 }
 /* A packed row shows "Packed" as quiet muted text in the same 88px column (still a button: it toggles back). */
-.pack-row.complete .pack-all {
-  border: 0;
-  background: none;
-  color: var(--muted);
-  font-size: 16px;
-  font-weight: 500;
-  text-align: right;
-}
-.weather-guidance {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-.weather-pill {
-  padding: 2px 6px;
-  border-radius: var(--control-radius);
-  background: var(--weather-pill);
-  color: var(--weather-pill-ink);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
+
 .weather-note {
   font-size: 13px;
   color: var(--muted);
 }
 
-.sections-panel {
-  padding: 12px 0 0;
-  border: 0;
-  border-top: 1px solid var(--line-strong);
-}
-.sections-panel h3 {
-  margin: 0 0 8px;
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.sections-panel ul {
-  display: grid;
-  gap: 4px;
-  margin: 0 0 8px;
-  padding: 0;
-  list-style: none;
-}
-.sections-panel a {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 44px;
-  color: var(--link);
-  font-weight: 600;
-  text-decoration: none;
-}
-.sections-panel a:hover {
-  text-decoration: underline;
-}
-
-@media (min-width: 721px) {
-  .pack-row {
-    grid-template-columns: 28px minmax(0, 1fr) 210px 88px 88px;
-  }
-  .pack-row .qty-stepper {
-    grid-column: auto;
-    justify-self: stretch;
-    grid-template-columns: 44px 1fr 44px;
-  }
-}
-
-@media (max-width: 720px) {
-  .pack-row {
-    grid-template-columns: 28px minmax(0, 1fr) 1fr 1fr;
-  }
-  .pack-row .item-body {
-    grid-column: 2 / -1;
-  }
-  .pack-row .qty-stepper {
-    grid-column: 1 / -1;
-    grid-template-columns: 44px 1fr 44px;
-    justify-self: stretch;
-  }
-  .pack-row .pack-all {
-    grid-column: 1 / 3;
-  }
-  .pack-row .edit-target {
-    grid-column: 3 / -1;
-  }
-  .row-error {
-    grid-column: 1 / -1;
-  }
-}
-
-/* ---- Field Ledger dashboard (#143, spec §4). Roles only; the stamp slot belongs to FL-c (#144). */
-.ledger-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 16px;
-  margin: 12px 2px 16px;
-}
-.ledger-head h1 {
-  margin-bottom: 0;
-  font-size: clamp(38px, 5vw, 68px);
-}
-.ledger-head h1:focus {
-  outline: none;
-}
-.ledger-grid {
-  align-items: start;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 24px;
-  margin-top: 16px;
-}
-@media (min-width: 981px) {
-  .ledger-grid {
-    grid-template-columns: minmax(0, 1fr) 300px;
-  }
-}
-.ledger-hero {
-  --ledger-row: 28px;
-  position: relative;
-  min-width: 0;
-  padding: var(--ledger-row) 24px;
-  border: 1px solid var(--line);
-  border-top: 4px solid var(--dark);
-  border-radius: var(--control-radius);
-  background:
-    repeating-linear-gradient(
-      to bottom,
-      transparent 0,
-      transparent calc(var(--ledger-row) - 1px),
-      var(--ledger-rule) calc(var(--ledger-row) - 1px),
-      var(--ledger-rule) var(--ledger-row)
-    ),
-    var(--surface);
-  box-shadow: 0 8px 24px var(--ledger-shadow);
-}
-.ledger-hero-top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-.ledger-hero-copy {
-  min-width: 0;
-}
-.ledger-hero .eyebrow,
-.later-journeys .eyebrow {
-  margin-bottom: 4px;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-}
-.ledger-hero .eyebrow {
-  margin: 0;
-  line-height: var(--ledger-row);
-}
-.ledger-hero h2 {
-  margin: 0;
-  font-size: clamp(44px, 3.7vw, 56px);
-  line-height: calc(var(--ledger-row) * 2);
-  letter-spacing: -0.04em;
-  /* Word boundaries first (balance); anywhere only as the last resort for an unbroken string, and it lets the grid shrink. */
-  overflow-wrap: anywhere;
-  text-wrap: balance;
-}
-/* Place or route, then dates and nights, one muted 14px line (rows of 28px). Each segment is a flex item that wraps
-   inside itself on word boundaries; the hairline before the dates is clipped by the wrapper when the dates start a line. */
-.ledger-meta {
-  margin: 0;
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 14px;
-  line-height: var(--ledger-row);
-  font-variant-numeric: tabular-nums;
-}
-.ledger-meta-line {
-  display: flex;
-  flex-wrap: wrap;
-  margin-left: -25px;
-}
-.ledger-meta-line > span {
-  position: relative;
-  min-width: 0;
-  margin-left: 25px;
-  overflow-wrap: break-word;
-}
-.ledger-meta-dates::before {
-  content: "";
-  position: absolute;
-  top: 6px;
-  left: -13px;
-  width: 1px;
-  height: 16px;
-  background: var(--line-strong);
-}
-.stamp-slot {
-  flex: none;
-  display: flex;
-  align-items: center;
-  height: calc(var(--ledger-row) * 4);
-}
-/* The weather band (#358): the strip of stay cells and the daily-forecast block read as one band. .hero-weather is the
-   size container (its width is the hero's inner width) and owns the surface and the two hairlines; the band inside it
-   is what the container queries below lay out. Everything is whole 28px rows: no fixed heights, no padding above or
-   below. Stacked is the base (one cell per row, as on a phone); "wide stack" and "two column" are for a container of
-   30em / 40em and up, in em so larger text and browser zoom fall back to the stacked layouts. */
-.hero-weather {
-  container-type: inline-size;
-  margin: var(--ledger-row) 0 0;
-  /* The two hairlines are inset shadows, not borders, so the band is exactly its whole rows tall. */
-  box-shadow:
-    inset 0 1px 0 var(--line),
-    inset 0 -1px 0 var(--line);
-  background: var(--weather-surface);
-}
-.weather-strip {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.weather-strip li {
-  padding: 0 14px;
-  font-size: 13px;
-}
-.weather-strip li + li {
-  box-shadow: inset 0 1px 0 var(--line);
-}
-/* Everything above the note, padding included, is exactly 4 rows (measured: the content is about 90px); only the note
-   grows, so the cell is always a whole number of rows. */
-.weather-cell-top {
-  display: grid;
-  align-content: stretch;
-  gap: 2px;
-  box-sizing: border-box;
-  min-height: calc(var(--ledger-row) * 4);
-  padding-top: 12px;
-}
-.weather-strip .weather-note {
-  display: block;
-  line-height: var(--ledger-row);
-}
-.weather-city {
-  font-weight: 700;
-  font-size: 15px;
-}
-/* An unbroken string (a very long place name) wraps inside its cell instead of sticking out of it (#305). */
-.weather-strip .weather-city,
-.weather-strip .weather-dates,
-.weather-strip .weather-range,
-.weather-strip .weather-note {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.weather-dates,
 .weather-note {
   color: var(--muted);
 }
@@ -3258,237 +2922,6 @@ a.back {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-}
-.weather-glyph {
-  font-size: 18px;
-  line-height: 1;
-  color: var(--accent-2);
-}
-.weather-strip-note {
-  margin: var(--ledger-row) 0 0;
-  line-height: var(--ledger-row);
-}
-/* The status row: days to go, the track, the counts, on one baseline (2 rows) while they fit on one line. It wraps
-   in whole 28px rows when they do not (the counts drop to their own line first), and at most 440px wide it is the
-   phone arrangement: days (2 rows), the track (1 row), the counts (1 row, or one count per line). No fixed height. */
-.ledger-status {
-  container-type: inline-size;
-  margin-top: var(--ledger-row);
-}
-.ledger-status-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  align-content: flex-start;
-  column-gap: 24px;
-}
-.days-to-go {
-  flex: none;
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  white-space: nowrap;
-}
-.days-to-go strong {
-  font-family: var(--font-display), var(--font-body), sans-serif;
-  font-size: 44px;
-  font-weight: 800;
-  line-height: calc(var(--ledger-row) * 2);
-  letter-spacing: -0.04em;
-  color: var(--ink);
-}
-.days-to-go span {
-  color: var(--muted);
-  font-size: 14px;
-  line-height: 20px;
-}
-.ledger-status .progress-track {
-  /* 6px bar in a whole 28px row when it sits on a line of its own (21px above, 1px below). */
-  flex: 1 1 96px;
-  min-width: 96px;
-  margin: 21px 0 1px;
-}
-.ledger-status .progress-track span {
-  background: var(--progress);
-}
-/* The two counts never break inside themselves; they wrap between each other. The wrapper clips the dot that sits
-   left of the second count, so it shows only when both counts share a line and never starts a line. */
-.ledger-counts {
-  flex: 0 1 auto;
-  display: flex;
-  flex-wrap: wrap;
-  column-gap: 24px;
-  max-width: 100%;
-  margin-left: auto;
-  overflow: hidden;
-  white-space: nowrap;
-  color: var(--muted);
-  font-size: 14px;
-  line-height: var(--ledger-row);
-  font-variant-numeric: tabular-nums;
-}
-.ledger-counts span {
-  position: relative;
-}
-.ledger-counts span + span::before {
-  content: "·";
-  position: absolute;
-  top: 0;
-  left: -16px;
-  width: 8px;
-  text-align: center;
-}
-@container (max-width: 440px) {
-  .ledger-status .days-to-go {
-    flex: 0 0 100%;
-  }
-  .ledger-status .progress-track {
-    flex: 0 0 100%;
-    min-width: 0;
-  }
-  .ledger-counts {
-    flex: 1 1 100%;
-    justify-content: space-between;
-    margin-left: 0;
-  }
-  .ledger-counts span + span::before {
-    content: none;
-  }
-}
-.ledger-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-content: center;
-  align-items: center;
-  gap: 12px 8px;
-  min-height: calc(var(--ledger-row) * 2);
-}
-.ledger-hero .quick-view {
-  margin-top: 16px;
-}
-
-.later-journeys {
-  min-width: 0;
-}
-@media (min-width: 981px) {
-  .later-journeys {
-    padding-left: 24px;
-    border-left: 1px solid var(--line);
-  }
-}
-.later-journeys h2 {
-  font-size: 25px;
-}
-.later-journeys ul {
-  display: grid;
-  gap: 0;
-  margin: 12px 0 0;
-  padding: 0;
-  list-style: none;
-}
-@media (min-width: 721px) and (max-width: 980px) {
-  .later-journeys ul {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-.later-journey {
-  display: grid;
-  grid-template-columns: 56px minmax(0, 1fr);
-  gap: 12px;
-  padding: 16px 0;
-  border-top: 1px solid var(--line);
-}
-.later-days {
-  display: grid;
-  align-content: start;
-  line-height: 1;
-}
-.later-days strong {
-  font-family: var(--font-display), var(--font-body), sans-serif;
-  font-size: 34px;
-  font-weight: 800;
-  color: var(--ink);
-}
-.later-days span {
-  margin-top: 4px;
-  color: var(--muted);
-  font-size: 11px;
-}
-.later-body h3 {
-  margin-bottom: 4px;
-  font-size: 24px;
-  line-height: 1.05;
-  overflow-wrap: anywhere;
-}
-.later-dates {
-  margin: 4px 0 10px;
-  color: var(--muted);
-  font-size: 13px;
-}
-.later-body .progress-copy {
-  margin-bottom: 8px;
-  font-size: 13px;
-}
-.later-body .progress-track span {
-  background: var(--progress);
-}
-.later-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-.later-link {
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-  padding-inline: 4px;
-  color: var(--link);
-  font-weight: 700;
-}
-.later-link:hover {
-  background: var(--selection-surface);
-}
-
-@media (max-width: 720px) {
-  /* The stamps sit under the title, as on the packing screen, so a two-stamp cluster never squeezes it. */
-  .ledger-hero-top {
-    flex-direction: column;
-    gap: 0;
-  }
-  .stamp-slot {
-    justify-content: center;
-  }
-  .ledger-head {
-    display: grid;
-  }
-  .ledger-head h1 {
-    font-size: 40px;
-  }
-  .ledger-head .button {
-    width: 100%;
-  }
-  .ledger-hero {
-    padding: var(--ledger-row) 20px;
-  }
-  .ledger-hero h2 {
-    font-size: 40px;
-  }
-  .ledger-actions {
-    min-height: calc(var(--ledger-row) * 4);
-  }
-  /* Continue packing takes the first row; Edit trip, Add item and the ⋯ share the next one. */
-  .ledger-actions > .button:first-child {
-    flex: 1 1 100%;
-  }
-  .ledger-actions > .button:not(:first-child),
-  .ledger-actions .add-item.hero > .button {
-    flex: 1 1 0;
-    min-width: 0;
-    height: 44px;
-    padding-inline: 8px;
-    white-space: nowrap;
-  }
 }
 
 /* The ⋯ menu (#155): a 44px button and a role="menu" panel under it, right-aligned (open upward when low). */
@@ -3569,25 +3002,6 @@ a.back {
   border: 0;
   border-top: 1px solid var(--line);
 }
-
-.later-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--line);
-}
-.later-head h2 {
-  margin: 0;
-}
-.later-head span {
-  color: var(--muted);
-  font-size: 13px;
-}
-.later-journeys li:first-child .later-journey {
-  border-top: 0;
-}
 /* When there is no weather to show, the card collapses to one quiet 44px line (audit 24). */
 .weather-panel.weather-compact,
 .weather-panel.weather-off {
@@ -3616,38 +3030,12 @@ a.back {
   margin-bottom: 16px;
 }
 /* The Trip math card and the other side cards are flat: a top rule, no box (audit 25). */
-.side .card:not(.ready-card) {
-  padding: 12px 0 0;
-  border: 0;
-  border-top: 1px solid var(--line-strong);
-  background: none;
-}
 
 /* ---- Trip screen (#155, design's corrections on #159): a clean cream hero card, the progress and filters on one
    full-width row, then the list (about 1000px) beside a slim 190px sections column. */
-.trip-hero {
-  position: relative;
-  overflow: hidden;
-  margin: 8px 0 16px;
-  padding: 8px 28px 24px;
-  border: 1px solid var(--line);
-  border-top: 4px solid var(--dark);
-  border-radius: var(--control-radius);
-  background:
-    repeating-linear-gradient(
-      to bottom,
-      transparent 0,
-      transparent 27px,
-      var(--ledger-rule) 27px,
-      var(--ledger-rule) 28px
-    ),
-    var(--surface);
-  box-shadow: 0 8px 24px var(--ledger-shadow);
-}
-.trip-hero > * {
-  position: relative;
-  z-index: 1;
-}
+
+/* The theme picture (#48) is an isolated optional layer: hidden until Caroline decides (hero-picture.ts). */
+
 .back-link {
   display: inline-flex;
   align-items: center;
@@ -3656,220 +3044,15 @@ a.back {
   font-size: 15px;
   text-decoration: underline;
 }
-.trip-hero-main {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 24px;
-}
-.trip-hero-copy {
-  min-width: 0;
-}
-.hero-eyebrow {
-  margin: 0 0 4px;
-  color: var(--link);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.trip-hero h1 {
-  margin: 0 0 6px;
-  font-size: clamp(44px, 3.7vw, 56px);
-  line-height: 0.98;
-  letter-spacing: -0.04em;
-}
-.trip-hero-dates {
-  margin: 0;
-  color: var(--muted);
-}
-.trip-hero p.route-chip {
-  display: inline-block;
-  margin: 0 0 6px;
-  padding: 3px 8px;
-  border-radius: var(--control-radius);
-  background: var(--detail-surface);
-  color: var(--ink);
-  font-size: 14px;
-  font-weight: 700;
-}
-.hero-stamps {
-  display: flex;
-  flex: none;
-  flex-direction: column;
-  align-items: center;
-  color: var(--dark);
-}
-.trip-hero > .status-pill {
-  position: absolute;
-  top: 16px;
-  right: 24px;
-}
-.weather-embedded {
-  margin-top: 20px;
-}
-.weather-embedded .weather-panel-head {
-  margin-bottom: 4px;
-}
-.weather-embedded .weather-panel-head h2 {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.weather-embedded .weather-list {
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(0, 1fr);
-  border-block: 1px solid var(--line);
-  background: var(--weather-surface);
-}
-.weather-embedded .weather-row {
-  grid-template-columns: minmax(0, 1fr);
-  gap: 2px;
-  padding: 12px 14px;
-  border-bottom: 0;
-}
-.weather-embedded .weather-row + .weather-row {
-  border-left: 1px solid var(--line);
-}
-.weather-embedded .weather-row.unavailable {
-  grid-template-columns: minmax(0, 1fr);
-}
-.weather-check-label {
-  display: block;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.weather-review-banner {
-  margin: 0 0 16px;
-}
-.packing-top {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 24px;
-  margin: 8px 0 24px;
-}
-.packing-progress {
-  flex: 0 1 440px;
-  min-width: 0;
-}
-.packing-progress .progress-line {
-  margin: 0 0 8px;
-  font-size: 20px;
-}
-.trip-layout {
-  display: grid;
-  gap: 16px;
-}
-.side {
-  display: grid;
-  gap: 12px;
-  align-content: start;
-}
-.sections-panel ul {
-  gap: 0;
-}
-.sections-panel a {
-  min-height: 44px;
-  font-size: 16px;
-  padding-block: 8px;
-  line-height: 1.3;
-  min-width: 0;
-  overflow-wrap: anywhere;
-  justify-content: flex-start;
-}
-.sections-panel li {
-  min-width: 0;
-  max-width: 100%;
-}
-.sections-panel p {
-  margin: 8px 0 0;
-  font-style: italic;
-}
+
 @media (min-width: 900px) {
-  .trip-layout {
-    grid-template-columns: minmax(0, 1fr) 190px;
-    column-gap: 32px;
-    align-items: start;
-  }
   /* One sticky unit (#297): the whole rail sticks, nothing inside it does, so the nav can never cover Trip math. */
-  .trip-layout .side {
-    position: sticky;
-    top: calc(var(--sticky-top) + 12px);
-    z-index: 10;
-    align-self: stretch; /* the grid area is the full list height, so the sticky rail has travel */
-    max-height: calc(100vh - var(--sticky-top) - 24px);
-    max-height: calc(100dvh - var(--sticky-top) - 24px);
-    overflow-x: hidden;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    scrollbar-width: thin;
-    scroll-padding: 8px;
-    padding: 6px; /* room for the 3px focus ring plus its 3px offset, so the rail overflow never clips it */
-    margin: -6px; /* cancels the padding: the visible column does not move */
-  }
 }
-@media (min-width: 900px) and (max-height: 760px) {
-  .trip-layout .side .sections-panel p {
-    display: none;
-  }
-}
+
 @media (max-width: 899px) {
   /* Below 900 the sections panel moves above the list as a wrapping chip row; the other side cards stay below. */
-  .trip-layout .side {
-    display: contents;
-  }
-  .trip-layout .side > * {
-    order: 1;
-  }
-  .trip-layout .side > .sections-panel {
-    order: -1;
-    padding: 12px 0;
-  }
-  .sections-panel ul {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-  .sections-panel li a {
-    padding: 8px 12px;
-    border: 1px solid var(--line-strong);
-    border-radius: var(--control-radius);
-  }
-  .sections-panel p {
-    display: none;
-  }
 }
-@media (max-width: 720px) {
-  .trip-hero {
-    padding: 4px 20px 20px;
-  }
-  .trip-hero-main {
-    flex-direction: column;
-    gap: 14px;
-  }
-  .trip-hero h1 {
-    font-size: 40px;
-  }
-  .weather-embedded .weather-list {
-    grid-auto-flow: row;
-  }
-  .weather-embedded .weather-row + .weather-row {
-    border-left: 0;
-    border-top: 1px solid var(--line);
-  }
-  .packing-top {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 12px;
-  }
-  .packing-progress {
-    flex-basis: auto;
-  }
-}
+
 .back-link span {
   margin-right: 6px;
 }
@@ -3940,15 +3123,6 @@ a.back {
   .add-item .button {
     width: 100%;
   }
-}
-
-/* The hero's inline "＋ Add item" (#147): the wrapper dissolves so the toggle is one of the action buttons; the form is
-   drawn into .add-item-host, a full-width row under the hero's stats and actions. */
-.add-item.hero {
-  display: contents;
-}
-.add-item-host:not(:empty) {
-  margin-top: 16px;
 }
 
 /* Shared DuplicateResolver (#168, #140 spec §0): one fieldset per group, native radios drawn as 56px option cards like the
@@ -4219,11 +3393,11 @@ a.back {
   }
   .modal:has(.save-list-form) .modal-actions {
     position: sticky;
-    bottom: -21px;
-    margin: 18px -21px -21px;
-    padding: 12px 21px;
+    bottom: calc(var(--modal-pad-bottom) * -1);
+    margin: 18px calc(var(--modal-pad) * -1) calc(var(--modal-pad-bottom) * -1);
+    padding: 12px var(--modal-pad) var(--modal-foot-bottom);
     border-top: 1px solid var(--line);
-    background: var(--paper);
+    background: var(--modal-surface);
   }
 }
 /* The group legend sits on its fieldset's top rule; room above it so the scroll area doesn't clip the first label. */
@@ -4243,10 +3417,6 @@ a.back {
   text-decoration: underline;
 }
 @media (max-width: 720px) {
-  .hero-stamps {
-    flex-direction: row;
-    gap: 12px;
-  }
   .edit-stamp {
     margin-top: 0;
   }
@@ -4315,43 +3485,7 @@ a.back {
   }
 }
 
-/* ---- Edit trip: tabs, preference groups and the recalculation review (#203, design). Role tokens only. */
-.modal:has(.edit-tabs) {
-  width: min(100%, 640px);
-}
-.edit-tabs {
-  display: flex;
-  gap: 4px 20px;
-  margin: 0 0 16px;
-  border-bottom: 1px solid var(--line);
-}
-.edit-tabs button {
-  display: inline-flex;
-  min-height: 44px;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: -1px;
-  padding: 0 2px;
-  border: 0;
-  border-bottom: 3px solid transparent;
-  border-radius: 0;
-  background: transparent;
-  color: var(--muted);
-  font: inherit;
-  font-size: 15px;
-  font-weight: 700;
-  cursor: pointer;
-}
-.edit-tabs button[aria-selected="true"] {
-  border-bottom-color: var(--dark);
-  color: var(--ink);
-}
-.edit-tab-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--dark);
-}
+/* ---- Edit trip: the preference groups inside the sheet (#203, #389). The sheet itself is EditTripSheet.module.css. */
 .pref-group {
   margin: 0 0 14px;
   padding: 0;
@@ -4361,128 +3495,6 @@ a.back {
   padding: 0;
   font-size: 14px;
   font-weight: 800;
-}
-.review-changes h3 {
-  margin: 0 0 6px;
-  outline-offset: 4px;
-}
-.review-changes h4 {
-  margin: 18px 0 6px;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.review-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 12px 0 0;
-  padding: 0;
-  list-style: none;
-}
-.review-chips li {
-  padding: 4px 8px;
-  border-radius: var(--control-radius);
-  background: var(--detail-surface);
-  font-size: 12px;
-  font-weight: 700;
-}
-.review-group ul {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.review-group li {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--line);
-}
-.review-group li p {
-  flex-basis: 100%;
-  margin: 0;
-}
-.review-stay {
-  margin-top: 18px;
-}
-.review-stay summary {
-  min-height: 44px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 700;
-  cursor: pointer;
-}
-.warn-tag {
-  background: transparent;
-  box-shadow: inset 0 0 0 1px currentColor;
-  color: var(--danger);
-}
-.review-also {
-  margin-top: 18px;
-  padding: 4px 14px 10px;
-  border-radius: var(--control-radius);
-  background: var(--detail-surface);
-}
-.review-also p {
-  margin: 6px 0 0;
-}
-.review-ack {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  margin-top: 16px;
-  font-weight: 700;
-}
-.review-ack input {
-  width: 24px;
-  height: 24px;
-  flex: none;
-}
-.edit-trip-discard {
-  flex: 1 1 100%;
-  margin: 0;
-  font-weight: 700;
-  text-align: right;
-}
-.edit-trip-nochange {
-  flex: 1 1 100%;
-  text-align: right;
-}
-/* The dialog keeps its head and footer in view; only the body scrolls, so Apply, Back, Cancel, the discard prompt and errors never scroll away. */
-.modal:has(.edit-tabs) {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-.modal:has(.edit-tabs) .modal-head {
-  flex: none;
-}
-.edit-body {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  margin: 0 -21px;
-  padding: 0 21px;
-}
-.edit-failure {
-  flex: none;
-  margin: 12px 0 0;
-}
-.modal:has(.edit-tabs) .modal-actions {
-  flex: none;
-  margin: 12px -21px -21px;
-  padding: 12px 21px;
-  border-top: 1px solid var(--line);
-  background: var(--paper);
-}
-.occasion-row input:disabled {
-  background: var(--detail-surface);
-  color: var(--muted-text);
-  cursor: not-allowed;
 }
 .staples-setup {
   max-width: 760px;
@@ -4604,13 +3616,6 @@ a.back {
   font-weight: 700;
 }
 @media (max-width: 720px) {
-  .modal:has(.edit-tabs) {
-    max-height: calc(100vh - 18px);
-  }
-  .edit-tabs button {
-    flex: 1 1 0;
-    justify-content: center;
-  }
   .staples-reminder {
     margin: 4px 0 16px;
     align-items: stretch;
@@ -4713,7 +3718,8 @@ a.back {
 .modal:has(.feedback-form) {
   display: flex;
   flex-direction: column;
-  width: min(100%, 760px);
+  /* The shared sheet cap (640px, #376 part 2 section 8) holds through the tablet band; the wide editor layout starts at 1024. */
+  width: min(100%, 640px);
   max-height: calc(var(--feedback-vh) - 36px);
   overflow: hidden;
 }
@@ -4725,15 +3731,28 @@ a.back {
   align-content: start;
   min-height: 0;
   overflow-y: auto;
-  margin: 0 -21px;
-  padding: 0 21px;
+  margin: 0 calc(var(--modal-pad) * -1);
+  padding: 0 var(--modal-pad);
 }
 .modal:has(.feedback-form) .modal-actions {
   flex: none;
-  margin: 12px -21px -21px;
-  padding: 12px 21px;
+  margin: 12px calc(var(--modal-pad) * -1) calc(var(--modal-pad-bottom) * -1);
+  padding: 12px var(--modal-pad) var(--modal-foot-bottom);
   border-top: 1px solid var(--line);
-  background: var(--paper);
+  background: var(--modal-surface);
+}
+@media (min-width: 1024px) {
+  .modal:has(.feedback-form) {
+    width: min(100%, 760px);
+  }
+}
+@media (max-width: 1023px) {
+  .modal:has(.save-list-form) {
+    max-height: 90dvh;
+  }
+  .modal:has(.feedback-form) {
+    max-height: min(90dvh, calc(var(--feedback-vh) - 36px));
+  }
 }
 .feedback-shot {
   display: grid;
@@ -4999,243 +4018,15 @@ a.back {
     max-width: 520px;
   }
 }
-
-/* Dashboard hero, daily forecast (#303 PR 2): a block under the weather strip, never inside a weather cell. Whole 28px
-   rows throughout (header 28, chips 84 each, "+N more" 28); no fixed heights, no padding above or below. At 721px and up
-   the days are 3-row chips in an auto-fill grid; at most 720px they are 28px rows (the #285 phone arrangement). */
-.hero-forecast {
-  font-size: 13px;
-  /* the one divider between the strip and the block (the band owns the outer hairlines) */
-  box-shadow: inset 0 1px 0 var(--line);
-}
-.hero-forecast-head {
-  padding-inline: 14px;
-}
-.hero-days {
-  display: grid;
-  /* the chip minimum follows the text size, so three-digit Fahrenheit and larger text still fit one line */
-  grid-template-columns: repeat(auto-fill, minmax(max(80px, 6.5em), 1fr));
-  column-gap: 8px;
-  row-gap: 0;
-  margin: 0;
-  padding: 0 14px;
-  list-style: none;
-}
-.hero-day {
-  display: grid;
-  grid-template-rows: repeat(3, var(--ledger-row));
-  justify-items: center;
-  min-width: 0;
-  line-height: var(--ledger-row);
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-  /* inset hairlines: left and bottom, so two chip rows never double a line */
-  box-shadow:
-    inset 1px 0 0 var(--line),
-    inset 0 -1px 0 var(--line);
-}
-.hero-day-label,
-.hero-day-temps {
-  white-space: nowrap;
-}
-.hero-day-glyph {
-  color: var(--accent-2);
-  font-size: 16px;
-}
-/* The month is only in the phone row ("Fri Nov 6"); the chip reads "Fri 6". */
-.hero-day-month {
-  display: none;
-}
-.hero-days-more {
-  margin: 0;
-  padding-inline: 14px;
-  line-height: var(--ledger-row);
-}
-.hero-days-more a {
-  position: relative;
-  /* The bold link and the regular paragraph are two faces with different metrics; top-aligning keeps the line box at
-     exactly --ledger-row instead of a half pixel taller in WebKit. */
-  vertical-align: top;
-  color: var(--link);
-  font-weight: 700;
-}
-/* The visual line stays 28px; the touch target is 44px tall. */
-.hero-days-more a::after {
-  content: "";
-  position: absolute;
-  inset: -8px 0;
-}
-@media (max-width: 720px) {
-  .hero-days {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .hero-day {
-    grid-template-columns: minmax(0, 1fr) 20px auto;
-    grid-template-rows: none;
-    align-items: center;
-    justify-items: stretch;
-    column-gap: 8px;
-    min-height: var(--ledger-row);
-    text-align: left;
-    box-shadow: inset 0 -1px 0 var(--line);
-  }
-  .hero-day-label {
-    white-space: normal;
-    overflow-wrap: anywhere;
-  }
-  .hero-day-month {
-    display: inline;
-  }
-  .hero-day-glyph {
-    text-align: center;
-  }
-  .hero-day-temps {
-    text-align: right;
-  }
-}
-/* The typical days of a mixed stay (#357): one text row under the cards, never chips, so a chip is always a real forecast.
-   Two 28px lines (the figures, then why they are not a forecast); the text wraps in whole lines. */
-.hero-typical {
-  box-shadow: inset 0 1px 0 var(--line);
-}
-.hero-typical p {
-  margin: 0;
-  padding-inline: 14px;
-  line-height: var(--ledger-row);
-  overflow-wrap: anywhere;
-}
-.hero-typical .weather-part-head {
-  min-height: 0;
-}
-/* A segment of the typical line ("High 92° ·") is never cut at a normal size: the line breaks only between segments. An
-   inline-block is as wide as its text when that fits the line, and no wider than the line when it does not, so only a
-   segment longer than a whole line (larger text on a narrow screen) wraps inside itself instead of pushing the page sideways. */
-.hero-seg {
-  display: inline-block;
-  max-width: 100%;
-  overflow-wrap: anywhere;
-  vertical-align: top;
-}
-.hero-typical-note {
-  color: var(--muted);
-}
-/* The footnote under an all-typical band: the same words as the trip page's footnote. */
-.hero-weather-foot {
-  margin: 0;
-  padding-inline: 14px;
-  font-size: 13px;
-  line-height: var(--ledger-row);
-  overflow-wrap: anywhere;
-  color: var(--muted);
-  box-shadow: inset 0 1px 0 var(--line);
-}
-.hero-other-stays {
-  font-size: 13px;
-  box-shadow: inset 0 1px 0 var(--line);
-}
-/* DM Sans runs wider than the Barlow this line was sized for: keep "Daily forecast for the other stays" on one row at 320px. */
-@media (max-width: 360px) {
-  .hero-other-stays {
-    padding-inline: 10px;
-    font-size: 12px;
-    letter-spacing: -0.01em;
-  }
-}
 @media (min-width: 721px) {
   /* WIDE STACK (container 30em and up): the cells side by side as columns (4 or more wrap to a second row), each cell
      three rows (identity on the left, the range on the right, the note below), then the block full width below. */
   @container (min-width: 30em) {
-    .hero-weather-band .weather-strip {
-      grid-template-columns: repeat(auto-fit, minmax(min(100%, 14em), 1fr));
-      /* every cell draws its left and top hairline; the first column's and the first row's are clipped away */
-      clip-path: inset(1px 0 0 1px);
-    }
-    /* four stays are a balanced 2 x 2, not 3 + 1 */
-    .hero-weather[data-stays="4"] .weather-strip {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-    .weather-strip li,
-    .weather-strip li + li {
-      box-shadow:
-        inset 1px 0 0 var(--line),
-        inset 0 1px 0 var(--line);
-    }
-    .weather-cell-top {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      column-gap: 8px;
-      gap: 0 8px;
-      min-height: 0;
-      padding-top: 0;
-      line-height: var(--ledger-row);
-    }
-    .weather-glyph {
-      order: 1;
-      line-height: var(--ledger-row);
-    }
-    .weather-city {
-      order: 2;
-      flex: 1 1 3.5em;
-      min-width: 0;
-    }
     .weather-range {
       order: 3;
       flex-wrap: wrap;
       justify-content: flex-end;
       margin-left: auto;
-    }
-    .weather-dates {
-      order: 4;
-      flex: 0 0 100%;
-      min-width: 0;
-    }
-  }
-  /* TWO COLUMN (container 40em and up, one stay with a forecast block): the summary on the left, the days on the right, one band the width of
-     the hero. The forecast block's left edge is the divider. */
-  @container (min-width: 40em) {
-    .hero-weather[data-stays="1"] .hero-weather-band:has(> .hero-forecast) {
-      display: grid;
-      grid-template-columns: minmax(12.5em, 17em) minmax(0, 1fr);
-    }
-    .hero-weather[data-stays="1"] .hero-weather-band:has(> .hero-forecast) .weather-strip {
-      clip-path: none;
-    }
-    .hero-weather[data-stays="1"] .hero-weather-band:has(> .hero-forecast) .weather-strip li {
-      box-shadow: none;
-    }
-    /* the left column is the cell stacked (identity, range, note), not the wide-stack three-row cell */
-    .hero-weather[data-stays="1"] .hero-weather-band:has(> .hero-forecast) .weather-cell-top {
-      display: grid;
-      align-items: normal;
-      gap: 2px;
-      min-height: calc(var(--ledger-row) * 4);
-      padding-top: 12px;
-      line-height: inherit;
-    }
-    .hero-weather[data-stays="1"] .hero-weather-band:has(> .hero-forecast) .weather-cell-top > * {
-      order: 0;
-      margin-left: 0;
-    }
-    .hero-weather[data-stays="1"] .hero-weather-band:has(> .hero-forecast) .weather-glyph {
-      line-height: 1;
-    }
-    .hero-weather[data-stays="1"] .hero-weather-band:has(> .hero-forecast) .weather-range {
-      flex-wrap: nowrap;
-      justify-content: normal;
-    }
-    .hero-weather[data-stays="1"] .hero-weather-band:has(> .hero-forecast) > .hero-forecast {
-      box-shadow: inset 1px 0 0 var(--line);
-    }
-    .hero-weather[data-stays="1"] .hero-weather-band:has(> .hero-forecast) .hero-days {
-      grid-template-columns: repeat(auto-fill, minmax(max(88px, 6.5em), 8.5em));
-      justify-content: start;
-    }
-    /* one to three days: wider chips, so the days fill more of the right column */
-    .hero-weather[data-stays="1"]
-      .hero-weather-band:has(> .hero-forecast)
-      .hero-days:is([data-count="1"], [data-count="2"], [data-count="3"]) {
-      grid-template-columns: repeat(auto-fill, minmax(max(88px, 6.5em), 12em));
     }
   }
 }

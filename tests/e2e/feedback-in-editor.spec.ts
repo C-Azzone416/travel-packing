@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { ownerEmailFor } from "./helpers/auth";
-import { DEVICE, legacyPackingLayout } from "./helpers/device";
+import { expectPacking } from "./helpers/packing";
+import { DEVICE } from "./helpers/device";
 import {
   connectedOnTrips,
   fakeFramebriar,
@@ -17,7 +18,7 @@ test.beforeEach(() => fakeFramebriar.reset());
 const editor = (page: Page) => page.getByRole("dialog", { name: "Edit trip" });
 const report = (page: Page) => page.getByRole("dialog", { name: "Send feedback" });
 const entry = (page: Page) => editor(page).getByRole("button", { name: "Send feedback" });
-const bodyOf = (page: Page) => editor(page).locator(".edit-body");
+const bodyOf = (page: Page) => editor(page).locator("[data-edit-body]");
 const CANVAS = /^Your screenshot\. Marks you draw are sent with it/;
 const GRID = 8;
 
@@ -36,7 +37,7 @@ async function rememberPictures(page: Page) {
 
 async function openTripPage(page: Page) {
   await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
-  await expect(page.getByRole("heading", { name: "San Diego", level: 1 })).toBeVisible();
+  await expectPacking(page);
 }
 
 async function openEditorOnTrip(page: Page) {
@@ -70,11 +71,12 @@ async function scrollEditorBody(page: Page, by: number) {
 /** Everything about the editor that must survive opening and cancelling Feedback. */
 async function editorState(page: Page) {
   return {
-    selectedTab: await editor(page)
-      .getByRole("tab", { selected: true })
+    openSection: await editor(page)
+      .locator('button[aria-expanded="true"]')
+      .first()
       .evaluate((node) => node.textContent),
-    dots: await editor(page).locator(".edit-tab-dot").count(),
-    laundry: await editor(page).getByRole("switch", { name: "Laundry access" }).isChecked(),
+    dots: await editor(page).getByRole("img", { name: "edited, not saved yet" }).count(),
+    laundry: await editor(page).getByRole("switch", { name: "Laundry on this trip" }).isChecked(),
     scrollTop: await bodyOf(page).evaluate((node) => Math.round(node.scrollTop)),
     pageScrollY: await page.evaluate(() => window.scrollY),
     bodyOverflow: await page.evaluate(() => document.body.style.overflow),
@@ -145,21 +147,18 @@ async function previewPicture(page: Page) {
 }
 
 test(
-  "the editor header has a Feedback entry on every tab and step; the page's own button stays out of reach",
+  "the editor header has a Feedback entry on every section and state; the page's own button stays out of reach",
   DEVICE,
   async ({ page }) => {
-    await legacyPackingLayout(page);
     await openEditor(page);
     await expect(entry(page)).toHaveCount(1);
     expect(await page.locator(".nav-feedback").evaluate((node) => !!node.closest("[inert]"))).toBe(
       true,
     );
-    await editor(page).getByRole("tab", { name: "Route & dates" }).click();
+    await editor(page).getByRole("button", { name: "Route & dates" }).click();
     await expect(entry(page)).toBeVisible();
-    await editor(page).getByRole("tab", { name: "Packing preferences" }).click();
-    await editor(page).getByRole("switch", { name: "Laundry access" }).click();
-    await editor(page).getByRole("button", { name: "Review changes" }).click();
-    await expect(editor(page).getByRole("button", { name: "Apply changes" })).toBeVisible();
+    await editor(page).getByRole("switch", { name: "Laundry on this trip" }).click();
+    await expect(editor(page).getByRole("button", { name: /^Save \d+ changes$/ })).toBeVisible();
     await expect(entry(page)).toBeEnabled();
     // The editor's own dialog is not the report: no Feedback sheet until the entry is pressed.
     await expect(report(page)).toHaveCount(0);
@@ -170,14 +169,9 @@ test(
   "pressing Feedback: the picture shows the visible editor (not blank, not blurred away), the sheet is on top, the editor is untouched after Cancel",
   DEVICE,
   async ({ page }) => {
-    await legacyPackingLayout(page);
     await rememberPictures(page);
-    // Desktop: just under the laptop view (#385); the phone project keeps the 1280px it always used.
-    await openEditor(page, {
-      width: test.info().project.name === "desktop" ? 1000 : 1280,
-      height: 520,
-    });
-    await editor(page).getByRole("switch", { name: "Laundry access" }).click();
+    await openEditor(page, { width: 1280, height: 520 });
+    await editor(page).getByRole("switch", { name: "Laundry on this trip" }).click();
     await scrollEditorBody(page, 100);
     const before = await editorState(page);
     expect(before.dots).toBe(1);
@@ -270,12 +264,11 @@ test(
   },
 );
 
-test("keyboard: Enter opens it, Tab stays inside each sheet, Escape closes only Feedback, then the editor's own Escape guard", async ({
+test("keyboard: Enter opens it, Tab stays inside each sheet, Escape closes only Feedback, then the editor's own Escape", async ({
   page,
 }) => {
-  await legacyPackingLayout(page);
   await openEditor(page);
-  await editor(page).getByRole("switch", { name: "Laundry access" }).click();
+  await editor(page).getByRole("switch", { name: "Laundry on this trip" }).click();
   await entry(page).focus();
   await page.keyboard.press("Enter");
   await expect(report(page)).toBeVisible();
@@ -295,20 +288,20 @@ test("keyboard: Enter opens it, Tab stays inside each sheet, Escape closes only 
       expect(await focusedIn(editor(page)), `${key} ${step} stays in the editor`).toBe(true);
     }
   }
-  // The editor's own Escape now asks before discarding the unsaved preference.
-  await page.keyboard.press("Escape");
-  await expect(editor(page).getByText("Discard your changes?")).toBeVisible();
   // Space on the entry opens Feedback too.
-  await editor(page).getByRole("button", { name: "Keep editing" }).click();
   await entry(page).focus();
   await page.keyboard.press("Space");
   await expect(report(page)).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(report(page)).toHaveCount(0);
+  // Nothing was saved, so the editor's own Escape leaves at once: no discard prompt (#389).
+  await page.keyboard.press("Escape");
+  await expect(editor(page)).toHaveCount(0);
 });
 
 test("a press outside the Feedback sheet does not close the editor or send anything; Send saves exactly one report", async ({
   page,
 }) => {
-  await legacyPackingLayout(page);
   await openEditor(page);
   const reports = watchReports(page);
   await entry(page).click();
@@ -334,7 +327,6 @@ test("a press outside the Feedback sheet does not close the editor or send anyth
 test("not connected: the entry is there but disabled and not tabbable; the editor is unaffected", async ({
   page,
 }) => {
-  await legacyPackingLayout(page);
   await forgetFeedbackEnrollment(`e2e-${ownerEmailFor(test.info().project.name)}`);
   await openSettings(page);
   await goToTrips(page);
@@ -389,11 +381,15 @@ test(
   "the head holds title, description, Feedback and × on one row without overlap at 320, 390, 721, 768 and 1280, connected or not, and at 200% zoom",
   DEVICE,
   async ({ page }) => {
-    await legacyPackingLayout(page);
     await openEditor(page);
     const widths = [320, 390, 721, 768, 1280];
     for (const width of widths) {
       await page.setViewportSize({ width, height: width < 700 ? 640 : 800 });
+      // The page behind the sheet swaps layout at 1024px; measure once it has.
+      await expect(page.locator("[data-packing-layout]")).toHaveAttribute(
+        "data-packing-layout",
+        width >= 1024 ? "laptop" : "phone",
+      );
       const m = await headMetrics(page);
       const where = `at ${width}px`;
       expect(overlaps(m.entry, m.close), `entry and × ${where}`).toBe(false);
@@ -428,7 +424,9 @@ test(
     expect(overlaps(zoomed.entry, zoomed.title), "entry and title at 200%").toBe(false);
     expect(zoomed.pageOverflow, "no sideways scroll at 200%").toBe(false);
 
-    // The overlap check can fail: pull the entry over the title and the same test says so.
+    // The overlap check can fail: pull the entry over the title and the same test says so. (Below 400px the buttons sit on a line of
+    // their own above the title, so the demonstration is made where they share a row.)
+    await page.setViewportSize({ width: 721, height: 800 });
     await page.evaluate(() => {
       const button = document.querySelector<HTMLElement>("[data-feedback-editor-entry]")!;
       const title = document.querySelector(".modal-head h2")!.getBoundingClientRect();
@@ -443,7 +441,6 @@ test(
 test("disconnected, the head is the same shape at 320 and 1280 (the disabled entry takes the same room)", async ({
   page,
 }) => {
-  await legacyPackingLayout(page);
   await forgetFeedbackEnrollment(`e2e-${ownerEmailFor(test.info().project.name)}`);
   await openSettings(page);
   await goToTrips(page);

@@ -1,11 +1,13 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
-import { DEVICE, legacyPackingLayout } from "./helpers/device";
+import { DEVICE, phoneHomeLayout } from "./helpers/device";
+import { openPastAndArchive, planATrip } from "./helpers/menu";
+import { reviewSheet } from "./helpers/packing";
 import { planAndCreate } from "./helpers/plan";
 
 // Home is the laptop suitcase view from 1024px (#387); this spec's subject is the page below it, so it runs there.
 test.beforeEach(async ({ page }) => {
-  await legacyPackingLayout(page);
+  await phoneHomeLayout(page);
 });
 
 // Historical wording for past trip cards (#301). A fixed clock: San Diego is upcoming (Oct 23–27), Lisbon is past
@@ -16,7 +18,6 @@ test.beforeEach(async ({ page }) => {
 // veto (revert b691527 and delete that block) leaves the wording tests as they are.
 const NOW = new Date("2026-10-16T12:00:00");
 
-const tab = (page: Page, name: RegExp) => page.getByRole("button", { name });
 const card = (page: Page, name: string) => page.getByRole("article", { name });
 const progressbar = (page: Page, destination: string) =>
   page.getByRole("progressbar", { name: `${destination} packing progress` });
@@ -29,7 +30,7 @@ async function openDashboard(page: Page) {
 
 /** The past card for a trip, once the Past & archive tab is open. */
 async function pastCard(page: Page, name: string): Promise<Locator> {
-  await tab(page, /Past & archive/).click();
+  await openPastAndArchive(page);
   return card(page, name);
 }
 
@@ -49,8 +50,8 @@ async function expectPastCard(
 }
 
 /**
- * Lisbon's review screen, from the card's trip link (whatever its label, so this works with or without the
- * Review bag commit). The trip screen only links to the review once everything is packed, so go to /review directly.
+ * Lisbon's "Review your bag" sheet, from the card's trip link (whatever its label, so this works with or without the
+ * Review bag commit). /review forwards to the Packing page with the sheet open (#411), so go there directly.
  */
 async function openLisbonReview(page: Page) {
   const article = await pastCard(page, "Lisbon");
@@ -60,16 +61,13 @@ async function openLisbonReview(page: Page) {
     .getAttribute("href");
   expect(href).toMatch(/^\/trips\/[^/]+$/);
   await page.goto(`${href}/review`);
-  await expect(page.getByRole("heading", { name: "Toiletries · Bathroom" })).toBeVisible();
+  await expect(reviewSheet(page)).toBeVisible();
 }
 
 /** Unchecks the first packed item on Lisbon's review, which takes the trip out of Ready (review.spec). */
 async function uncheckOneOnLisbon(page: Page) {
   await openLisbonReview(page);
-  await page
-    .getByRole("button", { name: /mark unpacked$/ })
-    .first()
-    .click();
+  await reviewSheet(page).getByRole("checkbox", { checked: true }).first().uncheck();
   await expect(page.getByText(/^No longer ready: an item was unchecked$/)).toBeVisible();
   await page.goto("/");
 }
@@ -80,11 +78,13 @@ test(
   async ({ page }) => {
     await openDashboard(page);
 
-    // Upcoming, unchanged: San Diego is the next departure (the hero), which still says what is left and
-    // links to "Continue packing".
-    await expect(progressbar(page, "San Diego")).toHaveAttribute("aria-valuetext", "18% packed");
-    await expect(page.getByText("27 left", { exact: true })).toBeVisible();
+    // Upcoming: San Diego is the next departure (the phone Home's tag). Its Pack panel counts what is in the bag and
+    // links to "Continue packing"; there is no past-trip wording on it.
+    await expect(page.getByRole("heading", { name: /in the bag/ })).toHaveText(
+      /^\d+ \/ \d+ in the bag$/,
+    );
     await expect(page.getByRole("link", { name: "Continue packing: San Diego" })).toBeVisible();
+    await expect(page.getByText(/Marked Ready|Past trip|Archived trip/)).toHaveCount(0);
 
     // Past, seeded Ready: Marked Ready with the counts.
     await expectPastCard(page, "Lisbon", {
@@ -107,18 +107,16 @@ test(
 
     // Past, fully packed and not Ready: pack everything again (the trip stays out of Ready), then All 29 packed.
     await openLisbonReview(page);
-    const unpacked = page.getByRole("button", { name: /^Mark packed/ });
+    const unpacked = reviewSheet(page).getByRole("checkbox", { checked: false });
     while ((await unpacked.count()) > 0) {
       const before = await unpacked.count();
-      await unpacked.first().click();
+      await unpacked.first().check();
       await expect.poll(() => unpacked.count()).toBeLessThan(before);
-      const notYet = page.getByRole("dialog").getByRole("button", { name: "Not yet" });
-      if (await notYet.isVisible()) await notYet.click();
     }
-    const placeBag = page.getByRole("button", { name: "Put bag in suitcase" });
+    const placeBag = reviewSheet(page).getByRole("button", { name: "Put bag in suitcase" });
     if (await placeBag.count()) {
       await placeBag.click();
-      await page.getByRole("dialog").getByRole("button", { name: "Confirm" }).click();
+      await expect(reviewSheet(page).getByRole("button", { name: "Undo placement" })).toBeVisible();
     }
     await page.goto("/");
     await expectPastCard(page, "Lisbon", {
@@ -137,14 +135,14 @@ test(
 
     // Ends 2026-10-15, the day before the fixed today: past, historical wording, not Ready.
     await page.goto("/");
-    await page.getByRole("link", { name: /Plan a trip/ }).click();
+    await planATrip(page);
     await planAndCreate(page, {
       query: "paris",
       option: /Paris/,
       start: "2026-10-13",
       end: "2026-10-15",
     });
-    await expect(page.getByRole("link", { name: /Plan a trip/ })).toBeVisible();
+    await expect(page.getByRole("tablist", { name: "Trip sections" })).toBeVisible();
 
     await page.goto("/");
     const paris = await pastCard(page, "Paris");
@@ -155,24 +153,24 @@ test(
 
     // Ends 2026-10-16, today: not past, so it stays upcoming with today's wording.
     await page.goto("/");
-    await page.getByRole("link", { name: /Plan a trip/ }).click();
+    await planATrip(page);
     await planAndCreate(page, {
       query: "paris",
       option: /Paris/,
       start: "2026-10-14",
       end: "2026-10-16",
     });
-    await expect(page.getByRole("link", { name: /Plan a trip/ })).toBeVisible();
+    await expect(page.getByRole("tablist", { name: "Trip sections" })).toBeVisible();
 
     await page.goto("/");
-    const upcoming = card(page, "Paris");
-    await expect(upcoming).toBeVisible();
-    await expect(upcoming.getByText("Past trip")).toHaveCount(0);
-    // Paris is under way, so the dashboard shows it as the next departure: it keeps today's progress wording
-    // ("N% packed") and its packing link.
-    await expect(progressbar(page, "Paris")).toHaveAttribute("aria-valuetext", "0% packed");
+    await expect(page.getByRole("region", { name: "Paris" })).toBeVisible();
+    await expect(page.getByText("Past trip")).toHaveCount(0);
+    // Paris is under way, so the phone Home shows it as the next trip: nothing packed, and its packing link.
+    await expect(page.getByRole("heading", { name: /in the bag/ })).toHaveText(
+      /^0 \/ \d+ in the bag$/,
+    );
     await expect(
-      page.getByRole("link", { name: /^(Continue|Keep) packing: Paris$/ }),
+      page.getByRole("link", { name: /^(Continue packing|Start packing|Open list): Paris$/ }),
     ).toBeVisible();
   },
 );

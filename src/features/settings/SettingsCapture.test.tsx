@@ -56,7 +56,7 @@ describe("the Settings page as a screenshot sees it", () => {
     expect(source).toContain("Account");
     expect(source).toContain("Sign out");
     expect(source).toContain(ORDINARY);
-    expect(source).toContain("Appearance");
+    expect(source).toContain("Colour scheme");
   });
 
   it("is provably clean: the identity region carries its exclusion", () => {

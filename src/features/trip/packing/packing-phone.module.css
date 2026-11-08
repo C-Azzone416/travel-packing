@@ -1,0 +1,401 @@
+/* Packing, phone (#386; spec on #376 part 3 section 1.4 and section 4). Rendered below 1024px only: the one breakpoint of the
+   redesign. Colours are the palette tokens and nothing else. Nothing here may push the page sideways down to 195px: every flex
+   and grid child has min-width: 0, user strings wrap anywhere, and the cube bar and city toggle are the only scrollers. */
+:global(body):has(.page) {
+  min-width: 0;
+}
+/* The page ends 16px above the tab bar (the shell's own bottom padding), so the fixed-height layout fills the screen exactly. */
+:global(main):has(.page) {
+  padding-bottom: 0;
+}
+.page {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  min-width: 0;
+  max-width: 640px;
+  margin-inline: auto;
+}
+.stage {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.suitcase {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+.suitcase > div,
+.suitcase > div > [data-interior] {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+/* Fixed layout: from 640px tall, with text at its normal size, the stage is one screen (header, bar, forecast, pills and action
+   bar keep their size; the suitcase takes the rest, at least 220px, and its list scrolls inside). A short phone, a phone on
+   its side, zoomed text or an overfull stage (review rows open) falls back to natural flow: the page scrolls and the action
+   bar sticks above the tab bar. */
+.actions {
+  position: sticky;
+  bottom: calc(var(--sticky-bottom) + 8px);
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 0;
+  background: var(--page);
+}
+@media (min-height: 640px) {
+  .page:not([data-zoomed]) .stage {
+    min-height: calc(
+      100dvh - env(safe-area-inset-top, 0px) - 8px - 44px - 4px - 8px - var(--sticky-bottom) - 16px
+    );
+  }
+  .page:not([data-zoomed]) .suitcase {
+    flex: 1 1 0;
+    min-height: 220px;
+  }
+}
+@media (min-height: 640px) and (max-height: 700px) {
+  .page:not([data-zoomed]) .suitcase {
+    max-height: 220px;
+  }
+}
+
+/* ---- Header ---- */
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  min-width: 0;
+  padding-inline: 4px;
+}
+.title {
+  margin: 0;
+  min-width: 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: var(--fs-page-title);
+  font-weight: var(--fw-heading-xl);
+  line-height: var(--lh-page-title);
+  letter-spacing: var(--tracking-title);
+  overflow-wrap: anywhere;
+}
+.headEnd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.laundry {
+  position: relative;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: center;
+  width: 104px;
+  min-height: 30px;
+  padding: 0 6px;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+}
+/* Tap area: 44px high although the pill is drawn 30px (the same trick as the filter pills). */
+.laundry::after {
+  content: "";
+  position: absolute;
+  inset: -7px 0;
+}
+.laundryOn {
+  background: var(--dark);
+  color: var(--onDark);
+}
+.laundryOff {
+  border-color: var(--tint);
+  background: var(--paper);
+  color: var(--ink);
+}
+.laundry:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+.laundry:focus-visible,
+.allIn:focus-visible,
+.next:focus-visible {
+  outline: 3px solid var(--info);
+  outline-offset: 2px;
+}
+.count {
+  margin: 0;
+  white-space: nowrap;
+  color: var(--ink);
+}
+.countNow {
+  font-family: var(--font-display);
+  font-size: var(--fs-totals);
+  font-weight: var(--fw-heading-xl);
+  line-height: 1;
+}
+.count[data-all-packed] .countNow {
+  color: var(--good);
+}
+/* A Ready trip: "Ready to go" with its two text actions under the title (#411). */
+.readyRow {
+  display: flex;
+  flex-wrap: wrap;
+  padding-inline: 4px;
+  align-items: center;
+  gap: 4px 16px;
+  min-width: 0;
+}
+.readyLine {
+  margin: 0;
+  color: var(--good);
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+}
+.textButton {
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.textButton:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+.textButton:focus-visible {
+  outline: 3px solid var(--info);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.countOf {
+  color: var(--muted);
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: var(--fw-heading);
+}
+
+/* ---- Cube bar: the one place a phone may scroll sideways ---- */
+.barWrap {
+  min-width: 0;
+}
+.bar {
+  display: flex;
+  gap: 10px;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+}
+.bar::-webkit-scrollbar {
+  display: none;
+}
+.bar > li {
+  flex: none;
+  min-width: 82px;
+  scroll-snap-align: start;
+}
+.bar > li > * {
+  width: 100%;
+  height: 100%;
+}
+
+/* ---- Filter pills ---- */
+.pills {
+  align-items: center;
+  padding-inline: 2px;
+}
+
+/* ---- Action bar ---- */
+.allIn,
+.next {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 52px;
+  border-radius: 999px;
+  font-family: var(--font-body);
+  font-size: var(--fs-button);
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+.allIn {
+  flex: 0 0 auto;
+  min-width: 82px;
+  padding: 0 18px;
+  border: 2px solid var(--tint);
+  background: var(--paper);
+  color: var(--ink);
+}
+.allIn:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.next {
+  flex: 1 1 120px;
+  min-width: 0;
+  padding: 6px 16px;
+  border: 0;
+  background: var(--dark);
+  color: var(--onDark);
+}
+
+/* ---- Under the stage ---- */
+.below {
+  composes: below from "./packing.module.css";
+}
+
+/* ---- Forecast card: one city at a time ---- */
+.phoneForecast {
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+  border: 2px solid var(--line);
+  border-radius: 16px;
+  background: var(--paper2);
+}
+.phoneForecastAlert {
+  border-color: var(--accent);
+}
+.phoneForecast[data-review-open="true"] {
+  max-height: min(300px, 36dvh);
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+.phoneForecastHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+.cityTabs {
+  display: flex;
+  max-width: 100%;
+  min-width: 0;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--tint);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+.cityTabs::-webkit-scrollbar {
+  display: none;
+}
+.cityTab {
+  position: relative;
+  box-sizing: border-box;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.cityTab::after {
+  content: "";
+  position: absolute;
+  inset: -7px 0;
+}
+.cityTab:focus-visible {
+  outline: 3px solid var(--info);
+  outline-offset: 1px;
+}
+.cityTabOn {
+  background: var(--dark);
+  color: var(--onDark);
+}
+.cityTabName {
+  min-width: 0;
+}
+.cityDot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.cityOnly {
+  margin: 0;
+  min-width: 0;
+  padding-inline: 6px;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: var(--fs-section-s);
+  font-weight: var(--fw-heading);
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+.cityOnly:focus-visible {
+  outline: 3px solid var(--info);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.reviewPhone {
+  position: relative;
+  min-height: 30px;
+}
+.reviewPhone::after {
+  content: "";
+  position: absolute;
+  inset: -7px 0;
+}
+.phonePanel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+}
+
+@media (min-width: 360px) {
+  .head,
+  .headEnd {
+    flex-wrap: nowrap;
+  }
+  .title {
+    flex: none;
+  }
+}

@@ -56,14 +56,14 @@ test("captures the reviewed Staples resilience states", async ({ page }, testInf
     await abortNextAction(page);
     await page.goto("/");
     await expect(page.getByRole("status", { name: "Staples setup unavailable" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Your travel ledger" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^Where to (first|next)\?$/ })).toBeVisible();
     await page.screenshot({
       path: join(SHOTS!, `${theme}-${width}-setup-read-failure.png`),
       fullPage: true,
     });
     await page.unroute("**/*");
     await page.reload();
-    await expect(page.getByRole("heading", { name: "Your travel ledger" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^Where to (first|next)\?$/ })).toBeVisible();
   }
 
   const dismissFailureCells: readonly { theme: Appearance; width: 1280 | 390 }[] = [

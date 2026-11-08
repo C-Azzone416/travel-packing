@@ -35,6 +35,7 @@ function actions(result: TripsActionResult = ok) {
 const signals = { promptBagPlacement: true, reviewPrompt: false };
 const TRIP_COMMANDS = [
   "setPacked",
+  "setPackedMany",
   "togglePacked",
   "incrementPacked",
   "decrementPacked",
@@ -55,6 +56,7 @@ const TRIP_COMMANDS = [
   "setTheme",
   "setStampLabels",
   "setStops",
+  "setTravelMode",
 ] as const;
 
 function tripActions(result: TripCommandResult = { ok: true, trip, signals }) {
@@ -98,6 +100,7 @@ describe("createServerTripsSource: per-trip commands", () => {
   const invocations = (source: ReturnType<typeof createServerTripsSource>) =>
     ({
       setPacked: () => source.setPacked("t", "i", 3),
+      setPackedMany: () => source.setPackedMany("t", [{ itemId: "i", packed: 3 }]),
       togglePacked: () => source.togglePacked("t", "i"),
       incrementPacked: () => source.incrementPacked("t", "i"),
       decrementPacked: () => source.decrementPacked("t", "i"),
@@ -117,7 +120,8 @@ describe("createServerTripsSource: per-trip commands", () => {
       updatePreferences: () => source.updatePreferences("t", config, "stamp"),
       setTheme: () => source.setTheme("t", "beach"),
       setStampLabels: () => source.setStampLabels("t", "ABC", null),
-      setStops: () => source.setStops("t", []),
+      setStops: () => source.setStops("t", [], "T1"),
+      setTravelMode: () => source.setTravelMode("t", "drive", "T1"),
     }) satisfies Record<(typeof TRIP_COMMANDS)[number], () => Promise<unknown>>;
 
   it("passes every command's arguments to the matching action and returns the trip and signals", async () => {
@@ -127,6 +131,7 @@ describe("createServerTripsSource: per-trip commands", () => {
     for (const name of TRIP_COMMANDS) expect(await run[name](), name).toEqual({ trip, signals });
     expect(calls).toEqual([
       ["setPacked", "t", "i", 3],
+      ["setPackedMany", "t", [{ itemId: "i", packed: 3 }]],
       ["togglePacked", "t", "i"],
       ["incrementPacked", "t", "i"],
       ["decrementPacked", "t", "i"],
@@ -146,7 +151,8 @@ describe("createServerTripsSource: per-trip commands", () => {
       ["updatePreferences", "t", config, "stamp"],
       ["setTheme", "t", "beach"],
       ["setStampLabels", "t", "ABC", null],
-      ["setStops", "t", []],
+      ["setStops", "t", [], "T1"],
+      ["setTravelMode", "t", "drive", "T1"],
     ]);
   });
 

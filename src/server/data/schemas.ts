@@ -54,6 +54,14 @@ export const setPackedInput = z.object({
   itemId,
   packed: z.number().int().min(0).max(999),
 });
+/** "All in" and its Undo: up to 200 items' packed counts in one change. */
+export const setPackedManyInput = z.object({
+  tripId,
+  entries: z
+    .array(z.object({ itemId, packed: z.number().int().min(0).max(999) }))
+    .min(1)
+    .max(200),
+});
 export const editItemInput = z.object({ tripId, itemId, name, qty, timing, scope });
 export const removeItemInput = z.object({ tripId, itemId, scope });
 export const addToiletryItemInput = z.object({
@@ -192,10 +200,20 @@ export const copyTripInput = z
   })
   .superRefine(oneRouteForm);
 /** Replace the stops of a saved trip. */
-export const setStopsInput = z.object({ tripId, stops: stopsSelection });
+export const setStopsInput = z.object({
+  tripId,
+  stops: stopsSelection,
+  /** The trip's `updatedAt` the editor was based on (#389); if the trip was saved since, nothing is applied (STALE). */
+  basedOn: z.string().max(40).optional(),
+});
 /** Change a saved trip's origin, travel mode and/or name; a field left out is unchanged, null clears it. At least one is required. */
 export const updateTripTravelInput = z
-  .object({ tripId, ...travelFields })
+  .object({
+    tripId,
+    ...travelFields,
+    /** The trip's `updatedAt` the editor was based on (#389); if the trip was saved since, nothing is applied (STALE). */
+    basedOn: z.string().max(40).optional(),
+  })
   .superRefine((value, ctx) => {
     if (value.origin === undefined && value.travelMode === undefined && value.name === undefined) {
       ctx.addIssue({ code: "custom", path: ["origin"], message: "Nothing to change" });

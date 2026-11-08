@@ -15,6 +15,7 @@ import { StapleRow } from "./StapleRow";
 import { StapleSheet } from "./StapleSheet";
 import { StaplesPreview } from "./StaplesPreview";
 import { StaplesTabs } from "./StaplesTabs";
+import { STAPLE_COUNT_RULES, STAPLE_LAUNDRY_NOTE } from "./staple-count-rules";
 import {
   DEFAULT_NIGHTS,
   STAPLE_CUBES,
@@ -190,6 +191,17 @@ export function StaplesScreen({
         a passport get added to a trip, and coats come from the weather. Tap an item to change its
         count, cube or laundry setting.
       </p>
+      <details className={styles.countRules}>
+        <summary>How counts work</summary>
+        <ul>
+          {STAPLE_COUNT_RULES.map((rule) => (
+            <li key={rule.cadence}>
+              <strong>{rule.label}</strong> <span>{rule.description}</span>
+            </li>
+          ))}
+        </ul>
+        <p>{STAPLE_LAUNDRY_NOTE}</p>
+      </details>
     </header>
   );
   const tabs = <StaplesTabs current="staples" />;

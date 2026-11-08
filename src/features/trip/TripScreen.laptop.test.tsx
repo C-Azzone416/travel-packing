@@ -568,6 +568,8 @@ describe("the forecast and the weather review rows", () => {
     const review = within(card).getByRole("button", { name: /\d+ to review/ });
     expect(review.getAttribute("aria-expanded")).toBe("false");
     expect(screen.getByText(/\d+ new to review/)).toBeTruthy();
+    // The forecast is Open-Meteo's: its attribution is on the card block.
+    expect(screen.getByRole("link", { name: "Weather data by Open-Meteo.com" })).toBeTruthy();
     // Nothing in the bag count changed: suggestions are not items.
   });
 
@@ -765,20 +767,25 @@ describe("the toiletry bag step and what sits under the suitcase", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     await user.click(screen.getByRole("button", { name: "Edit trip" }));
     expect(await screen.findByRole("dialog")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Change theme" })).toBeNull();
   });
 
-  it("shows the Ready card for a Ready trip, and the review prompt once everything is checked", async () => {
+  it("shows the green Ready ribbon and 'Ready to go' for a Ready trip, and Mark as not ready brings back the gold All packed ribbon and the banner", async () => {
     const { user, base } = setup({ tripId: "lisbon" });
     await screen.findByRole("heading", { name: "Packing", level: 1 });
-    expect(screen.getByText("You’re ready to go.")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Review bag again" }).getAttribute("href")).toBe(
-      "/trips/lisbon/review",
-    );
+    expect(document.querySelector('[data-packed-ribbon="good"]')?.textContent).toContain("Ready");
+    expect(screen.getByText("Ready to go")).toBeTruthy();
+    expect(screen.queryByText(/Everything is in\./)).toBeNull();
     await user.click(screen.getByRole("button", { name: "Mark as not ready" }));
     await waitFor(() => expect(tripOf(base, "lisbon").ready).toBe(false));
-    expect(await screen.findByText("Everything is checked. Want to review?")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Review your bag" }).getAttribute("href")).toBe(
-      "/trips/lisbon/review",
+    expect(await screen.findByText("Progress kept.")).toBeTruthy();
+    expect(document.querySelector('[data-packed-ribbon="good"]')).toBeNull();
+    expect(document.querySelector('[data-packed-ribbon="gold"]')?.textContent).toContain(
+      "All packed",
     );
+    expect(document.querySelector('[data-packed-state="packed"]')?.textContent).toContain(
+      "All packed",
+    );
+    expect(screen.getByText(/Everything is in\. Review your bag/)).toBeTruthy();
   });
 });

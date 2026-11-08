@@ -43,6 +43,7 @@ const actions = vi.hoisted(() => {
     commands: Object.fromEntries(
       [
         "setPackedAction",
+        "setPackedManyAction",
         "togglePackedAction",
         "incrementPackedAction",
         "decrementPackedAction",
@@ -64,6 +65,7 @@ const actions = vi.hoisted(() => {
         "setThemeAction",
         "setStampLabelsAction",
         "setStopsAction",
+        "setTravelModeAction",
       ].map(command),
     ),
   };
@@ -189,6 +191,12 @@ describe("TripsSourceProvider", () => {
         ["t", "i", 3],
       ],
       [
+        "setPackedMany",
+        (s) => s.setPackedMany("t", [{ itemId: "i", packed: 3 }]),
+        () => actions.commands.setPackedManyAction,
+        ["t", [{ itemId: "i", packed: 3 }]],
+      ],
+      [
         "togglePacked",
         (s) => s.togglePacked("t", "i"),
         () => actions.commands.togglePackedAction,
@@ -298,7 +306,18 @@ describe("TripsSourceProvider", () => {
         () => actions.commands.setStampLabelsAction,
         ["t", "ABC", null],
       ],
-      ["setStops", (s) => s.setStops("t", []), () => actions.commands.setStopsAction, ["t", []]],
+      [
+        "setStops",
+        (s) => s.setStops("t", [], "T1"),
+        () => actions.commands.setStopsAction,
+        ["t", [], "T1"],
+      ],
+      [
+        "setTravelMode",
+        (s) => s.setTravelMode("t", "drive", "T1"),
+        () => actions.commands.setTravelModeAction,
+        ["t", "drive", "T1"],
+      ],
     ];
 
     const everyAction = () => [

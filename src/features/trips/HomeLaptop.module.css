@@ -110,9 +110,7 @@
   background: var(--dark2);
 }
 .primary:focus-visible,
-.link:focus-visible,
-.cityButton:focus-visible,
-.miniLink:focus-visible {
+.link:focus-visible {
   outline: 3px solid var(--info);
   outline-offset: 2px;
 }
@@ -207,111 +205,6 @@
 .factsText {
   margin: 0;
 }
-.packFor {
-  margin-top: 22px;
-  display: grid;
-  gap: 10px;
-}
-.packFor > .eyebrow {
-  margin-bottom: -2px;
-}
-.cityList {
-  display: grid;
-  gap: 10px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.cityRow {
-  box-sizing: border-box;
-  min-width: 0;
-  border: 2px solid var(--tint);
-  border-radius: 16px;
-  background: var(--paper);
-  color: var(--ink);
-}
-.cityRow[data-alert="true"] {
-  border-color: var(--accent);
-  background: var(--accentSoft);
-}
-.cityHead {
-  margin: 0;
-  font: inherit;
-}
-.cityButton,
-.cityStatic {
-  box-sizing: border-box;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px 12px;
-  width: 100%;
-  min-height: 46px;
-  padding: 8px 14px;
-  border: 0;
-  background: none;
-  color: inherit;
-  font-family: var(--font-body);
-  font-size: 17px;
-  line-height: 1.3;
-  text-align: start;
-}
-.cityButton {
-  cursor: pointer;
-  border-radius: 14px;
-}
-.cityText {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.cityText strong {
-  font-weight: 700;
-}
-.cityText span {
-  color: var(--muted);
-  font-weight: 400;
-}
-.cityState {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--accent);
-  font-size: 14px;
-  font-weight: 600;
-}
-.cityRow:not([data-alert="true"]) .cityState {
-  color: var(--muted);
-}
-.dayGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
-  gap: 6px;
-  margin: 0;
-  padding: 0 12px 12px;
-  list-style: none;
-}
-.dayGrid > li {
-  min-width: 0;
-  display: flex;
-}
-.dayGrid > li > * {
-  flex: 1;
-}
-.more {
-  margin: 0;
-  padding: 0 14px 12px;
-  font-size: 14px;
-}
-.more a {
-  color: var(--ink);
-  font-weight: 600;
-}
-.weatherNote {
-  margin: 0;
-  color: var(--muted);
-  font-size: 14px;
-}
 
 /* ---- Upcoming ---- */
 .upHead {
@@ -348,53 +241,6 @@
   .upTitle {
     font-size: 23px;
   }
-}
-.upList {
-  display: grid;
-  gap: 8px;
-  margin: 12px 0 0;
-  padding: 0;
-  list-style: none;
-}
-.miniLink {
-  display: block;
-  color: inherit;
-  text-decoration: none;
-  border-radius: 18px;
-}
-.miniRow {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  min-width: 0;
-}
-.miniDate {
-  flex: none;
-  width: 56px;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  color: var(--ink);
-}
-.miniName {
-  flex: 1;
-  min-width: 0;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  font-family: var(--font-display);
-  font-weight: 800;
-  font-size: 20px;
-  line-height: 1.15;
-  overflow-wrap: anywhere;
-}
-.miniRoute {
-  flex: none;
-  max-width: 35%;
-  color: var(--muted);
-  font-size: 13px;
-  overflow-wrap: anywhere;
 }
 
 /* ---- No next trip (placeholder until #409) ---- */
