@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // All packed, "Review your bag" and Ready on the Packing screen (#411), on both layouts: the ribbon and banner, the sheet, the
 // toiletry-bag gate, "I'm ready to go", the Ready chip and "Mark as not ready", and the ?review=1 deep link.
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sampleLifecycleState } from "@/features/trips/fixtures";
@@ -436,5 +436,81 @@ describe("round 3: retry and URL clean-up are scoped", () => {
     await waitFor(() => expect(trip().ready).toBe(true));
     await waitFor(() => expect(window.location.search).toBe(""));
     expect(window.location.pathname).toBe("/trips/san-diego");
+  });
+
+  it("two Retry presses in the same tick, before the row re-renders, send ONE write (the retryingRef guard)", async () => {
+    const retry = deferred<void>();
+    let calls = 0;
+    const { user, trip } = setup({
+      short: 1,
+      openReview: true,
+      wrap: (base) => ({
+        setPacked: async (id: string, itemId: string, packed: number) => {
+          if (++calls === 1) throw new Error("offline");
+          await retry.promise;
+          return base.setPacked(id, itemId, packed);
+        },
+      }),
+    });
+    const dialog = await sheet();
+    const first = trip().items[0];
+    await user.click(within(dialog).getAllByRole("checkbox")[0]);
+    const button = await within(dialog).findByRole("button", {
+      name: new RegExp(`^Retry ${first.name}`),
+    });
+    // Both presses land inside one act scope: no re-render (which would detach the button) happens between them.
+    act(() => {
+      button.click();
+      expect(button.isConnected).toBe(true);
+      button.click();
+    });
+    retry.resolve();
+    await waitFor(() => expect(trip().items[0].packed).toBe(first.qty));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(calls).toBe(2);
+  });
+
+  it("closeReviewSheet's mounted guard: a Ready write that settles after unmount leaves its own ?review address alone", async () => {
+    const gate = deferred<void>();
+    window.history.replaceState(null, "", "/trips/san-diego?review=1");
+    const { user, view } = setup({
+      bag: true,
+      openReview: true,
+      wrap: (base) => ({
+        markReady: async (id: string) => {
+          await gate.promise;
+          return base.markReady(id);
+        },
+      }),
+    });
+    const dialog = await sheet();
+    await user.click(within(dialog).getByRole("button", { name: "I’m ready to go" }));
+    view.unmount();
+    // The address still belongs to this trip, so only the mounted guard can stop the rewrite.
+    gate.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(window.location.pathname + window.location.search).toBe("/trips/san-diego?review=1");
+  });
+
+  it("closeReviewSheet's own-path guard: a Ready write that settles while still mounted leaves another trip's ?review address alone", async () => {
+    const gate = deferred<void>();
+    window.history.replaceState(null, "", "/trips/san-diego?review=1");
+    const { user } = setup({
+      bag: true,
+      openReview: true,
+      wrap: (base) => ({
+        markReady: async (id: string) => {
+          await gate.promise;
+          return base.markReady(id);
+        },
+      }),
+    });
+    const dialog = await sheet();
+    await user.click(within(dialog).getByRole("button", { name: "I’m ready to go" }));
+    // Still mounted, but the address is another trip's: only the own-path check can stop the rewrite.
+    window.history.replaceState(null, "", "/trips/lisbon?review=1");
+    gate.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(window.location.pathname + window.location.search).toBe("/trips/lisbon?review=1");
   });
 });
