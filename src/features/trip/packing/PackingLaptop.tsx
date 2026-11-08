@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 import { CubeRailItem, PackedRibbon, Suitcase } from "@/components/suitcase";
 import { Icon } from "@/components/ui/Icon";
 import type { Cube } from "@/domain/cubes";
@@ -10,20 +10,13 @@ import type { LifecycleTrip } from "@/domain/trip-lifecycle";
 import type { PackedState } from "../packed-state";
 import { CubePanel, type AddOutcome } from "./CubePanel";
 import { PackedBanner } from "./PackedBanner";
+import type { PackingViewState } from "./use-packing-view-state";
 import { PackingHeader } from "./PackingHeader";
-import {
-  buildCubeViews,
-  headline,
-  isPacked,
-  type CubeFilter,
-  type CubeView,
-} from "./packing-model";
+import { buildCubeViews, headline, isPacked, type CubeView } from "./packing-model";
 import styles from "./packing.module.css";
 
 export interface PackingLaptopProps {
   trip: LifecycleTrip;
-  /** Which cube opens first (the Home tiles link here with ?cube=). Falls back to the first cube. */
-  openCube?: Cube;
   failedRows: ReadonlySet<string>;
   laundryBusy: boolean;
   onLaundry: (next: boolean) => void;
@@ -55,13 +48,14 @@ export interface PackingLaptopProps {
   tablet?: boolean;
   /** Packs every unpacked item of the cube in ONE change (resolves true when saved). Needed for the tablet footer. */
   onAllIn?: (view: CubeView) => Promise<boolean>;
+  /** The open cube, filters, Edit list and All in progress, kept by the screen so a layout change loses none of them. */
+  viewState: PackingViewState;
 }
 
 // The laptop (>= 1024px) Packing view (#385): header, Forecast, and the suitcase with the cube rail on the left and the
 // open cube on the right. The screen keeps all data flow (saves, authorization, optimistic counts); this only draws.
 export function PackingLaptop({
   trip,
-  openCube,
   failedRows,
   laundryBusy,
   onLaundry,
@@ -84,16 +78,15 @@ export function PackingLaptop({
   onDismissBanner,
   tablet,
   onAllIn,
+  viewState,
 }: PackingLaptopProps) {
   const views = buildCubeViews(trip);
-  const [chosen, setChosen] = useState<Cube | undefined>(openCube);
-  const [filters, setFilters] = useState<Partial<Record<Cube, CubeFilter>>>({});
-  const [editing, setEditing] = useState(false);
+  const { chosen, setChosen, filters, setFilters, editing, setEditing, packing, setPacking } =
+    viewState;
   const panelId = useId();
   const titleId = useId();
   const switched = useRef(false);
   const next = useRef<HTMLElement | null>(null);
-  const [packingAll, setPackingAll] = useState(false);
   // The cube that is open: the chosen one while it is still drawn (an emptied cube disappears), else the first.
   const current = views.find((view) => view.cube === chosen) ?? views[0];
 
@@ -112,10 +105,10 @@ export function PackingLaptop({
   };
   const following = views[views.indexOf(current) + 1];
   const allIn = async () => {
-    if (packingAll || !onAllIn) return;
-    setPackingAll(true);
+    if (packing || !onAllIn) return;
+    setPacking(true);
     const saved = await onAllIn(current);
-    setPackingAll(false);
+    setPacking(false);
     if (saved) next.current?.focus();
   };
   const bar =
@@ -124,7 +117,7 @@ export function PackingLaptop({
         <button
           type="button"
           className={styles.tabletAllIn}
-          disabled={current.items.every(isPacked) || packingAll}
+          disabled={current.items.every(isPacked) || packing}
           onClick={() => void allIn()}
         >
           All in

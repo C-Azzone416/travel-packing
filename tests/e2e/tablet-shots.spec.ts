@@ -45,3 +45,13 @@ test("staples-t-ocean-820", async ({ page }) => {
   await expect(page.getByRole("region", { name: "Clothing" })).toBeVisible();
   await shot(page, "staples-t-ocean-820");
 });
+
+test("review-t-ocean-820", async ({ page }) => {
+  await start(page, 820, 1100);
+  const href = (await page
+    .getByRole("link", { name: "Continue packing: San Diego" })
+    .getAttribute("href"))!;
+  await page.goto(`${href.split("?")[0]}?review=1`);
+  await expect(page.getByRole("dialog", { name: "Review your bag" })).toBeVisible();
+  await shot(page, "review-t-ocean-820");
+});

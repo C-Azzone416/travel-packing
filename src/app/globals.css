@@ -552,6 +552,17 @@ p {
   }
 }
 
+/* 768-1023 (#414): Review your bag keeps its 560px right-anchored sheet (spec #393 part 2 section 5.2) over the usual scrim. */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .modal-backdrop.modal-backdrop-side:has(.modal-tablet) {
+    background: color-mix(in srgb, var(--darkEdge) 55%, transparent);
+  }
+  .modal.modal-side.modal-tablet {
+    width: min(100%, 560px);
+    border-left: 1px solid var(--line);
+  }
+}
+
 /* Plain toasts sit above the nav; the assertive error region is separate. */
 .toast-region {
   position: fixed;

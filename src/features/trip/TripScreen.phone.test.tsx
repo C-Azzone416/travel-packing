@@ -26,9 +26,16 @@ vi.mock("next/navigation", () => ({
 
 // The viewport width the test pretends to have: a `(min-width: Npx)` query matches when the width is at least N.
 let width = 390;
+// Resizes the pretend window and tells every `matchMedia` listener, the way a rotation or a split-view change does.
+const listeners = new Set<() => void>();
+const resizeTo = (next: number) => {
+  width = next;
+  act(() => listeners.forEach((listener) => listener()));
+};
 const realMatchMedia = window.matchMedia;
 beforeEach(() => {
   width = 390;
+  listeners.clear();
   window.matchMedia = ((query: string) => {
     const min = Number(/min-width: (\d+)px/.exec(query)?.[1] ?? 0);
     return {
@@ -36,8 +43,8 @@ beforeEach(() => {
         return width >= min;
       },
       media: query,
-      addEventListener: () => {},
-      removeEventListener: () => {},
+      addEventListener: (_type: string, listener: () => void) => listeners.add(listener),
+      removeEventListener: (_type: string, listener: () => void) => listeners.delete(listener),
     };
   }) as unknown as typeof window.matchMedia;
 });
@@ -396,6 +403,52 @@ describe("the tablet action bar (768-1023px, #414)", () => {
       }),
     );
     expect(tabletPanel().getByRole("link", { name: "Done" }).getAttribute("href")).toBe("/");
+  });
+
+  it("keeps the open cube and its filter when the window crosses 768px, both ways", async () => {
+    width = 767;
+    const { user } = setup();
+    await ready();
+    await user.click(bar().getByRole("button", { name: /Toiletries/ }));
+    await user.click(screen.getByRole("button", { name: /^To pack/ }));
+    resizeTo(768);
+    await screen.findByRole("heading", { name: "Packing", level: 1 });
+    expect(panel().getAttribute("data-cube")).toBe("toiletries");
+    expect(screen.getByRole("button", { name: /^To pack/ }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    resizeTo(700);
+    await ready();
+    expect(panel().getAttribute("data-cube")).toBe("toiletries");
+    expect(screen.getByRole("button", { name: /^To pack/ }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+  });
+
+  it("does not send All in twice when the window crosses 768px while it is still saving", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const setPackedMany = vi.fn();
+    width = 767;
+    const { user } = setup({
+      wrap: (source) => ({
+        setPackedMany: async (...args: Parameters<typeof source.setPackedMany>) => {
+          setPackedMany(args[1]);
+          await gate;
+          return source.setPackedMany(...args);
+        },
+      }),
+    });
+    await ready();
+    await user.click(allIn());
+    await waitFor(() => expect(setPackedMany).toHaveBeenCalledTimes(1));
+    resizeTo(768);
+    await screen.findByRole("heading", { name: "Packing", level: 1 });
+    const again = tabletPanel().getByRole("button", { name: /^All in/ });
+    expect(again.hasAttribute("disabled")).toBe(true);
+    await user.click(again);
+    expect(setPackedMany).toHaveBeenCalledTimes(1);
+    release();
   });
 
   it("is not drawn on the laptop layout", async () => {

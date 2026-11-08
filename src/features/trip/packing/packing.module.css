@@ -963,3 +963,28 @@
   outline: 3px solid var(--info);
   outline-offset: 2px;
 }
+
+/* Tablet header, checklist and forecast (#414, spec #393 part 2 section 5.2): a title row, the progress full width, then the
+   actions right-aligned; ONE checklist column across the whole band; the forecast a two-column grid in which an unpaired third
+   stop takes one cell. */
+.page[data-packing-layout="tablet"] .header {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "title" "progress" "actions";
+  gap: 10px;
+}
+.page[data-packing-layout="tablet"] .progressZone {
+  max-width: none;
+}
+.page[data-packing-layout="tablet"] .actions {
+  justify-content: flex-end;
+}
+.page[data-packing-layout="tablet"] .list {
+  grid-auto-flow: row;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: none;
+}
+.page[data-packing-layout="tablet"] .cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}

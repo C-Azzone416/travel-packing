@@ -18,6 +18,7 @@ import { useTripsSource } from "@/features/trips/TripsSourceProvider";
 import { AddToiletryForm } from "./AddToiletryForm";
 import { automaticStamps } from "@/domain/stamps";
 import { localToday } from "@/lib/today";
+import { usePackingViewState } from "./packing/use-packing-view-state";
 import { LAPTOP_MIN_WIDTH, TABLET_MIN_WIDTH, useMinWidth } from "@/lib/use-min-width";
 import { SaveAsListSheet, type SaveOutcome } from "./SaveAsListSheet";
 import {
@@ -132,6 +133,7 @@ export function TripScreen({
       mounted.current = false;
     };
   }, []);
+  const packingView = usePackingViewState(undefined);
   const laptop = useMinWidth(LAPTOP_MIN_WIDTH);
   // 768-1023: the laptop structure (rail and panel) inside the phone shell, with the action bar as the panel footer (#414).
   const tablet = useMinWidth(TABLET_MIN_WIDTH) && !laptop;
@@ -519,6 +521,8 @@ export function TripScreen({
   // The cube that opens first: ?cube= (the Home tiles), or the cube of the item ?edit= asks for, so its row is on screen.
   const openingItem = openItemId ? trip.items.find((entry) => entry.id === openItemId) : undefined;
   const firstCube = openCube ?? (openingItem ? itemCube(openingItem) : undefined);
+  // The cube the person picked, else the one the screen opens first.
+  const viewState = { ...packingView, chosen: packingView.chosen ?? firstCube };
   const cubeName = (cube: Cube) =>
     cubeViews.find((view) => view.cube === cube)?.label ?? CUBE_LABELS[cube];
   const stopNames = weatherStops.map((stop) => stop.location.city);
@@ -809,9 +813,9 @@ export function TripScreen({
       {laptop || tablet ? (
         <PackingLaptop
           tablet={tablet}
+          viewState={viewState}
           onAllIn={allIn}
           trip={trip}
-          openCube={firstCube}
           failedRows={failedRows}
           laundryBusy={laundryBusy}
           onLaundry={setLaundry}
@@ -842,8 +846,8 @@ export function TripScreen({
         />
       ) : (
         <PackingPhone
+          viewState={viewState}
           trip={trip}
-          openCube={firstCube}
           failedRows={failedRows}
           laundryBusy={laundryBusy}
           onLaundry={setLaundry}

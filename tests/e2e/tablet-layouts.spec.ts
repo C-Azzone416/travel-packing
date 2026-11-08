@@ -79,6 +79,17 @@ for (const width of WIDTHS) {
         expect(part.y + part.height).toBeLessThanOrEqual(p.y + p.height + 1);
         expect(part.height).toBeGreaterThanOrEqual(51);
       }
+      // Header: a title row, the progress full width under it, then the actions right-aligned (section 5.2).
+      const title = await box(layout.getByRole("heading", { level: 1 }));
+      const progress = await box(layout.locator("[class*='progressZone']"));
+      const actions = await box(layout.locator("[class*='actions']").first());
+      expect(progress.y).toBeGreaterThanOrEqual(title.y + title.height - 1);
+      expect(progress.width).toBeGreaterThanOrEqual(b.width - 2);
+      expect(actions.y).toBeGreaterThanOrEqual(progress.y + progress.height - 1);
+      const lastAction = await box(layout.locator("[class*='actions'] > *").last());
+      expect(Math.abs(lastAction.x + lastAction.width - (b.x + b.width))).toBeLessThanOrEqual(2);
+      // ONE checklist column across the whole band.
+      expect(await columns(panel.locator("li[data-item-id]"))).toBe(1);
       // The footer is the panel's sticky foot: it stays on screen above the tab bar however long the list is.
       const tabBar = await box(page.locator(".bottom-nav"));
       expect(allIn.y + allIn.height).toBeLessThanOrEqual(tabBar.y + 1);
@@ -164,6 +175,71 @@ test.describe("Home Weather panel", () => {
         (el) => getComputedStyle(el).gridTemplateColumns.split(" ").length,
       );
       expect(tracks).toBe(width >= 768 ? 2 : 1);
+      expect(await overflow(page)).toBeLessThanOrEqual(0);
+    });
+  }
+});
+
+// The open cube and its filter survive crossing 768px in both directions (a rotation, a split view).
+test("crossing 768px keeps the open cube and its filter", async ({ page }) => {
+  await start(page, 767);
+  await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
+  await expect(page.locator('[data-packing-layout="phone"]')).toBeVisible();
+  await page
+    .getByRole("navigation", { name: "Cubes" })
+    .getByRole("button", { name: /Toiletries/ })
+    .click();
+  await page.getByRole("button", { name: /^To pack/ }).click();
+  for (const [width, layout] of [
+    [768, "tablet"],
+    [700, "phone"],
+    [1100, "laptop"],
+  ] as const) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(page.locator(`[data-packing-layout="${layout}"]`)).toBeVisible();
+    await expect(page.locator("section[data-cube]")).toHaveAttribute("data-cube", "toiletries");
+    await expect(page.getByRole("button", { name: /^To pack/ })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  }
+});
+
+// Review your bag stays a 560px sheet on the right from 768 to 1023 (it is a full screen below 768).
+for (const width of [768, 1000]) {
+  test(`${width}px: Review your bag is a 560px side sheet`, async ({ page }) => {
+    await start(page, width);
+    const link = page.getByRole("link", { name: "Continue packing: San Diego" });
+    const href = (await link.getAttribute("href"))!;
+    await page.goto(`${href.split("?")[0]}?review=1`);
+    const dialog = page.getByRole("dialog", { name: "Review your bag" });
+    await expect(dialog).toBeVisible();
+    await inject(page);
+    const d = await box(dialog);
+    expect(d.width).toBeLessThanOrEqual(560.5);
+    expect(Math.abs(d.x + d.width - width)).toBeLessThanOrEqual(1);
+  });
+}
+
+// The Packing forecast on a tablet: a two-column grid, and an unpaired third stop takes one cell.
+test.describe("Packing forecast on a tablet", () => {
+  test.use({ baseURL: `http://localhost:${OPEN_METEO_PORT}` });
+  for (const width of [768, 1000]) {
+    test(`${width}px: forecast cards two across, the third stop one cell`, async ({ page }) => {
+      test.setTimeout(120_000);
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await createWeatherTrip(page, [{ leave: 8, back: 11 }, { leave: 14 }, { leave: 15 }]);
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/");
+      await page.getByRole("link", { name: /^(Start|Continue) packing/ }).click();
+      const cards = page.locator("[class*='cards']").first();
+      await expect(cards).toBeVisible();
+      await inject(page);
+      const cells = cards.locator("> *");
+      await expect(cells).toHaveCount(3);
+      const [first, third] = [await box(cells.nth(0)), await box(cells.nth(2))];
+      expect(await columns(cells)).toBe(2);
+      expect(Math.abs(third.width - first.width)).toBeLessThanOrEqual(1);
       expect(await overflow(page)).toBeLessThanOrEqual(0);
     });
   }

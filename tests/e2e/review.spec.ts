@@ -16,7 +16,7 @@ import {
 const NOW = new Date("2026-10-16T12:00:00");
 const LAYOUTS = [
   { name: "laptop", width: 1280 },
-  { name: "phone", width: 1000 },
+  { name: "phone", width: 700 },
 ] as const;
 
 for (const layout of LAYOUTS) {
