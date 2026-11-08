@@ -5,6 +5,7 @@ import { useEffect, useId, useRef, type ReactNode } from "react";
 import { CubeRailItem, PackedRibbon, Suitcase } from "@/components/suitcase";
 import { Icon } from "@/components/ui/Icon";
 import type { Cube } from "@/domain/cubes";
+import { laundryControlVisible } from "@/domain/short-trip";
 import type { TripItem } from "@/domain/trip";
 import type { LifecycleTrip } from "@/domain/trip-lifecycle";
 import type { PackedState } from "../packed-state";
@@ -81,6 +82,8 @@ export function PackingLaptop({
   viewState,
 }: PackingLaptopProps) {
   const views = buildCubeViews(trip);
+  // Laundry is offered only where it would change a quantity (a short trip hides it, #412).
+  const laundryVisible = laundryControlVisible(trip);
   const { chosen, setChosen, filters, setFilters, editing, setEditing, packing, setPacking } =
     viewState;
   const panelId = useId();
@@ -165,6 +168,7 @@ export function PackingLaptop({
         tripName={trip.destination}
         headline={totals}
         laundry={trip.config.laundry}
+        laundryVisible={laundryVisible}
         laundryBusy={laundryBusy}
         onLaundry={onLaundry}
         onEditTrip={onEditTrip}

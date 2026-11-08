@@ -13,6 +13,7 @@ import {
   type Cube,
 } from "@/domain/cubes";
 import { canonicalItemId } from "@/domain/item-identity";
+import { isDayTrip } from "@/domain/short-trip";
 import type { TripItem } from "@/domain/trip";
 import type { LifecycleTrip } from "@/domain/trip-lifecycle";
 import type { WeatherChange } from "@/domain/weather/diff";
@@ -58,6 +59,8 @@ export interface CubeView {
   packed: number;
   total: number;
   morningOf: boolean;
+  /** The "Morning of" switch is offered: not on a day trip, where you are home the same day (#412). */
+  morningOfAvailable: boolean;
   /** One short line under the bar (Documents: "passport ✓"); null when the cube has none. */
   note: string | null;
   /** The weather cube holds an item that is not packed yet: the bar and note turn to the accent. */
@@ -74,7 +77,8 @@ export function cubeNote(cube: Cube, items: readonly TripItem[]): string | null 
 
 /** The cubes to draw, in rail order, with their counts. A cube with no items is left out unless it is Clothing or Misc. */
 export function buildCubeViews(trip: LifecycleTrip): CubeView[] {
-  const flagged = new Set(morningOfCubesFor(trip.items, trip.morningOfCubes));
+  const dayTrip = isDayTrip(trip);
+  const flagged = new Set(dayTrip ? [] : morningOfCubesFor(trip.items, trip.morningOfCubes));
   const byCube = new Map<Cube, TripItem[]>();
   for (const item of trip.items) {
     const cube = itemCube(item);
@@ -92,6 +96,7 @@ export function buildCubeViews(trip: LifecycleTrip): CubeView[] {
         packed,
         total,
         morningOf: flagged.has(cube),
+        morningOfAvailable: !dayTrip,
         note: cubeNote(cube, items),
         alert: cube === "weather" && items.some((item) => !isPacked(item)),
       };
@@ -134,15 +139,22 @@ export function filterItems(items: readonly TripItem[], filter: CubeFilter): Tri
 }
 
 /** The footer of the open cube: the hint, or what a finished or empty view says. */
-export function panelFooter(view: Pick<CubeView, "items">, shown: number): string {
+export function panelFooter(
+  view: Pick<CubeView, "items"> & { morningOfAvailable?: boolean },
+  shown: number,
+): string {
   if (view.items.length === 0) return "Nothing here yet.";
   if (shown === 0) return "Nothing here.";
   if (view.items.every(isPacked)) return "Everything in this cube is packed.";
-  return HINT;
+  return view.morningOfAvailable === false ? HINT_DAY_TRIP : HINT;
 }
 
 export const HINT =
   "Tick as you pack. “Edit list” adds items, moves them to another cube, or marks a cube for the morning you leave.";
+
+/** The same hint on a day trip, which has no "Morning of" (#412). */
+export const HINT_DAY_TRIP =
+  "Tick as you pack. “Edit list” adds items or moves them to another cube.";
 
 /** "Socks, 11": the name a checkbox announces (the count is part of it only when there is more than one). */
 export function checkboxName(item: { name: string; qty: number; section?: string }): string {

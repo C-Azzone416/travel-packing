@@ -4,7 +4,7 @@ import { recalculateSuggestions } from "@/domain/item-ops";
 import { locationById } from "@/domain/locations";
 import { setPacked } from "@/domain/readiness";
 import type { LifecycleTrip } from "@/domain/trip-lifecycle";
-import { addDays, type TripStop } from "@/domain/trip-stops";
+import { addDays, daysBetween, type TripStop } from "@/domain/trip-stops";
 import { sampleLifecycleState } from "@/features/trips/fixtures";
 import {
   changeCount,
@@ -222,6 +222,24 @@ describe("editChanges: route and dates", () => {
     expect(row(result, "dates")!.sub).toBe("4 → 2 nights");
     expect(row(result, "item-tops")!.sub).toMatch(/^Packed \d+ → \d+$/);
     expect(result.needsAcknowledgement).toBe(true);
+  });
+
+  it("a day trip's Dates row names one date on both sides of the change (#412)", () => {
+    const trip = base();
+    const days = daysBetween(trip.start, trip.end);
+    const result = changes(trip, longer(trip, -days));
+    expect(row(result, "dates")).toMatchObject({
+      from: `${dayMonth(trip.start)} – ${dayMonth(trip.end)}`,
+      to: dayMonth(trip.start),
+      sub: `${days} → day trip`,
+    });
+    // And back: the saved day trip is one date too.
+    const dayTrip = {
+      ...trip,
+      end: trip.start,
+      stops: trip.stops.map((s) => ({ ...s, leave: trip.start })),
+    };
+    expect(row(changes(dayTrip, longer(dayTrip, 2)), "dates")!.from).toBe(dayMonth(trip.start));
   });
 
   it("a new stop is 'new stop'; its forecast line appears only beyond the 16-day window", () => {

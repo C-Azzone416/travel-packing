@@ -5,6 +5,7 @@ import type { LifecycleTrip } from "@/domain/trip-lifecycle";
 import type { WeatherChange } from "@/domain/weather/diff";
 import {
   HINT,
+  HINT_DAY_TRIP,
   buildCubeViews,
   categoryForCube,
   checkboxName,
@@ -110,6 +111,33 @@ describe("the cubes to draw", () => {
     ).toEqual(["toiletries", "misc"]);
   });
 
+  it("a day trip has no Morning of: nothing is flagged, even by a Pack last item, and the switch is not offered (#412)", () => {
+    const day = (start: string, end: string) =>
+      ({
+        ...trip([...items, item("rope", 1, 0, { section: "packlast", cube: "misc" })]),
+        start,
+        end,
+      }) as LifecycleTrip;
+    const dayViews = buildCubeViews(day("2030-03-14", "2030-03-14"));
+    expect(dayViews.some((view) => view.morningOf)).toBe(false);
+    expect(dayViews.every((view) => !view.morningOfAvailable)).toBe(true);
+    const night = buildCubeViews(day("2030-03-14", "2030-03-15"));
+    expect(night.filter((view) => view.morningOf).map((view) => view.cube)).toEqual([
+      "toiletries",
+      "misc",
+    ]);
+    expect(night.every((view) => view.morningOfAvailable)).toBe(true);
+  });
+
+  it("a cube with no items is not drawn on a day trip (Toiletries), and is drawn once it holds an item (#412)", () => {
+    const clothes = [item("tops", 1, 0)];
+    const day = { ...trip(clothes), start: "2030-03-14", end: "2030-03-14" } as LifecycleTrip;
+    expect(buildCubeViews(day).some((view) => view.cube === "toiletries")).toBe(false);
+    const bag = item("toothbrush", 1, 0, { category: "Bathroom", groupId: "toiletry-bag" });
+    const withBag = { ...day, items: [...clothes, bag] } as LifecycleTrip;
+    expect(buildCubeViews(withBag).some((view) => view.cube === "toiletries")).toBe(true);
+  });
+
   it("a cube the person moved an item to holds it", () => {
     const views = buildCubeViews(trip([item("tops", 1, 0, { cube: "tech" })]));
     expect(views.find((view) => view.cube === "tech")?.items).toHaveLength(1);
@@ -132,6 +160,10 @@ describe("the open cube's footer and the move targets", () => {
     expect(panelFooter({ items: [item("a", 1, 0)] }, 0)).toBe("Nothing here.");
     expect(panelFooter({ items: [item("a", 1, 1)] }, 1)).toBe("Everything in this cube is packed.");
     expect(panelFooter({ items: [item("a", 1, 0)] }, 1)).toBe(HINT);
+    // A day trip's hint does not mention the morning you leave (#412).
+    const dayHint = panelFooter({ items: [item("a", 1, 0)], morningOfAvailable: false }, 1);
+    expect(dayHint).toBe(HINT_DAY_TRIP);
+    expect(dayHint).not.toMatch(/morning/);
   });
 
   it("offers every drawn cube except the item's own", () => {

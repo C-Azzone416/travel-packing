@@ -1,5 +1,6 @@
 "use client";
 
+import { nightsText } from "@/domain/trip-route";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type ReactNode, type Ref } from "react";
 import { Icon } from "@/components/ui/Icon";
@@ -130,7 +131,7 @@ export function HomePhone({
             <div className={styles.tagCopy}>
               <p className={styles.chip} data-on-now={dayBadge ? "" : undefined}>
                 {dayBadge ? "ON NOW" : packed === "ready" ? "READY" : "NEXT TRIP"} ·{" "}
-                {tagDatesShort(trip, today)} · {nights} {nights === 1 ? "night" : "nights"}
+                {tagDatesShort(trip, today)} · {nightsText(nights)}
               </p>
               <h2 id="home-trip-title" className={styles.name} data-size={hero.size}>
                 {hero.title}

@@ -31,6 +31,8 @@ function formatDate(value: string): string {
 export const formatShortDate = formatDate;
 
 export function formatRange(trip: Pick<LifecycleTrip, "start" | "end">): string {
+  // A day trip has one date (#412).
+  if (trip.start === trip.end) return formatDate(trip.start);
   return `${formatDate(trip.start)} – ${formatDate(trip.end)}`;
 }
 

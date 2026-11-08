@@ -86,6 +86,8 @@ export interface StartListProps {
   laundry: boolean;
   onLaundry: (on: boolean) => void;
   laundryText: string;
+  /** Offered only when laundry would change a quantity on this trip, or is already on (#412). */
+  laundryShown: boolean;
   weather: PlanWeather;
   weatherAdds: WeatherAdds | null;
   useWeather: boolean;
@@ -170,6 +172,7 @@ export function StartList({
   laundry,
   onLaundry,
   laundryText,
+  laundryShown,
   weather,
   weatherAdds,
   useWeather,
@@ -193,7 +196,7 @@ export function StartList({
     ? "Your saved list stands in for them on this trip"
     : nights === null
       ? "Underwear, socks and other per-day items counted for your trip"
-      : `Underwear, socks and other per-day items counted for ${nightsText(nights)}`;
+      : `Underwear, socks and other per-day items counted for ${nights <= 0 ? "a day trip" : nightsText(nights)}`;
   const latest = pastTrips[0];
   const chosenTrip = pastTrips.find((trip) => trip.id === copyId) ?? null;
 
@@ -323,18 +326,22 @@ export function StartList({
           ) : null}
         </Option>
       ) : null}
-      <p className={styles.eyebrow}>On this trip</p>
-      <Option
-        title={
-          <>
-            <Icon name="refresh" size={18} className={styles.inlineIcon} />
-            {" I’ll have laundry"}
-          </>
-        }
-        sub={laundryText}
-        checked={laundry}
-        onChange={onLaundry}
-      />
+      {laundryShown ? (
+        <>
+          <p className={styles.eyebrow}>On this trip</p>
+          <Option
+            title={
+              <>
+                <Icon name="refresh" size={18} className={styles.inlineIcon} />
+                {" I’ll have laundry"}
+              </>
+            }
+            sub={laundryText}
+            checked={laundry}
+            onChange={onLaundry}
+          />
+        </>
+      ) : null}
       {line ? (
         <p className={styles.sortedLine}>
           <strong>{line.bold}</strong>

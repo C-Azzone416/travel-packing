@@ -111,8 +111,8 @@ export function StickerTeaser({
       )}
       <dl className={styles.totals} aria-label="Travel totals">
         {[
-          [totals.trips, "trips"],
-          [totals.nights, "nights away"],
+          [totals.trips, totals.trips === 1 ? "trip" : "trips"],
+          [totals.nights, totals.nights === 1 ? "night away" : "nights away"],
         ].map(([value, text]) => (
           <div key={text}>
             <dt>{text}</dt>
@@ -266,10 +266,10 @@ export function StampsContent({
           )}
           <dl className={styles.totals} aria-label="Travel totals">
             {[
-              [view.totals.trips, "trips"],
-              [view.totals.places, "places"],
-              [view.totals.countries, "countries"],
-              [view.totals.nights, "nights away"],
+              [view.totals.trips, view.totals.trips === 1 ? "trip" : "trips"],
+              [view.totals.places, view.totals.places === 1 ? "place" : "places"],
+              [view.totals.countries, view.totals.countries === 1 ? "country" : "countries"],
+              [view.totals.nights, view.totals.nights === 1 ? "night away" : "nights away"],
             ].map(([value, label]) => (
               <div key={label}>
                 <dt>{label}</dt>

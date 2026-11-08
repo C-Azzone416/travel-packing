@@ -7,6 +7,7 @@
 // list as saved and that result, so the panel cannot disagree with what is saved: items the person added or edited stay as they
 // are, and packed items stay ticked (a packed count only drops to the new quantity).
 
+import { nightsText } from "@/domain/trip-route";
 import { parseDate } from "@/domain/calc";
 import { FORECAST_WINDOW_DAYS } from "@/domain/calc/dates";
 import { recalculateSuggestions } from "@/domain/item-ops";
@@ -78,8 +79,10 @@ export function dayMonth(value: string): string {
   return date ? `${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]}` : "";
 }
 
-const dateRange = (start: string, end: string) => `${dayMonth(start)} – ${dayMonth(end)}`;
-const nightsWord = (n: number) => `${n} ${n === 1 ? "night" : "nights"}`;
+// One date for a day trip (#412): "23 Oct", never "23 Oct – 23 Oct".
+const dateRange = (start: string, end: string) =>
+  start === end ? dayMonth(start) : `${dayMonth(start)} – ${dayMonth(end)}`;
+const nightsWord = nightsText;
 const onOff = (value: boolean) => (value ? "on" : "off");
 
 const sameStops = (a: readonly DraftStop[], b: readonly TripStop[]) =>

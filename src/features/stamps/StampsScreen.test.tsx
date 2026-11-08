@@ -379,6 +379,43 @@ describe("Stamps selected from the address and the Home teaser (#409)", () => {
     expect(screen.getByRole("article", { name: "Selected trip: Lisbon" })).toBeTruthy();
   });
 
+  it("the teaser says '1 night away' for one night and 'nights away' otherwise (#412)", () => {
+    const view = stampsView(sampleLifecycleState().trips, "2026-10-16", "rolling");
+    const { unmount } = render(
+      <StickerTeaser
+        stickers={[]}
+        inked={0}
+        filterLabel={view.filterLabel}
+        totals={{ trips: 1, nights: 1 }}
+      />,
+    );
+    expect(screen.getByText("night away")).toBeTruthy();
+    unmount();
+    render(
+      <StickerTeaser
+        stickers={[]}
+        inked={0}
+        filterLabel={view.filterLabel}
+        totals={{ trips: 1, nights: 0 }}
+      />,
+    );
+    expect(screen.getByText("nights away")).toBeTruthy();
+  });
+
+  it("the full totals say 'trip', 'place' and 'country' at one (#412)", () => {
+    const one = stampsView(sampleLifecycleState().trips, "2026-10-16", "rolling");
+    expect(one.totals.trips).toBe(1);
+    render(<StampsContent state={sampleLifecycleState()} today="2026-10-16" />);
+    const totals = within(screen.getByLabelText("Travel totals")).getAllByRole("term");
+    const words = totals.map((term) => term.textContent);
+    expect(words).toEqual([
+      one.totals.trips === 1 ? "trip" : "trips",
+      one.totals.places === 1 ? "place" : "places",
+      one.totals.countries === 1 ? "country" : "countries",
+      one.totals.nights === 1 ? "night away" : "nights away",
+    ]);
+  });
+
   it("the teaser draws decorative stickers, two totals and the one link", () => {
     const view = stampsView(sampleLifecycleState().trips, "2026-10-16", "rolling");
     render(

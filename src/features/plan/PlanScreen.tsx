@@ -168,7 +168,7 @@ function PlanBody({ from, trips, staples, home, lists, allowCustom, today, rende
   const [attempted, setAttempted] = useState(false);
   const [announcement, setAnnouncement] = useState("");
   const [saving, setSaving] = useState(false);
-  const [laundry, setLaundry] = useState(from?.config.laundry ?? false);
+  const [laundryChoice, setLaundry] = useState(from?.config.laundry ?? false);
   const [copySource, setCopySource] = useState<LifecycleTrip | null>(from);
   const [listId, setListId] = useState<string | null>(null);
   const [listDetail, setListDetail] = useState<SavedListDetail | null>(null);
@@ -200,6 +200,23 @@ function PlanBody({ from, trips, staples, home, lists, allowCustom, today, rende
       from && !pastTrips.some((trip) => trip.id === from.id) ? [from, ...pastTrips] : pastTrips,
     [from, pastTrips],
   );
+
+  // Judged on what will be created: the chosen list (or the Staples) with the chosen copy's preferences (#412). A laundry
+  // choice that changes nothing there is dropped from the preview and from what Create sends, not just hidden.
+  // While a chosen list's detail is still loading there is nothing to judge it on, so there is no effect yet.
+  const effect = useMemo(
+    () =>
+      listId && !listDetail
+        ? null
+        : laundryEffect(
+            withChoices(draft, { copy: copySource, listId, laundry: false }),
+            staples,
+            today,
+            listDetail ?? undefined,
+          ),
+    [draft, copySource, listId, staples, today, listDetail],
+  );
+  const laundry = laundryChoice && effect !== null;
 
   const finalDraft = useMemo(
     () => withChoices(draft, { copy: copySource, listId, laundry }),
@@ -241,10 +258,6 @@ function PlanBody({ from, trips, staples, home, lists, allowCustom, today, rende
           })
         : null,
     [draft, copyCandidate, laundry, staples, today],
-  );
-  const effect = useMemo(
-    () => laundryEffect(baseDraft, staples, today),
-    [baseDraft, staples, today],
   );
   const unit = "settings" in weather ? weather.settings.temperatureUnit : "F";
   const weatherRows = useMemo(
@@ -368,6 +381,7 @@ function PlanBody({ from, trips, staples, home, lists, allowCustom, today, rende
             laundry={laundry}
             onLaundry={setLaundry}
             laundryText={laundryLine(effect, laundry)}
+            laundryShown={effect !== null}
             weather={weather}
             weatherAdds={adds}
             useWeather={useWeather}

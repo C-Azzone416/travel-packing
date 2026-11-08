@@ -28,6 +28,7 @@ import type { StopWeather } from "@/domain/weather/types";
 import { diffRecommendations } from "@/domain/weather/diff";
 import { WEATHER_RULES, recommendPacking } from "@/domain/weather/recommend";
 import { toSuggestions } from "@/features/trip/packing/packing-model";
+import { isDayTrip } from "@/domain/short-trip";
 import { defaultFormatRange } from "@/domain/weather/recommend";
 import { displayTemperature, weatherRowView } from "@/features/trip/weather-view";
 import type { TemperatureUnit } from "@/server/data/weather-store";
@@ -117,7 +118,10 @@ export function cubeSummaries(
     const cube = itemCube(item);
     byCube.set(cube, [...(byCube.get(cube) ?? []), item]);
   }
-  const morning = new Set(morningOfCubesFor(trip.items, trip.morningOfCubes));
+  // A day trip has no "Morning of": you are home the same day (#412).
+  const morning = new Set(
+    isDayTrip(trip) ? [] : morningOfCubesFor(trip.items, trip.morningOfCubes),
+  );
   const international = isInternational(trip);
   const flying = trip.travelMode === "fly";
 

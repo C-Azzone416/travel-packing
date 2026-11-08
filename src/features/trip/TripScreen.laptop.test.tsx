@@ -789,3 +789,34 @@ describe("the toiletry bag step and what sits under the suitcase", () => {
     expect(screen.getByText(/Everything is in\. Review your bag/)).toBeTruthy();
   });
 });
+
+describe("a day trip (#412)", () => {
+  // The same trip with its last day moved to its first: 0 nights.
+  const dayTrip = (base: ReturnType<typeof memory>) => ({
+    getTrip: async (id: string) => {
+      const trip = await base.getTrip(id);
+      return { ...trip, end: trip.start };
+    },
+  });
+
+  it("hides the Laundry toggle when it would change nothing", async () => {
+    setup({ wrap: dayTrip });
+    await ready();
+    expect(screen.queryByRole("button", { name: /^Laundry/ })).toBeNull();
+  });
+
+  it("keeps the Laundry toggle when laundry is already on, so it can be turned off", async () => {
+    setup({ tripId: "lisbon", wrap: dayTrip });
+    await ready();
+    expect(screen.getByRole("button", { name: "Laundry on" })).toBeTruthy();
+  });
+
+  it("offers no Morning of switch in Edit list, and the rail has no Morning of marker", async () => {
+    const { user } = setup({ wrap: dayTrip });
+    await ready();
+    await user.click(within(panel()).getByRole("button", { name: "Edit list" }));
+    expect(within(panel()).queryByRole("switch", { name: /Morning of/ })).toBeNull();
+    expect(document.body.textContent).not.toContain("Morning of");
+    expect(document.body.textContent).not.toContain("the morning you leave");
+  });
+});

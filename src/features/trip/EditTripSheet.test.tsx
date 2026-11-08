@@ -4,6 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { renderInApp } from "@/test/providers";
+import { calculateSuggestions } from "@/domain/calc";
+import { recalculateSuggestions } from "@/domain/item-ops";
 import { setPacked } from "@/domain/readiness";
 import type { TripConfig } from "@/domain/trip";
 import type { LifecycleTrip } from "@/domain/trip-lifecycle";
@@ -607,8 +609,87 @@ describe("EditTripSheet: Route & dates", () => {
     await user.click(more);
     expect(within(dialog()).getByText("5 nights")).toBeTruthy();
     for (let i = 0; i < 5; i += 1) await user.click(less);
-    expect(within(dialog()).getByText("0 nights")).toBeTruthy();
+    expect(within(dialog()).getByText("day trip")).toBeTruthy();
     expect(less.disabled).toBe(true);
+  });
+
+  it("cut down to a day trip, the laundry row is disabled and says why; longer again, it works (#412)", async () => {
+    const { user, dialog } = setup({ tab: "route" });
+    const less = within(dialog()).getByRole("button", { name: "One night fewer" });
+    const more = within(dialog()).getByRole("button", { name: "One night more" });
+    await user.click(within(dialog()).getByRole("button", { name: /Packing preferences/ }));
+    expect(toggle(dialog(), "Laundry on this trip").disabled).toBe(false);
+    expect(within(dialog()).queryByText("No effect on a trip this short.")).toBeNull();
+    for (let i = 0; i < 4; i += 1) await user.click(less);
+    expect(toggle(dialog(), "Laundry on this trip").disabled).toBe(true);
+    expect(within(dialog()).getByText("No effect on a trip this short.")).toBeTruthy();
+    for (let i = 0; i < 4; i += 1) await user.click(more);
+    expect(toggle(dialog(), "Laundry on this trip").disabled).toBe(false);
+  });
+
+  it("a NEW laundry opt-in that becomes ineffective is neither listed nor saved; the Dates row says one date (#412)", async () => {
+    const { user, dialog, onApplyPreferences, onSaveRoute } = setup({ tab: "route" });
+    await user.click(within(dialog()).getByRole("button", { name: /Packing preferences/ }));
+    await user.click(toggle(dialog(), "Laundry on this trip"));
+    expect(toggle(dialog(), "Laundry on this trip").checked).toBe(true);
+    const less = within(dialog()).getByRole("button", { name: "One night fewer" });
+    for (let i = 0; i < 4; i += 1) await user.click(less);
+    // Disabled, and off as far as the list and the save are concerned.
+    expect(toggle(dialog(), "Laundry on this trip").disabled).toBe(true);
+    expect(toggle(dialog(), "Laundry on this trip").checked).toBe(false);
+    const text = rowsOf(dialog()).map((row) => row.textContent ?? "");
+    expect(text.some((row) => row.startsWith("Laundry"))).toBe(false);
+    const dates = text.find((row) => row.startsWith("Dates"))!;
+    expect(dates).not.toMatch(/(\d+ \w+) – \1/);
+    const tick = within(dialog()).queryByRole("checkbox", { name: /packed|understand|OK/i });
+    if (tick) await user.click(tick);
+    await user.click(saveButton(dialog()));
+    await waitFor(() => expect(onSaveRoute).toHaveBeenCalled());
+    expect(onApplyPreferences.mock.calls.every(([config]) => config.laundry === false)).toBe(true);
+  });
+
+  it("lengthening a fresh day trip makes laundry available: it is judged on the list the route edit will save (#412)", async () => {
+    const trip = base();
+    const stop = { ...trip.stops[0], leave: trip.stops[0].arrive };
+    const day = recalculateSuggestions(
+      { ...trip, stops: [stop], end: trip.start },
+      trip.config,
+      calculateSuggestions,
+    );
+    // A fresh day trip has no Smart tops or bottoms (nothing to wear every day).
+    const fresh = {
+      ...day,
+      items: day.items.filter((item) => !["tops", "bottoms"].includes(item.id)),
+    };
+    const { user, dialog } = setup({ trip: fresh, tab: "route" });
+    await user.click(within(dialog()).getByRole("button", { name: /Packing preferences/ }));
+    expect(toggle(dialog(), "Laundry on this trip").disabled).toBe(true);
+    const more = within(dialog()).getByRole("button", { name: "One night more" });
+    for (let i = 0; i < 4; i += 1) await user.click(more);
+    expect(toggle(dialog(), "Laundry on this trip").disabled).toBe(false);
+  });
+
+  it("How we count follows the dates being edited, not the saved ones (#412)", async () => {
+    const { user, dialog } = setup({ tab: "route" });
+    const line = () => within(dialog()).getByText(/How we count:/).parentElement?.textContent ?? "";
+    expect(line()).toMatch(/5 days away/);
+    const less = within(dialog()).getByRole("button", { name: "One night fewer" });
+    for (let i = 0; i < 4; i += 1) await user.click(less);
+    expect(line()).toMatch(/A day trip/);
+  });
+
+  it("a SAVED laundry-on can still be turned off on a day trip (#412)", async () => {
+    const trip = base();
+    const { user, dialog, onApplyPreferences } = setup({
+      trip: { ...trip, config: { ...trip.config, laundry: true } },
+    });
+    await user.click(within(dialog()).getByRole("button", { name: "Route & dates" }));
+    const less = within(dialog()).getByRole("button", { name: "One night fewer" });
+    for (let i = 0; i < 4; i += 1) await user.click(less);
+    expect(toggle(dialog(), "Laundry on this trip").disabled).toBe(false);
+    await user.click(toggle(dialog(), "Laundry on this trip"));
+    expect(toggle(dialog(), "Laundry on this trip").checked).toBe(false);
+    expect(onApplyPreferences).not.toHaveBeenCalled();
   });
 
   it("a Come home before Leave is a problem in words, and Save waits", async () => {

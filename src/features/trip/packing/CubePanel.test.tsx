@@ -11,6 +11,7 @@ const view = (cube: CubeView["cube"], label: string): CubeView => ({
   packed: 0,
   total: 1,
   morningOf: false,
+  morningOfAvailable: true,
   note: null,
   alert: false,
 });
@@ -59,5 +60,21 @@ describe("CubePanel Edit list add controls", () => {
     );
     expect(screen.getByRole("button", { name: /Add a Bathroom item/ })).toBeTruthy();
     expect(screen.queryByPlaceholderText("+ Add an item")).toBeNull();
+  });
+});
+
+describe("CubePanel Morning of (#412)", () => {
+  it("offers the Morning of switch on an ordinary trip", () => {
+    render(<CubePanel {...props({})} />);
+    expect(screen.getByRole("switch")).toBeTruthy();
+    expect(screen.getByText("Morning of")).toBeTruthy();
+  });
+
+  it("leaves the switch out on a day trip, where you are home the same day", () => {
+    render(
+      <CubePanel {...props({ view: { ...view("misc", "Misc"), morningOfAvailable: false } })} />,
+    );
+    expect(screen.queryByRole("switch")).toBeNull();
+    expect(screen.queryByText("Morning of")).toBeNull();
   });
 });

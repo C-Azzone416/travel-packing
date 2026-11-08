@@ -23,6 +23,7 @@ describe("formatDays", () => {
 describe("formatRange", () => {
   it("formats an inclusive range as short month and day, timezone-safe", () => {
     expect(formatRange({ start: "2026-10-23", end: "2026-10-27" })).toBe("Oct 23 – Oct 27");
+    expect(formatRange({ start: "2026-10-23", end: "2026-10-23" })).toBe("Oct 23");
     expect(formatRange({ start: "2026-12-30", end: "2027-01-02" })).toBe("Dec 30 – Jan 2");
   });
 

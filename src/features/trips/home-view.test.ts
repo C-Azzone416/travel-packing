@@ -99,6 +99,21 @@ describe("cubeSummaries", () => {
     expect(bagTotals(cubes)).toEqual({ packed: 12, total: 21 });
   });
 
+  it("a day trip has no Morning of marker; a one-night trip keeps Toiletries marked (#412)", () => {
+    const marked = (t: LifecycleTrip) =>
+      cubeSummaries(t)
+        .filter((c) => c.morningOf)
+        .map((c) => c.cube);
+    const night = trip({ start: "2027-03-14", end: "2027-03-15" });
+    expect(marked(night)).toEqual(["toiletries"]);
+    expect(marked(trip({ start: "2027-03-14", end: "2027-03-14" }))).toEqual([]);
+    const packLast = item("rope", "Accessories", 1, 0, { section: "packlast" });
+    const withPackLast = (end: string) =>
+      trip({ start: "2027-03-14", end, items: [...trip().items, packLast] });
+    expect(marked(withPackLast("2027-03-15"))).toContain("misc");
+    expect(marked(withPackLast("2027-03-14"))).toEqual([]);
+  });
+
   it("caps a cube's packed count at its quantity and leaves empty cubes out", () => {
     const cubes = cubeSummaries(trip({ items: [item("tops", "Clothing", 2, 9)] }));
     expect(cubes).toHaveLength(1);

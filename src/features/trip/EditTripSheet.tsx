@@ -9,6 +9,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { recalculateSuggestions } from "@/domain/item-ops";
+import { laundryChangesQuantity } from "@/domain/short-trip";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { ModalSheet } from "@/components/ui/ModalSheet";
@@ -47,6 +49,9 @@ import { localToday } from "@/lib/today";
 import { reconcile, settleTouched, type EndpointsTouched } from "./edit-reconcile";
 import { changeCount, editChanges, saveLabel, type ChangeRow } from "./edit-diff";
 import styles from "./EditTripSheet.module.css";
+
+/** The line under a disabled laundry row: no marked Staple would change on a trip this short (#412). */
+export const NO_LAUNDRY_EFFECT = "No effect on a trip this short.";
 
 export type EditTripTab = "route" | "preferences";
 export type ApplyOutcome = "ok" | "stale" | "failed";
@@ -197,7 +202,34 @@ export function EditTripSheet({
   const now = today ?? localToday();
   const fallback = provider === curatedLocationProvider ? undefined : curatedLocationProvider;
 
-  const draft = useMemo(() => ({ stops, config: prefs, travelMode: mode }), [stops, prefs, mode]);
+  // Laundry is a real choice only where it would change a quantity on the trip as edited here (#412): a day trip, or nothing
+  // to halve, leaves the row disabled. A SAVED laundry-on keeps it switchable so it can be turned off; a new opt-in that has
+  // become ineffective (enabled, then the trip was shortened) counts as off, so it is neither listed nor saved.
+  // The items the route edit will save (a day trip lengthened has tops it did not have), so laundry is judged on those.
+  const routeTrip = useMemo(() => {
+    const start = stops[0]?.arrive || trip.start;
+    const end = stops[stops.length - 1]?.leave || trip.end;
+    if (isEqual(stops, trip.stops) || stopProblems(stops).length > 0)
+      return { ...trip, start, end };
+    return recalculateSuggestions(
+      { ...trip, stops: stops as TripStop[], start, end },
+      trip.config,
+      calculateSuggestions,
+    );
+  }, [trip, stops]);
+  const laundryUseful = useMemo(
+    () => trip.config.laundry || laundryChangesQuantity(routeTrip, prefs),
+    [trip.config.laundry, routeTrip, prefs],
+  );
+  const effectivePrefs = useMemo(
+    () => (laundryUseful || !prefs.laundry ? prefs : { ...prefs, laundry: false }),
+    [laundryUseful, prefs],
+  );
+
+  const draft = useMemo(
+    () => ({ stops, config: effectivePrefs, travelMode: mode }),
+    [stops, effectivePrefs, mode],
+  );
   const changes = useMemo(
     () => editChanges(trip, draft, calculateSuggestions, now),
     [trip, draft, now],
@@ -218,9 +250,12 @@ export function EditTripSheet({
     arrive: stops[0]?.arrive ?? "",
     leave: stops[stops.length - 1]?.leave ?? "",
   });
+  // "How we count" follows the dates being edited, not only the saved ones.
+  const draftStart = stops[0]?.arrive || trip.start;
+  const draftEnd = stops[stops.length - 1]?.leave || trip.end;
   const mathDays = useMemo(
-    () => calculateSuggestions({ ...prefs, start: trip.start, end: trip.end }),
-    [prefs, trip.start, trip.end],
+    () => calculateSuggestions({ ...prefs, start: draftStart, end: draftEnd }),
+    [prefs, draftStart, draftEnd],
   );
   const patch = (next: Partial<TripConfig>) => setPrefs((current) => ({ ...current, ...next }));
   const problems = stopProblems(stops);
@@ -273,7 +308,7 @@ export function EditTripSheet({
       basedOn = saved.updatedAt ?? basedOn;
     }
     if (changes.applyPreferences) {
-      const outcome = await onApplyPreferences(prefs, basedOn);
+      const outcome = await onApplyPreferences(effectivePrefs, basedOn);
       setBusy(false);
       if (outcome !== "ok") {
         setNotice(outcome);
@@ -494,8 +529,11 @@ export function EditTripSheet({
               <Switch
                 label="Laundry on this trip"
                 marker={<Icon name="refresh" size={16} />}
-                description="Halves anything marked ↻ in your Staples."
-                checked={prefs.laundry}
+                description={
+                  laundryUseful ? "Halves anything marked ↻ in your Staples." : NO_LAUNDRY_EFFECT
+                }
+                checked={effectivePrefs.laundry}
+                disabled={!laundryUseful}
                 onChange={(laundry) => patch({ laundry })}
               />
               <Switch

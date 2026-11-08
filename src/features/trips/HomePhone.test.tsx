@@ -145,6 +145,25 @@ const later = (id: string, name: string, start: string) =>
   trip({ id, name, start, end: start, stops: [stop(name)] });
 
 describe("HomePhone", () => {
+  it("says '1 night' for a one-night trip and 'day trip' with a single date for a day trip (#412)", () => {
+    const night = trip({
+      start: "2027-03-14",
+      end: "2027-03-15",
+      stops: [{ ...stop("Lisbon"), arrive: "2027-03-14", leave: "2027-03-15" }],
+    });
+    const { unmount } = setup({ trip: night });
+    expect(screen.getByText(/NEXT TRIP · 14–15 Mar · 1 night$/)).toBeTruthy();
+    unmount();
+    const day = trip({
+      start: "2027-03-14",
+      end: "2027-03-14",
+      stops: [{ ...stop("Lisbon"), arrive: "2027-03-14", leave: "2027-03-14" }],
+    });
+    setup({ trip: day });
+    expect(screen.getByText(/NEXT TRIP · 14 Mar · day trip$/)).toBeTruthy();
+    expect(screen.queryByText(/0 nights/)).toBeNull();
+  });
+
   it("draws the tag with its dates, nights and countdown, and the four pills", () => {
     setup();
     const tag = screen.getByRole("region", { name: /Lisbon/ });
