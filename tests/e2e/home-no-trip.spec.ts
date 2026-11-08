@@ -147,6 +147,22 @@ for (const firstRun of [true, false]) {
   );
 }
 
+// The hero title (#467) is pixel-sized, so the root font-size change above leaves it alone: double every size instead, as a
+// person with a large text setting gets it, and the title must still wrap whole words in both states.
+for (const firstRun of [true, false]) {
+  test(
+    `195px ${firstRun ? "first run" : "returning"}, doubled text: the hero title wraps whole words`,
+    DEVICE,
+    async ({ page }) => {
+      await open(page, 195, { firstRun });
+      const title = page.getByRole("heading", { name: WHERE });
+      const factor = await enlargeText(page, title);
+      expect(factor, "the page text doubled before it is measured").toBeGreaterThanOrEqual(1.9);
+      await expectWholeWords(title, `hero title at 195px, doubled text`);
+    },
+  );
+}
+
 // The returning Home's recent-trip rows (#463) at 195px with doubled text: the px-sized rules double too (enlargeText), which a
 // root font-size change alone does not do. The page must not scroll sideways, and the recent trips must wrap whole words.
 test(

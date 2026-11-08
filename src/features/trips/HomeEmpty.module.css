@@ -258,6 +258,11 @@
 /* 195px and 200% text: the sticker, the trip copy and the count stack, so the copy has the row's full width. Beside the
    sticker it had about 70px, and a 36px name (#463) cannot wrap inside that without breaking mid-word. */
 @media (max-width: 359px) {
+  /* 195px with doubled text (#467): "Where" is about 141px at 44px, wider than the 123px inner width, so it broke mid-word.
+     At 18px (36px doubled) it is about 115px and every word stays whole. */
+  .title {
+    font-size: 18px;
+  }
   .recentRow {
     grid-template-columns: minmax(0, 1fr);
   }
