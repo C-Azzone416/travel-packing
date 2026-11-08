@@ -2,6 +2,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
 import { DEVICE, phoneHomeLayout } from "./helpers/device";
 import { openPastAndArchive, planATrip } from "./helpers/menu";
+import { reviewSheet } from "./helpers/packing";
 import { planAndCreate } from "./helpers/plan";
 
 // Home is the laptop suitcase view from 1024px (#387); this spec's subject is the page below it, so it runs there.
@@ -49,8 +50,8 @@ async function expectPastCard(
 }
 
 /**
- * Lisbon's review screen, from the card's trip link (whatever its label, so this works with or without the
- * Review bag commit). The trip screen only links to the review once everything is packed, so go to /review directly.
+ * Lisbon's "Review your bag" sheet, from the card's trip link (whatever its label, so this works with or without the
+ * Review bag commit). /review forwards to the Packing page with the sheet open (#411), so go there directly.
  */
 async function openLisbonReview(page: Page) {
   const article = await pastCard(page, "Lisbon");
@@ -60,16 +61,13 @@ async function openLisbonReview(page: Page) {
     .getAttribute("href");
   expect(href).toMatch(/^\/trips\/[^/]+$/);
   await page.goto(`${href}/review`);
-  await expect(page.getByRole("heading", { name: "Toiletries · Bathroom" })).toBeVisible();
+  await expect(reviewSheet(page)).toBeVisible();
 }
 
 /** Unchecks the first packed item on Lisbon's review, which takes the trip out of Ready (review.spec). */
 async function uncheckOneOnLisbon(page: Page) {
   await openLisbonReview(page);
-  await page
-    .getByRole("button", { name: /mark unpacked$/ })
-    .first()
-    .click();
+  await reviewSheet(page).getByRole("checkbox", { checked: true }).first().uncheck();
   await expect(page.getByText(/^No longer ready: an item was unchecked$/)).toBeVisible();
   await page.goto("/");
 }
@@ -109,18 +107,16 @@ test(
 
     // Past, fully packed and not Ready: pack everything again (the trip stays out of Ready), then All 29 packed.
     await openLisbonReview(page);
-    const unpacked = page.getByRole("button", { name: /^Mark packed/ });
+    const unpacked = reviewSheet(page).getByRole("checkbox", { checked: false });
     while ((await unpacked.count()) > 0) {
       const before = await unpacked.count();
-      await unpacked.first().click();
+      await unpacked.first().check();
       await expect.poll(() => unpacked.count()).toBeLessThan(before);
-      const notYet = page.getByRole("dialog").getByRole("button", { name: "Not yet" });
-      if (await notYet.isVisible()) await notYet.click();
     }
-    const placeBag = page.getByRole("button", { name: "Put bag in suitcase" });
+    const placeBag = reviewSheet(page).getByRole("button", { name: "Put bag in suitcase" });
     if (await placeBag.count()) {
       await placeBag.click();
-      await page.getByRole("dialog").getByRole("button", { name: "Confirm" }).click();
+      await expect(reviewSheet(page).getByRole("button", { name: "Undo placement" })).toBeVisible();
     }
     await page.goto("/");
     await expectPastCard(page, "Lisbon", {

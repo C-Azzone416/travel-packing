@@ -9,6 +9,9 @@ import {
   itemRow,
   openCube,
   openEditor,
+  packedRibbon,
+  readyRibbon,
+  reviewSheet,
   showItem,
   tick,
   untick,
@@ -166,10 +169,14 @@ test("completing the last item only reveals Review your bag; it never marks the 
     .getByRole("dialog", { name: "Toiletry bag in suitcase?" })
     .getByRole("button", { name: "Confirm" })
     .click();
-  const review = page.getByRole("link", { name: "Review your bag" });
-  await expect(review).toBeVisible();
-  await expect(review).toHaveAttribute("href", /^\/trips\/[0-9a-f-]{36}\/review$/);
-  await expect(page.getByText("You’re ready to go.")).toHaveCount(0);
+  // The gold ribbon on the handle and one banner whose button opens the sheet; nothing is Ready by itself.
+  await expect(packedRibbon(page)).toContainText("All packed");
+  const banner = page.locator("[data-packed-banner]");
+  await expect(banner).toContainText("Everything is in. Review your bag to mark the trip Ready.");
+  await expect(readyRibbon(page)).toHaveCount(0);
+  await banner.getByRole("button", { name: "Review your bag" }).click();
+  await expect(reviewSheet(page)).toBeVisible();
+  await expect(readyRibbon(page)).toHaveCount(0);
 });
 
 test("a trip-only edit leaves the staples alone: a new trip still has the default", async ({
@@ -226,7 +233,7 @@ test("a trip whose umbrella was already accepted shows it once, with no suggesti
   page,
 }) => {
   await openLisbon(page);
-  await expect(page.getByText("You’re ready to go.")).toBeVisible();
+  await expect(readyRibbon(page)).toBeVisible();
   await expect(page.getByText(/Simulated/)).toHaveCount(0);
   const ids = await allItemIds(page);
   expect(ids.filter((id) => id === "weather-umbrella")).toHaveLength(1);
@@ -274,12 +281,12 @@ test("a required item has no Remove button, and an empty name is refused", async
 
 test("editing preferences recalculates the list and revokes Ready", async ({ page }) => {
   await openLisbon(page);
-  await expect(page.getByText("You’re ready to go.")).toBeVisible();
+  await expect(readyRibbon(page)).toBeVisible();
   await page.getByRole("button", { name: "Edit preferences" }).click();
   const dialog = page.getByRole("dialog", { name: "Edit trip" });
   await dialog.getByRole("switch", { name: "Laundry on this trip" }).uncheck();
   await reviewAndApply(page, dialog);
-  await expect(page.getByText("You’re ready to go.")).toHaveCount(0);
+  await expect(readyRibbon(page)).toHaveCount(0);
 });
 
 test("Mark as not ready keeps every packed count", async ({ page }) => {
@@ -287,7 +294,7 @@ test("Mark as not ready keeps every packed count", async ({ page }) => {
   const total = page.getByText(/^(\d+) of \1 in the bag$/);
   const before = await total.innerText();
   await page.getByRole("button", { name: "Mark as not ready" }).click();
-  await expect(page.getByText("You’re ready to go.")).toHaveCount(0);
+  await expect(readyRibbon(page)).toHaveCount(0);
   await expect(page.locator(".toast-region")).toContainText("Progress kept.");
   await expect(total).toHaveText(before);
 });

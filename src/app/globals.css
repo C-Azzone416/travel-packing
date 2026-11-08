@@ -1282,20 +1282,6 @@ input:disabled {
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
-.review-group {
-  margin: 18px 0;
-}
-.review-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  padding: 11px 0;
-  border-bottom: 1px solid var(--line);
-}
-.review-row:last-child {
-  border: 0;
-}
 
 /* 8px between the label, the box, the helper line and what follows: the focus ring (3px + 2px offset) needs
    at least 5px, and the helper must not touch the results list. */
@@ -1422,13 +1408,6 @@ input:disabled {
   letter-spacing: -0.02em;
 }
 
-/* The review has no heading between its title (h1) and its sections, so they are h2 in the outline but look the same. */
-.review-group .list-section-head h2 {
-  margin: 0;
-  font-size: 16px;
-  letter-spacing: normal;
-}
-
 /* The list sits flat on the page: no card around it (audit 18). */
 
 /* The "Pack last" badge never touches the name before it (design: 6 to 8 px). */
@@ -1468,40 +1447,6 @@ input:disabled {
 .bag-placement.complete {
   border-color: var(--status-ready-border);
   background: var(--status-ready-bg);
-}
-.review-prompt {
-  margin-top: 16px;
-  padding: 18px;
-  border-radius: var(--control-radius);
-  background: var(--ink);
-  color: var(--action-ink);
-}
-.review-prompt p {
-  color: var(--action-ink);
-}
-.review-prompt .button.secondary {
-  color: var(--ink);
-}
-.ready-card {
-  background: linear-gradient(135deg, var(--action), var(--action-border));
-  color: var(--action-ink);
-}
-.ready-card p {
-  color: var(--action-ink);
-}
-.ready-card .eyebrow {
-  color: var(--action-ink);
-}
-.button.ready-secondary {
-  border-color: color-mix(in srgb, var(--surface) 72%, transparent);
-  background: transparent;
-  color: var(--action-ink);
-}
-.button.ready-secondary:hover {
-  background: color-mix(in srgb, var(--surface) 12%, transparent);
-}
-.ready-card .button.secondary {
-  color: var(--ink);
 }
 
 .scope-choice {
@@ -2280,12 +2225,6 @@ input:disabled {
   color: var(--muted-text);
   box-shadow: none;
   cursor: default;
-}
-/* Review: the reason sits on its own line under the Ready button, and the back arrow is a link that looks like the
-   shared back button on every other screen. */
-.review-actions .ready-blocker {
-  flex: 1 0 100%;
-  margin: 0;
 }
 a.back {
   display: inline-grid;

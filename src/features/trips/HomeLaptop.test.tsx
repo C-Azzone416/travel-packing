@@ -353,4 +353,31 @@ describe("HomeLaptop", () => {
     const { container } = setup({ busy: true });
     expect(container.firstElementChild?.getAttribute("aria-busy")).toBe("true");
   });
+  it("all packed (#411): gold All packed ribbon on the handle, 'Review your bag' opens the sheet on Packing, chip stays NEXT TRIP", () => {
+    setup({
+      trip: trip({
+        items: [item("tops", "Clothing", 3, 3), item("passport", "Other essentials", 1, 1)],
+      }),
+    });
+    expect(document.querySelector('[data-packed-ribbon="gold"]')?.textContent).toBe("All packed");
+    const review = screen.getByRole("link", { name: "Review your bag: Lisbon & Porto" });
+    expect(review.getAttribute("href")).toBe("/trips/t1?review=1");
+    expect(screen.queryByRole("link", { name: /Continue packing|Start packing/ })).toBeNull();
+    expect(screen.getByText(/NEXT TRIP/)).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "ALL PACKED" })).toBeTruthy();
+  });
+
+  it("Ready (#411): green Ready ribbon and a READY chip instead of NEXT TRIP", () => {
+    setup({ trip: trip({ ready: true }) });
+    expect(document.querySelector('[data-packed-ribbon="good"]')?.textContent).toBe("Ready");
+    expect(document.querySelector('[data-packed-ribbon="gold"]')).toBeNull();
+    expect(screen.getByText(/^READY ·/)).toBeTruthy();
+    expect(screen.queryByText(/NEXT TRIP/)).toBeNull();
+    expect(screen.getByRole("heading", { name: "READY TO GO" })).toBeTruthy();
+  });
+
+  it("a bag that is still being packed has no ribbon", () => {
+    setup();
+    expect(document.querySelector("[data-packed-ribbon]")).toBeNull();
+  });
 });

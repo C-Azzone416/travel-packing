@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSaveStatus } from "@/components/shell/SaveStatus";
 import { Button, buttonClassName } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { ModalSheet } from "@/components/ui/ModalSheet";
 import { useToast } from "@/components/ui/Toast";
 import { CUBE_LABELS, itemCube, type Cube } from "@/domain/cubes";
@@ -30,7 +29,9 @@ import {
 } from "./EditTripSheet";
 import { ItemEditor } from "./ItemEditor";
 import { EditStampSheet } from "./EditStampSheet";
-import { bagGate, packedAnnouncement, showReviewPrompt } from "./trip-view";
+import { bagGate, packedAnnouncement } from "./trip-view";
+import { packedState } from "./packed-state";
+import { ReviewBagSheet } from "./ReviewBagSheet";
 import { revocationReason } from "./review-view";
 import { WeatherPanel, type WeatherPanelState } from "./WeatherPanel";
 import { BagStep } from "./packing/BagStep";
@@ -87,9 +88,12 @@ export function TripScreen({
   tripId,
   openItemId,
   openCube,
+  openReview = false,
 }: {
   tripId: string;
   openItemId?: string;
+  /** ?review=1 (and the /review redirect): the "Review your bag" sheet opens as soon as the trip has loaded (#411). */
+  openReview?: boolean;
   /** The cube the laptop Packing view opens first (?cube=, which the Home tiles link to). */
   openCube?: Cube;
 }) {
@@ -101,12 +105,34 @@ export function TripScreen({
   const [staples, setStaples] = useState<Staple[]>([]);
   const [reloads, setReloads] = useState(0);
   const [dialog, setDialog] = useState<Dialog>(null);
-  const [submitting, setSubmitting] = useState(false);
+  // How many dialog/sheet writes are in flight. A count (not a flag): a row write that never set it must not clear it, and two
+  // overlapping writes keep their controls disabled until the LAST one settles.
+  const [modalWrites, setModalWrites] = useState(0);
+  const submitting = modalWrites > 0;
+  // A failed write from the Review sheet, with the retry the sheet offers (the page behind it is inert).
+  const [reviewFailure, setReviewFailure] = useState<{ message: string; retry: () => void } | null>(
+    null,
+  );
   const [failedRows, setFailedRows] = useState<ReadonlySet<string>>(new Set());
   const [announcement, setAnnouncement] = useState("");
   const [stampFailed, setStampFailed] = useState(false);
   const [weather, setWeather] = useState<WeatherExperience | null>(null);
   const [laundryBusy, setLaundryBusy] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(openReview);
+  // The "Everything is in" banner was dismissed; it comes back only after an untick and a new completion.
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+  // The review sheet has its own bag step, so the "Toiletry bag in suitcase?" prompt stays out of its way.
+  const reviewOpenRef = useRef(openReview);
+  // Rows whose Retry is in flight (see retryRow).
+  const retryingRef = useRef(new Set<string>());
+  const [retrying, setRetrying] = useState<readonly string[]>([]);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const laptop = useMinWidth(LAPTOP_MIN_WIDTH);
   const weatherRequest = useRef(0);
   const bagPromptDismissed = useRef(false);
@@ -204,7 +230,7 @@ export function TripScreen({
 
   const act = useCallback(
     (write: () => Promise<TripChange>, options: ActOptions = {}): Promise<void> => {
-      if (options.modal) setSubmitting(true);
+      if (options.modal) setModalWrites((count) => count + 1);
       return track(write, (change) => {
         const reason = confirmed.current ? revocationReason(confirmed.current, change.trip) : null;
         confirmed.current = change.trip;
@@ -214,7 +240,11 @@ export function TripScreen({
           retries.current.delete(options.row);
           setFailedRows((current) => new Set([...current].filter((id) => id !== options.row)));
         }
-        if (change.signals.promptBagPlacement && !bagPromptDismissed.current)
+        if (
+          change.signals.promptBagPlacement &&
+          !bagPromptDismissed.current &&
+          !reviewOpenRef.current
+        )
           setDialog({ kind: "bag" });
         if (options.announce) setAnnouncement(options.announce(change));
         if (options.staples) void source.listStaples().then(setStaples);
@@ -228,7 +258,9 @@ export function TripScreen({
           retries.current.set(row, { write, options });
           setFailedRows((current) => new Set(current).add(row));
         })
-        .finally(() => setSubmitting(false));
+        .finally(() => {
+          if (options.modal) setModalWrites((count) => Math.max(count - 1, 0));
+        });
     },
     [source, toast, track],
   );
@@ -597,13 +629,21 @@ export function TripScreen({
 
   const tickItem = (item: TripItem, packed: boolean) => setCount(item, packed ? item.qty : 0);
 
+  // Rows whose Retry is in flight. A ref guards a double press (state would not update between two clicks); the state shows
+  // "Saving…" and hides the button. A retry never queues a second write for the row while the first is pending.
   const retryRow = (id: string) => {
+    if (retryingRef.current.has(id)) return;
     // The retry button only renders while a failure is recorded for this row.
     const failed = retries.current.get(id) as {
       write: () => Promise<TripChange>;
       options: ActOptions;
     };
-    void act(failed.write, failed.options);
+    retryingRef.current.add(id);
+    setRetrying([...retryingRef.current]);
+    void act(failed.write, failed.options).finally(() => {
+      retryingRef.current.delete(id);
+      setRetrying([...retryingRef.current]);
+    });
   };
 
   const editItem = (id: string) => {
@@ -669,8 +709,7 @@ export function TripScreen({
       />
     );
 
-  // What sits under the suitcase until the Phase 3 issues (#411 all packed / Ready, #389 Edit trip) take it over. The laptop has
-  // "Edit trip" in its header; on a phone it is one of these links (the Home tag's menu takes it over in #389).
+  // What sits under the suitcase. The laptop has "Edit trip" in its header; on a phone it is one of these links.
   const packingTools = (withEditTrip: boolean) => (
     <div className="packing-tools" role="group" aria-label="More for this trip">
       {withEditTrip ? (
@@ -707,54 +746,61 @@ export function TripScreen({
       </button>
     </div>
   );
-  const packingReview = (
-    <>
-      {showReviewPrompt(trip) ? (
-        <div className="review-prompt">
-          <h3>Everything is checked. Want to review?</h3>
-          <p>
-            We will show the full bag, including Pack last and the return outfit, before you decide
-            it is ready.
-          </p>
-          <Link
-            className={buttonClassName({ variant: "secondary" })}
-            href={`/trips/${tripId}/review`}
-          >
-            Review your bag
-          </Link>
-        </div>
-      ) : null}
-      {trip.ready ? (
-        <Card padded className="ready-card">
-          <p className="eyebrow">Confirmed after review</p>
-          <h2>You’re ready to go.</h2>
-          <p>
-            You can still correct anything below. Any checklist change will revoke Ready, or you can
-            mark the trip not ready without changing packing progress.
-          </p>
-          <div className="actions">
-            <Link
-              className={buttonClassName({ variant: "secondary", small: true })}
-              href={`/trips/${tripId}/review`}
-            >
-              Review bag again
-            </Link>
-            <Button
-              className="ready-secondary"
-              small
-              onClick={() =>
-                void act(() => source.markNotReady(tripId), {
-                  after: () => toast.show("Progress kept."),
-                })
-              }
-            >
-              Mark as not ready
-            </Button>
-          </div>
-        </Card>
-      ) : null}
-    </>
-  );
+  const state = packedState(trip);
+  // An untick (or Ready turned off by a change) reopens the way for the banner: render-time reset, not an effect.
+  if (state === "open" && bannerDismissed) setBannerDismissed(false);
+
+  const openReviewSheet = () => {
+    reviewOpenRef.current = true;
+    setReviewOpen(true);
+  };
+  const closeReviewSheet = () => {
+    reviewOpenRef.current = false;
+    setReviewOpen(false);
+    setReviewFailure(null);
+    // Arrived by ?review=1 or the /review redirect: put the plain trip address back. Only while this screen is still the one on
+    // the page and only for ITS trip: a write that settles after the person has gone to another trip must not rewrite that URL.
+    if (
+      mounted.current &&
+      window.location.search.includes("review=") &&
+      decodeURIComponent(window.location.pathname) === `/trips/${tripId}`
+    ) {
+      window.history.replaceState(null, "", `/trips/${tripId}`);
+    }
+  };
+  // A write made from the Review sheet. Behind the sheet the page is inert, so a failure is shown INSIDE the sheet with a Retry
+  // that sends the same write again (the global Save error chip is out of reach there).
+  const sheetWrite = (what: string, write: () => Promise<TripChange>, options: ActOptions = {}) => {
+    const run = () => {
+      setReviewFailure(null);
+      void act(write, {
+        ...options,
+        modal: true,
+        onFail: () =>
+          setReviewFailure({ message: `${what} didn’t save. Nothing was changed.`, retry: run }),
+      });
+    };
+    run();
+  };
+  const markReady = () =>
+    sheetWrite("Marking the trip Ready", () => source.markReady(tripId), {
+      announce: () => "Marked ready.",
+      after: closeReviewSheet,
+    });
+  const markNotReady = () =>
+    void act(() => source.markNotReady(tripId), {
+      modal: true,
+      announce: () => "Marked not ready. Progress kept.",
+      after: () => toast.show("Progress kept."),
+    });
+  const readyProps = {
+    state,
+    onReview: openReviewSheet,
+    onNotReady: markNotReady,
+    readyBusy: submitting,
+    bannerOpen: !bannerDismissed,
+    onDismissBanner: () => setBannerDismissed(true),
+  };
 
   return (
     <section className="screen">
@@ -790,12 +836,8 @@ export function TripScreen({
             />
           }
           toiletryExtra={toiletryExtra}
-          below={
-            <>
-              {packingTools(false)}
-              {packingReview}
-            </>
-          }
+          below={packingTools(false)}
+          {...readyProps}
         />
       ) : (
         <PackingPhone
@@ -826,15 +868,36 @@ export function TripScreen({
             />
           }
           toiletryExtra={toiletryExtra}
-          below={
-            <>
-              {packingTools(true)}
-              {packingReview}
-            </>
-          }
+          below={packingTools(true)}
+          {...readyProps}
         />
       )}
 
+      {reviewOpen ? (
+        <ReviewBagSheet
+          trip={trip}
+          busy={submitting}
+          onTick={tickItem}
+          pending={[...Object.keys(tapped).filter((id) => !failedRows.has(id)), ...retrying]}
+          failedRows={failedRows}
+          failure={reviewFailure}
+          onRetry={retryRow}
+          onPlaceBag={() =>
+            sheetWrite("Putting the bag in the suitcase", () => source.confirmBagPlacement(tripId))
+          }
+          onUndoBag={() =>
+            sheetWrite("Undoing the bag placement", () => source.undoBagPlacement(tripId))
+          }
+          onReady={markReady}
+          onNotReady={() =>
+            sheetWrite("Marking the trip not ready", () => source.markNotReady(tripId), {
+              announce: () => "Marked not ready. Progress kept.",
+              after: () => toast.show("Progress kept."),
+            })
+          }
+          onClose={closeReviewSheet}
+        />
+      ) : null}
       {editing ? (
         <ItemEditor
           key={editing.id}

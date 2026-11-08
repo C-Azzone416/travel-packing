@@ -2,7 +2,13 @@ import { expect, test, type Page } from "@playwright/test";
 import { expectAccessible } from "./helpers/a11y";
 import { ownerEmailFor, signInAsOwner } from "./helpers/auth";
 import { markTripReady } from "./helpers/database";
-import { allItemIds, expectItem, expectNoItem, expectPacking } from "./helpers/packing";
+import {
+  allItemIds,
+  expectItem,
+  expectNoItem,
+  expectPacking,
+  readyRibbon,
+} from "./helpers/packing";
 import { DEVICE, phoneHomeLayout } from "./helpers/device";
 import { planRouteToList, reviewAndCreate } from "./helpers/plan";
 import { FAKE_GEOCODER_PORT, OPEN_METEO_PORT } from "./support/ports";
@@ -141,7 +147,7 @@ test("a changed forecast offers itemized changes; accepting some revokes Ready, 
   // Editing the route took the trip out of Ready; make it Ready again so the review has something to revoke.
   await markTripReady(`e2e-${ownerEmailFor(test.info().project.name)}`, "London → London");
   await page.reload();
-  await expect(page.getByText("You’re ready to go.")).toBeVisible();
+  await expect(readyRibbon(page)).toBeVisible();
 
   // The dry forecast no longer calls for the hot-weather lines: they come as rows to add or dismiss, inside the forecast card.
   await expect(reviewButton(page)).toBeVisible();
@@ -157,7 +163,7 @@ test("a changed forecast offers itemized changes; accepting some revokes Ready, 
   await expect(rows).toHaveCount(total - 1);
   // Accepting one revokes Ready.
   await rows.first().click();
-  await expect(page.getByText("You’re ready to go.")).toHaveCount(0);
+  await expect(readyRibbon(page)).toHaveCount(0);
 
   // The dismissed change does not come back after a reload.
   await page.reload();

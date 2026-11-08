@@ -1,11 +1,10 @@
 import type { ReactElement } from "react";
 import { describe, expect, it } from "vitest";
-import TripPage, { generateMetadata } from "./page";
-import { ReviewScreen } from "@/features/trip/ReviewScreen";
+import TripPage, { metadata } from "./page";
 
 describe("/trips/[id]", () => {
   it("is titled 'Packing list' and renders the trip screen for the id in the URL", async () => {
-    expect(await generateMetadata({})).toEqual({ title: "Packing list" });
+    expect(metadata).toEqual({ title: "Packing list" });
     const element = (await TripPage({
       params: Promise.resolve({ id: "san-diego" }),
     })) as ReactElement<{ tripId: string }>;
@@ -25,29 +24,22 @@ describe("/trips/[id]", () => {
     expect((await render({ edit: "" })).props.openItemId).toBeUndefined();
   });
 
-  it("?review=1 (where /trips/[id]/review forwards, #389) shows the Ready final check, titled 'Review your bag'", async () => {
+  it("?review=1 (where /trips/[id]/review forwards) opens the Review-your-bag sheet on the Packing screen", async () => {
     const element = (await TripPage({
       params: Promise.resolve({ id: "san-diego" }),
       searchParams: Promise.resolve({ review: "1" }),
-    })) as ReactElement<{ tripId: string }>;
-    expect(element.type).toBe(ReviewScreen);
+    })) as ReactElement<{ tripId: string; openReview?: boolean }>;
     expect(element.props.tripId).toBe("san-diego");
-    expect(await generateMetadata({ searchParams: Promise.resolve({ review: "1" }) })).toEqual({
-      title: "Review your bag",
-    });
+    expect(element.props.openReview).toBe(true);
   });
 
-  it("any other ?review value, or none, is the Packing page and its title", async () => {
+  it("any other ?review value, or none, leaves the sheet closed", async () => {
     for (const review of ["0", "", ["1", "1"], undefined]) {
       const element = (await TripPage({
         params: Promise.resolve({ id: "san-diego" }),
         searchParams: Promise.resolve({ review }),
-      })) as ReactElement<{ tripId: string }>;
-      expect(element.type).not.toBe(ReviewScreen);
-      expect(await generateMetadata({ searchParams: Promise.resolve({ review }) })).toEqual({
-        title: "Packing list",
-      });
+      })) as ReactElement<{ openReview?: boolean }>;
+      expect(element.props.openReview).toBe(false);
     }
-    expect(await generateMetadata({})).toEqual({ title: "Packing list" });
   });
 });

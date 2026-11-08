@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Icon } from "@/components/ui/Icon";
 import { cx } from "@/components/suitcase/cx";
+import type { PackedState } from "../packed-state";
 import type { Headline } from "./packing-model";
 import styles from "./packing.module.css";
 
@@ -15,10 +16,19 @@ export interface PackingHeaderProps {
   laundryBusy?: boolean;
   onLaundry: (next: boolean) => void;
   onEditTrip: () => void;
+  /** Where the trip is on the way to Ready (#411). */
+  state: PackedState;
+  /** Opens the "Review your bag" sheet. */
+  onReview: () => void;
+  /** Takes a Ready trip back to packing; the packed counts stay. */
+  onNotReady: () => void;
+  /** A Ready change is being saved: the Ready controls wait. */
+  readyBusy?: boolean;
 }
 
 // The header of the laptop Packing view (#376 part 3 section 1.3): "‹ Trip" and the title, the quantity progress, and the
-// two actions. The "All packed" wording on the right is the hook #411 builds on (data-all-packed on the progress zone).
+// actions. Once everything is in, "0 to go" becomes "All packed" (#411), and a Ready trip says "Ready to go" and offers
+// "Review bag" and "Mark as not ready".
 export function PackingHeader({
   tripName,
   headline,
@@ -26,8 +36,12 @@ export function PackingHeader({
   laundryBusy = false,
   onLaundry,
   onEditTrip,
+  state,
+  onReview,
+  onNotReady,
+  readyBusy = false,
 }: PackingHeaderProps) {
-  const allPacked = headline.total > 0 && headline.toGo === 0;
+  const allPacked = state !== "open";
   return (
     <header className={styles.header}>
       <div className={styles.titleZone}>
@@ -39,13 +53,23 @@ export function PackingHeader({
           Packing
         </h1>
       </div>
-      <div className={styles.progressZone} data-all-packed={allPacked ? "true" : undefined}>
+      <div
+        className={styles.progressZone}
+        data-all-packed={allPacked ? "true" : undefined}
+        data-packed-state={state}
+      >
         <div className={styles.progressTop}>
           <p className={styles.progressLine}>
             <span className={styles.bigNumber}>{headline.packed}</span> of {headline.total} in the
             bag
           </p>
-          <p className={styles.toGo}>{headline.toGo > 0 ? `${headline.toGo} to go` : "0 to go"}</p>
+          <p className={styles.toGo}>
+            {state === "ready"
+              ? "Ready to go"
+              : state === "packed"
+                ? "All packed"
+                : `${headline.toGo} to go`}
+          </p>
         </div>
         <div
           className={styles.track}
@@ -60,6 +84,25 @@ export function PackingHeader({
         </div>
       </div>
       <div className={styles.actions}>
+        {state === "ready" ? (
+          <>
+            <button
+              type="button"
+              className={cx(styles.action, styles.actionOff)}
+              onClick={onReview}
+            >
+              Review bag
+            </button>
+            <button
+              type="button"
+              className={cx(styles.action, styles.actionOff)}
+              disabled={readyBusy}
+              onClick={onNotReady}
+            >
+              Mark as not ready
+            </button>
+          </>
+        ) : null}
         <button
           type="button"
           className={cx(styles.action, laundry ? styles.actionOn : styles.actionOff)}

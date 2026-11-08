@@ -178,6 +178,8 @@ export function firstOpenCube(cubes: readonly CubeSummary[]): Cube | null {
  * (Caroline's ruling on #338); the all-packed state is #411.
  */
 export function suitcaseButtonLabel(totals: BagTotals, ready: boolean, phase: TripPhase): string {
+  // While the trip is on, the list is what the person opens, whatever its packed state (#410).
+  if (phase === "during") return "Open list";
   if (ready) return "Review bag";
   return packingButtonLabel(totals.packed, phase);
 }

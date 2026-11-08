@@ -149,6 +149,46 @@
   font-weight: var(--fw-heading-xl);
   line-height: 1;
 }
+.count[data-all-packed] .countNow {
+  color: var(--good);
+}
+/* A Ready trip: "Ready to go" with its two text actions under the title (#411). */
+.readyRow {
+  display: flex;
+  flex-wrap: wrap;
+  padding-inline: 4px;
+  align-items: center;
+  gap: 4px 16px;
+  min-width: 0;
+}
+.readyLine {
+  margin: 0;
+  color: var(--good);
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+}
+.textButton {
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.textButton:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+.textButton:focus-visible {
+  outline: 3px solid var(--info);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
 .countOf {
   color: var(--muted);
   font-family: var(--font-display);

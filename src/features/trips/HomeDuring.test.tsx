@@ -219,3 +219,73 @@ describe("the current stay without weather", () => {
     expect(items[0].textContent).not.toContain("·");
   });
 });
+
+describe("with #460's packed states (merged develop)", () => {
+  const packedTrip = (extra: Partial<LifecycleTrip> = {}): LifecycleTrip => ({
+    ...trip(),
+    ready: false,
+    items: trip().items.map((item) => ({ ...item, packed: item.qty })),
+    toiletryBagPacked: true,
+    ...extra,
+  });
+
+  it("keeps ON NOW and the Open list button on a fully packed or Ready trip while it is on (laptop)", () => {
+    for (const extra of [{}, { ready: true }]) {
+      const view = render(
+        <HomeLaptop
+          trip={packedTrip(extra)}
+          later={[]}
+          today="2027-03-18"
+          weather={{ phase: "none" }}
+          map={null}
+          busy={false}
+          {...handlers()}
+        />,
+      );
+      expect(screen.getByText(/^ON NOW/)).toBeTruthy();
+      expect(screen.queryByText(/^READY ·/)).toBeNull();
+      expect(screen.getByRole("link", { name: /^Open list:/ })).toBeTruthy();
+      expect(screen.queryByRole("link", { name: /Review/ })).toBeNull();
+      view.unmount();
+    }
+  });
+
+  it("keeps the READY chip before departure", () => {
+    render(
+      <HomeLaptop
+        trip={packedTrip({ ready: true })}
+        later={[]}
+        today="2027-03-02"
+        weather={{ phase: "none" }}
+        map={null}
+        busy={false}
+        {...handlers()}
+      />,
+    );
+    expect(screen.getByText(/^READY ·/)).toBeTruthy();
+    expect(screen.queryByText(/^ON NOW/)).toBeNull();
+  });
+
+  it("keeps ON NOW and Open list on a packed or Ready trip while it is on (phone)", () => {
+    for (const extra of [{}, { ready: true }]) {
+      const state = sampleLifecycleState();
+      const t = packedTrip(extra);
+      const view = render(
+        <HomePhone
+          trip={t}
+          later={[]}
+          state={{ ...state, trips: [t, ...state.trips.slice(1)] }}
+          today="2027-03-18"
+          weather={{ phase: "none" }}
+          map={null}
+          busy={false}
+          {...handlers()}
+        />,
+      );
+      expect(screen.getByText(/^ON NOW/)).toBeTruthy();
+      expect(screen.getByRole("link", { name: /^Open list:/ })).toBeTruthy();
+      expect(screen.queryByRole("link", { name: /Review/ })).toBeNull();
+      view.unmount();
+    }
+  });
+});

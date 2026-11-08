@@ -9,10 +9,12 @@ import {
   CubeTile,
   DayBadge,
   LuggageTag,
+  PackedRibbon,
   PillTabs,
   Suitcase,
 } from "@/components/suitcase";
 import type { LifecycleState, LifecycleTrip } from "@/domain/trip-lifecycle";
+import { packedState, reviewHref } from "@/features/trip/packed-state";
 import { StampsContent } from "@/features/stamps/StampsScreen";
 import { stampsView } from "@/features/stamps/stamps-view";
 import {
@@ -97,7 +99,6 @@ export function HomePhone({
     hero,
     countdown,
     dayBadge,
-    chip,
     totals,
     cubes,
     label,
@@ -107,6 +108,7 @@ export function HomePhone({
   } = model;
   const stamps = useMemo(() => stampsView(state.trips, today, "rolling").inked, [state, today]);
   const weatherSub = weatherPillSub(weather, model);
+  const packed = packedState(trip);
   const weatherEmpty = (
     <p className={styles.note}>
       {weather.phase === "loading"
@@ -127,7 +129,8 @@ export function HomePhone({
           <div className={styles.tagRow}>
             <div className={styles.tagCopy}>
               <p className={styles.chip} data-on-now={dayBadge ? "" : undefined}>
-                {chip} · {tagDatesShort(trip, today)} · {nights} {nights === 1 ? "night" : "nights"}
+                {dayBadge ? "ON NOW" : packed === "ready" ? "READY" : "NEXT TRIP"} ·{" "}
+                {tagDatesShort(trip, today)} · {nights} {nights === 1 ? "night" : "nights"}
               </p>
               <h2 id="home-trip-title" className={styles.name} data-size={hero.size}>
                 {hero.title}
@@ -180,7 +183,16 @@ export function HomePhone({
         value={panel}
         onChange={(id) => setPanel(id as HomePanel)}
         items={[
-          { id: "pack", label: "Pack", sub: `${totals.packed}/${totals.total}` },
+          {
+            id: "pack",
+            label: "Pack",
+            sub:
+              packed === "ready"
+                ? "Ready"
+                : packed === "packed"
+                  ? "All in"
+                  : `${totals.packed}/${totals.total}`,
+          },
           { id: "weather", label: "Weather", sub: weatherSub.text, alert: weatherSub.alert },
           { id: "future", label: "Future", sub: tripCount(later.length) },
           { id: "stamps", label: "Stamps", sub: String(stamps) },
@@ -207,7 +219,11 @@ export function HomePhone({
               </div>
             )}
           </figure>
-          <Suitcase role="region" aria-labelledby="home-bag-title">
+          <Suitcase
+            role="region"
+            aria-labelledby="home-bag-title"
+            ribbon={<PackedRibbon state={packed} />}
+          >
             <div className={styles.bagHead}>
               <h2 id="home-bag-title" className={styles.bigCount}>
                 <span className={styles.packed}>{totals.packed}</span>
@@ -232,10 +248,12 @@ export function HomePhone({
             </ul>
             <Link
               className={styles.primary}
-              href={packingHref(trip.id, next)}
-              aria-label={`${label}: ${name}`}
+              href={
+                packed === "packed" && !dayBadge ? reviewHref(trip.id) : packingHref(trip.id, next)
+              }
+              aria-label={`${packed === "packed" && !dayBadge ? "Review your bag" : label}: ${name}`}
             >
-              {label}
+              {packed === "packed" && !dayBadge ? "Review your bag" : label}
             </Link>
           </Suitcase>
         </div>
