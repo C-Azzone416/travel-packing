@@ -187,6 +187,27 @@ test("quick view on an archived trip filters without changing progress or touchi
   expect(requests).toEqual([]);
 });
 
+test("quick view collapses again, and the toggle says whether it is open", async ({ page }) => {
+  await openDashboard(page);
+  await openPastAndArchive(page);
+  const lisbon = card(page, "Lisbon");
+  const toggle = lisbon.getByRole("button", { name: /Quick view/ });
+  const quick = lisbon.locator('[id^="quick-view-"]');
+  const before = await lisbon.innerText();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(quick).toHaveCount(0);
+
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(quick).toBeVisible();
+
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(quick).toHaveCount(0);
+  // Closing it again puts the card back exactly as it was.
+  expect(await lisbon.innerText()).toBe(before);
+});
+
 test(
   "no horizontal scroll at 320px on Home or with a quick view open",
   DEVICE,

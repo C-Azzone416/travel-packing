@@ -86,6 +86,29 @@ test("Edit trip has three ways in: the dashboard, the packing hero and Trip math
   ).toBeChecked();
 });
 
+test('"How we count" says the sum for the saved dates and follows the dates being edited', async ({
+  page,
+}) => {
+  await openSanDiego(page);
+  const dialog = await openPreferences(page);
+  // San Diego is 5 days with the return travel outfit on: 5 days away - 1 for home = 4 days of everyday clothes.
+  const note = dialog.locator("p").filter({ hasText: /^How we count:/ });
+  await expect(note).toHaveText(
+    "How we count: 5 days away \u2212 1 for home = 4 days of everyday clothes. Your travel outfit is worn, not packed.",
+  );
+  // A day off the trip (still unsaved) changes the sum: 4 days away - 1 for home = 3 days of everyday clothes.
+  await section(page, "Route & dates").click();
+  await dialog.getByRole("button", { name: "One night fewer" }).click();
+  await expect(note).toHaveText(
+    "How we count: 4 days away \u2212 1 for home = 3 days of everyday clothes. Your travel outfit is worn, not packed.",
+  );
+  // Without the return outfit nothing is held back for home.
+  await dialog.getByRole("switch", { name: "Dedicated return travel outfit" }).uncheck();
+  await expect(note).toHaveText(
+    "How we count: 4 days away, none held back for home = 4 days of everyday clothes. Your travel outfit is worn, not packed.",
+  );
+});
+
 test("a recalculation keeps the person's list work: manual, edited, packed and removed items, stored", async ({
   page,
 }) => {

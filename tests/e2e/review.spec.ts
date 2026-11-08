@@ -97,6 +97,48 @@ for (const layout of LAYOUTS) {
       await expect(total).toHaveText(before);
     });
 
+    test("Undo placement takes a Ready trip out of Ready and keeps the contents; placing the bag again restores eligibility, stored", async ({
+      page,
+    }) => {
+      await openTrip(page, "Lisbon");
+      await expect(readyRibbon(page)).toBeVisible();
+      await page.getByRole("button", { name: "Review bag" }).click();
+      const sheet = reviewSheet(page);
+      await expect(sheet.getByRole("button", { name: "Mark as not ready" })).toBeVisible();
+      await sheet.getByRole("button", { name: "Undo placement" }).click();
+
+      // Ready is revoked, the reason is said, and Ready cannot be chosen again until the bag is back in.
+      await expect(
+        page.getByText(/^No longer ready: the toiletry bag is no longer in the suitcase$/),
+      ).toBeVisible();
+      await expect(readyRibbon(page)).toHaveCount(0);
+      await expect(sheet.getByRole("button", { name: "Put bag in suitcase" })).toBeVisible();
+      await expect(ready(page)).toHaveAttribute("aria-disabled", "true");
+      await expect(sheet.getByText("Confirm your toiletry bag is in the suitcase.")).toBeVisible();
+      // Only the bag came out: every item is still packed, so "All packed" shows on the handle.
+      await expect(packedRibbon(page)).toContainText("All packed");
+      await page.reload();
+      await expectPacking(page);
+      await expect(readyRibbon(page)).toHaveCount(0);
+      await expect(packedRibbon(page)).toContainText("All packed");
+
+      // Eligibility is restored by placing the bag again, and Ready then works.
+      await page
+        .locator("[data-packed-banner]")
+        .getByRole("button", { name: "Review your bag" })
+        .click();
+      await expect(ready(page)).toHaveAttribute("aria-disabled", "true");
+      await sheet.getByRole("button", { name: "Put bag in suitcase" }).click();
+      await expect(sheet.getByRole("button", { name: "Undo placement" })).toBeVisible();
+      await expect(ready(page)).not.toHaveAttribute("aria-disabled", "true");
+      await ready(page).click();
+      await expect(sheet).toHaveCount(0);
+      await expect(readyRibbon(page)).toContainText("Ready");
+      await page.reload();
+      await expectPacking(page);
+      await expect(readyRibbon(page)).toBeVisible();
+    });
+
     test("unticking an item in the sheet takes a Ready trip out of Ready, visibly, and that is stored", async ({
       page,
     }) => {
