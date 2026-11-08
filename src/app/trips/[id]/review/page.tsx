@@ -1,9 +1,8 @@
-import type { Metadata } from "next";
-import { ReviewScreen } from "@/features/trip/ReviewScreen";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Review your bag" };
-
+// The change-review step is now the live "What changes in your list" panel inside Edit trip (#389), so this address only
+// forwards. `?review=1` is for the Ready final check, which comes back as a sheet on Packing (#411).
 export default async function ReviewPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  return <ReviewScreen tripId={id} />;
+  redirect(`/trips/${encodeURIComponent(id)}?review=1`);
 }

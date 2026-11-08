@@ -266,30 +266,46 @@ export interface HowStepProps extends DraftProps {
   attempted: boolean;
 }
 
-/** Step 3: Fly, Drive, or Train or other. Colour is never the only signal: the chosen one is pressed and says so. */
-export function HowStep({ draft, onDraft, attempted }: HowStepProps) {
+/** Fly, Drive, or Train or other: one radio group. Colour is never the only signal: the chosen one is pressed and says so. */
+export function TravelModeControl({
+  value,
+  onChange,
+}: {
+  value: TravelMode | null | undefined;
+  onChange: (mode: TravelMode) => void;
+}) {
   const name = useId();
   return (
+    <fieldset className={styles.modes}>
+      <legend className="sr-only">How are you getting there?</legend>
+      {MODE_CHOICES.map((choice) => (
+        <label
+          key={choice.mode}
+          className={styles.mode}
+          data-checked={value === choice.mode ? "" : undefined}
+        >
+          <input
+            type="radio"
+            name={name}
+            value={choice.mode}
+            checked={value === choice.mode}
+            onChange={() => onChange(choice.mode)}
+          />
+          <span>{choice.label}</span>
+        </label>
+      ))}
+    </fieldset>
+  );
+}
+
+/** Step 3: how you are getting there. */
+export function HowStep({ draft, onDraft, attempted }: HowStepProps) {
+  return (
     <div className={styles.stepBody}>
-      <fieldset className={styles.modes}>
-        <legend className="sr-only">How are you getting there?</legend>
-        {MODE_CHOICES.map((choice) => (
-          <label
-            key={choice.mode}
-            className={styles.mode}
-            data-checked={draft.travelMode === choice.mode ? "" : undefined}
-          >
-            <input
-              type="radio"
-              name={name}
-              value={choice.mode}
-              checked={draft.travelMode === choice.mode}
-              onChange={() => onDraft({ ...draft, travelMode: choice.mode as TravelMode })}
-            />
-            <span>{choice.label}</span>
-          </label>
-        ))}
-      </fieldset>
+      <TravelModeControl
+        value={draft.travelMode}
+        onChange={(travelMode) => onDraft({ ...draft, travelMode })}
+      />
       <p className={attempted && !draft.travelMode ? styles.error : styles.hint}>
         Flights draw as an arc on the map, drives as a road line.
       </p>

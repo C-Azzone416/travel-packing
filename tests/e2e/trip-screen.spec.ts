@@ -277,7 +277,7 @@ test("editing preferences recalculates the list and revokes Ready", async ({ pag
   await expect(page.getByText("You’re ready to go.")).toBeVisible();
   await page.getByRole("button", { name: "Edit preferences" }).click();
   const dialog = page.getByRole("dialog", { name: "Edit trip" });
-  await dialog.getByRole("switch", { name: "Laundry access" }).uncheck();
+  await dialog.getByRole("switch", { name: "Laundry on this trip" }).uncheck();
   await reviewAndApply(page, dialog);
   await expect(page.getByText("You’re ready to go.")).toHaveCount(0);
 });

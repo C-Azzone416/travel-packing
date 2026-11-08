@@ -15,7 +15,7 @@ import {
   type LifecycleTrip,
 } from "@/domain/trip-lifecycle";
 import { localToday } from "@/lib/today";
-import { EditTripSheet, type ApplyOutcome } from "@/features/trip/EditTripSheet";
+import { EditTripSheet, type ApplyOutcome, type SaveResult } from "@/features/trip/EditTripSheet";
 import { HomeLaptop } from "./HomeLaptop";
 import { HomeEmpty } from "./HomeEmpty";
 import { HomePhone } from "./HomePhone";
@@ -259,20 +259,55 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
     );
   }
 
-  /** Save the route from the Edit trip sheet; true once saved. The sheet shows its own failure message. */
-  function saveRoute(id: string, stops: Parameters<typeof source.setStops>[1]): Promise<boolean> {
-    return track(
-      async () => {
-        await source.setStops(id, stops);
-        return source.load();
-      },
+  /** Save the route from the Edit trip sheet, based on the version the sheet reviewed. */
+  function saveRoute(
+    id: string,
+    stops: Parameters<typeof source.setStops>[1],
+    basedOn: string | undefined,
+  ): Promise<SaveResult> {
+    return saveAndReload(() => source.setStops(id, stops, basedOn), true);
+  }
+
+  /** Save how the trip is travelled from the Edit trip sheet, based on the version the sheet reviewed. */
+  function saveTravelMode(
+    id: string,
+    mode: Parameters<typeof source.setTravelMode>[1],
+    basedOn: string | undefined,
+  ) {
+    return saveAndReload(() => source.setTravelMode(id, mode, basedOn), false);
+  }
+
+  /**
+   * One of the sheet's saves. The write and the reload are separate: a rejected write is "stale" (the trip changed since the sheet
+   * was based on it) or null; a committed write always answers with ITS OWN save time (never one read from a later reload, which
+   * could belong to someone else's save), and a reload that fails afterwards only says so.
+   */
+  async function saveAndReload(
+    write: () => Promise<{ trip: { updatedAt?: string } }>,
+    refresh: boolean,
+  ): Promise<SaveResult> {
+    let change: { trip: { updatedAt?: string } };
+    try {
+      change = await track(write, () => undefined);
+    } catch (error) {
+      if (error instanceof Error && error.message === "STALE") {
+        await source
+          .load()
+          .then((next) => setLoad({ phase: "ready", state: next, today: getToday() }))
+          .catch(() => undefined);
+        return "stale";
+      }
+      return null;
+    }
+    await track(
+      () => source.load(),
       (next) => {
         setLoad({ phase: "ready", state: next, today: getToday() });
-        router.refresh?.();
+        if (refresh) router.refresh?.();
       },
-    )
-      .then(() => true)
-      .catch(() => false);
+      { read: true },
+    ).catch(() => toast.show("Saved, but couldn’t refresh your trips. Reload the page to see it."));
+    return { updatedAt: change.trip.updatedAt };
   }
 
   /** Apply reviewed packing preferences from the Edit trip sheet (#203). STALE means the trip changed since the review. */
@@ -282,11 +317,32 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
     basedOn: string | undefined,
   ): Promise<ApplyOutcome> {
     const before = state.trips.find((trip) => trip.id === id);
-    return track(
-      async () => {
-        await source.updatePreferences(id, config, basedOn);
-        return source.load();
-      },
+    return applyPreferencesNow(id, config, basedOn, before);
+  }
+
+  /** The write and the reload are separate, as for the route and travel mode: a rejected write is "failed" or "stale"; a committed one is "ok" even if the reload after it fails (which only says so). */
+  async function applyPreferencesNow(
+    id: string,
+    config: Parameters<typeof source.updatePreferences>[1],
+    basedOn: string | undefined,
+    before: { ready?: boolean; toiletryBagPacked?: boolean } | undefined,
+  ): Promise<ApplyOutcome> {
+    try {
+      await track(
+        () => source.updatePreferences(id, config, basedOn),
+        () => undefined,
+      );
+    } catch (error) {
+      if (!(error instanceof Error && error.message === "STALE")) return "failed";
+      // The list moved on while it was being reviewed: show the current one, so reviewing again is about it.
+      await source
+        .load()
+        .then((next) => setLoad({ phase: "ready", state: next, today: getToday() }))
+        .catch(() => undefined);
+      return "stale";
+    }
+    await track(
+      () => source.load(),
       (next) => {
         setLoad({ phase: "ready", state: next, today: getToday() });
         const after = next.trips.find((trip) => trip.id === id);
@@ -302,17 +358,9 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
             .join(" "),
         );
       },
-    )
-      .then((): ApplyOutcome => "ok")
-      .catch(async (error: unknown): Promise<ApplyOutcome> => {
-        if (!(error instanceof Error && error.message === "STALE")) return "failed";
-        // The list moved on while it was being reviewed: show the current one, so reviewing again is about it.
-        await source
-          .load()
-          .then((next) => setLoad({ phase: "ready", state: next, today: getToday() }))
-          .catch(() => undefined);
-        return "stale";
-      });
+      { read: true },
+    ).catch(() => toast.show("Saved, but couldn’t refresh your trips. Reload the page to see it."));
+    return "ok";
   }
 
   const archive = (id: string) => void run(id, () => source.archive(id));
@@ -477,7 +525,8 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
           trip={editTarget}
           initialTab="route"
           onClose={() => setEditing(null)}
-          onSaveRoute={(stops) => saveRoute(editTarget.id, stops)}
+          onSaveRoute={(stops, basedOn) => saveRoute(editTarget.id, stops, basedOn)}
+          onSetTravelMode={(mode, basedOn) => saveTravelMode(editTarget.id, mode, basedOn)}
           onApplyPreferences={(config, basedOn) => applyPreferences(editTarget.id, config, basedOn)}
         />
       ) : null}

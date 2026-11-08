@@ -740,7 +740,7 @@ describe("weather", () => {
     await user.click(screen.getByRole("button", { name: "Edit trip" }));
     const sheet = screen.getByRole("dialog", { name: "Edit trip" });
     fireEvent.change(within(sheet).getByLabelText("Leave"), { target: { value: "2026-09-09" } });
-    await user.click(within(sheet).getByRole("button", { name: "Save route" }));
+    await user.click(within(sheet).getByRole("button", { name: /^Save \d+ changes?$/ }));
     await waitFor(() => expect(wired.getTripWeather).toHaveBeenCalledTimes(2));
   });
 
@@ -779,12 +779,11 @@ describe("preferences and Ready", () => {
     await ready();
     await user.click(screen.getByRole("button", { name: "Edit preferences" }));
     const dialog = screen.getByRole("dialog", { name: "Edit trip" });
-    await user.click(within(dialog).getByRole("switch", { name: "Laundry access" }));
-    await user.click(within(dialog).getByRole("button", { name: "Review changes" }));
-    // Nothing is applied yet: the review says what will happen, including that Ready turns off.
+    await user.click(within(dialog).getByRole("switch", { name: "Laundry on this trip" }));
+    // Nothing is saved yet: the live panel says what will happen, including that Ready turns off.
     expect(tripOf(source, "lisbon").config.laundry).toBe(true);
-    expect(within(dialog).getByText("Ready turns off.")).toBeTruthy();
-    await user.click(within(dialog).getByRole("button", { name: "Apply changes" }));
+    expect(within(dialog).getByText(/Ready turns off/)).toBeTruthy();
+    await user.click(within(dialog).getByRole("button", { name: /^Save \d+ changes?$/ }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(tripOf(source, "lisbon").config.laundry).toBe(false);
     expect(tripOf(source, "lisbon").ready).toBe(false);
@@ -979,15 +978,14 @@ describe("a form submitted twice while saving saves once", () => {
     await ready();
     await user.click(screen.getByRole("button", { name: "Edit preferences" }));
     await user.click(
-      within(screen.getByRole("dialog")).getByRole("switch", { name: "Laundry access" }),
+      within(screen.getByRole("dialog")).getByRole("switch", { name: "Laundry on this trip" }),
     );
-    await user.click(
-      within(screen.getByRole("dialog")).getByRole("button", { name: "Review changes" }),
-    );
-    // The review of a trip with packed progress may ask for an acknowledgement first.
+    // A trip with packed progress may ask for an acknowledgement first.
     const acknowledge = screen.queryByRole("checkbox", { name: /I understand/ });
     if (acknowledge) await user.click(acknowledge);
-    const apply = within(screen.getByRole("dialog")).getByRole("button", { name: "Apply changes" });
+    const apply = within(screen.getByRole("dialog")).getByRole("button", {
+      name: /^Save \d+ changes?$/,
+    });
     fireEvent.click(apply);
     fireEvent.click(apply);
     await waitFor(() => expect(calls).toHaveBeenCalledTimes(1));
@@ -1131,15 +1129,12 @@ describe("edges", () => {
     await ready();
     await user.click(screen.getByRole("button", { name: "Edit preferences" }));
     await user.click(
-      within(screen.getByRole("dialog")).getByRole("switch", { name: "Laundry access" }),
-    );
-    await user.click(
-      within(screen.getByRole("dialog")).getByRole("button", { name: "Review changes" }),
+      within(screen.getByRole("dialog")).getByRole("switch", { name: "Laundry on this trip" }),
     );
     const acknowledge = screen.queryByRole("checkbox", { name: /I understand/ });
     if (acknowledge) await user.click(acknowledge);
     await user.click(
-      within(screen.getByRole("dialog")).getByRole("button", { name: "Apply changes" }),
+      within(screen.getByRole("dialog")).getByRole("button", { name: /^Save \d+ changes?$/ }),
     );
     expect(await screen.findByRole("button", { name: "Not saved, retry" })).toBeTruthy();
     expect(screen.getByRole("dialog", { name: "Edit trip" })).toBeTruthy();
@@ -1148,7 +1143,7 @@ describe("edges", () => {
     expect(
       (
         within(screen.getByRole("dialog")).getByRole("button", {
-          name: "Apply changes",
+          name: /^Save \d+ changes?$/,
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(false);
@@ -1161,8 +1156,7 @@ describe("edges", () => {
     const dialog = screen.getByRole("dialog");
     await user.click(within(dialog).getByRole("switch", { name: "One spare underwear + socks" }));
     await user.click(within(dialog).getByRole("switch", { name: "Reuse one nice look" }));
-    await user.click(within(dialog).getByRole("button", { name: "Review changes" }));
-    await user.click(within(dialog).getByRole("button", { name: "Apply changes" }));
+    await user.click(within(dialog).getByRole("button", { name: /^Save \d+ changes?$/ }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(tripOf(source).config).toMatchObject({ spare: false, reuseNice: false });
   });

@@ -35,6 +35,7 @@ import {
   setPackedAction,
   setPackedManyAction,
   setStopsAction,
+  setTravelModeAction,
   setStampLabelsAction,
   setThemeAction,
   skipWeatherAction,
@@ -111,6 +112,7 @@ export function TripsSourceProvider({
           setTheme: setThemeAction,
           setStampLabels: setStampLabelsAction,
           setStops: setStopsAction,
+          setTravelMode: setTravelModeAction,
         },
         {
           getSettings: getWeatherSettingsAction,
