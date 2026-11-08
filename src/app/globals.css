@@ -2696,16 +2696,6 @@ a.back {
   -webkit-box-orient: vertical;
 }
 
-/* Weather polish (#117): reasons cut to two lines on a phone with a More button, a stacked review footer, the What's this? note. */
-@media (max-width: 659px) {
-  .clamped:not(.open) {
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-}
-
 /* "Didn't get it?" under the resend control (#119): a link-style summary, 44px, in the same place on all three screens. */
 .didnt-get-it {
   margin-top: 12px;
