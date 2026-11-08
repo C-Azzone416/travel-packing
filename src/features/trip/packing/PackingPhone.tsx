@@ -138,23 +138,23 @@ export function PackingPhone({
               {state === "open" ? null : <span className="sr-only">All packed.</span>}
             </p>
           </div>
-          {state === "ready" ? (
-            <div className={styles.readyRow}>
-              <p className={styles.readyLine}>Ready to go</p>
-              <button type="button" className={styles.textButton} onClick={onReview}>
-                Review bag
-              </button>
-              <button
-                type="button"
-                className={styles.textButton}
-                disabled={readyBusy}
-                onClick={onNotReady}
-              >
-                Mark as not ready
-              </button>
-            </div>
-          ) : null}
         </header>
+        {state === "ready" ? (
+          <div className={styles.readyRow}>
+            <p className={styles.readyLine}>Ready to go</p>
+            <button type="button" className={styles.textButton} onClick={onReview}>
+              Review bag
+            </button>
+            <button
+              type="button"
+              className={styles.textButton}
+              disabled={readyBusy}
+              onClick={onNotReady}
+            >
+              Mark as not ready
+            </button>
+          </div>
+        ) : null}
 
         <nav className={styles.barWrap} aria-label="Cubes">
           <ul className={styles.bar} ref={bar}>

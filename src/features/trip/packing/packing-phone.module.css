@@ -155,8 +155,8 @@
 /* A Ready trip: "Ready to go" with its two text actions under the title (#411). */
 .readyRow {
   display: flex;
-  flex: 1 0 100%;
   flex-wrap: wrap;
+  padding-inline: 4px;
   align-items: center;
   gap: 4px 16px;
   min-width: 0;
