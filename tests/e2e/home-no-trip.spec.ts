@@ -163,6 +163,20 @@ for (const firstRun of [true, false]) {
   );
 }
 
+// The first-run empty suitcase (#471): at 195px with doubled text its cube names ("Documents") must not push the page
+// sideways, and every word across the whole Home must wrap whole.
+test(
+  "195px first run, doubled text: no sideways scroll and every word wraps whole across main",
+  DEVICE,
+  async ({ page }) => {
+    await open(page, 195, { firstRun: true });
+    const factor = await enlargeText(page, page.getByRole("heading", { name: WHERE }));
+    expect(factor, "the page text doubled before it is measured").toBeGreaterThanOrEqual(1.9);
+    expect(await overflow(page)).toBeLessThanOrEqual(0);
+    await expectWholeWords(page.locator("main"), "first-run Home at 195px, doubled text");
+  },
+);
+
 // The returning Home's recent-trip rows (#463) at 195px with doubled text: the px-sized rules double too (enlargeText), which a
 // root font-size change alone does not do. The page must not scroll sideways, and the recent trips must wrap whole words.
 test(
