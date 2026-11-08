@@ -205,7 +205,8 @@ export function stapleContext(
   return { ...counts, laundry: Boolean(config.laundry), spare: Boolean(config.spare) };
 }
 
-function returnOutfitItems(): TripItem[] {
+/** The four dedicated return-outfit rows a trip of more than one day starts with. */
+export function returnOutfitItems(): TripItem[] {
   return [
     newItem("return-top", "Fresh top", "Return outfit", 1, "return"),
     newItem("return-bottoms", "Bottoms", "Return outfit", 1, "return"),

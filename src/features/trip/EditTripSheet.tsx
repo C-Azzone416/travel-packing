@@ -9,6 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { recalculateSuggestions } from "@/domain/item-ops";
 import { laundryChangesQuantity } from "@/domain/short-trip";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
@@ -204,18 +205,21 @@ export function EditTripSheet({
   // Laundry is a real choice only where it would change a quantity on the trip as edited here (#412): a day trip, or nothing
   // to halve, leaves the row disabled. A SAVED laundry-on keeps it switchable so it can be turned off; a new opt-in that has
   // become ineffective (enabled, then the trip was shortened) counts as off, so it is neither listed nor saved.
+  // The items the route edit will save (a day trip lengthened has tops it did not have), so laundry is judged on those.
+  const routeTrip = useMemo(() => {
+    const start = stops[0]?.arrive || trip.start;
+    const end = stops[stops.length - 1]?.leave || trip.end;
+    if (isEqual(stops, trip.stops) || stopProblems(stops).length > 0)
+      return { ...trip, start, end };
+    return recalculateSuggestions(
+      { ...trip, stops: stops as TripStop[], start, end },
+      trip.config,
+      calculateSuggestions,
+    );
+  }, [trip, stops]);
   const laundryUseful = useMemo(
-    () =>
-      trip.config.laundry ||
-      laundryChangesQuantity(
-        {
-          ...trip,
-          start: stops[0]?.arrive || trip.start,
-          end: stops[stops.length - 1]?.leave || trip.end,
-        },
-        prefs,
-      ),
-    [trip, stops, prefs],
+    () => trip.config.laundry || laundryChangesQuantity(routeTrip, prefs),
+    [trip.config.laundry, routeTrip, prefs],
   );
   const effectivePrefs = useMemo(
     () => (laundryUseful || !prefs.laundry ? prefs : { ...prefs, laundry: false }),

@@ -132,7 +132,33 @@ describe("only rows the trip really has count (#412)", () => {
 });
 
 describe("a day trip's return outfit (#412)", () => {
-  it("an existing trip keeps the return rows it has, edited or not, when recalculated", () => {
+  const returnRows = (trip: Trip) => trip.items.filter((item) => item.section === "return");
+  const ids = (trip: Trip) => returnRows(trip).map((item) => item.id);
+
+  it("a day trip that is extended to overnight gains the four return rows; a second recalculation adds no more", () => {
+    const day = { ...tripOf("2030-03-14", "2030-03-14", CONFIG, false), days: 1 };
+    expect(returnRows(day)).toHaveLength(0);
+    const extended = recalculateSuggestions({ ...day, end: "2030-03-15" }, CONFIG, suggest);
+    expect(ids(extended)).toEqual([
+      "return-top",
+      "return-bottoms",
+      "return-underwear",
+      "return-socks",
+    ]);
+    expect(extended.days).toBe(2);
+    const again = recalculateSuggestions(extended, CONFIG, suggest);
+    expect(ids(again)).toEqual(ids(extended));
+  });
+
+  it("no return rows are added when the preference is off", () => {
+    const off = { ...CONFIG, returnOutfit: false };
+    const day = { ...tripOf("2030-03-14", "2030-03-14", off, false), days: 1 };
+    expect(
+      returnRows(recalculateSuggestions({ ...day, end: "2030-03-15" }, off, suggest)),
+    ).toHaveLength(0);
+  });
+
+  it("becoming a day trip drops the return rows nobody edited and keeps the edited ones", () => {
     const night = tripOf("2030-03-14", "2030-03-15", CONFIG, false);
     const rows: TripItem[] = [
       {
@@ -153,8 +179,34 @@ describe("a day trip's return outfit (#412)", () => {
         section: "return",
       },
     ];
-    const day = { ...night, end: night.start, items: [...night.items, ...rows] };
-    const next = recalculateSuggestions(day, { ...CONFIG, laundry: true }, suggest);
-    expect(next.items.filter((item) => item.section === "return")).toEqual(rows);
+    const withRows = { ...night, days: 2, items: [...night.items, ...rows] };
+    const day = recalculateSuggestions({ ...withRows, end: withRows.start }, CONFIG, suggest);
+    expect(returnRows(day)).toEqual([rows[0]]);
+  });
+
+  it("an overnight trip keeps the return rows it has, edited or not", () => {
+    const night = tripOf("2030-03-14", "2030-03-15", CONFIG, false);
+    const rows: TripItem[] = [
+      {
+        id: "return-top",
+        name: "My own top",
+        category: "Return outfit",
+        qty: 2,
+        packed: 1,
+        section: "return",
+        userEdited: true,
+      },
+      {
+        id: "return-socks",
+        name: "Socks",
+        category: "Return outfit",
+        qty: 1,
+        packed: 0,
+        section: "return",
+      },
+    ];
+    const withRows = { ...night, days: 2, items: [...night.items, ...rows] };
+    const next = recalculateSuggestions(withRows, { ...CONFIG, laundry: true }, suggest);
+    expect(returnRows(next)).toEqual(rows);
   });
 });

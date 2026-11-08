@@ -4,6 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { renderInApp } from "@/test/providers";
+import { calculateSuggestions } from "@/domain/calc";
+import { recalculateSuggestions } from "@/domain/item-ops";
 import { setPacked } from "@/domain/readiness";
 import type { TripConfig } from "@/domain/trip";
 import type { LifecycleTrip } from "@/domain/trip-lifecycle";
@@ -644,6 +646,27 @@ describe("EditTripSheet: Route & dates", () => {
     await user.click(saveButton(dialog()));
     await waitFor(() => expect(onSaveRoute).toHaveBeenCalled());
     expect(onApplyPreferences.mock.calls.every(([config]) => config.laundry === false)).toBe(true);
+  });
+
+  it("lengthening a fresh day trip makes laundry available: it is judged on the list the route edit will save (#412)", async () => {
+    const trip = base();
+    const stop = { ...trip.stops[0], leave: trip.stops[0].arrive };
+    const day = recalculateSuggestions(
+      { ...trip, stops: [stop], end: trip.start },
+      trip.config,
+      calculateSuggestions,
+    );
+    // A fresh day trip has no Smart tops or bottoms (nothing to wear every day).
+    const fresh = {
+      ...day,
+      items: day.items.filter((item) => !["tops", "bottoms"].includes(item.id)),
+    };
+    const { user, dialog } = setup({ trip: fresh, tab: "route" });
+    await user.click(within(dialog()).getByRole("button", { name: /Packing preferences/ }));
+    expect(toggle(dialog(), "Laundry on this trip").disabled).toBe(true);
+    const more = within(dialog()).getByRole("button", { name: "One night more" });
+    for (let i = 0; i < 4; i += 1) await user.click(more);
+    expect(toggle(dialog(), "Laundry on this trip").disabled).toBe(false);
   });
 
   it("How we count follows the dates being edited, not the saved ones (#412)", async () => {
