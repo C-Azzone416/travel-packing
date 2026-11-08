@@ -215,6 +215,35 @@ test(
   },
 );
 
+// The empty suitcase's cubes at normal text: two columns from 240px up to 359px, one column at 239px and below (#471).
+// Columns are counted by the distinct left edges of the cube tiles.
+const cubeColumns = (page: Page) =>
+  page
+    .locator("[data-empty-suitcase] li")
+    .evaluateAll(
+      (cubes) => new Set(cubes.map((cube) => Math.round(cube.getBoundingClientRect().left))).size,
+    );
+
+for (const width of [240, 320, 359]) {
+  test(
+    `${width}px first run, normal text: the empty suitcase has two cube columns`,
+    DEVICE,
+    async ({ page }) => {
+      await open(page, width, { firstRun: true });
+      expect(await cubeColumns(page), `cube columns at ${width}px, normal text`).toBe(2);
+    },
+  );
+}
+
+test(
+  "239px first run, normal text: the empty suitcase has one cube column",
+  DEVICE,
+  async ({ page }) => {
+    await open(page, 239, { firstRun: true });
+    expect(await cubeColumns(page), "cube columns at 239px, normal text").toBe(1);
+  },
+);
+
 // The returning Home's recent-trip rows (#463) at 195px with doubled text: the px-sized rules double too (enlargeText), which a
 // root font-size change alone does not do. The page must not scroll sideways, and the recent trips must wrap whole words.
 test(
