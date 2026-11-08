@@ -203,14 +203,17 @@ function PlanBody({ from, trips, staples, home, lists, allowCustom, today, rende
 
   // Judged on what will be created: the chosen list (or the Staples) with the chosen copy's preferences (#412). A laundry
   // choice that changes nothing there is dropped from the preview and from what Create sends, not just hidden.
+  // While a chosen list's detail is still loading there is nothing to judge it on, so there is no effect yet.
   const effect = useMemo(
     () =>
-      laundryEffect(
-        withChoices(draft, { copy: copySource, listId, laundry: false }),
-        staples,
-        today,
-        listDetail ?? undefined,
-      ),
+      listId && !listDetail
+        ? null
+        : laundryEffect(
+            withChoices(draft, { copy: copySource, listId, laundry: false }),
+            staples,
+            today,
+            listDetail ?? undefined,
+          ),
     [draft, copySource, listId, staples, today, listDetail],
   );
   const laundry = laundryChoice && effect !== null;

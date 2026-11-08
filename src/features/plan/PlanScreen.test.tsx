@@ -679,6 +679,31 @@ describe("Start from a saved list", () => {
     );
   });
 
+  it("while the chosen list is still loading, an ineffective laundry opt-in is not sent (#412)", async () => {
+    const { user, base } = await setup(
+      {},
+      {
+        memory: { savedLists: [LIST] },
+        source: (b) =>
+          derive(b, {
+            savedLists: {
+              list: async () => b.savedLists!.list(),
+              get: () => new Promise<never>(() => undefined),
+            },
+          }),
+      },
+    );
+    const spy = vi.spyOn(base, "createTrip");
+    await toStartingList(user);
+    await user.click(screen.getByRole("checkbox", { name: /I’ll have laundry/ }));
+    await user.click(screen.getByRole("checkbox", { name: /Start from a saved list/ }));
+    await user.click(next());
+    await user.click(screen.getByRole("button", { name: "Create trip" }));
+    await waitFor(() => expect(spy).toHaveBeenCalled());
+    expect(spy.mock.calls[0][0]).toMatchObject({ savedListId: "list-1" });
+    expect(spy.mock.calls[0][0].config.laundry).toBe(false);
+  });
+
   it("shows only the lists' own rows when there are several", async () => {
     const second = { ...LIST, id: "list-2", name: "City break" };
     const { user } = await setup({}, { memory: { savedLists: [LIST, second] } });

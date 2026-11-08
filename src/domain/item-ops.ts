@@ -11,7 +11,7 @@ import {
   type RejectionReason,
 } from "./readiness";
 import { TOILETRY_GROUP_ID, toiletryItems } from "./toiletry-bag";
-import { returnOutfitItems, stapleContext, stapleQuantity } from "./calc/staples";
+import { stapleContext, stapleQuantity } from "./calc/staples";
 import { nightsFor } from "./calc/daily-days";
 import { CUBES, DEFAULT_MORNING_OF_CUBES, isCube, itemCube, type Cube } from "./cubes";
 import { canonicalItemId } from "./item-identity";
@@ -315,21 +315,9 @@ export function recalculateSuggestions<T extends Trip>(
       return merged;
     });
 
-  // The dedicated return outfit follows the trip going from a day trip to overnight, or back (#412). A day trip that becomes
-  // overnight, with the preference on and no return rows, gets the four default ones; a trip that becomes a day trip drops
-  // the ones nobody edited. Nothing else adds or removes return rows, and a person's own rows are never touched.
-  const hasReturnRows = nonCalculated.some((entry) => entry.section === "return");
-  const wantsReturn = nextConfig.returnOutfit !== false && calculated.days > 1;
-  const withReturn =
-    wantsReturn && !hasReturnRows && trip.days <= 1
-      ? [...nonCalculated, ...returnOutfitItems()]
-      : calculated.days <= 1
-        ? nonCalculated.filter((entry) => entry.section !== "return" || entry.userEdited)
-        : nonCalculated;
-
   const recalculated: T = {
     ...trip,
-    items: [...nextSuggested, ...withReturn],
+    items: [...nextSuggested, ...nonCalculated],
     suggestionMemory: memory,
     config: { ...nextConfig },
     days: calculated.days,

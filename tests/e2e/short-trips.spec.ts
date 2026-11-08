@@ -20,8 +20,6 @@ for (const width of [1280, 390]) {
     ).toBeVisible();
     await create(page, width);
     await expect(page.getByRole("button", { name: /^Laundry/ })).toHaveCount(0);
-    // A fresh day trip has no dedicated return outfit.
-    await expect(page.getByText("return outfit")).toHaveCount(0);
     await page.getByRole("button", { name: "Edit list" }).click();
     await expect(page.getByRole("switch", { name: /Morning of/ })).toHaveCount(0);
     await expect(page.getByText("Morning of")).toHaveCount(0);

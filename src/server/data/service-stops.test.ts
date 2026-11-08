@@ -302,30 +302,6 @@ describe("setTripStops", () => {
     }
   });
 
-  it("a fresh day trip has no return rows; extended to overnight it gains them, and a reload shows them (#412)", async () => {
-    const day = [{ location: { id: "alpha" }, arrive: "2030-05-01", leave: "2030-05-01" }];
-    const trip = data(await create({ stops: day }));
-    const returnIds = (rows: { items: { id: string; section: string }[] }) =>
-      rows.items.filter((item) => item.section === "return").map((item) => item.id);
-    expect(returnIds(trip)).toEqual([]);
-    const extended = data(
-      await service.setTripStops(context(), {
-        tripId: trip.id,
-        stops: [{ location: { id: "alpha" }, arrive: "2030-05-01", leave: "2030-05-02" }],
-        basedOn: trip.updatedAt,
-      }),
-    );
-    expect(returnIds(extended)).toEqual([
-      "return-top",
-      "return-bottoms",
-      "return-underwear",
-      "return-socks",
-    ]);
-    expect(returnIds(data(await service.getTrip(context(), { tripId: trip.id })))).toEqual(
-      returnIds(extended),
-    );
-  });
-
   it("leaves a title the person edited alone", async () => {
     const trip = data(await create());
     await ctx.client.query(`UPDATE trips SET destination = 'Spring trip'`);

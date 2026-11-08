@@ -205,8 +205,7 @@ export function stapleContext(
   return { ...counts, laundry: Boolean(config.laundry), spare: Boolean(config.spare) };
 }
 
-/** The four dedicated return-outfit rows a trip of more than one day starts with. */
-export function returnOutfitItems(): TripItem[] {
+function returnOutfitItems(): TripItem[] {
   return [
     newItem("return-top", "Fresh top", "Return outfit", 1, "return"),
     newItem("return-bottoms", "Bottoms", "Return outfit", 1, "return"),
@@ -248,8 +247,7 @@ export function buildTripItems(
     ...(entry.optional ? { optional: true } : {}),
     ...(entry.groupId ? { groupId: entry.groupId } : {}),
   }));
-  // A day trip has no return outfit: you are home the same day (#412). Existing trips keep the rows they already have.
-  if (config.returnOutfit !== false && computed.days > 1) items.push(...returnOutfitItems());
+  if (config.returnOutfit !== false) items.push(...returnOutfitItems());
 
   for (const staple of staples) {
     const identity = canonicalItemId(staple.id);
