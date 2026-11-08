@@ -163,17 +163,55 @@ for (const firstRun of [true, false]) {
   );
 }
 
-// The first-run empty suitcase (#471): at 195px with doubled text its cube names ("Documents") must not push the page
-// sideways, and every word across the whole Home must wrap whole.
+// The first-run empty suitcase (#471): with doubled text its cube names ("Documents") must not push the page sideways,
+// every word across the whole Home must wrap whole, and each name must sit inside its own tile. The widths cover the
+// one-column band (195, 256, 270, 320) and the three-column edge (359).
+// Each cube's name text, measured by its Range rects, must sit inside its own tile.
+const spilledNames = (page: Page) =>
+  page.locator("[data-empty-suitcase] li").evaluateAll((cubes) =>
+    cubes
+      .map((cube) => {
+        const name = cube.querySelector("span");
+        if (!name) return null;
+        const tile = cube.getBoundingClientRect();
+        const range = document.createRange();
+        range.selectNodeContents(name);
+        const outside = Array.from(range.getClientRects()).some(
+          (box) => box.right > tile.right + 0.5 || box.left < tile.left - 0.5,
+        );
+        return outside ? (cube.textContent ?? "").slice(0, 12) : null;
+      })
+      .filter((text) => text !== null),
+  );
+
+for (const width of [195, 256, 270, 320, 359]) {
+  test(
+    `${width}px first run, doubled text: no sideways scroll, whole words, names inside their cubes`,
+    DEVICE,
+    async ({ page }) => {
+      await open(page, width, { firstRun: true });
+      const factor = await enlargeText(page, page.getByRole("heading", { name: WHERE }));
+      expect(factor, "the page text doubled before it is measured").toBeGreaterThanOrEqual(1.9);
+      expect(await overflow(page)).toBeLessThanOrEqual(0);
+      await expectWholeWords(page.locator("main"), `first-run Home at ${width}px, doubled text`);
+      expect(
+        await spilledNames(page),
+        `cube names inside their tiles at ${width}px, doubled text`,
+      ).toEqual([]);
+    },
+  );
+}
+
 test(
-  "195px first run, doubled text: no sideways scroll and every word wraps whole across main",
+  "320px first run, normal text: names inside their cubes and whole words",
   DEVICE,
   async ({ page }) => {
-    await open(page, 195, { firstRun: true });
-    const factor = await enlargeText(page, page.getByRole("heading", { name: WHERE }));
-    expect(factor, "the page text doubled before it is measured").toBeGreaterThanOrEqual(1.9);
+    await open(page, 320, { firstRun: true });
     expect(await overflow(page)).toBeLessThanOrEqual(0);
-    await expectWholeWords(page.locator("main"), "first-run Home at 195px, doubled text");
+    await expectWholeWords(page.locator("main"), "first-run Home at 320px, normal text");
+    expect(await spilledNames(page), "cube names inside their tiles at 320px, normal text").toEqual(
+      [],
+    );
   },
 );
 
