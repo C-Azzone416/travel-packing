@@ -216,6 +216,7 @@ for (const width of [768, 1000]) {
     await expect(dialog).toBeVisible();
     await inject(page);
     const d = await box(dialog);
+    expect(d.width).toBeGreaterThanOrEqual(559.5);
     expect(d.width).toBeLessThanOrEqual(560.5);
     expect(Math.abs(d.x + d.width - width)).toBeLessThanOrEqual(1);
   });

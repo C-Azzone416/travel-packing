@@ -385,10 +385,10 @@ test(
     const widths = [320, 390, 721, 768, 1280];
     for (const width of widths) {
       await page.setViewportSize({ width, height: width < 700 ? 640 : 800 });
-      // The page behind the sheet swaps layout at 1024px; measure once it has.
+      // The page behind the sheet swaps layout at 768px (phone to tablet) and 1024px (laptop); measure once it has.
       await expect(page.locator("[data-packing-layout]")).toHaveAttribute(
         "data-packing-layout",
-        width >= 1024 ? "laptop" : "phone",
+        width >= 1024 ? "laptop" : width >= 768 ? "tablet" : "phone",
       );
       const m = await headMetrics(page);
       const where = `at ${width}px`;
