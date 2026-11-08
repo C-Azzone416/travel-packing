@@ -199,10 +199,9 @@ describe("loading and errors", () => {
     const user = userEvent.setup();
     renderInApp(<TripsDashboard source={memory(sampleLifecycleState())} />);
     expect(user).toBeTruthy();
-    // The sample trips are past on the real date, so there is no next trip and the plain Trips list shows.
-    expect(
-      await screen.findByRole("heading", { name: "Your travel ledger", level: 1 }),
-    ).toBeTruthy();
+    // The sample trips are past on the real date, so there is no next trip and the returning Home shows.
+    expect(await screen.findByRole("heading", { name: "Trips", level: 1 })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Where to next?" })).toBeTruthy();
   });
 });
 
@@ -312,10 +311,18 @@ describe("past & archive view", () => {
   it("shows empty states for no upcoming and no past trips", async () => {
     const empty = sampleLifecycleState();
     empty.trips = [];
-    const { user } = setup(empty);
-    expect(await screen.findByText("No upcoming trips.")).toBeTruthy();
-    expect(screen.getByText(/Plan a trip or restore one from Past & archive/)).toBeTruthy();
-    await user.click(tab(/Past & archive/));
+    const first = setup(empty);
+    expect(await screen.findByRole("heading", { name: /^Where to (first|next)\?$/ })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Where to first?" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "+ Plan a trip" }).getAttribute("href")).toBe(
+      "/trips/new",
+    );
+    // With nothing archived or removed there is no history to open from here.
+    expect(screen.queryByRole("button", { name: "Past & archive" })).toBeNull();
+    empty.deletedTrips = [{ trip: sampleLifecycleState().trips[0], deletedAt: 1 }];
+    first.view.unmount();
+    const again = setup(empty);
+    await again.user.click(await screen.findByRole("button", { name: "Past & archive" }));
     expect(screen.getByText("No past or archived trips yet.")).toBeTruthy();
     expect(screen.getByText(/Archived trips and trips whose return date has passed/)).toBeTruthy();
   });
@@ -327,12 +334,12 @@ describe("archive and restore", () => {
     await ready();
     await choose(user, "San Diego", "Archive");
     await waitFor(() => expect(screen.queryByRole("heading", { name: "San Diego" })).toBeNull());
-    expect(screen.getByText("No upcoming trips.")).toBeTruthy();
-    expect(tab(/Upcoming/).textContent).toContain("0");
-    expect(tab(/Past & archive/).textContent).toContain("2");
+    expect(screen.getByRole("heading", { name: /^Where to (first|next)\?$/ })).toBeTruthy();
     expect(source.snapshot().trips.find((t) => t.id === "san-diego")?.archived).toBe(true);
 
     await user.click(tab(/Past & archive/));
+    expect(tab(/Upcoming/).textContent).toContain("0");
+    expect(tab(/Past & archive/).textContent).toContain("2");
     const archived = card("San Diego");
     expect(within(archived).getByText("Archived trip")).toBeTruthy();
     expect(within(archived).queryByRole("button", { name: /Archive:/ })).toBeNull();
@@ -349,9 +356,7 @@ describe("archive and restore", () => {
     await ready();
     await choose(user, "San Diego", "Archive");
     await waitFor(() =>
-      expect(document.activeElement).toBe(
-        screen.getByRole("heading", { name: "Your travel ledger", level: 1 }),
-      ),
+      expect(document.activeElement).toBe(screen.getByRole("heading", { name: "Trips", level: 1 })),
     );
   });
 
@@ -506,7 +511,7 @@ describe("quick view (on the Past & archive cards)", () => {
 
   it("is collapsed by default and the ⋯ menu toggles it, with the menu item saying what it will do", async () => {
     const { user } = setup(archivedState());
-    await screen.findByText("No upcoming trips.");
+    await screen.findByRole("heading", { name: /^Where to (first|next)\?$/ });
     await user.click(tab(/Past & archive/));
     expect(document.getElementById("quick-view-san-diego")).toBeNull();
     await user.click(within(card("San Diego")).getByRole("button", { name: /Quick view/ }));
@@ -525,7 +530,7 @@ describe("quick view (on the Past & archive cards)", () => {
     };
     const user = userEvent.setup();
     renderInApp(<TripsDashboard source={base} getToday={TODAY} />);
-    await screen.findByText("No upcoming trips.");
+    await screen.findByRole("heading", { name: /^Where to (first|next)\?$/ });
     const before = base.snapshot();
     const beforeJson = JSON.stringify(before);
 
@@ -566,7 +571,7 @@ describe("quick view (on the Past & archive cards)", () => {
         : trip,
     );
     const { user } = setup(state);
-    await screen.findByText("No upcoming trips.");
+    await screen.findByRole("heading", { name: /^Where to (first|next)\?$/ });
     await openQuick(user);
     expect(screen.getByRole("status", { name: "Quick view result count" }).textContent).toBe(
       "1 item shown",
@@ -596,9 +601,108 @@ describe("quick view (on the Past & archive cards)", () => {
 
   it("flags Pack last rows in the quick view", async () => {
     const { user } = setup(archivedState());
-    await screen.findByText("No upcoming trips.");
+    await screen.findByRole("heading", { name: /^Where to (first|next)\?$/ });
     const quick = await openQuick(user);
     const laptop = within(quick).getByText("Laptop").closest(".quick-view-row") as HTMLElement;
     expect(within(laptop).getByText("Pack last")).toBeTruthy();
+  });
+});
+
+describe("the Home with no trip coming up (#409)", () => {
+  const SEATTLE = {
+    location: {
+      id: "us-wa-seattle",
+      city: "Seattle",
+      region: "Washington",
+      country: "United States",
+      countryCode: "US",
+      label: "Seattle, Washington, United States",
+    },
+  };
+  const NUDGE = /Set your home city so trips know/;
+  const emptyState = () => ({ ...sampleLifecycleState(), trips: [] });
+  const sourceWith = (state: LifecycleState, homeCity: typeof SEATTLE | null) =>
+    createMemoryTripsSource(state, { now: () => 5_000, homeCity });
+
+  it("is the first-run welcome with the nudge while the account has no home city", async () => {
+    renderInApp(<TripsDashboard source={sourceWith(emptyState(), null)} getToday={TODAY} />);
+    expect(await screen.findByRole("heading", { name: "Where to first?" })).toBeTruthy();
+    expect(await screen.findByRole("link", { name: NUDGE })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Your travel ledger" })).toBeNull();
+  });
+
+  it("leaves the nudge out once a home city is set", async () => {
+    renderInApp(<TripsDashboard source={sourceWith(emptyState(), SEATTLE)} getToday={TODAY} />);
+    await screen.findByRole("heading", { name: "Where to first?" });
+    await act(async () => undefined);
+    expect(screen.queryByRole("link", { name: NUDGE })).toBeNull();
+  });
+
+  it("shows no nudge when the home city cannot be read, or the source has none", async () => {
+    const failing = {
+      ...sourceWith(emptyState(), null),
+      homeCity: () => Promise.reject(new Error("x")),
+    };
+    const first = renderInApp(<TripsDashboard source={failing} getToday={TODAY} />);
+    await screen.findByRole("heading", { name: "Where to first?" });
+    await act(async () => undefined);
+    expect(screen.queryByRole("link", { name: NUDGE })).toBeNull();
+    first.unmount();
+    const { homeCity: _omitted, ...without } = sourceWith(emptyState(), null);
+    void _omitted;
+    renderInApp(<TripsDashboard source={without} getToday={TODAY} />);
+    await screen.findByRole("heading", { name: "Where to first?" });
+    expect(screen.queryByRole("link", { name: NUDGE })).toBeNull();
+  });
+
+  it("never holds the trip list behind the home-city read", async () => {
+    const gate = deferred<typeof SEATTLE | null>();
+    const reads = vi.fn(() => gate.promise);
+    const source = { ...sourceWith(sampleLifecycleState(), null), homeCity: reads };
+    renderInApp(<TripsDashboard source={source} getToday={TODAY} />);
+    // The trips render while the read is still pending; with a trip to show it is not even asked.
+    expect(await screen.findByRole("heading", { name: "San Diego" })).toBeTruthy();
+    expect(reads).not.toHaveBeenCalled();
+    gate.resolve(null);
+  });
+
+  it("asks for the home city only after the trips loaded, and shows the list-first Home meanwhile", async () => {
+    const trips = deferred<LifecycleState>();
+    const gate = deferred<typeof SEATTLE | null>();
+    const base = sourceWith(emptyState(), null);
+    const reads = vi.fn(() => gate.promise);
+    const source = { ...base, load: () => trips.promise, homeCity: reads };
+    renderInApp(<TripsDashboard source={source} getToday={TODAY} />);
+    await act(async () => undefined);
+    expect(reads).not.toHaveBeenCalled();
+    trips.resolve(emptyState());
+    expect(await screen.findByRole("heading", { name: "Where to first?" })).toBeTruthy();
+    expect(reads).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("link", { name: NUDGE })).toBeNull();
+    gate.resolve(null);
+    expect(await screen.findByRole("link", { name: NUDGE })).toBeTruthy();
+  });
+
+  it("does not read the home city when the trips run out after the Home opened with a trip", async () => {
+    const reads = vi.fn(async () => null);
+    const source = { ...sourceWith(sampleLifecycleState(), null), homeCity: reads };
+    const { user } = (() => ({ user: userEvent.setup() }))();
+    renderInApp(<TripsDashboard source={source} getToday={TODAY} />);
+    await screen.findByRole("heading", { name: "San Diego" });
+    await user.click(screen.getByRole("button", { name: "More actions for San Diego" }));
+    await user.click(screen.getByRole("menuitem", { name: "Archive" }));
+    await screen.findByRole("heading", { name: "Where to next?" });
+    expect(reads).not.toHaveBeenCalled();
+  });
+
+  it("is the returning welcome once every trip is behind it, with the archive one tap away", async () => {
+    const state = sampleLifecycleState();
+    state.trips = state.trips.filter((trip) => trip.id === "lisbon");
+    state.deletedTrips = [{ trip: sampleLifecycleState().trips[0], deletedAt: 1 }];
+    const { user } = setup(state);
+    expect(await screen.findByRole("heading", { name: "Where to next?" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Recent trips" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Past & archive" }));
+    expect(screen.getByRole("heading", { name: "Recently deleted" })).toBeTruthy();
   });
 });

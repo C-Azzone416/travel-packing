@@ -43,7 +43,7 @@ test(
         .boundingBox())!;
       expect(build.y + build.height).toBeLessThanOrEqual(dismiss.y);
     }
-    await page.getByRole("link", { name: "Staples" }).click();
+    await page.getByRole("link", { name: "Staples", exact: true }).click();
     await expect(page.getByText("Your Staples list is intentionally empty.")).toBeVisible();
     await page.getByRole("link", { name: "Trips", exact: true }).click();
     await page.getByRole("button", { name: "Build Staples" }).click();
@@ -62,11 +62,11 @@ test(
     await editor.getByRole("button", { name: "Save staple" }).click();
     await page.getByRole("button", { name: "Save 1 Staples" }).click();
 
-    await expect(page.getByRole("heading", { name: "Your travel ledger" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^Where to (first|next)\?$/ })).toBeVisible();
     await expect(page.getByRole("complementary", { name: "Staples setup reminder" })).toHaveCount(
       0,
     );
-    await page.getByRole("link", { name: "Staples" }).click();
+    await page.getByRole("link", { name: "Staples", exact: true }).click();
     const underwear = page.locator('[data-staple-id="underwear"]');
     // Smart keeps its legacy label; a toiletry-bag item is filed in the Toiletries cube.
     await expect(underwear).toContainText("smart");
@@ -116,8 +116,8 @@ test(
 
     await page.unroute("**/*");
     await page.getByRole("button", { name: "Try save again" }).click();
-    await expect(page.getByRole("heading", { name: "Your travel ledger" })).toBeVisible();
-    await page.getByRole("link", { name: "Staples" }).click();
+    await expect(page.getByRole("heading", { name: /^Where to (first|next)\?$/ })).toBeVisible();
+    await page.getByRole("link", { name: "Staples", exact: true }).click();
     await expect(page.locator('[data-staple-id="underwear"]')).toBeVisible();
   },
 );
@@ -154,13 +154,13 @@ test(
     await expect(rowOf(page, "Underwear")).toContainText("1 per day");
     await expect(rowOf(page, "Socks")).not.toContainText("per day");
     await page.getByRole("button", { name: "Save 2 Staples" }).click();
-    await expect(page.getByRole("heading", { name: "Your travel ledger" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^Where to (first|next)\?$/ })).toBeVisible();
 
     for (const reload of [false, true]) {
       if (reload) await page.reload();
       await page
         .getByRole("navigation", { name: "Primary navigation" })
-        .getByRole("link", { name: "Staples" })
+        .getByRole("link", { name: "Staples", exact: true })
         .click();
       await expect(page.locator('[data-staple-id="toothbrush"]')).toContainText("per trip");
       await expect(page.locator('[data-staple-id="underwear"]')).toContainText("× 5");
@@ -177,7 +177,7 @@ test(
     await editRule(page, rowOf(page, "Underwear"), "3", /^Per day/);
     await expect(rowOf(page, "Underwear")).toContainText("3 per day");
     await page.getByRole("button", { name: "Save 1 Staples" }).click();
-    await expect(page.getByRole("heading", { name: "Your travel ledger" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^Where to (first|next)\?$/ })).toBeVisible();
 
     // Reopen setup from the reminder with the saved list still in place.
     await setStaplesSetupLifecycle(ownerId, "incomplete");
@@ -189,8 +189,8 @@ test(
     await page.getByRole("checkbox", { name: "Toothbrush" }).check();
     await expect(rowOf(page, "Underwear")).toContainText("3 per day");
     await page.getByRole("button", { name: "Save 2 Staples" }).click();
-    await expect(page.getByRole("heading", { name: "Your travel ledger" })).toBeVisible();
-    await page.getByRole("link", { name: "Staples" }).click();
+    await expect(page.getByRole("heading", { name: /^Where to (first|next)\?$/ })).toBeVisible();
+    await page.getByRole("link", { name: "Staples", exact: true }).click();
     await expect(page.locator('[data-staple-id="underwear"]')).toContainText("× 13");
     await expect(page.locator('[data-staple-id="toothbrush"]')).toContainText("per trip");
   },

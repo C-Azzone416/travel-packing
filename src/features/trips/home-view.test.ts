@@ -15,6 +15,7 @@ import {
   cubeSummaries,
   firstOpenCube,
   heroName,
+  noTripModel,
   isInternational,
   packingHref,
   pendingByStop,
@@ -589,5 +590,80 @@ describe("the phone tag and pills (#388)", () => {
     expect(model.nights).toBe(4);
     expect(model.countdown?.days).toBe(7);
     expect(model.label).toMatch(/packing/i);
+  });
+});
+
+describe("noTripModel (#409)", () => {
+  const completed = (id: string, start: string, end: string, archived = false) => ({
+    ...sampleLifecycleState().trips[1],
+    id,
+    start,
+    end,
+    archived,
+  });
+
+  it("is first run when the account has no completed trip", () => {
+    const model = noTripModel([], "2026-12-01");
+    expect(model).toMatchObject({
+      kind: "first",
+      eyebrow: "WELCOME",
+      title: "Where to first?",
+      lede: "Plan a trip and Packed Smart builds your list from your Staples and the weather.",
+      stickers: [],
+      recent: [],
+      inked: 0,
+    });
+  });
+
+  it("is still first run when the only trip is archived ahead of its dates", () => {
+    const future = { ...completed("future", "2027-01-10", "2027-01-12"), archived: true };
+    expect(noTripModel([future], "2026-12-01").kind).toBe("first");
+  });
+
+  it("is returning once a trip is behind it, archived or not", () => {
+    for (const archived of [false, true]) {
+      const model = noTripModel(
+        [completed("a", "2026-09-03", "2026-09-07", archived)],
+        "2026-12-01",
+      );
+      expect(model).toMatchObject({
+        kind: "returning",
+        eyebrow: "WELCOME BACK",
+        title: "Where to next?",
+        lede: "Your Staples are ready to start the list.",
+      });
+      expect(model.recent.map((trip) => trip.id)).toEqual(["a"]);
+    }
+  });
+
+  it("takes the three newest completed trips and at most six inked stickers, newest first", () => {
+    const trips = Array.from({ length: 8 }, (_, at) => {
+      const day = String(at + 1).padStart(2, "0");
+      const place = { ...sampleLifecycleState().trips[1].stops[0] };
+      return {
+        ...completed(`t${at}`, `2026-10-${day}`, `2026-10-${day}`),
+        stops: [
+          {
+            ...place,
+            location: { ...place.location, id: `p${at}`, city: `City${at}`, countryCode: `C${at}` },
+          },
+        ],
+      };
+    });
+    const model = noTripModel(trips, "2026-12-01");
+    expect(model.recent.map((trip) => trip.id)).toEqual(["t7", "t6", "t5"]);
+    expect(model.stickers).toHaveLength(6);
+    expect(model.stickers.every((sticker) => !sticker.upcoming)).toBe(true);
+    expect(model.inked).toBe(8);
+    expect(model.totals.trips).toBe(8);
+    expect(model.filterLabel).toBe("Last 12 months");
+  });
+
+  it("keeps older trips in Recent but not in the last-12-months teaser", () => {
+    const model = noTripModel([completed("old", "2024-01-03", "2024-01-05")], "2026-12-01");
+    expect(model.kind).toBe("returning");
+    expect(model.recent.map((trip) => trip.id)).toEqual(["old"]);
+    expect(model.stickers).toEqual([]);
+    expect(model.totals).toEqual({ trips: 0, nights: 0 });
   });
 });

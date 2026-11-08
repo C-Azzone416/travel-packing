@@ -49,10 +49,10 @@ test("the Staples | Saved lists switcher moves between the two pages, and the na
   await expect(
     page
       .getByRole("navigation", { name: "Primary navigation" })
-      .getByRole("link", { name: "Staples" }),
+      .getByRole("link", { name: "Staples", exact: true }),
   ).toHaveAttribute("aria-current", "page");
   await expect(page).toHaveTitle(/Saved lists/);
-  await tabs.getByRole("link", { name: "Staples" }).click();
+  await tabs.getByRole("link", { name: "Staples", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Staples", level: 1 })).toBeVisible();
 });
 

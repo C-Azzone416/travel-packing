@@ -35,7 +35,7 @@ test("archive -> appears in Past & archive -> restore -> back in Upcoming", asyn
   await openDashboard(page);
   await chooseFromMenu(page, "San Diego", "Archive");
   await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toHaveCount(0);
-  await expect(page.getByText("No upcoming trips.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Where to (first|next)\?$/ })).toBeVisible();
 
   await tab(page, /Past & archive/).click();
   const archived = card(page, "San Diego");

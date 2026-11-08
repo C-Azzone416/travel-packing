@@ -203,15 +203,6 @@ export function routeDisplay(
 
 // ---------------------------------------------------------------- Field Ledger dashboard (#143, spec §4)
 
-/** "N journeys ahead" for the page eyebrow; "No journeys ahead" when there are none. */
-export function journeysAheadLabel(count: number): string {
-  return count === 0
-    ? "No journeys ahead"
-    : count === 1
-      ? "1 journey ahead"
-      : `${count} journeys ahead`;
-}
-
 export interface WeatherCell {
   stopIndex: number;
   city: string;

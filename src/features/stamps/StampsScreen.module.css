@@ -529,3 +529,56 @@
   padding-inline: 0;
   margin-bottom: 16px;
 }
+
+/* The Home's Stamps teaser (#409): fewer, smaller stickers (3 columns, 72px laptop), two totals, a link. */
+.teaser .caseHead h2 {
+  margin: 0;
+  color: var(--onDarkMuted);
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+.teaser .stickerButton {
+  cursor: default;
+}
+.teaserLink {
+  display: inline-block;
+  margin-top: 16px;
+  color: var(--onDark);
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+@media (min-width: 1024px) {
+  .teaser .caseHead h2 {
+    font-size: 12px;
+    letter-spacing: 0.12em;
+  }
+  .teaser .stickerGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 22px 12px;
+  }
+  .teaser .stickerButton {
+    width: min(72px, 100%);
+    height: auto;
+    aspect-ratio: 1;
+    padding: 6px;
+  }
+  .teaser .stickerCode,
+  .teaser .stickerButton[data-shape="rounded"] .stickerCode,
+  .teaser .stickerButton[data-shape="squared"] .stickerCode {
+    font-size: 22px;
+  }
+  .teaser .totals {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .stickerCase.teaser,
+  .stickerCase.teaser :global([data-interior="dark"]) {
+    min-height: 0;
+  }
+}

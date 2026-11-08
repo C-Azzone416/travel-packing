@@ -139,7 +139,7 @@ describe("the phone Home and the Future pill", () => {
     const state = sampleLifecycleState();
     state.trips = state.trips.map((trip) => ({ ...trip, archived: true }));
     setup(state);
-    expect(await screen.findByText("No upcoming trips.")).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: /^Where to (first|next)\?$/ })).toBeTruthy();
     expect(screen.queryByRole("tablist", { name: "Trip sections" })).toBeNull();
   });
 });
