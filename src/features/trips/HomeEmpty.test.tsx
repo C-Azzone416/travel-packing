@@ -125,6 +125,9 @@ describe("the returning Home", () => {
     expect(screen.queryByRole("heading", { name: /Stickers/ })).toBeNull();
     expect(screen.getByRole("link", { name: "All stamps ›" }).getAttribute("href")).toBe("/stamps");
     expect(screen.getAllByRole("link", { name: /packed/ })).toHaveLength(2);
+    // The archive button sits in the Recent trips heading row, not at the foot of the page.
+    const heading = screen.getByRole("heading", { name: "Recent trips" }).parentElement!;
+    expect(within(heading).getByRole("button", { name: "Past & archive" })).toBeTruthy();
   });
 
   it("the teaser stickers are decoration, not controls", () => {

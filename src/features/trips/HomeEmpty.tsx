@@ -15,7 +15,7 @@ export interface HomeEmptyProps {
   laptop: boolean;
   /** True once the account is known to have no home city; unknown (still loading, or a source without one) shows no nudge. */
   homeCityUnset: boolean;
-  /** Archived or removed trips exist, so the Past & archive list (restore, undo remove) must stay reachable from here. */
+  /** First run only: archived or removed trips exist, so Past & archive (restore, undo remove) stays reachable. Returning always has it. */
   hasHistory: boolean;
   onOpenArchive: () => void;
   headingRef?: Ref<HTMLHeadingElement>;
@@ -127,6 +127,7 @@ export function HomeEmpty({
         {heading}
         <div className={styles.column}>
           <HeroCard model={model} />
+          {archive}
           {homeCityUnset ? <Nudge /> : null}
           <EmptySuitcase />
           {laptop ? null : (
@@ -134,7 +135,6 @@ export function HomeEmpty({
               Your stamps will collect here ›
             </Link>
           )}
-          {archive}
         </div>
       </div>
     );
@@ -146,11 +146,10 @@ export function HomeEmpty({
         <h2 id="home-recent-title" className={styles.recentTitle}>
           Recent trips
         </h2>
-        {laptop ? (
-          <button type="button" className={styles.archive} onClick={onOpenArchive}>
-            Past &amp; archive
-          </button>
-        ) : null}
+        {/* Up here, not at the foot of the page: the archive is reachable without scrolling past the toasts and the nav. */}
+        <button type="button" className={styles.archive} onClick={onOpenArchive}>
+          Past &amp; archive
+        </button>
       </div>
       <ul className={styles.recentList}>
         {model.recent.map((trip) => (
@@ -187,7 +186,6 @@ export function HomeEmpty({
           <HeroCard model={model} />
           {homeCityUnset ? <Nudge /> : null}
           {recent}
-          {hasHistory ? archive : null}
         </div>
       )}
     </div>
