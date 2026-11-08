@@ -5,7 +5,7 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sampleLifecycleState } from "@/features/trips/fixtures";
-import { createMemoryTripsSource } from "@/features/trips/trips-source";
+import { createMemoryTripsSource, type TripsSource } from "@/features/trips/trips-source";
 import { TripsSourceProvider } from "@/features/trips/TripsSourceProvider";
 import { renderInApp } from "@/test/providers";
 import { TripScreen } from "./TripScreen";
@@ -31,7 +31,16 @@ afterEach(() => {
 });
 
 /** San Diego with everything packed but the toiletry bag still outside the suitcase, and not Ready. */
-function memory(options: { ready?: boolean; bag?: boolean; short?: number } = {}) {
+function memory(
+  options: {
+    ready?: boolean;
+    bag?: boolean;
+    short?: number;
+    /** Item ids to leave unpacked. */
+    unpack?: string[];
+    empty?: boolean;
+  } = {},
+) {
   const state = sampleLifecycleState();
   state.trips = state.trips.map((trip) =>
     trip.id !== "san-diego"
@@ -40,10 +49,13 @@ function memory(options: { ready?: boolean; bag?: boolean; short?: number } = {}
           ...trip,
           ready: options.ready ?? false,
           toiletryBagPacked: options.bag ?? false,
-          items: trip.items.map((item, index) => ({
-            ...item,
-            packed: index < (options.short ?? 0) ? 0 : item.qty,
-          })),
+          items: options.empty
+            ? []
+            : trip.items.map((item, index) => ({
+                ...item,
+                packed:
+                  index < (options.short ?? 0) || options.unpack?.includes(item.id) ? 0 : item.qty,
+              })),
         },
   );
   return createMemoryTripsSource(state, {
@@ -53,16 +65,22 @@ function memory(options: { ready?: boolean; bag?: boolean; short?: number } = {}
   });
 }
 
-function setup(options: Parameters<typeof memory>[0] & { openReview?: boolean } = {}) {
-  const source = memory(options);
+function setup(
+  options: Parameters<typeof memory>[0] & {
+    openReview?: boolean;
+    wrap?: (base: ReturnType<typeof memory>) => Partial<TripsSource>;
+  } = {},
+) {
+  const base = memory(options);
+  const source = (options.wrap ? { ...base, ...options.wrap(base) } : base) as TripsSource;
   const user = userEvent.setup();
   renderInApp(
     <TripsSourceProvider source={source}>
       <TripScreen tripId="san-diego" openReview={options.openReview} />
     </TripsSourceProvider>,
   );
-  const trip = () => source.snapshot().trips.find((entry) => entry.id === "san-diego")!;
-  return { user, source, trip };
+  const trip = () => base.snapshot().trips.find((entry) => entry.id === "san-diego")!;
+  return { user, source: base, trip };
 }
 
 const title = () => screen.findByRole("heading", { level: 1 });
@@ -201,5 +219,151 @@ describe.each([
     expect(ribbon("gold")).toBeNull();
     expect(ribbon("good")).toBeNull();
     expect(document.querySelector("[data-packed-banner]")).toBeNull();
+  });
+});
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+describe.each([
+  ["laptop", true],
+  ["phone", false],
+])("the Review sheet's writes on the %s layout (QA round 2)", (_name, laptop) => {
+  beforeEach(() => {
+    layout.laptop = laptop;
+  });
+
+  it("a rejected Ready write shows an alert INSIDE the sheet with a Retry that sends it again", async () => {
+    let calls = 0;
+    const { user, trip } = setup({
+      bag: true,
+      openReview: true,
+      wrap: (base) => ({
+        markReady: (id: string) =>
+          ++calls === 1 ? Promise.reject(new Error("offline")) : base.markReady(id),
+      }),
+    });
+    const dialog = await sheet();
+    await user.click(within(dialog).getByRole("button", { name: "I’m ready to go" }));
+    const alert = await within(dialog).findByText(/Marking the trip Ready didn’t save/);
+    expect(trip().ready).toBe(false);
+    expect(screen.getByRole("dialog", { name: "Review your bag" })).toBeTruthy();
+    await user.click(
+      within(alert.closest('[role="alert"]') as HTMLElement).getByRole("button", { name: "Retry" }),
+    );
+    await waitFor(() => expect(trip().ready).toBe(true));
+    expect(calls).toBe(2);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("a failed tick says Not saved with a Retry in the sheet, and Retry saves it", async () => {
+    let calls = 0;
+    const { user, trip } = setup({
+      short: 1,
+      openReview: true,
+      wrap: (base) => ({
+        setPacked: (id: string, itemId: string, packed: number) =>
+          ++calls === 1 ? Promise.reject(new Error("offline")) : base.setPacked(id, itemId, packed),
+      }),
+    });
+    const dialog = await sheet();
+    const first = trip().items[0];
+    await user.click(within(dialog).getAllByRole("checkbox")[0]);
+    await within(dialog).findByText(/Not saved/);
+    expect(trip().items[0].packed).toBe(0);
+    await user.click(
+      within(dialog).getByRole("button", { name: new RegExp(`^Retry ${first.name}`) }),
+    );
+    await waitFor(() => expect(trip().items[0].packed).toBe(first.qty));
+    expect(within(dialog).queryByText(/Not saved/)).toBeNull();
+  });
+
+  it("a tick in flight shows Saving… until the source confirms it", async () => {
+    const gate = deferred<void>();
+    const { user, trip } = setup({
+      short: 1,
+      openReview: true,
+      wrap: (base) => ({
+        setPacked: async (id: string, itemId: string, packed: number) => {
+          await gate.promise;
+          return base.setPacked(id, itemId, packed);
+        },
+      }),
+    });
+    const dialog = await sheet();
+    await user.click(within(dialog).getAllByRole("checkbox")[0]);
+    expect(within(dialog).getByText("Saving…")).toBeTruthy();
+    gate.resolve();
+    await waitFor(() => expect(within(dialog).queryByText("Saving…")).toBeNull());
+    expect(trip().items[0].packed).toBe(trip().items[0].qty);
+  });
+
+  it("a tick that resolves does not re-enable the bag button while the bag write is still pending", async () => {
+    const tick = deferred<void>();
+    const bag = deferred<void>();
+    const { user } = setup({
+      short: 1,
+      openReview: true,
+      wrap: (base) => ({
+        setPacked: async (id: string, itemId: string, packed: number) => {
+          await tick.promise;
+          return base.setPacked(id, itemId, packed);
+        },
+        confirmBagPlacement: async (id: string) => {
+          await bag.promise;
+          return base.confirmBagPlacement(id);
+        },
+      }),
+    });
+    const dialog = await sheet();
+    await user.click(within(dialog).getAllByRole("checkbox")[0]);
+    const put = within(dialog).getByRole("button", { name: "Put bag in suitcase" });
+    await user.click(put);
+    expect(put.getAttribute("aria-disabled")).toBe("true");
+    tick.resolve();
+    await waitFor(() => expect(within(dialog).queryByText("Saving…")).toBeNull());
+    expect(put.getAttribute("aria-disabled")).toBe("true");
+    bag.resolve();
+    await within(dialog).findByRole("button", { name: "Undo placement" });
+  });
+
+  it("ticking the last Bathroom item inside the sheet does not open the bag prompt on top of it", async () => {
+    const { user, trip } = setup({ unpack: ["last-contacts"], openReview: true });
+    const dialog = await sheet();
+    await user.click(within(dialog).getByRole("checkbox", { name: /^Contacts/ }));
+    await waitFor(() =>
+      expect(trip().items.find((item) => item.id === "last-contacts")!.packed).toBeGreaterThan(0),
+    );
+    expect(await within(dialog).findByRole("button", { name: "Put bag in suitcase" })).toBeTruthy();
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+  });
+
+  it("a correction keeps focus on the checkbox that was changed", async () => {
+    const { user } = setup({ short: 1, openReview: true });
+    const dialog = await sheet();
+    const box = within(dialog).getAllByRole("checkbox")[0];
+    await user.click(box);
+    await waitFor(() => expect((box as HTMLInputElement).checked).toBe(true));
+    await waitFor(() => expect(within(dialog).queryByText("Saving…")).toBeNull());
+    expect(document.activeElement).toBe(box);
+  });
+
+  it("a direct review link to an EMPTY list says why Ready is not available", async () => {
+    const { user, trip } = setup({ empty: true, openReview: true });
+    const dialog = await sheet();
+    const ready = within(dialog).getByRole("button", { name: "I’m ready to go" });
+    expect(ready.getAttribute("aria-disabled")).toBe("true");
+    expect(document.getElementById(ready.getAttribute("aria-describedby")!)?.textContent).toBe(
+      "Add something to your list before marking it Ready.",
+    );
+    await user.click(ready);
+    expect(trip().ready).toBe(false);
   });
 });

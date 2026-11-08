@@ -104,7 +104,14 @@ export function TripScreen({
   const [staples, setStaples] = useState<Staple[]>([]);
   const [reloads, setReloads] = useState(0);
   const [dialog, setDialog] = useState<Dialog>(null);
-  const [submitting, setSubmitting] = useState(false);
+  // How many dialog/sheet writes are in flight. A count (not a flag): a row write that never set it must not clear it, and two
+  // overlapping writes keep their controls disabled until the LAST one settles.
+  const [modalWrites, setModalWrites] = useState(0);
+  const submitting = modalWrites > 0;
+  // A failed write from the Review sheet, with the retry the sheet offers (the page behind it is inert).
+  const [reviewFailure, setReviewFailure] = useState<{ message: string; retry: () => void } | null>(
+    null,
+  );
   const [failedRows, setFailedRows] = useState<ReadonlySet<string>>(new Set());
   const [announcement, setAnnouncement] = useState("");
   const [stampFailed, setStampFailed] = useState(false);
@@ -212,7 +219,7 @@ export function TripScreen({
 
   const act = useCallback(
     (write: () => Promise<TripChange>, options: ActOptions = {}): Promise<void> => {
-      if (options.modal) setSubmitting(true);
+      if (options.modal) setModalWrites((count) => count + 1);
       return track(write, (change) => {
         const reason = confirmed.current ? revocationReason(confirmed.current, change.trip) : null;
         confirmed.current = change.trip;
@@ -240,7 +247,9 @@ export function TripScreen({
           retries.current.set(row, { write, options });
           setFailedRows((current) => new Set(current).add(row));
         })
-        .finally(() => setSubmitting(false));
+        .finally(() => {
+          if (options.modal) setModalWrites((count) => Math.max(count - 1, 0));
+        });
     },
     [source, toast, track],
   );
@@ -727,14 +736,28 @@ export function TripScreen({
   const closeReviewSheet = () => {
     reviewOpenRef.current = false;
     setReviewOpen(false);
+    setReviewFailure(null);
     // Arrived by ?review=1 or the /review redirect: put the plain trip address back.
     if (window.location.search.includes("review=")) {
       window.history.replaceState(null, "", `/trips/${tripId}`);
     }
   };
+  // A write made from the Review sheet. Behind the sheet the page is inert, so a failure is shown INSIDE the sheet with a Retry
+  // that sends the same write again (the global Save error chip is out of reach there).
+  const sheetWrite = (what: string, write: () => Promise<TripChange>, options: ActOptions = {}) => {
+    const run = () => {
+      setReviewFailure(null);
+      void act(write, {
+        ...options,
+        modal: true,
+        onFail: () =>
+          setReviewFailure({ message: `${what} didn’t save. Nothing was changed.`, retry: run }),
+      });
+    };
+    run();
+  };
   const markReady = () =>
-    void act(() => source.markReady(tripId), {
-      modal: true,
+    sheetWrite("Marking the trip Ready", () => source.markReady(tripId), {
       announce: () => "Marked ready.",
       after: closeReviewSheet,
     });
@@ -829,10 +852,23 @@ export function TripScreen({
           trip={trip}
           busy={submitting}
           onTick={tickItem}
-          onPlaceBag={() => void act(() => source.confirmBagPlacement(tripId), { modal: true })}
-          onUndoBag={() => void act(() => source.undoBagPlacement(tripId), { modal: true })}
+          pending={Object.keys(tapped)}
+          failedRows={failedRows}
+          failure={reviewFailure}
+          onRetry={retryRow}
+          onPlaceBag={() =>
+            sheetWrite("Putting the bag in the suitcase", () => source.confirmBagPlacement(tripId))
+          }
+          onUndoBag={() =>
+            sheetWrite("Undoing the bag placement", () => source.undoBagPlacement(tripId))
+          }
           onReady={markReady}
-          onNotReady={markNotReady}
+          onNotReady={() =>
+            sheetWrite("Marking the trip not ready", () => source.markNotReady(tripId), {
+              announce: () => "Marked not ready. Progress kept.",
+              after: () => toast.show("Progress kept."),
+            })
+          }
           onClose={closeReviewSheet}
         />
       ) : null}

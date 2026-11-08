@@ -22,7 +22,17 @@ function show(trip: LifecycleTrip, busy = false) {
     onNotReady: vi.fn(),
     onClose: vi.fn(),
   };
-  render(<ReviewBagSheet trip={trip} busy={busy} {...handlers} />);
+  render(
+    <ReviewBagSheet
+      trip={trip}
+      busy={busy}
+      pending={[]}
+      failedRows={new Set()}
+      failure={null}
+      onRetry={vi.fn()}
+      {...handlers}
+    />,
+  );
   return handlers;
 }
 
@@ -92,5 +102,57 @@ describe("ReviewBagSheet", () => {
     show({ ...trip, items: trip.items.filter((item) => item.groupId !== "toiletry-bag") });
     expect(screen.queryByText("Toiletry bag in suitcase")).toBeNull();
     expect(screen.queryByRole("heading", { name: "Toiletries" })).toBeNull();
+  });
+
+  it("shows Saving… on a row whose tick is not confirmed, and Not saved · Retry on one that failed", async () => {
+    const user = userEvent.setup();
+    const trip = sanDiego();
+    const onRetry = vi.fn();
+    render(
+      <ReviewBagSheet
+        trip={trip}
+        busy={false}
+        pending={[trip.items[0].id]}
+        failedRows={new Set([trip.items[1].id])}
+        failure={null}
+        onRetry={onRetry}
+        onTick={vi.fn()}
+        onPlaceBag={vi.fn()}
+        onUndoBag={vi.fn()}
+        onReady={vi.fn()}
+        onNotReady={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.getAllByText("Saving…")).toHaveLength(1);
+    expect(screen.getByText(/Not saved/)).toBeTruthy();
+    await user.click(
+      screen.getByRole("button", { name: new RegExp(`^Retry ${trip.items[1].name}`) }),
+    );
+    expect(onRetry).toHaveBeenCalledWith(trip.items[1].id);
+  });
+
+  it("shows a failed bag step or Ready write as an alert inside the sheet, with a Retry", async () => {
+    const user = userEvent.setup();
+    const retry = vi.fn();
+    render(
+      <ReviewBagSheet
+        trip={sanDiego()}
+        busy={false}
+        pending={[]}
+        failedRows={new Set()}
+        failure={{ message: "Marking the trip Ready didn’t save. Nothing was changed.", retry }}
+        onRetry={vi.fn()}
+        onTick={vi.fn()}
+        onPlaceBag={vi.fn()}
+        onUndoBag={vi.fn()}
+        onReady={vi.fn()}
+        onNotReady={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    const alert = screen.getByText(/Marking the trip Ready didn’t save/).closest('[role="alert"]')!;
+    await user.click(within(alert as HTMLElement).getByRole("button", { name: "Retry" }));
+    expect(retry).toHaveBeenCalledTimes(1);
   });
 });

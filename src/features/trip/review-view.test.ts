@@ -19,18 +19,24 @@ const noToiletries = (trip: LifecycleTrip): LifecycleTrip => ({
 });
 
 describe("readyBlocker", () => {
-  it("counts the items still to check, with the right plural", () => {
+  it("counts what is still to pack by QUANTITY, with the right plural", () => {
     const trip = packed(base());
-    const one = {
+    const withLeft = (left: number[]): LifecycleTrip => ({
       ...trip,
-      items: trip.items.map((item, i) => (i === 0 ? { ...item, packed: 0 } : item)),
-    };
-    expect(readyBlocker(one)).toBe("Check off 1 more item");
-    const two = {
-      ...trip,
-      items: trip.items.map((item, i) => (i < 2 ? { ...item, packed: 0 } : item)),
-    };
-    expect(readyBlocker(two)).toBe("Check off 2 more items");
+      items: trip.items.map((item, i) =>
+        i < left.length ? { ...item, qty: 5, packed: 5 - left[i] } : item,
+      ),
+    });
+    // One row at 4 of 5 is one unit to go; one row at 1 of 5 is four, not "one more item".
+    expect(readyBlocker(withLeft([1]))).toBe("Check off 1 more item");
+    expect(readyBlocker(withLeft([4]))).toBe("Check off 4 more items");
+    expect(readyBlocker(withLeft([4, 2]))).toBe("Check off 6 more items");
+  });
+
+  it("says why an empty list cannot be Ready (the server refuses it)", () => {
+    expect(readyBlocker({ ...base(), items: [] })).toBe(
+      "Add something to your list before marking it Ready.",
+    );
   });
 
   it("asks for the bag once everything is checked and toiletries exist", () => {

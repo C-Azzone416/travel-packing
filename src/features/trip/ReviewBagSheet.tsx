@@ -16,6 +16,13 @@ export interface ReviewBagSheetProps {
   /** A change is being saved: the bag step and the Ready buttons wait. */
   busy: boolean;
   onTick: (item: TripItem, packed: boolean) => void;
+  /** Items whose tick is not confirmed yet ("Saving…"). */
+  pending: readonly string[];
+  /** Items whose last tick failed to save ("Not saved · Retry"). */
+  failedRows: ReadonlySet<string>;
+  onRetry: (itemId: string) => void;
+  /** A failed bag step or Ready write, with the retry for it. */
+  failure: { message: string; retry: () => void } | null;
   onPlaceBag: () => void;
   onUndoBag: () => void;
   onReady: () => void;
@@ -29,6 +36,10 @@ export interface ReviewBagSheetProps {
 export function ReviewBagSheet({
   trip,
   busy,
+  pending,
+  failedRows,
+  onRetry,
+  failure,
   onTick,
   onPlaceBag,
   onUndoBag,
@@ -92,6 +103,14 @@ export function ReviewBagSheet({
           <Button variant="secondary" onClick={onClose}>
             Back to packing list
           </Button>
+          {failure ? (
+            <div className={styles.failure} role="alert">
+              <span>{failure.message}</span>
+              <Button small onClick={failure.retry}>
+                Retry
+              </Button>
+            </div>
+          ) : null}
           {blocker && !trip.ready ? (
             <p id="review-blocker" className={styles.blocker}>
               {blocker}
@@ -126,7 +145,23 @@ export function ReviewBagSheet({
                     {trip.config.laundry && item.laundryHalves ? (
                       <LaundryMarker aria-hidden={undefined} />
                     ) : null}
+                    {failedRows.has(item.id) ? null : pending.includes(item.id) ? (
+                      <span className={styles.saving}>Saving…</span>
+                    ) : null}
                   </label>
+                  {failedRows.has(item.id) ? (
+                    <span className={styles.unsaved} role="alert">
+                      Not saved
+                      <button
+                        type="button"
+                        className={styles.retry}
+                        aria-label={`Retry ${item.name}`}
+                        onClick={() => onRetry(item.id)}
+                      >
+                        Retry
+                      </button>
+                    </span>
+                  ) : null}
                 </li>
               ))}
             </ul>

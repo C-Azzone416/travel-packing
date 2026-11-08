@@ -42,6 +42,16 @@ test("laptop 1280, Ocean: all packed, then the Review sheet", async ({ page }) =
     .click();
   await expect(reviewSheet(page)).toBeVisible();
   await shot(page, "packing-l-ocean-1280-review-sheet");
+  // A failed Ready write is shown inside the sheet with a Retry (the page behind it is inert).
+  await reviewSheet(page).getByRole("button", { name: "Put bag in suitcase" }).click();
+  await expect(reviewSheet(page).getByRole("button", { name: "Undo placement" })).toBeVisible();
+  await page.route(
+    (url) => url.pathname.startsWith("/trips/"),
+    (route) => (route.request().method() === "POST" ? route.abort() : route.continue()),
+  );
+  await reviewSheet(page).getByRole("button", { name: "I’m ready to go" }).click();
+  await expect(reviewSheet(page).getByRole("alert")).toContainText("didn’t save");
+  await shot(page, "packing-l-ocean-1280-review-sheet-error");
 });
 
 test("phone 390, Ocean: the Review sheet, then Ready", async ({ page }) => {
