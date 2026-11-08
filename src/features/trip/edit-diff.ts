@@ -17,7 +17,7 @@ import type { DraftStop, LifecycleTrip } from "@/domain/trip-lifecycle";
 import { daysBetween, tripDatesFromStops, type TripStop } from "@/domain/trip-stops";
 import type { SuggestFn, TripConfig, TripItem } from "@/domain/trip";
 import { countedWithEarlierRule } from "@/features/trips/count-copy";
-import { nightsAt, stopProblems } from "@/features/trips/stops-draft";
+import { stopProblems } from "@/features/trips/stops-draft";
 
 /** Everything the sheet lets the person edit. */
 export interface EditDraft {
@@ -278,11 +278,4 @@ export function changeCount(count: number): string {
 /** "Save 5 changes", "Save 1 change"; "Save changes" while there are none (the button is disabled then). */
 export function saveLabel(count: number): string {
   return count === 0 ? "Save changes" : `Save ${changeCount(count)}`;
-}
-
-/** Nights of a draft route, or null while a date is blank (for the "12 nights" line under the dates). */
-export function routeNights(stops: readonly DraftStop[]): number | null {
-  if (stops.length === 0) return null;
-  const first = nightsAt({ arrive: stops[0].arrive, leave: stops[stops.length - 1].leave });
-  return first;
 }

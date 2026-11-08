@@ -3,16 +3,19 @@ import type { LifecycleTrip } from "@/domain/trip-lifecycle";
 import type { SampleLocation, TripStop } from "@/domain/trip-stops";
 import type { StopWeather } from "@/domain/weather/types";
 import { sampleLifecycleState } from "./fixtures";
-import { fallbackReviewStop, weatherForReview } from "@/features/trip/weather-remaining";
+import {
+  fallbackReviewStop,
+  hereStopIndex,
+  remainingWeather,
+  weatherForReview,
+} from "@/features/trip/weather-remaining";
 import {
   cityWeather,
   countdownFor,
   dayBadgeFor,
-  hereStopIndex,
   homeModel,
   pendingByStop,
   weatherPillSub,
-  remainingWeather,
 } from "./home-view";
 
 // The Home while the trip is on (#410, spec #393 section 2.2). Every date is fixed: nothing here reads the clock.

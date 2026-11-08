@@ -13,8 +13,6 @@ import {
 } from "@/domain/cubes";
 import { tripPhase, type LifecycleTrip, type TripPhase } from "@/domain/trip-lifecycle";
 import { hereStopIndex, remainingWeather } from "@/features/trip/weather-remaining";
-
-export { hereStopIndex, remainingWeather };
 import { packingButtonLabel } from "@/lib/trip-phase-copy";
 import type { UsualWeatherRow } from "@/components/ui/UsualWeather";
 import {

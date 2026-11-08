@@ -37,7 +37,3 @@ export function countedWithEarlierRule(trip: {
 }): boolean {
   return trip.dailyDays !== dailyDaysFor(trip.days, trip.config.returnOutfit);
 }
-
-/** The Trip math line for a trip saved under the earlier counting rule: no sum is shown until its preferences are saved again. */
-export const STALE_COUNT_NOTE =
-  "This list was counted with the earlier rule. Edit preferences to update it.";

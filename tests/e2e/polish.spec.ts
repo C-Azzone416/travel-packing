@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
 import { DEVICE } from "./helpers/device";
 
-// Field Ledger polish (#160): small layout facts that only a rendered page can show.
+// Layout polish (#160): small layout facts that only a rendered page can show.
 test.beforeEach(async ({ page }) => {
   await page.clock.setFixedTime(new Date("2026-10-16T12:00:00"));
   await signInAsOwner(page);

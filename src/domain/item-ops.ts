@@ -384,7 +384,6 @@ export const ADDABLE_CATEGORIES = [
   "Other essentials",
   "Accessories",
 ] as const;
-export type AddableCategory = (typeof ADDABLE_CATEGORIES)[number];
 
 export const ADD_ITEM_NAME_MAX = 120;
 export const ADD_ITEM_QTY_MAX = 999;

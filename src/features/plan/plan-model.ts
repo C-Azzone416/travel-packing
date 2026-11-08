@@ -102,20 +102,6 @@ export function stepBlocker(draft: TripDraft, step: StepId, staleCopy = false): 
   return null;
 }
 
-/** The first step that is not finished yet; "review" when the earlier four all are. */
-export function firstOpenStep(draft: TripDraft, staleCopy = false): StepId {
-  return (
-    STEP_IDS.find((step) => step !== "review" && stepBlocker(draft, step, staleCopy)) ?? "review"
-  );
-}
-
-/** Whether the person may open this step: every step before it is finished. */
-export function isReachable(draft: TripDraft, step: StepId, staleCopy = false): boolean {
-  return STEP_IDS.slice(0, STEP_IDS.indexOf(step)).every(
-    (earlier) => stepBlocker(draft, earlier, staleCopy) === null,
-  );
-}
-
 // ------------------------------------------------------------------ summaries
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];

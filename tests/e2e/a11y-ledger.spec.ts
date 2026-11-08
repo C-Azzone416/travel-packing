@@ -152,7 +152,7 @@ test.describe("start from a saved list", DEVICE, () => {
   });
 });
 
-test.describe("add item, the ⋯ menu and the stamp sheet", DEVICE, () => {
+test.describe("the dashboard ⋯ menu", DEVICE, () => {
   test("the dashboard's trip ⋯ menu", async ({ page }) => {
     await openDashboard(page);
     await page.getByRole("button", { name: "More actions for San Diego" }).click();
