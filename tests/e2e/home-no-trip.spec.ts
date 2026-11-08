@@ -244,6 +244,24 @@ test(
   },
 );
 
+// The odd fifth tile (Misc) keeps the width of the others in two columns, so the grid leaves an empty cell, not a stretched
+// tile (#471 round 4).
+test(
+  "320px first run, normal text: the fifth cube is one tile wide, like the first",
+  DEVICE,
+  async ({ page }) => {
+    await open(page, 320, { firstRun: true });
+    const widths = await page
+      .locator("[data-empty-suitcase] li")
+      .evaluateAll((cubes) => cubes.map((cube) => cube.getBoundingClientRect().width));
+    expect(widths.length, "five cubes").toBe(5);
+    expect(
+      Math.abs(widths[4] - widths[0]),
+      `fifth cube ${widths[4]}px vs first ${widths[0]}px`,
+    ).toBeLessThanOrEqual(1);
+  },
+);
+
 // The returning Home's recent-trip rows (#463) at 195px with doubled text: the px-sized rules double too (enlargeText), which a
 // root font-size change alone does not do. The page must not scroll sideways, and the recent trips must wrap whole words.
 test(
