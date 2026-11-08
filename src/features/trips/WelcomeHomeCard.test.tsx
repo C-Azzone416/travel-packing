@@ -68,6 +68,33 @@ describe("WelcomeHomeCard", () => {
     expect(screen.getByRole("status").textContent).toBe(model.announcement);
   });
 
+  it("does not announce while the first frame is late: the 600 ms start when the ink does", () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) =>
+      frames.push(callback),
+    );
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    motion(false);
+    render(<WelcomeHomeCard model={model} />);
+    act(() => {
+      vi.advanceTimersByTime(INK_MS * 3);
+    });
+    // The frame has not come: still dashed, and nothing announced.
+    expect(sticker().getAttribute("data-upcoming")).toBe("true");
+    expect(screen.getByRole("status").textContent).toBe("");
+    act(() => frames[0](0));
+    expect(sticker().getAttribute("data-upcoming")).toBeNull();
+    act(() => {
+      vi.advanceTimersByTime(INK_MS - 1);
+    });
+    expect(screen.getByRole("status").textContent).toBe("");
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(screen.getByRole("status").textContent).toBe(model.announcement);
+  });
+
   it("is solid and announced at once under reduced motion", () => {
     motion(true);
     render(<WelcomeHomeCard model={model} />);

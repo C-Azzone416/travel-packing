@@ -3,7 +3,7 @@
 // on and off, what Add and Dismiss send). The main happy paths are in TripScreen.test.tsx.
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DayWeather, StopWeather } from "@/domain/weather/types";
 import { sampleLifecycleState } from "@/features/trips/fixtures";
 import { createMemoryTripsSource, type TripsSource } from "@/features/trips/trips-source";
@@ -211,5 +211,40 @@ describe("the review rows", () => {
     await user.click(screen.getAllByRole("button", { name: /^Add / })[0]);
     expect(await screen.findByRole("button", { name: "Not saved, retry" })).toBeTruthy();
     expect(screen.getAllByRole("button", { name: /^Add / }).length).toBeGreaterThan(0);
+  });
+});
+
+describe("during the trip (#410)", () => {
+  afterEach(() => vi.useRealTimers());
+
+  // Lisbon is 3-7 Sep 2026. The 4th was wet, the 5th (today) and on are dry.
+  const wetThenDry: StopWeather[] = [
+    {
+      stopIndex: 0,
+      status: "ok",
+      days: [
+        { ...hot, precipProbability: 0.8, precipMm: 12, highC: 15, lowC: 8 },
+        { ...hot, date: "2026-09-05" },
+      ],
+    },
+  ];
+
+  it("reviews only the days still ahead, as the Home counts them: a rain jacket for a wet day that is over is offered for removal", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-09-05T12:00:00") });
+    const { user, applyReview } = setup({
+      weather: { kind: "ready", stops: wetThenDry },
+      rainJacket: true,
+    });
+    await ready();
+    await screen.findByRole("button", { name: /to review/ }).then((button) => user.click(button));
+    await user.click(screen.getByRole("button", { name: "Remove Rain jacket" }));
+    await waitFor(() => expect(applyReview).toHaveBeenCalledTimes(1));
+  });
+
+  it("keeps the whole forecast in view before the trip: the wet day still calls for the jacket", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-09-01T12:00:00") });
+    setup({ weather: { kind: "ready", stops: wetThenDry }, rainJacket: true });
+    await ready();
+    expect(screen.queryByRole("button", { name: "Remove Rain jacket" })).toBeNull();
   });
 });

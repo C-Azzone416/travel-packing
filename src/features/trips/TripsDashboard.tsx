@@ -19,17 +19,12 @@ import { localToday } from "@/lib/today";
 import { EditTripSheet, type ApplyOutcome, type SaveResult } from "@/features/trip/EditTripSheet";
 import { HomeLaptop } from "./HomeLaptop";
 import { HomeEmpty } from "./HomeEmpty";
+import { weatherForReview } from "@/features/trip/weather-remaining";
 import { WelcomeHomeCard } from "./WelcomeHomeCard";
 import { welcomeHomeModel } from "./welcome-home";
 import { HomePhone } from "./HomePhone";
 import type { HomeMaps } from "./home-map-types";
-import {
-  cityWeather,
-  noTripModel,
-  remainingWeather,
-  usualRows,
-  type HeroWeather,
-} from "./home-view";
+import { cityWeather, noTripModel, usualRows, type HeroWeather } from "./home-view";
 import { LAPTOP_MIN_WIDTH, useMinWidth } from "@/lib/use-min-width";
 import { routeSignature, stopsOrDestination, tripRoutePoints } from "@/domain/trip-route";
 import { TripCard } from "./TripCard";
@@ -109,7 +104,9 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
         const today = getToday();
         // While the trip is on, only the days from today on count: the rows, and the suggestions still to review.
         const during = heroTrip ? tripPhase(heroTrip, today) === "during" : false;
-        const ahead = during ? remainingWeather(stops, result.stops, today) : result.stops;
+        const ahead = heroTrip
+          ? weatherForReview(heroTrip, stops, result.stops, today)
+          : result.stops;
         // Skipped suggestions stay out of the count; if they cannot be read, nothing is skipped.
         const skipped = await Promise.resolve()
           .then(() => weatherSource.listSuggestions(heroId))

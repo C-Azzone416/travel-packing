@@ -156,3 +156,66 @@ describe("the phone Home during the trip", () => {
     expect(screen.getAllByText("You're here")).toHaveLength(1);
   });
 });
+
+describe("a one-day trip on its day", () => {
+  const oneDay = {
+    ...trip(),
+    end: "2027-03-14",
+    stops: [stay("Lisbon", "2027-03-14", "2027-03-14")],
+  };
+
+  it("says Today on the laptop badge, and Leaves today for a longer trip", () => {
+    const view = render(
+      <HomeLaptop
+        trip={oneDay}
+        later={[]}
+        today="2027-03-14"
+        weather={{ phase: "none" }}
+        map={null}
+        busy={false}
+        {...handlers()}
+      />,
+    );
+    expect(screen.getAllByText("Today").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Leaves today")).toBeNull();
+    view.unmount();
+    laptop("2027-03-14", { phase: "none" });
+    expect(screen.getAllByText("Leaves today").length).toBeGreaterThan(0);
+  });
+
+  it("says Today on the phone badge", () => {
+    const state = sampleLifecycleState();
+    render(
+      <HomePhone
+        trip={oneDay}
+        later={[]}
+        state={{ ...state, trips: [oneDay, ...state.trips.slice(1)] }}
+        today="2027-03-14"
+        weather={{ phase: "none" }}
+        map={null}
+        busy={false}
+        {...handlers()}
+      />,
+    );
+    expect(screen.getAllByText("Today").length).toBeGreaterThan(0);
+  });
+});
+
+describe("the current stay without weather", () => {
+  it("is first, marked, and says weather isn't available (laptop)", () => {
+    const unavailable: CityWeather = {
+      ...row("Lisbon", 0, true),
+      range: "",
+      summary: "Weather isn't available for Lisbon right now.",
+      unavailable: true,
+    };
+    laptop("2027-03-15", { phase: "ready", city: [unavailable, row("Porto", 1, false)] });
+    const items = screen
+      .getAllByRole("listitem")
+      .filter((li) => li.hasAttribute("data-weather-source"));
+    expect(items[0].textContent).toContain("You're here");
+    expect(items[0].textContent).toContain("Lisbon");
+    expect(items[0].textContent).toContain("Weather isn't available for Lisbon right now.");
+    expect(items[0].textContent).not.toContain("·");
+  });
+});

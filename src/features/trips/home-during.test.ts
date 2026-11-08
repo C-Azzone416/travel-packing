@@ -3,12 +3,15 @@ import type { LifecycleTrip } from "@/domain/trip-lifecycle";
 import type { SampleLocation, TripStop } from "@/domain/trip-stops";
 import type { StopWeather } from "@/domain/weather/types";
 import { sampleLifecycleState } from "./fixtures";
+import { weatherForReview } from "@/features/trip/weather-remaining";
 import {
   cityWeather,
+  countdownFor,
   dayBadgeFor,
   hereStopIndex,
   homeModel,
   pendingByStop,
+  weatherPillSub,
   remainingWeather,
 } from "./home-view";
 
@@ -204,5 +207,82 @@ describe("homeModel while the trip is on", () => {
   it("keeps the Last day badge on the end date and goes back to NEXT TRIP-free once past", () => {
     expect(homeModel(trip(), { phase: "none" }, "2027-03-24").dayBadge?.text).toBe("Last day");
     expect(homeModel(trip(), { phase: "none" }, "2027-03-25").dayBadge).toBeNull();
+  });
+});
+
+describe("one calculation for the review (#410, QA round 2)", () => {
+  const day = (date: string, stopIndex: number, rain = 0.1) => ({
+    date,
+    stopIndex,
+    source: "forecast" as const,
+    highC: 20,
+    lowC: 10,
+    precipProbability: rain,
+    precipMm: 0,
+    snowCm: 0,
+    uvIndexMax: 3,
+    sunshineHours: 5,
+  });
+  const weather: StopWeather[] = [
+    { stopIndex: 0, status: "ok", days: ["2027-03-15", "2027-03-16"].map((d) => day(d, 0, 0.9)) },
+    { stopIndex: 1, status: "ok", days: ["2027-03-17", "2027-03-18"].map((d) => day(d, 1)) },
+  ];
+
+  it("weatherForReview keeps the days ahead while the trip is on, and everything before and after it", () => {
+    const during = weatherForReview(trip(), STOPS, weather, "2027-03-18");
+    expect(during.map((s) => [s.stopIndex, s.days.map((d) => d.date)])).toEqual([
+      [1, ["2027-03-18"]],
+    ]);
+    expect(weatherForReview(trip(), STOPS, weather, "2027-03-10")).toEqual(weather);
+    expect(weatherForReview(trip(), STOPS, weather, "2027-03-30")).toEqual(weather);
+  });
+
+  it("sends a change that names no stop to a stay on screen, never to one already left", () => {
+    const today = "2027-03-18";
+    const ahead = weatherForReview(trip(), STOPS, weather, today);
+    const rows = cityWeather(STOPS, weather, "C", today, true);
+    const model = homeModel(
+      trip({ items: [] }),
+      { phase: "ready", city: rows, review: { stops: ahead, suppressed: {} } },
+      today,
+    );
+    expect(rows.map((r) => r.stopIndex)).toEqual([1]);
+    expect(Object.keys(model.pending).map(Number).sort()).toEqual([1]);
+    expect(model.pendingCities).toEqual(["Porto"]);
+  });
+
+  it("keeps the current stay first and marked when it has no weather, with the unavailable line", () => {
+    const onlyPorto = weather.filter((s) => s.stopIndex === 1);
+    const rows = cityWeather(STOPS, onlyPorto, "C", "2027-03-15", true);
+    expect(rows.map((r) => [r.city, r.here, r.unavailable ?? false, r.tiles.length])).toEqual([
+      ["Lisbon", true, true, 0],
+      ["Porto", false, false, 2],
+    ]);
+    expect(rows[0].summary).toBe("Weather isn't available for Lisbon right now.");
+    // Not during the trip: a stay without weather is still simply left out.
+    expect(cityWeather(STOPS, onlyPorto, "C", "2027-03-10").map((r) => r.city)).toEqual(["Porto"]);
+  });
+
+  it("says N/A, not Clear, on the Weather pill when the only row is the unavailable current stay", () => {
+    const rows = cityWeather(STOPS, [], "C", "2027-03-15", true);
+    const model = { pendingCities: [], phase: "during" as const, rows };
+    expect(rows).toHaveLength(1);
+    expect(weatherPillSub({ phase: "ready" }, model).text).toBe("N/A");
+  });
+});
+
+describe("a one-day trip on its day (#410, QA round 2)", () => {
+  it("is Today, not Leaves today; a longer trip still Leaves today", () => {
+    const day = { start: "2027-03-14", end: "2027-03-14" };
+    expect(countdownFor(day, "2027-03-14")).toMatchObject({
+      days: 0,
+      dayTrip: true,
+      spoken: "Today",
+    });
+    expect(countdownFor(trip(), "2027-03-14")).toMatchObject({
+      dayTrip: false,
+      spoken: "Leaves today",
+    });
+    expect(countdownFor(day, "2027-03-12")?.dayTrip).toBe(false);
   });
 });

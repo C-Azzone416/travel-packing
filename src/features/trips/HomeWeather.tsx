@@ -64,7 +64,8 @@ function CityRows({
           <span className={styles.cityText}>
             {row.here ? <span className={styles.here}>You&apos;re here</span> : null}
             <strong>
-              {row.city} · {row.range}
+              {row.city}
+              {row.range ? ` · ${row.range}` : ""}
             </strong>{" "}
             <span>{row.summary}</span>
           </span>

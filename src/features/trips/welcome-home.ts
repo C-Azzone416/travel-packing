@@ -88,7 +88,7 @@ export function welcomeHomeModel(
   const totals = packedTotals(trip);
   const facts = [
     nights === 0 ? "Day trip" : `${nights} ${nights === 1 ? "night" : "nights"}`,
-    ...(totals.total > 0 ? [`${totals.packed} of ${totals.total} packed`] : []),
+    ...(totals.packed > 0 ? [`${totals.packed} of ${totals.total} packed`] : []),
   ].join(", ");
 
   const places = fresh.map((sticker) => sticker.place);

@@ -132,6 +132,16 @@ describe("welcomeHomeModel", () => {
     );
   });
 
+  it("leaves out the packed part when nothing was packed, though the list has items", () => {
+    const unpacked = {
+      ...LISBON_TRIP,
+      toiletryBagPacked: false,
+      items: LISBON_TRIP.items.map((item) => ({ ...item, packed: 0 })),
+    };
+    const line = welcomeHomeModel([unpacked], "2026-09-08")?.line;
+    expect(line).toMatch(/^[A-Z]{3} is in your Stamps\. 4 nights\.$/);
+  });
+
   it("has no card without a recent trip or without stops", () => {
     expect(welcomeHomeModel([], "2026-09-08")).toBeNull();
     expect(welcomeHomeModel([LISBON_TRIP], "2026-12-25")).toBeNull();

@@ -154,7 +154,7 @@ export function HomeLaptop({
               ) : null}
               {countdown ? (
                 <>
-                  <CountdownBadge days={countdown.days} toGo />
+                  <CountdownBadge days={countdown.days} toGo dayTrip={countdown.dayTrip} />
                   <span className="sr-only">{countdown.spoken}</span>
                 </>
               ) : null}

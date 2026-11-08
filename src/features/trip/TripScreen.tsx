@@ -19,6 +19,7 @@ import { useTripsSource } from "@/features/trips/TripsSourceProvider";
 import { AddToiletryForm } from "./AddToiletryForm";
 import { automaticStamps } from "@/domain/stamps";
 import { localToday } from "@/lib/today";
+import { weatherForReview } from "./weather-remaining";
 import { LAPTOP_MIN_WIDTH, useMinWidth } from "@/lib/use-min-width";
 import { SaveAsListSheet, type SaveOutcome } from "./SaveAsListSheet";
 import {
@@ -405,8 +406,13 @@ export function TripScreen({
   const editing =
     dialog?.kind === "edit" ? trip.items.find((entry) => entry.id === dialog.itemId) : undefined;
   const weatherStops = trip.stops ?? [];
+  // While the trip is on, only the days still ahead are reviewed: the same calculation the Home counts with (#410).
   const weatherDays =
-    weather?.panel.kind === "ready" ? weather.panel.stops.flatMap((stop) => stop.days) : [];
+    weather?.panel.kind === "ready"
+      ? weatherForReview(trip, weatherStops, weather.panel.stops, localToday()).flatMap(
+          (stop) => stop.days,
+        )
+      : [];
   const weatherRecommendation = recommendPacking({
     days: weatherDays,
     dayStopNames: weatherStops.map((stop) => stop.location.city),

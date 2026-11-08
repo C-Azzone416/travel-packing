@@ -32,12 +32,12 @@ export function WelcomeHomeCard({ model }: { model: WelcomeHomeModel }) {
     const frame = requestAnimationFrame(() => setInked(true));
     return () => cancelAnimationFrame(frame);
   }, [inked]);
-  // The status line is read once, after the 600 ms.
+  // The status line is read once, 600 ms after the ink actually starts (not from mount: the first frame may be late).
   useEffect(() => {
-    if (announced) return;
+    if (!inked || announced) return;
     const done = window.setTimeout(() => setAnnounced(true), INK_MS);
     return () => window.clearTimeout(done);
-  }, [announced]);
+  }, [inked, announced]);
 
   if (hidden) return null;
   const dismiss = () => {
