@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { expectWholeWords, overflow } from "./helpers/layout";
+import { enlargeText, expectWholeWords, overflow } from "./helpers/layout";
 import { ownerEmailFor, signInAsOwner } from "./helpers/auth";
 import { clearOwnerTrips, setOwnerHomeCity } from "./helpers/database";
 import { DEVICE } from "./helpers/device";
@@ -146,3 +146,18 @@ for (const firstRun of [true, false]) {
     },
   );
 }
+
+// The returning Home's recent-trip rows (#463) at 195px with doubled text: the px-sized rules double too (enlargeText), which a
+// root font-size change alone does not do. The page must not scroll sideways, and the recent trips must wrap whole words.
+test(
+  "195px returning, doubled text: the recent-trip rows wrap whole with no sideways scroll",
+  DEVICE,
+  async ({ page }) => {
+    await open(page, 195, { firstRun: false });
+    const recent = page.getByRole("region", { name: "Recent trips" });
+    const factor = await enlargeText(page, recent.getByRole("link").first().locator("strong"));
+    expect(factor, "the page text doubled before it is measured").toBeGreaterThanOrEqual(1.9);
+    expect(await overflow(page)).toBeLessThanOrEqual(0);
+    await expectWholeWords(recent, "recent trips at 195px, doubled text");
+  },
+);
