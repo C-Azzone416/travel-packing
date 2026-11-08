@@ -236,6 +236,26 @@ describe("reconcileStops", () => {
     expect(reconcileStops(base, blank, base, NONE)).toEqual(blank);
     expect(reconcileStops([], [], base, NONE)).toEqual(base);
   });
+
+  it("a Leave that moved without the person's Leave control is not theirs: the server's start is taken", () => {
+    const base = one("2026-10-23", "2026-10-27");
+    // The first arrival moved (the nights are kept), but the person did not use the Leave control.
+    const draft = one("2026-10-22", "2026-10-26");
+    const fresh = one("2026-10-21", "2026-10-30");
+    expect(reconcileStops(base, draft, fresh, { leave: false, home: false })).toEqual(
+      one("2026-10-21", "2026-10-30"),
+    );
+  });
+
+  it("a Come home that moved without the person's Come home control is not theirs: the server's end is taken", () => {
+    const base = one("2026-10-23", "2026-10-27");
+    // The last leave moved, but the person did not use the Come home control.
+    const draft = one("2026-10-23", "2026-10-28");
+    const fresh = one("2026-10-21", "2026-10-27");
+    expect(reconcileStops(base, draft, fresh, { leave: false, home: false })).toEqual(
+      one("2026-10-21", "2026-10-27"),
+    );
+  });
 });
 
 describe("reconcile", () => {
