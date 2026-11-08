@@ -46,7 +46,7 @@ E2E_PREBUILT=1 npm run test:e2e            # start the existing build instead of
 | `trip-screen.spec.ts`           |     4 | rows 44px and 320px, the sheet's close button and the bag button not wrapping, Edit list on a phone                                                         |
 | `packing-phone.spec.ts`         |       | Pack mode (#386): the cube bar, All in and Next, the fixed-height layout and its fallback, 390/320/195 at 100% and 200% text, 1023 vs 1024                  |
 | `packing-phone-weather.spec.ts` |       | the one-city forecast card with its dot and review rows (second app)                                                                                        |
-| `review.spec.ts`                |     2 | the Review bag sheet: 44px targets, screenshots                                                                                                             |
+| `review.spec.ts`                |     1 | the Review bag sheet: control height and no sideways scroll (the opt-in screenshot cases are in `packing-ready-shots.spec.ts` under `PACKING_READY_SHOTS`)  |
 | `staples.spec.ts`               |     2 | 44px targets, screenshots                                                                                                                                   |
 | `create-flow.spec.ts`           |     2 | switches 44px and no sideways scroll at 320px, screenshots                                                                                                  |
 | `location-modes.spec.ts`        |     2 | the picker's spacing keeps the focus ring uncovered, screenshots                                                                                            |
