@@ -127,7 +127,7 @@ for (const { theme, width } of CELLS) {
     await page.getByRole("button", { name: "Skip for now" }).click();
     await expect(page.getByRole("complementary", { name: "Staples setup reminder" })).toBeVisible();
     await shot("reminder-shown");
-    await page.getByRole("link", { name: "Staples" }).click();
+    await page.getByRole("link", { name: "Staples", exact: true }).click();
     await expect(page.getByText("Your Staples list is intentionally empty.")).toBeVisible();
     await shot("skipped-empty-staples");
 

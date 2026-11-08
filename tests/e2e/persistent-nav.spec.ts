@@ -339,7 +339,7 @@ test(
     await page.setViewportSize(PHONE[0]);
     await page
       .getByRole("navigation", { name: "Primary navigation" })
-      .getByRole("link", { name: "Staples" })
+      .getByRole("link", { name: "Staples", exact: true })
       .click();
     await expect(page.getByRole("heading", { name: "Staples", level: 1 })).toBeVisible();
     await expect(page.locator("[data-staple-id]").first()).toBeVisible();
