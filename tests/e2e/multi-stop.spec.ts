@@ -66,8 +66,13 @@ test(
     // The Home row shows the start; the whole route and its dates are in the Edit trip sheet.
     await page.getByRole("button", { name: "Edit trip" }).click();
     const dates = page.getByRole("dialog", { name: "Edit trip" });
-    await expect(dates.getByLabel("Arrive, Stop 2")).toHaveValue("2026-11-15");
-    await expect(dates.getByLabel("Arrive, Stop 3")).toHaveValue("2026-11-18");
+    const stopRow = (name: string) => dates.locator("li[data-stop-key]").filter({ hasText: name });
+    await expect(dates.getByLabel("Leave")).toHaveValue("2026-11-12");
+    await expect(dates.getByLabel("Come home")).toHaveValue("2026-11-22");
+    // Each stop's own dates: Paris is entered on 15 Nov and Rome on 18 Nov.
+    await expect(stopRow("Lisbon")).toContainText("12–15");
+    await expect(stopRow("Paris")).toContainText("15–18");
+    await expect(stopRow("Rome")).toContainText("18–22");
     await page.keyboard.press("Escape");
   },
 );

@@ -421,6 +421,7 @@ export function EditTripSheet({
               fallbackProvider={fallback}
               allowCustom={allowCustom}
               attempted={false}
+              describePlace
             />
           </div>
           <div className={planStyles.twoCol}>
