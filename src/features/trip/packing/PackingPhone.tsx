@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
-import { CubeChip, Suitcase } from "@/components/suitcase";
+import { CubeChip, PackedRibbon, Suitcase } from "@/components/suitcase";
 import { cx } from "@/components/suitcase/cx";
 import { Icon } from "@/components/ui/Icon";
 import type { Cube } from "@/domain/cubes";
 import { CubePanel, FilterBar } from "./CubePanel";
+import { PackedBanner } from "./PackedBanner";
 import type { PackingLaptopProps } from "./PackingLaptop";
 import {
   buildCubeViews,
@@ -43,6 +44,12 @@ export function PackingPhone({
   forecast,
   toiletryExtra,
   below,
+  state,
+  onReview,
+  onNotReady,
+  readyBusy,
+  bannerOpen,
+  onDismissBanner,
 }: PackingPhoneProps) {
   const views = buildCubeViews(trip);
   const [chosen, setChosen] = useState<Cube | undefined>(openCube);
@@ -120,10 +127,7 @@ export function PackingPhone({
               <Icon name="refresh" size={16} />
               {trip.config.laundry ? "Laundry on" : "Laundry off"}
             </button>
-            <p
-              className={styles.count}
-              data-all-packed={totals.total > 0 && totals.toGo === 0 ? "true" : undefined}
-            >
+            <p className={styles.count} data-all-packed={state !== "open" ? "true" : undefined}>
               <span aria-hidden="true">
                 <span className={styles.countNow}>{totals.packed}</span>
                 <span className={styles.countOf}> / {totals.total}</span>
@@ -131,9 +135,26 @@ export function PackingPhone({
               <span className="sr-only">
                 {totals.packed} of {totals.total} in the bag
               </span>
+              {state === "open" ? null : <span className="sr-only">All packed.</span>}
             </p>
           </div>
         </header>
+        {state === "ready" ? (
+          <div className={styles.readyRow}>
+            <p className={styles.readyLine}>Ready to go</p>
+            <button type="button" className={styles.textButton} onClick={onReview}>
+              Review bag
+            </button>
+            <button
+              type="button"
+              className={styles.textButton}
+              disabled={readyBusy}
+              onClick={onNotReady}
+            >
+              Mark as not ready
+            </button>
+          </div>
+        ) : null}
 
         <nav className={styles.barWrap} aria-label="Cubes">
           <ul className={styles.bar} ref={bar}>
@@ -165,7 +186,12 @@ export function PackingPhone({
           phone
         />
 
-        <Suitcase interior="paper" inset="none" className={styles.suitcase}>
+        <Suitcase
+          interior="paper"
+          inset="none"
+          className={styles.suitcase}
+          ribbon={<PackedRibbon state={state} />}
+        >
           <CubePanel
             key={current.cube}
             view={current}
@@ -190,6 +216,10 @@ export function PackingPhone({
           />
         </Suitcase>
 
+        {state === "packed" && bannerOpen ? (
+          <PackedBanner onReview={onReview} onDismiss={onDismissBanner} />
+        ) : null}
+
         <div className={styles.actions}>
           <button
             type="button"
@@ -200,7 +230,18 @@ export function PackingPhone({
             All in
             <Icon name="check" size={18} />
           </button>
-          {following ? (
+          {state === "packed" ? (
+            <button
+              type="button"
+              className={styles.next}
+              ref={(node) => {
+                next.current = node;
+              }}
+              onClick={onReview}
+            >
+              Review your bag <span aria-hidden="true">›</span>
+            </button>
+          ) : following ? (
             <button
               type="button"
               className={styles.next}

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { TOILETRY_GROUP_ID } from "@/domain/toiletry-bag";
 import { sampleLifecycleState } from "@/features/trips/fixtures";
 import type { LifecycleTrip } from "@/domain/trip-lifecycle";
-import { readyBlocker, reviewStatus, revocationReason } from "./review-view";
+import { readyBlocker, revocationReason } from "./review-view";
 
 const base = () => sampleLifecycleState().trips.find((trip) => trip.id === "san-diego")!;
 const packed = (trip: LifecycleTrip): LifecycleTrip => ({
@@ -19,18 +19,24 @@ const noToiletries = (trip: LifecycleTrip): LifecycleTrip => ({
 });
 
 describe("readyBlocker", () => {
-  it("counts the items still to check, with the right plural", () => {
+  it("counts what is still to pack by QUANTITY, with the right plural", () => {
     const trip = packed(base());
-    const one = {
+    const withLeft = (left: number[]): LifecycleTrip => ({
       ...trip,
-      items: trip.items.map((item, i) => (i === 0 ? { ...item, packed: 0 } : item)),
-    };
-    expect(readyBlocker(one)).toBe("Check off 1 more item");
-    const two = {
-      ...trip,
-      items: trip.items.map((item, i) => (i < 2 ? { ...item, packed: 0 } : item)),
-    };
-    expect(readyBlocker(two)).toBe("Check off 2 more items");
+      items: trip.items.map((item, i) =>
+        i < left.length ? { ...item, qty: 5, packed: 5 - left[i] } : item,
+      ),
+    });
+    // One row at 4 of 5 is one unit to go; one row at 1 of 5 is four, not "one more item".
+    expect(readyBlocker(withLeft([1]))).toBe("Check off 1 more item");
+    expect(readyBlocker(withLeft([4]))).toBe("Check off 4 more items");
+    expect(readyBlocker(withLeft([4, 2]))).toBe("Check off 6 more items");
+  });
+
+  it("says why an empty list cannot be Ready (the server refuses it)", () => {
+    expect(readyBlocker({ ...base(), items: [] })).toBe(
+      "Add something to your list before marking it Ready.",
+    );
   });
 
   it("asks for the bag once everything is checked and toiletries exist", () => {
@@ -42,36 +48,6 @@ describe("readyBlocker", () => {
   it("is null when everything is packed and the bag is placed, or there are no toiletries", () => {
     expect(readyBlocker(withBag(packed(base()), true))).toBeNull();
     expect(readyBlocker(withBag(noToiletries(packed(base())), false))).toBeNull();
-  });
-});
-
-describe("reviewStatus", () => {
-  it("says the trip is Ready when it is", () => {
-    expect(reviewStatus({ ...withBag(packed(base()), true), ready: true }).status).toBe(
-      "This trip is currently Ready.",
-    );
-  });
-
-  it("says the bag is unconfirmed when the contents are done but the bag is not placed", () => {
-    const trip = withBag(packed(base()), false);
-    expect(reviewStatus(trip)).toEqual({
-      status: "Toiletry contents are checked, but the bag is not confirmed in the suitcase.",
-      help: "Confirm the separate bag-placement step before Ready is available.",
-    });
-  });
-
-  it("says everything is packed when only the decision is left", () => {
-    expect(reviewStatus(withBag(packed(base()), true))).toEqual({
-      status: "Everything is packed.",
-      help: "Ready is still your decision.",
-    });
-  });
-
-  it("says there are unpacked items otherwise", () => {
-    expect(reviewStatus(base())).toEqual({
-      status: "There are still unpacked items.",
-      help: "Correct the items above before confirming.",
-    });
   });
 });
 

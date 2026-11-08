@@ -99,3 +99,30 @@ export async function showByName(page: Page, name: string): Promise<Locator> {
   }
   throw new Error(`No cube holds an item named ${name}`);
 }
+
+// All packed and Ready (#411): the ribbon on the suitcase handle and the "Review your bag" sheet.
+/** The gold "All packed" ribbon on the suitcase handle. */
+export const packedRibbon = (page: Page): Locator => page.locator('[data-packed-ribbon="gold"]');
+/** The green "Ready" ribbon on the suitcase handle. */
+export const readyRibbon = (page: Page): Locator => page.locator('[data-packed-ribbon="good"]');
+/** The "Review your bag" sheet. */
+export const reviewSheet = (page: Page): Locator =>
+  page.getByRole("dialog", { name: "Review your bag" });
+
+const BATHROOM = ["last-toothbrush", "last-toothpaste", "last-deodorant", "last-contacts"];
+
+/**
+ * Packs every item of the open trip one tap at a time (Bathroom last), then dismisses the "Toiletry bag in suitcase?" prompt
+ * that the last Bathroom item opens with "Not yet", so the bag step is left for the Review sheet's gate (#411).
+ */
+export async function packEverythingLeavingBag(page: Page): Promise<void> {
+  const ids = await allItemIds(page);
+  for (const id of [...ids.filter((entry) => !BATHROOM.includes(entry)), ...BATHROOM]) {
+    const box = (await showItem(page, id)).getByRole("checkbox");
+    if (!(await box.isChecked())) await box.check();
+  }
+  const prompt = page.getByRole("dialog", { name: "Toiletry bag in suitcase?" });
+  await expect(prompt).toBeVisible();
+  await prompt.getByRole("button", { name: "Not yet" }).click();
+  await expect(prompt).toHaveCount(0);
+}

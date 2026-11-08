@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { CubeRailItem, Suitcase } from "@/components/suitcase";
+import { CubeRailItem, PackedRibbon, Suitcase } from "@/components/suitcase";
 import type { Cube } from "@/domain/cubes";
 import type { TripItem } from "@/domain/trip";
 import type { LifecycleTrip } from "@/domain/trip-lifecycle";
+import type { PackedState } from "../packed-state";
 import { CubePanel, type AddOutcome } from "./CubePanel";
+import { PackedBanner } from "./PackedBanner";
 import { PackingHeader } from "./PackingHeader";
 import { buildCubeViews, headline, type CubeFilter } from "./packing-model";
 import styles from "./packing.module.css";
@@ -29,8 +31,18 @@ export interface PackingLaptopProps {
   forecast: ReactNode;
   /** The toiletry bag step: drawn at the foot of the Toiletries cube. */
   toiletryExtra?: ReactNode;
-  /** What sits under the suitcase until the Phase 3 issues (#411 all packed / Ready, #389 Edit trip) take it over. */
+  /** What sits under the suitcase (the packing tools). */
   below?: ReactNode;
+  /** Where the trip is on the way to Ready: drives the ribbon, the header line and the banner (#411). */
+  state: PackedState;
+  /** Opens the "Review your bag" sheet. */
+  onReview: () => void;
+  onNotReady: () => void;
+  /** A Ready change is being saved. */
+  readyBusy?: boolean;
+  /** The "Everything is in" banner has not been dismissed this session. */
+  bannerOpen: boolean;
+  onDismissBanner: () => void;
 }
 
 // The laptop (>= 1024px) Packing view (#385): header, Forecast, and the suitcase with the cube rail on the left and the
@@ -52,6 +64,12 @@ export function PackingLaptop({
   forecast,
   toiletryExtra,
   below,
+  state,
+  onReview,
+  onNotReady,
+  readyBusy,
+  bannerOpen,
+  onDismissBanner,
 }: PackingLaptopProps) {
   const views = buildCubeViews(trip);
   const [chosen, setChosen] = useState<Cube | undefined>(openCube);
@@ -86,9 +104,20 @@ export function PackingLaptop({
         laundryBusy={laundryBusy}
         onLaundry={onLaundry}
         onEditTrip={onEditTrip}
+        state={state}
+        onReview={onReview}
+        onNotReady={onNotReady}
+        readyBusy={readyBusy}
       />
       {forecast}
-      <Suitcase interior="dark" className={styles.suitcase}>
+      <Suitcase interior="dark" className={styles.suitcase} ribbon={<PackedRibbon state={state} />}>
+        {state === "packed" && bannerOpen ? (
+          <PackedBanner
+            className={styles.bannerInCase}
+            onReview={onReview}
+            onDismiss={onDismissBanner}
+          />
+        ) : null}
         <div className={styles.case}>
           <nav className={styles.rail} aria-label="Cubes">
             <ul>

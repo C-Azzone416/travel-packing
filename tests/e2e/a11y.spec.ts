@@ -4,7 +4,7 @@ import { resetStaplesSetup } from "./helpers/database";
 import { chooseFromMenu, openPastAndArchive, planATrip } from "./helpers/menu";
 import { expectAccessible } from "./helpers/a11y";
 import { DEVICE, phoneHomeLayout } from "./helpers/device";
-import { expectPacking, openCube, openEditor, tick } from "./helpers/packing";
+import { expectPacking, openCube, openEditor, reviewSheet, tick } from "./helpers/packing";
 import { serverActionId } from "./helpers/server-action";
 import { chooseMode, nextButton, pickPlace, setDates, toWhen } from "./helpers/plan";
 
@@ -207,14 +207,14 @@ test.describe("review, settings and staples", DEVICE, () => {
       await openPastAndArchive(page);
       await page.getByRole("link", { name: "Review bag: Lisbon" }).click();
       await expectPacking(page);
-      await page.getByRole("link", { name: "Review bag again" }).click();
+      await page.getByRole("button", { name: "Review bag" }).click();
     } else {
       await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
       await expectPacking(page);
       const id = new URL(page.url()).pathname.split("/").pop();
       await page.goto(`/trips/${id}/review`);
     }
-    await expect(page.getByRole("heading", { name: "Toiletries · Bathroom" })).toBeVisible();
+    await expect(reviewSheet(page)).toBeVisible();
   }
 
   test("review your bag with items still to pack", async ({ page }) => {
@@ -467,12 +467,10 @@ test.describe("more states", DEVICE, () => {
     await openDashboard(page);
     await openPastAndArchive(page);
     await page.getByRole("link", { name: "Review bag: Lisbon" }).click();
-    await page.getByRole("link", { name: "Review bag again" }).click();
-    await expect(page.getByRole("heading", { name: "Toiletries · Bathroom" })).toBeVisible();
-    await page
-      .locator('[data-item-id="tops"]')
-      .getByRole("button", { name: /mark unpacked/ })
-      .click();
+    await expectPacking(page);
+    await page.getByRole("button", { name: "Review bag" }).click();
+    await expect(reviewSheet(page)).toBeVisible();
+    await reviewSheet(page).locator('[data-item-id="tops"]').getByRole("checkbox").uncheck();
     await expect(page.getByText("No longer ready: an item was unchecked")).toBeVisible();
     await expectAccessible(page, "review after Ready was revoked");
   });

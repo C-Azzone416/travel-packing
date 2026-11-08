@@ -1,4 +1,4 @@
-import type { HTMLAttributes } from "react";
+import type { HTMLAttributes, ReactNode } from "react";
 import { cx } from "./cx";
 import styles from "./Suitcase.module.css";
 
@@ -11,6 +11,8 @@ export interface SuitcaseProps extends HTMLAttributes<HTMLDivElement> {
   interior?: SuitcaseInterior;
   /** Defaults to "home" for a paper interior and "none" for a dark one. */
   inset?: SuitcaseInset;
+  /** A ribbon that hangs from the handle (PackedRibbon, #411). Absent or null: the suitcase is unchanged. */
+  ribbon?: ReactNode;
 }
 
 // The suitcase (spec part 2 section 1): a dark rim with a hollow handle on top and an interior that holds the screen's
@@ -19,6 +21,7 @@ export interface SuitcaseProps extends HTMLAttributes<HTMLDivElement> {
 export function Suitcase({
   interior = "paper",
   inset,
+  ribbon,
   className,
   children,
   ...rest
@@ -28,6 +31,7 @@ export function Suitcase({
     <div className={cx(styles.suitcase, className)} {...rest}>
       <div className={styles.rim}>
         <span className={styles.handle} aria-hidden="true" data-suitcase-handle />
+        {ribbon ? <div className={styles.ribbon}>{ribbon}</div> : null}
         <div
           className={cx(styles.interior, styles[interior], styles[resolved])}
           data-interior={interior}

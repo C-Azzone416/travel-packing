@@ -2,10 +2,10 @@
 
 import { toiletryItems } from "@/domain/toiletry-bag";
 import type { LifecycleTrip } from "@/domain/trip-lifecycle";
-import { isComplete } from "./trip-view";
 
-const unpacked = (trip: LifecycleTrip): number =>
-  trip.items.filter((item) => !isComplete(item)).length;
+/** What is still to pack, by QUANTITY (counts are quantities everywhere, #376): a row at 1 of 5 has four to go. */
+const unitsLeft = (trip: LifecycleTrip): number =>
+  trip.items.reduce((sum, item) => sum + Math.max(item.qty - Math.max(item.packed, 0), 0), 0);
 
 /** Whether the bag-placement step still blocks Ready: toiletries exist and the bag is not in the suitcase. */
 const bagOutstanding = (trip: LifecycleTrip): boolean =>
@@ -16,41 +16,12 @@ const bagOutstanding = (trip: LifecycleTrip): boolean =>
  * it is. Mirrors the domain's rule: every item fully packed, and the bag placed when there are toiletries.
  */
 export function readyBlocker(trip: LifecycleTrip): string | null {
-  const left = unpacked(trip);
+  // The server refuses Ready on an empty list, so the sheet says why instead of offering a button that cannot work.
+  if (trip.items.length === 0) return "Add something to your list before marking it Ready.";
+  const left = unitsLeft(trip);
   if (left > 0) return `Check off ${left} more ${left === 1 ? "item" : "items"}`;
   if (bagOutstanding(trip)) return "Confirm your toiletry bag is in the suitcase.";
   return null;
-}
-
-export interface ReviewStatus {
-  status: string;
-  help: string;
-}
-
-/** The callout above the actions (prototype wording). */
-export function reviewStatus(trip: LifecycleTrip): ReviewStatus {
-  const contents = toiletryItems(trip);
-  const contentsDone = contents.length > 0 && contents.every(isComplete);
-  const complete = readyBlocker(trip) === null;
-  if (trip.ready) {
-    return {
-      status: "This trip is currently Ready.",
-      help: "Reviewing does not change that unless you choose below or correct an item.",
-    };
-  }
-  if (contentsDone && !trip.toiletryBagPacked) {
-    return {
-      status: "Toiletry contents are checked, but the bag is not confirmed in the suitcase.",
-      help: "Confirm the separate bag-placement step before Ready is available.",
-    };
-  }
-  if (complete) {
-    return { status: "Everything is packed.", help: "Ready is still your decision." };
-  }
-  return {
-    status: "There are still unpacked items.",
-    help: "Correct the items above before confirming.",
-  };
 }
 
 /**
