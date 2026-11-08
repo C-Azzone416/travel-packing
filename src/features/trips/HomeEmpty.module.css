@@ -273,6 +273,24 @@
   .recentPacked {
     white-space: normal;
   }
+  /* 195px with doubled text (#471): the suitcase frame takes 21px a side, so a cube is 121px and "Documents" (165px at
+     30px) overflowed the page by 19px. The cubes reach 8px into the frame's padding, the cube keeps 4px inside its border,
+     and the names drop to 11px (22px doubled, about 121px for "Documents"). Whole words still fit; nothing wraps mid-word.
+     Columns follow the text size, with at most two tracks: each track's minimum is max(5.5em, 50% - 3px), capped at 100%.
+     Normal text (16px): 5.5em is 88px, so two 1fr tracks fit from 240px (2 x 88 + 6px gap = 182px, the cube width there)
+     and one track below that. Doubled text doubles 5.5em to 176px, wider than any two-track row in the band, so one
+     full-width track; "Documents" needs 133px with its padding. An odd fifth tile (Misc) stays one tile wide in two columns.
+     Tiles keep the 4px inline padding. */
+  .cubes {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, max(5.5em, calc(50% - 3px))), 1fr));
+    margin-inline: -8px;
+  }
+  .cube {
+    padding-inline: 4px;
+  }
+  .cubeName {
+    font-size: 11px;
+  }
 }
 
 @media (min-width: 1024px) {

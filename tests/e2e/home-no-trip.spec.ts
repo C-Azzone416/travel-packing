@@ -163,6 +163,105 @@ for (const firstRun of [true, false]) {
   );
 }
 
+// The first-run empty suitcase (#471): with doubled text its cube names ("Documents") must not push the page sideways,
+// every word across the whole Home must wrap whole, and each name must sit inside its own tile. The widths cover the
+// one-column band (195, 256, 270, 320) and the three-column edge (359).
+// Each cube's name text, measured by its Range rects, must sit inside its own tile.
+const spilledNames = (page: Page) =>
+  page.locator("[data-empty-suitcase] li").evaluateAll((cubes) =>
+    cubes
+      .map((cube) => {
+        const name = cube.querySelector("span");
+        if (!name) return null;
+        const tile = cube.getBoundingClientRect();
+        const range = document.createRange();
+        range.selectNodeContents(name);
+        const outside = Array.from(range.getClientRects()).some(
+          (box) => box.right > tile.right + 0.5 || box.left < tile.left - 0.5,
+        );
+        return outside ? (cube.textContent ?? "").slice(0, 12) : null;
+      })
+      .filter((text) => text !== null),
+  );
+
+for (const width of [195, 256, 270, 320, 359]) {
+  test(
+    `${width}px first run, doubled text: no sideways scroll, whole words, names inside their cubes`,
+    DEVICE,
+    async ({ page }) => {
+      await open(page, width, { firstRun: true });
+      const factor = await enlargeText(page, page.getByRole("heading", { name: WHERE }));
+      expect(factor, "the page text doubled before it is measured").toBeGreaterThanOrEqual(1.9);
+      expect(await overflow(page)).toBeLessThanOrEqual(0);
+      await expectWholeWords(page.locator("main"), `first-run Home at ${width}px, doubled text`);
+      expect(
+        await spilledNames(page),
+        `cube names inside their tiles at ${width}px, doubled text`,
+      ).toEqual([]);
+    },
+  );
+}
+
+test(
+  "320px first run, normal text: names inside their cubes and whole words",
+  DEVICE,
+  async ({ page }) => {
+    await open(page, 320, { firstRun: true });
+    expect(await overflow(page)).toBeLessThanOrEqual(0);
+    await expectWholeWords(page.locator("main"), "first-run Home at 320px, normal text");
+    expect(await spilledNames(page), "cube names inside their tiles at 320px, normal text").toEqual(
+      [],
+    );
+  },
+);
+
+// The empty suitcase's cubes at normal text: two columns from 240px up to 359px, one column at 239px and below (#471).
+// Columns are counted by the distinct left edges of the cube tiles.
+const cubeColumns = (page: Page) =>
+  page
+    .locator("[data-empty-suitcase] li")
+    .evaluateAll(
+      (cubes) => new Set(cubes.map((cube) => Math.round(cube.getBoundingClientRect().left))).size,
+    );
+
+for (const width of [240, 320, 359]) {
+  test(
+    `${width}px first run, normal text: the empty suitcase has two cube columns`,
+    DEVICE,
+    async ({ page }) => {
+      await open(page, width, { firstRun: true });
+      expect(await cubeColumns(page), `cube columns at ${width}px, normal text`).toBe(2);
+    },
+  );
+}
+
+test(
+  "239px first run, normal text: the empty suitcase has one cube column",
+  DEVICE,
+  async ({ page }) => {
+    await open(page, 239, { firstRun: true });
+    expect(await cubeColumns(page), "cube columns at 239px, normal text").toBe(1);
+  },
+);
+
+// The odd fifth tile (Misc) keeps the width of the others in two columns, so the grid leaves an empty cell, not a stretched
+// tile (#471 round 4).
+test(
+  "320px first run, normal text: the fifth cube is one tile wide, like the first",
+  DEVICE,
+  async ({ page }) => {
+    await open(page, 320, { firstRun: true });
+    const widths = await page
+      .locator("[data-empty-suitcase] li")
+      .evaluateAll((cubes) => cubes.map((cube) => cube.getBoundingClientRect().width));
+    expect(widths.length, "five cubes").toBe(5);
+    expect(
+      Math.abs(widths[4] - widths[0]),
+      `fifth cube ${widths[4]}px vs first ${widths[0]}px`,
+    ).toBeLessThanOrEqual(1);
+  },
+);
+
 // The returning Home's recent-trip rows (#463) at 195px with doubled text: the px-sized rules double too (enlargeText), which a
 // root font-size change alone does not do. The page must not scroll sideways, and the recent trips must wrap whole words.
 test(
