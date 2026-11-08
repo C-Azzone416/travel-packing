@@ -26,8 +26,6 @@
   place-items: center;
   width: 84px;
   height: 84px;
-  /* The sticker is decoration (aria-hidden); at very large text its letters are cut here, never pushed past the card. */
-  overflow: clip;
   animation: press 600ms ease-out;
 }
 @keyframes press {
@@ -163,6 +161,10 @@
   }
 }
 @media (max-width: 239px) {
+  /* The sticker is decoration (aria-hidden); at very large text its letters are cut here, never pushed past the card. */
+  .press {
+    overflow: clip;
+  }
   .card {
     grid-template-columns: minmax(0, 1fr);
     justify-items: start;
