@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { TOILETRY_GROUP_ID } from "@/domain/toiletry-bag";
 import { sampleLifecycleState } from "@/features/trips/fixtures";
 import type { LifecycleTrip } from "@/domain/trip-lifecycle";
-import { readyBlocker, reviewStatus, revocationReason } from "./review-view";
+import { readyBlocker, revocationReason } from "./review-view";
 
 const base = () => sampleLifecycleState().trips.find((trip) => trip.id === "san-diego")!;
 const packed = (trip: LifecycleTrip): LifecycleTrip => ({
@@ -42,36 +42,6 @@ describe("readyBlocker", () => {
   it("is null when everything is packed and the bag is placed, or there are no toiletries", () => {
     expect(readyBlocker(withBag(packed(base()), true))).toBeNull();
     expect(readyBlocker(withBag(noToiletries(packed(base())), false))).toBeNull();
-  });
-});
-
-describe("reviewStatus", () => {
-  it("says the trip is Ready when it is", () => {
-    expect(reviewStatus({ ...withBag(packed(base()), true), ready: true }).status).toBe(
-      "This trip is currently Ready.",
-    );
-  });
-
-  it("says the bag is unconfirmed when the contents are done but the bag is not placed", () => {
-    const trip = withBag(packed(base()), false);
-    expect(reviewStatus(trip)).toEqual({
-      status: "Toiletry contents are checked, but the bag is not confirmed in the suitcase.",
-      help: "Confirm the separate bag-placement step before Ready is available.",
-    });
-  });
-
-  it("says everything is packed when only the decision is left", () => {
-    expect(reviewStatus(withBag(packed(base()), true))).toEqual({
-      status: "Everything is packed.",
-      help: "Ready is still your decision.",
-    });
-  });
-
-  it("says there are unpacked items otherwise", () => {
-    expect(reviewStatus(base())).toEqual({
-      status: "There are still unpacked items.",
-      help: "Correct the items above before confirming.",
-    });
   });
 });
 

@@ -22,37 +22,6 @@ export function readyBlocker(trip: LifecycleTrip): string | null {
   return null;
 }
 
-export interface ReviewStatus {
-  status: string;
-  help: string;
-}
-
-/** The callout above the actions (prototype wording). */
-export function reviewStatus(trip: LifecycleTrip): ReviewStatus {
-  const contents = toiletryItems(trip);
-  const contentsDone = contents.length > 0 && contents.every(isComplete);
-  const complete = readyBlocker(trip) === null;
-  if (trip.ready) {
-    return {
-      status: "This trip is currently Ready.",
-      help: "Reviewing does not change that unless you choose below or correct an item.",
-    };
-  }
-  if (contentsDone && !trip.toiletryBagPacked) {
-    return {
-      status: "Toiletry contents are checked, but the bag is not confirmed in the suitcase.",
-      help: "Confirm the separate bag-placement step before Ready is available.",
-    };
-  }
-  if (complete) {
-    return { status: "Everything is packed.", help: "Ready is still your decision." };
-  }
-  return {
-    status: "There are still unpacked items.",
-    help: "Correct the items above before confirming.",
-  };
-}
-
 /**
  * When a change took a Ready trip back to packing, the short reason for the "No longer ready" toast; null when
  * Ready was not revoked. Compares the trip before and after the server confirmed the change.

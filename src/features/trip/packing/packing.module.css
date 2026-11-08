@@ -89,6 +89,14 @@
   font-weight: 500;
   white-space: nowrap;
 }
+/* Everything in: the figure and the bar turn to --good (#411). */
+.progressZone[data-all-packed] .toGo {
+  color: var(--good);
+  font-weight: 600;
+}
+.progressZone[data-all-packed] .track span {
+  background: var(--good);
+}
 .track {
   height: 8px;
   overflow: hidden;
@@ -801,6 +809,63 @@
 .switch:disabled {
   cursor: not-allowed;
   opacity: 0.6;
+}
+
+/* ---- Everything is in: the one banner (#411) ---- */
+.banner {
+  box-sizing: border-box;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  margin: 0 0 14px;
+  padding: 12px 16px;
+  border: 2px solid var(--gold);
+  border-radius: 16px;
+  background: var(--goldSoft);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-weight: 600;
+}
+.bannerInCase {
+  margin: 14px 14px 0;
+}
+.bannerText {
+  flex: 1 1 200px;
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.bannerButton {
+  box-sizing: border-box;
+  min-height: 40px;
+  padding: 0 18px;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--dark);
+  color: var(--onDark);
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.bannerClose {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin: -6px -10px -6px 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  cursor: pointer;
+}
+.bannerButton:focus-visible,
+.bannerClose:focus-visible {
+  outline: 3px solid var(--info);
+  outline-offset: 2px;
 }
 
 /* ---- Under the suitcase ---- */

@@ -1,196 +1,175 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
 import { DEVICE, phoneHomeLayout } from "./helpers/device";
-import { expectPacking } from "./helpers/packing";
 import { openPastAndArchive } from "./helpers/menu";
+import {
+  expectPacking,
+  packedRibbon,
+  readyRibbon,
+  reviewSheet,
+  packEverythingLeavingBag,
+} from "./helpers/packing";
 
-// The phone Home (#388) and the phone Pack mode (#386) are drawn below 1024px: this spec's flow starts on the Home and does not
-// depend on the laptop layouts, so it runs there.
-test.beforeEach(async ({ page }) => {
-  await phoneHomeLayout(page);
-});
-
-// "Review your bag" and explicit Ready against a REAL Postgres (#17): what the page shows after a reload is what was
-// stored. Each test starts from this project's freshly seeded owner: San Diego partly packed and not Ready, Lisbon
-// fully packed and Ready.
+// All packed, "Review your bag" and explicit Ready against a REAL Postgres (#411, replacing the old review page of #17): what the
+// screen shows after a reload is what was stored. Each test starts from this project's freshly seeded owner: San Diego partly
+// packed and not Ready, Lisbon fully packed and Ready. Every flow runs on the laptop layout (1280 wide) and on the phone layout.
 const NOW = new Date("2026-10-16T12:00:00");
+const LAYOUTS = [
+  { name: "laptop", width: 1280 },
+  { name: "phone", width: 1000 },
+] as const;
 
-const ready = (page: Page) => page.getByRole("button", { name: "I’m ready to go" });
-const notReady = (page: Page) => page.getByRole("button", { name: "Mark as not ready" });
-const unpacked = (page: Page) => page.getByRole("button", { name: /^Mark packed/ });
-
-async function openReview(page: Page, trip: "San Diego" | "Lisbon", id: "san-diego" | "lisbon") {
-  await page.clock.setFixedTime(NOW);
-  await signInAsOwner(page);
-  await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
-  // The trip's id is stored by the data layer, so reach the review by the link the screens give.
-  if (trip === "San Diego") {
-    await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
-  } else {
-    await openPastAndArchive(page);
-    await page.getByRole("link", { name: "Review bag: Lisbon" }).click();
-  }
-  await expectPacking(page);
-  void id;
-  void trip;
-}
-
-/** The review is loaded once its sections are there (its title shows while it is still loading). */
-const reviewLoaded = (page: Page) =>
-  expect(page.getByRole("heading", { name: "Toiletries · Bathroom" })).toBeVisible();
-
-async function goToReview(page: Page) {
-  await page.getByRole("link", { name: /^Review bag again$|^Review your bag$/ }).click();
-  await reviewLoaded(page);
-}
-
-/** Pack every item from the review screen itself, then place the bag. */
-async function packEverything(page: Page) {
-  const dialog = page.getByRole("dialog", { name: "Toiletry bag in suitcase?" });
-  while ((await unpacked(page).count()) > 0) {
-    const before = await unpacked(page).count();
-    await unpacked(page).first().click();
-    await expect.poll(() => unpacked(page).count()).toBeLessThan(before);
-    // Checking the last Bathroom item offers bag placement (in the same update); the review does that step below.
-    if (await dialog.isVisible()) await dialog.getByRole("button", { name: "Not yet" }).click();
-  }
-  await page.getByRole("button", { name: "Put bag in suitcase" }).click();
-  await dialog.getByRole("button", { name: "Confirm" }).click();
-  await expect(page.getByRole("button", { name: "Undo placement" })).toBeVisible();
-}
-
-async function openSanDiegoReviewFromTrip(page: Page) {
-  await openReview(page, "San Diego", "san-diego");
-  // Open the review directly (the "Review your bag" prompt only appears once everything is checked).
-  const id = new URL(page.url()).pathname.split("/").pop();
-  await page.goto(`/trips/${id}/review`);
-  await reviewLoaded(page);
-}
-
-test("Ready is explicit: the last item checked does not make it Ready; review, confirm, then it is stored", async ({
-  page,
-}) => {
-  await openSanDiegoReviewFromTrip(page);
-  await packEverything(page);
-  // Everything is packed and the bag is placed, but the trip is still not Ready until the user says so.
-  await expect(page.locator(".status-pill.draft")).toBeVisible();
-  await expect(page.getByText("Everything is packed.")).toBeVisible();
-  await expect(ready(page)).toHaveAttribute("aria-disabled", "false");
-
-  await ready(page).click();
-  await expect(notReady(page)).toBeVisible();
-  await expect(notReady(page)).toBeFocused();
-  await expect(page.locator(".status-pill.ready")).toBeVisible();
-  await page.reload();
-  await expect(notReady(page)).toBeVisible();
-  await expect(page.locator(".status-pill.ready")).toBeVisible();
-});
-
-test("unchecking an item on a Ready trip takes it out of Ready, visibly, and that is stored", async ({
-  page,
-}) => {
-  await openReview(page, "Lisbon", "lisbon");
-  await goToReview(page);
-  await expect(notReady(page)).toBeVisible();
-  const first = page.getByRole("button", { name: /mark unpacked$/ }).first();
-  await first.click();
-  await expect(page.getByText(/^No longer ready: an item was unchecked$/)).toBeVisible();
-  await expect(page.locator(".status-pill.draft")).toBeVisible();
-  await expect(ready(page)).toBeVisible();
-  await expect(ready(page)).toHaveAttribute("aria-disabled", "true");
-  await page.reload();
-  await expect(ready(page)).toBeVisible();
-  await expect(page.locator(".status-pill.ready")).toHaveCount(0);
-});
-
-test("Mark as not ready keeps every packed quantity (checked after a reload)", async ({ page }) => {
-  await openReview(page, "Lisbon", "lisbon");
-  await goToReview(page);
-  const packedBefore = await page.getByRole("button", { name: /^Packed ✓/ }).count();
-  expect(packedBefore).toBeGreaterThan(0);
-  await notReady(page).click();
-  await expect(page.locator(".toast-region").getByText("Progress kept.")).toBeVisible();
-  await expect(ready(page)).toBeVisible();
-  await expect(ready(page)).toBeFocused();
-  await page.reload();
-  await expect(ready(page)).toBeVisible();
-  await expect(unpacked(page)).toHaveCount(0);
-  await expect(page.getByRole("button", { name: /^Packed ✓/ })).toHaveCount(packedBefore);
-  // It is still fully packed on the trip screen, too.
-  await page.getByRole("link", { name: "Back to packing list" }).last().click();
-  await expectPacking(page);
-  await expect(page.getByText(/^(\d+) of \1 in the bag$/)).toBeVisible();
-});
-
-test("the disabled Ready button says why, in text it is described by, and stays focusable", async ({
-  page,
-}) => {
-  await openSanDiegoReviewFromTrip(page);
-  const button = ready(page);
-  await expect(button).toHaveAttribute("aria-disabled", "true");
-  await expect(button).not.toHaveAttribute("disabled", "");
-  const reasonId = await button.getAttribute("aria-describedby");
-  expect(reasonId).toBeTruthy();
-  const count = await unpacked(page).count();
-  await expect(page.locator(`#${reasonId}`)).toHaveText(`Check off ${count} more items`);
-  await button.focus();
-  await expect(button).toBeFocused();
-  // Playwright treats aria-disabled as not actionable, so force the press: a real user can still press it.
-  await button.click({ force: true });
-  await expect(page.locator(".status-pill.ready")).toHaveCount(0);
-});
-
-test("a correction keeps focus on the same row", async ({ page }) => {
-  await openSanDiegoReviewFromTrip(page);
-  const first = unpacked(page).first();
-  const row = page.locator("[data-item-id]").filter({ has: first }).first();
-  const id = await row.getAttribute("data-item-id");
-  await first.click();
-  const done = page.locator(`[data-item-id="${id}"]`).getByRole("button", { name: /^Packed ✓/ });
-  await expect(done).toBeVisible();
-  await expect(done).toBeFocused();
-});
-
-test("another owner's trip id is not available", async ({ page }) => {
-  await page.clock.setFixedTime(NOW);
-  await signInAsOwner(page);
-  await page.goto("/trips/00000000-0000-4000-8000-0000000000aa/review");
-  await expect(page.getByRole("heading", { name: "That trip isn’t available" })).toBeVisible();
-});
-
-// Design's screenshot set for the review screen.
-test("screenshots of the review screen", DEVICE, async ({ page }, testInfo) => {
-  await page.emulateMedia({ reducedMotion: "reduce" });
-  const shot = (name: string, fullPage = true) =>
-    page.screenshot({
-      path: `test-results/screenshots/${testInfo.project.name}-review-${name}.png`,
-      fullPage,
+for (const layout of LAYOUTS) {
+  test.describe(`${layout.name} layout`, () => {
+    test.beforeEach(async ({ page }) => {
+      if (layout.name === "phone") await phoneHomeLayout(page);
+      else if (test.info().project.name === "desktop")
+        await page.setViewportSize({ width: layout.width, height: 900 });
     });
-  await openSanDiegoReviewFromTrip(page);
-  await shot("blocked");
-  await packEverything(page);
-  await shot("bag-placed");
-  await ready(page).click();
-  await expect(notReady(page)).toBeVisible();
-  await shot("ready");
-  await page
-    .getByRole("button", { name: /mark unpacked$/ })
-    .first()
-    .click();
-  await expect(page.getByText(/No longer ready/)).toBeVisible();
-  await shot("revoked", false);
-});
+
+    const ready = (page: Page) =>
+      reviewSheet(page).getByRole("button", { name: "I’m ready to go" });
+    const notReady = (page: Page) => page.getByRole("button", { name: "Mark as not ready" });
+
+    async function openTrip(page: Page, trip: "San Diego" | "Lisbon") {
+      await page.clock.setFixedTime(NOW);
+      await signInAsOwner(page);
+      await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
+      if (trip === "San Diego") {
+        await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
+      } else {
+        await openPastAndArchive(page);
+        await page.getByRole("link", { name: "Review bag: Lisbon" }).click();
+      }
+      await expectPacking(page);
+    }
+
+    test("all packed -> Review bag sheet -> toiletry gate -> I'm ready to go -> Ready ribbon -> Mark as not ready, all stored", async ({
+      page,
+    }) => {
+      // Packing every item one tap at a time is the slow part.
+      test.setTimeout(150_000);
+      await openTrip(page, "San Diego");
+      await expect(packedRibbon(page)).toHaveCount(0);
+      await packEverythingLeavingBag(page);
+
+      // All packed is derived and shown, but nothing is Ready by itself.
+      await expect(packedRibbon(page)).toContainText("All packed");
+      await expect(readyRibbon(page)).toHaveCount(0);
+      const banner = page.locator("[data-packed-banner]");
+      await expect(banner).toContainText(
+        "Everything is in. Review your bag to mark the trip Ready.",
+      );
+      await banner.getByRole("button", { name: "Review your bag" }).click();
+      const sheet = reviewSheet(page);
+      await expect(sheet).toBeVisible();
+
+      // The bag gate blocks Ready, says why, and the button stays focusable.
+      await expect(ready(page)).toHaveAttribute("aria-disabled", "true");
+      await expect(sheet.getByText("Confirm your toiletry bag is in the suitcase.")).toBeVisible();
+      await ready(page).focus();
+      await expect(ready(page)).toBeFocused();
+      await ready(page).click({ force: true });
+      await expect(readyRibbon(page)).toHaveCount(0);
+
+      await sheet.getByRole("button", { name: "Put bag in suitcase" }).click();
+      await expect(sheet.getByRole("button", { name: "Undo placement" })).toBeVisible();
+      await ready(page).click();
+      await expect(sheet).toHaveCount(0);
+      await expect(readyRibbon(page)).toContainText("Ready");
+      await expect(packedRibbon(page)).toHaveCount(0);
+      await expect(page.locator("[data-packed-banner]")).toHaveCount(0);
+      await expect(notReady(page)).toBeVisible();
+      await page.reload();
+      await expectPacking(page);
+      await expect(readyRibbon(page)).toBeVisible();
+
+      // Mark as not ready keeps every packed quantity, and that is stored too.
+      const total = page.getByText(/^(\d+) of \1 in the bag$/);
+      const before = await total.innerText();
+      await notReady(page).click();
+      await expect(page.locator(".toast-region")).toContainText("Progress kept.");
+      await expect(readyRibbon(page)).toHaveCount(0);
+      await expect(packedRibbon(page)).toContainText("All packed");
+      await page.reload();
+      await expectPacking(page);
+      await expect(readyRibbon(page)).toHaveCount(0);
+      await expect(total).toHaveText(before);
+    });
+
+    test("unticking an item in the sheet takes a Ready trip out of Ready, visibly, and that is stored", async ({
+      page,
+    }) => {
+      await openTrip(page, "Lisbon");
+      await expect(readyRibbon(page)).toBeVisible();
+      await page.getByRole("button", { name: "Review bag" }).click();
+      const sheet = reviewSheet(page);
+      await expect(sheet).toBeVisible();
+      await expect(sheet.getByRole("button", { name: "Mark as not ready" })).toBeVisible();
+      await sheet.getByRole("checkbox", { checked: true }).first().uncheck();
+      await expect(page.getByText(/^No longer ready: an item was unchecked$/)).toBeVisible();
+      await expect(ready(page)).toHaveAttribute("aria-disabled", "true");
+      await expect(readyRibbon(page)).toHaveCount(0);
+      await expect(packedRibbon(page)).toHaveCount(0);
+      await sheet.getByRole("button", { name: "Back to packing list" }).click();
+      await expect(sheet).toHaveCount(0);
+      await page.reload();
+      await expectPacking(page);
+      await expect(readyRibbon(page)).toHaveCount(0);
+    });
+
+    test("?review=1 opens the sheet on load, Back to packing list closes it and the address is plain again", async ({
+      page,
+    }) => {
+      await openTrip(page, "San Diego");
+      const path = new URL(page.url()).pathname;
+      await page.goto(`${path}?review=1`);
+      const sheet = reviewSheet(page);
+      await expect(sheet).toBeVisible();
+      // Items still to pack: Ready says how many, in text the button is described by.
+      const button = ready(page);
+      await expect(button).toHaveAttribute("aria-disabled", "true");
+      const reason = await button.getAttribute("aria-describedby");
+      expect(reason).toBeTruthy();
+      await expect(page.locator(`#${reason}`)).toHaveText(/^Check off \d+ more items$/);
+      await sheet.getByRole("button", { name: "Back to packing list" }).click();
+      await expect(sheet).toHaveCount(0);
+      await expect(page).toHaveURL((url) => url.pathname === path && url.search === "");
+    });
+
+    test("/trips/<id>/review forwards to Packing with the sheet open", async ({ page }) => {
+      await openTrip(page, "San Diego");
+      const path = new URL(page.url()).pathname;
+      await page.goto(`${path}/review`);
+      await expect(reviewSheet(page)).toBeVisible();
+      await expectPacking(page);
+    });
+
+    test("another owner's trip id is not available", async ({ page }) => {
+      await page.clock.setFixedTime(NOW);
+      await signInAsOwner(page);
+      await page.goto("/trips/00000000-0000-4000-8000-0000000000aa/review");
+      await expect(page.getByRole("heading", { name: "That trip isn’t available" })).toBeVisible();
+    });
+  });
+}
 
 test(
-  "every control on the review is a 44px target on phone, and nothing scrolls sideways",
+  "every control in the sheet is a 44px target on phone, and nothing scrolls sideways",
   DEVICE,
   async ({ page }, testInfo) => {
-    await openSanDiegoReviewFromTrip(page);
+    await page.clock.setFixedTime(NOW);
+    await signInAsOwner(page);
+    await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
+    await expectPacking(page);
+    await page.goto(`${new URL(page.url()).pathname}?review=1`);
+    const sheet = reviewSheet(page);
+    await expect(sheet).toBeVisible();
     if (testInfo.project.name === "phone") {
       for (const control of [
-        unpacked(page).first(),
-        ready(page),
-        page.getByRole("link", { name: "Back to packing list" }).last(),
+        sheet.getByRole("checkbox").first(),
+        sheet.getByRole("button", { name: "I’m ready to go" }),
+        sheet.getByRole("button", { name: "Back to packing list" }),
       ]) {
         const box = (await control.boundingBox())!;
         expect(Math.round(box.height)).toBeGreaterThanOrEqual(44);

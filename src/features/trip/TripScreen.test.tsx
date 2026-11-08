@@ -181,7 +181,7 @@ describe("loading and states", () => {
     const totals = headline(tripOf(active.source));
     expect(totals.total).toBeGreaterThan(30); // #295: the arrival day adds one top, underwear and socks
     expect(screen.getByText(`${totals.packed} of ${totals.total} in the bag`)).toBeTruthy();
-    expect(screen.queryByText("You’re ready to go.")).toBeNull();
+    expect(document.querySelector('[data-packed-ribbon="good"]')).toBeNull();
     expect(screen.queryByText(/sample/i)).toBeNull();
   });
 
@@ -408,11 +408,16 @@ describe("packing", () => {
       const box = within(await showItem(user, id)).getByRole("checkbox") as HTMLInputElement;
       if (!box.checked) await user.click(box);
     }
+    // The bag step belongs to the Review sheet, but checking the last Bathroom item still offers it here.
     await user.click(await screen.findByRole("button", { name: "Confirm" }));
-    const review = await screen.findByRole("link", { name: "Review your bag" });
-    expect(review.getAttribute("href")).toBe("/trips/san-diego/review");
+    expect(await screen.findByText(/Everything is in\. Review your bag/)).toBeTruthy();
+    expect(document.querySelector('[data-packed-ribbon="gold"]')?.textContent).toContain(
+      "All packed",
+    );
+    // The last cube's "Next" button becomes "Review your bag"; it opens the sheet and nothing is Ready yet.
+    expect(screen.queryByRole("button", { name: /^Next:/ })).toBeNull();
     expect(tripOf(source).ready).toBe(false);
-    expect(screen.queryByText("You’re ready to go.")).toBeNull();
+    expect(document.querySelector('[data-packed-ribbon="good"]')).toBeNull();
   });
 });
 
@@ -709,7 +714,7 @@ describe("weather", () => {
       expect.arrayContaining([expect.objectContaining({ semanticId: "weather-umbrella" })]),
     );
     expect(tripOf(source, "lisbon").ready).toBe(false);
-    expect(screen.queryByText("You’re ready to go.")).toBeNull();
+    expect(document.querySelector('[data-packed-ribbon="good"]')).toBeNull();
   });
 
   it("offers no changes when no stop has usable weather: the list stays as it is", async () => {
@@ -792,7 +797,7 @@ describe("preferences and Ready", () => {
         "Preferences updated. Ready turned off.",
       ),
     ).toBeTruthy();
-    expect(screen.queryByText("You’re ready to go.")).toBeNull();
+    expect(document.querySelector('[data-packed-ribbon="good"]')).toBeNull();
   });
 
   it("occasions and reuse follow Nice outfits, occasions stay within 1 to 8, and the return outfit help matches the calculator", async () => {
@@ -837,7 +842,7 @@ describe("preferences and Ready", () => {
     expect(
       within(document.querySelector(".toast-region") as HTMLElement).getByText("Progress kept."),
     ).toBeTruthy();
-    expect(screen.queryByText("You’re ready to go.")).toBeNull();
+    expect(document.querySelector('[data-packed-ribbon="good"]')).toBeNull();
   });
 });
 
@@ -1205,11 +1210,12 @@ describe("Ready is never revoked silently", () => {
   it("says why when unchecking an item takes a Ready trip back to packing", async () => {
     const { user, source } = setup("lisbon");
     await ready();
-    expect(screen.getByText("You’re ready to go.")).toBeTruthy();
+    expect(document.querySelector('[data-packed-ribbon="good"]')?.textContent).toContain("Ready");
+    expect(screen.getByText("Ready to go")).toBeTruthy();
     await toggle(user, "tops");
     expect(await screen.findByText("No longer ready: an item was unchecked")).toBeTruthy();
     expect(tripOf(source, "lisbon").ready).toBe(false);
-    expect(screen.queryByText("You’re ready to go.")).toBeNull();
+    expect(document.querySelector('[data-packed-ribbon="good"]')).toBeNull();
   });
 
   it("says nothing when a change leaves the trip as it was", async () => {

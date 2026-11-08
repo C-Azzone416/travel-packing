@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSaveStatus } from "@/components/shell/SaveStatus";
 import { Button, buttonClassName } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { ModalSheet } from "@/components/ui/ModalSheet";
 import { useToast } from "@/components/ui/Toast";
 import { CUBE_LABELS, itemCube, type Cube } from "@/domain/cubes";
@@ -29,7 +28,9 @@ import {
 } from "./EditTripSheet";
 import { ItemEditor } from "./ItemEditor";
 import { EditStampSheet } from "./EditStampSheet";
-import { bagGate, packedAnnouncement, showReviewPrompt } from "./trip-view";
+import { bagGate, packedAnnouncement } from "./trip-view";
+import { packedState } from "./packed-state";
+import { ReviewBagSheet } from "./ReviewBagSheet";
 import { revocationReason } from "./review-view";
 import { WeatherPanel, type WeatherPanelState } from "./WeatherPanel";
 import { BagStep } from "./packing/BagStep";
@@ -86,9 +87,12 @@ export function TripScreen({
   tripId,
   openItemId,
   openCube,
+  openReview = false,
 }: {
   tripId: string;
   openItemId?: string;
+  /** ?review=1 (and the /review redirect): the "Review your bag" sheet opens as soon as the trip has loaded (#411). */
+  openReview?: boolean;
   /** The cube the laptop Packing view opens first (?cube=, which the Home tiles link to). */
   openCube?: Cube;
 }) {
@@ -106,6 +110,11 @@ export function TripScreen({
   const [stampFailed, setStampFailed] = useState(false);
   const [weather, setWeather] = useState<WeatherExperience | null>(null);
   const [laundryBusy, setLaundryBusy] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(openReview);
+  // The "Everything is in" banner was dismissed; it comes back only after an untick and a new completion.
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+  // The review sheet has its own bag step, so the "Toiletry bag in suitcase?" prompt stays out of its way.
+  const reviewOpenRef = useRef(openReview);
   const laptop = useMinWidth(LAPTOP_MIN_WIDTH);
   const weatherRequest = useRef(0);
   const bagPromptDismissed = useRef(false);
@@ -213,7 +222,11 @@ export function TripScreen({
           retries.current.delete(options.row);
           setFailedRows((current) => new Set([...current].filter((id) => id !== options.row)));
         }
-        if (change.signals.promptBagPlacement && !bagPromptDismissed.current)
+        if (
+          change.signals.promptBagPlacement &&
+          !bagPromptDismissed.current &&
+          !reviewOpenRef.current
+        )
           setDialog({ kind: "bag" });
         if (options.announce) setAnnouncement(options.announce(change));
         if (options.staples) void source.listStaples().then(setStaples);
@@ -666,8 +679,7 @@ export function TripScreen({
       />
     );
 
-  // What sits under the suitcase until the Phase 3 issues (#411 all packed / Ready, #389 Edit trip) take it over. The laptop has
-  // "Edit trip" in its header; on a phone it is one of these links (the Home tag's menu takes it over in #389).
+  // What sits under the suitcase. The laptop has "Edit trip" in its header; on a phone it is one of these links.
   const packingTools = (withEditTrip: boolean) => (
     <div className="packing-tools" role="group" aria-label="More for this trip">
       {withEditTrip ? (
@@ -704,54 +716,42 @@ export function TripScreen({
       </button>
     </div>
   );
-  const packingReview = (
-    <>
-      {showReviewPrompt(trip) ? (
-        <div className="review-prompt">
-          <h3>Everything is checked. Want to review?</h3>
-          <p>
-            We will show the full bag, including Pack last and the return outfit, before you decide
-            it is ready.
-          </p>
-          <Link
-            className={buttonClassName({ variant: "secondary" })}
-            href={`/trips/${tripId}/review`}
-          >
-            Review your bag
-          </Link>
-        </div>
-      ) : null}
-      {trip.ready ? (
-        <Card padded className="ready-card">
-          <p className="eyebrow">Confirmed after review</p>
-          <h2>You’re ready to go.</h2>
-          <p>
-            You can still correct anything below. Any checklist change will revoke Ready, or you can
-            mark the trip not ready without changing packing progress.
-          </p>
-          <div className="actions">
-            <Link
-              className={buttonClassName({ variant: "secondary", small: true })}
-              href={`/trips/${tripId}/review`}
-            >
-              Review bag again
-            </Link>
-            <Button
-              className="ready-secondary"
-              small
-              onClick={() =>
-                void act(() => source.markNotReady(tripId), {
-                  after: () => toast.show("Progress kept."),
-                })
-              }
-            >
-              Mark as not ready
-            </Button>
-          </div>
-        </Card>
-      ) : null}
-    </>
-  );
+  const state = packedState(trip);
+  // An untick (or Ready turned off by a change) reopens the way for the banner: render-time reset, not an effect.
+  if (state === "open" && bannerDismissed) setBannerDismissed(false);
+
+  const openReviewSheet = () => {
+    reviewOpenRef.current = true;
+    setReviewOpen(true);
+  };
+  const closeReviewSheet = () => {
+    reviewOpenRef.current = false;
+    setReviewOpen(false);
+    // Arrived by ?review=1 or the /review redirect: put the plain trip address back.
+    if (window.location.search.includes("review=")) {
+      window.history.replaceState(null, "", `/trips/${tripId}`);
+    }
+  };
+  const markReady = () =>
+    void act(() => source.markReady(tripId), {
+      modal: true,
+      announce: () => "Marked ready.",
+      after: closeReviewSheet,
+    });
+  const markNotReady = () =>
+    void act(() => source.markNotReady(tripId), {
+      modal: true,
+      announce: () => "Marked not ready. Progress kept.",
+      after: () => toast.show("Progress kept."),
+    });
+  const readyProps = {
+    state,
+    onReview: openReviewSheet,
+    onNotReady: markNotReady,
+    readyBusy: submitting,
+    bannerOpen: !bannerDismissed,
+    onDismissBanner: () => setBannerDismissed(true),
+  };
 
   return (
     <section className="screen">
@@ -787,12 +787,8 @@ export function TripScreen({
             />
           }
           toiletryExtra={toiletryExtra}
-          below={
-            <>
-              {packingTools(false)}
-              {packingReview}
-            </>
-          }
+          below={packingTools(false)}
+          {...readyProps}
         />
       ) : (
         <PackingPhone
@@ -823,15 +819,23 @@ export function TripScreen({
             />
           }
           toiletryExtra={toiletryExtra}
-          below={
-            <>
-              {packingTools(true)}
-              {packingReview}
-            </>
-          }
+          below={packingTools(true)}
+          {...readyProps}
         />
       )}
 
+      {reviewOpen ? (
+        <ReviewBagSheet
+          trip={trip}
+          busy={submitting}
+          onTick={tickItem}
+          onPlaceBag={() => void act(() => source.confirmBagPlacement(tripId), { modal: true })}
+          onUndoBag={() => void act(() => source.undoBagPlacement(tripId), { modal: true })}
+          onReady={markReady}
+          onNotReady={markNotReady}
+          onClose={closeReviewSheet}
+        />
+      ) : null}
       {editing ? (
         <ItemEditor
           key={editing.id}

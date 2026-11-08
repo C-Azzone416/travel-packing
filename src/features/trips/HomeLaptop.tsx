@@ -4,9 +4,16 @@ import Link from "next/link";
 import type { ReactNode, Ref } from "react";
 import { Icon } from "@/components/ui/Icon";
 import { MoreMenu } from "@/components/ui/MoreMenu";
-import { CountdownBadge, CubeTile, LuggageTag, Suitcase } from "@/components/suitcase";
+import {
+  CountdownBadge,
+  CubeTile,
+  LuggageTag,
+  PackedRibbon,
+  Suitcase,
+} from "@/components/suitcase";
 import type { LifecycleTrip } from "@/domain/trip-lifecycle";
 import { tripFacts } from "@/domain/trip-route";
+import { packedState, reviewHref } from "@/features/trip/packed-state";
 import { homeModel, packingHref, tagDates, type HeroWeather } from "./home-view";
 import { HomeUpcoming } from "./HomeUpcoming";
 import { HomeWeather } from "./HomeWeather";
@@ -49,6 +56,7 @@ export function HomeLaptop({
 }: HomeLaptopProps) {
   const model = homeModel(trip, weather, today);
   const { name, stops, nights, hero, countdown, totals, cubes, label, next, caption } = model;
+  const packed = packedState(trip);
 
   return (
     <div className={styles.page} aria-busy={busy}>
@@ -66,11 +74,19 @@ export function HomeLaptop({
             <figcaption className={styles.caption}>{caption}</figcaption>
           </figure>
 
-          <Suitcase role="region" aria-labelledby="home-bag-title">
+          <Suitcase
+            role="region"
+            aria-labelledby="home-bag-title"
+            ribbon={<PackedRibbon state={packed} />}
+          >
             <div className={styles.bagHead}>
               <div>
                 <h2 id="home-bag-title" className={styles.eyebrow}>
-                  In the bag · tap a cube
+                  {packed === "packed"
+                    ? "ALL PACKED"
+                    : packed === "ready"
+                      ? "READY TO GO"
+                      : "In the bag · tap a cube"}
                 </h2>
                 <p className={styles.bigCount}>
                   <span>{totals.packed}</span>
@@ -79,10 +95,10 @@ export function HomeLaptop({
               </div>
               <Link
                 className={styles.primary}
-                href={packingHref(trip.id, next)}
-                aria-label={`${label}: ${name}`}
+                href={packed === "packed" ? reviewHref(trip.id) : packingHref(trip.id, next)}
+                aria-label={`${packed === "packed" ? "Review your bag" : label}: ${name}`}
               >
-                {label}
+                {packed === "packed" ? "Review your bag" : label}
               </Link>
             </div>
             <ul className={styles.cubes} aria-label="Cubes">
@@ -107,7 +123,8 @@ export function HomeLaptop({
           <LuggageTag role="region" aria-labelledby="home-trip-title">
             <div className={styles.tagTop}>
               <p className={styles.chip}>
-                NEXT TRIP · <span className={styles.chipDate}>{tagDates(trip, today)}</span>
+                {packed === "ready" ? "READY" : "NEXT TRIP"} ·{" "}
+                <span className={styles.chipDate}>{tagDates(trip, today)}</span>
               </p>
               <MoreMenu
                 subject={name}

@@ -1,0 +1,90 @@
+/* "Review your bag" sheet body (#411). The sheet frame is ModalSheet's side variant (Edit trip's geometry). */
+.callout {
+  margin: 0 0 16px;
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.4;
+}
+.group {
+  margin: 0 0 20px;
+  min-width: 0;
+}
+.cube {
+  margin: 0 0 6px;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: var(--fw-heading, 700);
+  line-height: 1.15;
+}
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.row {
+  min-width: 0;
+  border-bottom: 1px solid var(--line);
+}
+.label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  min-width: 0;
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  cursor: pointer;
+}
+.label input {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  accent-color: var(--dark);
+}
+.name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.qty {
+  color: var(--muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.gate {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 2px solid var(--line);
+  border-radius: 14px;
+  background: var(--paper2);
+}
+.gateCopy {
+  display: grid;
+  min-width: 0;
+  font-family: var(--font-body);
+}
+.meta {
+  color: var(--muted);
+  font-size: 14px;
+}
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+.blocker {
+  flex: 1 0 100%;
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 14px;
+}

@@ -5,6 +5,7 @@ import {
   expectPacking,
   openCube,
   openEditor,
+  readyRibbon,
   showItem,
   tick,
   untick,
@@ -99,15 +100,15 @@ test("the toiletry bag gate and its placement are stored", async ({ page }) => {
 
 test("Mark as not ready is stored, and keeps every packed count", async ({ page }) => {
   await openLisbon(page);
-  await expect(page.getByText("You’re ready to go.")).toBeVisible();
+  await expect(readyRibbon(page)).toBeVisible();
   const total = page.getByText(/^(\d+) of \1 in the bag$/);
   await expect(total).toBeVisible();
   const before = await total.innerText();
   await page.getByRole("button", { name: "Mark as not ready" }).click();
-  await expect(page.getByText("You’re ready to go.")).toHaveCount(0);
+  await expect(readyRibbon(page)).toHaveCount(0);
   await page.reload();
   await expectPacking(page);
-  await expect(page.getByText("You’re ready to go.")).toHaveCount(0);
+  await expect(readyRibbon(page)).toHaveCount(0);
   await expect(page.getByText(before, { exact: true })).toBeVisible();
 });
 
@@ -117,10 +118,10 @@ test("changing a Ready trip revokes Ready, and that is stored too", async ({ pag
   const dialog = page.getByRole("dialog", { name: "Edit trip" });
   await dialog.getByRole("switch", { name: "Laundry on this trip" }).uncheck();
   await reviewAndApply(page, dialog);
-  await expect(page.getByText("You’re ready to go.")).toHaveCount(0);
+  await expect(readyRibbon(page)).toHaveCount(0);
   await page.reload();
   await expectPacking(page);
-  await expect(page.getByText("You’re ready to go.")).toHaveCount(0);
+  await expect(readyRibbon(page)).toHaveCount(0);
 });
 
 test("an edit and a removal are stored", async ({ page }) => {

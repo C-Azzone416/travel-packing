@@ -1,6 +1,14 @@
 import { expect, test } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
-import { allItemIds, expectPacking, itemRow, tick } from "./helpers/packing";
+import {
+  allItemIds,
+  expectPacking,
+  itemRow,
+  packedRibbon,
+  readyRibbon,
+  reviewSheet,
+  tick,
+} from "./helpers/packing";
 import { DEVICE, phoneHomeLayout } from "./helpers/device";
 import { planToList, reviewAndCreate } from "./helpers/plan";
 import { planATrip, openTripFromHome, futureRow } from "./helpers/menu";
@@ -51,18 +59,23 @@ test(
     await expect(itemRow(page, bathroom[0]).getByRole("checkbox")).toBeChecked();
 
     // Packing everything only offers the review; it never marks the trip Ready by itself.
-    await expect(page.getByText("You’re ready to go.")).toHaveCount(0);
-    await page.getByRole("link", { name: "Review your bag" }).click();
-    await expect(page.getByRole("heading", { name: "Toiletries · Bathroom" })).toBeVisible();
-    await expect(page.getByText("Everything is packed.")).toBeVisible();
+    await expect(packedRibbon(page)).toContainText("All packed");
+    await expect(readyRibbon(page)).toHaveCount(0);
+    await page
+      .locator("[data-packed-banner]")
+      .getByRole("button", { name: "Review your bag" })
+      .click();
+    const sheet = reviewSheet(page);
+    await expect(sheet.getByRole("heading", { name: "Toiletries", level: 3 })).toBeVisible();
 
     // Ready is explicit, and stored.
-    await page.getByRole("button", { name: "I’m ready to go" }).click();
+    await sheet.getByRole("button", { name: "I’m ready to go" }).click();
+    await expect(sheet).toHaveCount(0);
     const notReady = page.getByRole("button", { name: "Mark as not ready" });
     await expect(notReady).toBeVisible();
-    await expect(page.locator(".status-pill.ready")).toBeVisible();
+    await expect(readyRibbon(page)).toBeVisible();
     await page.reload();
     await expect(notReady).toBeVisible();
-    await expect(page.locator(".status-pill.ready")).toBeVisible();
+    await expect(readyRibbon(page)).toBeVisible();
   },
 );
