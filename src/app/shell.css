@@ -428,3 +428,27 @@ main {
     display: inline;
   }
 }
+
+/* 1024-1099 (#469; spec #393 part 2 section 5.3): the top bar tightens so it fits with no overflow menu. Nav pills pad 14 (from 16),
+   the right-hand gaps are 12 (from 18), and Saved is the check alone (the word stays for a screen reader). Saving and the error chip
+   keep their text. */
+@media (min-width: 1024px) and (max-width: 1099px) {
+  .bottom-nav .nav-link {
+    padding-inline: 14px;
+  }
+  .topbar-end {
+    margin-right: 12px;
+  }
+  .bottom-nav .nav-feedback + .nav-signout {
+    margin-left: 12px;
+  }
+  .sync-chip:not(.saving):not(.error) .sync-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+}

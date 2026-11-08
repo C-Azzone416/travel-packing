@@ -544,6 +544,26 @@ describe("data-sheet-open on <body> (#341)", () => {
     expect(dialog.parentElement?.className).toBe("modal-backdrop modal-backdrop-side");
   });
 
+  it("tabletModal adds the centred-modal class to the side variant only (Edit trip, #469)", () => {
+    render(
+      <ModalSheet open variant="side" tabletModal title="Edit trip" onClose={() => {}}>
+        x
+      </ModalSheet>,
+    );
+    expect(screen.getByRole("dialog", { name: "Edit trip" }).className).toBe(
+      "modal modal-side modal-centred",
+    );
+  });
+
+  it("tabletModal does nothing on the default dialog", () => {
+    render(
+      <ModalSheet open tabletModal title="Plain" onClose={() => {}}>
+        x
+      </ModalSheet>,
+    );
+    expect(screen.getByRole("dialog", { name: "Plain" }).className).toBe("modal");
+  });
+
   it("the default variant keeps the plain dialog classes", () => {
     render(
       <ModalSheet open title="Plain" onClose={() => {}}>

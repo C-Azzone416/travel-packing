@@ -1078,3 +1078,13 @@
     padding-left: 24px;
   }
 }
+
+/* 1024-1179 (#469; spec #393 part 2 section 5.3): the preview column is 400 wide (470 from 1180). */
+@media (min-width: 1024px) and (max-width: 1179px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr) 400px;
+  }
+  .tagTitle {
+    font-size: 32px;
+  }
+}

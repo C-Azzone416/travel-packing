@@ -122,6 +122,12 @@
   padding: 0;
   list-style: none;
 }
+/* 1024-1099 (#469; spec #393 part 2 section 5.3): two columns, so a tile is not under 150px; three from 1100. */
+@media (min-width: 1024px) and (max-width: 1099px) {
+  .cubes {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
 .cubes > li {
   min-width: 0;
   display: flex;

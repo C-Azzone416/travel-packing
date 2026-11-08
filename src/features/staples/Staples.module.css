@@ -1024,3 +1024,13 @@
     margin-bottom: 12px;
   }
 }
+
+/* 1024-1179 (#469; spec #393 part 2 section 5.3): one column of cube cards and a 300px preview panel; from 1180 the laptop values. */
+@media (min-width: 1024px) and (max-width: 1179px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr) 300px;
+  }
+  .sections {
+    column-count: 1;
+  }
+}
