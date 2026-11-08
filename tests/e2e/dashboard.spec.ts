@@ -5,7 +5,7 @@ import { planAndCreate } from "./helpers/plan";
 import { DEVICE, phoneHomeLayout } from "./helpers/device";
 
 // Home is the laptop suitcase view from 1024px (#387) and the phone suitcase below it (#388); this spec runs on the phone Home
-// (the desktop project at 1000px, the phone project at its own size).
+// (the desktop project at 700px, the phone project at its own size).
 test.beforeEach(async ({ page }) => {
   await phoneHomeLayout(page);
 });

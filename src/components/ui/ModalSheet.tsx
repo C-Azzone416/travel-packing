@@ -90,6 +90,11 @@ export interface ModalSheetProps {
    * sheet on phones and the centred dialog from 660px. Focus, Escape and the backdrop behave the same in both.
    */
   variant?: "dialog" | "side";
+  /**
+   * "side" only: keep the panel a 560px right-anchored sheet from 768 to 1023px instead of a full screen (Review your bag on a
+   * tablet, #414). Edit trip stays full screen there until its centred modal lands (#469).
+   */
+  tabletSheet?: boolean;
 }
 
 // Bottom sheet on phones, centered dialog from 601px. Traps focus, closes on
@@ -106,6 +111,7 @@ export function ModalSheet({
   showClose = false,
   headerAction,
   variant = "dialog",
+  tabletSheet = false,
 }: ModalSheetProps) {
   const titleId = useId();
   const descriptionId = useId();
@@ -204,7 +210,9 @@ export function ModalSheet({
     >
       <div
         ref={dialogRef}
-        className={variant === "side" ? "modal modal-side" : "modal"}
+        className={
+          variant === "side" ? `modal modal-side${tabletSheet ? " modal-tablet" : ""}` : "modal"
+        }
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
