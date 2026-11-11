@@ -1,17 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { buttonClassName, Button } from "@/components/ui/Button";
 import { Suitcase } from "@/components/suitcase";
 import { useSaveStatus } from "@/components/shell/SaveStatus";
+import { useToast } from "@/components/ui/Toast";
+import { automaticStamps, type StampLabels } from "@/domain/stamps";
 import { localToday } from "@/lib/today";
 import { useTripsSource } from "@/features/trips/TripsSourceProvider";
-import type { LifecycleState } from "@/domain/trip-lifecycle";
+import type { LifecycleState, LifecycleTrip } from "@/domain/trip-lifecycle";
+import { EditStampSheet } from "@/features/trip/EditStampSheet";
+import { StampDetailsSheet } from "./StampDetailsSheet";
 import {
   filterLabel,
   stampTripView,
   stampsView,
+  stickerEditable,
   type PastTripView,
   type StampFilter,
   type StickerView,
@@ -30,6 +35,7 @@ export function Sticker({
   selected = false,
   onSelect,
   className,
+  large = false,
 }: {
   sticker: StickerView;
   /** An extra class from the screen that draws it (the Home's Welcome home card sizes it). */
@@ -37,7 +43,10 @@ export function Sticker({
   selected?: boolean;
   /** Without it the sticker is decorative (the Home's teaser): a span the keyboard and screen readers skip. */
   onSelect?: () => void;
+  /** The close-up in the stamp details: bigger, not a control, still named so a screen reader hears what the grid says. */
+  large?: boolean;
 }) {
+  const tag = sticker.upcoming && (onSelect || large);
   const body = (
     <>
       <span
@@ -53,21 +62,36 @@ export function Sticker({
           ×{sticker.completedCount}
         </span>
       ) : null}
+      {tag ? (
+        <span className={styles.upcomingTag} aria-hidden="true">
+          Upcoming
+        </span>
+      ) : null}
     </>
   );
   const common = {
-    className: className ? `${styles.stickerButton} ${className}` : styles.stickerButton,
+    className: [styles.stickerButton, large ? styles.stickerLarge : "", className ?? ""]
+      .filter(Boolean)
+      .join(" "),
     "data-upcoming": sticker.upcoming || undefined,
     "data-shape": sticker.shape,
     "data-colour": sticker.colour,
     style: { "--sticker-tilt": `${sticker.tilt}deg` } as React.CSSProperties,
   };
+  if (large)
+    return (
+      <span {...common} role="img" aria-label={sticker.accessibleName}>
+        {body}
+      </span>
+    );
   return onSelect ? (
     <button
       type="button"
       {...common}
+      data-sticker-key={sticker.key}
       aria-label={sticker.accessibleName}
       aria-pressed={selected}
+      aria-haspopup="dialog"
       onClick={onSelect}
     >
       {body}
@@ -127,7 +151,7 @@ export function StickerTeaser({
   );
 }
 
-function SelectedTrip({ trip }: { trip: PastTripView }) {
+function SelectedTrip({ trip, onEdit }: { trip: PastTripView; onEdit?: () => void }) {
   return (
     <article className={styles.selectedCard} aria-label={`Selected trip: ${trip.name}`}>
       <p className={styles.selectedEyebrow} data-colour={trip.stickerColour ?? undefined}>
@@ -145,6 +169,11 @@ function SelectedTrip({ trip }: { trip: PastTripView }) {
         <Link className={styles.openTrip} href={`/trips/${trip.id}`}>
           Open trip
         </Link>
+        {onEdit ? (
+          <Button variant="secondary" small onClick={onEdit}>
+            Edit stamp label
+          </Button>
+        ) : null}
       </div>
     </article>
   );
@@ -203,8 +232,21 @@ export function StampsContent({
 }) {
   const [filter, setFilter] = useState<StampFilter>(initialTripId ? "all" : "rolling");
   const [selectedId, setSelectedId] = useState<string | null>(initialTripId);
+  /** The stamp labels saved from here, so the stickers, the card and the details change in place. */
+  const [savedLabels, setSavedLabels] = useState<Record<string, StampLabels>>({});
+  const [detailKey, setDetailKey] = useState<string | null>(null);
+  const [editor, setEditor] = useState<{ tripId: string; stickerKey: string | null } | null>(null);
+  const focusAfterEditor = useRef<string | null>(null);
+  const [announcement, setAnnouncement] = useState("");
 
-  const view = useMemo(() => stampsView(state.trips, today, filter), [state, today, filter]);
+  const trips = useMemo<LifecycleTrip[]>(
+    () =>
+      state.trips.map((trip) =>
+        savedLabels[trip.id] ? { ...trip, stampLabels: savedLabels[trip.id] } : trip,
+      ),
+    [state.trips, savedLabels],
+  );
+  const view = useMemo(() => stampsView(trips, today, filter), [trips, today, filter]);
   const visibleIds = useMemo(
     () =>
       new Set([
@@ -213,10 +255,34 @@ export function StampsContent({
       ]),
     [view],
   );
-  const defaultId = view.pastTrips[0]?.id ?? view.stickers[0]?.tripId ?? null;
+  // Only an earned sticker is selected without a tap: an upcoming one must not look inked at first paint (#493).
+  const defaultId =
+    view.stickers.find((sticker) => !sticker.upcoming)?.tripId ?? view.pastTrips[0]?.id ?? null;
   const activeId = selectedId && visibleIds.has(selectedId) ? selectedId : defaultId;
-  const selectedTrip = activeId ? (state.trips.find((trip) => trip.id === activeId) ?? null) : null;
-  const selected = selectedTrip ? stampTripView(selectedTrip) : null;
+  const selectedTrip = activeId ? (trips.find((trip) => trip.id === activeId) ?? null) : null;
+  const selected = selectedTrip ? stampTripView(selectedTrip, today) : null;
+  const detailSticker = detailKey
+    ? (view.stickers.find((sticker) => sticker.key === detailKey) ?? null)
+    : null;
+  const detailTrip = detailSticker
+    ? (trips.find((trip) => trip.id === detailSticker.tripId) ?? null)
+    : null;
+  const editorTrip = editor ? (trips.find((trip) => trip.id === editor.tripId) ?? null) : null;
+
+  // After the editor closes, focus goes back to the sticker that opened it (not to the details it replaced).
+  useEffect(() => {
+    if (editor || !focusAfterEditor.current) return;
+    const key = focusAfterEditor.current;
+    focusAfterEditor.current = null;
+    [...document.querySelectorAll<HTMLElement>("[data-sticker-key]")]
+      .find((node) => node.dataset.stickerKey === key)
+      ?.focus();
+  }, [editor]);
+
+  const closeEditor = () => {
+    focusAfterEditor.current = editor?.stickerKey ?? null;
+    setEditor(null);
+  };
 
   return (
     <section className={`${styles.root} ${embedded ? styles.embedded : "screen"}`}>
@@ -257,7 +323,10 @@ export function StampsContent({
                   key={sticker.key}
                   sticker={sticker}
                   selected={activeId === sticker.tripId}
-                  onSelect={() => setSelectedId(sticker.tripId)}
+                  onSelect={() => {
+                    setSelectedId(sticker.tripId);
+                    setDetailKey(sticker.key);
+                  }}
                 />
               ))}
             </div>
@@ -285,7 +354,16 @@ export function StampsContent({
 
         <section className={styles.past} aria-labelledby="past-trips-title">
           <h2 id="past-trips-title">Past trips</h2>
-          {selected ? <SelectedTrip trip={selected} /> : null}
+          {selected && selectedTrip ? (
+            <SelectedTrip
+              trip={selected}
+              onEdit={
+                automaticStamps(selectedTrip.stops).length > 0
+                  ? () => setEditor({ tripId: selectedTrip.id, stickerKey: null })
+                  : undefined
+              }
+            />
+          ) : null}
           {view.pastTrips.length ? (
             <div className={styles.tripList}>
               {view.pastTrips.map((trip) => (
@@ -302,7 +380,85 @@ export function StampsContent({
           )}
         </section>
       </div>
+
+      {detailSticker && detailTrip && !editor ? (
+        <StampDetailsSheet
+          sticker={detailSticker}
+          trip={detailTrip}
+          summary={stampTripView(detailTrip, today)}
+          canEdit={automaticStamps(detailTrip.stops).length > 0}
+          editable={stickerEditable(detailTrip, detailSticker.stopIndex)}
+          onEdit={() => {
+            setDetailKey(null);
+            setEditor({ tripId: detailTrip.id, stickerKey: detailSticker.key });
+          }}
+          onClose={() => setDetailKey(null)}
+        />
+      ) : null}
+      {editorTrip ? (
+        <StampLabelEditor
+          trip={editorTrip}
+          onClose={closeEditor}
+          onSaved={(tripId, labels) => {
+            setSavedLabels((current) => ({ ...current, [tripId]: labels }));
+            setAnnouncement("Stamp label saved.");
+            closeEditor();
+          }}
+        />
+      ) : null}
+      <p className="sr-only" role="status">
+        {announcement}
+      </p>
     </section>
+  );
+}
+
+/** The existing Edit stamp sheet, wired to the trips source. Mounted only while it is open, so a read-only view needs no providers. */
+function StampLabelEditor({
+  trip,
+  onClose,
+  onSaved,
+}: {
+  trip: LifecycleTrip;
+  onClose: () => void;
+  onSaved: (tripId: string, labels: StampLabels) => void;
+}) {
+  const source = useTripsSource();
+  const { track } = useSaveStatus();
+  const toast = useToast();
+  const [saving, setSaving] = useState(false);
+  const [failed, setFailed] = useState(false);
+  return (
+    <EditStampSheet
+      automatic={automaticStamps(trip.stops)}
+      stops={trip.stops}
+      saved={trip.stampLabels}
+      departure={trip.start}
+      saving={saving}
+      failed={failed}
+      onClose={onClose}
+      onSave={(slot1, slot2) => {
+        setFailed(false);
+        setSaving(true);
+        const before = trip.stampLabels ?? [null, null];
+        track(
+          () => source.setStampLabels(trip.id, slot1, slot2),
+          (change) => {
+            const now = change.trip.stampLabels ?? [null, null];
+            // Only slots that changed count: a change that only cleared overrides is a reset.
+            const changed = [0, 1].filter((slot) => now[slot] !== before[slot]);
+            toast.show(
+              changed.length > 0 && changed.every((slot) => now[slot] === null)
+                ? "Stamp reset to automatic."
+                : "Stamp updated.",
+            );
+            onSaved(trip.id, now);
+          },
+        )
+          .catch(() => setFailed(true))
+          .finally(() => setSaving(false));
+      }}
+    />
   );
 }
 

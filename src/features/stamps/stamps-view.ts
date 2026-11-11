@@ -1,6 +1,6 @@
 import { parseDate } from "@/domain/calc";
 import { packedTotals } from "@/domain/readiness";
-import { selectStamps } from "@/domain/stamps";
+import { automaticStamps, selectStamps } from "@/domain/stamps";
 import { isPastTrip, type LifecycleTrip } from "@/domain/trip-lifecycle";
 import { TRAVEL_MODE_CAPTION, routeTextShort, tripDisplayName } from "@/domain/trip-route";
 import { daysBetween, type TripStop } from "@/domain/trip-stops";
@@ -22,6 +22,8 @@ export interface StickerView {
   colour: StickerColour;
   tilt: number;
   tripId: string;
+  /** Which stop of `tripId` the sticker draws; its code follows the trip's stamp label for that slot. */
+  stopIndex: number;
   accessibleName: string;
 }
 
@@ -31,6 +33,8 @@ export interface PastTripView {
   stickerColour: StickerColour | null;
   name: string;
   monthYear: string;
+  /** Not home yet: the trip has not ended, so it inks when you get home. */
+  upcoming: boolean;
   eyebrow: string;
   facts: string;
   packed: number;
@@ -146,7 +150,19 @@ function regionLabel(stop: TripStop): string {
   return (stop.location.region || stop.location.country).trim().toUpperCase();
 }
 
-export function stampTripView(trip: LifecycleTrip): PastTripView {
+export const UPCOMING_EYEBROW = "Upcoming · inks when you get home";
+
+/**
+ * Whether the stamp editor changes what this sticker says. The sticker draws one stop and takes its code from the trip's
+ * label for that slot, and the editor only has slots for the first two route stamps (the second only when the route has a
+ * second country). A sticker for a later stop shows an automatic code the editor cannot change.
+ */
+export function stickerEditable(trip: LifecycleTrip, stopIndex: number): boolean {
+  const slots = automaticStamps(trip.stops).length;
+  return stopIndex < slots && stopIndex < 2;
+}
+
+export function stampTripView(trip: LifecycleTrip, today?: string): PastTripView {
   const first = trip.stops[0];
   const code = first ? stickerCode(trip, first, 0) : "";
   const stickerColour = first
@@ -168,7 +184,11 @@ export function stampTripView(trip: LifecycleTrip): PastTripView {
     stickerColour,
     name: tripDisplayName(trip),
     monthYear: monthYear(trip.start),
-    eyebrow: [code, compactMonthYear(trip.start)].filter(Boolean).join(" · "),
+    upcoming: today !== undefined && !isPastTrip(trip, today),
+    eyebrow:
+      today !== undefined && !isPastTrip(trip, today)
+        ? UPCOMING_EYEBROW
+        : [code, compactMonthYear(trip.start)].filter(Boolean).join(" · "),
     facts,
     packed: totals.packed,
     total: totals.total,
@@ -231,7 +251,11 @@ export function stampsView(
           colour: look.colour,
           tilt: look.tilt,
           tripId: chosen.trip.id,
-          accessibleName: `${chosenStop.location.city}, ${monthYear(date)}, ${Math.max(1, count)} ${Math.max(1, count) === 1 ? "trip" : "trips"}`,
+          stopIndex: chosen.stopIndex,
+          accessibleName:
+            count === 0
+              ? `${chosenStop.location.city}, ${monthYear(date)}, upcoming, not inked yet`
+              : `${chosenStop.location.city}, ${monthYear(date)}, inked, ${count} ${count === 1 ? "trip" : "trips"}`,
         },
       };
     })
@@ -253,7 +277,7 @@ export function stampsView(
   return {
     filterLabel: filterLabel(filter, today),
     stickers,
-    pastTrips: past.map(stampTripView),
+    pastTrips: past.map((trip) => stampTripView(trip)),
     totals: {
       trips: past.length,
       places: completedPlaces.size,

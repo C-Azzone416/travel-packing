@@ -1,0 +1,314 @@
+// @vitest-environment jsdom
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
+import { renderInApp } from "@/test/providers";
+import { sampleLifecycleState, SAMPLE_LOCATIONS } from "@/features/trips/fixtures";
+import { buildTrip, emptyLifecycleState, type LifecycleState } from "@/domain/trip-lifecycle";
+import type { TripConfig } from "@/domain/trip";
+import type { SampleLocation } from "@/domain/trip-stops";
+import { createMemoryTripsSource } from "@/features/trips/trips-source";
+import { TripsSourceProvider } from "@/features/trips/TripsSourceProvider";
+import { StampsContent, StampsScreen } from "./StampsScreen";
+
+vi.mock("next/navigation", () => ({ usePathname: () => "/stamps" }));
+
+const TODAY = "2026-10-16";
+const CONFIG: TripConfig = {
+  laundry: false,
+  spare: true,
+  niceAttire: false,
+  occasionCount: 1,
+  reuseNice: false,
+  returnOutfit: true,
+};
+const LISBON = "Lisbon, Sep 2026, inked, 1 trip";
+const SAN_DIEGO = "San Diego, Oct 2026, upcoming, not inked yet";
+
+function source(state: LifecycleState = sampleLifecycleState()) {
+  return createMemoryTripsSource(state, { now: () => 1, today: () => TODAY });
+}
+
+function open(src: ReturnType<typeof source> = source()) {
+  const user = userEvent.setup();
+  renderInApp(
+    <TripsSourceProvider source={src}>
+      <StampsScreen getToday={() => TODAY} />
+    </TripsSourceProvider>,
+  );
+  return { user, src };
+}
+
+const place = (id: string, city: string, countryCode: string, country: string): SampleLocation => ({
+  id,
+  city,
+  region: "",
+  country,
+  countryCode,
+  label: `${city}, ${country}`,
+});
+
+function trip(id: string, start: string, end: string, location = SAMPLE_LOCATIONS["pt-lisbon"]) {
+  return buildTrip(location.city, location, start, end, CONFIG, [], {
+    newId: () => id,
+    today: TODAY,
+  });
+}
+const withTrips = (...trips: ReturnType<typeof trip>[]): LifecycleState => ({
+  ...emptyLifecycleState(),
+  trips,
+});
+
+describe("upcoming stickers do not read as earned (#493)", () => {
+  it("names an upcoming sticker as upcoming and an earned one as inked", async () => {
+    open();
+    expect(await screen.findByRole("button", { name: LISBON })).toBeTruthy();
+    expect(screen.getByRole("button", { name: SAN_DIEGO })).toBeTruthy();
+  });
+
+  it("selects nothing, and shows no selected card, when only upcoming stickers exist", async () => {
+    open(source(withTrips(trip("ahead", "2026-11-20", "2026-11-25"))));
+    const sticker = await screen.findByRole("button", {
+      name: "Lisbon, Nov 2026, upcoming, not inked yet",
+    });
+    expect(sticker.getAttribute("aria-pressed")).toBe("false");
+    expect(document.querySelectorAll('[aria-pressed="true"]')).toHaveLength(1); // the "Last 12 months" filter only
+    expect(screen.queryByRole("article", { name: /Selected trip/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Edit stamp label" })).toBeNull();
+  });
+
+  it("selects the earned sticker first when there is an earned one as well", async () => {
+    open();
+    const earned = await screen.findByRole("button", { name: LISBON });
+    expect(earned.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: SAN_DIEGO }).getAttribute("aria-pressed")).toBe(
+      "false",
+    );
+  });
+
+  it("tags only an upcoming sticker, and keeps it dashed when it is selected", async () => {
+    const { user } = open();
+    const upcoming = await screen.findByRole("button", { name: SAN_DIEGO });
+    expect(within(upcoming).getByText("Upcoming")).toBeTruthy();
+    expect(within(screen.getByRole("button", { name: LISBON })).queryByText("Upcoming")).toBeNull();
+    await user.click(upcoming);
+    await user.keyboard("{Escape}");
+    expect(upcoming.getAttribute("aria-pressed")).toBe("true");
+    expect(upcoming.getAttribute("data-upcoming")).toBe("true");
+    expect(within(upcoming).getByText("Upcoming")).toBeTruthy();
+    expect(screen.getByRole("article", { name: "Selected trip: San Diego" }).textContent).toContain(
+      "Upcoming · inks when you get home",
+    );
+  });
+
+  it("leaves the Home's teaser stickers decorative, with no tag", () => {
+    render(
+      <StampsContent state={withTrips(trip("ahead", "2026-11-20", "2026-11-25"))} today={TODAY} />,
+    );
+    expect(screen.getAllByText("Upcoming").length).toBe(1);
+  });
+});
+
+describe("a sticker opens its details (#494)", () => {
+  it("opens on a tap, on an already selected sticker, and on Enter and Space", async () => {
+    const { user } = open();
+    const lisbon = await screen.findByRole("button", { name: LISBON });
+    expect(lisbon.getAttribute("aria-pressed")).toBe("true");
+    expect(lisbon.getAttribute("aria-haspopup")).toBe("dialog");
+    await user.click(lisbon);
+    const dialog = screen.getByRole("dialog", { name: "Lisbon · Sep 2026" });
+    expect(within(dialog).getByRole("img", { name: LISBON })).toBeTruthy();
+    expect(within(dialog).getByText("Inked")).toBeTruthy();
+    expect(within(dialog).getByRole("link", { name: "Reuse this list" })).toBeTruthy();
+    expect(within(dialog).getByRole("link", { name: "Open trip" }).getAttribute("href")).toBe(
+      "/trips/lisbon",
+    );
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(lisbon);
+    lisbon.focus();
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    await user.keyboard("{Escape}");
+    await user.keyboard(" ");
+    expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+
+  it("says Upcoming for an upcoming trip and counts repeat visits", async () => {
+    const { user } = open(
+      source(
+        withTrips(
+          trip("a", "2025-11-01", "2025-11-03"),
+          trip("b", "2026-09-03", "2026-09-07"),
+          trip("c", "2026-11-20", "2026-11-25", SAMPLE_LOCATIONS["us-ca-san-diego"]),
+        ),
+      ),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Lisbon, Sep 2026, inked, 2 trips" }),
+    );
+    expect(screen.getByText(/Visited 2 times/)).toBeTruthy();
+    await user.keyboard("{Escape}");
+    await user.click(
+      screen.getByRole("button", { name: "San Diego, Nov 2026, upcoming, not inked yet" }),
+    );
+    expect(
+      within(screen.getByRole("dialog")).getByText("Upcoming · inks when you get home"),
+    ).toBeTruthy();
+  });
+
+  it("edits the label: the typed value is saved, and the sticker, card and details change in place", async () => {
+    const { user, src } = open();
+    const save = vi.spyOn(src, "setStampLabels");
+    await user.click(await screen.findByRole("button", { name: LISBON }));
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Edit stamp label" }),
+    );
+    // Only one modal is open: the details closed first.
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(screen.getByRole("dialog", { name: "Stamp label" })).toBeTruthy();
+    await user.click(screen.getByRole("radio", { name: "Custom" }));
+    const field = screen.getByLabelText("Label");
+    await user.clear(field);
+    await user.type(field, "abc");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(save).toHaveBeenCalledWith("lisbon", "ABC", null);
+    const sticker = screen.getByRole("button", { name: LISBON });
+    expect(sticker.querySelector("[data-text='ABC']")).toBeTruthy();
+    expect(screen.getByRole("article", { name: "Selected trip: Lisbon" }).textContent).toContain(
+      "ABC",
+    );
+    expect(document.activeElement).toBe(sticker);
+    expect(
+      screen.getAllByRole("status").some((node) => node.textContent === "Stamp label saved."),
+    ).toBe(true);
+    // The details show the trip's stamp as saved.
+    await user.click(sticker);
+    expect(within(screen.getByRole("dialog")).getByRole("img", { name: /ABC/ })).toBeTruthy();
+  });
+
+  it("leaves the label and puts focus back on the sticker when the editor is cancelled", async () => {
+    const { user, src } = open();
+    const save = vi.spyOn(src, "setStampLabels");
+    const sticker = await screen.findByRole("button", { name: LISBON });
+    const before = sticker.querySelector("[data-text]")?.getAttribute("data-text");
+    await user.click(sticker);
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Edit stamp label" }),
+    );
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(save).not.toHaveBeenCalled();
+    expect(sticker.querySelector("[data-text]")?.getAttribute("data-text")).toBe(before);
+    expect(document.activeElement).toBe(sticker);
+  });
+
+  it("keeps the editor open when the save fails, and Save tries again", async () => {
+    const { user, src } = open();
+    const real = src.setStampLabels.bind(src);
+    let attempts = 0;
+    vi.spyOn(src, "setStampLabels").mockImplementation((...args) => {
+      attempts += 1;
+      return attempts === 1 ? Promise.reject(new Error("down")) : real(...args);
+    });
+    await user.click(await screen.findByRole("button", { name: LISBON }));
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Edit stamp label" }),
+    );
+    await user.click(screen.getByRole("radio", { name: "Custom" }));
+    const field = screen.getByLabelText("Label");
+    await user.clear(field);
+    await user.type(field, "xyz");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText(/Couldn’t save the stamp/)).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: "Stamp label" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(
+      screen.getByRole("button", { name: LISBON }).querySelector("[data-text='XYZ']"),
+    ).toBeTruthy();
+  });
+
+  it("the selected card edits the label too, and a reset says so", async () => {
+    const { user, src } = open();
+    await screen.findByRole("article", { name: "Selected trip: Lisbon" });
+    const edit = screen.getByRole("button", { name: "Edit stamp label" });
+    await user.click(edit);
+    await user.click(screen.getByRole("radio", { name: "Custom" }));
+    const field = screen.getByLabelText("Label");
+    await user.clear(field);
+    await user.type(field, "ZZZ");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(src.snapshot().trips.find((t) => t.id === "lisbon")?.stampLabels?.[0]).toBe("ZZZ");
+    await user.click(screen.getByRole("button", { name: "Edit stamp label" }));
+    await user.click(screen.getByRole("button", { name: "Reset to automatic" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(await screen.findByText("Stamp reset to automatic.")).toBeTruthy();
+  });
+
+  it("leaves the stamp shape alone: only the existing labels are written", async () => {
+    const { user, src } = open();
+    const before = Object.keys(src.snapshot().trips.find((t) => t.id === "lisbon")!);
+    await user.click(await screen.findByRole("button", { name: LISBON }));
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Edit stamp label" }),
+    );
+    await user.click(screen.getByRole("radio", { name: "Custom" }));
+    const field = screen.getByLabelText("Label");
+    await user.clear(field);
+    await user.type(field, "QQQ");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    const after = src.snapshot().trips.find((t) => t.id === "lisbon")!;
+    expect(after.stampLabels).toEqual(["QQQ", null]);
+    for (const key of Object.keys(after)) expect([...before, "stampLabels"]).toContain(key);
+  });
+
+  it("hides the action when the route has no stamp to edit", async () => {
+    const blank = trip("blank", "2026-09-10", "2026-09-12", place("x", "Mystery", "", ""));
+    const { user } = open(source(withTrips(blank)));
+    await user.click(
+      await screen.findByRole("button", { name: "Mystery, Sep 2026, inked, 1 trip" }),
+    );
+    expect(
+      within(screen.getByRole("dialog")).queryByRole("button", { name: "Edit stamp label" }),
+    ).toBeNull();
+    expect(screen.queryByText(/code comes from the route/)).toBeNull();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("button", { name: "Edit stamp label" })).toBeNull();
+  });
+
+  it("disables the action, and says why, for a sticker the editor cannot change", async () => {
+    // Three countries: the route shows ONE departure stamp, so the sticker for the second stop has no slot to edit.
+    const multi = trip("multi", "2026-09-03", "2026-09-12");
+    const base = multi.stops[0];
+    multi.stops = [
+      base,
+      { ...base, location: place("us", "Austin", "US", "United States") },
+      { ...base, location: place("es", "Madrid", "ES", "Spain") },
+    ];
+    const { user } = open(source(withTrips(multi)));
+    // Both Austin and Madrid are one place each; Lisbon (stop 1) is editable, Austin (stop 2) is not.
+    await user.click(
+      await screen.findByRole("button", { name: "Austin, Sep 2026, inked, 1 trip" }),
+    );
+    const dialog = screen.getByRole("dialog");
+    const edit = within(dialog).getByRole("button", {
+      name: "Edit stamp label",
+    }) as HTMLButtonElement;
+    expect(edit.disabled).toBe(true);
+    expect(within(dialog).getByText("This sticker’s code comes from the route.")).toBeTruthy();
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "Lisbon, Sep 2026, inked, 1 trip" }));
+    expect(
+      (
+        within(screen.getByRole("dialog")).getByRole("button", {
+          name: "Edit stamp label",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(false);
+  });
+});

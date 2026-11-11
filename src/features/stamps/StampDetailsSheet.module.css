@@ -1,0 +1,71 @@
+.details {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 8px 0 4px;
+  text-align: center;
+}
+.close {
+  padding: 18px 28px 22px;
+  border-radius: 18px;
+  background: var(--dark);
+}
+.preview {
+  display: grid;
+  min-height: 86px;
+  place-items: center;
+}
+.facts,
+.status,
+.routeNote {
+  margin: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.facts {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.4;
+}
+.status {
+  font-size: 15px;
+  font-weight: 700;
+}
+.routeNote {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* The actions stay in reach on a phone: stacked full width, pinned under the scrolling body. */
+@media (max-width: 720px) {
+  :global(.modal):has(.details) :global(.modal-actions) {
+    position: sticky;
+    bottom: calc(var(--modal-pad-bottom) * -1);
+    flex-direction: column;
+    align-items: stretch;
+    margin: 18px calc(var(--modal-pad) * -1) calc(var(--modal-pad-bottom) * -1);
+    padding: 12px var(--modal-pad) var(--modal-foot-bottom);
+    border-top: 1px solid var(--line);
+    background: var(--modal-surface);
+  }
+  :global(.modal):has(.details) :global(.modal-actions) > :global(.button) {
+    min-height: 44px;
+    justify-content: center;
+    text-align: center;
+  }
+}
+/* 195px / 200% text: a full screen with the actions pinned, and a smaller close-up. */
+@media (max-width: 239px) {
+  :global(.modal):has(.details) {
+    max-height: 100dvh;
+    border-radius: 0;
+  }
+  .close {
+    padding-inline: 12px;
+  }
+  .close :global(span[role="img"]) {
+    width: 120px;
+    height: 120px;
+  }
+}
