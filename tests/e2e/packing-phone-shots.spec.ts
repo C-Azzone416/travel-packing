@@ -72,5 +72,7 @@ test("ocean 195 at 200% text: quick add button", async ({ page }) => {
     )
     .toBeGreaterThanOrEqual(31.9);
   await expect(page.getByRole("button", { name: "Add an item to Clothing" })).toBeVisible();
-  await shot(page, "qa-p-ocean-195-200pct");
+  // At 200% text the page scrolls (natural flow), so take the whole page to show the button in place.
+  mkdirSync(SHOTS!, { recursive: true });
+  await page.screenshot({ path: `${SHOTS}/qa-p-ocean-195-200pct.png`, fullPage: true });
 });
