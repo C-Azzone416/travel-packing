@@ -247,6 +247,27 @@ export async function setTripTravelMode(
   }
 }
 
+/** Move one of the owner's trips to new dates (the seed's are relative to a fixed day; the server's clock is the real one). */
+export async function setTripDates(
+  ownerId: string,
+  destination: string,
+  start: string,
+  end: string,
+): Promise<void> {
+  const pool = new Pool({ connectionString: E2E_DATABASE_URL, max: 1 });
+  try {
+    const db = drizzle(pool, { schema }) as unknown as Db;
+    await db
+      .update(schema.trips)
+      .set({ startDate: start, endDate: end })
+      .where(
+        and(eq(schema.trips.ownerId, ownerId), like(schema.trips.destination, `${destination}%`)),
+      );
+  } finally {
+    await pool.end();
+  }
+}
+
 /** Mark one of the owner's trips Ready directly (the weather review revokes it; getting there by packing is slow). */
 export async function markTripReady(ownerId: string, destination: string): Promise<void> {
   const pool = new Pool({ connectionString: E2E_DATABASE_URL, max: 1 });
