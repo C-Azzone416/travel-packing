@@ -7,7 +7,7 @@ import { Stamps } from "@/components/stamp/Stamp";
 import { selectStamps } from "@/domain/stamps";
 import type { LifecycleTrip } from "@/domain/trip-lifecycle";
 import { Sticker } from "./StampsScreen";
-import type { PastTripView, StickerView } from "./stamps-view";
+import { UPCOMING_EYEBROW, type PastTripView, type StickerView } from "./stamps-view";
 import styles from "./StampDetailsSheet.module.css";
 
 /**
@@ -74,7 +74,7 @@ export function StampDetailsSheet({
         ) : null}
         <p className={styles.facts}>{summary.facts}</p>
         <p className={styles.status}>
-          {sticker.upcoming ? "Upcoming · inks when you get home" : "Inked"}
+          {sticker.upcoming ? UPCOMING_EYEBROW : "Inked"}
           {sticker.completedCount > 1 ? ` · Visited ${sticker.completedCount} times` : ""}
         </p>
         {canEdit && !editable ? (

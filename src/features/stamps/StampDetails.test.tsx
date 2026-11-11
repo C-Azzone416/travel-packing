@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { renderInApp } from "@/test/providers";
@@ -9,7 +9,8 @@ import type { TripConfig } from "@/domain/trip";
 import type { SampleLocation } from "@/domain/trip-stops";
 import { createMemoryTripsSource } from "@/features/trips/trips-source";
 import { TripsSourceProvider } from "@/features/trips/TripsSourceProvider";
-import { StampsContent, StampsScreen } from "./StampsScreen";
+import { StampsScreen, StickerTeaser } from "./StampsScreen";
+import { stampsView } from "./stamps-view";
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/stamps" }));
 
@@ -101,11 +102,23 @@ describe("upcoming stickers do not read as earned (#493)", () => {
     );
   });
 
-  it("leaves the Home's teaser stickers decorative, with no tag", () => {
-    render(
-      <StampsContent state={withTrips(trip("ahead", "2026-11-20", "2026-11-25"))} today={TODAY} />,
+  it("draws the Home teaser's stickers decorative, an upcoming one with no tag", () => {
+    const view = stampsView(
+      withTrips(trip("ahead", "2026-11-20", "2026-11-25")).trips,
+      TODAY,
+      "all",
     );
-    expect(screen.getAllByText("Upcoming").length).toBe(1);
+    render(
+      <StickerTeaser
+        stickers={view.stickers}
+        inked={view.inked}
+        filterLabel="All time"
+        totals={{ trips: 0, nights: 0 }}
+      />,
+    );
+    expect(view.stickers[0].upcoming).toBe(true);
+    expect(document.querySelector('[data-decorative="true"][data-upcoming="true"]')).toBeTruthy();
+    expect(screen.queryByText("Upcoming")).toBeNull();
   });
 });
 
@@ -312,9 +325,8 @@ describe("a sticker opens its details (#494)", () => {
     ).toBe(false);
   });
 
-  it("disables the action when the slot the editor would write is not the one the sticker shows", async () => {
-    // PT, PT, ES: Porto's sticker reads label slot 2, which the editor labels as the ES stamp.
-    const route = trip("pte", "2026-09-03", "2026-09-12");
+  it("a write from the editor changes exactly the sticker the route label names (Lisbon, Porto, Madrid)", async () => {
+    const route = trip("lpm", "2026-09-03", "2026-09-12");
     const base = route.stops[0];
     route.stops = [
       base,
@@ -322,12 +334,104 @@ describe("a sticker opens its details (#494)", () => {
       { ...base, location: place("es", "Madrid", "ES", "Spain") },
     ];
     const { user } = open(source(withTrips(route)));
-    await user.click(await screen.findByRole("button", { name: "Porto, Sep 2026, inked, 1 trip" }));
-    const dialog = screen.getByRole("dialog");
+    const porto = "Porto, Sep 2026, inked, 1 trip";
+    const codes = () =>
+      Object.fromEntries(
+        ["Lisbon", "Porto", "Madrid"].map((city) => [
+          city,
+          screen
+            .getByRole("button", { name: `${city}, Sep 2026, inked, 1 trip` })
+            .querySelector("strong")
+            ?.getAttribute("data-text"),
+        ]),
+      );
+    await screen.findByRole("button", { name: porto });
+    const before = codes();
+    await user.click(screen.getByRole("button", { name: "Lisbon, Sep 2026, inked, 1 trip" }));
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Edit stamp label" }),
+    );
+    const stamp2 = within(screen.getByRole("group", { name: /Stamp 2/ }));
+    await user.click(stamp2.getByRole("radio", { name: "Custom" }));
+    const field = stamp2.getByLabelText("Label");
+    await user.clear(field);
+    await user.type(field, "qqq");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    const after = codes();
+    expect(after.Madrid).toBe("QQQ");
+    expect(after.Porto).toBe(before.Porto);
+    expect(after.Lisbon).toBe(before.Lisbon);
+  });
+
+  function deferSave(src: ReturnType<typeof source>) {
+    const real = src.setStampLabels.bind(src);
+    let release!: () => void;
+    const gate = new Promise<void>((done) => (release = done));
+    vi.spyOn(src, "setStampLabels").mockImplementationOnce(async (...args) => {
+      await gate;
+      return real(...args);
+    });
+    return release;
+  }
+  async function typeLabel(user: ReturnType<typeof userEvent.setup>, text: string) {
+    await user.click(screen.getByRole("radio", { name: "Custom" }));
+    const field = screen.getByLabelText("Label");
+    await user.clear(field);
+    await user.type(field, text);
+  }
+
+  it("cannot be dismissed while a save is pending", async () => {
+    const { user, src } = open();
+    const release = deferSave(src);
+    await user.click(await screen.findByRole("button", { name: LISBON }));
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Edit stamp label" }),
+    );
+    await typeLabel(user, "lat");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect((screen.getByRole("button", { name: "Cancel" }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "Close dialog" }));
+    fireEvent.mouseDown(screen.getByTestId("modal-backdrop"));
+    expect(screen.getByRole("dialog", { name: "Stamp label" })).toBeTruthy();
+    await act(async () => release());
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(
-      (within(dialog).getByRole("button", { name: "Edit stamp label" }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(true);
-    expect(within(dialog).getByText("This sticker’s code comes from the route.")).toBeTruthy();
+      screen.getByRole("button", { name: LISBON }).querySelector("[data-text='LAT']"),
+    ).toBeTruthy();
+  });
+
+  it("a late save closes nothing of another trip's editor (Back during the save)", async () => {
+    const { user, src } = open();
+    const release = deferSave(src);
+    await user.click(await screen.findByRole("button", { name: LISBON }));
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Edit stamp label" }),
+    );
+    await typeLabel(user, "lat");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    // Back is the one way out while a save is pending.
+    await act(async () => {
+      window.history.back();
+      await new Promise((done) => setTimeout(done, 20));
+    });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await user.click(screen.getByRole("button", { name: SAN_DIEGO }));
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Edit stamp label" }),
+    );
+    await typeLabel(user, "sdd");
+    await act(async () => release());
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: LISBON }).querySelector("[data-text='LAT']"),
+      ).toBeTruthy(),
+    );
+    // San Diego's editor and its draft are untouched.
+    expect(screen.getByRole("dialog", { name: "Stamp label" })).toBeTruthy();
+    expect(screen.getByLabelText("Label")).toHaveProperty("value", "SDD");
   });
 });

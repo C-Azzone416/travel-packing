@@ -16,7 +16,8 @@ import {
 } from "@/components/suitcase";
 import type { LifecycleState, LifecycleTrip } from "@/domain/trip-lifecycle";
 import { packedState, reviewHref } from "@/features/trip/packed-state";
-import { StampsContent } from "@/features/stamps/StampsScreen";
+import { StampsContent, type LabelStore } from "@/features/stamps/StampsScreen";
+import type { StampLabels } from "@/domain/stamps";
 import { stampsView } from "@/features/stamps/stamps-view";
 import {
   homeModel,
@@ -93,6 +94,15 @@ export function HomePhone({
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
+  // Labels saved in the Stamps panel outlive the panel, which unmounts when another pill is chosen.
+  const [savedLabels, setSavedLabels] = useState<Record<string, StampLabels>>({});
+  const labelStore = useMemo<LabelStore>(
+    () => ({
+      labels: savedLabels,
+      save: (tripId, labels) => setSavedLabels((current) => ({ ...current, [tripId]: labels })),
+    }),
+    [savedLabels],
+  );
   const model = homeModel(trip, weather, today);
   const {
     name,
@@ -324,7 +334,7 @@ export function HomePhone({
           aria-labelledby="home-tab-stamps"
           className={styles.panel}
         >
-          <StampsContent state={state} today={today} embedded />
+          <StampsContent state={state} today={today} embedded labelStore={labelStore} />
         </div>
       ) : null}
     </div>

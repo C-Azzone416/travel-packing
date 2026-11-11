@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildTrip, type LifecycleTrip } from "@/domain/trip-lifecycle";
 import type { TripConfig } from "@/domain/trip";
+import { stampSlotForStop } from "@/domain/stamps";
 import type { SampleLocation } from "@/domain/trip-stops";
 import {
   filterLabel,
@@ -281,20 +282,69 @@ describe("the rolling window's boundaries (#446)", () => {
       expect(codeOf(route, "Austin")).not.toBe("ZZZ");
     });
 
-    it("calls a sticker editable only when the slot the editor writes is the one it shows", () => {
-      expect(stickerEditable(twoCountries([null, null]), 0)).toBe(true);
-      expect(stickerEditable(twoCountries([null, null]), 1)).toBe(true);
-      // PT, PT, ES: the editor's second stamp is ES, but the second stop's sticker reads that slot while being Portugal.
-      const route = trip("Lisbon", "PT", "2026-09-01", "2026-09-05");
-      route.stops.push(
-        { ...route.stops[0], location: place("Porto", "PT") },
-        { ...route.stops[0], location: place("Madrid", "ES") },
-      );
-      expect(stickerEditable(route, 0)).toBe(true);
-      expect(stickerEditable(route, 1)).toBe(false);
-      expect(stickerEditable(route, 2)).toBe(false);
-      // A route with no stamp has nothing to edit.
-      expect(stickerEditable({ ...route, stops: [] }, 0)).toBe(false);
+    // The country of each stop in a route, as a trip whose stamps follow those countries.
+    const route = (...countries: Array<"PT" | "ES" | "US">) => {
+      const first = trip("Lisbon", "PT", "2026-09-01", "2026-09-05");
+      const names = {
+        PT: ["Lisbon", "Porto", "Faro"],
+        ES: ["Madrid", "Barcelona", "Sevilla"],
+        US: ["Austin", "Boston", "Denver"],
+      };
+      const used = { PT: 0, ES: 0, US: 0 };
+      first.stops = countries.map((code) => ({
+        ...first.stops[0],
+        location: place(names[code][used[code]++], code),
+      }));
+      return first;
+    };
+    const slots = (...countries: Array<"PT" | "ES" | "US">) => {
+      const r = route(...countries);
+      return r.stops.map((_, index) => stampSlotForStop(r.stops, index));
+    };
+
+    it("maps every stop to ONE label slot, whether or not stop and stamp indices coincide", () => {
+      expect(slots("PT", "ES")).toEqual([0, 1]);
+      expect(slots("PT", "PT", "ES")).toEqual([0, 0, 1]);
+      expect(slots("PT", "ES", "ES")).toEqual([0, 1, 1]);
+      expect(slots("PT", "ES", "PT")).toEqual([0, 1, 0]);
+      expect(slots("PT", "PT")).toEqual([0, 0]);
+      // Three countries show one departure stamp: later stops have no slot.
+      expect(slots("PT", "ES", "US")).toEqual([0, null, null]);
+      expect(stampSlotForStop([], 0)).toBeNull();
+      expect(stampSlotForStop(route("PT").stops, 5)).toBeNull();
+    });
+
+    it("lets a write change exactly the stickers of the slot it writes (PT, PT, ES and PT, ES, ES)", () => {
+      const pte = route("PT", "PT", "ES");
+      pte.stampLabels = [null, "QQQ"];
+      expect([codeOf(pte, "Lisbon"), codeOf(pte, "Porto"), codeOf(pte, "Madrid")]).toEqual([
+        stampsView([route("PT", "PT", "ES")], today, "all").stickers.find(
+          (e) => e.place === "Lisbon",
+        )?.code,
+        stampsView([route("PT", "PT", "ES")], today, "all").stickers.find(
+          (e) => e.place === "Porto",
+        )?.code,
+        "QQQ",
+      ]);
+      pte.stampLabels = ["ZZZ", null];
+      expect([codeOf(pte, "Lisbon"), codeOf(pte, "Porto"), codeOf(pte, "Madrid")]).toEqual([
+        "ZZZ",
+        "ZZZ",
+        codeOf(route("PT", "PT", "ES"), "Madrid"),
+      ]);
+      const pee = route("PT", "ES", "ES");
+      pee.stampLabels = [null, "QQQ"];
+      expect(codeOf(pee, "Madrid")).toBe("QQQ");
+      expect(codeOf(pee, "Barcelona")).toBe("QQQ");
+      expect(codeOf(pee, "Lisbon")).not.toBe("QQQ");
+    });
+
+    it("calls a sticker editable exactly when it has a slot", () => {
+      const pte = route("PT", "PT", "ES");
+      expect([0, 1, 2].map((index) => stickerEditable(pte, index))).toEqual([true, true, true]);
+      const three = route("PT", "ES", "US");
+      expect([0, 1, 2].map((index) => stickerEditable(three, index))).toEqual([true, false, false]);
+      expect(stickerEditable({ ...pte, stops: [] }, 0)).toBe(false);
     });
   });
 });

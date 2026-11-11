@@ -100,19 +100,26 @@ export function EditStampSheet({
     onSave(drafts[0].value, slots > 1 ? drafts[1].value : null);
   }
 
+  // While a save is pending the sheet cannot be dismissed (Cancel, Escape, the scrim and the close button), so the save that
+  // finishes always belongs to the sheet on screen.
+  const dismiss = () => {
+    if (!saving) onClose();
+  };
+
   return (
     <ModalSheet
       open
       showClose
       title="Stamp label"
       description="Choose what each stamp says on this trip. Automatic labels come from your route."
-      onClose={onClose}
+      onClose={dismiss}
+      dismissOnBackdrop={!saving}
       actions={
         <>
           <Button type="submit" form={formId} disabled={saving || !dirty || invalid}>
             {saving ? "Saving…" : "Save"}
           </Button>
-          <Button variant="secondary" onClick={onClose}>
+          <Button variant="secondary" onClick={dismiss} disabled={saving}>
             Cancel
           </Button>
         </>

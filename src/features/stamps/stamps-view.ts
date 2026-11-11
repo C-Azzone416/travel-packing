@@ -1,7 +1,6 @@
 import { parseDate } from "@/domain/calc";
 import { packedTotals } from "@/domain/readiness";
-import { alpha3For } from "@/domain/iso-alpha3";
-import { automaticStamps, selectStamps } from "@/domain/stamps";
+import { automaticStamps, selectStamps, stampSlotForStop } from "@/domain/stamps";
 import { isPastTrip, type LifecycleTrip } from "@/domain/trip-lifecycle";
 import { TRAVEL_MODE_CAPTION, routeTextShort, tripDisplayName } from "@/domain/trip-route";
 import { daysBetween, type TripStop } from "@/domain/trip-stops";
@@ -34,8 +33,6 @@ export interface PastTripView {
   stickerColour: StickerColour | null;
   name: string;
   monthYear: string;
-  /** Not home yet: the trip has not ended, so it inks when you get home. */
-  upcoming: boolean;
   eyebrow: string;
   facts: string;
   packed: number;
@@ -139,7 +136,8 @@ export function tripMatchesFilter(
 }
 
 function stickerCode(trip: LifecycleTrip, stop: TripStop, index: number): string {
-  const override = trip.stampLabels?.[index] ?? null;
+  const slot = stampSlotForStop(trip.stops, index);
+  const override = slot === null ? null : (trip.stampLabels?.[slot] ?? null);
   return selectStamps([stop], [override, null])[0]?.label ?? "";
 }
 
@@ -153,23 +151,9 @@ function regionLabel(stop: TripStop): string {
 
 export const UPCOMING_EYEBROW = "Upcoming · inks when you get home";
 
-/**
- * Whether the stamp editor changes what this sticker says. The sticker draws one stop and takes its code from the trip's
- * label for that slot, and the editor only has slots for the first two route stamps (the second only when the route has a
- * second country). A sticker for a later stop shows an automatic code the editor cannot change.
- */
+/** Whether the stamp editor changes what this sticker says: it has a label slot, and the route has a stamp to edit. */
 export function stickerEditable(trip: LifecycleTrip, stopIndex: number): boolean {
-  const automatic = automaticStamps(trip.stops);
-  if (stopIndex === 0) return automatic.length > 0;
-  // Slot 2 is the editor's SECOND route stamp. It is this sticker's only when that stamp is this stop's own country
-  // (PT, PT, ES: the second stop's sticker reads slot 2, but the editor labels slot 2 as ES).
-  const stop = trip.stops[stopIndex];
-  return (
-    stopIndex === 1 &&
-    automatic.length > 1 &&
-    !!stop &&
-    automatic[1].label === alpha3For(stop.location.countryCode)
-  );
+  return stampSlotForStop(trip.stops, stopIndex) !== null && automaticStamps(trip.stops).length > 0;
 }
 
 export function stampTripView(trip: LifecycleTrip, today: string): PastTripView {
@@ -196,7 +180,6 @@ export function stampTripView(trip: LifecycleTrip, today: string): PastTripView 
     stickerColour,
     name: tripDisplayName(trip),
     monthYear: monthYear(trip.start),
-    upcoming,
     eyebrow: upcoming
       ? UPCOMING_EYEBROW
       : [code, compactMonthYear(trip.start)].filter(Boolean).join(" · "),

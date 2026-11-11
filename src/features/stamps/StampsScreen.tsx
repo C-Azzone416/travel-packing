@@ -28,6 +28,19 @@ type Load =
   | { phase: "error" }
   | { phase: "ready"; state: LifecycleState; today: string };
 
+export interface LabelStore {
+  labels: Record<string, StampLabels>;
+  save: (tripId: string, labels: StampLabels) => void;
+}
+
+interface EditorOpen {
+  tripId: string;
+  /** The sticker that opened it, to give focus back to; null when the selected card opened it. */
+  stickerKey: string | null;
+  /** Which opening this is, so a late save cannot close a different one. */
+  token: number;
+}
+
 const FILTERS: readonly StampFilter[] = ["rolling", "year", "all"];
 
 export function Sticker({
@@ -223,19 +236,37 @@ export function StampsContent({
   today,
   embedded = false,
   initialTripId = null,
+  labelStore,
 }: {
   state: LifecycleState;
   today: string;
   embedded?: boolean;
+  /**
+   * Where the labels saved from here are kept. The Home's Stamps panel unmounts when the pill changes, so it keeps them above
+   * this component; without it they live here.
+   */
+  labelStore?: LabelStore;
   /** The trip to select first (`/stamps?trip=<id>`, from the Home's recent trips). */
   initialTripId?: string | null;
 }) {
   const [filter, setFilter] = useState<StampFilter>(initialTripId ? "all" : "rolling");
   const [selectedId, setSelectedId] = useState<string | null>(initialTripId);
   /** The stamp labels saved from here, so the stickers, the card and the details change in place. */
-  const [savedLabels, setSavedLabels] = useState<Record<string, StampLabels>>({});
+  const [ownLabels, setOwnLabels] = useState<Record<string, StampLabels>>({});
+  const savedLabels = labelStore?.labels ?? ownLabels;
+  const saveLabels =
+    labelStore?.save ??
+    ((tripId: string, labels: StampLabels) =>
+      setOwnLabels((current) => ({ ...current, [tripId]: labels })));
   const [detailKey, setDetailKey] = useState<string | null>(null);
-  const [editor, setEditor] = useState<{ tripId: string; stickerKey: string | null } | null>(null);
+  const [editor, setEditor] = useState<EditorOpen | null>(null);
+  const editorRef = useRef<EditorOpen | null>(null);
+  useEffect(() => {
+    editorRef.current = editor;
+  }, [editor]);
+  const editorCount = useRef(0);
+  /** The editor adds one history entry so the phone's Back button closes it within Stamps instead of leaving the panel. */
+  const ownEntry = useRef(false);
   const focusAfterEditor = useRef<string | null>(null);
   const [announcement, setAnnouncement] = useState("");
 
@@ -279,10 +310,37 @@ export function StampsContent({
       ?.focus();
   }, [editor]);
 
-  const closeEditor = () => {
-    focusAfterEditor.current = editor?.stickerKey ?? null;
+  const openEditor = (tripId: string, stickerKey: string | null) => {
+    editorCount.current += 1;
+    setEditor({ tripId, stickerKey, token: editorCount.current });
+    if (!ownEntry.current) {
+      ownEntry.current = true;
+      window.history.pushState({ stampEditor: true }, "", window.location.href);
+    }
+  };
+  const dismissEditor = () => {
+    focusAfterEditor.current = editorRef.current?.stickerKey ?? null;
     setEditor(null);
   };
+  const closeEditor = () => {
+    if (ownEntry.current) {
+      ownEntry.current = false;
+      window.history.back();
+    }
+    dismissEditor();
+  };
+  // Back (the browser's or the phone's) with the editor open closes it and keeps the person where they were.
+  useEffect(() => {
+    const onPop = () => {
+      if (!ownEntry.current) return;
+      ownEntry.current = false;
+      dismissEditor();
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+    // dismissEditor only reads refs and a state setter.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <section className={`${styles.root} ${embedded ? styles.embedded : "screen"}`}>
@@ -359,7 +417,7 @@ export function StampsContent({
               trip={selected}
               onEdit={
                 automaticStamps(selectedTrip.stops).length > 0
-                  ? () => setEditor({ tripId: selectedTrip.id, stickerKey: null })
+                  ? () => openEditor(selectedTrip.id, null)
                   : undefined
               }
             />
@@ -390,19 +448,21 @@ export function StampsContent({
           editable={stickerEditable(detailTrip, detailSticker.stopIndex)}
           onEdit={() => {
             setDetailKey(null);
-            setEditor({ tripId: detailTrip.id, stickerKey: detailSticker.key });
+            openEditor(detailTrip.id, detailSticker.key);
           }}
           onClose={() => setDetailKey(null)}
         />
       ) : null}
       {editorTrip ? (
         <StampLabelEditor
+          key={editor?.token}
           trip={editorTrip}
           onClose={closeEditor}
           onSaved={(tripId, labels) => {
-            setSavedLabels((current) => ({ ...current, [tripId]: labels }));
+            saveLabels(tripId, labels);
             setAnnouncement("Stamp label saved.");
-            closeEditor();
+            // A save finishing closes only the editor that sent it.
+            if (editorRef.current?.token === editor?.token) closeEditor();
           }}
         />
       ) : null}
