@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { calculateSuggestions as suggest, stapleContext, stapleQuantity } from "./calc";
-import { isDayTrip, laundryChangesQuantity, laundryControlVisible } from "./short-trip";
+import { recalculateSuggestions } from "./item-ops";
+import {
+  isDayTrip,
+  laundryChangesQuantity,
+  laundryControlVisible,
+  laundryIdleReason,
+} from "./short-trip";
 import type { Trip, TripConfig, TripItem } from "./trip";
 
 const CONFIG: TripConfig = {
@@ -127,5 +133,70 @@ describe("only rows the trip really has count (#412)", () => {
     };
     expect(laundryChangesQuantity(fixed)).toBe(false);
     expect(laundryControlVisible(fixed)).toBe(false);
+  });
+});
+
+describe("laundry off and back on (#495)", () => {
+  const ON = { ...CONFIG, laundry: true };
+  const qtyOf = (trip: Trip, id: string) => trip.items.find((entry) => entry.id === id)?.qty;
+
+  it("a multi-night trip with a marked Staple: off restores the quantity, the control stays, on halves it again", () => {
+    const on = tripOf("2030-03-14", "2030-03-24", ON, true);
+    const halved = qtyOf(on, "jacket")!;
+    const off = recalculateSuggestions(on, { ...ON, laundry: false }, suggest);
+    expect(qtyOf(off, "jacket")).toBeGreaterThan(halved);
+    // Off must still offer the switch: turning it on WOULD change that row.
+    expect(laundryChangesQuantity(off)).toBe(true);
+    expect(laundryControlVisible(off)).toBe(true);
+    expect(laundryIdleReason(off)).toBeNull();
+    const back = recalculateSuggestions(off, { ...ON, laundry: true }, suggest);
+    expect(qtyOf(back, "jacket")).toBe(halved);
+  });
+
+  it("a hand-edited quantity survives both flips", () => {
+    const on = tripOf("2030-03-14", "2030-03-24", ON, true);
+    const edited = {
+      ...on,
+      items: on.items.map((entry) =>
+        entry.id === "jacket" ? { ...entry, qty: 9, userEdited: true } : entry,
+      ),
+    };
+    const off = recalculateSuggestions(edited, { ...ON, laundry: false }, suggest);
+    expect(qtyOf(off, "jacket")).toBe(9);
+    expect(qtyOf(recalculateSuggestions(off, ON, suggest), "jacket")).toBe(9);
+  });
+
+  it("a multi-night list with no eligible row: unchanged totals are valid, and the reason is the list, not the length", () => {
+    const long = tripOf("2030-03-14", "2030-03-24", ON, false);
+    // A fixed list (no Everyday tops/bottoms, no marked Staple): flipping laundry moves none of its rows.
+    const off = { ...long, config: { ...ON, laundry: false } };
+    const flipped = recalculateSuggestions(off, ON, suggest);
+    for (const entry of long.items) expect(qtyOf(flipped, entry.id)).toBe(entry.qty);
+    expect(laundryChangesQuantity(off)).toBe(false);
+    expect(laundryControlVisible(off)).toBe(false);
+    expect(laundryIdleReason(off)).toBe("no-items");
+  });
+
+  it("a weather-split list is left alone by laundry, so it is idle too", () => {
+    const long = tripOf("2030-03-14", "2030-03-24", CONFIG, false);
+    const split = {
+      ...long,
+      items: [
+        {
+          id: "tops-short",
+          name: "Short-sleeve tops",
+          category: "Clothing",
+          qty: 6,
+          packed: 0,
+          section: "main",
+        },
+      ] as TripItem[],
+    };
+    expect(laundryIdleReason(split)).toBe("no-items");
+  });
+
+  it("a day trip is reported as a day trip, and a changing trip has no reason", () => {
+    expect(laundryIdleReason(tripOf("2030-03-14", "2030-03-14", CONFIG, true))).toBe("day-trip");
+    expect(laundryIdleReason(tripOf("2030-03-14", "2030-03-24", CONFIG, true))).toBeNull();
   });
 });

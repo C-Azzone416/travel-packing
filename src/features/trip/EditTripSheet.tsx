@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { recalculateSuggestions } from "@/domain/item-ops";
-import { laundryChangesQuantity } from "@/domain/short-trip";
+import { laundryChangesQuantity, laundryIdleReason } from "@/domain/short-trip";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { ModalSheet } from "@/components/ui/ModalSheet";
@@ -52,6 +52,9 @@ import styles from "./EditTripSheet.module.css";
 
 /** The line under a disabled laundry row: no marked Staple would change on a trip this short (#412). */
 export const NO_LAUNDRY_EFFECT = "No effect on a trip this short.";
+/** The line under a laundry row on a longer trip whose list has nothing the preference moves (#495). */
+export const NO_LAUNDRY_ITEMS =
+  "No effect yet: nothing on this list changes with laundry. Mark a Staple ↻ to use it.";
 
 export type EditTripTab = "route" | "preferences";
 export type ApplyOutcome = "ok" | "stale" | "failed";
@@ -221,6 +224,7 @@ export function EditTripSheet({
     () => trip.config.laundry || laundryChangesQuantity(routeTrip, prefs),
     [trip.config.laundry, routeTrip, prefs],
   );
+  const laundryIdle = useMemo(() => laundryIdleReason(routeTrip, prefs), [routeTrip, prefs]);
   const effectivePrefs = useMemo(
     () => (laundryUseful || !prefs.laundry ? prefs : { ...prefs, laundry: false }),
     [laundryUseful, prefs],
@@ -530,7 +534,11 @@ export function EditTripSheet({
                 label="Laundry on this trip"
                 marker={<Icon name="refresh" size={16} />}
                 description={
-                  laundryUseful ? "Halves anything marked ↻ in your Staples." : NO_LAUNDRY_EFFECT
+                  laundryIdle === "day-trip"
+                    ? NO_LAUNDRY_EFFECT
+                    : laundryIdle === "no-items"
+                      ? NO_LAUNDRY_ITEMS
+                      : "Halves anything marked ↻ in your Staples."
                 }
                 checked={effectivePrefs.laundry}
                 disabled={!laundryUseful}

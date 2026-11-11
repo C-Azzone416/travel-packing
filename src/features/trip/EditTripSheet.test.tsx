@@ -627,6 +627,35 @@ describe("EditTripSheet: Route & dates", () => {
     expect(toggle(dialog(), "Laundry on this trip").disabled).toBe(false);
   });
 
+  it("a longer trip whose list has no laundry-eligible row says so, and does not blame the trip length (#495)", async () => {
+    const trip = base();
+    const { dialog } = setup({
+      trip: {
+        ...trip,
+        items: trip.items.filter((entry) => !["tops", "bottoms"].includes(entry.id)),
+      },
+    });
+    expect(toggle(dialog(), "Laundry on this trip").disabled).toBe(true);
+    expect(within(dialog()).queryByText("No effect on a trip this short.")).toBeNull();
+    expect(
+      within(dialog()).getByText(
+        "No effect yet: nothing on this list changes with laundry. Mark a Staple ↻ to use it.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("laundry saved off on a trip whose rows respond to it can be switched back on (#495)", async () => {
+    const { user, dialog, onApplyPreferences } = setup();
+    expect(toggle(dialog(), "Laundry on this trip").checked).toBe(false);
+    expect(toggle(dialog(), "Laundry on this trip").disabled).toBe(false);
+    await user.click(toggle(dialog(), "Laundry on this trip"));
+    await user.click(saveButton(dialog()));
+    expect(onApplyPreferences).toHaveBeenCalledWith(
+      expect.objectContaining({ laundry: true }),
+      expect.anything(),
+    );
+  });
+
   it("a NEW laundry opt-in that becomes ineffective is neither listed nor saved; the Dates row says one date (#412)", async () => {
     const { user, dialog, onApplyPreferences, onSaveRoute } = setup({ tab: "route" });
     await user.click(within(dialog()).getByRole("button", { name: /Packing preferences/ }));
