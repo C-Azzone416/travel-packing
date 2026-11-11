@@ -216,3 +216,14 @@ export function routeSignature(
 ): string {
   return JSON.stringify([mode ?? "other", points.map((p) => [p.kind, p.lat, p.lng, p.label])]);
 }
+
+/**
+ * The trip as the Home draws it: a trip with no origin of its own starts from the account's Home (#497), so a Home saved
+ * after the trip was made still supplies the missing start. An explicit origin is never replaced, and nothing is stored.
+ */
+export function withHomeOrigin<T extends { origin?: TripOrigin | null }>(
+  trip: T,
+  home: TripOrigin | null | undefined,
+): T {
+  return trip.origin || !home ? trip : { ...trip, origin: home };
+}
