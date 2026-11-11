@@ -343,7 +343,7 @@
   flex-wrap: wrap;
   gap: 8px;
 }
-.selectedActions :global(.button) {
+.selectedCard .selectedActions :global(.button) {
   min-height: 44px;
   border-color: var(--paper);
   border-radius: 999px;
