@@ -38,7 +38,7 @@ vi.mock("@/server/auth/auth-runtime", () => ({
 }));
 vi.mock("@/app/sign-in/actions", () => ({ signOutAction: async () => undefined }));
 
-import RootLayout from "./layout";
+import RootLayout, { metadata } from "./layout";
 
 beforeEach(() => {
   authScreen = null;
@@ -50,6 +50,13 @@ beforeEach(() => {
 });
 
 const render = async () => renderToStaticMarkup(await RootLayout({ children: <p>page body</p> }));
+
+describe("RootLayout metadata (#492)", () => {
+  it("sets no metadata.icons or manifest, so the Next.js file conventions (icon.svg, favicon.ico, apple-icon.png) serve the icons", () => {
+    expect(metadata).not.toHaveProperty("icons");
+    expect(metadata).not.toHaveProperty("manifest");
+  });
+});
 
 describe("RootLayout", () => {
   it("wraps app pages in the shell (skip link, top bar, navigation)", async () => {
