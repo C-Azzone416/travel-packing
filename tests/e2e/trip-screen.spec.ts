@@ -416,7 +416,7 @@ test("Edit list adds an unpacked item to the cube, never doubles it, and hands B
   const field = page.getByPlaceholder("+ Add an item");
   await field.fill("Camera");
   await page.getByRole("button", { name: "Add", exact: true }).click();
-  await expect(status(page)).toHaveText("Camera added to Tech.");
+  await expect(status(page)).toHaveText("Added Camera to Tech.");
   await expect(field).toHaveValue("");
   await expect(page.locator("[data-item-id]").filter({ hasText: "Camera" })).toHaveCount(1);
 

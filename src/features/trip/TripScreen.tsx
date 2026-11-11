@@ -610,7 +610,10 @@ export function TripScreen({
     if (existing) return Promise.resolve({ ok: false, reason: "EXISTS", existingId: existing.id });
     return new Promise((resolve) => {
       void act(() => source.addItem(tripId, { name, category, neededQty: 1, cube }), {
-        announce: () => `${name} added to ${cubeName(cube)}.`,
+        announce: () =>
+          (packingView.filters[cube] ?? "all") === "packed"
+            ? `Added ${name}. It’s in To pack.`
+            : `Added ${name} to ${cubeName(cube)}.`,
         after: () => resolve({ ok: true }),
         onFail: (error) => {
           const again = findExistingItem(trip, name, category);

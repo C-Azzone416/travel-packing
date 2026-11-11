@@ -230,11 +230,17 @@ function AddRow({
   label,
   onAdd,
   onEditItem,
+  onCancel,
+  onSubmitted,
 }: {
   cube: Cube;
   label: string;
   onAdd: CubePanelProps["onAdd"];
   onEditItem: CubePanelProps["onEditItem"];
+  /** Quick add (#496): present when the row opened from the "＋ Add an item" button. It adds Cancel and Escape, and takes focus. */
+  onCancel?: () => void;
+  /** Called when a name is sent, with whether it was saved, so the panel can bring a new row into view. */
+  onSubmitted?: (saved: boolean | null) => void;
 }) {
   const [name, setName] = useState("");
   const [problem, setProblem] = useState<null | "EMPTY" | "LONG" | "FAILED">(null);
@@ -242,6 +248,12 @@ function AddRow({
   const [saving, setSaving] = useState(false);
   const field = useRef<HTMLInputElement>(null);
   const messageId = useId();
+
+  useEffect(() => {
+    if (onCancel) field.current?.focus();
+    // Focus once, when the quick row opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -258,8 +270,10 @@ function AddRow({
     setSaving(true);
     setProblem(null);
     setExisting(null);
+    onSubmitted?.(null);
     const outcome = await onAdd(cube, trimmed);
     setSaving(false);
+    onSubmitted?.(outcome.ok);
     if (outcome.ok) {
       setName("");
       return field.current?.focus();
@@ -277,7 +291,18 @@ function AddRow({
           ? "Couldn’t add it. Nothing was changed."
           : null;
   return (
-    <form className={styles.addRow} onSubmit={submit} noValidate autoComplete="off">
+    <form
+      className={styles.addRow}
+      onSubmit={submit}
+      noValidate
+      autoComplete="off"
+      onKeyDown={(event) => {
+        if (onCancel && event.key === "Escape") {
+          event.stopPropagation();
+          onCancel();
+        }
+      }}
+    >
       <label className={styles.addField}>
         <span className="sr-only">Add an item to {label}</span>
         <input
@@ -300,6 +325,11 @@ function AddRow({
       <button type="submit" className={styles.addButton} disabled={saving}>
         Add
       </button>
+      {onCancel ? (
+        <button type="button" className={styles.addCancel} onClick={onCancel}>
+          Cancel
+        </button>
+      ) : null}
       {message || existing ? (
         <p id={messageId} className={styles.addMessage} role="alert">
           {message ?? (
@@ -317,6 +347,61 @@ function AddRow({
         </p>
       ) : null}
     </form>
+  );
+}
+
+/**
+ * The always-visible add control (#496). A dashed "＋ Add an item" button at the end of a cube's list; it swaps for the add row,
+ * which Cancel or Escape closes (discarding the text) and hands focus back to the button.
+ */
+function QuickAdd({
+  cube,
+  label,
+  onAdd,
+  onEditItem,
+  onSubmitted,
+}: {
+  cube: Cube;
+  label: string;
+  onAdd: CubePanelProps["onAdd"];
+  onEditItem: CubePanelProps["onEditItem"];
+  onSubmitted: (saved: boolean | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const button = useRef<HTMLButtonElement>(null);
+  const restore = useRef(false);
+  useEffect(() => {
+    if (!open && restore.current) {
+      restore.current = false;
+      button.current?.focus();
+    }
+  }, [open]);
+  return (
+    <div className={styles.quickAdd}>
+      {open ? (
+        <AddRow
+          cube={cube}
+          label={label}
+          onAdd={onAdd}
+          onEditItem={onEditItem}
+          onSubmitted={onSubmitted}
+          onCancel={() => {
+            restore.current = true;
+            setOpen(false);
+          }}
+        />
+      ) : (
+        <button
+          ref={button}
+          type="button"
+          className={styles.quickAddButton}
+          aria-label={`Add an item to ${label}`}
+          onClick={() => setOpen(true)}
+        >
+          ＋ Add an item
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -350,6 +435,29 @@ export function CubePanel({
   const shown = editing ? view.items : filterItems(view.items, filter);
   const lockedOn = view.items.some((item) => item.section === "packlast");
   const switchId = useId();
+  const listRef = useRef<HTMLUListElement>(null);
+  const scrollNew = useRef(false);
+  // A saved quick add brings its new row into view (All / To pack show it; Packed does not list it).
+  useEffect(() => {
+    if (!scrollNew.current) return;
+    scrollNew.current = false;
+    listRef.current?.lastElementChild?.scrollIntoView?.({ block: "nearest" });
+  }, [view.total]);
+  const onSubmitted = (saved: boolean | null) => {
+    scrollNew.current = saved === null || saved === true;
+  };
+  // One add control per cube: Toiletries adds through the Bathroom control in its bag step, every other cube through this.
+  const addControl = extra ? null : editing ? (
+    <AddRow cube={view.cube} label={view.label} onAdd={onAdd} onEditItem={onEditItem} />
+  ) : (
+    <QuickAdd
+      cube={view.cube}
+      label={view.label}
+      onAdd={onAdd}
+      onEditItem={onEditItem}
+      onSubmitted={onSubmitted}
+    />
+  );
   const footerText = panelFooter(view, shown.length);
   // The hint ("Tick as you pack ...") is for the laptop; a phone shows only the lines that report a state.
   const footer =
@@ -387,6 +495,7 @@ export function CubePanel({
 
       {shown.length > 0 ? (
         <ul
+          ref={listRef}
           className={cx(styles.list, editing && styles.listEditing, phone && styles.listPhone)}
           style={{ ["--rows" as string]: Math.ceil(shown.length / 2) }}
           aria-label={`${view.label} items`}
@@ -420,10 +529,7 @@ export function CubePanel({
 
       {editing ? (
         <div className={styles.editFooter}>
-          {/* The Toiletries cube adds through the Bathroom form in its bag step: one add control, not two. */}
-          {extra ? null : (
-            <AddRow cube={view.cube} label={view.label} onAdd={onAdd} onEditItem={onEditItem} />
-          )}
+          {addControl}
           {view.morningOfAvailable ? (
             <div className={styles.morningRow}>
               <label className={styles.morningLabel} htmlFor={switchId}>
@@ -446,8 +552,16 @@ export function CubePanel({
             </div>
           ) : null}
         </div>
+      ) : phone ? (
+        <>
+          {footer}
+          {addControl}
+        </>
       ) : (
-        footer
+        <>
+          {addControl}
+          {footer}
+        </>
       )}
       {bar}
     </section>

@@ -326,7 +326,37 @@ describe("Edit list", () => {
     expect((within(panel()).getByPlaceholderText("+ Add an item") as HTMLInputElement).value).toBe(
       "",
     );
-    expect(live().textContent).toBe("Beach towel added to Clothing.");
+    expect(live().textContent).toBe("Added Beach towel to Clothing.");
+  });
+
+  it("quick adds from the end of the list without Edit list, and the count grows by one (#496)", async () => {
+    const { user, base } = setup();
+    await ready();
+    const before = within(panel()).getByText(/^\d+ of (\d+) packed$/).textContent!;
+    const total = Number(/of (\d+)/.exec(before)![1]);
+    await user.click(within(panel()).getByRole("button", { name: "Add an item to Clothing" }));
+    await user.type(within(panel()).getByPlaceholderText("+ Add an item"), "Sun hat{Enter}");
+    await waitFor(() => expect(within(panel()).getByText("Sun hat")).toBeTruthy());
+    expect(itemCube(tripOf(base).items.find((entry) => entry.name === "Sun hat")!)).toBe(
+      "clothing",
+    );
+    expect(within(panel()).getByText(new RegExp(`of ${total + 1} packed$`))).toBeTruthy();
+    expect(live().textContent).toBe("Added Sun hat to Clothing.");
+  });
+
+  it("says where a quick add went when the Packed filter hides it (#496)", async () => {
+    const { user } = setup();
+    await ready();
+    await user.click(within(panel()).getByRole("button", { name: /^Packed/ }));
+    await user.click(within(panel()).getByRole("button", { name: "Add an item to Clothing" }));
+    await user.type(within(panel()).getByPlaceholderText("+ Add an item"), "Sun hat{Enter}");
+    await waitFor(() => expect(live().textContent).toBe("Added Sun hat. It’s in To pack."));
+    expect(within(panel()).queryByText("Sun hat")).toBeNull();
+    expect(
+      within(panel())
+        .getByRole("button", { name: /^Packed/ })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
   });
 
   it("adds to the cube that is open, not to Clothing", async () => {
