@@ -1,5 +1,6 @@
 import { parseDate } from "@/domain/calc";
 import { packedTotals } from "@/domain/readiness";
+import { alpha3For } from "@/domain/iso-alpha3";
 import { automaticStamps, selectStamps } from "@/domain/stamps";
 import { isPastTrip, type LifecycleTrip } from "@/domain/trip-lifecycle";
 import { TRAVEL_MODE_CAPTION, routeTextShort, tripDisplayName } from "@/domain/trip-route";
@@ -158,17 +159,28 @@ export const UPCOMING_EYEBROW = "Upcoming · inks when you get home";
  * second country). A sticker for a later stop shows an automatic code the editor cannot change.
  */
 export function stickerEditable(trip: LifecycleTrip, stopIndex: number): boolean {
-  const slots = automaticStamps(trip.stops).length;
-  return stopIndex < slots && stopIndex < 2;
+  const automatic = automaticStamps(trip.stops);
+  if (stopIndex === 0) return automatic.length > 0;
+  // Slot 2 is the editor's SECOND route stamp. It is this sticker's only when that stamp is this stop's own country
+  // (PT, PT, ES: the second stop's sticker reads slot 2, but the editor labels slot 2 as ES).
+  const stop = trip.stops[stopIndex];
+  return (
+    stopIndex === 1 &&
+    automatic.length > 1 &&
+    !!stop &&
+    automatic[1].label === alpha3For(stop.location.countryCode)
+  );
 }
 
-export function stampTripView(trip: LifecycleTrip, today?: string): PastTripView {
+export function stampTripView(trip: LifecycleTrip, today: string): PastTripView {
   const first = trip.stops[0];
   const code = first ? stickerCode(trip, first, 0) : "";
   const stickerColour = first
     ? stickerLook(first.location.countryCode, first.location.city).colour
     : null;
   const totals = packedTotals(trip);
+  // A trip with no usable dates is neither: it keeps its "Date not set" line.
+  const upcoming = dateOf(trip.start) !== null && !isPastTrip(trip, today);
   const nights = Math.max(0, daysBetween(trip.start, trip.end));
   const facts = [
     monthYear(trip.start),
@@ -184,11 +196,10 @@ export function stampTripView(trip: LifecycleTrip, today?: string): PastTripView
     stickerColour,
     name: tripDisplayName(trip),
     monthYear: monthYear(trip.start),
-    upcoming: today !== undefined && !isPastTrip(trip, today),
-    eyebrow:
-      today !== undefined && !isPastTrip(trip, today)
-        ? UPCOMING_EYEBROW
-        : [code, compactMonthYear(trip.start)].filter(Boolean).join(" · "),
+    upcoming,
+    eyebrow: upcoming
+      ? UPCOMING_EYEBROW
+      : [code, compactMonthYear(trip.start)].filter(Boolean).join(" · "),
     facts,
     packed: totals.packed,
     total: totals.total,
@@ -277,7 +288,7 @@ export function stampsView(
   return {
     filterLabel: filterLabel(filter, today),
     stickers,
-    pastTrips: past.map((trip) => stampTripView(trip)),
+    pastTrips: past.map((trip) => stampTripView(trip, today)),
     totals: {
       trips: past.length,
       places: completedPlaces.size,

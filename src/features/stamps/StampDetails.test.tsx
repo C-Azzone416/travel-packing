@@ -311,4 +311,23 @@ describe("a sticker opens its details (#494)", () => {
       ).disabled,
     ).toBe(false);
   });
+
+  it("disables the action when the slot the editor would write is not the one the sticker shows", async () => {
+    // PT, PT, ES: Porto's sticker reads label slot 2, which the editor labels as the ES stamp.
+    const route = trip("pte", "2026-09-03", "2026-09-12");
+    const base = route.stops[0];
+    route.stops = [
+      base,
+      { ...base, location: place("pt2", "Porto", "PT", "Portugal") },
+      { ...base, location: place("es", "Madrid", "ES", "Spain") },
+    ];
+    const { user } = open(source(withTrips(route)));
+    await user.click(await screen.findByRole("button", { name: "Porto, Sep 2026, inked, 1 trip" }));
+    const dialog = screen.getByRole("dialog");
+    expect(
+      (within(dialog).getByRole("button", { name: "Edit stamp label" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(within(dialog).getByText("This sticker’s code comes from the route.")).toBeTruthy();
+  });
 });

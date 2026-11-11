@@ -6,6 +6,7 @@ import {
   filterLabel,
   placeHash,
   stampTripView,
+  stickerEditable,
   stickerLook,
   stampsView,
   tripMatchesFilter,
@@ -162,7 +163,7 @@ describe("Stamps view", () => {
 
     const view = stampsView([legacy], today, "all");
     expect(view.stickers[0]).toMatchObject({ month: "", monthYear: "Date not set" });
-    expect(stampTripView(legacy)).toMatchObject({
+    expect(stampTripView(legacy, today)).toMatchObject({
       monthYear: "Date not set",
       eyebrow: "DATE NOT SET",
     });
@@ -186,9 +187,9 @@ describe("Stamps view", () => {
     expect(view.stickers).toHaveLength(3);
     expect(view.stickers.find((entry) => entry.place === "Portland")?.region).toBe("UNITED STATES");
     expect(view.totals.countries).toBe(1);
-    expect(stampTripView(dayTrip).facts).toContain("drive · PDX · day trip");
-    expect(stampTripView(overnight).facts).toContain("1 night");
-    expect(stampTripView(noStops)).toMatchObject({
+    expect(stampTripView(dayTrip, today).facts).toContain("drive · PDX · day trip");
+    expect(stampTripView(overnight, today).facts).toContain("1 night");
+    expect(stampTripView(noStops, today)).toMatchObject({
       code: "",
       stickerColour: null,
       name: "Saved destination",
@@ -254,5 +255,46 @@ describe("the rolling window's boundaries (#446)", () => {
     expect(
       stampsView([onMarch1, febEnd], today, "rolling").pastTrips.map((entry) => entry.id),
     ).toEqual([onMarch1.id]);
+  });
+
+  describe("which label slot a sticker reads (#494)", () => {
+    const today = "2026-10-16";
+    // Two countries: the route shows two stamps, slot 1 for the first stop and slot 2 for the second.
+    function twoCountries(labels: [string | null, string | null]) {
+      const route = trip("Lisbon", "PT", "2026-09-01", "2026-09-05");
+      route.stops.push({ ...route.stops[0], location: place("Austin", "US") });
+      route.stampLabels = labels;
+      return route;
+    }
+    const codeOf = (route: LifecycleTrip, city: string) =>
+      stampsView([route], today, "all").stickers.find((entry) => entry.place === city)?.code;
+
+    it("shows the second slot's label only on the second stop's sticker", () => {
+      const route = twoCountries([null, "QQQ"]);
+      expect(codeOf(route, "Austin")).toBe("QQQ");
+      expect(codeOf(route, "Lisbon")).not.toBe("QQQ");
+    });
+
+    it("shows the first slot's label only on the first stop's sticker", () => {
+      const route = twoCountries(["ZZZ", null]);
+      expect(codeOf(route, "Lisbon")).toBe("ZZZ");
+      expect(codeOf(route, "Austin")).not.toBe("ZZZ");
+    });
+
+    it("calls a sticker editable only when the slot the editor writes is the one it shows", () => {
+      expect(stickerEditable(twoCountries([null, null]), 0)).toBe(true);
+      expect(stickerEditable(twoCountries([null, null]), 1)).toBe(true);
+      // PT, PT, ES: the editor's second stamp is ES, but the second stop's sticker reads that slot while being Portugal.
+      const route = trip("Lisbon", "PT", "2026-09-01", "2026-09-05");
+      route.stops.push(
+        { ...route.stops[0], location: place("Porto", "PT") },
+        { ...route.stops[0], location: place("Madrid", "ES") },
+      );
+      expect(stickerEditable(route, 0)).toBe(true);
+      expect(stickerEditable(route, 1)).toBe(false);
+      expect(stickerEditable(route, 2)).toBe(false);
+      // A route with no stamp has nothing to edit.
+      expect(stickerEditable({ ...route, stops: [] }, 0)).toBe(false);
+    });
   });
 });
