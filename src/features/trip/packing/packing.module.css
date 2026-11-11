@@ -782,7 +782,7 @@
   box-sizing: border-box;
   min-height: 44px;
   padding: 8px 16px;
-  border: 1px dashed var(--line2);
+  border: 1px dashed var(--muted);
   border-radius: 999px;
   background: none;
   color: var(--ink);
@@ -801,8 +801,8 @@
   bottom: 0;
   z-index: 1;
   padding-block: 8px;
-  border-top: 1px solid var(--line2);
-  background: var(--paper);
+  border-top: 1px solid var(--line);
+  background: var(--paper2);
 }
 .morningRow {
   display: flex;

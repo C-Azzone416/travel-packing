@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -206,5 +208,24 @@ describe("CubePanel quick add (#496)", () => {
     expect((await screen.findByRole("alert")).textContent).toBe(
       "Couldn’t add it. Nothing was changed.",
     );
+  });
+});
+
+describe("quick add colours (#496)", () => {
+  const css = readFileSync(
+    join(process.cwd(), "src/features/trip/packing/packing.module.css"),
+    "utf8",
+  );
+  const rule = (selector: string) =>
+    css.match(new RegExp(`^${selector.replace(/[.]/g, "\\.")} \\{([^}]*)\\}`, "m"))![1]!;
+
+  it("draws the button border in --muted (3:1 or better on the paper tokens), not --line2", () => {
+    expect(rule(".quickAddButton")).toMatch(/border: 1px dashed var\(--muted\);/);
+  });
+
+  it("gives the phone sticky footer an opaque --paper2 with a --line top border", () => {
+    const body = rule(".panelPhone .quickAdd");
+    expect(body).toMatch(/background: var\(--paper2\);/);
+    expect(body).toMatch(/border-top: 1px solid var\(--line\);/);
   });
 });
