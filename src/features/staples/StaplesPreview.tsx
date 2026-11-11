@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, type CSSProperties } from "react";
+import { useId, useRef, type CSSProperties } from "react";
 import { Icon } from "@/components/ui/Icon";
 import {
   MAX_NIGHTS,
@@ -50,6 +50,7 @@ export function StaplesPreview({
   const switchId = useId();
   const previewSwitchId = useId();
   const bodyId = useId();
+  const barRef = useRef<HTMLButtonElement>(null);
   const percent = ((nights - MIN_NIGHTS) / (MAX_NIGHTS - MIN_NIGHTS)) * 100;
 
   const controls = (
@@ -92,6 +93,7 @@ export function StaplesPreview({
       <aside className={styles.preview} aria-label="Preview">
         <div className={styles.previewTop}>
           <button
+            ref={barRef}
             type="button"
             className={styles.dockTitle}
             aria-expanded={on}
@@ -111,7 +113,15 @@ export function StaplesPreview({
         <div id={bodyId} className={styles.dockBody} hidden={!on}>
           {controls}
           <p className={styles.note}>{laundryNote(laundry, summary.saves)}</p>
-          <button type="button" className={styles.dockOff} onClick={() => onToggle(false)}>
+          <button
+            type="button"
+            className={styles.dockOff}
+            onClick={() => {
+              // The dock body hides with this click: move focus to the bar that stays visible.
+              barRef.current?.focus();
+              onToggle(false);
+            }}
+          >
             Turn off
           </button>
         </div>

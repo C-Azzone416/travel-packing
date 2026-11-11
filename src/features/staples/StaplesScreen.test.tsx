@@ -942,4 +942,22 @@ describe("phone", () => {
     expect(live().textContent).toBe("Preview off.");
     expect(rowText("underwear")).not.toContain("→");
   });
+
+  it("keeps keyboard focus on the bar when Turn off hides the dock", async () => {
+    const { user } = setup({ laptop: false });
+    await loaded();
+    const bar = screen.getByRole("button", { name: "Preview a trip" });
+    bar.focus();
+    await user.keyboard("{Enter}");
+    expect(bar.getAttribute("aria-expanded")).toBe("true");
+    // Tab order inside the open dock: slider, laundry switch, Turn off.
+    await user.tab();
+    await user.tab();
+    await user.tab();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Turn off" }));
+    await user.keyboard("{Enter}");
+    const after = screen.getByRole("button", { name: "Preview a trip" });
+    expect(after.getAttribute("aria-expanded")).toBe("false");
+    expect(document.activeElement).toBe(after);
+  });
 });
