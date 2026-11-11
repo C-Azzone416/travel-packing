@@ -135,6 +135,11 @@ export function TripScreen({
     };
   }, []);
   const packingView = usePackingViewState(undefined);
+  // What the screen shows NOW, for a message that is built when a write finishes (the view may have changed meanwhile).
+  const packingViewNow = useRef(packingView);
+  useEffect(() => {
+    packingViewNow.current = packingView;
+  });
   const laptop = useMinWidth(LAPTOP_MIN_WIDTH);
   // 768-1023: the laptop structure (rail and panel) inside the phone shell, with the action bar as the panel footer (#414).
   const tablet = useMinWidth(TABLET_MIN_WIDTH) && !laptop;
@@ -610,8 +615,9 @@ export function TripScreen({
     if (existing) return Promise.resolve({ ok: false, reason: "EXISTS", existingId: existing.id });
     return new Promise((resolve) => {
       void act(() => source.addItem(tripId, { name, category, neededQty: 1, cube }), {
+        // The new item is unpacked: only the Packed filter outside Edit list hides it, read when the save completes.
         announce: () =>
-          (packingView.filters[cube] ?? "all") === "packed"
+          !packingViewNow.current.editing && packingViewNow.current.filters[cube] === "packed"
             ? `Added ${name}. It’s in To pack.`
             : `Added ${name} to ${cubeName(cube)}.`,
         after: () => resolve({ ok: true }),

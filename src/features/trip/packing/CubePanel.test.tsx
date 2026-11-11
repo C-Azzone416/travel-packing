@@ -116,6 +116,8 @@ describe("CubePanel quick add (#496)", () => {
         />,
       );
       expect(screen.getAllByRole("button", { name: /^＋ Add/ })).toHaveLength(1);
+      expect(screen.getByRole("button", { name: /Add a Bathroom item/ })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Add an item to Toiletries" })).toBeNull();
       expect(screen.queryByPlaceholderText("+ Add an item")).toBeNull();
       unmount();
     }
@@ -208,6 +210,100 @@ describe("CubePanel quick add (#496)", () => {
     expect((await screen.findByRole("alert")).textContent).toBe(
       "Couldn’t add it. Nothing was changed.",
     );
+  });
+});
+
+describe("quick add while a write is pending (#496)", () => {
+  const normal = (over: Partial<CubePanelProps> = {}) => props({ editing: false, ...over });
+
+  it("cannot be dismissed: Cancel is disabled, Escape keeps the row, so a resubmit sends once", async () => {
+    const user = userEvent.setup();
+    let finish: (value: { ok: true }) => void = () => {};
+    const onAdd = vi.fn(() => new Promise<{ ok: true }>((resolve) => (finish = resolve)));
+    render(<CubePanel {...normal({ onAdd })} />);
+    await user.click(screen.getByRole("button", { name: "Add an item to Misc" }));
+    await user.type(screen.getByPlaceholderText("+ Add an item"), "Hat{Enter}");
+    expect((screen.getByRole("button", { name: "Cancel" }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("button", { name: "Add an item to Misc" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Add" }));
+    expect(onAdd).toHaveBeenCalledTimes(1);
+    finish({ ok: true });
+    await waitFor(() =>
+      expect((screen.getByRole("button", { name: "Add" }) as HTMLButtonElement).disabled).toBe(
+        false,
+      ),
+    );
+  });
+
+  it("keeps the field read-only while pending, so a newer draft is never cleared", async () => {
+    const user = userEvent.setup();
+    let finish: (value: { ok: true }) => void = () => {};
+    const onAdd = vi.fn(() => new Promise<{ ok: true }>((resolve) => (finish = resolve)));
+    render(<CubePanel {...normal({ onAdd })} />);
+    await user.click(screen.getByRole("button", { name: "Add an item to Misc" }));
+    const field = screen.getByPlaceholderText("+ Add an item") as HTMLInputElement;
+    await user.type(field, "Hat{Enter}");
+    expect(field.readOnly).toBe(true);
+    await user.type(field, "Gloves");
+    expect(field.value).toBe("Hat");
+    finish({ ok: true });
+    await waitFor(() => expect(field.value).toBe(""));
+    expect(field.readOnly).toBe(false);
+  });
+});
+
+describe("quick add scrolling (#496)", () => {
+  const withItems = (...rows: Array<[string, number]>) => {
+    const base = view("misc", "Misc");
+    return {
+      ...base,
+      total: rows.length,
+      items: rows.map(([id, packed]) => ({ ...base.items[0]!, id, name: id, packed })),
+    };
+  };
+
+  it("under Packed, adding an unpacked item scrolls nowhere", async () => {
+    const user = userEvent.setup();
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    const before = withItems(["old", 1]);
+    const { rerender } = render(
+      <CubePanel {...props({ editing: false, filter: "packed", view: before })} />,
+    );
+    await user.click(screen.getByRole("button", { name: "Add an item to Misc" }));
+    await user.type(screen.getByPlaceholderText("+ Add an item"), "Hat{Enter}");
+    rerender(
+      <CubePanel
+        {...props({ editing: false, filter: "packed", view: withItems(["old", 1], ["Hat", 0]) })}
+      />,
+    );
+    await waitFor(() =>
+      expect((screen.getByRole("button", { name: "Add" }) as HTMLButtonElement).disabled).toBe(
+        false,
+      ),
+    );
+    expect(scroll).not.toHaveBeenCalled();
+  });
+
+  it("under All, scrolls to the saved row, not to the last one", async () => {
+    const user = userEvent.setup();
+    const scrolled: string[] = [];
+    Element.prototype.scrollIntoView = function (this: Element) {
+      scrolled.push(this.getAttribute("data-item-id") ?? "");
+    };
+    const { rerender } = render(
+      <CubePanel {...props({ editing: false, view: withItems(["a", 0], ["z", 0]) })} />,
+    );
+    await user.click(screen.getByRole("button", { name: "Add an item to Misc" }));
+    await user.type(screen.getByPlaceholderText("+ Add an item"), "Hat{Enter}");
+    rerender(
+      <CubePanel {...props({ editing: false, view: withItems(["a", 0], ["Hat", 0], ["z", 0]) })} />,
+    );
+    await waitFor(() => expect(scrolled).toEqual(["Hat"]));
   });
 });
 

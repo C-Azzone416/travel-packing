@@ -297,7 +297,8 @@ function AddRow({
       noValidate
       autoComplete="off"
       onKeyDown={(event) => {
-        if (onCancel && event.key === "Escape") {
+        // A write in flight cannot be dismissed: the row stays, so no remount resets the guard or drops a newer draft.
+        if (onCancel && !saving && event.key === "Escape") {
           event.stopPropagation();
           onCancel();
         }
@@ -310,6 +311,7 @@ function AddRow({
           className={styles.addInput}
           name="packing-item-name"
           value={name}
+          readOnly={saving}
           placeholder="+ Add an item"
           maxLength={ADD_ITEM_NAME_MAX + 20}
           autoComplete="off"
@@ -326,7 +328,7 @@ function AddRow({
         Add
       </button>
       {onCancel ? (
-        <button type="button" className={styles.addCancel} onClick={onCancel}>
+        <button type="button" className={styles.addCancel} disabled={saving} onClick={onCancel}>
           Cancel
         </button>
       ) : null}
@@ -436,15 +438,23 @@ export function CubePanel({
   const lockedOn = view.items.some((item) => item.section === "packlast");
   const switchId = useId();
   const listRef = useRef<HTMLUListElement>(null);
-  const scrollNew = useRef(false);
-  // A saved quick add brings its new row into view (All / To pack show it; Packed does not list it).
+  // The ids the cube had when a quick add was sent. The saved item is the one that is not among them; only that row is scrolled
+  // to, and only if the current view lists it (a Packed filter hides an unpacked newcomer, and then the scroll stays put).
+  const idsBeforeAdd = useRef<Set<string> | null>(null);
   useEffect(() => {
-    if (!scrollNew.current) return;
-    scrollNew.current = false;
-    listRef.current?.lastElementChild?.scrollIntoView?.({ block: "nearest" });
-  }, [view.total]);
+    const before = idsBeforeAdd.current;
+    if (!before) return;
+    const saved = view.items.find((item) => !before.has(item.id));
+    if (!saved) return;
+    idsBeforeAdd.current = null;
+    if (!shown.some((item) => item.id === saved.id)) return;
+    listRef.current
+      ?.querySelector(`[data-item-id="${saved.id}"]`)
+      ?.scrollIntoView?.({ block: "nearest" });
+  });
   const onSubmitted = (saved: boolean | null) => {
-    scrollNew.current = saved === null || saved === true;
+    idsBeforeAdd.current =
+      saved === false ? null : (idsBeforeAdd.current ?? new Set(view.items.map((item) => item.id)));
   };
   // One add control per cube: Toiletries adds through the Bathroom control in its bag step, every other cube through this.
   const addControl = extra ? null : editing ? (

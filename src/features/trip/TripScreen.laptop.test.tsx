@@ -359,6 +359,26 @@ describe("Edit list", () => {
     ).toBe("true");
   });
 
+  it("describes the view at completion: Packed inside Edit list shows the row, so no To pack message (#496)", async () => {
+    const { user } = setup();
+    await ready();
+    await user.click(within(panel()).getByRole("button", { name: /^Packed/ }));
+    await user.click(within(panel()).getByRole("button", { name: "Edit list" }));
+    await user.type(within(panel()).getByPlaceholderText("+ Add an item"), "Sun hat{Enter}");
+    await waitFor(() => expect(live().textContent).toBe("Added Sun hat to Clothing."));
+    expect(within(panel()).getByText("Sun hat")).toBeTruthy();
+  });
+
+  it("describes the view at completion: a filter changed during the write (#496)", async () => {
+    const { user } = setup();
+    await ready();
+    await user.click(within(panel()).getByRole("button", { name: "Add an item to Clothing" }));
+    await user.type(within(panel()).getByPlaceholderText("+ Add an item"), "Sun hat");
+    await user.click(within(panel()).getByRole("button", { name: "Add" }));
+    await user.click(within(panel()).getByRole("button", { name: /^Packed/ }));
+    await waitFor(() => expect(live().textContent).toMatch(/^Added Sun hat/));
+  });
+
   it("adds to the cube that is open, not to Clothing", async () => {
     const { user, base } = setup();
     await ready();
