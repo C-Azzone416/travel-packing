@@ -27,9 +27,20 @@ export interface EditStampSheetProps {
   saving: boolean;
   /** The last save did not go through. The sheet stays open and Save tries again. */
   failed?: boolean;
+  /** Another write is pending or failed (#494): Save waits, and this says why. */
+  blockedNote?: string;
+  /** The failed save's Try again is in flight: Try again stays mounted but inert, so focus stays in the dialog. */
+  retrying?: boolean;
+  /** Replays the failed save (the same tracked read and write). With `failed`, the sheet offers it as "Try again" and Save waits. */
+  onRetry?: () => void;
   onClose: () => void;
   /** The typed text for each slot, or null for automatic. The server trims, upper-cases and validates it again. */
-  onSave: (slot1: string | null, slot2: string | null) => void;
+  onSave: (
+    slot1: string | null,
+    slot2: string | null,
+    /** Which slots the person actually changed, judged on what they typed, not on the normalised value. */
+    changed: readonly [boolean, boolean],
+  ) => void;
 }
 
 type Mode = "automatic" | "custom";
@@ -54,10 +65,15 @@ export function EditStampSheet({
   departure,
   saving,
   failed = false,
+  retrying = false,
+  blockedNote,
+  onRetry,
   onClose,
   onSave,
 }: EditStampSheetProps) {
   const formId = useId();
+  // While a save or its Try again is pending, or waiting on Try again, the fields are read-only: what is shown is what is sent.
+  const locked = saving || retrying || (failed && Boolean(onRetry));
   const labels = saved ?? NO_STAMP_LABELS;
   const slots = Math.max(automatic.length, 1);
   const [modes, setModes] = useState<Mode[]>(
@@ -92,12 +108,17 @@ export function EditStampSheet({
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    if (saving || !dirty) return;
+    if (locked || !dirty) return;
     if (invalid) {
       setTouched([true, true]);
       return;
     }
-    onSave(drafts[0].value, slots > 1 ? drafts[1].value : null);
+    const changed = [0, 1].map(
+      (index) =>
+        modes[index] !== (labels[index] ? "custom" : "automatic") ||
+        (modes[index] === "custom" && texts[index] !== (labels[index] ?? "")),
+    ) as [boolean, boolean];
+    onSave(drafts[0].value, slots > 1 ? drafts[1].value : null, changed);
   }
 
   return (
@@ -109,7 +130,11 @@ export function EditStampSheet({
       onClose={onClose}
       actions={
         <>
-          <Button type="submit" form={formId} disabled={saving || !dirty || invalid}>
+          <Button
+            type="submit"
+            form={formId}
+            disabled={locked || !dirty || invalid || Boolean(blockedNote)}
+          >
             {saving ? "Saving…" : "Save"}
           </Button>
           <Button variant="secondary" onClick={onClose}>
@@ -172,6 +197,7 @@ export function EditStampSheet({
                         name={modeName}
                         value={option}
                         checked={mode === option}
+                        disabled={locked}
                         onChange={() => setMode(index, option)}
                       />
                       <span>{option === "automatic" ? "Automatic" : "Custom"}</span>
@@ -193,6 +219,7 @@ export function EditStampSheet({
                         className="stamp-input"
                         value={text}
                         maxLength={3}
+                        readOnly={locked}
                         autoCapitalize="characters"
                         autoComplete="off"
                         spellCheck={false}
@@ -224,6 +251,7 @@ export function EditStampSheet({
                   <button
                     type="button"
                     className="link-button"
+                    disabled={locked}
                     onClick={() => setMode(index, "automatic")}
                   >
                     Reset to automatic
@@ -233,10 +261,22 @@ export function EditStampSheet({
             </div>
           );
         })}
-        {failed ? (
+        {blockedNote ? <p className="tiny muted">{blockedNote}</p> : null}
+        {failed && !retrying ? (
           <p className="field-error" role="alert">
-            Couldn’t save the stamp. Nothing changed. Press Save to try again.
+            {onRetry
+              ? "Couldn’t save the stamp. Your changes are kept. Press Try again."
+              : "Couldn’t save the stamp. Nothing changed. Press Save to try again."}
           </p>
+        ) : null}
+        {failed && onRetry ? (
+          <Button
+            variant="secondary"
+            aria-disabled={retrying || undefined}
+            onClick={retrying ? undefined : onRetry}
+          >
+            Try again
+          </Button>
         ) : null}
       </form>
     </ModalSheet>

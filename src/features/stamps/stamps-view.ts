@@ -1,6 +1,6 @@
 import { parseDate } from "@/domain/calc";
 import { packedTotals } from "@/domain/readiness";
-import { selectStamps } from "@/domain/stamps";
+import { automaticStamps, selectStamps } from "@/domain/stamps";
 import { isPastTrip, type LifecycleTrip } from "@/domain/trip-lifecycle";
 import { TRAVEL_MODE_CAPTION, routeTextShort, tripDisplayName } from "@/domain/trip-route";
 import { daysBetween, type TripStop } from "@/domain/trip-stops";
@@ -23,6 +23,8 @@ export interface StickerView {
   tilt: number;
   tripId: string;
   accessibleName: string;
+  /** The code comes from a later stop's own route stamp, which the label editor cannot change (#494). */
+  codeFromRoute: boolean;
 }
 
 export interface PastTripView {
@@ -241,6 +243,9 @@ export function stampsView(
           colour: look.colour,
           tilt: look.tilt,
           tripId: chosen.trip.id,
+          codeFromRoute:
+            chosen.stopIndex > 1 ||
+            (chosen.stopIndex === 1 && automaticStamps(chosen.trip.stops).length < 2),
           accessibleName: isUpcoming
             ? `${chosenStop.location.city}, ${monthYear(date)}, upcoming, not inked yet`
             : `${chosenStop.location.city}, ${monthYear(date)}, inked, ${count} ${count === 1 ? "trip" : "trips"}`,

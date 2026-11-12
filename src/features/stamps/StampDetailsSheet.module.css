@@ -54,6 +54,10 @@
 }
 /* 195px / 200% text: a smaller close-up. */
 @media (max-width: 239px) {
+  /* The pinned footer would cover the heading and Close at 195px / 200% text: let it scroll with the body there. */
+  :global(.modal):has(.details) :global(.modal-actions) {
+    position: static;
+  }
   .close {
     padding-inline: 12px;
   }

@@ -500,6 +500,13 @@ describe("themes", () => {
 });
 
 describe("stamp labels (#151)", () => {
+  it("setStampLabelsAction leaves a slot marked unchanged exactly as stored (#494)", async () => {
+    const trip = await seedTrip(db(), OWNER.userId);
+    changed(await setStampLabelsAction(trip.id, "ABC", null));
+    const part = changed(await setStampLabelsAction(trip.id, null, "ZZZ", [false, false]));
+    expect(part.trip.stampLabels).toEqual(["ABC", null]);
+  });
+
   it("setStampLabelsAction stores the typed label upper-cased, clears it, and is validated", async () => {
     const trip = await seedTrip(db(), OWNER.userId);
     const set = changed(await setStampLabelsAction(trip.id, " abc ", null));

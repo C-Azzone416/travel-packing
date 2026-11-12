@@ -151,7 +151,12 @@ export interface TripsSource {
    * or null / blank / the automatic label for no override. Rejects anything else, and a label for a second stamp the route
    * does not have.
    */
-  setStampLabels(tripId: string, slot1: string | null, slot2: string | null): Promise<TripChange>;
+  setStampLabels(
+    tripId: string,
+    slot1: string | null,
+    slot2: string | null,
+    changed?: readonly [boolean, boolean],
+  ): Promise<TripChange>;
   /** Replace the trip's route (1-6 stops). Dates, day counts and calculated items follow; rejects an invalid route. */
   setStops(tripId: string, stops: TripStop[], basedOn?: string): Promise<TripChange>;
   /** Change how the trip is travelled (Fly / Drive / Train or other); the origin and the name are left alone. */
@@ -429,10 +434,11 @@ export function createMemoryTripsSource(
       if (!isThemeId(theme)) return Promise.reject(new TripsSourceError("INVALID_INPUT"));
       return direct(id, (trip) => ({ ...trip, theme }));
     },
-    setStampLabels: (id, slot1, slot2) =>
+    setStampLabels: (id, slot1, slot2, changed) =>
       direct(id, (trip) => {
         const automatic = automaticStamps(trip.stops);
         const stored = [slot1, slot2].map((raw, index) => {
+          if (changed?.[index] === false) return trip.stampLabels?.[index] ?? null;
           if (raw === null) return null;
           const label = normaliseStampLabel(raw);
           if (!label.ok || (index === 1 && label.label !== null && automatic.length < 2)) {

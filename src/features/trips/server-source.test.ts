@@ -119,7 +119,7 @@ describe("createServerTripsSource: per-trip commands", () => {
       reviewWeatherAgain: () => source.reviewWeatherAgain("t"),
       updatePreferences: () => source.updatePreferences("t", config, "stamp"),
       setTheme: () => source.setTheme("t", "beach"),
-      setStampLabels: () => source.setStampLabels("t", "ABC", null),
+      setStampLabels: () => source.setStampLabels("t", "ABC", null, [true, false]),
       setStops: () => source.setStops("t", [], "T1"),
       setTravelMode: () => source.setTravelMode("t", "drive", "T1"),
     }) satisfies Record<(typeof TRIP_COMMANDS)[number], () => Promise<unknown>>;
@@ -150,7 +150,7 @@ describe("createServerTripsSource: per-trip commands", () => {
       ["reviewWeatherAgain", "t"],
       ["updatePreferences", "t", config, "stamp"],
       ["setTheme", "t", "beach"],
-      ["setStampLabels", "t", "ABC", null],
+      ["setStampLabels", "t", "ABC", null, [true, false]],
       ["setStops", "t", [], "T1"],
       ["setTravelMode", "t", "drive", "T1"],
     ]);
