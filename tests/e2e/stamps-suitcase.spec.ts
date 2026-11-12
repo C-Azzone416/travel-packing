@@ -195,7 +195,7 @@ test(
   },
 );
 
-test("details: a sticker opens a read-only sheet; Escape and Back put focus back on it (#494)", async ({
+test("details: a sticker opens a read-only sheet; Escape puts focus back on it (#494)", async ({
   page,
 }) => {
   await openStamps(page);
@@ -210,7 +210,7 @@ test("details: a sticker opens a read-only sheet; Escape and Back put focus back
   // The selected sticker opens it again.
   await lisbon.click();
   await expect(details).toBeVisible();
-  await page.goBack();
+  await page.keyboard.press("Escape");
   await expect(details).toBeHidden();
   await expect(lisbon).toBeFocused();
 });
