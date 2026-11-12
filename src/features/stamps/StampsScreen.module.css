@@ -586,7 +586,7 @@
   }
   .stickerButton[data-shape="rounded"] .stickerCode,
   .stickerButton[data-shape="squared"] .stickerCode {
-    font-size: 24px;
+    font-size: 32px;
   }
   .stickerRegion,
   .stickerMonth {

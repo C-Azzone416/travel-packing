@@ -225,8 +225,7 @@ export function stampsView(
       const date = chosen.trip.start;
       const look = stickerLook(chosenStop.location.countryCode, chosenStop.location.city);
       const count = complete.length;
-      // A trip with no usable start date is never "upcoming": it keeps its "Date not set" sticker.
-      const isUpcoming = count === 0 && dateOf(chosen.trip.start) !== null;
+      const isUpcoming = count === 0;
       return {
         order: date,
         sticker: {
@@ -244,7 +243,7 @@ export function stampsView(
           tripId: chosen.trip.id,
           accessibleName: isUpcoming
             ? `${chosenStop.location.city}, ${monthYear(date)}, upcoming, not inked yet`
-            : `${chosenStop.location.city}, ${monthYear(date)}, inked, ${Math.max(1, count)} ${Math.max(1, count) === 1 ? "trip" : "trips"}`,
+            : `${chosenStop.location.city}, ${monthYear(date)}, inked, ${count} ${count === 1 ? "trip" : "trips"}`,
         },
       };
     })

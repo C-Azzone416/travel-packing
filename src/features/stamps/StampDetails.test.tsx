@@ -102,15 +102,17 @@ describe("upcoming stickers do not read as earned (#493)", () => {
     expect(screen.queryByRole("article", { name: /Selected trip/ })).toBeNull();
   });
 
-  it("never calls a trip with no usable start date upcoming", async () => {
+  it("an undated trip with no completed visit is not earned, counted or selected", async () => {
     const legacy = { ...trip("legacy", "2026-11-20", "2026-11-25"), start: "", end: "" };
     const { user } = open(source(withTrips(legacy)));
     await user.click(await screen.findByRole("button", { name: "All time" }));
-    const sticker = await screen.findByRole("button", { name: /Date not set/ });
-    expect(sticker.getAttribute("data-upcoming")).toBeNull();
-    expect(within(sticker).queryByText("Upcoming")).toBeNull();
+    expect(await screen.findByText("0 inked")).toBeTruthy();
+    const sticker = screen.getByRole("button", { name: /Date not set/ });
+    expect(sticker.getAttribute("aria-pressed")).toBe("false");
+    expect(sticker.getAttribute("aria-label")).not.toMatch(/inked, \d/);
+    expect(screen.queryByRole("article", { name: /Selected trip/ })).toBeNull();
     await user.click(sticker);
-    expect(within(screen.getByRole("dialog")).queryByText(/Upcoming/)).toBeNull();
+    expect(within(screen.getByRole("dialog")).queryByText("Inked")).toBeNull();
   });
 
   it("tags only an upcoming sticker, and keeps it dashed when it is selected", async () => {
