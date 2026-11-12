@@ -48,8 +48,17 @@ export function PackingPhone({
   const views = buildCubeViews(trip);
   // Laundry is offered only where it would change a quantity (a short trip hides it, #412).
   const laundryVisible = laundryControlVisible(trip);
-  const { chosen, setChosen, filters, setFilters, editing, setEditing, packing, setPacking } =
-    viewState;
+  const {
+    chosen,
+    setChosen,
+    filters,
+    setFilters,
+    editing,
+    setEditing,
+    packing,
+    setPacking,
+    addPending,
+  } = viewState;
   const [said, setSaid] = useState("");
   const panelId = useId();
   const titleId = useId();
@@ -178,6 +187,7 @@ export function PackingPhone({
           onFilter={(value) => setFilters((all) => ({ ...all, [current.cube]: value }))}
           editing={editing}
           onEditing={setEditing}
+          editLocked={addPending.some((entry) => entry.cube === current.cube)}
           className={styles.pills}
           phone
         />
@@ -196,6 +206,7 @@ export function PackingPhone({
             onFilter={(value) => setFilters((all) => ({ ...all, [current.cube]: value }))}
             editing={editing}
             onEditing={setEditing}
+            editLocked={addPending.some((entry) => entry.cube === current.cube)}
             laundry={trip.config.laundry}
             failedRows={failedRows}
             onTick={onTick}

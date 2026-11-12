@@ -171,3 +171,8 @@
     clip: auto;
   }
 }
+
+.pill:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
