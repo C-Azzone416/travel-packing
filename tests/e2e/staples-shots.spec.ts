@@ -2,13 +2,14 @@ import { mkdirSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 import { ownerEmailFor, signInAsOwner } from "./helpers/auth";
 import { setOwnerAppearance } from "./helpers/database";
+import { enlargeText } from "./helpers/layout";
 
 // Rendered screenshots of the redesigned Staples screen (#384) for design's review, next to the design images. Run with
 // STAPLES_REDESIGN_SHOTS=<folder>; without it these are skipped. Laptop: the list, and the list with a row's inline editor
 // open. Phone: the list (laundry off, as in st-p) and the bottom sheet. Widths 1280, 390 and 195, in all three schemes.
 const SHOTS = process.env.STAPLES_REDESIGN_SHOTS;
 const THEMES = ["ocean", "evergreen", "dusk"] as const;
-// `expand`: open the phone dock for the shot (st-p shows it open); the others show its default (collapsed on a short or narrow screen).
+// The preview is off by default; each cell is shot off, then on.
 const SIZES = [
   { width: 1280, height: 1000, tag: "1280", expand: false },
   { width: 390, height: 844, tag: "390", expand: true },
@@ -24,7 +25,7 @@ async function shot(page: Page, name: string, fullPage: boolean) {
 }
 
 for (const theme of THEMES) {
-  for (const { width, height, tag: size, expand } of SIZES) {
+  for (const { width, height, tag: size } of SIZES) {
     const tag = `${theme}-${size}`;
     test(`${tag}: the Staples screen`, async ({ page }) => {
       test.setTimeout(120_000);
@@ -65,27 +66,30 @@ for (const theme of THEMES) {
         const editor = page.getByRole("group", { name: "Edit Tees" });
         await editor.getByRole("button", { name: "per day" }).click();
         await editor.getByRole("switch", { name: "Fewer with laundry" }).click();
-        await expect(row.locator("ins")).toHaveText("× 3");
+        await expect(row).toContainText("1 per day");
         await shot(page, `${tag}-editor`, true);
         await row.getByRole("button", { name: /^Tees/ }).click();
       }
-      if (!laptop) {
-        // st-p shows the laundry switch off in the dock.
-        const dock = page.getByRole("button", { name: /^Preview:/ });
-        if (expand) {
-          if ((await dock.getAttribute("aria-expanded")) === "false") await dock.click();
-          await page.getByRole("switch", { name: "Laundry on the trip" }).uncheck();
-        } else {
-          // The default: collapsed on a screen under 700px tall or 360px wide, so the list stays usable.
-          await expect(dock).toHaveAttribute("aria-expanded", "false");
-        }
-      }
+      // The preview is opt-in (#491): the list is shot with it off (the saved rules), then with it on.
+      const turnOn = async () => {
+        if (laptop) await page.getByRole("switch", { name: "Preview a trip", exact: true }).check();
+        else await page.getByRole("button", { name: "Preview a trip", exact: true }).click();
+      };
       await page.waitForTimeout(300);
       await shot(page, `${tag}-list`, laptop);
+      await turnOn();
+      await page.waitForTimeout(300);
+      await shot(page, `${tag}-list-preview`, laptop);
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
       );
       expect(overflow).toBeLessThanOrEqual(0);
+      if (size === "195") {
+        // 200% text, the stacking case of #491.
+        await enlargeText(page, page.locator("[data-staple-id]").first());
+        await page.waitForTimeout(300);
+        await shot(page, `${tag}-list-preview-200`, true);
+      }
     });
   }
 }
