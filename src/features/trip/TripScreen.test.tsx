@@ -1064,16 +1064,19 @@ describe("editing the stamp (#151)", () => {
     await user.click(screen.getByRole("button", { name: "Save" }));
     const sheet = screen.getByRole("dialog", { name: "Stamp label" });
     await waitFor(() =>
-      expect(within(sheet).getByText(/Couldn’t save the stamp\. Nothing changed/)).toBeTruthy(),
+      expect(
+        within(sheet).getByText(/Couldn’t save the stamp\. Your changes are kept/),
+      ).toBeTruthy(),
     );
     expect(tripOf(source).stampLabels ?? [null, null]).toEqual([null, null]);
+    expect(within(sheet).getByRole("button", { name: "Save" }).hasAttribute("disabled")).toBe(true);
     fail = false;
-    await user.click(within(sheet).getByRole("button", { name: "Save" }));
+    await user.click(within(sheet).getByRole("button", { name: "Try again" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(tripOf(source).stampLabels).toEqual(["ABC", null]);
   });
 
-  it("is cleared when the sheet is closed, so reopening starts clean", async () => {
+  it("is gated after a failed save: Edit stamp stays disabled until the save succeeds (#494)", async () => {
     const { user } = setup("san-diego", (base) => ({
       ...base,
       setStampLabels: () => Promise.reject(new Error("nope")),
@@ -1086,8 +1089,9 @@ describe("editing the stamp (#151)", () => {
     await user.click(screen.getByRole("button", { name: "Save" }));
     await screen.findByText(/Couldn’t save the stamp/);
     await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(editButton().getAttribute("aria-disabled")).toBe("true");
     await user.click(editButton());
-    expect(screen.queryByText(/Couldn’t save the stamp/)).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "Stamp label" })).toBeNull();
   });
 });
 

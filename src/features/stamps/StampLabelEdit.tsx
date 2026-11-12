@@ -8,6 +8,7 @@ import { automaticStamps } from "@/domain/stamps";
 import type { LifecycleTrip } from "@/domain/trip-lifecycle";
 import { EditStampSheet } from "@/features/trip/EditStampSheet";
 import { useTripsSource } from "@/features/trips/TripsSourceProvider";
+import type { TripsSource } from "@/features/trips/trips-source";
 import styles from "./StampLabelEdit.module.css";
 
 export const LABEL_SAVING = "Saving the last change…";
@@ -21,9 +22,46 @@ const LABEL_BACK = "Stamp label editing available again.";
  */
 export function useStampLabelGate(): string | null {
   const { pending, status } = useSaveStatus();
-  if (status === "error") return LABEL_FAILED;
-  return pending ? LABEL_SAVING : null;
+  // A retry in flight reads as saving, not as the failure it is retrying.
+  if (pending) return LABEL_SAVING;
+  return status === "error" ? LABEL_FAILED : null;
 }
+
+/** What an open label editor shows from the gate: the one Try again for its own failed save, else the gate's note. */
+export function useEditorGate(failed: boolean, saving: boolean) {
+  const gate = useStampLabelGate();
+  const { retry } = useSaveStatus();
+  const retryable = failed && gate === LABEL_FAILED;
+  return {
+    failed: retryable,
+    onRetry: retry,
+    blockedNote: saving || retryable ? undefined : (gate ?? undefined),
+  };
+}
+
+type Labels = readonly [string | null, string | null];
+
+/**
+ * The write behind every label Save: read the trip fresh, keep the server's value for each slot the person did not change,
+ * and write both. Run it inside track(), so a Retry reads again.
+ */
+export async function saveFreshLabels(
+  source: TripsSource,
+  tripId: string,
+  draft: Labels,
+  changed: readonly [boolean, boolean],
+) {
+  const fresh = (await source.getTrip(tripId)).stampLabels ?? [null, null];
+  return source.setStampLabels(
+    tripId,
+    changed[0] ? draft[0] : fresh[0],
+    changed[1] ? draft[1] : fresh[1],
+  );
+}
+
+/** Whether the trip has a stamp the editor can change: an automatic one, or a saved first label. */
+export const hasEditableStamp = (trip: LifecycleTrip): boolean =>
+  automaticStamps(trip.stops).length > 0 || Boolean(trip.stampLabels?.[0]);
 
 /** "Edit stamp label" with its helper line. Disabled with aria-disabled so it stays focusable. */
 export function StampLabelAction({
@@ -47,7 +85,7 @@ export function StampLabelAction({
     setAnnounce(gate ?? (wasBlocked.current ? LABEL_BACK : ""));
     wasBlocked.current = gate !== null;
   }, [gate, fromRoute]);
-  if (trip.stops.length === 0) return null;
+  if (!hasEditableStamp(trip)) return null;
   return (
     <div className={styles.action}>
       <Button
@@ -55,8 +93,11 @@ export function StampLabelAction({
         small={small}
         aria-disabled={helper ? true : undefined}
         aria-describedby={helper ? helpId : undefined}
-        onClick={() => {
-          if (!helper) onEdit();
+        onClick={(event) => {
+          if (helper) return;
+          // The sheet gives focus back to what had it when it opened: take it first (a tap may not focus a button).
+          event.currentTarget.focus({ preventScroll: true });
+          onEdit();
         }}
       >
         Edit stamp label
@@ -90,23 +131,19 @@ export function StampLabelEditor({
   const source = useTripsSource();
   const { track } = useSaveStatus();
   const toast = useToast();
-  const gate = useStampLabelGate();
   const [saving, setSaving] = useState(false);
   const [failed, setFailed] = useState(false);
-  const opened = useRef(trip.stampLabels ?? [null, null]);
+  const editor = useEditorGate(failed, saving);
 
-  const save = (slot1: string | null, slot2: string | null) => {
+  const save = (
+    slot1: string | null,
+    slot2: string | null,
+    changed: readonly [boolean, boolean],
+  ) => {
     setFailed(false);
     setSaving(true);
-    const draft = [slot1, slot2];
     track(
-      async () => {
-        const fresh = (await source.getTrip(trip.id)).stampLabels ?? [null, null];
-        const [a, b] = draft.map((value, slot) =>
-          value !== opened.current[slot] ? value : fresh[slot],
-        );
-        return source.setStampLabels(trip.id, a, b);
-      },
+      () => saveFreshLabels(source, trip.id, [slot1, slot2], changed),
       (change) => {
         setSaving(false);
         onSaved(change.trip);
@@ -126,8 +163,9 @@ export function StampLabelEditor({
       saved={trip.stampLabels}
       departure={trip.start}
       saving={saving}
-      failed={failed}
-      blockedNote={saving ? undefined : (gate ?? undefined)}
+      failed={editor.failed}
+      onRetry={editor.onRetry}
+      blockedNote={editor.blockedNote}
       onClose={onClose}
       onSave={save}
     />

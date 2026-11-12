@@ -156,10 +156,13 @@ export function StickerTeaser({
 function SelectedTrip({
   trip,
   full,
+  fromRoute,
   onEdit,
 }: {
   trip: PastTripView;
   full: LifecycleTrip | null;
+  /** The selected sticker's code comes from the route, so the action is disabled here as in its details. */
+  fromRoute: boolean;
   onEdit?: () => void;
 }) {
   return (
@@ -170,7 +173,9 @@ function SelectedTrip({
       <h3>{trip.name}</h3>
       <p>{trip.facts}</p>
       <div className={styles.selectedActions}>
-        {onEdit && full ? <StampLabelAction small trip={full} onEdit={onEdit} /> : null}
+        {onEdit && full ? (
+          <StampLabelAction small trip={full} fromRoute={fromRoute} onEdit={onEdit} />
+        ) : null}
         <Link
           className={buttonClassName({ variant: "secondary", small: true })}
           href={`/trips/new?copy=${trip.id}`}
@@ -241,6 +246,8 @@ export function StampsContent({
 }) {
   const [filter, setFilter] = useState<StampFilter>(initialTripId ? "all" : "rolling");
   const [selectedId, setSelectedId] = useState<string | null>(initialTripId);
+  // The sticker that was selected (its key), "" for a trip picked from the list, null when nothing was picked yet.
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [detailKey, setDetailKey] = useState<string | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
 
@@ -270,6 +277,14 @@ export function StampsContent({
   }, [view, state.trips]);
   const activeId = selectedId && visibleIds.has(selectedId) ? selectedId : defaultId;
   const selectedTrip = activeId ? (state.trips.find((trip) => trip.id === activeId) ?? null) : null;
+  const cardSticker =
+    selectedKey === ""
+      ? undefined
+      : view.stickers.find(
+          (sticker) =>
+            sticker.tripId === activeId &&
+            (selectedKey === null ? !sticker.upcoming : sticker.key === selectedKey),
+        );
   const selected = selectedTrip ? stampTripView(selectedTrip, today) : null;
   const detailSticker = detailKey
     ? (view.stickers.find((sticker) => sticker.key === detailKey) ?? null)
@@ -321,6 +336,7 @@ export function StampsContent({
                   selected={activeId === sticker.tripId}
                   onSelect={() => {
                     setSelectedId(sticker.tripId);
+                    setSelectedKey(sticker.key);
                     setDetailKey(sticker.key);
                   }}
                 />
@@ -351,7 +367,12 @@ export function StampsContent({
         <section className={styles.past} aria-labelledby="past-trips-title">
           <h2 id="past-trips-title">Past trips</h2>
           {selected ? (
-            <SelectedTrip trip={selected} full={selectedTrip} onEdit={onEditTrip} />
+            <SelectedTrip
+              trip={selected}
+              full={selectedTrip}
+              fromRoute={cardSticker?.codeFromRoute ?? false}
+              onEdit={onEditTrip}
+            />
           ) : null}
           {view.pastTrips.length ? (
             <div className={styles.tripList}>
@@ -360,7 +381,10 @@ export function StampsContent({
                   key={trip.id}
                   trip={trip}
                   selected={activeId === trip.id}
-                  onSelect={() => setSelectedId(trip.id)}
+                  onSelect={() => {
+                    setSelectedId(trip.id);
+                    setSelectedKey("");
+                  }}
                 />
               ))}
             </div>

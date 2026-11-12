@@ -29,9 +29,16 @@ export interface EditStampSheetProps {
   failed?: boolean;
   /** Another write is pending or failed (#494): Save waits, and this says why. */
   blockedNote?: string;
+  /** Replays the failed save (the same tracked read and write). With `failed`, the sheet offers it as "Try again" and Save waits. */
+  onRetry?: () => void;
   onClose: () => void;
   /** The typed text for each slot, or null for automatic. The server trims, upper-cases and validates it again. */
-  onSave: (slot1: string | null, slot2: string | null) => void;
+  onSave: (
+    slot1: string | null,
+    slot2: string | null,
+    /** Which slots the person actually changed, judged on what they typed, not on the normalised value. */
+    changed: readonly [boolean, boolean],
+  ) => void;
 }
 
 type Mode = "automatic" | "custom";
@@ -57,6 +64,7 @@ export function EditStampSheet({
   saving,
   failed = false,
   blockedNote,
+  onRetry,
   onClose,
   onSave,
 }: EditStampSheetProps) {
@@ -100,7 +108,12 @@ export function EditStampSheet({
       setTouched([true, true]);
       return;
     }
-    onSave(drafts[0].value, slots > 1 ? drafts[1].value : null);
+    const changed = [0, 1].map(
+      (index) =>
+        modes[index] !== (labels[index] ? "custom" : "automatic") ||
+        (modes[index] === "custom" && texts[index] !== (labels[index] ?? "")),
+    ) as [boolean, boolean];
+    onSave(drafts[0].value, slots > 1 ? drafts[1].value : null, changed);
   }
 
   return (
@@ -115,7 +128,9 @@ export function EditStampSheet({
           <Button
             type="submit"
             form={formId}
-            disabled={saving || !dirty || invalid || Boolean(blockedNote)}
+            disabled={
+              saving || !dirty || invalid || Boolean(blockedNote) || (failed && Boolean(onRetry))
+            }
           >
             {saving ? "Saving…" : "Save"}
           </Button>
@@ -243,8 +258,15 @@ export function EditStampSheet({
         {blockedNote ? <p className="tiny muted">{blockedNote}</p> : null}
         {failed ? (
           <p className="field-error" role="alert">
-            Couldn’t save the stamp. Nothing changed. Press Save to try again.
+            {onRetry
+              ? "Couldn’t save the stamp. Your changes are kept. Press Try again."
+              : "Couldn’t save the stamp. Nothing changed. Press Save to try again."}
           </p>
+        ) : null}
+        {failed && onRetry ? (
+          <Button variant="secondary" onClick={onRetry}>
+            Try again
+          </Button>
         ) : null}
       </form>
     </ModalSheet>

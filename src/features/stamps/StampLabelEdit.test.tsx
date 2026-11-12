@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { useSaveStatus } from "@/components/shell/SaveStatus";
@@ -206,13 +206,52 @@ describe("Edit stamp label (#494)", () => {
     );
   });
 
-  it("tracks the write: a failed save blocks Save with the top-bar note, and Retry replays the read and write", async () => {
+  it("keeps the draft after a failed save and offers one Try again inside the editor, with no Cancel", async () => {
     let calls = 0;
-    const { user, src } = open(withTrip(lisbon()));
+    const trip = {
+      ...twoCountries(),
+      stampLabels: ["AAA", null] as [string | null, string | null],
+    };
+    const { user, src } = open(withTrip(trip));
     const real = src.setStampLabels.bind(src);
     vi.spyOn(src, "setStampLabels").mockImplementation((...args) => {
       calls += 1;
       return calls === 1 ? Promise.reject(new Error("down")) : real(...args);
+    });
+    await user.click(await screen.findByRole("button", { name: /^Lisbon, Sep 2026/ }));
+    await user.click(edit(screen.getByRole("dialog")));
+    const input = within(screen.getByRole("group", { name: "Stamp 1, custom" })).getByLabelText(
+      "Label",
+    );
+    await user.clear(input);
+    await user.type(input, "qq1");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    const editor = await screen.findByRole("dialog", { name: "Stamp label" });
+    const retry = await within(editor).findByRole("button", { name: "Try again" });
+    expect(within(editor).getByRole("alert").textContent).toContain("Your changes are kept");
+    expect(within(editor).queryByText(LABEL_FAILED)).toBeNull();
+    expect(within(editor).getByRole("button", { name: "Save" }).hasAttribute("disabled")).toBe(
+      true,
+    );
+    expect((input as HTMLInputElement).value).toBe("QQ1");
+    // Another session changes slot 2 before the retry: the retry reads again.
+    await real("lisbon", "AAA", "ZZZ");
+    await user.click(retry);
+    await waitFor(() => expect(calls).toBe(2));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Stamp label" })).toBeNull());
+    expect(await src.getTrip("lisbon")).toMatchObject({ stampLabels: ["QQ1", "ZZZ"] });
+  });
+
+  it("says Saving, not the failure, while the retry is in flight, and fails again cleanly", async () => {
+    const { user, src } = open(withTrip(lisbon()));
+    let gate: (() => void) | null = null;
+    let calls = 0;
+    vi.spyOn(src, "setStampLabels").mockImplementation(() => {
+      calls += 1;
+      if (calls === 1) return Promise.reject(new Error("down"));
+      return new Promise((_, reject) => {
+        gate = () => reject(new Error("still down"));
+      });
     });
     await user.click(await screen.findByRole("button", { name: LISBON }));
     await user.click(edit(screen.getByRole("dialog")));
@@ -222,19 +261,80 @@ describe("Edit stamp label (#494)", () => {
     await user.type(input, "qq1");
     await user.click(screen.getByRole("button", { name: "Save" }));
     const editor = await screen.findByRole("dialog", { name: "Stamp label" });
-    await waitFor(() =>
-      expect(within(editor).getAllByText(LABEL_FAILED).length).toBeGreaterThan(0),
+    await user.click(await within(editor).findByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(within(editor).getByText(LABEL_SAVING)).toBeTruthy());
+    expect(within(editor).queryByRole("button", { name: "Try again" })).toBeNull();
+    expect(within(editor).queryByRole("alert")).toBeNull();
+    await act(async () => (gate as (() => void) | null)?.());
+    expect(await within(editor).findByRole("button", { name: "Try again" })).toBeTruthy();
+  });
+
+  it("does not send an untouched slot as automatic: a stored code equal to the automatic one stays the server's", async () => {
+    // A route change can leave slot 2's stored label equal to its new automatic code (USA).
+    const trip = {
+      ...twoCountries(),
+      stampLabels: ["AAA", "USA"] as [string | null, string | null],
+    };
+    const { user, src } = open(withTrip(trip));
+    const setLabels = vi.spyOn(src, "setStampLabels");
+    await user.click(await screen.findByRole("button", { name: /^Lisbon, Sep 2026/ }));
+    await user.click(edit(screen.getByRole("dialog")));
+    // Another session saved ZZZ in slot 2 after this editor opened.
+    await src.setStampLabels("lisbon", "AAA", "ZZZ");
+    setLabels.mockClear();
+    const input = within(screen.getByRole("group", { name: "Stamp 1, custom" })).getByLabelText(
+      "Label",
     );
-    expect(within(editor).getByRole("alert").textContent).toContain("Couldn’t save the stamp");
-    expect(within(editor).getByRole("button", { name: "Save" }).hasAttribute("disabled")).toBe(
-      true,
-    );
-    await user.click(within(editor).getByRole("button", { name: "Cancel" }));
-    await user.click(screen.getByRole("button", { name: "Not saved, retry" }));
-    await user.click(screen.getByRole("button", { name: "Retry" }));
-    await waitFor(() => expect(calls).toBe(2));
-    await waitFor(() =>
-      expect(screen.getByRole("article", { name: /Selected trip/ }).textContent).toContain("QQ1"),
-    );
+    await user.clear(input);
+    await user.type(input, "abc");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(setLabels).toHaveBeenCalledWith("lisbon", "ABC", "ZZZ"));
+  });
+
+  it("the selected card follows the selected sticker: a route-derived one is disabled, and no editable stamp hides it", async () => {
+    const base = lisbon();
+    const [first] = base.stops;
+    const stop = (city: string, arrive: string, extra = {}) => ({
+      ...first,
+      location: { ...first.location, city, id: city, ...extra },
+      arrive,
+    });
+    const porto = {
+      ...base,
+      stops: [stop("Lisbon", "2026-09-03"), stop("Porto", "2026-09-05")],
+    };
+    const { user } = open(withTrip(porto));
+    await user.click(await screen.findByRole("button", { name: /^Porto, Sep 2026/ }));
+    await user.keyboard("{Escape}");
+    const card = screen.getByRole("article", { name: /Selected trip/ });
+    expect(edit(card).getAttribute("aria-disabled")).toBe("true");
+    expect(within(card).getByText(LABEL_ROUTE)).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: /^Lisbon, Sep 2026/ }));
+    await user.keyboard("{Escape}");
+    expect(edit(card).getAttribute("aria-disabled")).toBeNull();
+  });
+
+  it("hides the action for a stop with no country and no airport stamp", () => {
+    const base = lisbon();
+    const nowhere = {
+      ...base,
+      stops: base.stops.map((stop) => ({
+        ...stop,
+        airportCode: undefined,
+        location: { ...stop.location, countryCode: "", country: "" },
+      })),
+    };
+    renderInApp(<StampLabelAction trip={nowhere} onEdit={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: "Edit stamp label" })).toBeNull();
+  });
+
+  it("takes focus before opening from the card, so Escape returns to the card action", async () => {
+    const { user } = open();
+    const sticker = await screen.findByRole("button", { name: LISBON });
+    sticker.focus();
+    const card = screen.getByRole("article", { name: /Selected trip/ });
+    fireEvent.click(edit(card));
+    await user.keyboard("{Escape}");
+    expect(document.activeElement).toBe(edit(card));
   });
 });

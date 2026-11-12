@@ -95,7 +95,7 @@ describe("EditStampSheet", () => {
     expect((screen.getByLabelText("Label") as HTMLInputElement).value).toBe("");
     await user.type(screen.getByLabelText("Label"), "abc");
     await user.click(save());
-    expect(onSave).toHaveBeenCalledWith("ABC", null);
+    expect(onSave).toHaveBeenCalledWith("ABC", null, expect.any(Array));
   });
 
   it("Save is off until something changes", async () => {
@@ -127,7 +127,7 @@ describe("EditStampSheet", () => {
     // The preview shows the custom text, not the automatic one (it is decorative: the block names it).
     expect(document.querySelector(".stamp-preview")?.textContent).toContain("AB7");
     await user.click(save());
-    expect(onSave).toHaveBeenCalledWith("AB7", null);
+    expect(onSave).toHaveBeenCalledWith("AB7", null, expect.any(Array));
   });
 
   it("shows the error on blur for a short label, and Save refuses until it is fixed", async () => {
@@ -148,7 +148,7 @@ describe("EditStampSheet", () => {
     await user.type(field, "c");
     expect(fieldError()).toBeNull();
     await user.click(save());
-    expect(onSave).toHaveBeenCalledWith(null, "ABC");
+    expect(onSave).toHaveBeenCalledWith(null, "ABC", expect.any(Array));
   });
 
   it("refuses non-ASCII text on Save (the field is never transliterated)", async () => {
@@ -192,7 +192,7 @@ describe("EditStampSheet", () => {
     await user.type(field, "Ab1");
     expect(field.value).toBe("AB1");
     await user.click(save());
-    expect(onSave).toHaveBeenCalledWith("AB1", null);
+    expect(onSave).toHaveBeenCalledWith("AB1", null, expect.any(Array));
   });
 
   it("a blank custom label is refused rather than saved as nothing", async () => {
@@ -215,21 +215,21 @@ describe("EditStampSheet", () => {
     expect(block(1, "automatic")).toBeTruthy();
     expect(screen.getByText("PRT, the country code for Portugal")).toBeTruthy();
     await user.click(save());
-    expect(onSave).toHaveBeenCalledWith(null, "XYZ");
+    expect(onSave).toHaveBeenCalledWith(null, "XYZ", expect.any(Array));
   });
 
   it("choosing Automatic and saving clears the override, and a custom label equal to the automatic one saves as null", async () => {
     const first = setup({ saved: ["ABC", null] });
     await first.user.click(within(block(1, "custom")).getByRole("radio", { name: "Automatic" }));
     await first.user.click(save());
-    expect(first.onSave).toHaveBeenCalledWith(null, null);
+    expect(first.onSave).toHaveBeenCalledWith(null, null, expect.any(Array));
     first.unmount();
 
     const second = setup({ saved: ["ABC", null] });
     await second.user.clear(screen.getByLabelText("Label"));
     await second.user.type(screen.getByLabelText("Label"), "prt");
     await second.user.click(save());
-    expect(second.onSave).toHaveBeenCalledWith(null, null);
+    expect(second.onSave).toHaveBeenCalledWith(null, null, expect.any(Array));
   });
 
   it("Cancel closes without saving", async () => {

@@ -30,6 +30,11 @@ import {
 } from "./EditTripSheet";
 import { ItemEditor } from "./ItemEditor";
 import { EditStampSheet } from "./EditStampSheet";
+import {
+  saveFreshLabels,
+  useEditorGate,
+  useStampLabelGate,
+} from "@/features/stamps/StampLabelEdit";
 import { bagGate, packedAnnouncement } from "./trip-view";
 import { packedState } from "./packed-state";
 import { ReviewBagSheet } from "./ReviewBagSheet";
@@ -101,6 +106,7 @@ export function TripScreen({
   const source = useTripsSource();
   const router = useRouter();
   const { track } = useSaveStatus();
+  const stampGate = useStampLabelGate();
   const toast = useToast();
   const [load, setLoad] = useState<Load>({ phase: "loading" });
   const [staples, setStaples] = useState<Staple[]>([]);
@@ -117,6 +123,7 @@ export function TripScreen({
   const [failedRows, setFailedRows] = useState<ReadonlySet<string>>(new Set());
   const [announcement, setAnnouncement] = useState("");
   const [stampFailed, setStampFailed] = useState(false);
+  const stampEditor = useEditorGate(stampFailed, submitting);
   const [weather, setWeather] = useState<WeatherExperience | null>(null);
   const [laundryBusy, setLaundryBusy] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(openReview);
@@ -772,7 +779,11 @@ export function TripScreen({
         <button
           type="button"
           className="link-button edit-stamp"
-          onClick={() => setDialog({ kind: "stamp" })}
+          aria-disabled={stampGate ? true : undefined}
+          title={stampGate ?? undefined}
+          onClick={() => {
+            if (!stampGate) setDialog({ kind: "stamp" });
+          }}
         >
           Edit stamp
         </button>
@@ -996,15 +1007,15 @@ export function TripScreen({
           saved={trip.stampLabels}
           departure={trip.start}
           saving={submitting}
-          failed={stampFailed}
+          {...stampEditor}
           onClose={() => {
             setStampFailed(false);
             close();
           }}
-          onSave={(slot1, slot2) => {
+          onSave={(slot1, slot2, changed) => {
             setStampFailed(false);
             const before = trip.stampLabels ?? [null, null];
-            void act(() => source.setStampLabels(tripId, slot1, slot2), {
+            void act(() => saveFreshLabels(source, tripId, [slot1, slot2], changed), {
               modal: true,
               onFail: () => setStampFailed(true),
               after: (change) => {
