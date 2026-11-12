@@ -202,6 +202,32 @@
 .stickerButton.stickerLarge .stickerMonth {
   font-size: 12px;
 }
+@media (max-width: 239px) {
+  /* Enlarged text must not push the tag past the sticker: it wraps inside it. */
+  .upcomingTag {
+    box-sizing: border-box;
+    width: max-content;
+    max-width: 100%;
+    height: auto;
+    min-height: 20px;
+    padding-block: 2px;
+    letter-spacing: 0.02em;
+    overflow-wrap: anywhere;
+    text-align: center;
+    white-space: normal;
+  }
+  .stickerButton.stickerLarge .stickerCode,
+  .stickerButton.stickerLarge[data-shape="rounded"] .stickerCode,
+  .stickerButton.stickerLarge[data-shape="squared"] .stickerCode {
+    max-width: 100%;
+    font-size: 24px;
+  }
+  .stickerButton.stickerLarge .stickerRegion,
+  .stickerButton.stickerLarge .stickerMonth {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+}
 @media (forced-colors: active) {
   .stickerButton {
     border-color: CanvasText;
@@ -494,8 +520,8 @@
     grid-template-columns: 1fr;
   }
   .stickerButton {
-    width: 88px;
-    height: 88px;
+    width: 96px;
+    height: 96px;
   }
   .selectedActions > * {
     width: 100%;
@@ -560,7 +586,7 @@
   }
   .stickerButton[data-shape="rounded"] .stickerCode,
   .stickerButton[data-shape="squared"] .stickerCode {
-    font-size: 32px;
+    font-size: 24px;
   }
   .stickerRegion,
   .stickerMonth {

@@ -75,6 +75,44 @@ describe("upcoming stickers do not read as earned (#493)", () => {
     );
   });
 
+  it("selects the trip that was completed most recently, not the one that started last", async () => {
+    // Lisbon ran Aug 25 - Sep 20 and San Diego Sep 10-12: San Diego starts later, Lisbon came home later.
+    open(
+      source(
+        withTrips(
+          trip("long", "2026-08-25", "2026-09-20"),
+          trip("short", "2026-09-10", "2026-09-12", SAMPLE_LOCATIONS["us-ca-san-diego"]),
+        ),
+      ),
+    );
+    const lisbon = await screen.findByRole("button", { name: "Lisbon, Aug 2026, inked, 1 trip" });
+    expect(lisbon.getAttribute("aria-pressed")).toBe("true");
+    expect(
+      screen
+        .getByRole("button", { name: "San Diego, Sep 2026, inked, 1 trip" })
+        .getAttribute("aria-pressed"),
+    ).toBe("false");
+  });
+
+  it("selects nothing when no earned sticker exists, even if a past trip has no stops", async () => {
+    const bare = { ...trip("bare", "2026-08-01", "2026-08-03"), stops: [] };
+    open(source(withTrips(bare, trip("ahead", "2026-11-20", "2026-11-25"))));
+    await screen.findByRole("button", { name: "Lisbon, Nov 2026, upcoming, not inked yet" });
+    expect(screen.getByText("0 inked")).toBeTruthy();
+    expect(screen.queryByRole("article", { name: /Selected trip/ })).toBeNull();
+  });
+
+  it("never calls a trip with no usable start date upcoming", async () => {
+    const legacy = { ...trip("legacy", "2026-11-20", "2026-11-25"), start: "", end: "" };
+    const { user } = open(source(withTrips(legacy)));
+    await user.click(await screen.findByRole("button", { name: "All time" }));
+    const sticker = await screen.findByRole("button", { name: /Date not set/ });
+    expect(sticker.getAttribute("data-upcoming")).toBeNull();
+    expect(within(sticker).queryByText("Upcoming")).toBeNull();
+    await user.click(sticker);
+    expect(within(screen.getByRole("dialog")).queryByText(/Upcoming/)).toBeNull();
+  });
+
   it("tags only an upcoming sticker, and keeps it dashed when it is selected", async () => {
     const { user } = open();
     const upcoming = await screen.findByRole("button", { name: SAN_DIEGO });
@@ -121,6 +159,21 @@ describe("a sticker opens its details (#494)", () => {
     await user.keyboard("{Escape}");
     await user.keyboard(" ");
     expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+
+  it("opens with focus on the title, shows the route stamps, and gives focus back on Escape and Close", async () => {
+    const { user } = open();
+    const lisbon = await screen.findByRole("button", { name: LISBON });
+    await user.click(lisbon);
+    const dialog = screen.getByRole("dialog", { name: "Lisbon · Sep 2026" });
+    expect(document.activeElement).toBe(within(dialog).getByRole("heading", { name: /Lisbon/ }));
+    // The compact route stamps are shown read only: no control for them.
+    expect(dialog.querySelector("[data-text]")).toBeTruthy();
+    await user.keyboard("{Escape}");
+    expect(document.activeElement).toBe(lisbon);
+    await user.click(lisbon);
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: /Close/ }));
+    expect(document.activeElement).toBe(lisbon);
   });
 
   it("says Upcoming for an upcoming trip and counts repeat visits", async () => {

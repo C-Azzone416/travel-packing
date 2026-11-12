@@ -84,7 +84,6 @@ export function Sticker({
     <button
       type="button"
       {...common}
-      data-sticker-key={sticker.key}
       aria-label={sticker.accessibleName}
       aria-pressed={selected}
       aria-haspopup="dialog"
@@ -235,8 +234,20 @@ export function StampsContent({
     [view],
   );
   // Only an earned sticker is selected without a tap: an upcoming one must not look inked at first paint (#493).
-  const defaultId =
-    view.stickers.find((sticker) => !sticker.upcoming)?.tripId ?? view.pastTrips[0]?.id ?? null;
+  // It is the most recently completed trip (by its end date) that an earned sticker stands for; none earned, nothing selected.
+  const defaultId = useMemo(() => {
+    const ends = new Map(state.trips.map((trip) => [trip.id, trip.end]));
+    const earned = view.stickers.filter((sticker) => !sticker.upcoming);
+    return (
+      earned.reduce<(typeof earned)[number] | null>(
+        (best, sticker) =>
+          !best || (ends.get(sticker.tripId) ?? "") > (ends.get(best.tripId) ?? "")
+            ? sticker
+            : best,
+        null,
+      )?.tripId ?? null
+    );
+  }, [view, state.trips]);
   const activeId = selectedId && visibleIds.has(selectedId) ? selectedId : defaultId;
   const selectedTrip = activeId ? (state.trips.find((trip) => trip.id === activeId) ?? null) : null;
   const selected = selectedTrip ? stampTripView(selectedTrip, today) : null;

@@ -97,6 +97,8 @@ export interface ModalSheetProps {
   tabletSheet?: boolean;
   /** "side" only: a centred 560px modal from 768 to 1023px instead of a full screen (Edit trip, #469). Below 768 and from 1024 it is unchanged. */
   tabletModal?: boolean;
+  /** Start focus on the title instead of the first control, for a read-only sheet whose content should be met before its actions. */
+  focusTitle?: boolean;
 }
 
 // Bottom sheet on phones, centered dialog from 601px. Traps focus, closes on
@@ -115,6 +117,7 @@ export function ModalSheet({
   variant = "dialog",
   tabletSheet = false,
   tabletModal = false,
+  focusTitle = false,
 }: ModalSheetProps) {
   const titleId = useId();
   const descriptionId = useId();
@@ -133,6 +136,7 @@ export function ModalSheet({
     // A control can ask to be first (a radio group asks for its checked option).
     const start =
       dialog.querySelector<HTMLElement>("[data-modal-autofocus]") ??
+      (focusTitle ? document.getElementById(titleId) : null) ??
       [...dialog.querySelectorAll<HTMLElement>(FOCUSABLE)].find(
         (node) => !node.hasAttribute("data-modal-close") && !node.closest(".modal-head-end"),
       );
@@ -154,7 +158,7 @@ export function ModalSheet({
       // move a sticky opener (the Feedback button in the sticky bar, #282) to its in-flow position and jump the page.
       opener?.focus({ preventScroll: true });
     };
-  }, [open]);
+  }, [open, focusTitle, titleId]);
 
   if (!open) return null;
 
@@ -229,7 +233,9 @@ export function ModalSheet({
         <div className="modal-head">
           <div>
             {eyebrow ? <p className="tiny muted modal-eyebrow">{eyebrow}</p> : null}
-            <h2 id={titleId}>{title}</h2>
+            <h2 id={titleId} tabIndex={focusTitle ? -1 : undefined}>
+              {title}
+            </h2>
             {description ? <p id={descriptionId}>{description}</p> : null}
           </div>
           {headerAction ? (

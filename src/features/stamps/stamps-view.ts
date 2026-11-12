@@ -22,8 +22,6 @@ export interface StickerView {
   colour: StickerColour;
   tilt: number;
   tripId: string;
-  /** Which stop of `tripId` the sticker draws; its code follows the trip's stamp label for that slot. */
-  stopIndex: number;
   accessibleName: string;
 }
 
@@ -227,6 +225,8 @@ export function stampsView(
       const date = chosen.trip.start;
       const look = stickerLook(chosenStop.location.countryCode, chosenStop.location.city);
       const count = complete.length;
+      // A trip with no usable start date is never "upcoming": it keeps its "Date not set" sticker.
+      const isUpcoming = count === 0 && dateOf(chosen.trip.start) !== null;
       return {
         order: date,
         sticker: {
@@ -237,16 +237,14 @@ export function stampsView(
           month: month(date),
           monthYear: monthYear(date),
           completedCount: count,
-          upcoming: count === 0,
+          upcoming: isUpcoming,
           shape: look.shape,
           colour: look.colour,
           tilt: look.tilt,
           tripId: chosen.trip.id,
-          stopIndex: chosen.stopIndex,
-          accessibleName:
-            count === 0
-              ? `${chosenStop.location.city}, ${monthYear(date)}, upcoming, not inked yet`
-              : `${chosenStop.location.city}, ${monthYear(date)}, inked, ${count} ${count === 1 ? "trip" : "trips"}`,
+          accessibleName: isUpcoming
+            ? `${chosenStop.location.city}, ${monthYear(date)}, upcoming, not inked yet`
+            : `${chosenStop.location.city}, ${monthYear(date)}, inked, ${Math.max(1, count)} ${Math.max(1, count) === 1 ? "trip" : "trips"}`,
         },
       };
     })
