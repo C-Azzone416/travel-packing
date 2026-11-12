@@ -443,6 +443,48 @@ describe("Edit list", () => {
     );
   });
 
+  it("a failed add releases the Edit list lock, so Edit list works again (#496)", async () => {
+    const { user } = setup({
+      wrap: () => ({ addItem: async () => Promise.reject(new Error("down")) }),
+    });
+    await ready();
+    await user.click(within(panel()).getByRole("button", { name: "Add an item to Clothing" }));
+    await user.type(within(panel()).getByPlaceholderText("+ Add an item"), "Sun hat{Enter}");
+    expect((await within(panel()).findByRole("alert")).textContent).toBe(
+      "Couldn’t add it. Nothing was changed.",
+    );
+    expect(
+      (within(panel()).getByRole("button", { name: "Edit list" }) as HTMLButtonElement).disabled,
+    ).toBe(false);
+  });
+
+  it("scrolls to the saved item, not to a later item another write added (#496)", async () => {
+    const scrolled: string[] = [];
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function (this: Element) {
+      scrolled.push(this.getAttribute("data-item-id") ?? "");
+    };
+    try {
+      const { user, base } = setup({
+        wrap: (source) => ({
+          addItem: async (id: string, input: Parameters<typeof source.addItem>[1]) => {
+            await source.addItem(id, input);
+            // Another item lands after the saved one before this write's change is returned.
+            return source.addItem(id, { ...input, name: "Rain hat" });
+          },
+        }),
+      });
+      await ready();
+      await user.click(within(panel()).getByRole("button", { name: "Add an item to Clothing" }));
+      await user.type(within(panel()).getByPlaceholderText("+ Add an item"), "Sun hat{Enter}");
+      await waitFor(() => expect(within(panel()).getByText("Sun hat")).toBeTruthy());
+      const saved = tripOf(base).items.find((entry) => entry.name === "Sun hat")!;
+      await waitFor(() => expect(scrolled).toEqual([saved.id]));
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
+  });
+
   it("adds to the cube that is open, not to Clothing", async () => {
     const { user, base } = setup();
     await ready();
