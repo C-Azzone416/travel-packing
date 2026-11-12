@@ -369,14 +369,45 @@ describe("Edit list", () => {
     expect(within(panel()).getByText("Sun hat")).toBeTruthy();
   });
 
-  it("describes the view at completion: a filter changed during the write (#496)", async () => {
-    const { user } = setup();
+  it("describes the view at completion: All at submit, Packed at completion (#496)", async () => {
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const { user } = setup({
+      wrap: (source) => ({
+        addItem: async (...args: Parameters<typeof source.addItem>) => {
+          await gate;
+          return source.addItem(...args);
+        },
+      }),
+    });
     await ready();
     await user.click(within(panel()).getByRole("button", { name: "Add an item to Clothing" }));
     await user.type(within(panel()).getByPlaceholderText("+ Add an item"), "Sun hat");
     await user.click(within(panel()).getByRole("button", { name: "Add" }));
     await user.click(within(panel()).getByRole("button", { name: /^Packed/ }));
-    await waitFor(() => expect(live().textContent).toMatch(/^Added Sun hat/));
+    release();
+    await waitFor(() => expect(live().textContent).toBe("Added Sun hat. It’s in To pack."));
+  });
+
+  it("describes the view at completion: Packed at submit, All at completion (#496)", async () => {
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const { user } = setup({
+      wrap: (source) => ({
+        addItem: async (...args: Parameters<typeof source.addItem>) => {
+          await gate;
+          return source.addItem(...args);
+        },
+      }),
+    });
+    await ready();
+    await user.click(within(panel()).getByRole("button", { name: /^Packed/ }));
+    await user.click(within(panel()).getByRole("button", { name: "Add an item to Clothing" }));
+    await user.type(within(panel()).getByPlaceholderText("+ Add an item"), "Sun hat");
+    await user.click(within(panel()).getByRole("button", { name: "Add" }));
+    await user.click(within(panel()).getByRole("button", { name: /^All/ }));
+    release();
+    await waitFor(() => expect(live().textContent).toBe("Added Sun hat to Clothing."));
   });
 
   it("adds to the cube that is open, not to Clothing", async () => {

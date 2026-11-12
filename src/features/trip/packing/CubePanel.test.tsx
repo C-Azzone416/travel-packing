@@ -222,13 +222,16 @@ describe("quick add while a write is pending (#496)", () => {
     const onAdd = vi.fn(() => new Promise<{ ok: true }>((resolve) => (finish = resolve)));
     render(<CubePanel {...normal({ onAdd })} />);
     await user.click(screen.getByRole("button", { name: "Add an item to Misc" }));
-    await user.type(screen.getByPlaceholderText("+ Add an item"), "Hat{Enter}");
+    const field = screen.getByPlaceholderText("+ Add an item");
+    await user.type(field, "Hat{Enter}");
     expect((screen.getByRole("button", { name: "Cancel" }) as HTMLButtonElement).disabled).toBe(
       true,
     );
     await user.click(screen.getByRole("button", { name: "Cancel" }));
+    field.focus();
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("button", { name: "Add an item to Misc" })).toBeNull();
+    expect(screen.getByPlaceholderText("+ Add an item")).toBe(field);
     await user.click(screen.getByRole("button", { name: "Add" }));
     expect(onAdd).toHaveBeenCalledTimes(1);
     finish({ ok: true });
