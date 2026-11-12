@@ -468,4 +468,44 @@ describe("a sticker opens its details (#494)", () => {
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(write).toHaveBeenCalledWith("lisbon", "ABC", "QQQ"));
   });
+
+  it("writes only Stamp 2 when Stamp 1 was confirmed meanwhile", async () => {
+    const sample = sampleLifecycleState();
+    const lisbon = sample.trips[1];
+    const base = lisbon.stops[0];
+    const madrid = {
+      ...base,
+      location: { ...base.location, id: "es", city: "Madrid", country: "Spain", countryCode: "ES" },
+    };
+    const stops = [base, madrid];
+    const stateWith = (labels: [string | null, string | null]): LifecycleState => ({
+      ...sample,
+      trips: [sample.trips[0], { ...lisbon, stops, stampLabels: labels }],
+    });
+    const src = source(stateWith([null, null]));
+    const write = vi.spyOn(src, "setStampLabels");
+    const user = userEvent.setup();
+    const tree = (state: LifecycleState) => (
+      <ToastProvider>
+        <SaveStatusProvider>
+          <TripsSourceProvider source={src}>
+            <StampsContent state={state} today={TODAY} onTripSaved={() => undefined} />
+          </TripsSourceProvider>
+        </SaveStatusProvider>
+      </ToastProvider>
+    );
+    const view = render(tree(stateWith([null, null])));
+    await user.click(screen.getByRole("button", { name: LISBON }));
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Edit stamp label" }),
+    );
+    // Another surface confirms Stamp 1 while this editor is open.
+    view.rerender(tree(stateWith(["QQQ", null])));
+    const one = within(screen.getByRole("group", { name: /Stamp 2/ }));
+    await user.click(one.getByRole("radio", { name: "Custom" }));
+    await user.clear(one.getByLabelText("Label"));
+    await user.type(one.getByLabelText("Label"), "abd");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(write).toHaveBeenCalledWith("lisbon", "QQQ", "ABD"));
+  });
 });

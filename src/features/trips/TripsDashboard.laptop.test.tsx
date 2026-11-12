@@ -255,4 +255,68 @@ describe("TripsDashboard at laptop width", () => {
     // Stamp 2 is the confirmed QQQ, not what the dashboard first loaded.
     expect(write).toHaveBeenLastCalledWith("lisbon", "ABC", "QQQ");
   });
+
+  it("allows one stamp label write per trip: a resize during a pending save cannot let the reopened editor write over it", async () => {
+    const media = laptop(false);
+    const sample = sampleLifecycleState();
+    const lisbon = sample.trips[1];
+    const base = lisbon.stops[0];
+    const madrid = {
+      ...base,
+      location: { ...base.location, id: "es", city: "Madrid", country: "Spain", countryCode: "ES" },
+    };
+    const source = createMemoryTripsSource(
+      { ...sample, trips: [sample.trips[0], { ...lisbon, stops: [base, madrid] }] },
+      { now: () => 5_000 },
+    );
+    const real = source.setStampLabels.bind(source);
+    let release!: () => void;
+    const gate = new Promise<void>((done) => (release = done));
+    const write = vi.spyOn(source, "setStampLabels").mockImplementationOnce(async (...args) => {
+      await gate;
+      return real(...args);
+    });
+    const user = userEvent.setup();
+    renderInApp(
+      <TripsSourceProvider source={source}>
+        <TripsDashboard source={source} getToday={TODAY} />
+      </TripsSourceProvider>,
+    );
+    const sticker = "Lisbon, Sep 2026, inked, 1 trip";
+    const openEditor = async () => {
+      await user.click(await screen.findByRole("button", { name: sticker }));
+      await user.click(
+        within(screen.getByRole("dialog")).getByRole("button", { name: "Edit stamp label" }),
+      );
+    };
+    const type = async (stamp: RegExp, text: string) => {
+      const group = within(screen.getByRole("group", { name: stamp }));
+      await user.click(group.getByRole("radio", { name: "Custom" }));
+      await user.clear(group.getByLabelText("Label"));
+      await user.type(group.getByLabelText("Label"), text);
+    };
+    await user.click(await screen.findByRole("tab", { name: /^Stamps/ }));
+    await openEditor();
+    await type(/Stamp 2/, "qqq");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    // The write is pending: cross the breakpoint and back, which unmounts the editor that sent it.
+    act(() => media.set(true));
+    await screen.findByRole("heading", { name: /In the bag/ });
+    act(() => media.set(false));
+    await user.click(await screen.findByRole("tab", { name: /^Stamps/ }));
+    await openEditor();
+    // Save waits for the first write: the same "Saving…" state, on a button that cannot be pressed.
+    expect((screen.getByRole("button", { name: "Saving…" }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    expect(write).toHaveBeenCalledTimes(1);
+    await act(async () => release());
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Saving…" })).toBeNull());
+    await type(/Stamp 1/, "abc");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(write).toHaveBeenCalledTimes(2);
+    expect(write).toHaveBeenLastCalledWith("lisbon", "ABC", "QQQ");
+    expect(source.snapshot().trips[1].stampLabels).toEqual(["ABC", "QQQ"]);
+  });
 });

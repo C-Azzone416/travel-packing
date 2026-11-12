@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { buttonClassName, Button } from "@/components/ui/Button";
 import { Suitcase } from "@/components/suitcase";
 import { useSaveStatus } from "@/components/shell/SaveStatus";
@@ -29,6 +29,12 @@ type Load =
   | { phase: "ready"; state: LifecycleState; today: string };
 
 const NO_LABELS: Record<string, StampLabels> = {};
+const NO_PENDING: ReadonlySet<string> = new Set();
+
+export interface LabelWrites {
+  pending: ReadonlySet<string>;
+  setPending: (tripId: string, on: boolean) => void;
+}
 
 interface EditorOpen {
   tripId: string;
@@ -234,6 +240,7 @@ export function StampsContent({
   embedded = false,
   initialTripId = null,
   onTripSaved,
+  writes,
 }: {
   state: LifecycleState;
   today: string;
@@ -244,6 +251,12 @@ export function StampsContent({
    * the labels saved here are kept in this component.
    */
   onTripSaved?: (trip: LifecycleTrip) => void;
+  /**
+   * The trips with a label write in flight, and how to mark one. At most one write per trip is allowed at a time, so this lives
+   * with the owner of `state` too (the Home's editor unmounts on a resize while its write is still pending). Without it
+   * they are kept in this component.
+   */
+  writes?: LabelWrites;
   /** The trip to select first (`/stamps?trip=<id>`, from the Home's recent trips). */
   initialTripId?: string | null;
 }) {
@@ -252,7 +265,28 @@ export function StampsContent({
   /** The stamp labels saved from here, so the stickers, the card and the details change in place. */
   const [ownLabels, setOwnLabels] = useState<Record<string, StampLabels>>({});
   const savedLabels = onTripSaved ? NO_LABELS : ownLabels;
-  const saving = useRef(false);
+  const [ownPending, setOwnPending] = useState<ReadonlySet<string>>(NO_PENDING);
+  const pending = writes?.pending ?? ownPending;
+  const setPending =
+    writes?.setPending ??
+    ((tripId: string, on: boolean) =>
+      setOwnPending((current) => {
+        const next = new Set(current);
+        if (on) next.add(tripId);
+        else next.delete(tripId);
+        return next;
+      }));
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const pendingRef = useRef(pending);
+  useEffect(() => {
+    pendingRef.current = pending;
+  }, [pending]);
   const [detailKey, setDetailKey] = useState<string | null>(null);
   const [editor, setEditor] = useState<EditorOpen | null>(null);
   const editorRef = useRef<EditorOpen | null>(null);
@@ -329,7 +363,7 @@ export function StampsContent({
     const onPop = () => {
       if (!ownEntry.current) return;
       // A pending save cannot be dismissed (Back included): the entry Back removed is put back and the editor stays.
-      if (saving.current) {
+      if (editorRef.current && pendingRef.current.has(editorRef.current.tripId)) {
         window.history.pushState({ stampEditor: true }, "", window.location.href);
         return;
       }
@@ -458,9 +492,8 @@ export function StampsContent({
           key={editor?.token}
           trip={editorTrip}
           onClose={closeEditor}
-          onSavingChange={(value) => {
-            saving.current = value;
-          }}
+          pending={pending.has(editorTrip.id)}
+          setPending={(on) => setPending(editorTrip.id, on)}
           onSaved={(saved) => {
             if (onTripSaved) onTripSaved(saved);
             else
@@ -469,8 +502,9 @@ export function StampsContent({
                 [saved.id]: saved.stampLabels ?? [null, null],
               }));
             setAnnouncement("Stamp label saved.");
-            // A save finishing closes only the editor that sent it.
-            if (editorRef.current?.token === editor?.token) closeEditor();
+            // A save finishing closes only the editor that sent it, and only while this panel is still on screen: a panel that
+            // was unmounted (a resize) has no editor to close, and its history entry must not close a newer one.
+            if (mounted.current && editorRef.current?.token === editor?.token) closeEditor();
           }}
         />
       ) : null}
@@ -486,17 +520,19 @@ function StampLabelEditor({
   trip,
   onClose,
   onSaved,
-  onSavingChange,
+  pending,
+  setPending,
 }: {
   trip: LifecycleTrip;
   onClose: () => void;
   onSaved: (trip: LifecycleTrip) => void;
-  onSavingChange: (saving: boolean) => void;
+  /** This trip has a label write in flight (from this editor or one that was closed by a resize): Save waits for it. */
+  pending: boolean;
+  setPending: (on: boolean) => void;
 }) {
   const source = useTripsSource();
   const { track } = useSaveStatus();
   const toast = useToast();
-  const [saving, setSaving] = useState(false);
   const [failed, setFailed] = useState(false);
   // The labels as last confirmed, read when Save is pressed: only the slots the person changed are written over them.
   const latest = useRef(trip.stampLabels);
@@ -509,13 +545,12 @@ function StampLabelEditor({
       stops={trip.stops}
       saved={trip.stampLabels}
       departure={trip.start}
-      saving={saving}
+      saving={pending}
       failed={failed}
       onClose={onClose}
       onSave={(slot1, slot2, changed) => {
         setFailed(false);
-        setSaving(true);
-        onSavingChange(true);
+        setPending(true);
         const before = latest.current ?? [null, null];
         const first = changed[0] ? slot1 : before[0];
         const second = changed[1] ? slot2 : before[1];
@@ -534,10 +569,7 @@ function StampLabelEditor({
           },
         )
           .catch(() => setFailed(true))
-          .finally(() => {
-            onSavingChange(false);
-            setSaving(false);
-          });
+          .finally(() => setPending(false));
       }}
     />
   );
@@ -548,6 +580,15 @@ export function StampsScreen({ getToday = localToday }: { getToday?: () => strin
   const { track } = useSaveStatus();
   const [load, setLoad] = useState<Load>({ phase: "loading" });
   const [reload, setReload] = useState(0);
+  const [pending, setPendingSet] = useState<ReadonlySet<string>>(NO_PENDING);
+  const setPending = useCallback((tripId: string, on: boolean) => {
+    setPendingSet((current) => {
+      const next = new Set(current);
+      if (on) next.add(tripId);
+      else next.delete(tripId);
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -597,6 +638,7 @@ export function StampsScreen({ getToday = localToday }: { getToday?: () => strin
       state={load.state}
       today={load.today}
       initialTripId={initialTripId}
+      writes={{ pending, setPending }}
       onTripSaved={(saved) =>
         setLoad((current) =>
           current.phase === "ready"

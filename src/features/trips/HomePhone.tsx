@@ -16,7 +16,7 @@ import {
 } from "@/components/suitcase";
 import type { LifecycleState, LifecycleTrip } from "@/domain/trip-lifecycle";
 import { packedState, reviewHref } from "@/features/trip/packed-state";
-import { StampsContent } from "@/features/stamps/StampsScreen";
+import { StampsContent, type LabelWrites } from "@/features/stamps/StampsScreen";
 import { stampsView } from "@/features/stamps/stamps-view";
 import {
   homeModel,
@@ -62,6 +62,8 @@ export interface HomePhoneProps {
   onTripSaved?: (trip: LifecycleTrip) => void;
   /** The trip has no starting point (and the account no Home): offer a way to set one (#497). */
   needsOrigin?: boolean;
+  /** The trips with a stamp label write in flight, kept by the dashboard (see StampsContent). */
+  stampWrites?: LabelWrites;
 }
 
 /**
@@ -84,6 +86,7 @@ export function HomePhone({
   headingRef,
   onTripSaved,
   needsOrigin = false,
+  stampWrites,
 }: HomePhoneProps) {
   // The chosen pill is in the address, so a link, a reload and Back all land on it. The Home draws only after its trips have
   // loaded in the browser, so reading the address in the initial state cannot disagree with the server's markup.
@@ -336,7 +339,13 @@ export function HomePhone({
           aria-labelledby="home-tab-stamps"
           className={styles.panel}
         >
-          <StampsContent state={state} today={today} embedded onTripSaved={onTripSaved} />
+          <StampsContent
+            state={state}
+            today={today}
+            embedded
+            onTripSaved={onTripSaved}
+            writes={stampWrites}
+          />
         </div>
       ) : null}
     </div>

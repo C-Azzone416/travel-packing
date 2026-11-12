@@ -205,6 +205,18 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
     );
   }, []);
 
+  // The trips with a stamp label write in flight. Also above the laptop/phone branch: an editor closed by a resize leaves its write
+  // pending, and the reopened one must wait for it instead of writing over a label that has not been confirmed yet.
+  const [stampWrites, setStampWrites] = useState<ReadonlySet<string>>(new Set());
+  const setStampPending = useCallback((tripId: string, on: boolean) => {
+    setStampWrites((current) => {
+      const next = new Set(current);
+      if (on) next.add(tripId);
+      else next.delete(tripId);
+      return next;
+    });
+  }, []);
+
   const tryAgain = () => {
     setLoad({ phase: "loading" });
     setReloads((count) => count + 1);
@@ -516,6 +528,7 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
               onOpenArchive={() => setView("archive")}
               headingRef={headingRef}
               onTripSaved={confirmTrip}
+              stampWrites={{ pending: stampWrites, setPending: setStampPending }}
             />
           ) : (
             <HomeEmpty
