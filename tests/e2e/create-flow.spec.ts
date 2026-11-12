@@ -172,10 +172,6 @@ test("create: where, when, how, the list, review -> the trip is on the dashboard
   await page.getByRole("checkbox", { name: /I’ll have laundry/ }).check();
   await expect.poll(count).toBeLessThan(without);
   const preview = await count();
-  // The preview counts the toiletry bag as one more thing for the suitcase (only when the list has toiletries); the phone Pack
-  // mode counts the list's own rows by quantity, so its total is the preview less that bag. Tracked in #456; the Toiletries cube
-  // is asserted below so this offset cannot hide a different difference.
-  const inTheBag = preview - 1;
   await nextButton(page).click();
   await createButton(page).click();
   await phoneHomeLayout(page);
@@ -187,10 +183,10 @@ test("create: where, when, how, the list, review -> the trip is on the dashboard
   await expect(london).toBeVisible();
   await expect(london).toContainText("12 NOV");
   await expect(london).not.toContainText("23 OCT");
-  // What the preview said is what was created, less the toiletry bag (#456), none packed (the trip's own page says so).
+  // What the preview said is what was created, none packed (the trip's own page says so).
   await london.click();
   await expect(page.getByRole("button", { name: /^Toiletries/ })).toBeVisible();
-  await expect(page.getByText(`0 of ${inTheBag} in the bag`)).toBeVisible();
+  await expect(page.getByText(`0 of ${preview} in the bag`)).toBeVisible();
   await page
     .getByRole("navigation", { name: "Primary navigation" })
     .getByRole("link", { name: "Trips" })
@@ -201,7 +197,7 @@ test("create: where, when, how, the list, review -> the trip is on the dashboard
   await page.reload();
   await expect(futureTab(page)).toContainText("1 trip");
   await (await futureRowNamed(page, "London")).click();
-  await expect(page.getByText(`0 of ${inTheBag} in the bag`)).toBeVisible();
+  await expect(page.getByText(`0 of ${preview} in the bag`)).toBeVisible();
   await page
     .getByRole("navigation", { name: "Primary navigation" })
     .getByRole("link", { name: "Trips" })
@@ -321,6 +317,71 @@ test("copy: a new trip from the plan, and the source trip unchanged", async ({ p
     .click();
   expect(await tag(page, "San Diego").innerText()).toBe(before);
   expect(await page.getByRole("tab", { name: /^Pack \d+\/\d+$/ }).innerText()).toBe(packBefore);
+});
+
+test("copy: the ambiguous London requires an explicit choice, and the copy keeps the chosen place", async ({
+  page,
+}) => {
+  await openDashboard(page);
+  await chooseFromMenu(page, "San Diego", "Copy trip");
+  await laptopPlanLayout(page);
+  await expect(page.getByRole("heading", { name: "Plan a trip", level: 1 })).toBeVisible();
+  await page.getByRole("combobox", { name: "Destination search" }).fill("london");
+  const options = page.getByRole("option");
+  await expect(options).toHaveCount(2);
+  await expect(options.nth(0)).toContainText("England, United Kingdom");
+  await expect(options.nth(1)).toContainText("Ontario, Canada");
+  // Without a choice Next only says why; it does not move on.
+  const next = nextButton(page);
+  await expect(next).toHaveAttribute("aria-disabled", "true");
+  await next.click({ force: true });
+  await expect(page.getByRole("region", { name: "Where" })).toHaveAttribute("aria-current", "step");
+  await expect(page.getByText("Choose a destination from the list to continue.")).toHaveCount(1);
+  await options.nth(1).click();
+  await expect(page.getByRole("button", { name: "Change London" })).toBeVisible();
+  await toWhen(page);
+  await setDates(page, "2026-11-12", "2026-11-16");
+  await toList(page);
+  await expect(page.getByRole("checkbox", { name: /Copy a past trip/ })).toBeChecked();
+  await reviewAndCreate(page);
+  await phoneHomeLayout(page);
+  const london = await futureRowNamed(page, "London");
+  await expect(london).toBeVisible();
+  // The chosen London is the Ontario one.
+  await page.getByRole("button", { name: "More actions for London" }).click();
+  await page.getByRole("menuitem", { name: "Edit trip", exact: true }).click();
+  await expect(page.getByRole("dialog").getByText("London · Ontario · Canada")).toBeVisible();
+});
+
+test("copy: cancelling a copy draft saves nothing and leaves the source trip as it was", async ({
+  page,
+}) => {
+  await openDashboard(page);
+  const before = await tag(page, "San Diego").innerText();
+  const packBefore = await page.getByRole("tab", { name: /^Pack \d+\/\d+$/ }).innerText();
+  await chooseFromMenu(page, "San Diego", "Copy trip");
+  await expect(page.getByRole("heading", { name: "Plan a trip", level: 1 })).toBeVisible();
+  await pickPlace(page, "paris", /Paris/);
+  await toWhen(page);
+  await setDates(page, "2026-12-04", "2026-12-08");
+  await toList(page);
+  await expect(page.getByRole("checkbox", { name: /Copy a past trip/ })).toBeChecked();
+  // The close button (phone) or the Trips link (laptop) asks nothing: the draft lives in memory until Create trip.
+  await page
+    .getByRole("main")
+    .getByRole("link", { name: /^(Close and return to trips|Trips)$/ })
+    .click();
+  await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(futureTab(page)).toContainText("0 trips");
+  expect(await tag(page, "San Diego").innerText()).toBe(before);
+  expect(await page.getByRole("tab", { name: /^Pack \d+\/\d+$/ }).innerText()).toBe(packBefore);
+
+  // Nothing was stored: after a reload there is still no Paris trip.
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
+  await expect(futureTab(page)).toContainText("0 trips");
+  await expect(page.getByRole("heading", { name: "Paris" })).toHaveCount(0);
 });
 
 test("Copy a past trip offers the latest past trip, and copies its preferences", async ({

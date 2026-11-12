@@ -96,11 +96,11 @@ describe("allPacked", () => {
 describe("packedTotals", () => {
   it.each([
     ["no toiletries", trip([shirt(2), socks(5)]), { packed: 4, total: 5 }],
-    ["toiletries, bag outside", trip([shirt(3), brush(1)]), { packed: 4, total: 5 }],
+    ["toiletries, bag outside: no bag unit", trip([shirt(3), brush(1)]), { packed: 4, total: 4 }],
     [
-      "toiletries, bag in suitcase",
+      "toiletries, bag in suitcase: still no bag unit",
       trip([shirt(3), brush(1)], { toiletryBagPacked: true }),
-      { packed: 5, total: 5 },
+      { packed: 4, total: 4 },
     ],
     ["empty", trip([]), { packed: 0, total: 0 }],
   ])("%s", (_name, t, expected) => {

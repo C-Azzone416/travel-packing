@@ -219,6 +219,39 @@ test("a remembered edit changes future trips, but neither this trip's history no
   await expect(await showItem(page, "sunglasses")).toContainText("Polarized sunglasses");
 });
 
+test("removing a placed toiletry with Remember takes the bag out of the suitcase and drops it from future trips, stored", async ({
+  page,
+}) => {
+  await openSanDiego(page);
+  for (const id of TOILETRIES) await tick(page, id);
+  await page.getByRole("button", { name: "Not yet" }).click();
+  await page.getByRole("button", { name: "Put bag in suitcase" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Confirm" }).click();
+  await expect(page.getByText("Toiletry bag is in the suitcase")).toBeVisible();
+
+  await openEditor(page, "last-contacts");
+  const edit = page.getByRole("dialog", { name: "Edit item" });
+  await edit.getByRole("radio", { name: /Remember for future trips/ }).check();
+  await edit.getByRole("button", { name: "Remove item" }).click();
+  const confirm = page.getByRole("dialog", { name: /^Remove .+\?$/ });
+  await expect(confirm).toContainText("from your staples");
+  await confirm.getByRole("button", { name: "Remove item" }).click();
+  await expectNoItem(page, "last-contacts");
+
+  // The remaining toiletries are still packed, but the bag is no longer in the suitcase, and that is stored.
+  await openCube(page, "Toiletries");
+  await expect(page.getByText("Toiletry bag ready to place")).toBeVisible();
+  await expect(page.getByText("Toiletry bag is in the suitcase")).toHaveCount(0);
+  await page.reload();
+  await openCube(page, "Toiletries");
+  await expect(page.getByText("Toiletry bag ready to place")).toBeVisible();
+  await expect(page.getByText("Toiletry bag is in the suitcase")).toHaveCount(0);
+
+  // The staple is gone too: a trip made afterwards does not have it.
+  await newParisTrip(page);
+  await expectNoItem(page, "last-contacts");
+});
+
 test("weather: a trip with only curated places says it needs a map place, and adds nothing to the list", async ({
   page,
 }) => {

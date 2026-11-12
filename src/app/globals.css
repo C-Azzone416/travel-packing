@@ -1029,10 +1029,6 @@ body[data-sheet-open] .toast-region {
   gap: 14px;
   padding: 20px;
 }
-.two-col {
-  display: grid;
-  gap: 12px;
-}
 /* Group labels (legends) are the same size and weight as field labels. */
 legend {
   padding: 0;
@@ -1412,31 +1408,10 @@ input:disabled {
 .confirmed-location .button.ghost {
   color: var(--status-ready-text);
 }
-@media (min-width: 660px) {
-  .two-col {
-    grid-template-columns: 1fr 1fr;
-  }
-}
 
 /* ---- Trip screen / packing list (#16). Ported from the prototype; sizes follow design's #12 and #16 gaps. */
 
 /* A group: 29px display heading, the muted "2 of 6 complete" at the right, a hairline rule under (audit 8). */
-.list-section-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 4px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--line-strong);
-}
-.list-section-head h3 {
-  margin: 0;
-  font-family: var(--font-display), var(--font-body), sans-serif;
-  font-size: 29px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-}
 
 /* The list sits flat on the page: no card around it (audit 18). */
 
@@ -2721,32 +2696,6 @@ a.back {
   -webkit-box-orient: vertical;
 }
 
-.add-stop-row {
-  display: grid;
-  gap: 4px;
-  justify-items: start;
-}
-/* Weather polish (#117): reasons cut to two lines on a phone with a More button, a stacked review footer, the What's this? note. */
-.more-button {
-  margin-left: 6px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--link);
-  font: inherit;
-  font-weight: 700;
-  text-decoration: underline;
-  cursor: pointer;
-}
-@media (max-width: 659px) {
-  .clamped:not(.open) {
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-}
-
 /* "Didn't get it?" under the resend control (#119): a link-style summary, 44px, in the same place on all three screens. */
 .didnt-get-it {
   margin-top: 12px;
@@ -2927,14 +2876,6 @@ a.back {
 }
 /* A packed row shows "Packed" as quiet muted text in the same 88px column (still a button: it toggles back). */
 
-.weather-note {
-  font-size: 13px;
-  color: var(--muted);
-}
-
-.weather-note {
-  color: var(--muted);
-}
 .weather-range small {
   color: var(--muted);
   font-size: 11px;
@@ -3052,8 +2993,6 @@ a.back {
 /* ---- Trip screen (#155, design's corrections on #159): a clean cream hero card, the progress and filters on one
    full-width row, then the list (about 1000px) beside a slim 190px sections column. */
 
-/* The theme picture (#48) is an isolated optional layer: hidden until Caroline decides (hero-picture.ts). */
-
 .back-link {
   display: inline-flex;
   align-items: center;
@@ -3061,14 +3000,6 @@ a.back {
   color: var(--link);
   font-size: 15px;
   text-decoration: underline;
-}
-
-@media (min-width: 900px) {
-  /* One sticky unit (#297): the whole rail sticks, nothing inside it does, so the nav can never cover Trip math. */
-}
-
-@media (max-width: 899px) {
-  /* Below 900 the sections panel moves above the list as a wrapping chip row; the other side cards stay below. */
 }
 
 .back-link span {
@@ -3093,35 +3024,10 @@ a.back {
   box-shadow: none;
 }
 
-/* ---- Inline "＋ Add item" on the packing screen (#147). 44px controls; stacks on phones. */
-.add-item {
-  margin: 16px 0 0;
-}
-.add-item-form {
-  display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 0.8fr);
-  align-items: start;
-  gap: 12px;
-  margin-top: 12px;
-  padding: 16px;
-  border: 1px solid var(--line);
-  border-radius: var(--control-radius);
-  background: var(--surface);
-}
-.add-item-form input,
-.add-item-form select {
-  min-height: 44px;
-}
-.add-item-actions,
-.add-item-note,
+/* ---- Save-to-list duplicate warning (the add-item sheet). */
 .add-item-exists {
   grid-column: 1 / -1;
   margin: 0;
-}
-.add-item-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
 }
 .add-item-exists {
   padding: 10px 12px;
@@ -3133,14 +3039,6 @@ a.back {
   min-height: 44px;
   padding-inline: 8px;
   font-weight: 700;
-}
-@media (max-width: 720px) {
-  .add-item-form {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .add-item .button {
-    width: 100%;
-  }
 }
 
 /* Shared DuplicateResolver (#168, #140 spec §0): one fieldset per group, native radios drawn as 56px option cards like the

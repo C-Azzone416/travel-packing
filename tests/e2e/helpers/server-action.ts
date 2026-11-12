@@ -23,3 +23,10 @@ export function serverActionId(file: string, exportName: string): string {
   );
   return matches[0][0];
 }
+
+/** The "file#export" name of a server action id from the built manifest, for failure messages ("unknown" if it is not there). */
+export function serverActionName(id: string): string {
+  const manifest = JSON.parse(readFileSync(join(process.cwd(), MANIFEST), "utf8")) as Manifest;
+  const reference = manifest.node?.[id];
+  return reference ? `${reference.filename}#${reference.exportedName}` : "unknown";
+}

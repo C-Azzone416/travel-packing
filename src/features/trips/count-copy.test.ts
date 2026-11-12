@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { dailyDaysFor } from "@/domain/calc/daily-days";
-import {
-  countedWithEarlierRule,
-  countEquation,
-  STALE_COUNT_NOTE,
-  tripMathLine,
-} from "./count-copy";
+import { countedWithEarlierRule, countEquation, tripMathLine } from "./count-copy";
 
 const n = dailyDaysFor;
 const WORN = "Your travel outfit is worn, not packed.";
@@ -104,11 +99,5 @@ describe("a trip counted with the earlier rule", () => {
     expect(countedWithEarlierRule(trip(5, 4, true))).toBe(false);
     expect(countedWithEarlierRule(trip(5, 4, false))).toBe(true);
     expect(countedWithEarlierRule(trip(1, 0, false))).toBe(false);
-  });
-
-  it("has a fixed note", () => {
-    expect(STALE_COUNT_NOTE).toBe(
-      "This list was counted with the earlier rule. Edit preferences to update it.",
-    );
   });
 });

@@ -36,3 +36,17 @@ export function laundryChangesQuantity(
 export function laundryControlVisible(trip: Trip, config: TripConfig = trip.config): boolean {
   return config.laundry || laundryChangesQuantity(trip, config);
 }
+
+/**
+ * Why laundry has nothing to do on this trip, or null when it does change a quantity (#495). A day trip has no days to
+ * launder across; otherwise the list simply has no row the preference moves: no Staple marked ↻ and no Everyday
+ * tops/bottoms (a weather-split list counts its own lines and the calculator leaves them alone). The reason is about the
+ * list, never about the trip being short, so the copy never blames the length of a multi-night trip.
+ */
+export function laundryIdleReason(
+  trip: Trip,
+  config: TripConfig = trip.config,
+): "day-trip" | "no-items" | null {
+  if (laundryChangesQuantity(trip, config)) return null;
+  return isDayTrip(trip) ? "day-trip" : "no-items";
+}

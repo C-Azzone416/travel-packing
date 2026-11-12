@@ -140,13 +140,13 @@ export function filterItems(items: readonly TripItem[], filter: CubeFilter): Tri
 
 /** The footer of the open cube: the hint, or what a finished or empty view says. */
 export function panelFooter(
-  view: Pick<CubeView, "items"> & { morningOfAvailable?: boolean },
+  view: Pick<CubeView, "items" | "morningOfAvailable">,
   shown: number,
 ): string {
   if (view.items.length === 0) return "Nothing here yet.";
   if (shown === 0) return "Nothing here.";
   if (view.items.every(isPacked)) return "Everything in this cube is packed.";
-  return view.morningOfAvailable === false ? HINT_DAY_TRIP : HINT;
+  return view.morningOfAvailable ? HINT : HINT_DAY_TRIP;
 }
 
 export const HINT =

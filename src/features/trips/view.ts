@@ -1,18 +1,7 @@
 // Pure view-models for the trips dashboard. No React, no clock: `today` is passed in.
 
 import { parseDate } from "@/domain/calc";
-import { daysBetween, type TripStop } from "@/domain/trip-stops";
-import type { StopWeather } from "@/domain/weather/types";
-import {
-  dayCount,
-  displayTemperature,
-  typicalLine,
-  weatherRowView,
-  type DayView,
-  type WeatherRowView,
-} from "@/features/trip/weather-view";
-import type { TemperatureUnit } from "@/server/data/weather-store";
-import { packedTotals } from "@/domain/readiness";
+import { allPacked, packedTotals } from "@/domain/readiness";
 import { isPastTrip, classifyTrip, type LifecycleTrip } from "@/domain/trip-lifecycle";
 import { toiletryBagState, toiletryItems, TOILETRY_GROUP_ID } from "@/domain/toiletry-bag";
 import type { TripItem } from "@/domain/trip";
@@ -58,6 +47,8 @@ export interface TripCardView {
   packed: number;
   total: number;
   remaining: number;
+  /** Every item is packed but the toiletry bag is not placed yet: not Ready, and not "0 left". */
+  bagNext: boolean;
   percent: number;
   range: string;
   days: number;
@@ -83,6 +74,7 @@ export function tripCardView(trip: LifecycleTrip, today: string, view: TripListV
     packed: totals.packed,
     total: totals.total,
     remaining: totals.total - totals.packed,
+    bagNext: totals.total > 0 && totals.packed >= totals.total && !trip.ready && !allPacked(trip),
     percent: totals.total ? Math.round((totals.packed / totals.total) * 100) : 0,
     range: formatRange(trip),
     days: trip.days,
@@ -200,143 +192,5 @@ export function routeDisplay(
     shortened,
     count: cities.length,
     spoken: `Route: ${cities.join(", then ")}.`,
-  };
-}
-
-// ---------------------------------------------------------------- Field Ledger dashboard (#143, spec §4)
-
-export interface WeatherCell {
-  stopIndex: number;
-  city: string;
-  dates: string;
-  glyph: WeatherRowView["glyph"];
-  /** "18° / 11°" in the person's unit. */
-  range: string;
-  /** One line: "Rain on 2 of 5 days", "Snow likely", "Mostly dry". */
-  note: string;
-  /** "Forecast" or "Typical" so a normal-for-the-season figure is never read as a forecast. */
-  source: string;
-}
-
-/** The day glyph for a set of days, by the same snow-then-rain rule as a stay. */
-function glyphOf(days: readonly DayView[]): WeatherRowView["glyph"] {
-  return days.some((day) => day.glyph === "snow")
-    ? "snow"
-    : days.some((day) => day.glyph === "rain")
-      ? "rain"
-      : "sun";
-}
-
-/**
- * One compact cell per stay that has weather; a stay without it is simply left out (never a daily forecast). A stay with
- * any forecast day is summed up over those days only, so the cell, the daily cards and the trip page's Forecast line
- * count the same days (#357); a stay with none shows its typical figures, tagged Typical.
- */
-export function weatherCells(
-  stops: readonly TripStop[],
-  weather: readonly StopWeather[],
-  unit: TemperatureUnit,
-  today?: string,
-): WeatherCell[] {
-  const cells: WeatherCell[] = [];
-  stops.forEach((stop, index) => {
-    const found = weather.find((entry) => entry.stopIndex === index);
-    const row = found ? weatherRowView(stop, found, unit, today) : null;
-    if (!row) return;
-    const part = row.forecast ?? {
-      high: row.high,
-      low: row.low,
-      rainDays: row.rainDays,
-      totalDays: row.totalDays,
-    };
-    const glyph = row.forecast ? glyphOf(row.forecastDays) : row.glyph;
-    // "of 2 forecast days" only when the stay also has typical days; an all-forecast stay keeps "of 4 days"
-    const days =
-      row.forecast && row.typical
-        ? `${part.totalDays} forecast ${part.totalDays === 1 ? "day" : "days"}`
-        : dayCount(part.totalDays);
-    cells.push({
-      stopIndex: index,
-      city: row.city,
-      dates: row.dates,
-      glyph,
-      range: `${displayTemperature(part.high, unit)}° / ${displayTemperature(part.low, unit)}°`,
-      note:
-        glyph === "snow"
-          ? "Snow likely"
-          : part.rainDays > 0
-            ? `Rain on ${part.rainDays} of ${days}`
-            : "Mostly dry",
-      source: row.forecast ? "Forecast" : "Typical",
-    });
-  });
-  return cells;
-}
-
-/** The most forecast days the dashboard hero shows (#303); the rest are one "+N more days" link to the trip page. */
-export const HERO_FORECAST_CAP = 7;
-
-/** The hero's daily forecast block: the first stay that has any forecast day, its first 7 days, and how many more. */
-export interface HeroForecast {
-  city: string;
-  days: DayView[];
-  /** Forecast days past the cap. */
-  more: number;
-  /** All the stay's forecast days, before the cap: `days.length + more`. */
-  forecastTotal: number;
-  /** All the stay's days: `forecastTotal` plus the typical days. */
-  totalDays: number;
-  /** The stay's typical days, if it has any (#357): shown as one text row, never as cards. */
-  typical: {
-    line: string;
-    range: string | null;
-    days: number;
-    /** Why these days are not a forecast. */
-    note: string;
-  } | null;
-  /** Another stay on the trip also has forecast days: a link to the trip page covers them. */
-  otherForecastStays: boolean;
-}
-
-const TYPICAL_NOTE = {
-  after: "Beyond the 16-day forecast, so these days use the average of the last 5 years.",
-  before: "Before today, so these days use the average of the last 5 years.",
-  split: "These days use the average of the last 5 years, not a forecast.",
-} as const;
-
-/** The first stay (trip order) with at least one forecast day, or null: typical-only trips get no block. */
-export function heroForecast(
-  stops: readonly TripStop[],
-  weather: readonly StopWeather[],
-  unit: TemperatureUnit,
-  today?: string,
-): HeroForecast | null {
-  const rows = stops.map((stop, index) => {
-    const found = weather.find((entry) => entry.stopIndex === index);
-    return found ? weatherRowView(stop, found, unit, today) : null;
-  });
-  const at = rows.findIndex((row) => row !== null && row.forecastDays.length > 0);
-  const row = at === -1 ? null : rows[at];
-  if (!row) return null;
-  const forecastTotal = row.forecastDays.length;
-  const typical = row.typical;
-  return {
-    city: row.city,
-    days: row.forecastDays.slice(0, HERO_FORECAST_CAP),
-    more: forecastTotal - Math.min(forecastTotal, HERO_FORECAST_CAP),
-    forecastTotal,
-    totalDays: row.totalDays,
-    typical:
-      typical && row.typicalPlacement
-        ? {
-            line: typicalLine(typical, unit, row.typicalRange),
-            range: row.typicalRange,
-            days: typical.totalDays,
-            note: TYPICAL_NOTE[row.typicalPlacement],
-          }
-        : null,
-    otherForecastStays: rows.some(
-      (other, index) => index !== at && other !== null && other.forecastDays.length > 0,
-    ),
   };
 }

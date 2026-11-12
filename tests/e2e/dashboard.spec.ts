@@ -3,6 +3,7 @@ import { signInAsOwner } from "./helpers/auth";
 import { chooseFromMenu, futureTab, openPastAndArchive, planATrip } from "./helpers/menu";
 import { planAndCreate } from "./helpers/plan";
 import { DEVICE, phoneHomeLayout } from "./helpers/device";
+import { serverActionId, serverActionName } from "./helpers/server-action";
 
 // Home is the laptop suitcase view from 1024px (#387) and the phone suitcase below it (#388); this spec runs on the phone Home
 // (the desktop project at 700px, the phone project at its own size).
@@ -142,11 +143,29 @@ test("quick view on an archived trip filters without changing progress or touchi
   await openDashboard(page);
   await chooseFromMenu(page, "San Diego", "Archive");
   await tab(page, /Past & archive/).click();
+  // Opening the dashboard fires READ server actions a little after it shows (the trips, the home city, the weather settings and
+  // suggestions; #478, #484). They are POSTs to the same URL, so they are excluded by their action id, never by a guess at the
+  // body. ANY other request counts, and the failure names its method, URL and next-action id.
+  const reads = new Set(
+    [
+      ["src/features/trips/actions.ts", "loadTripsAction"],
+      ["src/features/trips/trip-actions.ts", "getHomeCityAction"],
+      ["src/features/trips/trip-actions.ts", "listWeatherSuggestionsAction"],
+      ["src/features/settings/weather-actions.ts", "getWeatherSettingsAction"],
+      // The shell's staples-reminder read (src/app/layout.tsx), fired on every page.
+      ["src/features/trips/trip-actions.ts", "getStaplesSetupAction"],
+    ].map(([file, name]) => serverActionId(file, name)),
+  );
   const requests: string[] = [];
   page.on("request", (request) => {
+    const url = request.url();
     // Next prefetches linked routes (?_rsc=) as links scroll into view: reads, not saves.
-    if (!/\/_next\/|\.(jpg|png|css|js|woff2?)$|_rsc=/.test(request.url()))
-      requests.push(`${request.method()} ${request.url()}`);
+    if (/\/_next\/|\.(jpg|png|css|js|woff2?)$|_rsc=/.test(url)) return;
+    const action = request.headers()["next-action"];
+    if (action !== undefined && reads.has(action)) return;
+    requests.push(
+      `${request.method()} ${url}${action === undefined ? "" : ` next-action=${action} (${serverActionName(action)})`}`,
+    );
   });
   const san = card(page, "San Diego");
   const progress = await san.getByText(/of \d+ packed/).innerText();
@@ -166,6 +185,27 @@ test("quick view on an archived trip filters without changing progress or touchi
   expect(await san.getByText(/of \d+ packed/).innerText()).toBe(progress);
   await expect(page.getByRole("link", { name: "Saved" })).toHaveCount(0);
   expect(requests).toEqual([]);
+});
+
+test("quick view collapses again, and the toggle says whether it is open", async ({ page }) => {
+  await openDashboard(page);
+  await openPastAndArchive(page);
+  const lisbon = card(page, "Lisbon");
+  const toggle = lisbon.getByRole("button", { name: /Quick view/ });
+  const quick = lisbon.locator('[id^="quick-view-"]');
+  const before = await lisbon.innerText();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(quick).toHaveCount(0);
+
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(quick).toBeVisible();
+
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(quick).toHaveCount(0);
+  // Closing it again puts the card back exactly as it was.
+  expect(await lisbon.innerText()).toBe(before);
 });
 
 test(

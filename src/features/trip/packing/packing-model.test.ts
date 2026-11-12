@@ -156,10 +156,14 @@ describe("the cubes to draw", () => {
 
 describe("the open cube's footer and the move targets", () => {
   it("says what an empty cube, an empty filter and a finished cube mean, else the hint", () => {
-    expect(panelFooter({ items: [] }, 0)).toBe("Nothing here yet.");
-    expect(panelFooter({ items: [item("a", 1, 0)] }, 0)).toBe("Nothing here.");
-    expect(panelFooter({ items: [item("a", 1, 1)] }, 1)).toBe("Everything in this cube is packed.");
-    expect(panelFooter({ items: [item("a", 1, 0)] }, 1)).toBe(HINT);
+    expect(panelFooter({ items: [], morningOfAvailable: true }, 0)).toBe("Nothing here yet.");
+    expect(panelFooter({ items: [item("a", 1, 0)], morningOfAvailable: true }, 0)).toBe(
+      "Nothing here.",
+    );
+    expect(panelFooter({ items: [item("a", 1, 1)], morningOfAvailable: true }, 1)).toBe(
+      "Everything in this cube is packed.",
+    );
+    expect(panelFooter({ items: [item("a", 1, 0)], morningOfAvailable: true }, 1)).toBe(HINT);
     // A day trip's hint does not mention the morning you leave (#412).
     const dayHint = panelFooter({ items: [item("a", 1, 0)], morningOfAvailable: false }, 1);
     expect(dayHint).toBe(HINT_DAY_TRIP);
