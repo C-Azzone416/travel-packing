@@ -16,6 +16,10 @@ Closes #
 
 ```
 
+- [ ] The `ci` result is green for the current head SHA (CI is not enforced by GitHub settings yet):
+
+Head SHA: `________`
+
 ## Coverage
 
 | Lines | Branches | Functions | Statements |
@@ -24,8 +28,17 @@ Closes #
 
 ## Screenshots (UI changes)
 
-- [ ] Phone 390×844
-- [ ] Desktop 1440×1000
+- [ ] Affected view/state at phone 390×844
+- [ ] Affected view/state at desktop 1440×1000
+- [ ] Extra width, theme, loading, empty, error, or large-text evidence only where this change touches it
+
+Keep repeatable screenshot scripts/specs in the repository. Attach rendered images to the PR and identify the exact head SHA; use synthetic data only.
+
+## Review gates
+
+- [ ] QA approved this exact head
+- [ ] Design approved this exact head, or the PR does not have `needs-design-review`
+- [ ] Judge posted `JUDGE: APPROVED` for this exact head
 
 ## Security checklist
 
