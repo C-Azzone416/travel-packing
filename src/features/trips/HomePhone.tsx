@@ -60,6 +60,8 @@ export interface HomePhoneProps {
   headingRef?: Ref<HTMLHeadingElement>;
   /** A trip as the source confirmed it after a stamp label save; the dashboard keeps it so a resize cannot lose it. */
   onTripSaved?: (trip: LifecycleTrip) => void;
+  /** The trip has no starting point (and the account no Home): offer a way to set one (#497). */
+  needsOrigin?: boolean;
 }
 
 /**
@@ -81,6 +83,7 @@ export function HomePhone({
   onOpenArchive,
   headingRef,
   onTripSaved,
+  needsOrigin = false,
 }: HomePhoneProps) {
   // The chosen pill is in the address, so a link, a reload and Back all land on it. The Home draws only after its trips have
   // loaded in the browser, so reading the address in the initial state cannot disagree with the server's markup.
@@ -222,6 +225,12 @@ export function HomePhone({
                 Map unavailable
               </div>
             )}
+            {needsOrigin ? (
+              <p className={styles.originNudge} data-testid="origin-nudge">
+                <Link href="/settings">Set your Home city</Link> to start the route from home, or
+                pick a starting point in Edit trip.
+              </p>
+            ) : null}
           </figure>
           <Suitcase
             role="region"

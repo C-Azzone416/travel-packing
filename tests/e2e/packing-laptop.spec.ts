@@ -170,6 +170,55 @@ test("the laundry toggle recalculates quantities, keeps what is packed, and turn
   await expect(tops).toContainText("× 4");
 });
 
+test("laundry turned off from Packing can be turned back on from Edit trip, and it survives a reload (#495)", async ({
+  page,
+}) => {
+  await openSanDiego(page);
+  const tops = panel(page).locator('[data-item-id="tops"]');
+  await page.getByRole("button", { name: "Laundry off" }).click();
+  await expect(tops).toContainText("× 2");
+  await page.getByRole("button", { name: "Laundry on" }).click();
+  await expect(tops).toContainText("× 4");
+  await page.getByRole("button", { name: "Edit trip" }).first().click();
+  const dialog = page.getByRole("dialog", { name: "Edit trip" });
+  await dialog.getByRole("button", { name: /Packing preferences/ }).click();
+  const laundry = dialog.getByRole("switch", { name: "Laundry on this trip" });
+  await expect(laundry).toBeEnabled();
+  await expect(laundry).not.toBeChecked();
+  await laundry.check();
+  await dialog.getByRole("button", { name: /^Save \d+ changes?$/ }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(tops).toContainText("× 2");
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Laundry on" })).toBeVisible();
+  await expect(panel(page).locator('[data-item-id="tops"]')).toContainText("× 2");
+});
+
+test("a longer trip whose list has nothing laundry moves: Edit trip says so, and does not blame the trip length (#495)", async ({
+  page,
+}) => {
+  await openSanDiego(page);
+  await panel(page).getByRole("button", { name: "Edit list" }).click();
+  for (const name of ["Remove Everyday tops", "Remove Everyday bottoms"]) {
+    await panel(page).getByRole("button", { name }).click();
+    const confirm = page.getByRole("dialog", { name: /^Remove / });
+    if (await confirm.isVisible().catch(() => false)) {
+      await confirm
+        .getByRole("button", { name: /Remove/ })
+        .last()
+        .click();
+    }
+  }
+  await panel(page).getByRole("button", { name: "Done" }).click();
+  await expect(page.getByRole("button", { name: /^Laundry/ })).toHaveCount(0);
+  await page.getByRole("button", { name: "Edit trip" }).first().click();
+  const dialog = page.getByRole("dialog", { name: "Edit trip" });
+  await dialog.getByRole("button", { name: /Packing preferences/ }).click();
+  await expect(dialog.getByRole("switch", { name: "Laundry on this trip" })).toBeDisabled();
+  await expect(dialog.getByText(/nothing on this list changes with laundry/)).toBeVisible();
+  await expect(dialog.getByText("No effect on a trip this short.")).toHaveCount(0);
+});
+
 test("axe is clean on the view, Edit list and the open item editor (colour contrast is #377)", async ({
   page,
 }) => {
