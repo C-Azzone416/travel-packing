@@ -11,6 +11,7 @@ import {
   routeTextShort,
   tripDisplayName,
   tripFacts,
+  withHomeOrigin,
   TRAVEL_MODE_CAPTION,
   TRAVEL_MODE_LABEL,
   TRAVEL_MODES,
@@ -150,5 +151,19 @@ describe("facts and caption", () => {
     ).toBe("SEA → LIS → OPO → SEA · flight · 10 nights · 2 cities");
     expect(routeCaption({ nights: 10, stops: LIS_OPO })).toBe("LIS → OPO · 10 nights · 2 cities");
     expect(routeCaption({ nights: 0, stops: [] })).toBe("day trip");
+  });
+});
+
+describe("withHomeOrigin (#497)", () => {
+  const home = origin("Chicago", "ORD");
+  it("fills a missing origin from Home, never replaces an explicit one, and never mutates", () => {
+    const bare = { origin: null };
+    expect(withHomeOrigin(bare, home).origin).toBe(home);
+    expect(bare.origin).toBeNull();
+    const own = { origin: origin("Denver") };
+    expect(withHomeOrigin(own, home)).toBe(own);
+    expect(withHomeOrigin<{ origin?: TripOrigin | null }>({}, home).origin).toBe(home);
+    expect(withHomeOrigin(bare, null)).toBe(bare);
+    expect(withHomeOrigin(bare, undefined)).toBe(bare);
   });
 });

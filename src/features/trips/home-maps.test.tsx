@@ -6,8 +6,12 @@ import { homeMaps } from "./home-maps";
 
 const getDataContext = vi.fn();
 const listTrips = vi.fn();
+const getHomeCity = vi.fn();
 vi.mock("@/server/data/runtime", () => ({ getDataContext: () => getDataContext() }));
-vi.mock("@/server/data/service", () => ({ listTrips: (c: unknown) => listTrips(c) }));
+vi.mock("@/server/data/service", () => ({
+  listTrips: (c: unknown) => listTrips(c),
+  getHomeCity: (c: unknown) => getHomeCity(c),
+}));
 
 const base = sampleLifecycleState().trips[0];
 const stored = (id: string, start: string, end: string, extra: Partial<StoredTrip> = {}) =>
@@ -30,7 +34,22 @@ const NOW = new Date("2026-10-16T12:00:00Z");
 beforeEach(() => {
   getDataContext.mockReset().mockResolvedValue({});
   listTrips.mockReset();
+  getHomeCity.mockReset().mockResolvedValue({ ok: true, data: null });
 });
+
+const HOME = {
+  location: {
+    id: "chicago",
+    city: "Chicago",
+    region: "Illinois",
+    country: "United States",
+    countryCode: "US",
+    label: "Chicago, Illinois, United States",
+    latitude: 41.88,
+    longitude: -87.63,
+  },
+  airportCode: "ORD",
+};
 
 describe("homeMaps", () => {
   it("draws a map for each of the earliest two trips that are not over, with the route it drew", async () => {
@@ -70,6 +89,37 @@ describe("homeMaps", () => {
     expect(await homeMaps(NOW)).toEqual({});
     listTrips.mockRejectedValueOnce(new Error("boom"));
     expect(await homeMaps(NOW)).toEqual({});
+  });
+
+  it("starts a trip with no origin from the Home saved later, and says which Home (#497)", async () => {
+    getHomeCity.mockResolvedValue({ ok: true, data: HOME });
+    listTrips.mockResolvedValue({ ok: true, data: [stored("a", "2026-10-20", "2026-10-25")] });
+    const { a } = await homeMaps(NOW);
+    expect(a.home).toEqual(HOME);
+    expect(a.signature).toContain("Chicago");
+  });
+
+  it("keeps a trip's own origin when Home changes, and draws destination-only with no Home or an unreadable one", async () => {
+    getHomeCity.mockResolvedValue({ ok: true, data: HOME });
+    const own = {
+      ...HOME,
+      location: { ...HOME.location, city: "Denver", latitude: 39.74, longitude: -104.99 },
+    };
+    listTrips.mockResolvedValue({
+      ok: true,
+      data: [stored("a", "2026-10-20", "2026-10-25", { origin: own } as Partial<StoredTrip>)],
+    });
+    const kept = (await homeMaps(NOW)).a;
+    expect(kept.home).toBeUndefined();
+    expect(kept.signature).toContain("Denver");
+    expect(kept.signature).not.toContain("Chicago");
+    listTrips.mockResolvedValue({ ok: true, data: [stored("a", "2026-10-20", "2026-10-25")] });
+    getHomeCity.mockResolvedValue({ ok: true, data: null });
+    expect((await homeMaps(NOW)).a.home).toBeUndefined();
+    getHomeCity.mockResolvedValue({ ok: false, error: { code: "INTERNAL" } });
+    expect((await homeMaps(NOW)).a.signature).not.toContain("Chicago");
+    getHomeCity.mockRejectedValue(new Error("boom"));
+    expect(Object.keys(await homeMaps(NOW))).toEqual(["a"]);
   });
 
   it("uses the real clock when none is given", async () => {

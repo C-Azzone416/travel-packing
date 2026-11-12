@@ -4,6 +4,7 @@ import { expectPacking, showItem } from "./helpers/packing";
 import { DEVICE, phoneHomeLayout } from "./helpers/device";
 import { planAndCreate } from "./helpers/plan";
 import { planATrip, futureRow, openTripFromHome } from "./helpers/menu";
+import { enlargeText } from "./helpers/layout";
 
 // The Staples screen against a REAL Postgres (#18): what it shows after a reload is what was stored. Each test starts
 // from this project's freshly seeded owner (the default staples, San Diego partly packed, Lisbon Ready).
@@ -21,6 +22,13 @@ async function saved(page: Page, action: () => Promise<unknown>) {
     page.waitForResponse((response) => response.request().method() === "POST"),
     action(),
   ]);
+}
+
+// The preview is opt-in and off on every load: a switch on a laptop, the dock's bar on a phone.
+async function previewOn(page: Page) {
+  const laptop = (page.viewportSize()?.width ?? 0) >= 1024;
+  if (laptop) await page.getByRole("switch", { name: "Preview a trip", exact: true }).check();
+  else await page.getByRole("button", { name: "Preview a trip", exact: true }).click();
 }
 
 async function openStaples(page: Page) {
@@ -114,11 +122,14 @@ test("edit a staple count: existing trips are unchanged, and the next new trip u
   await rowButton(page, "underwear", "Underwear").click();
   const editor = editorOf(page, "Underwear");
   await saved(page, () => editor.getByRole("button", { name: /^More / }).click());
-  // The row shows what a new 4-night trip starts with: 2 per day over 4 everyday days, plus the spare.
-  await expect(staple(page, "underwear")).toContainText("× 9");
+  // The row shows the saved rule only; the preview (opt-in) adds what a new 4-night trip starts with: 2 per day over 4
+  // everyday days, plus the spare.
+  await expect(staple(page, "underwear")).toContainText("2 per day");
+  await expect(staple(page, "underwear")).not.toContainText("→");
   await page.reload();
-  await expect(staple(page, "underwear")).toContainText("per day");
-  await expect(staple(page, "underwear")).toContainText("× 9");
+  await expect(staple(page, "underwear")).toContainText("2 per day");
+  await previewOn(page);
+  await expect(staple(page, "underwear")).toContainText("9 for a 4-night trip");
 
   // Existing trips keep their lists.
   await page.goto("/");
@@ -154,8 +165,8 @@ test("add a staple to a cube: it is stored, per trip, and Pack last starts off",
   const row = section(page, "Tech")
     .locator("[data-staple-id]")
     .filter({ hasText: "Phone charger" });
-  await expect(row).toContainText("per trip");
-  await expect(row).toContainText("× 1");
+  await expect(row).toContainText("1 per trip");
+  await expect(row).not.toContainText("×");
   await expect(row).not.toContainText("Pack last");
 });
 
@@ -172,34 +183,37 @@ test("change how a staple scales and mark it ↻: the preview halves it with lau
   page,
 }) => {
   await openStaples(page);
+  await previewOn(page);
   const slider = page.getByRole("slider", { name: "Preview a trip of" });
   await expect(slider).toHaveAttribute("aria-valuetext", "4 nights");
   await rowButton(page, "sleepwear", "Sleepwear").click();
   const editor = editorOf(page, "Sleepwear");
-  await expect(staple(page, "sleepwear")).toContainText("× 1");
+  await expect(staple(page, "sleepwear")).toContainText("1 for a 4-night trip");
   await saved(page, () => editor.getByRole("button", { name: "per day" }).click());
-  await expect(staple(page, "sleepwear")).toContainText("× 5");
+  await expect(staple(page, "sleepwear")).toContainText("5 for a 4-night trip");
   await saved(page, () => editor.getByRole("switch", { name: "Fewer with laundry" }).click());
   // Laundry is on in the preview: 5 halves to 3, and the preview says what it saved.
-  await expect(staple(page, "sleepwear").locator("del")).toHaveText("× 5");
-  await expect(staple(page, "sleepwear").locator("ins")).toHaveText("× 3");
+  await expect(staple(page, "sleepwear").locator("del")).toHaveText("5");
+  await expect(staple(page, "sleepwear").locator("ins")).toHaveText("3");
   await expect(page.getByText("Laundry saves 2 (anything marked ↻ is halved).")).toBeVisible();
   await page.getByRole("switch", { name: "Laundry on the trip" }).uncheck();
-  await expect(staple(page, "sleepwear")).toContainText("× 5");
+  await expect(staple(page, "sleepwear")).toContainText("5 for a 4-night trip");
   await expect(staple(page, "sleepwear").locator("del")).toHaveCount(0);
   await expect(
     page.getByText("Laundry would save 2. Underwear and socks stay one per day."),
   ).toBeVisible();
   // The cadence and the flag are stored.
   await page.reload();
-  await expect(staple(page, "sleepwear")).toContainText("per day");
+  await expect(staple(page, "sleepwear")).toContainText("1 per day");
   await expect(staple(page, "sleepwear").getByText("Fewer with laundry")).toHaveCount(1);
   // Per night is reachable too: 4 nights is 4.
   await rowButton(page, "sleepwear", "Sleepwear").click();
   await saved(page, () =>
     editorOf(page, "Sleepwear").getByRole("button", { name: "per night" }).click(),
   );
-  await expect(staple(page, "sleepwear")).toContainText("× 4");
+  await expect(staple(page, "sleepwear")).toContainText("1 per night");
+  await previewOn(page);
+  await expect(staple(page, "sleepwear")).toContainText("2 for a 4-night trip, reduced from 4");
 });
 
 test("underwear and socks cannot carry ↻, and say why", async ({ page }) => {
@@ -214,14 +228,15 @@ test("underwear and socks cannot carry ↻, and say why", async ({ page }) => {
 
 test("the preview slider scales the per-day counts", async ({ page }) => {
   await openStaples(page);
+  await previewOn(page);
   const slider = page.getByRole("slider", { name: "Preview a trip of" });
   await slider.fill("10");
   await expect(slider).toHaveAttribute("aria-valuetext", "10 nights");
-  await expect(staple(page, "underwear")).toContainText("× 11");
-  await expect(staple(page, "last-toothbrush")).toContainText("× 1");
+  await expect(staple(page, "underwear")).toContainText("11 for a 10-night trip");
+  await expect(staple(page, "last-toothbrush")).toContainText("1 for a 10-night trip");
   await slider.fill("1");
   await expect(slider).toHaveAttribute("aria-valuetext", "1 night");
-  await expect(staple(page, "underwear")).toContainText("× 2");
+  await expect(staple(page, "underwear")).toContainText("2 for a 1-night trip");
 });
 
 test("move a staple to another cube", async ({ page }) => {
@@ -303,8 +318,7 @@ test(
       await saved(page, () => sheet.getByRole("button", { name: "per night" }).click());
       await sheet.getByRole("button", { name: "Done" }).click();
       await expect(page.getByRole("dialog")).toHaveCount(0);
-      await expect(staple(page, "sleepwear")).toContainText("per night");
-      await expect(staple(page, "sleepwear")).toContainText("× 8");
+      await expect(staple(page, "sleepwear")).toContainText("2 per night");
     }
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -363,9 +377,9 @@ test("the count-rules disclosure stays reachable and wraps whole words at every 
   }
 });
 
-// Design's re-check of #384: the phone dock is drawn about 125px tall (st-p-ocean), and the staple sheet keeps Remove and Done
-// on screen at 195×844 and 390×640 (its fields scroll inside it).
-test("the phone dock keeps to its drawn height, and the sheet keeps Remove and Done on screen", async ({
+// #491: the phone dock starts as ONE collapsed bar (48px button) above the tab bar; opening it never lets it cover the tab
+// bar or grow past 45% of the screen. The staple sheet keeps Remove and Done on screen at 195×844 and 390×640.
+test("the phone dock starts as one collapsed bar clear of the tab bar, and the sheet keeps Remove and Done on screen", async ({
   page,
 }) => {
   await page.clock.setFixedTime(NOW);
@@ -374,11 +388,26 @@ test("the phone dock keeps to its drawn height, and the sheet keeps Remove and D
   await page.goto("/staples");
   await expect(section(page, "Clothing")).toBeVisible();
   const dock = page.getByRole("complementary", { name: "Preview" });
-  await expect(page.getByRole("button", { name: /^Preview:/ })).toHaveAttribute(
+  const bar = page.getByRole("button", { name: "Preview a trip", exact: true });
+  await expect(bar).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByRole("slider")).toHaveCount(0);
+  expect((await bar.boundingBox())!.height).toBeGreaterThanOrEqual(48);
+  expect((await dock.boundingBox())!.height).toBeLessThanOrEqual(80);
+  const tabBar = (await page
+    .getByRole("navigation", { name: "Primary navigation" })
+    .boundingBox())!;
+  const closed = (await dock.boundingBox())!;
+  expect(closed.y + closed.height).toBeLessThanOrEqual(tabBar.y + 0.5);
+  await bar.click();
+  await expect(page.getByRole("button", { name: "Preview: 4 nights" })).toHaveAttribute(
     "aria-expanded",
     "true",
   );
-  expect((await dock.boundingBox())!.height).toBeLessThanOrEqual(130);
+  const open = (await dock.boundingBox())!;
+  expect(open.height).toBeLessThanOrEqual(844 * 0.45 + 1);
+  expect(open.y + open.height).toBeLessThanOrEqual(tabBar.y + 0.5);
+  await page.getByRole("button", { name: "Turn off" }).click();
+  await expect(bar).toHaveAttribute("aria-expanded", "false");
 
   for (const size of [
     { width: 195, height: 844 },
@@ -406,5 +435,43 @@ test("the phone dock keeps to its drawn height, and the sheet keeps Remove and D
     await sheet.getByRole("button", { name: "Done" }).scrollIntoViewIfNeeded();
     await sheet.getByRole("button", { name: "Done" }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
+  }
+});
+
+// #491 geometry pin: at 195px and at 200% text, a long staple name with a scaled rule and a total stacks (name over the rule
+// and total), nothing overflows sideways, and the targets stay 44px.
+test("at 195px and 200% text a long scaled staple stacks its name over its rule and total, with 44px targets", async ({
+  page,
+}) => {
+  await openStaples(page);
+  for (const size of [
+    { width: 195, height: 844, zoom: false },
+    { width: 390, height: 844, zoom: true },
+  ]) {
+    await page.setViewportSize({ width: size.width, height: size.height });
+    await page.goto("/staples");
+    await expect(section(page, "Clothing")).toBeVisible();
+    await previewOn(page);
+    if (size.zoom) await enlargeText(page, staple(page, "underwear"));
+    const row = staple(page, "underwear");
+    await expect(row).toContainText("5 for a 4-night trip");
+    await expect(row).toContainText("1 per day");
+    const button = row.getByRole("button").first();
+    expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow, `${size.width}px`).toBeLessThanOrEqual(0);
+    const box = (await button.boundingBox())!;
+    const inside = await button.evaluate((el) =>
+      [...el.children].every((child) => {
+        const r = child.getBoundingClientRect();
+        const outer = el.getBoundingClientRect();
+        return r.left >= outer.left - 0.5 && r.right <= outer.right + 0.5;
+      }),
+    );
+    expect(inside, `${size.width}px: nothing clipped`).toBe(true);
+    expect(box.width).toBeLessThanOrEqual(size.width);
+    await expectWholeWords(row, `row at ${size.width}px`);
   }
 });

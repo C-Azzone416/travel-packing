@@ -1,21 +1,21 @@
 "use client";
 
-import { useId, useState, type CSSProperties } from "react";
+import { useId, useRef, type CSSProperties } from "react";
 import { Icon } from "@/components/ui/Icon";
-import { useMediaQuery } from "@/components/ui/useMediaQuery";
-import { LaundryMarker } from "@/components/suitcase/Markers";
 import {
   MAX_NIGHTS,
   MIN_NIGHTS,
+  itemsLabel,
   nightsLabel,
-  scalesWithTrip,
   type PreviewSummary,
 } from "./staples-cubes";
-import { HalvedCount } from "./StapleRow";
 import styles from "./Staples.module.css";
 
 export interface StaplesPreviewProps {
   laptop: boolean;
+  /** The opt-in "Preview a trip" mode. Off on every load; never stored. */
+  on: boolean;
+  onToggle: (on: boolean) => void;
   nights: number;
   onNights: (nights: number) => void;
   laundry: boolean;
@@ -29,10 +29,17 @@ export function laundryNote(laundry: boolean, saves: number): string {
   return `Laundry saves ${saves} (anything marked ↻ is halved).`;
 }
 
-// The preview (spec part 3 section 1.5): a sticky panel beside the suitcase on a laptop, a collapsible dock above the
-// tab bar on a phone. Every number comes from the domain calculator through `previewStaples`.
+/** The status sentence when the preview turns on, and its text for the panel's total. */
+export const previewTotalText = (total: number, nights: number): string =>
+  `${itemsLabel(total)} for ${nightsLabel(nights)}`;
+
+// The opt-in preview (#491). Off: a quiet card on a laptop (the column stays reserved) and one collapsed bar above the tab
+// bar on a phone. On: the slider, the laundry switch, the total and "By cube"; the rows gain their own totals. The rows
+// are never listed a second time here. Every number comes from the domain calculator through `previewStaples`.
 export function StaplesPreview({
   laptop,
+  on,
+  onToggle,
   nights,
   onNights,
   laundry,
@@ -41,13 +48,10 @@ export function StaplesPreview({
 }: StaplesPreviewProps) {
   const sliderId = useId();
   const switchId = useId();
+  const previewSwitchId = useId();
   const bodyId = useId();
-  const shortScreen = useMediaQuery("(max-height: 699px), (max-width: 359px)");
-  // The dock starts collapsed on a short screen so the list stays usable; a tap on its title toggles it.
-  const [expandedByUser, setExpandedByUser] = useState<boolean | null>(null);
-  const expanded = laptop || (expandedByUser ?? !shortScreen);
+  const barRef = useRef<HTMLButtonElement>(null);
   const percent = ((nights - MIN_NIGHTS) / (MAX_NIGHTS - MIN_NIGHTS)) * 100;
-  const scaling = summary.rows.filter((row) => scalesWithTrip(row.staple));
 
   const controls = (
     <>
@@ -89,23 +93,37 @@ export function StaplesPreview({
       <aside className={styles.preview} aria-label="Preview">
         <div className={styles.previewTop}>
           <button
+            ref={barRef}
             type="button"
             className={styles.dockTitle}
-            aria-expanded={expanded}
+            aria-expanded={on}
             aria-controls={bodyId}
-            onClick={() => setExpandedByUser(!expanded)}
+            onClick={() => onToggle(!on)}
           >
-            {`Preview: ${nightsLabel(nights)}`}
+            {on ? `Preview: ${nightsLabel(nights)}` : "Preview a trip"}
             <Icon name="chevronRight" size={16} />
           </button>
-          <span className={styles.big} role="status">
-            <span className={styles.bigNumber}>{summary.total}</span>
-            <span className={styles.bigUnit}>{summary.total === 1 ? "item" : "items"}</span>
-          </span>
+          {on ? (
+            <span className={styles.big} role="status">
+              <span className={styles.bigNumber}>{summary.total}</span>
+              <span className={styles.bigUnit}>{summary.total === 1 ? "item" : "items"}</span>
+            </span>
+          ) : null}
         </div>
-        <div id={bodyId} className={styles.dockBody} hidden={!expanded}>
+        <div id={bodyId} className={styles.dockBody} hidden={!on}>
           {controls}
           <p className={styles.note}>{laundryNote(laundry, summary.saves)}</p>
+          <button
+            type="button"
+            className={styles.dockOff}
+            onClick={() => {
+              // The dock body hides with this click: move focus to the bar that stays visible.
+              barRef.current?.focus();
+              onToggle(false);
+            }}
+          >
+            Turn off
+          </button>
         </div>
       </aside>
     );
@@ -113,52 +131,57 @@ export function StaplesPreview({
 
   return (
     <aside className={styles.preview} aria-label="Preview">
-      <p className={styles.previewEyebrow}>Preview</p>
-      {controls}
-      <div className={styles.panelBlock}>
-        <span className={styles.big} role="status">
-          <span className={styles.bigNumber}>{summary.total}</span>
-          <span
-            className={styles.bigUnit}
-          >{`${summary.total === 1 ? "item" : "items"} to start`}</span>
-        </span>
-        <p className={styles.note}>{laundryNote(laundry, summary.saves)}</p>
-      </div>
-      <div className={styles.panelBlock}>
-        <h2 className={styles.previewEyebrow}>Scales with the trip</h2>
-        {scaling.length ? (
-          <ul className={styles.scales}>
-            {scaling.map(({ staple, plain, qty }) => (
-              <li key={staple.id} className={styles.scaleRow}>
-                <span>{staple.name}</span>
-                <span className={styles.scaleCount}>
-                  {staple.laundryHalves ? <LaundryMarker variant="staples" /> : null}
-                  <span>
-                    <HalvedCount plain={plain} qty={qty} />
-                  </span>
-                </span>
+      {on ? (
+        <p className={styles.previewEyebrow}>Preview</p>
+      ) : (
+        <>
+          <h2 className={styles.previewTitle}>Preview a trip</h2>
+          <p className={styles.note}>
+            See what these rules add up to for a trip of any length. Nothing here changes your
+            Staples.
+          </p>
+        </>
+      )}
+      <label className={styles.switchRow} htmlFor={previewSwitchId}>
+        Preview a trip
+        <input
+          id={previewSwitchId}
+          className={styles.switchInput}
+          type="checkbox"
+          role="switch"
+          checked={on}
+          aria-controls={bodyId}
+          onChange={(event) => onToggle(event.target.checked)}
+        />
+        <span className={styles.switchTrack} aria-hidden="true" />
+      </label>
+      <div id={bodyId} hidden={!on}>
+        {controls}
+        <div className={styles.panelBlock}>
+          <span className={styles.big} role="status">
+            <span className={styles.bigNumber}>{summary.total}</span>
+            <span className={styles.bigUnit}>
+              {`${summary.total === 1 ? "item" : "items"} for ${nightsLabel(nights)}`}
+            </span>
+          </span>
+          <p className={styles.note}>{laundryNote(laundry, summary.saves)}</p>
+        </div>
+        <div className={styles.panelBlock}>
+          <h2 className={styles.previewEyebrow}>By cube</h2>
+          <ul className={styles.byCube}>
+            {summary.perCube.map(({ cube, label, items }) => (
+              <li key={cube}>
+                <span>{label}</span>
+                <b>{items}</b>
               </li>
             ))}
           </ul>
-        ) : (
-          <p className={styles.footnote}>Nothing scales with the trip yet.</p>
-        )}
-      </div>
-      <div className={styles.panelBlock}>
-        <h2 className={styles.previewEyebrow}>By cube</h2>
-        <ul className={styles.byCube}>
-          {summary.perCube.map(({ cube, label, items }) => (
-            <li key={cube}>
-              <span>{label}</span>
-              <b>{items}</b>
-            </li>
-          ))}
-        </ul>
-      </div>
-      <div className={styles.panelBlock}>
-        <p className={styles.footnote}>
-          Weather suggestions and special items are added on top when you plan a real trip.
-        </p>
+        </div>
+        <div className={styles.panelBlock}>
+          <p className={styles.footnote}>
+            Weather suggestions and special items are added on top when you plan a real trip.
+          </p>
+        </div>
       </div>
     </aside>
   );

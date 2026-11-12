@@ -36,6 +36,8 @@ export interface HomeLaptopProps {
   onOpenArchive: () => void;
   /** The page heading, which takes focus after a write (the control used may be gone). */
   headingRef?: Ref<HTMLHeadingElement>;
+  /** The trip has no starting point (and the account no Home): offer a way to set one (#497). */
+  needsOrigin?: boolean;
 }
 
 /**
@@ -54,6 +56,7 @@ export function HomeLaptop({
   onRemove,
   onOpenArchive,
   headingRef,
+  needsOrigin = false,
 }: HomeLaptopProps) {
   const model = homeModel(trip, weather, today);
   const { name, stops, nights, hero, countdown, dayBadge, totals, cubes, label, next, caption } =
@@ -74,6 +77,12 @@ export function HomeLaptop({
               </div>
             )}
             <figcaption className={styles.caption}>{caption}</figcaption>
+            {needsOrigin ? (
+              <p className={styles.originNudge} data-testid="origin-nudge">
+                <Link href="/settings">Set your Home city</Link> to start the route from home, or
+                pick a starting point in Edit trip.
+              </p>
+            ) : null}
           </figure>
 
           <Suitcase

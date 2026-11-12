@@ -18,7 +18,7 @@ import { useTripsSource } from "@/features/trips/TripsSourceProvider";
 import { AddToiletryForm } from "./AddToiletryForm";
 import { automaticStamps } from "@/domain/stamps";
 import { localToday } from "@/lib/today";
-import { usePackingViewState } from "./packing/use-packing-view-state";
+import { usePackingViewState, type PendingAdd } from "./packing/use-packing-view-state";
 import { fallbackReviewStop, weatherForReview } from "./weather-remaining";
 import { LAPTOP_MIN_WIDTH, TABLET_MIN_WIDTH, useMinWidth } from "@/lib/use-min-width";
 import { SaveAsListSheet, type SaveOutcome } from "./SaveAsListSheet";
@@ -135,6 +135,13 @@ export function TripScreen({
     };
   }, []);
   const packingView = usePackingViewState(undefined);
+  const pendingAdds = useRef(new Map<number, PendingAdd & { promise: Promise<TripChange> }>());
+  const addAttempts = useRef(0);
+  // What the screen shows NOW, for a message that is built when a write finishes (the view may have changed meanwhile).
+  const packingViewNow = useRef(packingView);
+  useEffect(() => {
+    packingViewNow.current = packingView;
+  });
   const laptop = useMinWidth(LAPTOP_MIN_WIDTH);
   // 768-1023: the laptop structure (rail and panel) inside the phone shell, with the action bar as the panel footer (#414).
   const tablet = useMinWidth(TABLET_MIN_WIDTH) && !laptop;
@@ -608,10 +615,37 @@ export function TripScreen({
     const category = categoryForCube(cube);
     const existing = findExistingItem(trip, name, category);
     if (existing) return Promise.resolve({ ok: false, reason: "EXISTS", existingId: existing.id });
+    // The send layer owns the pending guard, so it survives the add row and the panel remounting (cube changes, Edit list). Each
+    // ATTEMPT (the first send, and a top-bar Retry re-running this write) registers its own entry and settles only that entry.
+    const key = `${cube}:${name.trim().replace(/\s+/g, " ").toLowerCase()}`;
+    if ([...pendingAdds.current.values()].some((entry) => entry.key === key))
+      return Promise.resolve({ ok: false, reason: "PENDING" });
+    const sendAttempt = () => {
+      // One write in flight per key, enforced here because both a fresh send and the top-bar Retry (which re-runs this very
+      // function) come through it: a second caller reuses the write already running instead of sending again.
+      const running = [...pendingAdds.current.values()].find((entry) => entry.key === key);
+      if (running) return running.promise;
+      const id = ++addAttempts.current;
+      const end = () => {
+        pendingAdds.current.delete(id);
+        packingView.setAddPending([...pendingAdds.current.values()]);
+      };
+      const promise = source.addItem(tripId, { name, category, neededQty: 1, cube }).finally(end);
+      pendingAdds.current.set(id, { id, cube, key, promise });
+      packingView.setAddPending([...pendingAdds.current.values()]);
+      return promise;
+    };
     return new Promise((resolve) => {
-      void act(() => source.addItem(tripId, { name, category, neededQty: 1, cube }), {
-        announce: () => `${name} added to ${cubeName(cube)}.`,
-        after: () => resolve({ ok: true }),
+      void act(sendAttempt, {
+        // The new item is unpacked: only the Packed filter outside Edit list hides it, read when the save completes.
+        announce: () =>
+          !packingViewNow.current.editing && packingViewNow.current.filters[cube] === "packed"
+            ? `Added ${name}. It’s in To pack.`
+            : `Added ${name} to ${cubeName(cube)}.`,
+        // The confirmed row: the one the saved trip lists under this name and category (a duplicate is refused, so it is unique).
+        after: (change) => {
+          resolve({ ok: true, itemId: findExistingItem(change.trip, name, category)?.id });
+        },
         onFail: (error) => {
           const again = findExistingItem(trip, name, category);
           resolve(

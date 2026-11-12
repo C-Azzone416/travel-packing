@@ -13,7 +13,7 @@ import { removeStapleAction } from "@/features/trips/trip-actions";
 import { StapleInlineEditor } from "./StapleInlineEditor";
 import { StapleRow } from "./StapleRow";
 import { StapleSheet } from "./StapleSheet";
-import { StaplesPreview } from "./StaplesPreview";
+import { StaplesPreview, previewTotalText } from "./StaplesPreview";
 import { StaplesTabs } from "./StaplesTabs";
 import { STAPLE_COUNT_RULES, STAPLE_LAUNDRY_NOTE } from "./staple-count-rules";
 import {
@@ -21,6 +21,7 @@ import {
   STAPLE_CUBES,
   groupByCube,
   itemsLabel,
+  nightsLabel,
   moveToCube,
   previewStaples,
   stapleCount,
@@ -50,6 +51,7 @@ export function StaplesScreen({
   const [openId, setOpenId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, Staple>>({});
   const [announcement, setAnnouncement] = useState("");
+  const [previewOn, setPreviewOn] = useState(false);
   const [nights, setNights] = useState(DEFAULT_NIGHTS);
   const [laundry, setLaundry] = useState(true);
   const [name, setName] = useState("");
@@ -150,6 +152,14 @@ export function StaplesScreen({
   );
   const sections = useMemo(() => groupByCube(staples), [staples]);
   const rowFor = useMemo(() => new Map(summary.rows.map((row) => [row.staple.id, row])), [summary]);
+
+  // The preview is a read-only what-if: turning it on or off, or moving its inputs, never writes and never touches drafts.
+  const togglePreview = (on: boolean) => {
+    setPreviewOn(on);
+    setAnnouncement(
+      on ? `Preview on: ${previewTotalText(summary.total, nights)}.` : "Preview off.",
+    );
+  };
 
   const submitAdd = (event: FormEvent) => {
     event.preventDefault();
@@ -348,9 +358,11 @@ export function StaplesScreen({
                       {label}
                     </h2>
                     <span className={styles.cubeCount}>
-                      {laptop
-                        ? `${stapleCount(inCube.length)} · ${itemsLabel(items)}`
-                        : itemsLabel(items)}
+                      {!previewOn
+                        ? stapleCount(inCube.length)
+                        : laptop
+                          ? `${stapleCount(inCube.length)} · ${itemsLabel(items)} for ${nightsLabel(nights)}`
+                          : itemsLabel(items)}
                     </span>
                   </div>
                   {inCube.length ? (
@@ -361,8 +373,9 @@ export function StaplesScreen({
                           <StapleRow
                             key={staple.id}
                             staple={staple}
-                            plain={row?.plain ?? staple.qty}
-                            qty={row?.qty ?? staple.qty}
+                            total={
+                              previewOn && row ? { plain: row.plain, qty: row.qty, nights } : null
+                            }
                             laptop={laptop}
                             open={openId === staple.id}
                             onToggle={() => setOpenId(openId === staple.id ? null : staple.id)}
@@ -384,6 +397,8 @@ export function StaplesScreen({
         </Suitcase>
         <StaplesPreview
           laptop={laptop}
+          on={previewOn}
+          onToggle={togglePreview}
           nights={nights}
           onNights={setNights}
           laundry={laundry}

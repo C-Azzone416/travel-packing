@@ -224,6 +224,35 @@ test(
   },
 );
 
+// ---- quick add (#496) ----------------------------------------------------------------------------------------------------
+
+for (const [size, zoom] of [
+  [{ width: 390, height: 844 }, false],
+  [{ width: 195, height: 640 }, true],
+] as const) {
+  test(
+    `${size.width}x${size.height}${zoom ? " at 200% text" : ""}: the Add an item button is pinned inside the cube panel on a long cube, 44px+, with no sideways scroll`,
+    DEVICE,
+    async ({ page }) => {
+      await open(page, size);
+      if (zoom) await zoomText(page);
+      const add = page.getByRole("button", { name: "Add an item to Clothing" });
+      await expect(add).toBeVisible();
+      const panel = (await page.locator("[data-cube]").boundingBox())!;
+      const box = (await add.boundingBox())!;
+      expect(box.height).toBeGreaterThanOrEqual(43.5);
+      expect(box.y).toBeGreaterThanOrEqual(panel.y);
+      expect(box.y + box.height).toBeLessThanOrEqual(panel.y + panel.height + 1);
+      expect(box.x + box.width).toBeLessThanOrEqual(size.width);
+      expect(await sideways(page)).toBeLessThanOrEqual(0);
+      await add.click();
+      await expect(page.getByPlaceholder("+ Add an item")).toBeFocused();
+      await page.keyboard.press("Escape");
+      await expect(add).toBeFocused();
+    },
+  );
+}
+
 // ---- the fixed-height layout and its fallback ----------------------------------------------------------------------------
 
 test(
