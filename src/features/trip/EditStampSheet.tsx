@@ -27,6 +27,8 @@ export interface EditStampSheetProps {
   saving: boolean;
   /** The last save did not go through. The sheet stays open and Save tries again. */
   failed?: boolean;
+  /** Another write is pending or failed (#494): Save waits, and this says why. */
+  blockedNote?: string;
   onClose: () => void;
   /** The typed text for each slot, or null for automatic. The server trims, upper-cases and validates it again. */
   onSave: (slot1: string | null, slot2: string | null) => void;
@@ -54,6 +56,7 @@ export function EditStampSheet({
   departure,
   saving,
   failed = false,
+  blockedNote,
   onClose,
   onSave,
 }: EditStampSheetProps) {
@@ -109,7 +112,11 @@ export function EditStampSheet({
       onClose={onClose}
       actions={
         <>
-          <Button type="submit" form={formId} disabled={saving || !dirty || invalid}>
+          <Button
+            type="submit"
+            form={formId}
+            disabled={saving || !dirty || invalid || Boolean(blockedNote)}
+          >
             {saving ? "Saving…" : "Save"}
           </Button>
           <Button variant="secondary" onClick={onClose}>
@@ -233,6 +240,7 @@ export function EditStampSheet({
             </div>
           );
         })}
+        {blockedNote ? <p className="tiny muted">{blockedNote}</p> : null}
         {failed ? (
           <p className="field-error" role="alert">
             Couldn’t save the stamp. Nothing changed. Press Save to try again.
