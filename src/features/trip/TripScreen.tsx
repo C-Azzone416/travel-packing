@@ -135,7 +135,7 @@ export function TripScreen({
     };
   }, []);
   const packingView = usePackingViewState(undefined);
-  const pendingAdds = useRef(new Map<number, PendingAdd>());
+  const pendingAdds = useRef(new Map<number, PendingAdd & { promise: Promise<TripChange> }>());
   const addAttempts = useRef(0);
   // What the screen shows NOW, for a message that is built when a write finishes (the view may have changed meanwhile).
   const packingViewNow = useRef(packingView);
@@ -621,14 +621,19 @@ export function TripScreen({
     if ([...pendingAdds.current.values()].some((entry) => entry.key === key))
       return Promise.resolve({ ok: false, reason: "PENDING" });
     const sendAttempt = () => {
+      // One write in flight per key, enforced here because both a fresh send and the top-bar Retry (which re-runs this very
+      // function) come through it: a second caller reuses the write already running instead of sending again.
+      const running = [...pendingAdds.current.values()].find((entry) => entry.key === key);
+      if (running) return running.promise;
       const id = ++addAttempts.current;
-      pendingAdds.current.set(id, { id, cube, key });
-      packingView.setAddPending([...pendingAdds.current.values()]);
       const end = () => {
         pendingAdds.current.delete(id);
         packingView.setAddPending([...pendingAdds.current.values()]);
       };
-      return source.addItem(tripId, { name, category, neededQty: 1, cube }).finally(end);
+      const promise = source.addItem(tripId, { name, category, neededQty: 1, cube }).finally(end);
+      pendingAdds.current.set(id, { id, cube, key, promise });
+      packingView.setAddPending([...pendingAdds.current.values()]);
+      return promise;
     };
     return new Promise((resolve) => {
       void act(sendAttempt, {
