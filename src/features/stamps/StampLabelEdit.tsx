@@ -32,8 +32,11 @@ export function useEditorGate(failed: boolean, saving: boolean) {
   const gate = useStampLabelGate();
   const { retry } = useSaveStatus();
   const retryable = failed && gate === LABEL_FAILED;
+  // Try again stays mounted (aria-disabled) while its own retry is pending, so keyboard focus never leaves the dialog.
+  const retrying = failed && gate === LABEL_SAVING;
   return {
-    failed: retryable,
+    failed: retryable || retrying,
+    retrying,
     onRetry: retry,
     blockedNote: saving || retryable ? undefined : (gate ?? undefined),
   };
@@ -56,6 +59,7 @@ export async function saveFreshLabels(
     tripId,
     changed[0] ? draft[0] : fresh[0],
     changed[1] ? draft[1] : fresh[1],
+    changed,
   );
 }
 
@@ -164,6 +168,7 @@ export function StampLabelEditor({
       departure={trip.start}
       saving={saving}
       failed={editor.failed}
+      retrying={editor.retrying}
       onRetry={editor.onRetry}
       blockedNote={editor.blockedNote}
       onClose={onClose}

@@ -188,7 +188,9 @@ describe("Edit stamp label (#494)", () => {
     await user.clear(input);
     await user.type(input, "abc");
     await user.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() => expect(setLabels).toHaveBeenCalledWith("lisbon", "ABC", "ZZZ"));
+    await waitFor(() =>
+      expect(setLabels).toHaveBeenCalledWith("lisbon", "ABC", "ZZZ", [true, false]),
+    );
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Stamp label" })).toBeNull());
   });
 
@@ -263,10 +265,17 @@ describe("Edit stamp label (#494)", () => {
     const editor = await screen.findByRole("dialog", { name: "Stamp label" });
     await user.click(await within(editor).findByRole("button", { name: "Try again" }));
     await waitFor(() => expect(within(editor).getByText(LABEL_SAVING)).toBeTruthy());
-    expect(within(editor).queryByRole("button", { name: "Try again" })).toBeNull();
+    expect(
+      within(editor).getByRole("button", { name: "Try again" }).getAttribute("aria-disabled"),
+    ).toBe("true");
     expect(within(editor).queryByRole("alert")).toBeNull();
+    // The visible draft is the retried payload: the fields are read-only while it is pending.
+    expect((within(editor).getByLabelText("Label") as HTMLInputElement).readOnly).toBe(true);
     await act(async () => (gate as (() => void) | null)?.());
     expect(await within(editor).findByRole("button", { name: "Try again" })).toBeTruthy();
+    expect(
+      within(editor).getByRole("button", { name: "Try again" }).getAttribute("aria-disabled"),
+    ).toBeNull();
   });
 
   it("does not send an untouched slot as automatic: a stored code equal to the automatic one stays the server's", async () => {
@@ -288,7 +297,9 @@ describe("Edit stamp label (#494)", () => {
     await user.clear(input);
     await user.type(input, "abc");
     await user.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() => expect(setLabels).toHaveBeenCalledWith("lisbon", "ABC", "ZZZ"));
+    await waitFor(() =>
+      expect(setLabels).toHaveBeenCalledWith("lisbon", "ABC", "ZZZ", [true, false]),
+    );
   });
 
   it("the selected card follows the selected sticker: a route-derived one is disabled, and no editable stamp hides it", async () => {

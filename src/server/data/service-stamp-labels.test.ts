@@ -29,6 +29,7 @@ const PLACES: Record<string, SampleLocation> = {
   lisbon: place("lisbon", "Lisbon", "PT"),
   porto: place("porto", "Porto", "PT"),
   madrid: place("madrid", "Madrid", "ES"),
+  london: place("london", "London", "GB"),
 };
 
 let ctx: Awaited<ReturnType<typeof createMigratedDb>>;
@@ -165,6 +166,58 @@ describe("setTripStampLabels", () => {
     expect(
       errorOf(await setLabels("00000000-0000-4000-8000-0000000000ff", "ABC", null))?.code,
     ).toBe("NOT_FOUND");
+    expect(await stored()).toEqual([{ a: null, b: null }]);
+  });
+
+  it("saves only the changed slots: an untouched override survives even when the route made it automatic (#494)", async () => {
+    const trip = data(await create(TWO_COUNTRIES));
+    await setLabels(trip.id, null, "GBR");
+    data(
+      await service.setTripStops(context(), {
+        tripId: trip.id,
+        stops: [
+          stop("lisbon", "2030-05-01", "2030-05-04"),
+          stop("london", "2030-05-04", "2030-05-07"),
+        ],
+      }),
+    );
+    // The client's slot 2 value equals the route's new automatic label (GBR), but only slot 1 was changed.
+    const result = data(
+      await service.setTripStampLabels(context(), {
+        tripId: trip.id,
+        slot1: "ABC",
+        slot2: "GBR",
+        changed: [true, false],
+      }),
+    );
+    expect(result.trip.stampLabels).toEqual(["ABC", "GBR"]);
+    expect(await stored()).toEqual([{ a: "ABC", b: "GBR" }]);
+    // Without a mask both slots are written, as before; an unchanged slot is not validated or rewritten.
+    await service.setTripStampLabels(context(), { tripId: trip.id, slot1: "XYZ", slot2: "GBR" });
+    expect(await stored()).toEqual([{ a: "XYZ", b: null }]);
+    expect(
+      errorOf(
+        await service.setTripStampLabels(context(), {
+          tripId: trip.id,
+          slot1: "no",
+          slot2: "b!",
+          changed: [false, true],
+        }),
+      ),
+    ).toMatchObject({ code: "INVALID_INPUT", fields: ["slot2"] });
+    expect(await stored()).toEqual([{ a: "XYZ", b: null }]);
+  });
+
+  it("a changed mask does not bypass the owner scope", async () => {
+    const trip = data(await create(TWO_COUNTRIES));
+    as(OTHER_OWNER);
+    const result = await service.setTripStampLabels(context(), {
+      tripId: trip.id,
+      slot1: "ABC",
+      slot2: null,
+      changed: [true, false],
+    });
+    expect(errorOf(result)?.code).toBe("NOT_FOUND");
     expect(await stored()).toEqual([{ a: null, b: null }]);
   });
 

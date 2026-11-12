@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { screen, within } from "@testing-library/react";
+import { act, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { renderInApp } from "@/test/providers";
 import { automaticStamps, type StampLabels } from "@/domain/stamps";
@@ -29,6 +30,8 @@ function setup(
     saved?: StampLabels;
     saving?: boolean;
     failed?: boolean;
+    retrying?: boolean;
+    onRetry?: () => void;
   } = {},
 ) {
   const stops = props.stops ?? TWO;
@@ -43,6 +46,8 @@ function setup(
       departure="2030-05-01"
       saving={props.saving ?? false}
       failed={props.failed}
+      retrying={props.retrying}
+      onRetry={props.onRetry}
       onClose={onClose}
       onSave={onSave}
     />,
@@ -246,5 +251,66 @@ describe("EditStampSheet", () => {
       true,
     );
     expect(fieldError()?.textContent).toContain("Nothing changed");
+  });
+
+  describe("while a failed save is waiting on Try again (#494)", () => {
+    it("the fields are read-only, so Try again always sends what is shown", async () => {
+      const onRetry = vi.fn();
+      const { user } = setup({ saved: ["ABC", null], failed: true, onRetry });
+      const input = screen.getByRole("textbox", { name: "Label" }) as HTMLInputElement;
+      expect(input.readOnly).toBe(true);
+      await user.type(input, "XYZ");
+      expect(input.value).toBe("ABC");
+      expect(
+        (within(block(1, "custom")).getByRole("radio", { name: "Automatic" }) as HTMLInputElement)
+          .disabled,
+      ).toBe(true);
+      await user.click(screen.getByRole("button", { name: "Try again" }));
+      expect(onRetry).toHaveBeenCalledTimes(1);
+    });
+
+    it("Try again stays mounted and focused while its retry is pending, and Escape still closes", async () => {
+      const onRetry = vi.fn();
+      const onClose = vi.fn();
+      let setRetrying: (value: boolean) => void = () => {};
+      function Harness() {
+        const [retrying, set] = useState(false);
+        setRetrying = set;
+        return (
+          <EditStampSheet
+            automatic={automaticStamps(TWO)}
+            stops={TWO}
+            saved={["ABC", null]}
+            departure="2030-05-01"
+            saving={false}
+            failed
+            retrying={retrying}
+            onRetry={() => {
+              onRetry();
+              set(true);
+            }}
+            onClose={onClose}
+            onSave={vi.fn()}
+          />
+        );
+      }
+      const user = userEvent.setup();
+      renderInApp(<Harness />);
+      const again = screen.getByRole("button", { name: "Try again" });
+      again.focus();
+      await user.keyboard("{Enter}");
+      expect(onRetry).toHaveBeenCalledTimes(1);
+      const pending = screen.getByRole("button", { name: "Try again" });
+      expect(pending).toBe(again);
+      expect(pending.getAttribute("aria-disabled")).toBe("true");
+      expect(document.activeElement).toBe(pending);
+      await user.keyboard("{Enter}");
+      expect(onRetry).toHaveBeenCalledTimes(1);
+      act(() => setRetrying(false));
+      expect(screen.getByRole("button", { name: "Try again" })).toBe(again);
+      expect(document.activeElement).toBe(again);
+      await user.keyboard("{Escape}");
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
   });
 });
