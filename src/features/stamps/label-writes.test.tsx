@@ -6,7 +6,7 @@ import type { TripConfig } from "@/domain/trip";
 import { buildTrip, type LifecycleTrip } from "@/domain/trip-lifecycle";
 import type { Signals } from "@/domain/readiness";
 import type { TripChange, TripsSource } from "@/features/trips/trips-source";
-import { type LabelEdit, useLabelWrites } from "./label-writes";
+import { type LabelEdit, useStampLabelWrites } from "./label-writes";
 
 const TODAY = "2026-10-16";
 const CONFIG: TripConfig = {
@@ -64,30 +64,35 @@ function confirm(trip: LifecycleTrip): TripChange {
   return { trip, signals: SIGNALS };
 }
 
-describe("useLabelWrites: the per-trip chain and the baseline after a failure", () => {
+describe("useStampLabelWrites: the per-trip chain and the baseline after a failure", () => {
   it("issues a second write for a trip only after the first settles, and carries its confirmed slot 1", async () => {
-    let trips: LifecycleTrip[] = [makeTrip([null, null])];
-    const { result } = renderHook(() =>
-      useLabelWrites(
-        () => trips,
-        () => {},
-      ),
-    );
+    const screen: StampLabels = [null, null];
+    const { result } = renderHook(() => useStampLabelWrites());
     const { source, calls, setStampLabels } = fakeSource();
 
     let writeA!: Promise<unknown>;
     let writeB!: Promise<unknown>;
     act(() => {
-      writeA = result.current.write(source, "trip-1", {
-        slot1: "Sunset",
-        slot2: null,
-        changed: [true, false],
-      } satisfies LabelEdit);
-      writeB = result.current.write(source, "trip-1", {
-        slot1: null,
-        slot2: "Harbour",
-        changed: [false, true],
-      } satisfies LabelEdit);
+      writeA = result.current.write(
+        source,
+        "trip-1",
+        {
+          slot1: "Sunset",
+          slot2: null,
+          changed: [true, false],
+        } satisfies LabelEdit,
+        screen,
+      );
+      writeB = result.current.write(
+        source,
+        "trip-1",
+        {
+          slot1: null,
+          slot2: "Harbour",
+          changed: [false, true],
+        } satisfies LabelEdit,
+        screen,
+      );
     });
 
     // While A is pending, B must not reach the source (give queued microtasks a turn to run).
@@ -99,7 +104,6 @@ describe("useLabelWrites: the per-trip chain and the baseline after a failure", 
 
     // A settles with slot 1 confirmed.
     const confirmedA = makeTrip(["Sunset", null]);
-    trips = [confirmedA];
     await act(async () => {
       calls[0].deferred.resolve(confirm(confirmedA));
       await writeA;
@@ -110,7 +114,6 @@ describe("useLabelWrites: the per-trip chain and the baseline after a failure", 
     expect(calls[1]).toMatchObject({ tripId: "trip-1", slot1: "Sunset", slot2: "Harbour" });
 
     const confirmedB = makeTrip(["Sunset", "Harbour"]);
-    trips = [confirmedB];
     await act(async () => {
       calls[1].deferred.resolve(confirm(confirmedB));
       await writeB;
@@ -120,28 +123,33 @@ describe("useLabelWrites: the per-trip chain and the baseline after a failure", 
 
   it("after a failed write, the next write keeps the trip's confirmed slot 2 and clears pending", async () => {
     // The trip already holds a confirmed slot 2; the failing write A would have touched slot 1.
-    const trips = [makeTrip([null, "Harbour"])];
-    const { result } = renderHook(() =>
-      useLabelWrites(
-        () => trips,
-        () => {},
-      ),
-    );
+    const screen: StampLabels = [null, "Harbour"];
+    const { result } = renderHook(() => useStampLabelWrites());
     const { source, calls, setStampLabels } = fakeSource();
 
     let writeA!: Promise<unknown>;
     let writeB!: Promise<unknown>;
     act(() => {
-      writeA = result.current.write(source, "trip-1", {
-        slot1: "Sunset",
-        slot2: null,
-        changed: [true, false],
-      } satisfies LabelEdit);
-      writeB = result.current.write(source, "trip-1", {
-        slot1: "Market",
-        slot2: null,
-        changed: [true, false],
-      } satisfies LabelEdit);
+      writeA = result.current.write(
+        source,
+        "trip-1",
+        {
+          slot1: "Sunset",
+          slot2: null,
+          changed: [true, false],
+        } satisfies LabelEdit,
+        screen,
+      );
+      writeB = result.current.write(
+        source,
+        "trip-1",
+        {
+          slot1: "Market",
+          slot2: null,
+          changed: [true, false],
+        } satisfies LabelEdit,
+        screen,
+      );
     });
     await waitFor(() => expect(calls).toHaveLength(1));
     expect(calls[0]).toMatchObject({ slot1: "Sunset", slot2: "Harbour" });

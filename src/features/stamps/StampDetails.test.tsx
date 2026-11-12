@@ -449,7 +449,7 @@ describe("a sticker opens its details (#494)", () => {
       <ToastProvider>
         <SaveStatusProvider>
           <TripsSourceProvider source={src}>
-            <StampsContent state={state} today={TODAY} onTripSaved={() => undefined} />
+            <StampsContent state={state} today={TODAY} />
           </TripsSourceProvider>
         </SaveStatusProvider>
       </ToastProvider>
@@ -489,7 +489,7 @@ describe("a sticker opens its details (#494)", () => {
       <ToastProvider>
         <SaveStatusProvider>
           <TripsSourceProvider source={src}>
-            <StampsContent state={state} today={TODAY} onTripSaved={() => undefined} />
+            <StampsContent state={state} today={TODAY} />
           </TripsSourceProvider>
         </SaveStatusProvider>
       </ToastProvider>

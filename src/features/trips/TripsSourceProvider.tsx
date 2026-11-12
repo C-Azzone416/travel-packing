@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, type ReactNode } from "react";
+import { StampLabelWritesProvider } from "@/features/stamps/label-writes";
 import {
   archiveTripAction,
   createTripAction,
@@ -141,5 +142,10 @@ export function TripsSourceProvider({
         { list: listSavedListsAction, get: getSavedListAction },
       ),
   );
-  return <TripsSourceContext.Provider value={value}>{children}</TripsSourceContext.Provider>;
+  // The stamp label write queue lives exactly as long as the source: the top bar's Retry outlives any one screen.
+  return (
+    <TripsSourceContext.Provider value={value}>
+      <StampLabelWritesProvider>{children}</StampLabelWritesProvider>
+    </TripsSourceContext.Provider>
+  );
 }

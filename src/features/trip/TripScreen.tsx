@@ -17,6 +17,7 @@ import { TripsSourceError, type TripChange } from "@/features/trips/trips-source
 import { useTripsSource } from "@/features/trips/TripsSourceProvider";
 import { AddToiletryForm } from "./AddToiletryForm";
 import { automaticStamps } from "@/domain/stamps";
+import { useStampLabelWrites } from "@/features/stamps/label-writes";
 import { localToday } from "@/lib/today";
 import { usePackingViewState } from "./packing/use-packing-view-state";
 import { fallbackReviewStop, weatherForReview } from "./weather-remaining";
@@ -102,6 +103,7 @@ export function TripScreen({
   const router = useRouter();
   const { track } = useSaveStatus();
   const toast = useToast();
+  const labelWrites = useStampLabelWrites();
   const [load, setLoad] = useState<Load>({ phase: "loading" });
   const [staples, setStaples] = useState<Staple[]>([]);
   const [reloads, setReloads] = useState(0);
@@ -974,6 +976,8 @@ export function TripScreen({
               modal: true,
               onFail: () => setStampFailed(true),
               after: (change) => {
+                // The shell keeps the last confirmed trip for the Stamps screens, so they do not show an older label.
+                labelWrites.record(change.trip);
                 const now = change.trip.stampLabels ?? [null, null];
                 // Only slots that changed count: a change that only cleared overrides is a reset.
                 const changed = [0, 1].filter((slot) => now[slot] !== before[slot]);

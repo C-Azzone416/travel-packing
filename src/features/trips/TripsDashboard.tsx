@@ -23,7 +23,7 @@ import { weatherForReview } from "@/features/trip/weather-remaining";
 import { WelcomeHomeCard } from "./WelcomeHomeCard";
 import { welcomeHomeModel } from "./welcome-home";
 import { HomePhone } from "./HomePhone";
-import { useLabelWrites } from "@/features/stamps/label-writes";
+import { useStampLabelWrites } from "@/features/stamps/label-writes";
 import type { HomeMaps } from "./home-map-types";
 import { cityWeather, noTripModel, usualRows, type HeroWeather } from "./home-view";
 import { LAPTOP_MIN_WIDTH, useMinWidth } from "@/lib/use-min-width";
@@ -190,31 +190,15 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
     };
   }, [source, track, getToday, reloads]);
 
-  // A trip the source confirmed outside this screen's own writes (a stamp label saved in the Stamps panel). It lives here, above the
-  // laptop/phone branch, so crossing 1024px or changing pill cannot bring back an older copy.
-  const confirmTrip = useCallback((trip: LifecycleTrip) => {
-    setLoad((current) =>
-      current.phase === "ready"
-        ? {
-            ...current,
-            state: {
-              ...current.state,
-              trips: current.state.trips.map((entry) => (entry.id === trip.id ? trip : entry)),
-            },
-          }
-        : current,
-    );
-  }, []);
-
-  // Stamp label writes, kept above the laptop/phone branch: an editor closed by a resize leaves its write in flight, and the next one
-  // for that trip (a reopened editor's Save, or the top bar's Retry) must wait for it and build on what it confirmed.
-  const loadRef = useRef(load);
-  useEffect(() => {
-    loadRef.current = load;
-  });
-  const stampWrites = useLabelWrites(
-    () => (loadRef.current.phase === "ready" ? loadRef.current.state.trips : []),
-    confirmTrip,
+  // Stamp labels saved or retried from anywhere in the shell are laid over what this screen loaded, so a retry that lands while the
+  // Home is not on screen is already here when it is.
+  const labelWrites = useStampLabelWrites();
+  const shownState = useMemo(
+    () =>
+      load.phase === "ready"
+        ? { ...load.state, trips: labelWrites.overlay(load.state.trips) as LifecycleTrip[] }
+        : null,
+    [labelWrites, load],
   );
 
   const tryAgain = () => {
@@ -282,7 +266,8 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
     );
   }
 
-  const { state, today } = load;
+  const { today } = load;
+  const state = shownState ?? load.state;
   const upcoming = upcomingTrips(state.trips, today);
   const past = pastAndArchivedTrips(state.trips, today);
   const visible = view === "upcoming" ? upcoming : past;
@@ -527,8 +512,6 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
               onRemove={setRemoving}
               onOpenArchive={() => setView("archive")}
               headingRef={headingRef}
-              onTripSaved={confirmTrip}
-              stampWrites={stampWrites}
             />
           ) : (
             <HomeEmpty

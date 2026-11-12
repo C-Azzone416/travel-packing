@@ -12,7 +12,7 @@ import { useTripsSource } from "@/features/trips/TripsSourceProvider";
 import type { LifecycleState, LifecycleTrip } from "@/domain/trip-lifecycle";
 import { EditStampSheet } from "@/features/trip/EditStampSheet";
 import { StampDetailsSheet } from "./StampDetailsSheet";
-import { useLabelWrites, type LabelWrites } from "./label-writes";
+import { useStampLabelWrites, type StampLabelWrites } from "./label-writes";
 import {
   filterLabel,
   stampTripView,
@@ -28,8 +28,6 @@ type Load =
   | { phase: "loading" }
   | { phase: "error" }
   | { phase: "ready"; state: LifecycleState; today: string };
-
-const NO_LABELS: Record<string, StampLabels> = {};
 
 interface EditorOpen {
   tripId: string;
@@ -234,43 +232,17 @@ export function StampsContent({
   today,
   embedded = false,
   initialTripId = null,
-  onTripSaved,
-  writes,
 }: {
   state: LifecycleState;
   today: string;
   embedded?: boolean;
-  /**
-   * Called with the trip as the source confirmed it after a label save. The screen that owns `state` puts it there, so every
-   * layout of that screen (the Home's panel unmounts on a pill change or a resize) reads the same confirmed labels. Without it
-   * the labels saved here are kept in this component.
-   */
-  onTripSaved?: (trip: LifecycleTrip) => void;
-  /**
-   * The trips with a label write in flight, and how to mark one. At most one write per trip is allowed at a time, so this lives
-   * with the owner of `state` too (the Home's editor unmounts on a resize while its write is still pending). Without it
-   * they are kept in this component.
-   */
-  writes?: LabelWrites;
   /** The trip to select first (`/stamps?trip=<id>`, from the Home's recent trips). */
   initialTripId?: string | null;
 }) {
   const [filter, setFilter] = useState<StampFilter>(initialTripId ? "all" : "rolling");
   const [selectedId, setSelectedId] = useState<string | null>(initialTripId);
-  /** The stamp labels saved from here, so the stickers, the card and the details change in place. */
-  const [ownLabels, setOwnLabels] = useState<Record<string, StampLabels>>({});
-  const savedLabels = onTripSaved ? NO_LABELS : ownLabels;
-  const tripsRef = useRef<readonly LifecycleTrip[]>(state.trips);
-  const ownWrites = useLabelWrites(
-    () => tripsRef.current,
-    (confirmed) =>
-      setOwnLabels((current) => ({
-        ...current,
-        [confirmed.id]: confirmed.stampLabels ?? [null, null],
-      })),
-  );
-  const labelWrites = writes ?? ownWrites;
-  const pending = labelWrites.pending;
+  // The shell's label writes: one queue and one record of confirmed trips for every screen (the top bar's Retry outlives them).
+  const labelWrites = useStampLabelWrites();
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -278,6 +250,7 @@ export function StampsContent({
       mounted.current = false;
     };
   }, []);
+  const pending = labelWrites.pending;
   const pendingRef = useRef(pending);
   useEffect(() => {
     pendingRef.current = pending;
@@ -294,16 +267,7 @@ export function StampsContent({
   const focusAfterEditor = useRef<string | null>(null);
   const [announcement, setAnnouncement] = useState("");
 
-  const trips = useMemo<LifecycleTrip[]>(
-    () =>
-      state.trips.map((trip) =>
-        savedLabels[trip.id] ? { ...trip, stampLabels: savedLabels[trip.id] } : trip,
-      ),
-    [state.trips, savedLabels],
-  );
-  useEffect(() => {
-    tripsRef.current = trips;
-  }, [trips]);
+  const trips = useMemo(() => labelWrites.overlay(state.trips), [labelWrites, state.trips]);
   const view = useMemo(() => stampsView(trips, today, filter), [trips, today, filter]);
   const visibleIds = useMemo(
     () =>
@@ -491,13 +455,7 @@ export function StampsContent({
           trip={editorTrip}
           onClose={closeEditor}
           writes={labelWrites}
-          onSaved={(saved) => {
-            if (onTripSaved) onTripSaved(saved);
-            else
-              setOwnLabels((current) => ({
-                ...current,
-                [saved.id]: saved.stampLabels ?? [null, null],
-              }));
+          onSaved={() => {
             setAnnouncement("Stamp label saved.");
             // A save finishing closes only the editor that sent it, and only while this panel is still on screen: a panel that
             // was unmounted (a resize) has no editor to close, and its history entry must not close a newer one.
@@ -523,7 +481,7 @@ function StampLabelEditor({
   onClose: () => void;
   onSaved: (trip: LifecycleTrip) => void;
   /** Where the writes are kept. This trip may have one in flight (from this editor, one a resize closed, or the top bar's Retry): Save waits. */
-  writes: LabelWrites;
+  writes: StampLabelWrites;
 }) {
   const source = useTripsSource();
   const { track } = useSaveStatus();
@@ -543,7 +501,7 @@ function StampLabelEditor({
         // The tracked write is the one code path: Retry from the top bar runs it again, marking the trip pending and building its
         // payload from the labels confirmed at that moment.
         track(
-          () => writes.write(source, trip.id, { slot1, slot2, changed }),
+          () => writes.write(source, trip.id, { slot1, slot2, changed }, trip.stampLabels),
           ({ change, before }) => {
             const now = change.trip.stampLabels ?? [null, null];
             // Only slots that changed count: a change that only cleared overrides is a reset.
@@ -566,28 +524,6 @@ export function StampsScreen({ getToday = localToday }: { getToday?: () => strin
   const { track } = useSaveStatus();
   const [load, setLoad] = useState<Load>({ phase: "loading" });
   const [reload, setReload] = useState(0);
-  const loadRef = useRef(load);
-  useEffect(() => {
-    loadRef.current = load;
-  });
-  const confirmTrip = useCallback((saved: LifecycleTrip) => {
-    setLoad((current) =>
-      current.phase === "ready"
-        ? {
-            ...current,
-            state: {
-              ...current.state,
-              trips: current.state.trips.map((trip) => (trip.id === saved.id ? saved : trip)),
-            },
-          }
-        : current,
-    );
-  }, []);
-  const writes = useLabelWrites(
-    () => (loadRef.current.phase === "ready" ? loadRef.current.state.trips : []),
-    confirmTrip,
-  );
-
   useEffect(() => {
     let cancelled = false;
     track(
@@ -631,13 +567,5 @@ export function StampsScreen({ getToday = localToday }: { getToday?: () => strin
 
   // The trips have loaded in the browser by now, so reading the address cannot disagree with the server's markup.
   const initialTripId = new URLSearchParams(window.location.search).get("trip");
-  return (
-    <StampsContent
-      state={load.state}
-      today={load.today}
-      initialTripId={initialTripId}
-      writes={writes}
-      onTripSaved={confirmTrip}
-    />
-  );
+  return <StampsContent state={load.state} today={load.today} initialTripId={initialTripId} />;
 }
