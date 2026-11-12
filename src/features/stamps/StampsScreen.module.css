@@ -134,7 +134,9 @@
 .stickerButton[data-colour="goldDeep"] {
   --sticker-fill: var(--goldDeep);
 }
+/* Upcoming (#493): an empty dashed outline plus an "Upcoming" tag. Gold stays the repeat badge's alone. */
 .stickerButton[data-upcoming="true"] {
+  border-width: 2px;
   border-style: dashed;
   border-color: var(--ghost);
   outline: 0;
@@ -142,14 +144,77 @@
   color: var(--ghost);
   box-shadow: none;
 }
+/* Selected (either kind): one neutral ring, a 5px gap out. It never changes how earned or upcoming reads. */
 .stickerButton[aria-pressed="true"] {
   box-shadow:
-    0 0 0 4px var(--gold),
+    0 0 0 5px var(--dark),
+    0 0 0 7px var(--onDark),
     0 7px 12px color-mix(in srgb, var(--darkEdge) 30%, transparent);
+}
+.stickerButton[data-upcoming="true"][aria-pressed="true"] {
+  box-shadow:
+    0 0 0 5px var(--dark),
+    0 0 0 7px var(--onDark);
 }
 .stickerButton:focus-visible {
   outline: 3px solid var(--onDark);
   outline-offset: 4px;
+}
+/* Focus and selection are told apart: a selected sticker's focus ring sits outside its selection ring. */
+.stickerButton[aria-pressed="true"]:focus-visible {
+  outline-offset: 9px;
+}
+.upcomingTag {
+  position: absolute;
+  bottom: -10px;
+  left: 50%;
+  height: 20px;
+  display: inline-grid;
+  place-items: center;
+  padding-inline: 8px;
+  border: 1px dashed var(--ghost);
+  border-radius: 999px;
+  background: var(--dark);
+  color: var(--onDarkMuted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transform: translateX(-50%) rotate(calc(-1 * var(--sticker-tilt)));
+}
+.stickerButton[data-shape="circle"] .upcomingTag {
+  transform: translateX(-50%);
+}
+/* The close-up in the stamp details. */
+.stickerButton.stickerLarge {
+  width: 160px;
+  height: 160px;
+  cursor: default;
+}
+.stickerButton.stickerLarge .stickerCode,
+.stickerButton.stickerLarge[data-shape="rounded"] .stickerCode,
+.stickerButton.stickerLarge[data-shape="squared"] .stickerCode {
+  font-size: 48px;
+}
+.stickerButton.stickerLarge .stickerRegion,
+.stickerButton.stickerLarge .stickerMonth {
+  font-size: 12px;
+}
+@media (forced-colors: active) {
+  .stickerButton {
+    border-color: CanvasText;
+  }
+  .stickerButton[data-upcoming="true"] {
+    border-color: GrayText;
+    color: GrayText;
+  }
+  .stickerButton[aria-pressed="true"] {
+    outline: 3px solid Highlight;
+    outline-offset: 5px;
+    box-shadow: none;
+  }
 }
 .stickerRegion,
 .stickerMonth {
@@ -278,7 +343,7 @@
   flex-wrap: wrap;
   gap: 8px;
 }
-.selectedActions :global(.button) {
+.selectedCard .selectedActions :global(.button) {
   min-height: 44px;
   border-color: var(--paper);
   border-radius: 999px;

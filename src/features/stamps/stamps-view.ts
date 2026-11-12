@@ -22,6 +22,8 @@ export interface StickerView {
   colour: StickerColour;
   tilt: number;
   tripId: string;
+  /** Which stop of `tripId` the sticker draws; its code follows the trip's stamp label for that slot. */
+  stopIndex: number;
   accessibleName: string;
 }
 
@@ -31,6 +33,8 @@ export interface PastTripView {
   stickerColour: StickerColour | null;
   name: string;
   monthYear: string;
+  /** Not home yet: the trip has not ended, so it inks when you get home. */
+  upcoming: boolean;
   eyebrow: string;
   facts: string;
   packed: number;
@@ -146,13 +150,17 @@ function regionLabel(stop: TripStop): string {
   return (stop.location.region || stop.location.country).trim().toUpperCase();
 }
 
-export function stampTripView(trip: LifecycleTrip): PastTripView {
+export const UPCOMING_EYEBROW = "Upcoming · inks when you get home";
+
+export function stampTripView(trip: LifecycleTrip, today: string): PastTripView {
   const first = trip.stops[0];
   const code = first ? stickerCode(trip, first, 0) : "";
   const stickerColour = first
     ? stickerLook(first.location.countryCode, first.location.city).colour
     : null;
   const totals = packedTotals(trip);
+  // A trip with no usable dates is neither: it keeps its "Date not set" line.
+  const upcoming = dateOf(trip.start) !== null && !isPastTrip(trip, today);
   const nights = Math.max(0, daysBetween(trip.start, trip.end));
   const facts = [
     monthYear(trip.start),
@@ -168,7 +176,10 @@ export function stampTripView(trip: LifecycleTrip): PastTripView {
     stickerColour,
     name: tripDisplayName(trip),
     monthYear: monthYear(trip.start),
-    eyebrow: [code, compactMonthYear(trip.start)].filter(Boolean).join(" · "),
+    upcoming,
+    eyebrow: upcoming
+      ? UPCOMING_EYEBROW
+      : [code, compactMonthYear(trip.start)].filter(Boolean).join(" · "),
     facts,
     packed: totals.packed,
     total: totals.total,
@@ -231,7 +242,11 @@ export function stampsView(
           colour: look.colour,
           tilt: look.tilt,
           tripId: chosen.trip.id,
-          accessibleName: `${chosenStop.location.city}, ${monthYear(date)}, ${Math.max(1, count)} ${Math.max(1, count) === 1 ? "trip" : "trips"}`,
+          stopIndex: chosen.stopIndex,
+          accessibleName:
+            count === 0
+              ? `${chosenStop.location.city}, ${monthYear(date)}, upcoming, not inked yet`
+              : `${chosenStop.location.city}, ${monthYear(date)}, inked, ${count} ${count === 1 ? "trip" : "trips"}`,
         },
       };
     })
@@ -253,7 +268,7 @@ export function stampsView(
   return {
     filterLabel: filterLabel(filter, today),
     stickers,
-    pastTrips: past.map(stampTripView),
+    pastTrips: past.map((trip) => stampTripView(trip, today)),
     totals: {
       trips: past.length,
       places: completedPlaces.size,
