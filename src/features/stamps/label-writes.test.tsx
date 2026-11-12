@@ -170,3 +170,71 @@ describe("useStampLabelWrites: the per-trip chain and the baseline after a failu
     expect(result.current.pending.size).toBe(0);
   });
 });
+
+describe("useStampLabelWrites: the overlay picks the newer copy of a trip", () => {
+  const SAVED_AT = "2026-10-16T10:00:00.000Z";
+
+  /** Confirm `saved` from here, then lay the overlay over a copy a screen loaded. */
+  function overlayAfterRecord(
+    saved: LifecycleTrip,
+    loaded: LifecycleTrip,
+  ): readonly LifecycleTrip[] {
+    const { result } = renderHook(() => useStampLabelWrites());
+    act(() => result.current.record(saved));
+    return result.current.overlay([loaded]);
+  }
+
+  it("a copy loaded after the confirmed write (newer updatedAt) wins", () => {
+    const saved = { ...makeTrip(["Sunset", null]), updatedAt: SAVED_AT };
+    const loaded = { ...makeTrip([null, "Harbour"]), updatedAt: "2026-10-16T11:00:00.000Z" };
+    expect(overlayAfterRecord(saved, loaded)[0]).toBe(loaded);
+  });
+
+  it.each([
+    ["an equal", SAVED_AT],
+    ["an older", "2026-10-16T09:00:00.000Z"],
+  ])("a copy with %s updatedAt is replaced by the confirmed trip", (_name, updatedAt) => {
+    const saved = { ...makeTrip(["Sunset", null]), updatedAt: SAVED_AT };
+    const loaded = { ...makeTrip([null, "Harbour"]), updatedAt };
+    expect(overlayAfterRecord(saved, loaded)[0]).toEqual(saved);
+  });
+
+  it("a confirmed copy without updatedAt lays only its labels over the loaded trip", () => {
+    const saved = makeTrip(["Sunset", null]);
+    const loaded = { ...makeTrip([null, "Harbour"]), name: "Loaded copy", updatedAt: SAVED_AT };
+    expect(overlayAfterRecord(saved, loaded)[0]).toEqual({
+      ...loaded,
+      stampLabels: ["Sunset", null],
+    });
+  });
+});
+
+describe("useStampLabelWrites: with no predecessor, the base is the confirmed trip", () => {
+  it("builds the write on the provider's labels when the screen's labels are stale", async () => {
+    const { result } = renderHook(() => useStampLabelWrites());
+    act(() => result.current.record(makeTrip(["Sunset", null])));
+    const { source, calls, setStampLabels } = fakeSource();
+
+    let write!: Promise<unknown>;
+    act(() => {
+      write = result.current.write(
+        source,
+        "trip-1",
+        {
+          slot1: null,
+          slot2: "Harbour",
+          changed: [false, true],
+        } satisfies LabelEdit,
+        [null, null],
+      );
+    });
+    await waitFor(() => expect(setStampLabels).toHaveBeenCalledTimes(1));
+    expect(calls[0]).toMatchObject({ tripId: "trip-1", slot1: "Sunset", slot2: "Harbour" });
+
+    await act(async () => {
+      calls[0].deferred.resolve(confirm(makeTrip(["Sunset", "Harbour"])));
+      await write;
+    });
+    expect(result.current.pending.size).toBe(0);
+  });
+});

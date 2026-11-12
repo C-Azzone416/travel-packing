@@ -8,6 +8,7 @@ import { sampleLifecycleState } from "@/features/trips/fixtures";
 import { TripsDashboard } from "@/features/trips/TripsDashboard";
 import { createMemoryTripsSource } from "@/features/trips/trips-source";
 import { TripsSourceProvider } from "@/features/trips/TripsSourceProvider";
+import { TripScreen } from "@/features/trip/TripScreen";
 import { StampsScreen } from "./StampsScreen";
 
 vi.mock("next/navigation", () => ({
@@ -137,5 +138,70 @@ describe("a Retry that lands after navigating to the Stamps screen", () => {
     await ctx.user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(ctx.source.snapshot().trips[1].stampLabels).toEqual(["ABC", "QQQ"]);
+  });
+});
+
+/** The Trip page and the Stamps screen in one app shell (the root layout's lifetime; the screen is swapped). */
+function TripThenStamps() {
+  const [screenName, setScreen] = useState<"trip" | "stamps">("trip");
+  return (
+    <>
+      <button onClick={() => setScreen("stamps")}>Go to Stamps</button>
+      {screenName === "trip" ? (
+        <TripScreen tripId="san-diego" />
+      ) : (
+        <StampsScreen getToday={TODAY} />
+      )}
+    </>
+  );
+}
+
+describe("a Trip-page label save is recorded for the Stamps screen", () => {
+  it("Stamps shows the saved label over the copy it loaded before, and the next Stamps edit keeps it", async () => {
+    vi.stubGlobal("matchMedia", () => ({
+      matches: false,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }));
+    const sample = sampleLifecycleState();
+    const sanDiego = sample.trips[0];
+    const base = sanDiego.stops[0];
+    const madrid = {
+      ...base,
+      location: { ...base.location, id: "es", city: "Madrid", country: "Spain", countryCode: "ES" },
+    };
+    const memory = createMemoryTripsSource(
+      { ...sample, trips: [{ ...sanDiego, stops: [base, madrid] }, sample.trips[1]] },
+      { now: () => 5_000 },
+    );
+    // The copy a screen loaded before the Trip-page save: the Stamps screen loads it after the save.
+    const frozen = memory.snapshot();
+    const source = { ...memory, load: async () => frozen };
+    const user = userEvent.setup();
+    renderInApp(
+      <TripsSourceProvider source={source}>
+        <TripThenStamps />
+      </TripsSourceProvider>,
+    );
+
+    await screen.findByRole("heading", { name: "Pack mode", level: 1 });
+    await user.click(screen.getByRole("button", { name: "Edit stamp" }));
+    await typeLabel(user, /Stamp 1/, "abc");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    await user.click(screen.getByRole("button", { name: "Go to Stamps" }));
+    await screen.findByRole("heading", { name: "Stamps", level: 1 });
+    const button = await screen.findByRole("button", { name: /^San Diego/ });
+    expect(button.querySelector("strong")?.getAttribute("data-text")).toBe("ABC");
+
+    await user.click(button);
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Edit stamp label" }),
+    );
+    await typeLabel(user, /Stamp 2/, "xyz");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(source.snapshot().trips[0].stampLabels).toEqual(["ABC", "XYZ"]);
   });
 });
