@@ -223,7 +223,7 @@ export function PackingLaptop({
             onFilter={(filter) => setFilters((all) => ({ ...all, [current.cube]: filter }))}
             editing={editing}
             onEditing={setEditing}
-            editLocked={addPending.includes(current.cube)}
+            editLocked={addPending.some((entry) => entry.cube === current.cube)}
             laundry={trip.config.laundry}
             failedRows={failedRows}
             onTick={onTick}

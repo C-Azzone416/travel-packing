@@ -485,6 +485,73 @@ describe("Edit list", () => {
     }
   });
 
+  it("the guard survives cube navigation: the same name is not sent twice, and no error shows (#496)", async () => {
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const calls = vi.fn();
+    const { user } = setup({
+      wrap: (source) => ({
+        addItem: async (...args: Parameters<typeof source.addItem>) => {
+          calls();
+          await gate;
+          return source.addItem(...args);
+        },
+      }),
+    });
+    await ready();
+    await user.click(within(panel()).getByRole("button", { name: "Add an item to Clothing" }));
+    await user.type(within(panel()).getByPlaceholderText("+ Add an item"), "Sun hat{Enter}");
+    await user.click(rail().getByRole("button", { name: /Misc/ }));
+    await user.click(rail().getByRole("button", { name: /Clothing/ }));
+    await user.click(within(panel()).getByRole("button", { name: "Add an item to Clothing" }));
+    await user.type(within(panel()).getByPlaceholderText("+ Add an item"), " sun  HAT{Enter}");
+    expect(calls).toHaveBeenCalledTimes(1);
+    expect(within(panel()).queryByRole("alert")).toBeNull();
+    release();
+    await waitFor(() => expect(live().textContent).toBe("Added Sun hat to Clothing."));
+    expect(calls).toHaveBeenCalledTimes(1);
+    expect(within(panel()).queryByRole("alert")).toBeNull();
+  });
+
+  it("each attempt settles its own entry: a Retry finishing first leaves Edit list locked for the other add (#496)", async () => {
+    const gates: Array<() => void> = [];
+    let call = 0;
+    const { user } = setup({
+      wrap: (source) => ({
+        addItem: async (...args: Parameters<typeof source.addItem>) => {
+          const mine = ++call;
+          if (mine === 1) throw new Error("offline");
+          await new Promise<void>((resolve) => gates.push(resolve));
+          return source.addItem(...args);
+        },
+      }),
+    });
+    await ready();
+    const pill = () =>
+      within(panel()).getByRole("button", { name: /^(Edit list|Done)$/ }) as HTMLButtonElement;
+    await user.click(within(panel()).getByRole("button", { name: "Add an item to Clothing" }));
+    await user.type(within(panel()).getByPlaceholderText("+ Add an item"), "Rain hat{Enter}");
+    await within(panel()).findByRole("alert");
+    expect(pill().disabled).toBe(false);
+    await user.click(screen.getByRole("button", { name: "Not saved, retry" }));
+    await user.click(
+      within(await screen.findByRole("dialog", { name: "Couldn’t save" })).getByRole("button", {
+        name: "Retry",
+      }),
+    );
+    await waitFor(() => expect(gates).toHaveLength(1));
+    expect(pill().disabled).toBe(true);
+    const field = within(panel()).getByPlaceholderText("+ Add an item");
+    await user.clear(field);
+    await user.type(field, "Sun hat{Enter}");
+    await waitFor(() => expect(gates).toHaveLength(2));
+    gates[0]!();
+    await waitFor(() => expect(within(panel()).queryByText("Rain hat")).not.toBeNull());
+    expect(pill().disabled).toBe(true);
+    gates[1]!();
+    await waitFor(() => expect(pill().disabled).toBe(false));
+  });
+
   it("adds to the cube that is open, not to Clothing", async () => {
     const { user, base } = setup();
     await ready();

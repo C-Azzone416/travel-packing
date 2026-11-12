@@ -261,6 +261,20 @@ describe("quick add while a write is pending (#496)", () => {
   });
 });
 
+describe("quick add refused as already pending (#496)", () => {
+  it("shows no message and keeps the typed name when the send layer says PENDING", async () => {
+    const user = userEvent.setup();
+    const onAdd = vi.fn(async () => ({ ok: false as const, reason: "PENDING" as const }));
+    render(<CubePanel {...props({ editing: false, onAdd })} />);
+    await user.click(screen.getByRole("button", { name: "Add an item to Misc" }));
+    const field = screen.getByPlaceholderText("+ Add an item") as HTMLInputElement;
+    await user.type(field, "Hat{Enter}");
+    await waitFor(() => expect(field.readOnly).toBe(false));
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(field.value).toBe("Hat");
+  });
+});
+
 describe("quick add scrolling (#496)", () => {
   const withItems = (...rows: Array<[string, number]>) => {
     const base = view("misc", "Misc");

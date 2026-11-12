@@ -18,7 +18,7 @@ import { useTripsSource } from "@/features/trips/TripsSourceProvider";
 import { AddToiletryForm } from "./AddToiletryForm";
 import { automaticStamps } from "@/domain/stamps";
 import { localToday } from "@/lib/today";
-import { usePackingViewState } from "./packing/use-packing-view-state";
+import { usePackingViewState, type PendingAdd } from "./packing/use-packing-view-state";
 import { fallbackReviewStop, weatherForReview } from "./weather-remaining";
 import { LAPTOP_MIN_WIDTH, TABLET_MIN_WIDTH, useMinWidth } from "@/lib/use-min-width";
 import { SaveAsListSheet, type SaveOutcome } from "./SaveAsListSheet";
@@ -135,6 +135,8 @@ export function TripScreen({
     };
   }, []);
   const packingView = usePackingViewState(undefined);
+  const pendingAdds = useRef(new Map<number, PendingAdd>());
+  const addAttempts = useRef(0);
   // What the screen shows NOW, for a message that is built when a write finishes (the view may have changed meanwhile).
   const packingViewNow = useRef(packingView);
   useEffect(() => {
@@ -613,14 +615,23 @@ export function TripScreen({
     const category = categoryForCube(cube);
     const existing = findExistingItem(trip, name, category);
     if (existing) return Promise.resolve({ ok: false, reason: "EXISTS", existingId: existing.id });
-    packingView.setAddPending((all) => [...all, cube]);
-    const settled = () =>
-      packingView.setAddPending((all) => {
-        const at = all.indexOf(cube);
-        return at < 0 ? all : all.filter((_, index) => index !== at);
-      });
+    // The send layer owns the pending guard, so it survives the add row and the panel remounting (cube changes, Edit list). Each
+    // ATTEMPT (the first send, and a top-bar Retry re-running this write) registers its own entry and settles only that entry.
+    const key = `${cube}:${name.trim().replace(/\s+/g, " ").toLowerCase()}`;
+    if ([...pendingAdds.current.values()].some((entry) => entry.key === key))
+      return Promise.resolve({ ok: false, reason: "PENDING" });
+    const sendAttempt = () => {
+      const id = ++addAttempts.current;
+      pendingAdds.current.set(id, { id, cube, key });
+      packingView.setAddPending([...pendingAdds.current.values()]);
+      const end = () => {
+        pendingAdds.current.delete(id);
+        packingView.setAddPending([...pendingAdds.current.values()]);
+      };
+      return source.addItem(tripId, { name, category, neededQty: 1, cube }).finally(end);
+    };
     return new Promise((resolve) => {
-      void act(() => source.addItem(tripId, { name, category, neededQty: 1, cube }), {
+      void act(sendAttempt, {
         // The new item is unpacked: only the Packed filter outside Edit list hides it, read when the save completes.
         announce: () =>
           !packingViewNow.current.editing && packingViewNow.current.filters[cube] === "packed"
@@ -628,11 +639,9 @@ export function TripScreen({
             : `Added ${name} to ${cubeName(cube)}.`,
         // The confirmed row: the one the saved trip lists under this name and category (a duplicate is refused, so it is unique).
         after: (change) => {
-          settled();
           resolve({ ok: true, itemId: findExistingItem(change.trip, name, category)?.id });
         },
         onFail: (error) => {
-          settled();
           const again = findExistingItem(trip, name, category);
           resolve(
             error instanceof TripsSourceError && error.message === "EXISTS" && again

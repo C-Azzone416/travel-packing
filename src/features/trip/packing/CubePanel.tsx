@@ -26,7 +26,9 @@ export type AddOutcome =
   /** itemId: the saved item, as confirmed by the write (absent when the add went through another form). */
   | { ok: true; itemId?: string }
   | { ok: false; reason: "EXISTS"; existingId: string }
-  | { ok: false; reason: "FAILED" };
+  | { ok: false; reason: "FAILED" }
+  /** The same name is already being saved in this cube: nothing was sent, and nothing is shown. */
+  | { ok: false; reason: "PENDING" };
 
 export interface CubePanelProps {
   view: CubeView;
@@ -285,7 +287,7 @@ function AddRow({
       return field.current?.focus();
     }
     if (outcome.reason === "EXISTS") setExisting(outcome.existingId);
-    else setProblem("FAILED");
+    else if (outcome.reason === "FAILED") setProblem("FAILED");
   }
 
   const message =

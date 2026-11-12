@@ -4,6 +4,13 @@ import { useState } from "react";
 import type { Cube } from "@/domain/cubes";
 import type { CubeFilter } from "./packing-model";
 
+/** One add attempt in flight: its own id, the cube, and the cube plus normalised name it is saving. */
+export interface PendingAdd {
+  id: number;
+  cube: Cube;
+  key: string;
+}
+
 /**
  * What the Packing screen remembers about how it is being looked at: the open cube, each cube's filter, Edit list, and an All in
  * that is still saving. It lives in the screen, not in a layout, so crossing 768px (a rotation, a split view) swaps the layout
@@ -16,9 +23,9 @@ export function usePackingViewState(openCube: Cube | undefined) {
   const [filters, setFilters] = useState<Partial<Record<Cube, CubeFilter>>>({});
   const [editing, setEditing] = useState(false);
   const [packing, setPacking] = useState(false);
-  // The cubes with a quick add or Edit list add still being saved (one entry per write). Edit list / Done stays locked for a
-  // cube until its adds settle, so the add row is never remounted (which would reset its pending guard) mid-write (#496).
-  const [addPending, setAddPending] = useState<readonly Cube[]>([]);
+  // The adds still being saved, one entry per send ATTEMPT (a Retry is its own attempt), kept at the send layer so they survive
+  // the add row and its panel remounting. Edit list / Done is locked for a cube until its attempts settle (#496).
+  const [addPending, setAddPending] = useState<readonly PendingAdd[]>([]);
   return {
     chosen,
     setChosen,

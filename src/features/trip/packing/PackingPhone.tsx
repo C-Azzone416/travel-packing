@@ -187,7 +187,7 @@ export function PackingPhone({
           onFilter={(value) => setFilters((all) => ({ ...all, [current.cube]: value }))}
           editing={editing}
           onEditing={setEditing}
-          editLocked={addPending.includes(current.cube)}
+          editLocked={addPending.some((entry) => entry.cube === current.cube)}
           className={styles.pills}
           phone
         />
@@ -206,7 +206,7 @@ export function PackingPhone({
             onFilter={(value) => setFilters((all) => ({ ...all, [current.cube]: value }))}
             editing={editing}
             onEditing={setEditing}
-            editLocked={addPending.includes(current.cube)}
+            editLocked={addPending.some((entry) => entry.cube === current.cube)}
             laundry={trip.config.laundry}
             failedRows={failedRows}
             onTick={onTick}
