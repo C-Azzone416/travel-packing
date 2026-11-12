@@ -162,7 +162,7 @@ describe("Stamps view", () => {
 
     const view = stampsView([legacy], today, "all");
     expect(view.stickers[0]).toMatchObject({ month: "", monthYear: "Date not set" });
-    expect(stampTripView(legacy)).toMatchObject({
+    expect(stampTripView(legacy, today)).toMatchObject({
       monthYear: "Date not set",
       eyebrow: "DATE NOT SET",
     });
@@ -186,9 +186,9 @@ describe("Stamps view", () => {
     expect(view.stickers).toHaveLength(3);
     expect(view.stickers.find((entry) => entry.place === "Portland")?.region).toBe("UNITED STATES");
     expect(view.totals.countries).toBe(1);
-    expect(stampTripView(dayTrip).facts).toContain("drive · PDX · day trip");
-    expect(stampTripView(overnight).facts).toContain("1 night");
-    expect(stampTripView(noStops)).toMatchObject({
+    expect(stampTripView(dayTrip, today).facts).toContain("drive · PDX · day trip");
+    expect(stampTripView(overnight, today).facts).toContain("1 night");
+    expect(stampTripView(noStops, today)).toMatchObject({
       code: "",
       stickerColour: null,
       name: "Saved destination",

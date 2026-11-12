@@ -65,7 +65,7 @@ const withTrips = (...trips: LifecycleTrip[]): LifecycleState => ({
   trips,
 });
 
-const PORTO = "Porto, Oct 2026, 1 trip";
+const PORTO = "Porto, Oct 2026, inked, 1 trip";
 
 /** A state with one completed Porto trip, the newer result in the superseded-load tests. */
 function porto(): LifecycleState {
@@ -100,9 +100,9 @@ describe("Stamps screen", () => {
     expect(screen.getByRole("region", { name: "Loading stamps" })).toBeTruthy();
     expect(await screen.findByRole("heading", { name: "Past trips", level: 2 })).toBeTruthy();
     expect(screen.getByText("1 inked")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Lisbon, Sep 2026, 1 trip" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Lisbon, Sep 2026, inked, 1 trip" })).toBeTruthy();
     const upcoming = screen.getByRole("button", {
-      name: "San Diego, Oct 2026, 1 trip",
+      name: "San Diego, Oct 2026, upcoming, not inked yet",
     });
     expect(upcoming.getAttribute("data-upcoming")).toBe("true");
     const totals = screen.getByLabelText("Travel totals");
@@ -123,9 +123,15 @@ describe("Stamps screen", () => {
     );
     await user.click(
       screen.getByRole("button", {
-        name: "San Diego, Oct 2026, 1 trip",
+        name: "San Diego, Oct 2026, upcoming, not inked yet",
       }),
     );
+    // A sticker tap selects the trip and opens its details, whose actions point at the same trip.
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByRole("link", { name: "Open trip" }).getAttribute("href")).toBe(
+      "/trips/san-diego",
+    );
+    await user.keyboard("{Escape}");
     expect(screen.getByRole("link", { name: "Open trip" }).getAttribute("href")).toBe(
       "/trips/san-diego",
     );
@@ -157,7 +163,9 @@ describe("Stamps screen", () => {
     );
     expect(await screen.findByText("No past trips yet.")).toBeTruthy();
     expect(screen.getByText("0 inked")).toBeTruthy();
-    expect(screen.getByRole("button", { name: /San Diego, Oct 2026, 1 trip/ })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: /San Diego, Oct 2026, upcoming, not inked yet/ }),
+    ).toBeTruthy();
   });
 
   it("retries a failed read and never shows Saving", async () => {
@@ -222,10 +230,11 @@ describe("Stamps screen", () => {
       ),
     );
     await screen.findByRole("heading", { name: "Past trips", level: 2 });
-    const sticker = screen.getByRole("button", { name: "Lisbon, Sep 2026, 2 trips" });
+    const sticker = screen.getByRole("button", { name: "Lisbon, Sep 2026, inked, 2 trips" });
     expect(sticker.textContent).toContain("×2");
     expect(
-      screen.getByRole("button", { name: "San Diego, Oct 2026, 1 trip" }).textContent,
+      screen.getByRole("button", { name: "San Diego, Oct 2026, upcoming, not inked yet" })
+        .textContent,
     ).not.toContain("×");
   });
 
@@ -282,12 +291,15 @@ describe("Stamps screen", () => {
       }),
     );
     await screen.findByRole("heading", { name: "Past trips", level: 2 });
+    // The earned sticker's trip is selected first; the trip with no stops has no sticker to default to.
+    expect(screen.getByRole("article", { name: "Selected trip: Mystery" })).toBeTruthy();
+    const stoplessRow = screen.getByRole("button", { name: /Stopless.*packed/ });
+    await userEvent.click(stoplessRow);
     const selected = screen.getByRole("article", { name: "Selected trip: Stopless" });
     expect(selected.querySelector("[data-colour]")).toBeNull();
-    const stoplessRow = screen.getByRole("button", { name: /Stopless.*packed/ });
     expect(stoplessRow.textContent).toContain("—");
     expect(stoplessRow.querySelector("[data-colour]")).toBeNull();
-    const dashSticker = screen.getByRole("button", { name: "Mystery, Sep 2026, 1 trip" });
+    const dashSticker = screen.getByRole("button", { name: "Mystery, Sep 2026, inked, 1 trip" });
     expect(dashSticker.querySelector("[data-text='—']")).toBeTruthy();
   });
 
