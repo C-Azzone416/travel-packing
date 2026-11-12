@@ -23,6 +23,7 @@ import { weatherForReview } from "@/features/trip/weather-remaining";
 import { WelcomeHomeCard } from "./WelcomeHomeCard";
 import { welcomeHomeModel } from "./welcome-home";
 import { HomePhone } from "./HomePhone";
+import { useLabelWrites } from "@/features/stamps/label-writes";
 import type { HomeMaps } from "./home-map-types";
 import { cityWeather, noTripModel, usualRows, type HeroWeather } from "./home-view";
 import { LAPTOP_MIN_WIDTH, useMinWidth } from "@/lib/use-min-width";
@@ -205,17 +206,16 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
     );
   }, []);
 
-  // The trips with a stamp label write in flight. Also above the laptop/phone branch: an editor closed by a resize leaves its write
-  // pending, and the reopened one must wait for it instead of writing over a label that has not been confirmed yet.
-  const [stampWrites, setStampWrites] = useState<ReadonlySet<string>>(new Set());
-  const setStampPending = useCallback((tripId: string, on: boolean) => {
-    setStampWrites((current) => {
-      const next = new Set(current);
-      if (on) next.add(tripId);
-      else next.delete(tripId);
-      return next;
-    });
-  }, []);
+  // Stamp label writes, kept above the laptop/phone branch: an editor closed by a resize leaves its write in flight, and the next one
+  // for that trip (a reopened editor's Save, or the top bar's Retry) must wait for it and build on what it confirmed.
+  const loadRef = useRef(load);
+  useEffect(() => {
+    loadRef.current = load;
+  });
+  const stampWrites = useLabelWrites(
+    () => (loadRef.current.phase === "ready" ? loadRef.current.state.trips : []),
+    confirmTrip,
+  );
 
   const tryAgain = () => {
     setLoad({ phase: "loading" });
@@ -528,7 +528,7 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
               onOpenArchive={() => setView("archive")}
               headingRef={headingRef}
               onTripSaved={confirmTrip}
-              stampWrites={{ pending: stampWrites, setPending: setStampPending }}
+              stampWrites={stampWrites}
             />
           ) : (
             <HomeEmpty

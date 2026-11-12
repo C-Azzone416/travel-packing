@@ -16,7 +16,8 @@ import {
 } from "@/components/suitcase";
 import type { LifecycleState, LifecycleTrip } from "@/domain/trip-lifecycle";
 import { packedState, reviewHref } from "@/features/trip/packed-state";
-import { StampsContent, type LabelWrites } from "@/features/stamps/StampsScreen";
+import { StampsContent } from "@/features/stamps/StampsScreen";
+import type { LabelWrites } from "@/features/stamps/label-writes";
 import { stampsView } from "@/features/stamps/stamps-view";
 import {
   homeModel,
