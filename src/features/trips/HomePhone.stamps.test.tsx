@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderInApp } from "@/test/providers";
 import type { LifecycleState } from "@/domain/trip-lifecycle";
@@ -29,25 +30,39 @@ function twoCountries(): LifecycleState {
   return { ...state, trips: [hero, { ...lisbon, stops: [base, madrid] }] };
 }
 
+/** What the dashboard does: it owns the trips and takes a confirmed one back from the panel. */
+function Dashboard({ initial }: { initial: LifecycleState }) {
+  const [state, setState] = useState(initial);
+  return (
+    <HomePhone
+      trip={state.trips[0]}
+      later={[]}
+      state={state}
+      onTripSaved={(saved) =>
+        setState((current) => ({
+          ...current,
+          trips: current.trips.map((entry) => (entry.id === saved.id ? saved : entry)),
+        }))
+      }
+      today={TODAY}
+      weather={{ phase: "none" }}
+      map={null}
+      busy={false}
+      onEdit={vi.fn()}
+      onArchive={vi.fn()}
+      onRemove={vi.fn()}
+      onOpenArchive={vi.fn()}
+    />
+  );
+}
+
 function setup() {
   const user = userEvent.setup();
   const state = twoCountries();
   const source = createMemoryTripsSource(state, { now: () => 1, today: () => TODAY });
   renderInApp(
     <TripsSourceProvider source={source}>
-      <HomePhone
-        trip={state.trips[0]}
-        later={[]}
-        state={state}
-        today={TODAY}
-        weather={{ phase: "none" }}
-        map={null}
-        busy={false}
-        onEdit={vi.fn()}
-        onArchive={vi.fn()}
-        onRemove={vi.fn()}
-        onOpenArchive={vi.fn()}
-      />
+      <Dashboard initial={state} />
     </TripsSourceProvider>,
   );
   return { user, source };

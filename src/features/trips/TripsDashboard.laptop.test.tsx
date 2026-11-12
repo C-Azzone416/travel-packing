@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
-import { act, screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderInApp } from "@/test/providers";
 import { routeSignature, tripRoutePoints } from "@/domain/trip-route";
 import { sampleLifecycleState } from "./fixtures";
 import type { HomeMaps } from "./home-map-types";
+import { TripsSourceProvider } from "./TripsSourceProvider";
 import { TripsDashboard } from "./TripsDashboard";
 import { createMemoryTripsSource, type TripsSource } from "./trips-source";
 
@@ -164,5 +165,51 @@ describe("TripsDashboard at laptop width", () => {
     const button = await screen.findByRole("button", { name: /San Diego · 59°\/50°/ });
     expect(button.getAttribute("aria-expanded")).toBe("true");
     expect(button.textContent).toMatch(/\d+ to review/);
+  });
+
+  it("keeps a stamp label saved on the phone Home across a resize over 1024px, and a later save writes only what changed", async () => {
+    const media = laptop(false);
+    const sample = sampleLifecycleState();
+    const lisbon = sample.trips[1];
+    const base = lisbon.stops[0];
+    const madrid = {
+      ...base,
+      location: { ...base.location, id: "es", city: "Madrid", country: "Spain", countryCode: "ES" },
+    };
+    const source = createMemoryTripsSource(
+      { ...sample, trips: [sample.trips[0], { ...lisbon, stops: [base, madrid] }] },
+      { now: () => 5_000 },
+    );
+    const write = vi.spyOn(source, "setStampLabels");
+    const user = userEvent.setup();
+    renderInApp(
+      <TripsSourceProvider source={source}>
+        <TripsDashboard source={source} getToday={TODAY} />
+      </TripsSourceProvider>,
+    );
+    const sticker = "Lisbon, Sep 2026, inked, 1 trip";
+    const edit = async (stamp: RegExp, text: string) => {
+      await user.click(await screen.findByRole("button", { name: sticker }));
+      await user.click(
+        within(screen.getByRole("dialog")).getByRole("button", { name: "Edit stamp label" }),
+      );
+      const group = within(screen.getByRole("group", { name: stamp }));
+      await user.click(group.getByRole("radio", { name: "Custom" }));
+      await user.clear(group.getByLabelText("Label"));
+      await user.type(group.getByLabelText("Label"), text);
+      await user.click(screen.getByRole("button", { name: "Save" }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    };
+    await user.click(await screen.findByRole("tab", { name: /^Stamps/ }));
+    await edit(/Stamp 2/, "qqq");
+    expect(write).toHaveBeenLastCalledWith("lisbon", null, "QQQ");
+    // Up over the breakpoint (laptop Home) and back down: the phone panel is drawn again.
+    act(() => media.set(true));
+    await screen.findByRole("heading", { name: /In the bag/ });
+    act(() => media.set(false));
+    await user.click(await screen.findByRole("tab", { name: /^Stamps/ }));
+    await edit(/Stamp 1/, "abc");
+    // Stamp 2 is the confirmed QQQ, not what the dashboard first loaded.
+    expect(write).toHaveBeenLastCalledWith("lisbon", "ABC", "QQQ");
   });
 });

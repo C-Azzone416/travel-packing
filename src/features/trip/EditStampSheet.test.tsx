@@ -5,6 +5,8 @@ import { describe, expect, it, vi } from "vitest";
 import { renderInApp } from "@/test/providers";
 import { automaticStamps, type StampLabels } from "@/domain/stamps";
 import type { TripStop } from "@/domain/trip-stops";
+import { SaveStatusProvider, ConnectedSaveChip } from "@/components/shell/SaveStatus";
+import { ToastProvider } from "@/components/ui/Toast";
 import { EditStampSheet } from "./EditStampSheet";
 
 const stop = (
@@ -95,7 +97,7 @@ describe("EditStampSheet", () => {
     expect((screen.getByLabelText("Label") as HTMLInputElement).value).toBe("");
     await user.type(screen.getByLabelText("Label"), "abc");
     await user.click(save());
-    expect(onSave).toHaveBeenCalledWith("ABC", null);
+    expect(onSave).toHaveBeenCalledWith("ABC", null, [true, false]);
   });
 
   it("Save is off until something changes", async () => {
@@ -127,7 +129,7 @@ describe("EditStampSheet", () => {
     // The preview shows the custom text, not the automatic one (it is decorative: the block names it).
     expect(document.querySelector(".stamp-preview")?.textContent).toContain("AB7");
     await user.click(save());
-    expect(onSave).toHaveBeenCalledWith("AB7", null);
+    expect(onSave).toHaveBeenCalledWith("AB7", null, [true, false]);
   });
 
   it("shows the error on blur for a short label, and Save refuses until it is fixed", async () => {
@@ -148,7 +150,7 @@ describe("EditStampSheet", () => {
     await user.type(field, "c");
     expect(fieldError()).toBeNull();
     await user.click(save());
-    expect(onSave).toHaveBeenCalledWith(null, "ABC");
+    expect(onSave).toHaveBeenCalledWith(null, "ABC", [false, true]);
   });
 
   it("refuses non-ASCII text on Save (the field is never transliterated)", async () => {
@@ -192,7 +194,7 @@ describe("EditStampSheet", () => {
     await user.type(field, "Ab1");
     expect(field.value).toBe("AB1");
     await user.click(save());
-    expect(onSave).toHaveBeenCalledWith("AB1", null);
+    expect(onSave).toHaveBeenCalledWith("AB1", null, [true, false]);
   });
 
   it("a blank custom label is refused rather than saved as nothing", async () => {
@@ -215,21 +217,21 @@ describe("EditStampSheet", () => {
     expect(block(1, "automatic")).toBeTruthy();
     expect(screen.getByText("PRT, the country code for Portugal")).toBeTruthy();
     await user.click(save());
-    expect(onSave).toHaveBeenCalledWith(null, "XYZ");
+    expect(onSave).toHaveBeenCalledWith(null, "XYZ", [true, false]);
   });
 
   it("choosing Automatic and saving clears the override, and a custom label equal to the automatic one saves as null", async () => {
     const first = setup({ saved: ["ABC", null] });
     await first.user.click(within(block(1, "custom")).getByRole("radio", { name: "Automatic" }));
     await first.user.click(save());
-    expect(first.onSave).toHaveBeenCalledWith(null, null);
+    expect(first.onSave).toHaveBeenCalledWith(null, null, [true, false]);
     first.unmount();
 
     const second = setup({ saved: ["ABC", null] });
     await second.user.clear(screen.getByLabelText("Label"));
     await second.user.type(screen.getByLabelText("Label"), "prt");
     await second.user.click(save());
-    expect(second.onSave).toHaveBeenCalledWith(null, null);
+    expect(second.onSave).toHaveBeenCalledWith(null, null, [true, false]);
   });
 
   it("Cancel closes without saving", async () => {
@@ -246,5 +248,34 @@ describe("EditStampSheet", () => {
       true,
     );
     expect(fieldError()?.textContent).toContain("Nothing changed");
+  });
+
+  it("reports only the slots changed from what it opened with, even when the saved labels move underneath", async () => {
+    const stops = TWO;
+    const onSave = vi.fn();
+    const user = userEvent.setup();
+    const props = {
+      automatic: automaticStamps(stops),
+      stops,
+      departure: "2030-05-01",
+      saving: false,
+      onClose: vi.fn(),
+      onSave,
+    };
+    const view = renderInApp(<EditStampSheet {...props} saved={[null, null]} />);
+    // Stamp 2 was saved elsewhere after this sheet opened.
+    view.rerender(
+      <ToastProvider>
+        <SaveStatusProvider>
+          <ConnectedSaveChip />
+          <EditStampSheet {...props} saved={[null, "QQQ"]} />
+        </SaveStatusProvider>
+      </ToastProvider>,
+    );
+    await user.click(within(block(1, "automatic")).getByRole("radio", { name: "Custom" }));
+    await user.clear(within(block(1, "custom")).getByLabelText("Label"));
+    await user.type(within(block(1, "custom")).getByLabelText("Label"), "abc");
+    await user.click(save());
+    expect(onSave).toHaveBeenCalledWith("ABC", null, [true, false]);
   });
 });

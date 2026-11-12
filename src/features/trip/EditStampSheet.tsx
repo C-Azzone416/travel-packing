@@ -29,7 +29,12 @@ export interface EditStampSheetProps {
   failed?: boolean;
   onClose: () => void;
   /** The typed text for each slot, or null for automatic. The server trims, upper-cases and validates it again. */
-  onSave: (slot1: string | null, slot2: string | null) => void;
+  onSave: (
+    slot1: string | null,
+    slot2: string | null,
+    /** Which slots the person changed from what the sheet opened with. An unchanged slot should keep its latest saved value. */
+    changed: readonly [boolean, boolean],
+  ) => void;
 }
 
 type Mode = "automatic" | "custom";
@@ -59,6 +64,8 @@ export function EditStampSheet({
 }: EditStampSheetProps) {
   const formId = useId();
   const labels = saved ?? NO_STAMP_LABELS;
+  // What the sheet opened with: "changed" is judged against it, not against whatever was saved since.
+  const [opened] = useState<StampLabels>(labels);
   const slots = Math.max(automatic.length, 1);
   const [modes, setModes] = useState<Mode[]>(
     labels.map((label) => (label ? "custom" : "automatic")),
@@ -75,7 +82,11 @@ export function EditStampSheet({
   const drafts = [0, 1].map((index) =>
     index < slots ? draft(index) : { value: null, valid: true },
   );
-  const dirty = drafts.some((entry, index) => entry.value !== (labels[index] ?? null));
+  const changed: readonly [boolean, boolean] = [
+    drafts[0].value !== (opened[0] ?? null),
+    drafts[1].value !== (opened[1] ?? null),
+  ];
+  const dirty = changed[0] || changed[1];
   const invalid = drafts.some((entry, index) => index < slots && !entry.valid);
 
   const setMode = (index: number, mode: Mode) => {
@@ -97,7 +108,7 @@ export function EditStampSheet({
       setTouched([true, true]);
       return;
     }
-    onSave(drafts[0].value, slots > 1 ? drafts[1].value : null);
+    onSave(drafts[0].value, slots > 1 ? drafts[1].value : null, changed);
   }
 
   // While a save is pending the sheet cannot be dismissed (Cancel, Escape, the scrim and the close button), so the save that

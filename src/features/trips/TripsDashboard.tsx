@@ -184,6 +184,22 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
     };
   }, [source, track, getToday, reloads]);
 
+  // A trip the source confirmed outside this screen's own writes (a stamp label saved in the Stamps panel). It lives here, above the
+  // laptop/phone branch, so crossing 1024px or changing pill cannot bring back an older copy.
+  const confirmTrip = useCallback((trip: LifecycleTrip) => {
+    setLoad((current) =>
+      current.phase === "ready"
+        ? {
+            ...current,
+            state: {
+              ...current.state,
+              trips: current.state.trips.map((entry) => (entry.id === trip.id ? trip : entry)),
+            },
+          }
+        : current,
+    );
+  }, []);
+
   const tryAgain = () => {
     setLoad({ phase: "loading" });
     setReloads((count) => count + 1);
@@ -490,6 +506,7 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
               onRemove={setRemoving}
               onOpenArchive={() => setView("archive")}
               headingRef={headingRef}
+              onTripSaved={confirmTrip}
             />
           ) : (
             <HomeEmpty

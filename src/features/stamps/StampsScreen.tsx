@@ -28,10 +28,7 @@ type Load =
   | { phase: "error" }
   | { phase: "ready"; state: LifecycleState; today: string };
 
-export interface LabelStore {
-  labels: Record<string, StampLabels>;
-  save: (tripId: string, labels: StampLabels) => void;
-}
+const NO_LABELS: Record<string, StampLabels> = {};
 
 interface EditorOpen {
   tripId: string;
@@ -236,16 +233,17 @@ export function StampsContent({
   today,
   embedded = false,
   initialTripId = null,
-  labelStore,
+  onTripSaved,
 }: {
   state: LifecycleState;
   today: string;
   embedded?: boolean;
   /**
-   * Where the labels saved from here are kept. The Home's Stamps panel unmounts when the pill changes, so it keeps them above
-   * this component; without it they live here.
+   * Called with the trip as the source confirmed it after a label save. The screen that owns `state` puts it there, so every
+   * layout of that screen (the Home's panel unmounts on a pill change or a resize) reads the same confirmed labels. Without it
+   * the labels saved here are kept in this component.
    */
-  labelStore?: LabelStore;
+  onTripSaved?: (trip: LifecycleTrip) => void;
   /** The trip to select first (`/stamps?trip=<id>`, from the Home's recent trips). */
   initialTripId?: string | null;
 }) {
@@ -253,11 +251,8 @@ export function StampsContent({
   const [selectedId, setSelectedId] = useState<string | null>(initialTripId);
   /** The stamp labels saved from here, so the stickers, the card and the details change in place. */
   const [ownLabels, setOwnLabels] = useState<Record<string, StampLabels>>({});
-  const savedLabels = labelStore?.labels ?? ownLabels;
-  const saveLabels =
-    labelStore?.save ??
-    ((tripId: string, labels: StampLabels) =>
-      setOwnLabels((current) => ({ ...current, [tripId]: labels })));
+  const savedLabels = onTripSaved ? NO_LABELS : ownLabels;
+  const saving = useRef(false);
   const [detailKey, setDetailKey] = useState<string | null>(null);
   const [editor, setEditor] = useState<EditorOpen | null>(null);
   const editorRef = useRef<EditorOpen | null>(null);
@@ -333,6 +328,11 @@ export function StampsContent({
   useEffect(() => {
     const onPop = () => {
       if (!ownEntry.current) return;
+      // A pending save cannot be dismissed (Back included): the entry Back removed is put back and the editor stays.
+      if (saving.current) {
+        window.history.pushState({ stampEditor: true }, "", window.location.href);
+        return;
+      }
       ownEntry.current = false;
       dismissEditor();
     };
@@ -458,8 +458,16 @@ export function StampsContent({
           key={editor?.token}
           trip={editorTrip}
           onClose={closeEditor}
-          onSaved={(tripId, labels) => {
-            saveLabels(tripId, labels);
+          onSavingChange={(value) => {
+            saving.current = value;
+          }}
+          onSaved={(saved) => {
+            if (onTripSaved) onTripSaved(saved);
+            else
+              setOwnLabels((current) => ({
+                ...current,
+                [saved.id]: saved.stampLabels ?? [null, null],
+              }));
             setAnnouncement("Stamp label saved.");
             // A save finishing closes only the editor that sent it.
             if (editorRef.current?.token === editor?.token) closeEditor();
@@ -478,16 +486,23 @@ function StampLabelEditor({
   trip,
   onClose,
   onSaved,
+  onSavingChange,
 }: {
   trip: LifecycleTrip;
   onClose: () => void;
-  onSaved: (tripId: string, labels: StampLabels) => void;
+  onSaved: (trip: LifecycleTrip) => void;
+  onSavingChange: (saving: boolean) => void;
 }) {
   const source = useTripsSource();
   const { track } = useSaveStatus();
   const toast = useToast();
   const [saving, setSaving] = useState(false);
   const [failed, setFailed] = useState(false);
+  // The labels as last confirmed, read when Save is pressed: only the slots the person changed are written over them.
+  const latest = useRef(trip.stampLabels);
+  useEffect(() => {
+    latest.current = trip.stampLabels;
+  }, [trip.stampLabels]);
   return (
     <EditStampSheet
       automatic={automaticStamps(trip.stops)}
@@ -497,12 +512,15 @@ function StampLabelEditor({
       saving={saving}
       failed={failed}
       onClose={onClose}
-      onSave={(slot1, slot2) => {
+      onSave={(slot1, slot2, changed) => {
         setFailed(false);
         setSaving(true);
-        const before = trip.stampLabels ?? [null, null];
+        onSavingChange(true);
+        const before = latest.current ?? [null, null];
+        const first = changed[0] ? slot1 : before[0];
+        const second = changed[1] ? slot2 : before[1];
         track(
-          () => source.setStampLabels(trip.id, slot1, slot2),
+          () => source.setStampLabels(trip.id, first, second),
           (change) => {
             const now = change.trip.stampLabels ?? [null, null];
             // Only slots that changed count: a change that only cleared overrides is a reset.
@@ -512,11 +530,14 @@ function StampLabelEditor({
                 ? "Stamp reset to automatic."
                 : "Stamp updated.",
             );
-            onSaved(trip.id, now);
+            onSaved(change.trip);
           },
         )
           .catch(() => setFailed(true))
-          .finally(() => setSaving(false));
+          .finally(() => {
+            onSavingChange(false);
+            setSaving(false);
+          });
       }}
     />
   );
@@ -571,5 +592,24 @@ export function StampsScreen({ getToday = localToday }: { getToday?: () => strin
 
   // The trips have loaded in the browser by now, so reading the address cannot disagree with the server's markup.
   const initialTripId = new URLSearchParams(window.location.search).get("trip");
-  return <StampsContent state={load.state} today={load.today} initialTripId={initialTripId} />;
+  return (
+    <StampsContent
+      state={load.state}
+      today={load.today}
+      initialTripId={initialTripId}
+      onTripSaved={(saved) =>
+        setLoad((current) =>
+          current.phase === "ready"
+            ? {
+                ...current,
+                state: {
+                  ...current.state,
+                  trips: current.state.trips.map((trip) => (trip.id === saved.id ? saved : trip)),
+                },
+              }
+            : current,
+        )
+      }
+    />
+  );
 }

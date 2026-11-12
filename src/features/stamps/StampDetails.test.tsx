@@ -9,7 +9,9 @@ import type { TripConfig } from "@/domain/trip";
 import type { SampleLocation } from "@/domain/trip-stops";
 import { createMemoryTripsSource } from "@/features/trips/trips-source";
 import { TripsSourceProvider } from "@/features/trips/TripsSourceProvider";
-import { StampsScreen, StickerTeaser } from "./StampsScreen";
+import { SaveStatusProvider } from "@/components/shell/SaveStatus";
+import { ToastProvider } from "@/components/ui/Toast";
+import { StampsContent, StampsScreen, StickerTeaser } from "./StampsScreen";
 import { stampsView } from "./stamps-view";
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/stamps" }));
@@ -404,34 +406,66 @@ describe("a sticker opens its details (#494)", () => {
     ).toBeTruthy();
   });
 
-  it("a late save closes nothing of another trip's editor (Back during the save)", async () => {
+  it("keeps the editor open when Back is pressed during a save, and the entry stays marked until the save is done", async () => {
     const { user, src } = open();
     const release = deferSave(src);
     await user.click(await screen.findByRole("button", { name: LISBON }));
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", { name: "Edit stamp label" }),
     );
+    expect(window.history.state).toEqual({ stampEditor: true });
     await typeLabel(user, "lat");
     await user.click(screen.getByRole("button", { name: "Save" }));
-    // Back is the one way out while a save is pending.
     await act(async () => {
       window.history.back();
       await new Promise((done) => setTimeout(done, 20));
     });
-    expect(screen.queryByRole("dialog")).toBeNull();
-    await user.click(screen.getByRole("button", { name: SAN_DIEGO }));
+    // Back did not dismiss it, and the entry Back removed is back, so the next Back is still ours.
+    expect(screen.getByRole("dialog", { name: "Stamp label" })).toBeTruthy();
+    expect(window.history.state).toEqual({ stampEditor: true });
+    await act(async () => release());
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    // Closing after the save pops the entry: the page is not left on a marked one.
+    await waitFor(() => expect(window.history.state).not.toEqual({ stampEditor: true }));
+  });
+
+  it("writes only the slot that was changed, over the labels as last confirmed", async () => {
+    const sample = sampleLifecycleState();
+    const lisbon = sample.trips[1];
+    const base = lisbon.stops[0];
+    const madrid = {
+      ...base,
+      location: { ...base.location, id: "es", city: "Madrid", country: "Spain", countryCode: "ES" },
+    };
+    const stops = [base, madrid];
+    const stateWith = (labels: [string | null, string | null]): LifecycleState => ({
+      ...sample,
+      trips: [sample.trips[0], { ...lisbon, stops, stampLabels: labels }],
+    });
+    const src = source(stateWith([null, null]));
+    const write = vi.spyOn(src, "setStampLabels");
+    const user = userEvent.setup();
+    const tree = (state: LifecycleState) => (
+      <ToastProvider>
+        <SaveStatusProvider>
+          <TripsSourceProvider source={src}>
+            <StampsContent state={state} today={TODAY} onTripSaved={() => undefined} />
+          </TripsSourceProvider>
+        </SaveStatusProvider>
+      </ToastProvider>
+    );
+    const view = render(tree(stateWith([null, null])));
+    await user.click(screen.getByRole("button", { name: LISBON }));
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", { name: "Edit stamp label" }),
     );
-    await typeLabel(user, "sdd");
-    await act(async () => release());
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: LISBON }).querySelector("[data-text='LAT']"),
-      ).toBeTruthy(),
-    );
-    // San Diego's editor and its draft are untouched.
-    expect(screen.getByRole("dialog", { name: "Stamp label" })).toBeTruthy();
-    expect(screen.getByLabelText("Label")).toHaveProperty("value", "SDD");
+    // Another surface confirms Stamp 2 while this editor is open.
+    view.rerender(tree(stateWith([null, "QQQ"])));
+    const one = within(screen.getByRole("group", { name: /Stamp 1/ }));
+    await user.click(one.getByRole("radio", { name: "Custom" }));
+    await user.clear(one.getByLabelText("Label"));
+    await user.type(one.getByLabelText("Label"), "abc");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(write).toHaveBeenCalledWith("lisbon", "ABC", "QQQ"));
   });
 });
