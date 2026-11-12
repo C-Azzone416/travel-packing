@@ -87,7 +87,12 @@ export function Sticker({
       aria-label={sticker.accessibleName}
       aria-pressed={selected}
       aria-haspopup="dialog"
-      onClick={onSelect}
+      onClick={(event) => {
+        // The sheet gives focus back to whatever had it when it opened. Focus this sticker first so a previously closed sheet's
+        // opener (Safari leaves focus behind on a tap) is not returned to instead (#493).
+        event.currentTarget.focus({ preventScroll: true });
+        onSelect();
+      }}
     >
       {body}
     </button>

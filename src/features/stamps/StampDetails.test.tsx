@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { renderInApp } from "@/test/providers";
@@ -176,6 +176,39 @@ describe("a sticker opens its details (#494)", () => {
     await user.click(lisbon);
     await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: /Close/ }));
     expect(document.activeElement).toBe(lisbon);
+  });
+
+  it("returns focus to the sticker that opened the sheet, not the previous one (Close and Escape, #493)", async () => {
+    // fireEvent.click leaves focus where it was (as Safari does for a tap), so the second opener is the trap.
+    const { user } = open();
+    const lisbon = await screen.findByRole("button", { name: LISBON });
+    const sanDiego = screen.getByRole("button", { name: SAN_DIEGO });
+    fireEvent.click(lisbon);
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /Close/ }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(sanDiego);
+    expect(screen.getByRole("dialog", { name: "San Diego · Oct 2026" })).toBeTruthy();
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /Close/ }));
+    expect(document.activeElement).toBe(sanDiego);
+    fireEvent.click(lisbon);
+    await user.keyboard("{Escape}");
+    fireEvent.click(sanDiego);
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(sanDiego);
+  });
+
+  it("pins the read-only route preview by its accessible name and saved label, apart from the close-up", async () => {
+    const { user } = open(
+      source(
+        withTrips({ ...trip("lisbon", "2026-09-03", "2026-09-07"), stampLabels: ["ZZX", null] }),
+      ),
+    );
+    await user.click(await screen.findByRole("button", { name: LISBON }));
+    const dialog = screen.getByRole("dialog", { name: "Lisbon · Sep 2026" });
+    const preview = within(dialog).getByRole("img", { name: "ZZX, Lisbon, departure stamp" });
+    expect(preview.textContent).toContain("ZZX");
+    expect(within(dialog).getByRole("img", { name: LISBON }).textContent).not.toContain("ZZX");
   });
 
   it("says Upcoming for an upcoming trip and counts repeat visits", async () => {
