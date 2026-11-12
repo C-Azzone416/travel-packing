@@ -613,6 +613,12 @@ export function TripScreen({
     const category = categoryForCube(cube);
     const existing = findExistingItem(trip, name, category);
     if (existing) return Promise.resolve({ ok: false, reason: "EXISTS", existingId: existing.id });
+    packingView.setAddPending((all) => [...all, cube]);
+    const settled = () =>
+      packingView.setAddPending((all) => {
+        const at = all.indexOf(cube);
+        return at < 0 ? all : all.filter((_, index) => index !== at);
+      });
     return new Promise((resolve) => {
       void act(() => source.addItem(tripId, { name, category, neededQty: 1, cube }), {
         // The new item is unpacked: only the Packed filter outside Edit list hides it, read when the save completes.
@@ -620,8 +626,13 @@ export function TripScreen({
           !packingViewNow.current.editing && packingViewNow.current.filters[cube] === "packed"
             ? `Added ${name}. It’s in To pack.`
             : `Added ${name} to ${cubeName(cube)}.`,
-        after: () => resolve({ ok: true }),
+        // The confirmed row: the one the saved trip lists under this name and category (a duplicate is refused, so it is unique).
+        after: (change) => {
+          settled();
+          resolve({ ok: true, itemId: findExistingItem(change.trip, name, category)?.id });
+        },
         onFail: (error) => {
+          settled();
           const again = findExistingItem(trip, name, category);
           resolve(
             error instanceof TripsSourceError && error.message === "EXISTS" && again

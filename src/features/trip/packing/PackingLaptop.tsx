@@ -84,8 +84,17 @@ export function PackingLaptop({
   const views = buildCubeViews(trip);
   // Laundry is offered only where it would change a quantity (a short trip hides it, #412).
   const laundryVisible = laundryControlVisible(trip);
-  const { chosen, setChosen, filters, setFilters, editing, setEditing, packing, setPacking } =
-    viewState;
+  const {
+    chosen,
+    setChosen,
+    filters,
+    setFilters,
+    editing,
+    setEditing,
+    packing,
+    setPacking,
+    addPending,
+  } = viewState;
   const panelId = useId();
   const titleId = useId();
   const switched = useRef(false);
@@ -214,6 +223,7 @@ export function PackingLaptop({
             onFilter={(filter) => setFilters((all) => ({ ...all, [current.cube]: filter }))}
             editing={editing}
             onEditing={setEditing}
+            editLocked={addPending.includes(current.cube)}
             laundry={trip.config.laundry}
             failedRows={failedRows}
             onTick={onTick}

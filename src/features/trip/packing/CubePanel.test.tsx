@@ -175,12 +175,14 @@ describe("CubePanel quick add (#496)", () => {
     const scroll = vi.fn();
     Element.prototype.scrollIntoView = scroll;
     const view1 = view("misc", "Misc");
-    const { rerender } = render(<CubePanel {...normal({ view: view1 })} />);
+    const onAdd = vi.fn(async () => ({ ok: true as const, itemId: "y" }));
+    const { rerender } = render(<CubePanel {...normal({ view: view1, onAdd })} />);
     await user.click(screen.getByRole("button", { name: "Add an item to Misc" }));
     await user.type(screen.getByPlaceholderText("+ Add an item"), "Hat{Enter}");
     rerender(
       <CubePanel
         {...normal({
+          onAdd,
           view: {
             ...view1,
             total: 2,
@@ -274,14 +276,20 @@ describe("quick add scrolling (#496)", () => {
     const scroll = vi.fn();
     Element.prototype.scrollIntoView = scroll;
     const before = withItems(["old", 1]);
+    const onAdd = vi.fn(async () => ({ ok: true as const, itemId: "Hat" }));
     const { rerender } = render(
-      <CubePanel {...props({ editing: false, filter: "packed", view: before })} />,
+      <CubePanel {...props({ editing: false, filter: "packed", view: before, onAdd })} />,
     );
     await user.click(screen.getByRole("button", { name: "Add an item to Misc" }));
     await user.type(screen.getByPlaceholderText("+ Add an item"), "Hat{Enter}");
     rerender(
       <CubePanel
-        {...props({ editing: false, filter: "packed", view: withItems(["old", 1], ["Hat", 0]) })}
+        {...props({
+          editing: false,
+          filter: "packed",
+          view: withItems(["old", 1], ["Hat", 0]),
+          onAdd,
+        })}
       />,
     );
     await waitFor(() =>
@@ -298,15 +306,54 @@ describe("quick add scrolling (#496)", () => {
     Element.prototype.scrollIntoView = function (this: Element) {
       scrolled.push(this.getAttribute("data-item-id") ?? "");
     };
+    const onAdd = vi.fn(async () => ({ ok: true as const, itemId: "Hat" }));
     const { rerender } = render(
-      <CubePanel {...props({ editing: false, view: withItems(["a", 0], ["z", 0]) })} />,
+      <CubePanel {...props({ editing: false, view: withItems(["a", 0], ["z", 0]), onAdd })} />,
     );
     await user.click(screen.getByRole("button", { name: "Add an item to Misc" }));
     await user.type(screen.getByPlaceholderText("+ Add an item"), "Hat{Enter}");
     rerender(
-      <CubePanel {...props({ editing: false, view: withItems(["a", 0], ["Hat", 0], ["z", 0]) })} />,
+      <CubePanel
+        {...props({ editing: false, view: withItems(["a", 0], ["Hat", 0], ["z", 0]), onAdd })}
+      />,
     );
     await waitFor(() => expect(scrolled).toEqual(["Hat"]));
+  });
+
+  it("overlapping writes: another item arriving first is never scrolled to; the saved one is, when it lands", async () => {
+    const user = userEvent.setup();
+    const scrolled: string[] = [];
+    Element.prototype.scrollIntoView = function (this: Element) {
+      scrolled.push(this.getAttribute("data-item-id") ?? "");
+    };
+    let finish: (value: { ok: true; itemId: string }) => void = () => {};
+    const onAdd = vi.fn(
+      () => new Promise<{ ok: true; itemId: string }>((resolve) => (finish = resolve)),
+    );
+    const { rerender } = render(
+      <CubePanel {...props({ editing: false, view: withItems(["a", 0]), onAdd })} />,
+    );
+    await user.click(screen.getByRole("button", { name: "Add an item to Misc" }));
+    await user.type(screen.getByPlaceholderText("+ Add an item"), "Sun hat{Enter}");
+    // A different write (Rain hat) lands first.
+    rerender(
+      <CubePanel {...props({ editing: false, view: withItems(["a", 0], ["Rain", 0]), onAdd })} />,
+    );
+    expect(scrolled).toEqual([]);
+    finish({ ok: true, itemId: "Sun" });
+    rerender(
+      <CubePanel
+        {...props({ editing: false, view: withItems(["a", 0], ["Rain", 0], ["Sun", 0]), onAdd })}
+      />,
+    );
+    await waitFor(() => expect(scrolled).toEqual(["Sun"]));
+  });
+
+  it("the Edit list pill is disabled while an add is pending in this cube", () => {
+    render(<CubePanel {...props({ editing: false, editLocked: true })} />);
+    expect((screen.getByRole("button", { name: "Edit list" }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
   });
 });
 

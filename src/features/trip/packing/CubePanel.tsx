@@ -23,7 +23,8 @@ import {
 import styles from "./packing.module.css";
 
 export type AddOutcome =
-  | { ok: true }
+  /** itemId: the saved item, as confirmed by the write (absent when the add went through another form). */
+  | { ok: true; itemId?: string }
   | { ok: false; reason: "EXISTS"; existingId: string }
   | { ok: false; reason: "FAILED" };
 
@@ -35,6 +36,8 @@ export interface CubePanelProps {
   onFilter: (filter: CubeFilter) => void;
   editing: boolean;
   onEditing: (editing: boolean) => void;
+  /** An add is still being saved in this cube (see FilterBarProps.editLocked). */
+  editLocked?: boolean;
   /** The trip has laundry on: halved items show the ↻ marker. */
   laundry: boolean;
   failedRows: ReadonlySet<string>;
@@ -66,6 +69,8 @@ export interface FilterBarProps {
   onFilter: (filter: CubeFilter) => void;
   editing: boolean;
   onEditing: (editing: boolean) => void;
+  /** An add is still being saved in this cube: Edit list / Done waits, so the add row is not remounted mid-write. */
+  editLocked?: boolean;
   className?: string;
   /** On a phone the pencil is an icon alone (its label stays the accessible name) until it turns into "Done". */
   phone?: boolean;
@@ -79,6 +84,7 @@ export function FilterBar({
   onFilter,
   editing,
   onEditing,
+  editLocked = false,
   className,
   phone = false,
 }: FilterBarProps) {
@@ -111,6 +117,7 @@ export function FilterBar({
         active={editing}
         iconOnlyOnPhone={phone && !editing}
         className={phone ? styles.editPill : undefined}
+        disabled={editLocked}
         onClick={() => onEditing(!editing)}
       >
         {editing ? "Done" : "Edit list"}
@@ -231,7 +238,7 @@ function AddRow({
   onAdd,
   onEditItem,
   onCancel,
-  onSubmitted,
+  onSaved,
 }: {
   cube: Cube;
   label: string;
@@ -239,8 +246,8 @@ function AddRow({
   onEditItem: CubePanelProps["onEditItem"];
   /** Quick add (#496): present when the row opened from the "＋ Add an item" button. It adds Cancel and Escape, and takes focus. */
   onCancel?: () => void;
-  /** Called when a name is sent, with whether it was saved, so the panel can bring a new row into view. */
-  onSubmitted?: (saved: boolean | null) => void;
+  /** Called with the saved item's id, as the write confirmed it, so the panel can bring that row into view. */
+  onSaved?: (itemId: string) => void;
 }) {
   const [name, setName] = useState("");
   const [problem, setProblem] = useState<null | "EMPTY" | "LONG" | "FAILED">(null);
@@ -270,11 +277,10 @@ function AddRow({
     setSaving(true);
     setProblem(null);
     setExisting(null);
-    onSubmitted?.(null);
     const outcome = await onAdd(cube, trimmed);
     setSaving(false);
-    onSubmitted?.(outcome.ok);
     if (outcome.ok) {
+      if (outcome.itemId) onSaved?.(outcome.itemId);
       setName("");
       return field.current?.focus();
     }
@@ -361,13 +367,13 @@ function QuickAdd({
   label,
   onAdd,
   onEditItem,
-  onSubmitted,
+  onSaved,
 }: {
   cube: Cube;
   label: string;
   onAdd: CubePanelProps["onAdd"];
   onEditItem: CubePanelProps["onEditItem"];
-  onSubmitted: (saved: boolean | null) => void;
+  onSaved: (itemId: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const button = useRef<HTMLButtonElement>(null);
@@ -386,7 +392,7 @@ function QuickAdd({
           label={label}
           onAdd={onAdd}
           onEditItem={onEditItem}
-          onSubmitted={onSubmitted}
+          onSaved={onSaved}
           onCancel={() => {
             restore.current = true;
             setOpen(false);
@@ -418,6 +424,7 @@ export function CubePanel({
   onFilter,
   editing,
   onEditing,
+  editLocked = false,
   laundry,
   failedRows,
   onTick,
@@ -438,24 +445,20 @@ export function CubePanel({
   const lockedOn = view.items.some((item) => item.section === "packlast");
   const switchId = useId();
   const listRef = useRef<HTMLUListElement>(null);
-  // The ids the cube had when a quick add was sent. The saved item is the one that is not among them; only that row is scrolled
-  // to, and only if the current view lists it (a Packed filter hides an unpacked newcomer, and then the scroll stays put).
-  const idsBeforeAdd = useRef<Set<string> | null>(null);
+  // The saved item's id, as the quick add's write confirmed it. Only that row is scrolled to, once the view has it and only if
+  // the current view lists it (a Packed filter hides an unpacked newcomer, and then the scroll stays put).
+  const [scrollToId, setScrollToId] = useState<string | null>(null);
+  const scrolledId = useRef<string | null>(null);
   useEffect(() => {
-    const before = idsBeforeAdd.current;
-    if (!before) return;
-    const saved = view.items.find((item) => !before.has(item.id));
-    if (!saved) return;
-    idsBeforeAdd.current = null;
-    if (!shown.some((item) => item.id === saved.id)) return;
+    if (!scrollToId || scrolledId.current === scrollToId) return;
+    if (!view.items.some((item) => item.id === scrollToId)) return;
+    scrolledId.current = scrollToId;
+    if (!shown.some((item) => item.id === scrollToId)) return;
     listRef.current
-      ?.querySelector(`[data-item-id="${saved.id}"]`)
+      ?.querySelector(`[data-item-id="${scrollToId}"]`)
       ?.scrollIntoView?.({ block: "nearest" });
   });
-  const onSubmitted = (saved: boolean | null) => {
-    idsBeforeAdd.current =
-      saved === false ? null : (idsBeforeAdd.current ?? new Set(view.items.map((item) => item.id)));
-  };
+  const onSaved = setScrollToId;
   // One add control per cube: Toiletries adds through the Bathroom control in its bag step, every other cube through this.
   const addControl = extra ? null : editing ? (
     <AddRow cube={view.cube} label={view.label} onAdd={onAdd} onEditItem={onEditItem} />
@@ -465,7 +468,7 @@ export function CubePanel({
       label={view.label}
       onAdd={onAdd}
       onEditItem={onEditItem}
-      onSubmitted={onSubmitted}
+      onSaved={onSaved}
     />
   );
   const footerText = panelFooter(view, shown.length);
@@ -498,6 +501,7 @@ export function CubePanel({
             onFilter={onFilter}
             editing={editing}
             onEditing={onEditing}
+            editLocked={editLocked}
             className={styles.panelPills}
           />
         )}

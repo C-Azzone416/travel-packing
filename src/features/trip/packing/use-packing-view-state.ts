@@ -16,7 +16,21 @@ export function usePackingViewState(openCube: Cube | undefined) {
   const [filters, setFilters] = useState<Partial<Record<Cube, CubeFilter>>>({});
   const [editing, setEditing] = useState(false);
   const [packing, setPacking] = useState(false);
-  return { chosen, setChosen, filters, setFilters, editing, setEditing, packing, setPacking };
+  // The cubes with a quick add or Edit list add still being saved (one entry per write). Edit list / Done stays locked for a
+  // cube until its adds settle, so the add row is never remounted (which would reset its pending guard) mid-write (#496).
+  const [addPending, setAddPending] = useState<readonly Cube[]>([]);
+  return {
+    chosen,
+    setChosen,
+    filters,
+    setFilters,
+    editing,
+    setEditing,
+    packing,
+    setPacking,
+    addPending,
+    setAddPending,
+  };
 }
 
 export type PackingViewState = ReturnType<typeof usePackingViewState>;

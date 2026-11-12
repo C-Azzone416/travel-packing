@@ -410,6 +410,39 @@ describe("Edit list", () => {
     await waitFor(() => expect(live().textContent).toBe("Added Sun hat to Clothing."));
   });
 
+  it("locks Edit list / Done while an add is pending, so a resubmit after toggling sends once (#496)", async () => {
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const calls = vi.fn();
+    const { user } = setup({
+      wrap: (source) => ({
+        addItem: async (...args: Parameters<typeof source.addItem>) => {
+          calls();
+          await gate;
+          return source.addItem(...args);
+        },
+      }),
+    });
+    await ready();
+    await user.click(within(panel()).getByRole("button", { name: "Add an item to Clothing" }));
+    await user.type(within(panel()).getByPlaceholderText("+ Add an item"), "Sun hat{Enter}");
+    const editPill = within(panel()).getByRole("button", {
+      name: "Edit list",
+    }) as HTMLButtonElement;
+    expect(editPill.disabled).toBe(true);
+    await user.click(editPill);
+    expect(within(panel()).queryByRole("button", { name: "Done" })).toBeNull();
+    await user.click(within(panel()).getByRole("button", { name: "Add" }));
+    expect(calls).toHaveBeenCalledTimes(1);
+    release();
+    await waitFor(() => expect(live().textContent).toBe("Added Sun hat to Clothing."));
+    await waitFor(() =>
+      expect(
+        (within(panel()).getByRole("button", { name: "Edit list" }) as HTMLButtonElement).disabled,
+      ).toBe(false),
+    );
+  });
+
   it("adds to the cube that is open, not to Clothing", async () => {
     const { user, base } = setup();
     await ready();
