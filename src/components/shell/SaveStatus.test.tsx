@@ -236,6 +236,38 @@ describe("SaveStatusProvider", () => {
     expect(again).toHaveBeenCalledOnce();
   });
 
+  it("keeps the failed write retryable when discard runs during a held Retry", async () => {
+    setup();
+    const held = deferred();
+    const write = vi
+      .fn<() => Promise<string>>()
+      .mockRejectedValueOnce(new Error("first failure"))
+      .mockImplementationOnce(() => held.promise)
+      .mockResolvedValueOnce("saved");
+    await act(async () => {
+      await api.track(write).catch(() => {});
+    });
+
+    act(() => api.retry());
+    expect(write).toHaveBeenCalledTimes(2);
+    expect(api.pending).toBe(true);
+    act(() => api.discard(write));
+    expect(api.pending).toBe(true);
+    expect(api.status).toBe("error");
+    expect(chipText()).toContain("Not saved");
+
+    await act(async () => {
+      held.reject(new Error("retry failure"));
+    });
+    expect(api.pending).toBe(false);
+    expect(api.status).toBe("error");
+    await act(async () => {
+      api.retry();
+    });
+    expect(write).toHaveBeenCalledTimes(3);
+    expect(api.status).toBe("saved");
+  });
+
   it("stays in Error when the retry fails again, and keeps retrying the same write", async () => {
     setup();
     const write = vi.fn().mockRejectedValue(new Error("still down"));
