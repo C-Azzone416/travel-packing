@@ -48,6 +48,8 @@ interface SaveStatusApi {
   lastSavedAt: Date | null;
   /** Re-run the last FAILED write only. A newer successful write clears it, so stale writes never replay. */
   retry: () => void;
+  /** Drop this write if it is the failed one on hold, so Retry never replays it. Does nothing while a write is in flight. */
+  discard: (write: () => Promise<unknown>) => void;
   /** True while a non-read write is in flight, including the short delay before `status` becomes "saving". */
   pending: boolean;
 }
@@ -181,9 +183,19 @@ export function SaveStatusProvider({ children }: { children: ReactNode }) {
       }).catch(() => {});
   }, [track]);
 
+  const discard = useCallback(
+    (write: () => Promise<unknown>) => {
+      if (lastFailed.current?.write !== write || pending.current > 0) return;
+      lastFailed.current = null;
+      failed.current = false;
+      applyStatus("idle");
+    },
+    [applyStatus],
+  );
+
   const api = useMemo<SaveStatusApi>(
-    () => ({ status, lastSavedAt, track, retry, pending: hasPending }),
-    [status, lastSavedAt, track, retry, hasPending],
+    () => ({ status, lastSavedAt, track, retry, discard, pending: hasPending }),
+    [status, lastSavedAt, track, retry, discard, hasPending],
   );
 
   // While a change is unsaved, leaving the page asks first (design's #31).

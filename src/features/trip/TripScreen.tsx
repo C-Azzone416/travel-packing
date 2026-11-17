@@ -16,7 +16,6 @@ import { recommendPacking } from "@/domain/weather/recommend";
 import { TripsSourceError, type TripChange } from "@/features/trips/trips-source";
 import { useTripsSource } from "@/features/trips/TripsSourceProvider";
 import { AddToiletryForm } from "./AddToiletryForm";
-import { automaticStamps } from "@/domain/stamps";
 import { localToday } from "@/lib/today";
 import { usePackingViewState, type PendingAdd } from "./packing/use-packing-view-state";
 import { fallbackReviewStop, weatherForReview } from "./weather-remaining";
@@ -29,7 +28,6 @@ import {
   type SaveResult,
 } from "./EditTripSheet";
 import { ItemEditor } from "./ItemEditor";
-import { EditStampSheet } from "./EditStampSheet";
 import { bagGate, packedAnnouncement } from "./trip-view";
 import { packedState } from "./packed-state";
 import { ReviewBagSheet } from "./ReviewBagSheet";
@@ -63,7 +61,6 @@ type Dialog =
   | { kind: "add-toiletry"; name?: string; qty?: number }
   | { kind: "save-list" }
   | { kind: "bag" }
-  | { kind: "stamp" }
   | { kind: "trip"; tab: EditTripTab };
 
 interface WeatherExperience {
@@ -116,7 +113,6 @@ export function TripScreen({
   );
   const [failedRows, setFailedRows] = useState<ReadonlySet<string>>(new Set());
   const [announcement, setAnnouncement] = useState("");
-  const [stampFailed, setStampFailed] = useState(false);
   const [weather, setWeather] = useState<WeatherExperience | null>(null);
   const [laundryBusy, setLaundryBusy] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(openReview);
@@ -768,15 +764,6 @@ export function TripScreen({
       >
         Save as a list
       </button>
-      {trip.stops.length > 0 ? (
-        <button
-          type="button"
-          className="link-button edit-stamp"
-          onClick={() => setDialog({ kind: "stamp" })}
-        >
-          Edit stamp
-        </button>
-      ) : null}
       <button
         type="button"
         className="link-button edit-preferences"
@@ -987,39 +974,6 @@ export function TripScreen({
               after: close,
             })
           }
-        />
-      ) : null}
-      {dialog?.kind === "stamp" ? (
-        <EditStampSheet
-          automatic={automaticStamps(trip.stops)}
-          stops={trip.stops}
-          saved={trip.stampLabels}
-          departure={trip.start}
-          saving={submitting}
-          failed={stampFailed}
-          onClose={() => {
-            setStampFailed(false);
-            close();
-          }}
-          onSave={(slot1, slot2) => {
-            setStampFailed(false);
-            const before = trip.stampLabels ?? [null, null];
-            void act(() => source.setStampLabels(tripId, slot1, slot2), {
-              modal: true,
-              onFail: () => setStampFailed(true),
-              after: (change) => {
-                const now = change.trip.stampLabels ?? [null, null];
-                // Only slots that changed count: a change that only cleared overrides is a reset.
-                const changed = [0, 1].filter((slot) => now[slot] !== before[slot]);
-                toast.show(
-                  changed.length > 0 && changed.every((slot) => now[slot] === null)
-                    ? "Stamp reset to automatic."
-                    : "Stamp updated.",
-                );
-                close();
-              },
-            });
-          }}
         />
       ) : null}
       {dialog?.kind === "trip" ? (

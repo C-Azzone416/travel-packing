@@ -207,7 +207,7 @@ test(
   },
 );
 
-test("details: a sticker opens a read-only sheet; Escape puts focus back on it (#494)", async ({
+test("details: a sticker opens a sheet with Edit stamp label; Escape puts focus back on it (#494)", async ({
   page,
 }) => {
   await openStamps(page);
@@ -215,7 +215,7 @@ test("details: a sticker opens a read-only sheet; Escape puts focus back on it (
   await lisbon.click();
   const details = page.getByRole("dialog", { name: "Lisbon · Sep 2026" });
   await expect(details).toBeVisible();
-  await expect(details.getByRole("button", { name: /Edit stamp label/ })).toHaveCount(0);
+  await expect(details.getByRole("button", { name: "Edit stamp label" })).toBeVisible();
   // Focus starts on the title, so the next Enter does not navigate.
   await expect(details.getByRole("heading", { name: "Lisbon · Sep 2026" })).toBeFocused();
   await page.keyboard.press("Escape");

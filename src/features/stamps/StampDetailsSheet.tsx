@@ -6,6 +6,7 @@ import { ModalSheet } from "@/components/ui/ModalSheet";
 import type { LifecycleTrip } from "@/domain/trip-lifecycle";
 import { Stamps } from "@/components/stamp/Stamp";
 import { selectStamps } from "@/domain/stamps";
+import { StampLabelAction } from "./StampLabelEdit";
 import { Sticker } from "./StampsScreen";
 import type { PastTripView, StickerView } from "./stamps-view";
 import styles from "./StampDetailsSheet.module.css";
@@ -17,11 +18,14 @@ export function StampDetailsSheet({
   sticker,
   trip,
   summary,
+  onEdit,
   onClose,
 }: {
   sticker: StickerView;
   trip: LifecycleTrip;
   summary: PastTripView;
+  /** Opens the label editor; absent where editing is not offered (the Home). */
+  onEdit?: () => void;
   onClose: () => void;
 }) {
   const stamps = selectStamps(trip.stops, trip.stampLabels);
@@ -34,6 +38,9 @@ export function StampDetailsSheet({
       onClose={onClose}
       actions={
         <>
+          {onEdit ? (
+            <StampLabelAction trip={trip} fromRoute={sticker.codeFromRoute} onEdit={onEdit} />
+          ) : null}
           <Link
             className={buttonClassName({ variant: "secondary" })}
             href={`/trips/new?copy=${trip.id}`}

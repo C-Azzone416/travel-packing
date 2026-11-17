@@ -18,3 +18,6 @@ results.sarif
 # Local agent-harness files (untracked, never in CI); keeps the pre-push hook from failing on them
 .mcp.json
 CLAUDE.md
+AGENTS.md
+.codex/
+.agents/

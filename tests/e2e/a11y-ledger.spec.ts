@@ -198,17 +198,12 @@ test.describe("keyboard in the new dialogs", () => {
     );
   });
 
-  test("Save as a list, and the Stamp label sheet", async ({ page }) => {
+  test("Save as a list", async ({ page }) => {
     await openPacking(page);
     await expectDialogKeyboard(
       page,
       page.getByRole("button", { name: "Save as a list" }),
       page.getByRole("dialog", { name: "Save as a list" }),
-    );
-    await expectDialogKeyboard(
-      page,
-      page.getByRole("button", { name: "Edit stamp" }),
-      page.getByRole("dialog", { name: "Stamp label" }),
     );
   });
 });
@@ -229,16 +224,6 @@ test("the new toasts are announced in the polite status region", async ({ page }
   await page.getByRole("link", { name: "Edit Lake week" }).click();
   await page.getByRole("button", { name: "Remove Toothbrush" }).click();
   await expect(region.getByRole("button", { name: "Undo" })).toBeVisible();
-
-  await page.goto("/");
-  await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
-  await expectPacking(page);
-  await page.getByRole("button", { name: "Edit stamp" }).click();
-  const stamp = page.getByRole("dialog", { name: "Stamp label" });
-  await stamp.getByRole("radio", { name: "Custom" }).check();
-  await stamp.getByRole("textbox", { name: "Label", exact: true }).fill("sd7");
-  await stamp.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(region.getByText("Stamp updated.")).toBeVisible();
 });
 
 test.describe("narrow screens", DEVICE, () => {
@@ -290,10 +275,7 @@ test.describe("narrow screens", DEVICE, () => {
     await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
     await expectPacking(page);
     await expectNoSidewaysScroll("packing screen");
-    for (const [opener, dialog] of [
-      ["Save as a list", "Save as a list"],
-      ["Edit stamp", "Stamp label"],
-    ]) {
+    for (const [opener, dialog] of [["Save as a list", "Save as a list"]]) {
       await page.getByRole("button", { name: opener }).click();
       await expect(page.getByRole("dialog", { name: dialog })).toBeVisible();
       await expectNoSidewaysScroll(dialog);

@@ -227,6 +227,8 @@ export const setStampLabelsInput = z.object({
   tripId,
   slot1: z.string().max(64).nullable(),
   slot2: z.string().max(64).nullable(),
+  /** Which slots the person changed; an unchanged slot keeps its stored value untouched. Omitted means both. */
+  changed: z.tuple([z.boolean(), z.boolean()]).optional(),
 });
 
 export const stapleInput = z

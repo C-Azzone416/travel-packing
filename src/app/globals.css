@@ -3321,22 +3321,7 @@ a.back {
   padding-top: 16px;
 }
 
-/* ---- Edit stamp (#151, design). Role tokens only. */
-.edit-stamp {
-  margin-top: 4px;
-  font-size: 13px;
-  font-weight: 700;
-  text-decoration: none;
-}
-.edit-stamp:hover,
-.edit-stamp:focus-visible {
-  text-decoration: underline;
-}
-@media (max-width: 720px) {
-  .edit-stamp {
-    margin-top: 0;
-  }
-}
+/* ---- Stamp label sheet (#151, design). Role tokens only. */
 .stamp-form {
   display: grid;
   gap: 20px;
