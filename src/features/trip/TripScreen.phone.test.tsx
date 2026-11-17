@@ -803,11 +803,14 @@ describe("text zoom and the fixed-height layout", () => {
 
   it("marks the page zoomed while the root font size is larger than 16px, and clears it again", async () => {
     let notify: () => void = () => {};
+    const observeMock = vi.fn();
     globalThis.ResizeObserver = class {
       constructor(callback: () => void) {
         notify = callback;
       }
-      observe() {}
+      observe(target: Element) {
+        observeMock(target);
+      }
       disconnect() {}
       unobserve() {}
     } as unknown as typeof ResizeObserver;
@@ -817,6 +820,7 @@ describe("text zoom and the fixed-height layout", () => {
     );
     setup();
     await ready();
+    await waitFor(() => expect(observeMock).toHaveBeenCalledTimes(1));
     expect(document.querySelector("[data-zoomed]")).toBeNull();
     px = 32;
     act(() => notify());
