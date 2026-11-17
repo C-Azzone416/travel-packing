@@ -288,7 +288,7 @@ describe("the cube bar", () => {
       setup();
       await ready();
       const list = screen.getByRole("navigation", { name: "Cubes" }).querySelector("ul")!;
-      expect(list.scrollLeft).toBe(300 - (200 - 80) / 2);
+      await waitFor(() => expect(list.scrollLeft).toBe(300 - (200 - 80) / 2));
     } finally {
       offsets.mockRestore();
       client.mockRestore();
