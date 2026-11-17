@@ -342,6 +342,8 @@ export function setTripStampLabels(context: DataContext, input: unknown) {
     const fields: string[] = [];
     const stored = ([request.slot1, request.slot2] as const).map((raw, index) => {
       const slot = index === 0 ? "slot1" : "slot2";
+      // An untouched slot keeps exactly what is stored, so saving one label never rewrites the other's override.
+      if (request.changed?.[index] === false) return trip.stampLabels?.[index] ?? null;
       if (raw === null) return null;
       const label = normaliseStampLabel(raw);
       if (!label.ok || (index === 1 && label.label !== null && automatic.length < 2)) {

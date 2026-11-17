@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { screen, within } from "@testing-library/react";
+import { act, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { renderInApp } from "@/test/providers";
 import { automaticStamps, type StampLabels } from "@/domain/stamps";
@@ -29,6 +30,8 @@ function setup(
     saved?: StampLabels;
     saving?: boolean;
     failed?: boolean;
+    retrying?: boolean;
+    onRetry?: () => void;
   } = {},
 ) {
   const stops = props.stops ?? TWO;
@@ -43,6 +46,8 @@ function setup(
       departure="2030-05-01"
       saving={props.saving ?? false}
       failed={props.failed}
+      retrying={props.retrying}
+      onRetry={props.onRetry}
       onClose={onClose}
       onSave={onSave}
     />,
@@ -95,7 +100,7 @@ describe("EditStampSheet", () => {
     expect((screen.getByLabelText("Label") as HTMLInputElement).value).toBe("");
     await user.type(screen.getByLabelText("Label"), "abc");
     await user.click(save());
-    expect(onSave).toHaveBeenCalledWith("ABC", null);
+    expect(onSave).toHaveBeenCalledWith("ABC", null, expect.any(Array));
   });
 
   it("Save is off until something changes", async () => {
@@ -127,7 +132,7 @@ describe("EditStampSheet", () => {
     // The preview shows the custom text, not the automatic one (it is decorative: the block names it).
     expect(document.querySelector(".stamp-preview")?.textContent).toContain("AB7");
     await user.click(save());
-    expect(onSave).toHaveBeenCalledWith("AB7", null);
+    expect(onSave).toHaveBeenCalledWith("AB7", null, expect.any(Array));
   });
 
   it("shows the error on blur for a short label, and Save refuses until it is fixed", async () => {
@@ -148,7 +153,7 @@ describe("EditStampSheet", () => {
     await user.type(field, "c");
     expect(fieldError()).toBeNull();
     await user.click(save());
-    expect(onSave).toHaveBeenCalledWith(null, "ABC");
+    expect(onSave).toHaveBeenCalledWith(null, "ABC", expect.any(Array));
   });
 
   it("refuses non-ASCII text on Save (the field is never transliterated)", async () => {
@@ -192,7 +197,7 @@ describe("EditStampSheet", () => {
     await user.type(field, "Ab1");
     expect(field.value).toBe("AB1");
     await user.click(save());
-    expect(onSave).toHaveBeenCalledWith("AB1", null);
+    expect(onSave).toHaveBeenCalledWith("AB1", null, expect.any(Array));
   });
 
   it("a blank custom label is refused rather than saved as nothing", async () => {
@@ -215,21 +220,21 @@ describe("EditStampSheet", () => {
     expect(block(1, "automatic")).toBeTruthy();
     expect(screen.getByText("PRT, the country code for Portugal")).toBeTruthy();
     await user.click(save());
-    expect(onSave).toHaveBeenCalledWith(null, "XYZ");
+    expect(onSave).toHaveBeenCalledWith(null, "XYZ", expect.any(Array));
   });
 
   it("choosing Automatic and saving clears the override, and a custom label equal to the automatic one saves as null", async () => {
     const first = setup({ saved: ["ABC", null] });
     await first.user.click(within(block(1, "custom")).getByRole("radio", { name: "Automatic" }));
     await first.user.click(save());
-    expect(first.onSave).toHaveBeenCalledWith(null, null);
+    expect(first.onSave).toHaveBeenCalledWith(null, null, expect.any(Array));
     first.unmount();
 
     const second = setup({ saved: ["ABC", null] });
     await second.user.clear(screen.getByLabelText("Label"));
     await second.user.type(screen.getByLabelText("Label"), "prt");
     await second.user.click(save());
-    expect(second.onSave).toHaveBeenCalledWith(null, null);
+    expect(second.onSave).toHaveBeenCalledWith(null, null, expect.any(Array));
   });
 
   it("Cancel closes without saving", async () => {
@@ -246,5 +251,66 @@ describe("EditStampSheet", () => {
       true,
     );
     expect(fieldError()?.textContent).toContain("Nothing changed");
+  });
+
+  describe("while a failed save is waiting on Try again (#494)", () => {
+    it("the fields are read-only, so Try again always sends what is shown", async () => {
+      const onRetry = vi.fn();
+      const { user } = setup({ saved: ["ABC", null], failed: true, onRetry });
+      const input = screen.getByRole("textbox", { name: "Label" }) as HTMLInputElement;
+      expect(input.readOnly).toBe(true);
+      await user.type(input, "XYZ");
+      expect(input.value).toBe("ABC");
+      expect(
+        (within(block(1, "custom")).getByRole("radio", { name: "Automatic" }) as HTMLInputElement)
+          .disabled,
+      ).toBe(true);
+      await user.click(screen.getByRole("button", { name: "Try again" }));
+      expect(onRetry).toHaveBeenCalledTimes(1);
+    });
+
+    it("Try again stays mounted and focused while its retry is pending, and Escape still closes", async () => {
+      const onRetry = vi.fn();
+      const onClose = vi.fn();
+      let setRetrying: (value: boolean) => void = () => {};
+      function Harness() {
+        const [retrying, set] = useState(false);
+        setRetrying = set;
+        return (
+          <EditStampSheet
+            automatic={automaticStamps(TWO)}
+            stops={TWO}
+            saved={["ABC", null]}
+            departure="2030-05-01"
+            saving={false}
+            failed
+            retrying={retrying}
+            onRetry={() => {
+              onRetry();
+              set(true);
+            }}
+            onClose={onClose}
+            onSave={vi.fn()}
+          />
+        );
+      }
+      const user = userEvent.setup();
+      renderInApp(<Harness />);
+      const again = screen.getByRole("button", { name: "Try again" });
+      again.focus();
+      await user.keyboard("{Enter}");
+      expect(onRetry).toHaveBeenCalledTimes(1);
+      const pending = screen.getByRole("button", { name: "Try again" });
+      expect(pending).toBe(again);
+      expect(pending.getAttribute("aria-disabled")).toBe("true");
+      expect(document.activeElement).toBe(pending);
+      await user.keyboard("{Enter}");
+      expect(onRetry).toHaveBeenCalledTimes(1);
+      act(() => setRetrying(false));
+      expect(screen.getByRole("button", { name: "Try again" })).toBe(again);
+      expect(document.activeElement).toBe(again);
+      await user.keyboard("{Escape}");
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
   });
 });

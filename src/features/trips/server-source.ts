@@ -80,6 +80,7 @@ export interface TripActions {
     tripId: string,
     slot1: string | null,
     slot2: string | null,
+    changed?: readonly [boolean, boolean],
   ): Promise<TripCommandResult>;
   setStops(tripId: string, stops: TripStop[], basedOn?: string): Promise<TripCommandResult>;
   setTravelMode(
@@ -209,7 +210,8 @@ export function createServerTripsSource(
     updatePreferences: (id, config, basedOn) =>
       unwrapChange(trip.updatePreferences(id, config, basedOn)),
     setTheme: (id, theme) => unwrapChange(trip.setTheme(id, theme)),
-    setStampLabels: (id, slot1, slot2) => unwrapChange(trip.setStampLabels(id, slot1, slot2)),
+    setStampLabels: (id, slot1, slot2, changed) =>
+      unwrapChange(trip.setStampLabels(id, slot1, slot2, changed)),
     setStops: (id, stops, basedOn) => unwrapChange(trip.setStops(id, stops, basedOn)),
     setTravelMode: (id, mode, basedOn) => unwrapChange(trip.setTravelMode(id, mode, basedOn)),
   };

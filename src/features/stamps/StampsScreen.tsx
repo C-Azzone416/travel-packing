@@ -8,7 +8,9 @@ import { useSaveStatus } from "@/components/shell/SaveStatus";
 import { localToday } from "@/lib/today";
 import { useTripsSource } from "@/features/trips/TripsSourceProvider";
 import type { LifecycleState } from "@/domain/trip-lifecycle";
+import type { LifecycleTrip } from "@/domain/trip-lifecycle";
 import { StampDetailsSheet } from "./StampDetailsSheet";
+import { StampLabelAction, StampLabelEditor } from "./StampLabelEdit";
 import {
   filterLabel,
   stampTripView,
@@ -151,7 +153,18 @@ export function StickerTeaser({
   );
 }
 
-function SelectedTrip({ trip }: { trip: PastTripView }) {
+function SelectedTrip({
+  trip,
+  full,
+  fromRoute,
+  onEdit,
+}: {
+  trip: PastTripView;
+  full: LifecycleTrip | null;
+  /** The selected sticker's code comes from the route, so the action is disabled here as in its details. */
+  fromRoute: boolean;
+  onEdit?: () => void;
+}) {
   return (
     <article className={styles.selectedCard} aria-label={`Selected trip: ${trip.name}`}>
       <p className={styles.selectedEyebrow} data-colour={trip.stickerColour ?? undefined}>
@@ -160,6 +173,9 @@ function SelectedTrip({ trip }: { trip: PastTripView }) {
       <h3>{trip.name}</h3>
       <p>{trip.facts}</p>
       <div className={styles.selectedActions}>
+        {onEdit && full ? (
+          <StampLabelAction small trip={full} fromRoute={fromRoute} onEdit={onEdit} />
+        ) : null}
         <Link
           className={buttonClassName({ variant: "secondary", small: true })}
           href={`/trips/new?copy=${trip.id}`}
@@ -218,16 +234,22 @@ export function StampsContent({
   today,
   embedded = false,
   initialTripId = null,
+  onTripChange,
 }: {
   state: LifecycleState;
   today: string;
   embedded?: boolean;
   /** The trip to select first (`/stamps?trip=<id>`, from the Home's recent trips). */
   initialTripId?: string | null;
+  /** Where a saved trip goes back into the screen's state. Label editing is offered only when this is given (#494). */
+  onTripChange?: (trip: LifecycleTrip) => void;
 }) {
   const [filter, setFilter] = useState<StampFilter>(initialTripId ? "all" : "rolling");
   const [selectedId, setSelectedId] = useState<string | null>(initialTripId);
+  // The sticker that was selected (its key), "" for a trip picked from the list, null when nothing was picked yet.
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [detailKey, setDetailKey] = useState<string | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
 
   const view = useMemo(() => stampsView(state.trips, today, filter), [state, today, filter]);
   const visibleIds = useMemo(
@@ -255,6 +277,14 @@ export function StampsContent({
   }, [view, state.trips]);
   const activeId = selectedId && visibleIds.has(selectedId) ? selectedId : defaultId;
   const selectedTrip = activeId ? (state.trips.find((trip) => trip.id === activeId) ?? null) : null;
+  const cardSticker =
+    selectedKey === ""
+      ? undefined
+      : view.stickers.find(
+          (sticker) =>
+            sticker.tripId === activeId &&
+            (selectedKey === null ? !sticker.upcoming : sticker.key === selectedKey),
+        );
   const selected = selectedTrip ? stampTripView(selectedTrip, today) : null;
   const detailSticker = detailKey
     ? (view.stickers.find((sticker) => sticker.key === detailKey) ?? null)
@@ -262,6 +292,8 @@ export function StampsContent({
   const detailTrip = detailSticker
     ? (state.trips.find((trip) => trip.id === detailSticker.tripId) ?? null)
     : null;
+  const editTrip = editId ? (state.trips.find((trip) => trip.id === editId) ?? null) : null;
+  const onEditTrip = onTripChange ? () => setEditId(selectedTrip?.id ?? null) : undefined;
 
   return (
     <section className={`${styles.root} ${embedded ? styles.embedded : "screen"}`}>
@@ -304,6 +336,7 @@ export function StampsContent({
                   selected={activeId === sticker.tripId}
                   onSelect={() => {
                     setSelectedId(sticker.tripId);
+                    setSelectedKey(sticker.key);
                     setDetailKey(sticker.key);
                   }}
                 />
@@ -333,7 +366,14 @@ export function StampsContent({
 
         <section className={styles.past} aria-labelledby="past-trips-title">
           <h2 id="past-trips-title">Past trips</h2>
-          {selected ? <SelectedTrip trip={selected} /> : null}
+          {selected ? (
+            <SelectedTrip
+              trip={selected}
+              full={selectedTrip}
+              fromRoute={cardSticker?.codeFromRoute ?? false}
+              onEdit={onEditTrip}
+            />
+          ) : null}
           {view.pastTrips.length ? (
             <div className={styles.tripList}>
               {view.pastTrips.map((trip) => (
@@ -341,7 +381,10 @@ export function StampsContent({
                   key={trip.id}
                   trip={trip}
                   selected={activeId === trip.id}
-                  onSelect={() => setSelectedId(trip.id)}
+                  onSelect={() => {
+                    setSelectedId(trip.id);
+                    setSelectedKey("");
+                  }}
                 />
               ))}
             </div>
@@ -356,8 +399,19 @@ export function StampsContent({
           sticker={detailSticker}
           trip={detailTrip}
           summary={stampTripView(detailTrip, today)}
+          onEdit={
+            onTripChange
+              ? () => {
+                  setEditId(detailTrip.id);
+                  setDetailKey(null);
+                }
+              : undefined
+          }
           onClose={() => setDetailKey(null)}
         />
+      ) : null}
+      {editTrip && onTripChange ? (
+        <StampLabelEditor trip={editTrip} onSaved={onTripChange} onClose={() => setEditId(null)} />
       ) : null}
     </section>
   );
@@ -412,5 +466,24 @@ export function StampsScreen({ getToday = localToday }: { getToday?: () => strin
 
   // The trips have loaded in the browser by now, so reading the address cannot disagree with the server's markup.
   const initialTripId = new URLSearchParams(window.location.search).get("trip");
-  return <StampsContent state={load.state} today={load.today} initialTripId={initialTripId} />;
+  return (
+    <StampsContent
+      state={load.state}
+      today={load.today}
+      initialTripId={initialTripId}
+      onTripChange={(saved) =>
+        setLoad((current) =>
+          current.phase === "ready"
+            ? {
+                ...current,
+                state: {
+                  ...current.state,
+                  trips: current.state.trips.map((trip) => (trip.id === saved.id ? saved : trip)),
+                },
+              }
+            : current,
+        )
+      }
+    />
+  );
 }

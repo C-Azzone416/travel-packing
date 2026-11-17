@@ -331,8 +331,11 @@ export async function setStampLabelsAction(
   tripId: string,
   slot1: string | null,
   slot2: string | null,
+  changed?: readonly [boolean, boolean],
 ): Promise<TripCommandResult> {
-  return command((context) => service.setTripStampLabels(context, { tripId, slot1, slot2 }));
+  return command((context) =>
+    service.setTripStampLabels(context, { tripId, slot1, slot2, changed }),
+  );
 }
 
 export async function updatePreferencesAction(

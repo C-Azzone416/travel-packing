@@ -133,6 +133,36 @@ describe("Stamps view", () => {
     });
   });
 
+  it("maps a label to the slot the editor names: slot 2 is the second COUNTRY, not the second stop", () => {
+    const route = trip("Lisbon", "PT", "2026-09-01", "2026-09-05", { airportCode: "LIS" });
+    route.stops.push(
+      {
+        ...route.stops[0],
+        location: place("Porto", "PT"),
+        airportCode: "OPO",
+        arrive: "2026-09-05",
+        leave: "2026-09-07",
+      },
+      {
+        ...route.stops[0],
+        location: place("San Diego", "US"),
+        airportCode: "SAN",
+        arrive: "2026-09-07",
+        leave: "2026-09-09",
+      },
+    );
+    route.stampLabels = [null, "QQQ"];
+    const stickers = stampsView([route], today, "rolling").stickers;
+    const code = (city: string) => stickers.find((entry) => entry.place === city)?.code;
+    expect(code("Porto")).toBe("OPO");
+    expect(code("San Diego")).toBe("QQQ");
+    expect(stickers.find((entry) => entry.place === "San Diego")?.codeFromRoute).toBe(false);
+    route.stampLabels = ["ZZZ", null];
+    const first = stampsView([route], today, "rolling").stickers;
+    expect(first.find((entry) => entry.place === "Lisbon")?.code).toBe("ZZZ");
+    expect(first.find((entry) => entry.place === "Porto")?.code).toBe("ZZZ");
+  });
+
   it("renders honest empty totals and no invented code for a place without country data", () => {
     const future = trip("Unknown", "", "2027-01-01", "2027-01-02");
     future.stops[0].location.country = "";

@@ -377,6 +377,11 @@
   color: var(--ink);
   font-size: 15px;
 }
+.selectedCard .selectedActions :global(.button[aria-disabled="true"]) {
+  border-color: var(--line);
+  background: var(--seafoam-soft);
+  color: var(--muted-text);
+}
 .openTrip {
   min-height: 44px;
   display: inline-flex;
