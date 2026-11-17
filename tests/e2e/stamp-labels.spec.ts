@@ -104,6 +104,9 @@ test("a two-country trip has two stamps: each slot saves on its own and both per
     ["2026-11-12", "2026-11-15", "2026-11-18"],
   );
   await reviewAndCreate(page);
+  // Create trip saves, then routes Home: Stamps loads its list once, so go only after the trip is saved.
+  await page.waitForURL((url) => url.pathname === "/");
+
   await page.goto("/stamps");
   const sticker = (place: string) =>
     page.getByRole("button", { name: new RegExp(`^${place}, Nov 2026`) });
@@ -146,59 +149,66 @@ test("a two-country trip has two stamps: each slot saves on its own and both per
   await expect(field(slot(again, 2))).toHaveValue("ZZ9");
 });
 
-test(
-  "the label editor is keyboard operable, accessible and fits a phone",
-  DEVICE,
-  async ({ page }) => {
-    await page.clock.setFixedTime(NOW);
-    await signInAsOwner(page);
-    await page.goto("/stamps");
-    const sticker = page.getByRole("button", {
-      name: "Lisbon, Sep 2026, inked, 1 trip",
-      exact: true,
-    });
-    await sticker.focus();
-    await page.keyboard.press("Enter");
-    const details = page.getByRole("dialog", { name: "Lisbon · Sep 2026" });
-    await expect(details).toBeVisible();
-    const edit = details.getByRole("button", { name: "Edit stamp label" });
-    await edit.focus();
-    await page.keyboard.press("Space");
-    const sheet = page.getByRole("dialog", { name: "Stamp label" });
-    await expect(sheet).toBeVisible();
-    await expectAccessible(page, "stamp label editor, automatic", { include: '[role="dialog"]' });
-    await sheet.getByRole("radio", { name: "Custom" }).check();
-    await field(sheet).fill("a1b");
-    await expectAccessible(page, "stamp label editor, custom", { include: '[role="dialog"]' });
-    // Tab order inside the dialog: from the field to Save, Cancel and Close, and the trap wraps back to the form.
-    const seen: string[] = [];
-    for (let at = 0; at < 4; at += 1) {
-      await page.keyboard.press("Tab");
+// 390 wide (the iPhone 15 profile is 393), keeping its height, WebKit and mobile emulation.
+test.describe(() => {
+  test.use({ viewport: { width: 390, height: 659 } });
+  test(
+    "the label editor is keyboard operable, accessible and fits a phone",
+    DEVICE,
+    async ({ page }) => {
+      expect(page.viewportSize()?.width).toBe(390);
+      await page.clock.setFixedTime(NOW);
+      await signInAsOwner(page);
+      await page.goto("/stamps");
+      const sticker = page.getByRole("button", {
+        name: "Lisbon, Sep 2026, inked, 1 trip",
+        exact: true,
+      });
+      await sticker.focus();
+      await page.keyboard.press("Enter");
+      const details = page.getByRole("dialog", { name: "Lisbon · Sep 2026" });
+      await expect(details).toBeVisible();
+      const edit = details.getByRole("button", { name: "Edit stamp label" });
+      await edit.focus();
+      await page.keyboard.press("Space");
+      const sheet = page.getByRole("dialog", { name: "Stamp label" });
+      await expect(sheet).toBeVisible();
+      await expectAccessible(page, "stamp label editor, automatic", { include: '[role="dialog"]' });
+      await sheet.getByRole("radio", { name: "Custom" }).check();
+      await field(sheet).fill("a1b");
+      await expectAccessible(page, "stamp label editor, custom", { include: '[role="dialog"]' });
+      // Tab order inside the dialog: from the field to Save, Cancel and Close, and the trap wraps back to the form.
+      const seen: string[] = [];
+      for (let at = 0; at < 4; at += 1) {
+        await page.keyboard.press("Tab");
+        await expect(sheet.locator(":focus")).toHaveCount(1);
+        seen.push(
+          await page.evaluate(() => {
+            const el = document.activeElement as HTMLElement | null;
+            return el?.getAttribute("aria-label") || el?.textContent?.trim() || el?.tagName || "";
+          }),
+        );
+      }
+      expect(seen.slice(0, 3)).toEqual(["Save", "Cancel", "Close dialog"]);
+      // The fourth Tab wraps back into the form (the trap), not out of the dialog.
       await expect(sheet.locator(":focus")).toHaveCount(1);
-      seen.push(
-        await page.evaluate(() => {
-          const el = document.activeElement as HTMLElement | null;
-          return el?.getAttribute("aria-label") || el?.textContent?.trim() || el?.tagName || "";
-        }),
-      );
-    }
-    expect(seen.slice(0, 3)).toEqual(["Save", "Cancel", "Close dialog"]);
-    for (const name of ["Save", "Close dialog"]) {
-      const button = sheet.getByRole("button", { name, exact: true });
-      await button.scrollIntoViewIfNeeded();
-      const box = await button.boundingBox();
-      expect(box, name).not.toBeNull();
-      expect(box!.x).toBeGreaterThanOrEqual(0);
-      expect(box!.x + box!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
-    }
-    expect(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-      ),
-    ).toBeLessThanOrEqual(0);
-    await page.keyboard.press("Escape");
-    await expect(sheet).toBeHidden();
-    // Opening the editor closes the details sheet, so focus goes back to the sticker that opened those.
-    await expect(sticker).toBeFocused();
-  },
-);
+      for (const name of ["Save", "Close dialog"]) {
+        const button = sheet.getByRole("button", { name, exact: true });
+        await button.scrollIntoViewIfNeeded();
+        const box = await button.boundingBox();
+        expect(box, name).not.toBeNull();
+        expect(box!.x).toBeGreaterThanOrEqual(0);
+        expect(box!.x + box!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+      }
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        ),
+      ).toBeLessThanOrEqual(0);
+      await page.keyboard.press("Escape");
+      await expect(sheet).toBeHidden();
+      // Opening the editor closes the details sheet, so focus goes back to the sticker that opened those.
+      await expect(sticker).toBeFocused();
+    },
+  );
+});
