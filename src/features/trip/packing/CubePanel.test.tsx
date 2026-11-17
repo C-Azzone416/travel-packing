@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { CubePanel, type CubePanelProps } from "./CubePanel";
@@ -66,11 +66,30 @@ describe("CubePanel Edit list add controls", () => {
   });
 });
 
+describe("CubePanel filter controls", () => {
+  it("selects each filter and enters Edit list", async () => {
+    const user = userEvent.setup();
+    const onFilter = vi.fn();
+    const onEditing = vi.fn();
+    render(<CubePanel {...props({ editing: false, onFilter, onEditing })} />);
+    await user.click(screen.getByRole("button", { name: /^All/ }));
+    await user.click(screen.getByRole("button", { name: /^To pack/ }));
+    await user.click(screen.getByRole("button", { name: /^Packed/ }));
+    expect(onFilter.mock.calls).toEqual([["all"], ["to-pack"], ["packed"]]);
+    await user.click(screen.getByRole("button", { name: "Edit list" }));
+    expect(onEditing).toHaveBeenCalledWith(true);
+  });
+});
+
 describe("CubePanel Morning of (#412)", () => {
-  it("offers the Morning of switch on an ordinary trip", () => {
-    render(<CubePanel {...props({})} />);
+  it("offers the Morning of switch on an ordinary trip", async () => {
+    const user = userEvent.setup();
+    const onMorningOf = vi.fn();
+    render(<CubePanel {...props({ onMorningOf })} />);
     expect(screen.getByRole("switch")).toBeTruthy();
     expect(screen.getByText("Morning of")).toBeTruthy();
+    await user.click(screen.getByRole("switch"));
+    expect(onMorningOf).toHaveBeenCalledWith("misc", true);
   });
 
   it("leaves the switch out on a day trip, where you are home the same day", () => {
@@ -79,6 +98,14 @@ describe("CubePanel Morning of (#412)", () => {
     );
     expect(screen.queryByRole("switch")).toBeNull();
     expect(screen.queryByText("Morning of")).toBeNull();
+  });
+
+  it("locks Morning of when the cube contains a Pack last item", () => {
+    const locked = view("misc", "Misc");
+    locked.items = [{ ...locked.items[0]!, section: "packlast" }];
+    render(<CubePanel {...props({ view: locked })} />);
+    expect((screen.getByRole("switch") as HTMLInputElement).disabled).toBe(true);
+    expect(screen.getByText("A Pack last item is in this cube.")).toBeTruthy();
   });
 });
 
@@ -213,6 +240,59 @@ describe("CubePanel quick add (#496)", () => {
       "Couldn’t add it. Nothing was changed.",
     );
   });
+
+  it("keeps a failed draft available for Retry, then clears it only after success", async () => {
+    const user = userEvent.setup();
+    const onAdd = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, reason: "FAILED" })
+      .mockResolvedValueOnce({ ok: true });
+    render(<CubePanel {...normal({ onAdd })} />);
+    await user.click(screen.getByRole("button", { name: "Add an item to Misc" }));
+    const field = screen.getByPlaceholderText("+ Add an item") as HTMLInputElement;
+    await user.type(field, "Hat{Enter}");
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "Couldn’t add it. Nothing was changed.",
+    );
+    expect(field.value).toBe("Hat");
+    expect(field.readOnly).toBe(false);
+    await user.click(screen.getByRole("button", { name: "Add" }));
+    await waitFor(() => expect(field.value).toBe(""));
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(onAdd).toHaveBeenCalledTimes(2);
+    expect(onAdd).toHaveBeenNthCalledWith(1, "misc", "Hat");
+    expect(onAdd).toHaveBeenNthCalledWith(2, "misc", "Hat");
+  });
+
+  it("Cancel remains available after a failed add and discards its draft", async () => {
+    const user = userEvent.setup();
+    const onAdd = vi.fn(async () => ({ ok: false as const, reason: "FAILED" as const }));
+    render(<CubePanel {...normal({ onAdd })} />);
+    await user.click(screen.getByRole("button", { name: "Add an item to Misc" }));
+    await user.type(screen.getByPlaceholderText("+ Add an item"), "Hat{Enter}");
+    await screen.findByRole("alert");
+    const cancel = screen.getByRole("button", { name: "Cancel" }) as HTMLButtonElement;
+    expect(cancel.disabled).toBe(false);
+    await user.click(cancel);
+    expect(screen.getByRole("button", { name: "Add an item to Misc" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Add an item to Misc" }));
+    expect((screen.getByPlaceholderText("+ Add an item") as HTMLInputElement).value).toBe("");
+  });
+
+  it("refuses an overlong name without sending it", async () => {
+    const user = userEvent.setup();
+    const onAdd = vi.fn(async () => ({ ok: true as const }));
+    render(<CubePanel {...normal({ onAdd })} />);
+    await user.click(screen.getByRole("button", { name: "Add an item to Misc" }));
+    fireEvent.change(screen.getByPlaceholderText("+ Add an item"), {
+      target: { value: "x".repeat(121) },
+    });
+    await user.click(screen.getByRole("button", { name: "Add" }));
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "Keep the name under 120 characters.",
+    );
+    expect(onAdd).not.toHaveBeenCalled();
+  });
 });
 
 describe("quick add while a write is pending (#496)", () => {
@@ -229,6 +309,9 @@ describe("quick add while a write is pending (#496)", () => {
     expect((screen.getByRole("button", { name: "Cancel" }) as HTMLButtonElement).disabled).toBe(
       true,
     );
+    expect((screen.getByRole("button", { name: "Add" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.submit(field.closest("form")!);
+    expect(onAdd).toHaveBeenCalledTimes(1);
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     field.focus();
     await user.keyboard("{Escape}");
@@ -368,6 +451,85 @@ describe("quick add scrolling (#496)", () => {
     expect((screen.getByRole("button", { name: "Edit list" }) as HTMLButtonElement).disabled).toBe(
       true,
     );
+  });
+});
+
+describe("CubePanel row branches", () => {
+  it("shows and operates partial, return, laundry, and failed checklist details", async () => {
+    const user = userEvent.setup();
+    const item = {
+      ...view("misc", "Misc").items[0]!,
+      name: "Return layers",
+      qty: 3,
+      packed: 1,
+      section: "return" as const,
+      laundryHalves: true,
+    };
+    const onTick = vi.fn();
+    const onRetry = vi.fn();
+    render(
+      <CubePanel
+        {...props({
+          editing: false,
+          view: { ...view("misc", "Misc"), items: [item], total: 3, packed: 1 },
+          laundry: true,
+          failedRows: new Set([item.id]),
+          onTick,
+          onRetry,
+        })}
+      />,
+    );
+    const checkbox = screen.getByRole("checkbox") as HTMLInputElement;
+    expect(checkbox.indeterminate).toBe(true);
+    expect(screen.getByText("return outfit")).toBeTruthy();
+    expect(screen.getByText("× 3")).toBeTruthy();
+    expect(screen.getByText("1 of 3")).toBeTruthy();
+    await user.click(checkbox);
+    expect(onTick).toHaveBeenCalledWith(item, true);
+    await user.click(screen.getByRole("button", { name: "Not saved · Retry" }));
+    expect(onRetry).toHaveBeenCalledWith(item.id);
+  });
+
+  it("operates edit, move, and remove for a return item with quantity", async () => {
+    const user = userEvent.setup();
+    const item = {
+      ...view("misc", "Misc").items[0]!,
+      name: "Return layers",
+      qty: 2,
+      section: "return" as const,
+    };
+    const onEditItem = vi.fn();
+    const onMove = vi.fn();
+    const onRemove = vi.fn();
+    render(
+      <CubePanel
+        {...props({
+          view: { ...view("misc", "Misc"), items: [item], total: 2 },
+          cubes: [view("misc", "Misc"), view("clothing", "Clothing")],
+          onEditItem,
+          onMove,
+          onRemove,
+        })}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: /Edit Return layers/ }));
+    expect(onEditItem).toHaveBeenCalledWith(item.id);
+    const move = screen.getByRole("combobox", { name: /Move Return layers/ });
+    fireEvent.change(move, { target: { value: "" } });
+    expect(onMove).not.toHaveBeenCalled();
+    await user.selectOptions(move, "clothing");
+    expect(onMove).toHaveBeenCalledWith(item, "clothing");
+    await user.click(screen.getByRole("button", { name: /Remove Return layers/ }));
+    expect(onRemove).toHaveBeenCalledWith(item);
+  });
+
+  it("uses the compact phone count and omits the ordinary hint and filter bar", () => {
+    render(<CubePanel {...props({ editing: false, layout: "phone" })} />);
+    expect(screen.getByText("0 of 1")).toBeTruthy();
+    expect(screen.queryByText("0 of 1 packed")).toBeNull();
+    expect(screen.queryByRole("group", { name: "Packing list view" })).toBeNull();
+    expect(screen.queryByText(/Tick as you pack/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Add an item to Misc" })).toBeTruthy();
   });
 });
 
