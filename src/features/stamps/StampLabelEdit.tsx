@@ -20,7 +20,7 @@ const LABEL_BACK = "Stamp label editing available again.";
  * Label editing is off while any write is pending or failed-and-not-retried (#494): the session-wide save status is the
  * gate, so an edit never overlaps another write. Nothing is stored here; it re-enables when the status clears.
  */
-export function useStampLabelGate(): string | null {
+function useStampLabelGate(): string | null {
   const { pending, status } = useSaveStatus();
   // A retry in flight reads as saving, not as the failure it is retrying.
   if (pending) return LABEL_SAVING;
@@ -28,7 +28,7 @@ export function useStampLabelGate(): string | null {
 }
 
 /** What an open label editor shows from the gate: the one Try again for its own failed save, else the gate's note. */
-export function useEditorGate(failed: boolean, saving: boolean) {
+function useEditorGate(failed: boolean, saving: boolean) {
   const gate = useStampLabelGate();
   const { retry } = useSaveStatus();
   const retryable = failed && gate === LABEL_FAILED;
@@ -48,7 +48,7 @@ type Labels = readonly [string | null, string | null];
  * The write behind every label Save: read the trip fresh, keep the server's value for each slot the person did not change,
  * and write both. Run it inside track(), so a Retry reads again.
  */
-export async function saveFreshLabels(
+async function saveFreshLabels(
   source: TripsSource,
   tripId: string,
   draft: Labels,
@@ -64,7 +64,7 @@ export async function saveFreshLabels(
 }
 
 /** Whether the trip has a stamp the editor can change: an automatic one, or a saved first label. */
-export const hasEditableStamp = (trip: LifecycleTrip): boolean =>
+const hasEditableStamp = (trip: LifecycleTrip): boolean =>
   automaticStamps(trip.stops).length > 0 || Boolean(trip.stampLabels?.[0]);
 
 /** "Edit stamp label" with its helper line. Disabled with aria-disabled so it stays focusable. */

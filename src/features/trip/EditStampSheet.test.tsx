@@ -47,7 +47,7 @@ function setup(
       saving={props.saving ?? false}
       failed={props.failed}
       retrying={props.retrying}
-      onRetry={props.onRetry}
+      onRetry={props.onRetry ?? vi.fn()}
       onClose={onClose}
       onSave={onSave}
     />,
@@ -245,12 +245,12 @@ describe("EditStampSheet", () => {
     expect(onSave).not.toHaveBeenCalled();
   });
 
-  it("while saving the button says so and cannot be pressed; a failure says Nothing changed", () => {
+  it("while saving the button says so and cannot be pressed; a failure keeps the changes", () => {
     setup({ saved: ["ABC", null], saving: true, failed: true });
     expect((screen.getByRole("button", { name: "Saving…" }) as HTMLButtonElement).disabled).toBe(
       true,
     );
-    expect(fieldError()?.textContent).toContain("Nothing changed");
+    expect(fieldError()?.textContent).toContain("Your changes are kept");
   });
 
   describe("while a failed save is waiting on Try again (#494)", () => {

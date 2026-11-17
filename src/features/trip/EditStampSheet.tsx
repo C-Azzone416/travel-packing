@@ -32,7 +32,7 @@ export interface EditStampSheetProps {
   /** The failed save's Try again is in flight: Try again stays mounted but inert, so focus stays in the dialog. */
   retrying?: boolean;
   /** Replays the failed save (the same tracked read and write). With `failed`, the sheet offers it as "Try again" and Save waits. */
-  onRetry?: () => void;
+  onRetry: () => void;
   onClose: () => void;
   /** The typed text for each slot, or null for automatic. The server trims, upper-cases and validates it again. */
   onSave: (
@@ -73,7 +73,7 @@ export function EditStampSheet({
 }: EditStampSheetProps) {
   const formId = useId();
   // While a save or its Try again is pending, or waiting on Try again, the fields are read-only: what is shown is what is sent.
-  const locked = saving || retrying || (failed && Boolean(onRetry));
+  const locked = saving || retrying || failed;
   const labels = saved ?? NO_STAMP_LABELS;
   const slots = Math.max(automatic.length, 1);
   const [modes, setModes] = useState<Mode[]>(
@@ -264,12 +264,10 @@ export function EditStampSheet({
         {blockedNote ? <p className="tiny muted">{blockedNote}</p> : null}
         {failed && !retrying ? (
           <p className="field-error" role="alert">
-            {onRetry
-              ? "Couldn’t save the stamp. Your changes are kept. Press Try again."
-              : "Couldn’t save the stamp. Nothing changed. Press Save to try again."}
+            Couldn’t save the stamp. Your changes are kept. Press Try again.
           </p>
         ) : null}
-        {failed && onRetry ? (
+        {failed ? (
           <Button
             variant="secondary"
             aria-disabled={retrying || undefined}
