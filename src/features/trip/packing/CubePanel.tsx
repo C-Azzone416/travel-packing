@@ -23,9 +23,12 @@ import {
 import styles from "./packing.module.css";
 
 export type AddOutcome =
-  | { ok: true }
+  /** itemId: the saved item, as confirmed by the write (absent when the add went through another form). */
+  | { ok: true; itemId?: string }
   | { ok: false; reason: "EXISTS"; existingId: string }
-  | { ok: false; reason: "FAILED" };
+  | { ok: false; reason: "FAILED" }
+  /** The same name is already being saved in this cube: nothing was sent, and nothing is shown. */
+  | { ok: false; reason: "PENDING" };
 
 export interface CubePanelProps {
   view: CubeView;
@@ -35,6 +38,8 @@ export interface CubePanelProps {
   onFilter: (filter: CubeFilter) => void;
   editing: boolean;
   onEditing: (editing: boolean) => void;
+  /** An add is still being saved in this cube (see FilterBarProps.editLocked). */
+  editLocked?: boolean;
   /** The trip has laundry on: halved items show the ↻ marker. */
   laundry: boolean;
   failedRows: ReadonlySet<string>;
@@ -66,6 +71,8 @@ export interface FilterBarProps {
   onFilter: (filter: CubeFilter) => void;
   editing: boolean;
   onEditing: (editing: boolean) => void;
+  /** An add is still being saved in this cube: Edit list / Done waits, so the add row is not remounted mid-write. */
+  editLocked?: boolean;
   className?: string;
   /** On a phone the pencil is an icon alone (its label stays the accessible name) until it turns into "Done". */
   phone?: boolean;
@@ -79,6 +86,7 @@ export function FilterBar({
   onFilter,
   editing,
   onEditing,
+  editLocked = false,
   className,
   phone = false,
 }: FilterBarProps) {
@@ -111,6 +119,7 @@ export function FilterBar({
         active={editing}
         iconOnlyOnPhone={phone && !editing}
         className={phone ? styles.editPill : undefined}
+        disabled={editLocked}
         onClick={() => onEditing(!editing)}
       >
         {editing ? "Done" : "Edit list"}
@@ -230,11 +239,17 @@ function AddRow({
   label,
   onAdd,
   onEditItem,
+  onCancel,
+  onSaved,
 }: {
   cube: Cube;
   label: string;
   onAdd: CubePanelProps["onAdd"];
   onEditItem: CubePanelProps["onEditItem"];
+  /** Quick add (#496): present when the row opened from the "＋ Add an item" button. It adds Cancel and Escape, and takes focus. */
+  onCancel?: () => void;
+  /** Called with the saved item's id, as the write confirmed it, so the panel can bring that row into view. */
+  onSaved?: (itemId: string) => void;
 }) {
   const [name, setName] = useState("");
   const [problem, setProblem] = useState<null | "EMPTY" | "LONG" | "FAILED">(null);
@@ -242,6 +257,12 @@ function AddRow({
   const [saving, setSaving] = useState(false);
   const field = useRef<HTMLInputElement>(null);
   const messageId = useId();
+
+  useEffect(() => {
+    if (onCancel) field.current?.focus();
+    // Focus once, when the quick row opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -261,11 +282,12 @@ function AddRow({
     const outcome = await onAdd(cube, trimmed);
     setSaving(false);
     if (outcome.ok) {
+      if (outcome.itemId) onSaved?.(outcome.itemId);
       setName("");
       return field.current?.focus();
     }
     if (outcome.reason === "EXISTS") setExisting(outcome.existingId);
-    else setProblem("FAILED");
+    else if (outcome.reason === "FAILED") setProblem("FAILED");
   }
 
   const message =
@@ -277,7 +299,19 @@ function AddRow({
           ? "Couldn’t add it. Nothing was changed."
           : null;
   return (
-    <form className={styles.addRow} onSubmit={submit} noValidate autoComplete="off">
+    <form
+      className={styles.addRow}
+      onSubmit={submit}
+      noValidate
+      autoComplete="off"
+      onKeyDown={(event) => {
+        // A write in flight cannot be dismissed: the row stays, so no remount resets the guard or drops a newer draft.
+        if (onCancel && !saving && event.key === "Escape") {
+          event.stopPropagation();
+          onCancel();
+        }
+      }}
+    >
       <label className={styles.addField}>
         <span className="sr-only">Add an item to {label}</span>
         <input
@@ -285,6 +319,7 @@ function AddRow({
           className={styles.addInput}
           name="packing-item-name"
           value={name}
+          readOnly={saving}
           placeholder="+ Add an item"
           maxLength={ADD_ITEM_NAME_MAX + 20}
           autoComplete="off"
@@ -300,6 +335,11 @@ function AddRow({
       <button type="submit" className={styles.addButton} disabled={saving}>
         Add
       </button>
+      {onCancel ? (
+        <button type="button" className={styles.addCancel} disabled={saving} onClick={onCancel}>
+          Cancel
+        </button>
+      ) : null}
       {message || existing ? (
         <p id={messageId} className={styles.addMessage} role="alert">
           {message ?? (
@@ -320,6 +360,61 @@ function AddRow({
   );
 }
 
+/**
+ * The always-visible add control (#496). A dashed "＋ Add an item" button at the end of a cube's list; it swaps for the add row,
+ * which Cancel or Escape closes (discarding the text) and hands focus back to the button.
+ */
+function QuickAdd({
+  cube,
+  label,
+  onAdd,
+  onEditItem,
+  onSaved,
+}: {
+  cube: Cube;
+  label: string;
+  onAdd: CubePanelProps["onAdd"];
+  onEditItem: CubePanelProps["onEditItem"];
+  onSaved: (itemId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const button = useRef<HTMLButtonElement>(null);
+  const restore = useRef(false);
+  useEffect(() => {
+    if (!open && restore.current) {
+      restore.current = false;
+      button.current?.focus();
+    }
+  }, [open]);
+  return (
+    <div className={styles.quickAdd}>
+      {open ? (
+        <AddRow
+          cube={cube}
+          label={label}
+          onAdd={onAdd}
+          onEditItem={onEditItem}
+          onSaved={onSaved}
+          onCancel={() => {
+            restore.current = true;
+            setOpen(false);
+          }}
+        />
+      ) : (
+        <button
+          ref={button}
+          type="button"
+          className={styles.quickAddButton}
+          aria-label={`Add an item to ${label}`}
+          onClick={() => setOpen(true)}
+        >
+          ＋ Add an item
+        </button>
+      )}
+    </div>
+  );
+}
+
 // The open cube (#376 part 3 section 1.3): its title and "9 of 14 packed", the All / To pack / Packed pills with the
 // number of rows each lists, "Edit list", a two-column checklist with ONE tick per item, and the footer line. Edit list
 // swaps the checklist for the editing rows (rename/quantity, move to another cube, remove) plus "Add an item" and the
@@ -331,6 +426,7 @@ export function CubePanel({
   onFilter,
   editing,
   onEditing,
+  editLocked = false,
   laundry,
   failedRows,
   onTick,
@@ -350,6 +446,33 @@ export function CubePanel({
   const shown = editing ? view.items : filterItems(view.items, filter);
   const lockedOn = view.items.some((item) => item.section === "packlast");
   const switchId = useId();
+  const listRef = useRef<HTMLUListElement>(null);
+  // The saved item's id, as the quick add's write confirmed it. Only that row is scrolled to, once the view has it and only if
+  // the current view lists it (a Packed filter hides an unpacked newcomer, and then the scroll stays put).
+  const [scrollToId, setScrollToId] = useState<string | null>(null);
+  const scrolledId = useRef<string | null>(null);
+  useEffect(() => {
+    if (!scrollToId || scrolledId.current === scrollToId) return;
+    if (!view.items.some((item) => item.id === scrollToId)) return;
+    scrolledId.current = scrollToId;
+    if (!shown.some((item) => item.id === scrollToId)) return;
+    listRef.current
+      ?.querySelector(`[data-item-id="${scrollToId}"]`)
+      ?.scrollIntoView?.({ block: "nearest" });
+  });
+  const onSaved = setScrollToId;
+  // One add control per cube: Toiletries adds through the Bathroom control in its bag step, every other cube through this.
+  const addControl = extra ? null : editing ? (
+    <AddRow cube={view.cube} label={view.label} onAdd={onAdd} onEditItem={onEditItem} />
+  ) : (
+    <QuickAdd
+      cube={view.cube}
+      label={view.label}
+      onAdd={onAdd}
+      onEditItem={onEditItem}
+      onSaved={onSaved}
+    />
+  );
   const footerText = panelFooter(view, shown.length);
   // The hint ("Tick as you pack ...") is for the laptop; a phone shows only the lines that report a state.
   const footer =
@@ -380,6 +503,7 @@ export function CubePanel({
             onFilter={onFilter}
             editing={editing}
             onEditing={onEditing}
+            editLocked={editLocked}
             className={styles.panelPills}
           />
         )}
@@ -387,6 +511,7 @@ export function CubePanel({
 
       {shown.length > 0 ? (
         <ul
+          ref={listRef}
           className={cx(styles.list, editing && styles.listEditing, phone && styles.listPhone)}
           style={{ ["--rows" as string]: Math.ceil(shown.length / 2) }}
           aria-label={`${view.label} items`}
@@ -420,10 +545,7 @@ export function CubePanel({
 
       {editing ? (
         <div className={styles.editFooter}>
-          {/* The Toiletries cube adds through the Bathroom form in its bag step: one add control, not two. */}
-          {extra ? null : (
-            <AddRow cube={view.cube} label={view.label} onAdd={onAdd} onEditItem={onEditItem} />
-          )}
+          {addControl}
           {view.morningOfAvailable ? (
             <div className={styles.morningRow}>
               <label className={styles.morningLabel} htmlFor={switchId}>
@@ -446,8 +568,16 @@ export function CubePanel({
             </div>
           ) : null}
         </div>
+      ) : phone ? (
+        <>
+          {footer}
+          {addControl}
+        </>
       ) : (
-        footer
+        <>
+          {addControl}
+          {footer}
+        </>
       )}
       {bar}
     </section>

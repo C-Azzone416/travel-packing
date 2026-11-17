@@ -3,24 +3,46 @@
 import type { ReactNode } from "react";
 import { LaundryMarker } from "@/components/suitcase/Markers";
 import type { Staple } from "@/domain/trip";
+import { nightsLabel, ruleText, scalesWithTrip } from "./staples-cubes";
 import styles from "./Staples.module.css";
 
-/** "× 5", or "~~× 5~~ × 3" when laundry halves it in the preview (spec part 3 section 6). */
-export function HalvedCount({ plain, qty }: { plain: number; qty: number }) {
-  if (plain === qty) return <>{`× ${qty}`}</>;
+/** A row's trip total in the preview: "4", or "~~4~~ 3" when laundry halves it. The sentence for a screen reader follows. */
+export function PreviewTotal({
+  plain,
+  qty,
+  nights,
+}: {
+  plain: number;
+  qty: number;
+  nights: number;
+}) {
+  const trip = nightsLabel(nights).replace(" ", "-").replace(/s$/, "");
+  const halved = plain !== qty;
   return (
     <>
-      <del className={styles.was}>{`× ${plain}`}</del>
-      <ins className={styles.now}>{`× ${qty}`}</ins>
-      <span className="sr-only">{`, reduced from ${plain} with laundry`}</span>
+      <span aria-hidden="true">
+        {halved ? (
+          <>
+            <del className={styles.was}>{plain}</del>
+            <ins className={styles.now}>{qty}</ins>
+          </>
+        ) : (
+          qty
+        )}
+      </span>
+      <span className="sr-only">
+        {halved
+          ? `${qty} for a ${trip} trip, reduced from ${plain} with laundry`
+          : `${qty} for a ${trip} trip`}
+      </span>
     </>
   );
 }
 
 export interface StapleRowProps {
   staple: Staple;
-  plain: number;
-  qty: number;
+  /** The preview's totals for this row; null while the preview is off (the row then shows only its saved rule). */
+  total: { plain: number; qty: number; nights: number } | null;
   laptop: boolean;
   open: boolean;
   onToggle: () => void;
@@ -29,19 +51,18 @@ export interface StapleRowProps {
   buttonRef?: (node: HTMLButtonElement | null) => void;
 }
 
-// One staple: name, the laundry marker when it is flagged, its cadence, and its count in the preview trip. The whole
+// One staple: name, the laundry marker when it is flagged, its saved rule, and (only while the preview is on) its total for the preview trip. The whole
 // row is one button that opens the editor (inline on a laptop, a sheet on a phone).
 export function StapleRow({
   staple,
-  plain,
-  qty,
+  total,
   laptop,
   open,
   onToggle,
   editor,
   buttonRef,
 }: StapleRowProps) {
-  const scaled = staple.cadence !== "per trip";
+  const scaled = scalesWithTrip(staple);
   return (
     <li className={styles.item} data-staple-id={staple.id}>
       <button
@@ -58,11 +79,16 @@ export function StapleRow({
         </span>
         {staple.laundryHalves ? <LaundryMarker variant="staples" /> : null}
         <span className={`${styles.cadence} ${scaled ? styles.cadenceScaled : ""}`}>
-          {staple.cadence}
+          {ruleText(staple)}
         </span>
-        <span className={styles.count}>
-          <HalvedCount plain={plain} qty={qty} />
-        </span>
+        {total ? (
+          <span className={styles.count}>
+            <span className={styles.arrow} aria-hidden="true">
+              →
+            </span>
+            <PreviewTotal {...total} />
+          </span>
+        ) : null}
       </button>
       {open && laptop ? editor : null}
     </li>

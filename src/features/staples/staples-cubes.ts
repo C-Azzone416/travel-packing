@@ -177,6 +177,10 @@ export function previewStaples(
 export const scalesWithTrip = (staple: Pick<Staple, "cadence">): boolean =>
   staple.cadence !== "per trip";
 
+/** A staple's saved rule as the row shows it: "1 per day", "2 per trip", "Smart". Never a trip total. */
+export const ruleText = (staple: Pick<Staple, "cadence" | "qty">): string =>
+  staple.cadence === "smart" ? "Smart" : `${staple.qty} ${staple.cadence}`;
+
 export const nightsLabel = nightsText;
 export const itemsLabel = (count: number): string => `${count} ${count === 1 ? "item" : "items"}`;
 export const stapleCount = (count: number): string =>

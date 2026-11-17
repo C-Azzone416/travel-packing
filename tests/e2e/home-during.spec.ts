@@ -73,12 +73,16 @@ test.describe("laptop (1280)", () => {
   test("stickers stay dashed through the trip and ink the day after", async ({ page }) => {
     await open(page, 1280, DAY_3);
     await page.goto("/stamps");
-    const sticker = page.getByRole("button", { name: "San Diego, Oct 2026, 1 trip" });
+    const sticker = page.getByRole("button", {
+      name: "San Diego, Oct 2026, upcoming, not inked yet",
+    });
     await expect(sticker).toHaveAttribute("data-upcoming", "true");
     await expect(sticker).toHaveCSS("border-top-style", "dashed");
     await page.clock.setFixedTime(NEXT_DAY);
     await page.reload();
-    const inked = page.getByRole("button", { name: "San Diego, Oct 2026, 1 trip" });
+    const inked = page.getByRole("button", {
+      name: "San Diego, Oct 2026, inked, 1 trip",
+    });
     await expect(inked).not.toHaveAttribute("data-upcoming", "true");
     await expect(inked).toHaveCSS("border-top-style", "solid");
   });

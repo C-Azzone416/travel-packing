@@ -3,6 +3,13 @@ import { signIn, setupEmailFor } from "./helpers/auth";
 import { resetStaplesSetup, setStaplesSetupLifecycle } from "./helpers/database";
 import { DEVICE } from "./helpers/device";
 
+// The Staples preview is opt-in (#491): a switch on a laptop, the dock's bar on a phone.
+async function previewOn(page: Page) {
+  if ((page.viewportSize()?.width ?? 0) >= 1024)
+    await page.getByRole("switch", { name: "Preview a trip", exact: true }).check();
+  else await page.getByRole("button", { name: "Preview a trip", exact: true }).click();
+}
+
 test(
   "first-use Staples setup is optional, resumable, and personal",
   DEVICE,
@@ -69,7 +76,7 @@ test(
     await page.getByRole("link", { name: "Staples", exact: true }).click();
     const underwear = page.locator('[data-staple-id="underwear"]');
     // Smart keeps its legacy label; a toiletry-bag item is filed in the Toiletries cube.
-    await expect(underwear).toContainText("smart");
+    await expect(underwear).toContainText("Smart");
     await expect(underwear).toContainText("Pack last");
     await expect(
       page.getByRole("region", { name: "Toiletries" }).locator('[data-staple-id="underwear"]'),
@@ -163,7 +170,11 @@ test(
         .getByRole("link", { name: "Staples", exact: true })
         .click();
       await expect(page.locator('[data-staple-id="toothbrush"]')).toContainText("per trip");
-      await expect(page.locator('[data-staple-id="underwear"]')).toContainText("× 5");
+      await expect(page.locator('[data-staple-id="underwear"]')).toContainText("1 per day");
+      await previewOn(page);
+      await expect(page.locator('[data-staple-id="underwear"]')).toContainText(
+        "5 for a 4-night trip",
+      );
     }
   },
 );
@@ -191,7 +202,11 @@ test(
     await page.getByRole("button", { name: "Save 2 Staples" }).click();
     await expect(page.getByRole("heading", { name: /^Where to (first|next)\?$/ })).toBeVisible();
     await page.getByRole("link", { name: "Staples", exact: true }).click();
-    await expect(page.locator('[data-staple-id="underwear"]')).toContainText("× 13");
+    await expect(page.locator('[data-staple-id="underwear"]')).toContainText("3 per day");
+    await previewOn(page);
+    await expect(page.locator('[data-staple-id="underwear"]')).toContainText(
+      "13 for a 4-night trip",
+    );
     await expect(page.locator('[data-staple-id="toothbrush"]')).toContainText("per trip");
   },
 );

@@ -8,6 +8,7 @@ import { useSaveStatus } from "@/components/shell/SaveStatus";
 import { localToday } from "@/lib/today";
 import { useTripsSource } from "@/features/trips/TripsSourceProvider";
 import type { LifecycleState } from "@/domain/trip-lifecycle";
+import { StampDetailsSheet } from "./StampDetailsSheet";
 import {
   filterLabel,
   stampTripView,
@@ -30,6 +31,7 @@ export function Sticker({
   selected = false,
   onSelect,
   className,
+  large = false,
 }: {
   sticker: StickerView;
   /** An extra class from the screen that draws it (the Home's Welcome home card sizes it). */
@@ -37,7 +39,10 @@ export function Sticker({
   selected?: boolean;
   /** Without it the sticker is decorative (the Home's teaser): a span the keyboard and screen readers skip. */
   onSelect?: () => void;
+  /** The close-up in the stamp details: bigger, not a control, still named so a screen reader hears what the grid says. */
+  large?: boolean;
 }) {
+  const tag = sticker.upcoming && (onSelect || large);
   const body = (
     <>
       <span
@@ -53,22 +58,41 @@ export function Sticker({
           ×{sticker.completedCount}
         </span>
       ) : null}
+      {tag ? (
+        <span className={styles.upcomingTag} aria-hidden="true">
+          Upcoming
+        </span>
+      ) : null}
     </>
   );
   const common = {
-    className: className ? `${styles.stickerButton} ${className}` : styles.stickerButton,
+    className: [styles.stickerButton, large ? styles.stickerLarge : "", className ?? ""]
+      .filter(Boolean)
+      .join(" "),
     "data-upcoming": sticker.upcoming || undefined,
     "data-shape": sticker.shape,
     "data-colour": sticker.colour,
     style: { "--sticker-tilt": `${sticker.tilt}deg` } as React.CSSProperties,
   };
+  if (large)
+    return (
+      <span {...common} role="img" aria-label={sticker.accessibleName}>
+        {body}
+      </span>
+    );
   return onSelect ? (
     <button
       type="button"
       {...common}
       aria-label={sticker.accessibleName}
       aria-pressed={selected}
-      onClick={onSelect}
+      aria-haspopup="dialog"
+      onClick={(event) => {
+        // The sheet gives focus back to whatever had it when it opened. Focus this sticker first so a previously closed sheet's
+        // opener (Safari leaves focus behind on a tap) is not returned to instead (#493).
+        event.currentTarget.focus({ preventScroll: true });
+        onSelect();
+      }}
     >
       {body}
     </button>
@@ -203,6 +227,7 @@ export function StampsContent({
 }) {
   const [filter, setFilter] = useState<StampFilter>(initialTripId ? "all" : "rolling");
   const [selectedId, setSelectedId] = useState<string | null>(initialTripId);
+  const [detailKey, setDetailKey] = useState<string | null>(null);
 
   const view = useMemo(() => stampsView(state.trips, today, filter), [state, today, filter]);
   const visibleIds = useMemo(
@@ -213,10 +238,30 @@ export function StampsContent({
       ]),
     [view],
   );
-  const defaultId = view.pastTrips[0]?.id ?? view.stickers[0]?.tripId ?? null;
+  // Only an earned sticker is selected without a tap: an upcoming one must not look inked at first paint (#493).
+  // It is the most recently completed trip (by its end date) that an earned sticker stands for; none earned, nothing selected.
+  const defaultId = useMemo(() => {
+    const ends = new Map(state.trips.map((trip) => [trip.id, trip.end]));
+    const earned = view.stickers.filter((sticker) => !sticker.upcoming);
+    return (
+      earned.reduce<(typeof earned)[number] | null>(
+        (best, sticker) =>
+          !best || (ends.get(sticker.tripId) ?? "") > (ends.get(best.tripId) ?? "")
+            ? sticker
+            : best,
+        null,
+      )?.tripId ?? null
+    );
+  }, [view, state.trips]);
   const activeId = selectedId && visibleIds.has(selectedId) ? selectedId : defaultId;
   const selectedTrip = activeId ? (state.trips.find((trip) => trip.id === activeId) ?? null) : null;
-  const selected = selectedTrip ? stampTripView(selectedTrip) : null;
+  const selected = selectedTrip ? stampTripView(selectedTrip, today) : null;
+  const detailSticker = detailKey
+    ? (view.stickers.find((sticker) => sticker.key === detailKey) ?? null)
+    : null;
+  const detailTrip = detailSticker
+    ? (state.trips.find((trip) => trip.id === detailSticker.tripId) ?? null)
+    : null;
 
   return (
     <section className={`${styles.root} ${embedded ? styles.embedded : "screen"}`}>
@@ -257,7 +302,10 @@ export function StampsContent({
                   key={sticker.key}
                   sticker={sticker}
                   selected={activeId === sticker.tripId}
-                  onSelect={() => setSelectedId(sticker.tripId)}
+                  onSelect={() => {
+                    setSelectedId(sticker.tripId);
+                    setDetailKey(sticker.key);
+                  }}
                 />
               ))}
             </div>
@@ -302,6 +350,15 @@ export function StampsContent({
           )}
         </section>
       </div>
+
+      {detailSticker && detailTrip ? (
+        <StampDetailsSheet
+          sticker={detailSticker}
+          trip={detailTrip}
+          summary={stampTripView(detailTrip, today)}
+          onClose={() => setDetailKey(null)}
+        />
+      ) : null}
     </section>
   );
 }

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Staple } from "@/domain/trip";
@@ -76,6 +76,20 @@ const rowFor = (id: string) => document.querySelector(`[data-staple-id="${id}"]`
 const problem = () => document.getElementById("staple-add-problem");
 const live = () => screen.getByRole("status", { name: "Staples updates" });
 
+/** Turns the opt-in preview on (the laptop switch, or the phone dock's bar). */
+async function previewOn(user: ReturnType<typeof userEvent.setup>, laptop = true) {
+  await user.click(
+    laptop
+      ? screen.getByRole("switch", { name: "Preview a trip" })
+      : screen.getByRole("button", { name: "Preview a trip" }),
+  );
+}
+/** What a row shows, without the screen-reader-only sentence. */
+const rowText = (id: string) =>
+  Array.from(rowFor(id).querySelectorAll("button")[0].childNodes)
+    .map((node) => ((node as HTMLElement).classList?.contains("sr-only") ? "" : node.textContent))
+    .join(" ");
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((res) => (resolve = res));
@@ -91,11 +105,14 @@ describe("laptop: the page", () => {
     expect(screen.getByText(/Your Staples start every new trip/)).toBeTruthy();
     const headings = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
     expect(headings.slice(0, 5)).toEqual(["Clothing", "Toiletries", "Tech", "Documents", "Misc"]);
-    // 4 nights = 5 days: underwear and socks 5 each, sleepwear 1.
-    expect(within(card("Clothing")).getByText("3 staples · 11 items")).toBeTruthy();
-    expect(within(card("Toiletries")).getByText("4 staples · 4 items")).toBeTruthy();
+    // The preview is off: a cube head is only its staple count (an item total is a preview number).
+    expect(within(card("Clothing")).getByText("3 staples")).toBeTruthy();
+    expect(within(card("Toiletries")).getByText("4 staples")).toBeTruthy();
     expect(within(card("Documents")).getByText("No staples yet")).toBeTruthy();
-    expect(within(card("Misc")).getByText("2 staples · 2 items")).toBeTruthy();
+    expect(within(card("Misc")).getByText("2 staples")).toBeTruthy();
+    for (const name of ["Clothing", "Toiletries", "Misc"]) {
+      expect(within(card(name)).queryByText(/items/)).toBeNull();
+    }
     expect(screen.getByLabelText("Preview")).toBeTruthy();
     expect(
       screen.getByText("Weather suggestions and special items", { exact: false }),
@@ -120,13 +137,69 @@ describe("laptop: the page", () => {
     expect(disclosure.open).toBe(true);
   });
 
-  it("shows each row's name, cadence and count in the preview trip", async () => {
+  it("shows each row's saved rule only, with no count, while the preview is off", async () => {
+    setup({
+      extra: [
+        TEES,
+        { ...TEES, id: "nightly", name: "Nightly", cadence: "per night", qty: 2 },
+        { ...TEES, id: "smarty", name: "Smarty", cadence: "smart", laundryHalves: undefined },
+      ],
+    });
+    await loaded();
+    expect(rowText("underwear")).toContain("1 per day");
+    expect(rowText("last-toothbrush")).toContain("1 per trip");
+    expect(rowText("nightly")).toContain("2 per night");
+    expect(rowText("smarty")).toContain("Smart");
+    expect(within(rowFor("smarty")).queryByText("1 smart")).toBeNull();
+    // No "× N" and no total anywhere in a row, and no arrow.
+    for (const row of document.querySelectorAll("[data-staple-id]")) {
+      expect(row.textContent).not.toMatch(/×|→/);
+    }
+    expect(within(rowFor("last-laptop")).getByText("Pack last")).toBeTruthy();
+  });
+
+  it("starts with the preview off, in a reserved card, and off again after a remount", async () => {
+    const { user } = setup();
+    await loaded();
+    const switchEl = screen.getByRole("switch", { name: "Preview a trip" });
+    expect(switchEl).toHaveProperty("checked", false);
+    expect(screen.getByText(/Nothing here changes your Staples/)).toBeTruthy();
+    expect(screen.queryByRole("slider")).toBeNull();
+    expect(switchEl.getAttribute("aria-controls")).toBeTruthy();
+    expect(document.getElementById(switchEl.getAttribute("aria-controls")!)!.hidden).toBe(true);
+    await user.click(switchEl);
+    expect(switchEl).toHaveProperty("checked", true);
+    cleanup();
     setup();
     await loaded();
-    const underwear = rowFor("underwear");
-    expect(within(underwear).getByText("per day")).toBeTruthy();
-    expect(within(underwear).getByText("× 5")).toBeTruthy();
-    expect(within(rowFor("last-toothbrush")).getByText("per trip")).toBeTruthy();
+    expect(screen.getByRole("switch", { name: "Preview a trip" })).toHaveProperty("checked", false);
+    expect(screen.queryByRole("slider")).toBeNull();
+  });
+
+  it("shows each row's rule and, with the preview on, a labelled total after an arrow", async () => {
+    const { user } = setup({
+      extra: [
+        {
+          ...TEES,
+          id: "nightly",
+          name: "Nightly",
+          cadence: "per night",
+          qty: 1,
+          laundryHalves: undefined,
+        },
+      ],
+    });
+    await loaded();
+    await previewOn(user);
+    // 4 nights = 5 days: 1 per day = 5, 1 per night = 4, 1 per trip = 1.
+    expect(rowText("underwear")).toMatch(/1 per day\s*→\s*5/);
+    expect(rowText("nightly")).toMatch(/1 per night\s*→\s*4/);
+    expect(rowText("last-toothbrush")).toMatch(/1 per trip\s*→\s*1/);
+    expect(within(rowFor("underwear")).getByText("5 for a 4-night trip")).toBeTruthy();
+    expect(within(rowFor("underwear")).getByText("→").getAttribute("aria-hidden")).toBe("true");
+    for (const row of document.querySelectorAll("[data-staple-id]")) {
+      expect(row.textContent).not.toContain("×");
+    }
     expect(within(rowFor("last-laptop")).getByText("Pack last")).toBeTruthy();
   });
 
@@ -187,67 +260,123 @@ describe("laptop: the page", () => {
     setup({ wrap: (base) => ({ ...base, listStaples: async () => [] }) });
     await loaded();
     expect(screen.getByText(/Your Staples list is intentionally empty/)).toBeTruthy();
-    expect(screen.getByText("Nothing scales with the trip yet.")).toBeTruthy();
   });
 });
 
 describe("laptop: the preview", () => {
-  it("scales per-day counts with the slider and announces the value as nights", async () => {
-    setup();
+  it("scales per-day totals with the slider and announces the value as nights", async () => {
+    const { user } = setup();
     await loaded();
+    await previewOn(user);
     const slider = screen.getByRole("slider", { name: "Preview a trip of" });
     expect(slider.getAttribute("aria-valuetext")).toBe("4 nights");
     fireEvent.change(slider, { target: { value: "6" } });
     expect(slider.getAttribute("aria-valuetext")).toBe("6 nights");
-    expect(within(rowFor("underwear")).getByText("× 7")).toBeTruthy();
+    expect(within(rowFor("underwear")).getByText("7 for a 6-night trip")).toBeTruthy();
     fireEvent.change(slider, { target: { value: "1" } });
     expect(slider.getAttribute("aria-valuetext")).toBe("1 night");
-    expect(within(rowFor("underwear")).getByText("× 2")).toBeTruthy();
+    expect(within(rowFor("underwear")).getByText("2 for a 1-night trip")).toBeTruthy();
     fireEvent.change(slider, { target: { value: "21" } });
     expect(slider.getAttribute("aria-valuetext")).toBe("21 nights");
-    expect(within(rowFor("underwear")).getByText("× 22")).toBeTruthy();
+    expect(within(rowFor("underwear")).getByText("22 for a 21-night trip")).toBeTruthy();
   });
 
   it("halves the staples marked ↻ when laundry is on, and says what it saves", async () => {
     const { user } = setup({ extra: [TEES] });
     await loaded();
+    await previewOn(user);
     // 4 nights: a real trip gives tops 4 (days minus the return-outfit day); laundry halves it to 2.
-    expect(within(rowFor("tops")).getByText("× 4").closest("del")).toBeTruthy();
-    expect(within(rowFor("tops")).getByText("× 2")).toBeTruthy();
-    expect(within(rowFor("tops")).getByText(/reduced from 4 with laundry/)).toBeTruthy();
+    expect(within(rowFor("tops")).getByText("4").closest("del")).toBeTruthy();
+    expect(within(rowFor("tops")).getByText("2").closest("ins")).toBeTruthy();
+    expect(
+      within(rowFor("tops")).getByText("2 for a 4-night trip, reduced from 4 with laundry"),
+    ).toBeTruthy();
     expect(screen.getByText("Laundry saves 2 (anything marked ↻ is halved).")).toBeTruthy();
     const laundry = screen.getByRole("switch", { name: "Laundry on the trip" });
     expect(laundry).toHaveProperty("checked", true);
     await user.click(laundry);
     expect(laundry).toHaveProperty("checked", false);
-    expect(within(rowFor("tops")).getByText("× 4")).toBeTruthy();
-    expect(within(rowFor("tops")).queryByText("× 2")).toBeNull();
+    expect(within(rowFor("tops")).queryByText("2", { selector: "ins" })).toBeNull();
+    expect(within(rowFor("tops")).getByText("4 for a 4-night trip")).toBeTruthy();
     expect(
       screen.getByText("Laundry would save 2. Underwear and socks stay one per day."),
     ).toBeTruthy();
   });
 
-  it("lists what scales with the trip and the items by cube", async () => {
-    setup({ extra: [TEES] });
+  it("totals the preview in the cube heads and By cube, and never lists the rows a second time", async () => {
+    const { user } = setup({ extra: [TEES] });
     await loaded();
+    await previewOn(user);
     const preview = screen.getByLabelText("Preview");
-    const scales = within(preview).getByRole("heading", { name: "Scales with the trip" })
-      .nextElementSibling as HTMLElement;
-    const names = within(scales)
-      .getAllByRole("listitem")
-      .map((li) => li.textContent ?? "");
-    expect(names).toHaveLength(3);
-    expect(names[0]).toMatch(/^Underwear× 5$/);
-    expect(names[1]).toMatch(/^Socks× 5$/);
-    expect(names[2]).toMatch(/^TeesFewer with laundry× 4× 2, reduced from 4 with laundry$/);
+    expect(screen.queryByRole("heading", { name: "Scales with the trip" })).toBeNull();
+    expect(within(preview).queryAllByRole("listitem")).toHaveLength(5); // only the By cube lines
+    expect(within(preview).queryByText("Underwear")).toBeNull();
     const byCube = within(preview).getByRole("heading", { name: "By cube" })
       .nextElementSibling as HTMLElement;
-    expect(
-      within(byCube)
-        .getAllByRole("listitem")
-        .map((li) => li.textContent),
-    ).toEqual(["Clothing13", "Toiletries4", "Tech2", "Documents0", "Misc2"]);
-    expect(within(preview).getByText(/items to start/)).toBeTruthy();
+    const perCube = within(byCube)
+      .getAllByRole("listitem")
+      .map((li) => li.textContent);
+    expect(perCube).toEqual(["Clothing13", "Toiletries4", "Tech2", "Documents0", "Misc2"]);
+    // A cube head's total equals the sum of its row totals, and equals the By cube line.
+    expect(within(card("Clothing")).getByText("4 staples · 13 items for 4 nights")).toBeTruthy();
+    for (const [name, count] of [
+      ["Clothing", 13],
+      ["Toiletries", 4],
+      ["Tech", 2],
+      ["Misc", 2],
+    ] as const) {
+      const rows = Array.from(card(name).querySelectorAll("[data-staple-id]"));
+      const sum = rows.reduce(
+        (total, row) =>
+          total +
+          Number(
+            Array.from(row.querySelectorAll(".sr-only"), (n) =>
+              /^(\d+) for a 4-night/.exec(n.textContent ?? ""),
+            ).find(Boolean)![1],
+          ),
+        0,
+      );
+      expect(sum, name).toBe(count);
+    }
+    expect(within(preview).getByText("items for 4 nights")).toBeTruthy();
+    expect(within(preview).getByText(/Weather suggestions and special items/)).toBeTruthy();
+  });
+
+  it("announces the preview turning on and off, and names the switch's panel", async () => {
+    const { user } = setup();
+    await loaded();
+    const switchEl = screen.getByRole("switch", { name: "Preview a trip" });
+    await user.click(switchEl);
+    expect(live().textContent).toBe("Preview on: 19 items for 4 nights.");
+    expect(document.getElementById(switchEl.getAttribute("aria-controls")!)!.hidden).toBe(false);
+    await user.click(switchEl);
+    expect(live().textContent).toBe("Preview off.");
+    expect(screen.queryByRole("slider")).toBeNull();
+  });
+
+  it("never writes: toggling, the slider and laundry change nothing stored, and drafts and the open editor survive", async () => {
+    const upsert = vi.fn();
+    const { user, source } = setup({
+      extra: [TEES],
+      wrap: (base) => ({
+        ...base,
+        listStaples: async () => [...(await base.listStaples()), TEES],
+        upsertStaple: async (staple) => (upsert(staple), base.upsertStaple(staple)),
+      }),
+    });
+    await loaded();
+    const before = JSON.stringify(source.staplesSnapshot());
+    await user.click(within(rowFor("last-laptop")).getByRole("button", { name: /^Laptop/ }));
+    expect(screen.getByRole("group", { name: "Edit Laptop" })).toBeTruthy();
+    await previewOn(user);
+    fireEvent.change(screen.getByRole("slider", { name: "Preview a trip of" }), {
+      target: { value: "9" },
+    });
+    await user.click(screen.getByRole("switch", { name: "Laundry on the trip" }));
+    await user.click(screen.getByRole("switch", { name: "Preview a trip" }));
+    expect(screen.getByRole("group", { name: "Edit Laptop" })).toBeTruthy();
+    expect(upsert).not.toHaveBeenCalled();
+    expect(JSON.stringify(source.staplesSnapshot())).toBe(before);
   });
 });
 
@@ -296,7 +425,7 @@ describe("laptop: the inline editor", () => {
     await waitFor(() =>
       expect(source.staplesSnapshot().find((s) => s.id === "last-laptop")!.qty).toBe(2),
     );
-    expect(within(rowFor("last-laptop")).getByText("× 2")).toBeTruthy();
+    expect(rowText("last-laptop")).toContain("2 per trip");
     expect(JSON.stringify(source.snapshot().trips)).toBe(tripsBefore);
   });
 
@@ -347,8 +476,8 @@ describe("laptop: the inline editor", () => {
         "per night",
       ),
     );
-    // 4 nights: one laptop per night.
-    expect(within(rowFor("last-laptop")).getByText("× 4")).toBeTruthy();
+    // The row shows the saved rule, not a trip total.
+    expect(rowText("last-laptop")).toContain("1 per night");
   });
 
   it("moves a staple to another cube", async () => {
@@ -451,7 +580,7 @@ describe("laptop: the inline editor", () => {
     await user.click(within(rowFor("last-laptop")).getByRole("button", { name: /^Laptop/ }));
     await user.click(screen.getByRole("button", { name: /^More / }));
     expect(await screen.findByRole("button", { name: /not saved/i })).toBeTruthy();
-    await waitFor(() => expect(within(rowFor("last-laptop")).getByText("× 1")).toBeTruthy());
+    await waitFor(() => expect(rowText("last-laptop")).toContain("1 per trip"));
   });
 });
 
@@ -688,7 +817,7 @@ describe("phone", () => {
     await loaded();
     expect(screen.getByText("11 staples")).toBeTruthy();
     expect(screen.queryByRole("combobox", { name: "Cube for the new staple" })).toBeNull();
-    expect(within(card("Clothing")).getByText("11 items")).toBeTruthy();
+    expect(within(card("Clothing")).getByText("3 staples")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Add staple" })).toBeTruthy();
   });
 
@@ -775,26 +904,60 @@ describe("phone", () => {
     );
   });
 
-  it("shows the dock, collapsible on a short screen", async () => {
-    const { user } = setup({ laptop: false, short: true });
-    await loaded();
-    const title = screen.getByRole("button", { name: "Preview: 4 nights" });
-    expect(title.getAttribute("aria-expanded")).toBe("false");
-    expect(screen.queryByRole("slider")).toBeNull();
-    await user.click(title);
-    expect(title.getAttribute("aria-expanded")).toBe("true");
-    expect(screen.getByRole("slider", { name: "Preview a trip of" })).toBeTruthy();
-    expect(screen.getByText("Laundry saves 0 (anything marked ↻ is halved).")).toBeTruthy();
+  it("starts the dock as one collapsed bar, on a tall or a short screen", async () => {
+    for (const short of [false, true]) {
+      const { unmount } = (() => {
+        setup({ laptop: false, short });
+        return { unmount: cleanup };
+      })();
+      await loaded();
+      const bar = screen.getByRole("button", { name: "Preview a trip" });
+      expect(bar.getAttribute("aria-expanded")).toBe("false");
+      expect(document.getElementById(bar.getAttribute("aria-controls")!)!.hidden).toBe(true);
+      expect(screen.queryByRole("slider")).toBeNull();
+      expect(within(screen.getByLabelText("Preview")).queryByRole("status")).toBeNull();
+      expect(within(card("Clothing")).queryByText(/items/)).toBeNull();
+      expect(rowText("underwear")).not.toContain("→");
+      unmount();
+    }
   });
 
-  it("starts the dock open on a tall screen and shows the item count", async () => {
-    setup({ laptop: false });
+  it("expands from the bar into the dock with totals, and turns off from its foot", async () => {
+    const { user } = setup({ laptop: false, extra: [TEES] });
     await loaded();
-    expect(
-      screen.getByRole("button", { name: "Preview: 4 nights" }).getAttribute("aria-expanded"),
-    ).toBe("true");
+    await previewOn(user, false);
+    const bar = screen.getByRole("button", { name: "Preview: 4 nights" });
+    expect(bar.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("slider", { name: "Preview a trip of" })).toBeTruthy();
     expect(within(screen.getByLabelText("Preview")).getByRole("status").textContent).toContain(
       "items",
     );
+    expect(within(card("Clothing")).getByText("13 items")).toBeTruthy();
+    expect(rowText("underwear")).toMatch(/1 per day\s*→\s*5/);
+    expect(live().textContent).toMatch(/^Preview on: \d+ items for 4 nights\.$/);
+    await user.click(screen.getByRole("button", { name: "Turn off" }));
+    expect(
+      screen.getByRole("button", { name: "Preview a trip" }).getAttribute("aria-expanded"),
+    ).toBe("false");
+    expect(live().textContent).toBe("Preview off.");
+    expect(rowText("underwear")).not.toContain("→");
+  });
+
+  it("keeps keyboard focus on the bar when Turn off hides the dock", async () => {
+    const { user } = setup({ laptop: false });
+    await loaded();
+    const bar = screen.getByRole("button", { name: "Preview a trip" });
+    bar.focus();
+    await user.keyboard("{Enter}");
+    expect(bar.getAttribute("aria-expanded")).toBe("true");
+    // Tab order inside the open dock: slider, laundry switch, Turn off.
+    await user.tab();
+    await user.tab();
+    await user.tab();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Turn off" }));
+    await user.keyboard("{Enter}");
+    const after = screen.getByRole("button", { name: "Preview a trip" });
+    expect(after.getAttribute("aria-expanded")).toBe("false");
+    expect(document.activeElement).toBe(after);
   });
 });

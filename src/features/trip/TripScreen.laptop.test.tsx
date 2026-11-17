@@ -326,7 +326,317 @@ describe("Edit list", () => {
     expect((within(panel()).getByPlaceholderText("+ Add an item") as HTMLInputElement).value).toBe(
       "",
     );
-    expect(live().textContent).toBe("Beach towel added to Clothing.");
+    expect(live().textContent).toBe("Added Beach towel to Clothing.");
+  });
+
+  it("quick adds from the end of the list without Edit list, and the count grows by one (#496)", async () => {
+    const { user, base } = setup();
+    await ready();
+    const before = within(panel()).getByText(/^\d+ of (\d+) packed$/).textContent!;
+    const total = Number(/of (\d+)/.exec(before)![1]);
+    await user.click(within(panel()).getByRole("button", { name: "Add an item to Clothing" }));
+    await user.type(within(panel()).getByPlaceholderText("+ Add an item"), "Sun hat{Enter}");
+    await waitFor(() => expect(within(panel()).getByText("Sun hat")).toBeTruthy());
+    expect(itemCube(tripOf(base).items.find((entry) => entry.name === "Sun hat")!)).toBe(
+      "clothing",
+    );
+    expect(within(panel()).getByText(new RegExp(`of ${total + 1} packed$`))).toBeTruthy();
+    expect(live().textContent).toBe("Added Sun hat to Clothing.");
+  });
+
+  it("says where a quick add went when the Packed filter hides it (#496)", async () => {
+    const { user } = setup();
+    await ready();
+    await user.click(within(panel()).getByRole("button", { name: /^Packed/ }));
+    await user.click(within(panel()).getByRole("button", { name: "Add an item to Clothing" }));
+    await user.type(within(panel()).getByPlaceholderText("+ Add an item"), "Sun hat{Enter}");
+    await waitFor(() => expect(live().textContent).toBe("Added Sun hat. It’s in To pack."));
+    expect(within(panel()).queryByText("Sun hat")).toBeNull();
+    expect(
+      within(panel())
+        .getByRole("button", { name: /^Packed/ })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+  });
+
+  it("describes the view at completion: Packed inside Edit list shows the row, so no To pack message (#496)", async () => {
+    const { user } = setup();
+    await ready();
+    await user.click(within(panel()).getByRole("button", { name: /^Packed/ }));
+    await user.click(within(panel()).getByRole("button", { name: "Edit list" }));
+    await user.type(within(panel()).getByPlaceholderText("+ Add an item"), "Sun hat{Enter}");
+    await waitFor(() => expect(live().textContent).toBe("Added Sun hat to Clothing."));
+    expect(within(panel()).getByText("Sun hat")).toBeTruthy();
+  });
+
+  it("describes the view at completion: All at submit, Packed at completion (#496)", async () => {
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const { user } = setup({
+      wrap: (source) => ({
+        addItem: async (...args: Parameters<typeof source.addItem>) => {
+          await gate;
+          return source.addItem(...args);
+        },
+      }),
+    });
+    await ready();
+    await user.click(within(panel()).getByRole("button", { name: "Add an item to Clothing" }));
+    await user.type(within(panel()).getByPlaceholderText("+ Add an item"), "Sun hat");
+    await user.click(within(panel()).getByRole("button", { name: "Add" }));
+    await user.click(within(panel()).getByRole("button", { name: /^Packed/ }));
+    release();
+    await waitFor(() => expect(live().textContent).toBe("Added Sun hat. It’s in To pack."));
+  });
+
+  it("describes the view at completion: Packed at submit, All at completion (#496)", async () => {
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const { user } = setup({
+      wrap: (source) => ({
+        addItem: async (...args: Parameters<typeof source.addItem>) => {
+          await gate;
+          return source.addItem(...args);
+        },
+      }),
+    });
+    await ready();
+    await user.click(within(panel()).getByRole("button", { name: /^Packed/ }));
+    await user.click(within(panel()).getByRole("button", { name: "Add an item to Clothing" }));
+    await user.type(within(panel()).getByPlaceholderText("+ Add an item"), "Sun hat");
+    await user.click(within(panel()).getByRole("button", { name: "Add" }));
+    await user.click(within(panel()).getByRole("button", { name: /^All/ }));
+    release();
+    await waitFor(() => expect(live().textContent).toBe("Added Sun hat to Clothing."));
+  });
+
+  it("locks Edit list / Done while an add is pending, so a resubmit after toggling sends once (#496)", async () => {
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const calls = vi.fn();
+    const { user } = setup({
+      wrap: (source) => ({
+        addItem: async (...args: Parameters<typeof source.addItem>) => {
+          calls();
+          await gate;
+          return source.addItem(...args);
+        },
+      }),
+    });
+    await ready();
+    await user.click(within(panel()).getByRole("button", { name: "Add an item to Clothing" }));
+    await user.type(within(panel()).getByPlaceholderText("+ Add an item"), "Sun hat{Enter}");
+    const editPill = within(panel()).getByRole("button", {
+      name: "Edit list",
+    }) as HTMLButtonElement;
+    expect(editPill.disabled).toBe(true);
+    await user.click(editPill);
+    expect(within(panel()).queryByRole("button", { name: "Done" })).toBeNull();
+    await user.click(within(panel()).getByRole("button", { name: "Add" }));
+    expect(calls).toHaveBeenCalledTimes(1);
+    release();
+    await waitFor(() => expect(live().textContent).toBe("Added Sun hat to Clothing."));
+    await waitFor(() =>
+      expect(
+        (within(panel()).getByRole("button", { name: "Edit list" }) as HTMLButtonElement).disabled,
+      ).toBe(false),
+    );
+  });
+
+  it("a failed add releases the Edit list lock, so Edit list works again (#496)", async () => {
+    const { user } = setup({
+      wrap: () => ({ addItem: async () => Promise.reject(new Error("down")) }),
+    });
+    await ready();
+    await user.click(within(panel()).getByRole("button", { name: "Add an item to Clothing" }));
+    await user.type(within(panel()).getByPlaceholderText("+ Add an item"), "Sun hat{Enter}");
+    expect((await within(panel()).findByRole("alert")).textContent).toBe(
+      "Couldn’t add it. Nothing was changed.",
+    );
+    expect(
+      (within(panel()).getByRole("button", { name: "Edit list" }) as HTMLButtonElement).disabled,
+    ).toBe(false);
+  });
+
+  it("scrolls to the saved item, not to a later item another write added (#496)", async () => {
+    const scrolled: string[] = [];
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function (this: Element) {
+      scrolled.push(this.getAttribute("data-item-id") ?? "");
+    };
+    try {
+      const { user, base } = setup({
+        wrap: (source) => ({
+          addItem: async (id: string, input: Parameters<typeof source.addItem>[1]) => {
+            await source.addItem(id, input);
+            // Another item lands after the saved one before this write's change is returned.
+            return source.addItem(id, { ...input, name: "Rain hat" });
+          },
+        }),
+      });
+      await ready();
+      await user.click(within(panel()).getByRole("button", { name: "Add an item to Clothing" }));
+      await user.type(within(panel()).getByPlaceholderText("+ Add an item"), "Sun hat{Enter}");
+      await waitFor(() => expect(within(panel()).getByText("Sun hat")).toBeTruthy());
+      const saved = tripOf(base).items.find((entry) => entry.name === "Sun hat")!;
+      await waitFor(() => expect(scrolled).toEqual([saved.id]));
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
+  });
+
+  it("the guard survives cube navigation: the same name is not sent twice, and no error shows (#496)", async () => {
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const calls = vi.fn();
+    const { user } = setup({
+      wrap: (source) => ({
+        addItem: async (...args: Parameters<typeof source.addItem>) => {
+          calls();
+          await gate;
+          return source.addItem(...args);
+        },
+      }),
+    });
+    await ready();
+    await user.click(within(panel()).getByRole("button", { name: "Add an item to Clothing" }));
+    await user.type(within(panel()).getByPlaceholderText("+ Add an item"), "Sun hat{Enter}");
+    await user.click(rail().getByRole("button", { name: /Misc/ }));
+    await user.click(rail().getByRole("button", { name: /Clothing/ }));
+    await user.click(within(panel()).getByRole("button", { name: "Add an item to Clothing" }));
+    await user.type(within(panel()).getByPlaceholderText("+ Add an item"), " sun  HAT{Enter}");
+    expect(calls).toHaveBeenCalledTimes(1);
+    expect(within(panel()).queryByRole("alert")).toBeNull();
+    release();
+    await waitFor(() => expect(live().textContent).toBe("Added Sun hat to Clothing."));
+    expect(calls).toHaveBeenCalledTimes(1);
+    expect(within(panel()).queryByRole("alert")).toBeNull();
+  });
+
+  it("each attempt settles its own entry: a Retry finishing first leaves Edit list locked for the other add (#496)", async () => {
+    const gates: Array<() => void> = [];
+    let call = 0;
+    const { user } = setup({
+      wrap: (source) => ({
+        addItem: async (...args: Parameters<typeof source.addItem>) => {
+          const mine = ++call;
+          if (mine === 1) throw new Error("offline");
+          await new Promise<void>((resolve) => gates.push(resolve));
+          return source.addItem(...args);
+        },
+      }),
+    });
+    await ready();
+    const pill = () =>
+      within(panel()).getByRole("button", { name: /^(Edit list|Done)$/ }) as HTMLButtonElement;
+    await user.click(within(panel()).getByRole("button", { name: "Add an item to Clothing" }));
+    await user.type(within(panel()).getByPlaceholderText("+ Add an item"), "Rain hat{Enter}");
+    await within(panel()).findByRole("alert");
+    expect(pill().disabled).toBe(false);
+    await user.click(screen.getByRole("button", { name: "Not saved, retry" }));
+    await user.click(
+      within(await screen.findByRole("dialog", { name: "Couldn’t save" })).getByRole("button", {
+        name: "Retry",
+      }),
+    );
+    await waitFor(() => expect(gates).toHaveLength(1));
+    expect(pill().disabled).toBe(true);
+    const field = within(panel()).getByPlaceholderText("+ Add an item");
+    await user.clear(field);
+    await user.type(field, "Sun hat{Enter}");
+    await waitFor(() => expect(gates).toHaveLength(2));
+    gates[0]!();
+    await waitFor(() => expect(within(panel()).queryByText("Rain hat")).not.toBeNull());
+    expect(pill().disabled).toBe(true);
+    gates[1]!();
+    await waitFor(() => expect(pill().disabled).toBe(false));
+  });
+
+  const retryFromChip = async (user: ReturnType<typeof setup>["user"]) => {
+    await user.click(screen.getByRole("button", { name: /^(Not saved, retry|Saving)/ }));
+    await user.click(
+      within(await screen.findByRole("dialog", { name: "Couldn’t save" })).getByRole("button", {
+        name: "Retry",
+      }),
+    );
+  };
+
+  it("a top-bar Retry while the same name is pending inline sends nothing more (#496)", async () => {
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const calls = vi.fn();
+    const { user } = setup({
+      wrap: (source) => ({
+        addItem: async (...args: Parameters<typeof source.addItem>) => {
+          calls();
+          if (calls.mock.calls.length === 1) throw new Error("offline");
+          await gate;
+          return source.addItem(...args);
+        },
+      }),
+    });
+    await ready();
+    await user.click(within(panel()).getByRole("button", { name: "Add an item to Clothing" }));
+    await user.type(within(panel()).getByPlaceholderText("+ Add an item"), "Sun hat{Enter}");
+    await within(panel()).findByRole("alert");
+    await user.type(within(panel()).getByPlaceholderText("+ Add an item"), "{Enter}");
+    await waitFor(() => expect(calls).toHaveBeenCalledTimes(2));
+    await retryFromChip(user);
+    expect(calls).toHaveBeenCalledTimes(2);
+    release();
+    await waitFor(() => expect(live().textContent).toBe("Added Sun hat to Clothing."));
+    expect(calls).toHaveBeenCalledTimes(2);
+  });
+
+  it("two successive top-bar Retries while the first is pending send once (#496)", async () => {
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const calls = vi.fn();
+    const { user } = setup({
+      wrap: (source) => ({
+        addItem: async (...args: Parameters<typeof source.addItem>) => {
+          calls();
+          if (calls.mock.calls.length === 1) throw new Error("offline");
+          await gate;
+          return source.addItem(...args);
+        },
+      }),
+    });
+    await ready();
+    await user.click(within(panel()).getByRole("button", { name: "Add an item to Clothing" }));
+    await user.type(within(panel()).getByPlaceholderText("+ Add an item"), "Sun hat{Enter}");
+    await within(panel()).findByRole("alert");
+    await retryFromChip(user);
+    await waitFor(() => expect(calls).toHaveBeenCalledTimes(2));
+    await retryFromChip(user);
+    expect(calls).toHaveBeenCalledTimes(2);
+    release();
+    await waitFor(() => expect(live().textContent).toBe("Added Sun hat to Clothing."));
+    expect(calls).toHaveBeenCalledTimes(2);
+  });
+
+  it("the same name in two different cubes both send (#496)", async () => {
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const calls = vi.fn();
+    const { user } = setup({
+      wrap: (source) => ({
+        addItem: async (...args: Parameters<typeof source.addItem>) => {
+          calls();
+          await gate;
+          return source.addItem(...args);
+        },
+      }),
+    });
+    await ready();
+    await user.click(within(panel()).getByRole("button", { name: "Add an item to Clothing" }));
+    await user.type(within(panel()).getByPlaceholderText("+ Add an item"), "Charger{Enter}");
+    await user.click(rail().getByRole("button", { name: /Misc/ }));
+    await user.click(within(panel()).getByRole("button", { name: "Add an item to Misc" }));
+    await user.type(within(panel()).getByPlaceholderText("+ Add an item"), "Charger{Enter}");
+    expect(calls).toHaveBeenCalledTimes(2);
+    release();
+    await waitFor(() => expect(live().textContent).toMatch(/^Added Charger/));
   });
 
   it("adds to the cube that is open, not to Clothing", async () => {

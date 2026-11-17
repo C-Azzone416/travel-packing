@@ -96,6 +96,30 @@ test("the rail switches cubes, marks the open one current and moves focus to its
   await expect(panel(page).getByText("Toiletry bag not ready to place")).toBeVisible();
 });
 
+test("quick add: the button ends the Misc list without Edit list, adds an item, and Escape returns focus (#496)", async ({
+  page,
+}) => {
+  await openSanDiego(page);
+  await rail(page).getByRole("button", { name: /^Misc/ }).click();
+  const add = panel(page).getByRole("button", { name: "Add an item to Misc" });
+  await expect(add).toBeVisible();
+  await add.click();
+  await expect(panel(page).getByPlaceholder("+ Add an item")).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(add).toBeFocused();
+  await add.click();
+  await panel(page).getByPlaceholder("+ Add an item").fill("Neck pillow");
+  await panel(page).getByRole("button", { name: "Add", exact: true }).click();
+  await expect(panel(page).getByText("Neck pillow")).toBeVisible();
+  await expect(status(page)).toHaveText("Added Neck pillow to Misc.");
+  // Toiletries keeps its single Bathroom control.
+  await rail(page)
+    .getByRole("button", { name: /^Toiletries/ })
+    .click();
+  await expect(panel(page).getByRole("button", { name: /Add an item to/ })).toHaveCount(0);
+  await expect(panel(page).getByRole("button", { name: /Add a Bathroom item/ })).toHaveCount(1);
+});
+
 test("Edit list adds an item to this cube, moves one to another cube, and removes one", async ({
   page,
 }) => {
@@ -105,7 +129,7 @@ test("Edit list adds an item to this cube, moves one to another cube, and remove
   await panel(page).getByPlaceholder("+ Add an item").fill("Travel pillow");
   await panel(page).getByRole("button", { name: "Add", exact: true }).click();
   await expect(panel(page).getByText("Travel pillow")).toBeVisible();
-  await expect(status(page)).toHaveText("Travel pillow added to Misc.");
+  await expect(status(page)).toHaveText("Added Travel pillow to Misc.");
   // The same name again is not added twice.
   await panel(page).getByPlaceholder("+ Add an item").fill("travel pillow");
   await panel(page).getByRole("button", { name: "Add", exact: true }).click();

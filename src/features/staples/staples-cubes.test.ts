@@ -13,6 +13,7 @@ import {
   moveToCube,
   nightsLabel,
   previewStaples,
+  ruleText,
   scalesWithTrip,
   stapleCount,
   stapleCube,
@@ -253,5 +254,14 @@ describe("labels", () => {
     expect(itemsLabel(0)).toBe("0 items");
     expect(stapleCount(1)).toBe("1 staple");
     expect(stapleCount(24)).toBe("24 staples");
+  });
+});
+
+describe("ruleText", () => {
+  it("is the saved rule, never a trip total", () => {
+    expect(ruleText({ cadence: "per day", qty: 1 })).toBe("1 per day");
+    expect(ruleText({ cadence: "per trip", qty: 2 })).toBe("2 per trip");
+    expect(ruleText({ cadence: "per night", qty: 3 })).toBe("3 per night");
+    expect(ruleText({ cadence: "smart", qty: 4 })).toBe("Smart");
   });
 });

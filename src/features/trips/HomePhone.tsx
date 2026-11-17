@@ -58,6 +58,8 @@ export interface HomePhoneProps {
   onOpenArchive: () => void;
   /** The page heading, which takes focus after a write (the control used may be gone). */
   headingRef?: Ref<HTMLHeadingElement>;
+  /** The trip has no starting point (and the account no Home): offer a way to set one (#497). */
+  needsOrigin?: boolean;
 }
 
 /**
@@ -78,6 +80,7 @@ export function HomePhone({
   onRemove,
   onOpenArchive,
   headingRef,
+  needsOrigin = false,
 }: HomePhoneProps) {
   // The chosen pill is in the address, so a link, a reload and Back all land on it. The Home draws only after its trips have
   // loaded in the browser, so reading the address in the initial state cannot disagree with the server's markup.
@@ -219,6 +222,12 @@ export function HomePhone({
                 Map unavailable
               </div>
             )}
+            {needsOrigin ? (
+              <p className={styles.originNudge} data-testid="origin-nudge">
+                <Link href="/settings">Set your Home city</Link> to start the route from home, or
+                pick a starting point in Edit trip.
+              </p>
+            ) : null}
           </figure>
           <Suitcase
             role="region"

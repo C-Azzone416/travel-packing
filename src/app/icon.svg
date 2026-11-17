@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <style>
+    .tile { fill: #142b3b; stroke: #c6d5d8; stroke-opacity: 0.4; stroke-width: 1; }
+    .glyph { fill: none; stroke: #fff8eb; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+    .latch { fill: #d7c095; }
+    @media (prefers-color-scheme: dark) {
+      .tile { fill: #fff8eb; }
+      .glyph { stroke: #142b3b; }
+    }
+  </style>
+  <rect class="tile" x="0.5" y="0.5" width="31" height="31" rx="6.5" />
+  <g class="glyph">
+    <rect x="4" y="10" width="24" height="17" rx="3" />
+    <path d="M11 10 V7.5 Q11 6 12.5 6 H19.5 Q21 6 21 7.5 V10" />
+    <path d="M10.5 14 V23 M21.5 14 V23" />
+  </g>
+  <rect class="latch" x="13.5" y="12.5" width="5" height="2.5" rx="1" />
+</svg>

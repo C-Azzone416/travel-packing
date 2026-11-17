@@ -59,7 +59,7 @@ test(
     expect(add!.x).toBeGreaterThan(field!.x + field!.width - 1);
     const count = await page
       .getByRole("region", { name: "Clothing" })
-      .getByText(/items$/)
+      .getByText(/^\d+ staples?$/)
       .boundingBox();
     expect(count!.height).toBeLessThan(24);
   },
@@ -70,7 +70,7 @@ test("Staples: a group's count shares the heading's row", async ({ page }) => {
   const head = await page.getByRole("heading", { name: "Clothing", level: 2 }).boundingBox();
   const count = await page
     .getByRole("region", { name: "Clothing" })
-    .getByText(/items$/)
+    .getByText(/^\d+ staples?$/)
     .boundingBox();
   // The count's box sits within the heading's row, not above or below it.
   expect(count!.y).toBeGreaterThanOrEqual(head!.y - 2);

@@ -85,6 +85,49 @@ describe("TripsDashboard at laptop width", () => {
     expect(screen.queryByRole("img", { name: "Old map" })).toBeNull();
   });
 
+  it("starts a trip that never had an origin from the Home the server drew it with (#497), and says so when there is none", async () => {
+    laptop(true);
+    const trip = sampleLifecycleState().trips[0];
+    expect(trip.origin ?? null).toBeNull();
+    const home = {
+      location: {
+        id: "chicago",
+        city: "Chicago",
+        region: "Illinois",
+        country: "United States",
+        countryCode: "US",
+        label: "Chicago, Illinois, United States",
+        latitude: 41.88,
+        longitude: -87.63,
+      },
+      airportCode: "ORD",
+    };
+    const withHome = routeSignature(tripRoutePoints({ ...trip, origin: home }), trip.travelMode);
+    const drawn: HomeMaps = {
+      [trip.id]: { signature: withHome, node: <svg role="img" aria-label="Drawn map" />, home },
+    };
+    const { unmount } = renderInApp(
+      <TripsDashboard source={memory()} getToday={TODAY} maps={drawn} />,
+    );
+    expect(await screen.findByRole("img", { name: "Drawn map" })).toBeTruthy();
+    expect(screen.getByText(/^ORD → /)).toBeTruthy();
+    expect(screen.queryByTestId("origin-nudge")).toBeNull();
+    unmount();
+    // No Home and no origin: the destination-only map stays, with a way to set a start.
+    const noHome = routeSignature(tripRoutePoints(trip), trip.travelMode);
+    renderInApp(
+      <TripsDashboard
+        source={memory()}
+        getToday={TODAY}
+        maps={{ [trip.id]: { signature: noHome, node: <svg role="img" aria-label="Drawn map" /> } }}
+      />,
+    );
+    expect(await screen.findByRole("img", { name: "Drawn map" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Set your Home city" }).getAttribute("href")).toBe(
+      "/settings",
+    );
+  });
+
   it("opens Past & archive from the trip menu without a reload", async () => {
     laptop(true);
     const user = userEvent.setup();

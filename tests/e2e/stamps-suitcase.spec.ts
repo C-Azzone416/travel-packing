@@ -36,9 +36,9 @@ test("the sticker suitcase is data-backed and selects trips without changing the
 }) => {
   await openStamps(page);
   await expect(page.getByText("1 inked")).toBeVisible();
-  const lisbon = page.getByRole("button", { name: "Lisbon, Sep 2026, 1 trip", exact: true });
+  const lisbon = page.getByRole("button", { name: "Lisbon, Sep 2026, inked, 1 trip", exact: true });
   const sanDiego = page.getByRole("button", {
-    name: "San Diego, Oct 2026, 1 trip",
+    name: "San Diego, Oct 2026, upcoming, not inked yet",
     exact: true,
   });
   await expect(lisbon).toHaveAttribute("aria-pressed", "true");
@@ -54,6 +54,10 @@ test("the sticker suitcase is data-backed and selects trips without changing the
   );
   await sanDiego.focus();
   await page.keyboard.press("Enter");
+  // A sticker opens its details as well as selecting it (#494).
+  await expect(page.getByRole("dialog", { name: "San Diego · Oct 2026" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(sanDiego).toBeFocused();
   await expect(page.getByRole("article", { name: "Selected trip: San Diego" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Open trip" })).toHaveAttribute("href", /\/trips\//);
   await page.reload();
@@ -81,7 +85,9 @@ test(
     await openStamps(page);
     expect(await sideways(page), JSON.stringify(await overflowingElements(page), null, 2)).toBe(0);
     await expect(page.getByRole("button", { name: "Last 12 months" })).toBeVisible();
-    await expect(page.getByRole("button", { name: /Lisbon, Sep 2026, 1 trip/ })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /Lisbon, Sep 2026, inked, 1 trip/ }),
+    ).toBeVisible();
     await page.getByRole("heading", { name: "Past trips" }).scrollIntoViewIfNeeded();
     await expect(page.getByRole("link", { name: "Reuse this list" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Open trip" })).toBeVisible();
@@ -107,4 +113,118 @@ test("focused review screenshots", DEVICE, async ({ page }, testInfo) => {
     path: `test-results/screenshots/stamps-dusk-195-${testInfo.project.name}.png`,
     fullPage: true,
   });
+});
+
+const rgb = (page: Page, variable: string) =>
+  page.evaluate((name) => {
+    const probe = document.createElement("i");
+    probe.style.color = `var(${name})`;
+    document.body.append(probe);
+    const colour = getComputedStyle(probe).color;
+    probe.remove();
+    return colour;
+  }, variable);
+
+test("an upcoming sticker stays dashed and unfilled when selected, and selection is not gold (#493)", async ({
+  page,
+}) => {
+  await openStamps(page);
+  const lisbon = page.getByRole("button", { name: "Lisbon, Sep 2026, inked, 1 trip" });
+  const sanDiego = page.getByRole("button", {
+    name: "San Diego, Oct 2026, upcoming, not inked yet",
+  });
+  // Nothing upcoming is selected at first paint; the earned sticker is.
+  await expect(lisbon).toHaveAttribute("aria-pressed", "true");
+  await expect(sanDiego).toHaveAttribute("aria-pressed", "false");
+  await sanDiego.click();
+  await page.keyboard.press("Escape");
+  await expect(sanDiego).toHaveAttribute("aria-pressed", "true");
+  await expect(sanDiego).toHaveCSS("border-top-style", "dashed");
+  await expect(sanDiego).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await expect(sanDiego.getByText("Upcoming", { exact: true })).toBeVisible();
+  const gold = await rgb(page, "--gold");
+  expect(await sanDiego.evaluate((node) => getComputedStyle(node).boxShadow)).not.toContain(gold);
+  expect(await lisbon.evaluate((node) => getComputedStyle(node).boxShadow)).not.toContain(gold);
+  // Earned stays solid, with no tag.
+  await expect(lisbon).toHaveCSS("border-top-style", "solid");
+  await expect(lisbon.getByText("Upcoming", { exact: true })).toHaveCount(0);
+});
+
+test("forced colours: upcoming and earned stickers differ in border style and colour (#493)", async ({
+  page,
+}) => {
+  await page.emulateMedia({ forcedColors: "active" });
+  await openStamps(page);
+  const earned = page.getByRole("button", { name: "Lisbon, Sep 2026, inked, 1 trip" });
+  const upcoming = page.getByRole("button", {
+    name: "San Diego, Oct 2026, upcoming, not inked yet",
+  });
+  const style = (node: typeof earned) =>
+    node.evaluate((element) => {
+      const css = getComputedStyle(element);
+      return { style: css.borderTopStyle, colour: css.borderTopColor };
+    });
+  const [a, b] = [await style(earned), await style(upcoming)];
+  expect(a.style).not.toBe(b.style);
+  expect(a.colour).not.toBe(b.colour);
+});
+
+test(
+  "195px at 200% text: the Upcoming tag stays inside, and both details actions are reachable (#493, #494)",
+  DEVICE,
+  async ({ page }) => {
+    await page.setViewportSize({ width: 195, height: 640 });
+    await openStamps(page);
+    const doubleText = (selector: string) =>
+      page.evaluate((root) => {
+        const all = [...document.querySelectorAll<HTMLElement>(`${root}, ${root} *`)];
+        const sizes = all.map((el) => parseFloat(getComputedStyle(el).fontSize));
+        all.forEach((el, at) =>
+          el.style.setProperty("font-size", `${sizes[at] * 2}px`, "important"),
+        );
+      }, selector);
+    await doubleText("main");
+    const upcoming = page.getByRole("button", {
+      name: "San Diego, Oct 2026, upcoming, not inked yet",
+    });
+    const tag = upcoming.getByText("Upcoming", { exact: true });
+    await tag.scrollIntoViewIfNeeded();
+    const [sticker, label] = [(await upcoming.boundingBox())!, (await tag.boundingBox())!];
+    expect(sticker.width).toBeGreaterThanOrEqual(96);
+    expect(label.x).toBeGreaterThanOrEqual(0);
+    expect(label.x + label.width).toBeLessThanOrEqual(195);
+    expect(label.width).toBeLessThanOrEqual(sticker.width);
+    await upcoming.click();
+    const dialog = page.getByRole("dialog", { name: "San Diego · Oct 2026" });
+    await expect(dialog).toBeVisible();
+    await doubleText('[role="dialog"]');
+    for (const name of ["Reuse this list", "Open trip"]) {
+      const action = dialog.getByRole("link", { name });
+      await action.scrollIntoViewIfNeeded();
+      await expect(action).toBeInViewport();
+      expect((await action.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    }
+  },
+);
+
+test("details: a sticker opens a read-only sheet; Escape puts focus back on it (#494)", async ({
+  page,
+}) => {
+  await openStamps(page);
+  const lisbon = page.getByRole("button", { name: "Lisbon, Sep 2026, inked, 1 trip" });
+  await lisbon.click();
+  const details = page.getByRole("dialog", { name: "Lisbon · Sep 2026" });
+  await expect(details).toBeVisible();
+  await expect(details.getByRole("button", { name: /Edit stamp label/ })).toHaveCount(0);
+  // Focus starts on the title, so the next Enter does not navigate.
+  await expect(details.getByRole("heading", { name: "Lisbon · Sep 2026" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(details).toBeHidden();
+  await expect(lisbon).toBeFocused();
+  // The selected sticker opens it again.
+  await lisbon.click();
+  await expect(details).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(details).toBeHidden();
+  await expect(lisbon).toBeFocused();
 });

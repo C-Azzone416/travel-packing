@@ -26,7 +26,12 @@ import { HomePhone } from "./HomePhone";
 import type { HomeMaps } from "./home-map-types";
 import { cityWeather, noTripModel, usualRows, type HeroWeather } from "./home-view";
 import { LAPTOP_MIN_WIDTH, useMinWidth } from "@/lib/use-min-width";
-import { routeSignature, stopsOrDestination, tripRoutePoints } from "@/domain/trip-route";
+import {
+  routeSignature,
+  stopsOrDestination,
+  tripRoutePoints,
+  withHomeOrigin,
+} from "@/domain/trip-route";
 import { TripCard } from "./TripCard";
 import type { TripsSource } from "./trips-source";
 import { formatRange, tripCardView, type TripListView } from "./view";
@@ -408,9 +413,11 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
   /** The server-drawn map for this trip, only while it still matches the route the trip has now. */
   const mapFor = (trip: LifecycleTrip) => {
     const drawn = maps?.[trip.id];
-    const now = routeSignature(tripRoutePoints(trip), trip.travelMode);
+    const now = routeSignature(tripRoutePoints(withHomeOrigin(trip, drawn?.home)), trip.travelMode);
     return drawn && drawn.signature === now ? drawn.node : null;
   };
+  /** The next trip as the Home draws it: no origin of its own means it starts from the Home the server drew the map with (#497). */
+  const shown = hero ? withHomeOrigin(hero, maps?.[hero.id]?.home) : null;
   const welcome = welcomeHomeModel(state.trips, today);
   const editTarget = state.trips.find((trip) => trip.id === editing) ?? null;
 
@@ -462,9 +469,10 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
       ) : (
         <>
           {welcome ? <WelcomeHomeCard key={welcome.tripId} model={welcome} /> : null}
-          {hero && laptop ? (
+          {hero && shown && laptop ? (
             <HomeLaptop
-              trip={hero}
+              trip={shown}
+              needsOrigin={!shown.origin}
               later={departures.slice(1)}
               today={today}
               weather={weather}
@@ -476,9 +484,10 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
               onOpenArchive={() => setView("archive")}
               headingRef={headingRef}
             />
-          ) : hero ? (
+          ) : hero && shown ? (
             <HomePhone
-              trip={hero}
+              trip={shown}
+              needsOrigin={!shown.origin}
               later={departures.slice(1)}
               state={state}
               today={today}

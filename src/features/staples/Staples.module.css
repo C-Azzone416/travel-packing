@@ -256,6 +256,7 @@
 .row {
   box-sizing: border-box;
   display: flex;
+  flex-wrap: wrap; /* at large text the rule and total drop under the name instead of breaking it (#491) */
   align-items: center;
   gap: 8px;
   width: 100%;
@@ -274,7 +275,7 @@
   font-size: var(--fs-body);
   line-height: var(--lh-body);
   font-weight: 600;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word; /* break inside a word only when it is wider than the line; min-content stays a whole word */
 }
 .packLast {
   display: block;
@@ -291,12 +292,21 @@
 }
 .count {
   flex: none;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
   min-width: 2.2em;
-  text-align: end;
+  justify-content: flex-end;
+  color: var(--ink);
   font-size: var(--fs-body);
-  font-weight: 700;
+  font-weight: 600;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+}
+/* The arrow is decorative (aria-hidden); the row's sr-only sentence carries the meaning. */
+.arrow {
+  color: var(--ghost);
+  font-weight: 400;
 }
 .was {
   margin-inline-end: 6px;
@@ -581,6 +591,7 @@
 .dockTitle {
   display: inline-flex;
   align-items: center;
+  min-height: 48px;
   gap: 6px;
   padding: 0;
   border: 0;
@@ -613,6 +624,29 @@
   font-family: var(--font-display);
   font-size: 16px;
   font-weight: var(--fw-heading);
+}
+.previewTitle {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-section-l);
+  font-weight: var(--fw-heading);
+  line-height: var(--lh-section);
+}
+.dockOff {
+  min-height: 44px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.dockOff:focus-visible {
+  outline: 3px solid var(--info);
+  outline-offset: 2px;
 }
 .previewEyebrow {
   margin: 0;
@@ -749,40 +783,10 @@
   font-size: var(--fs-lede);
   line-height: 1.35;
 }
-.laptopOnly {
-  display: none;
-}
-.scales,
 .byCube {
   margin: 0;
   padding: 0;
   list-style: none;
-}
-.scales {
-  display: grid;
-  gap: 6px;
-}
-.scaleRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-height: 36px;
-  padding: 0 12px;
-  border-radius: 10px;
-  background: var(--tint);
-  font-size: 15px;
-}
-.scaleRow > span:first-child {
-  min-width: 0;
-  font-weight: 600;
-  overflow-wrap: anywhere;
-}
-.scaleCount {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  flex: none;
 }
 .byCube li {
   display: flex;
@@ -872,6 +876,10 @@
   .row {
     flex-wrap: wrap;
   }
+  /* 195 / 200% text: the name takes its own line; the rule and total sit under it. */
+  .rowName {
+    flex-basis: 100%;
+  }
 }
 
 /* ---- Laptop ---- */
@@ -955,9 +963,6 @@
     padding: 18px;
     border-radius: 22px;
     box-shadow: none;
-  }
-  .laptopOnly {
-    display: block;
   }
   .bigNumber {
     font-size: 36px;

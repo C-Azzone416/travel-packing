@@ -755,6 +755,55 @@
   font-size: 14px;
   font-weight: 600;
 }
+.addCancel {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.addCancel:focus-visible,
+.quickAddButton:focus-visible {
+  outline: 3px solid var(--info);
+  outline-offset: 2px;
+}
+/* Quick add (#496): an action row at the end of the list. On a phone it is the last row of the panel footer, pinned to the
+   bottom of the scroll area so a long cube never scrolls it away. */
+.quickAdd {
+  display: grid;
+  min-width: 0;
+}
+.quickAddButton {
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 8px 16px;
+  border: 1px dashed var(--muted);
+  border-radius: 999px;
+  background: none;
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.25;
+  text-align: center;
+  cursor: pointer;
+}
+.quickAddButton:hover {
+  background: var(--tint);
+}
+.panelPhone .quickAdd {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  padding-block: 8px;
+  border-top: 1px solid var(--line);
+  background: var(--paper2);
+}
 .morningRow {
   display: flex;
   align-items: center;

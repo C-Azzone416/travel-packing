@@ -70,6 +70,8 @@ describe("proxy matcher", () => {
     "/logo.png",
     "/assets/art.webp",
     "/styles.css",
+    "/icon.svg",
+    "/apple-icon.png",
   ])("skips the static file %s", (path) => {
     expect(covered(path)).toBe(false);
   });

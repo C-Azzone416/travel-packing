@@ -47,3 +47,32 @@ test("ocean 195 at 200% text: the cube list wraps between words", async ({ page 
     .toBeGreaterThanOrEqual(31.9);
   await shot(page, "pk-p-ocean-195-200pct");
 });
+
+// #496: quick add. 390 with the add row open, 390 on an empty list (Packed filter on a cube with nothing packed), 195 at 200%.
+test("ocean 390: quick add row open", async ({ page }) => {
+  await open(page, 390, 844);
+  await page.getByRole("button", { name: "Add an item to Clothing" }).click();
+  await expect(page.getByPlaceholder("+ Add an item")).toBeFocused();
+  await shot(page, "qa-p-ocean-390-open");
+});
+
+test("ocean 390: quick add on an empty list", async ({ page }) => {
+  await open(page, 390, 844);
+  await page.getByRole("button", { name: /^Packed/ }).click();
+  await expect(page.getByRole("button", { name: "Add an item to Clothing" })).toBeVisible();
+  await shot(page, "qa-p-ocean-390-empty");
+});
+
+test("ocean 195 at 200% text: quick add button", async ({ page }) => {
+  await open(page, 195, 640);
+  await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+  await expect
+    .poll(() =>
+      page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).fontSize)),
+    )
+    .toBeGreaterThanOrEqual(31.9);
+  await expect(page.getByRole("button", { name: "Add an item to Clothing" })).toBeVisible();
+  // At 200% text the page scrolls (natural flow), so take the whole page to show the button in place.
+  mkdirSync(SHOTS!, { recursive: true });
+  await page.screenshot({ path: `${SHOTS}/qa-p-ocean-195-200pct.png`, fullPage: true });
+});
