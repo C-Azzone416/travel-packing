@@ -100,6 +100,21 @@ export function automaticStamps(stops: readonly TripStop[]): StampSpec[] {
   return codes.length === 1 || codes.length === 2 ? codes.map(countryStamp) : fallback(first);
 }
 
+/**
+ * Which editable slot (0 or 1) a trip's stop at `index` shows, or null when its code comes from the route alone. The same
+ * numbering the editor uses: with country stamps a stop shows its own country's slot; otherwise only the first stop has one.
+ */
+export function stampSlotForStop(stops: readonly TripStop[], index: number): 0 | 1 | null {
+  const automatic = automaticStamps(stops);
+  if (automatic.length > 0 && automatic.every((stamp) => stamp.kind === "country")) {
+    const at = automatic.findIndex(
+      (stamp) => stamp.label === alpha3For(stops[index]?.location.countryCode ?? ""),
+    );
+    return at === 0 ? 0 : at === 1 ? 1 : null;
+  }
+  return index === 0 ? 0 : null;
+}
+
 /** "PRT, ESP route stamps", "LIS airport, Lisbon, departure stamp" or "CHE, Zermatt, departure stamp". */
 export function stampsAriaLabel(stamps: readonly StampSpec[]): string {
   const first = stamps[0];

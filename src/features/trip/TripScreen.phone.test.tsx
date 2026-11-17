@@ -830,11 +830,12 @@ describe("text zoom and the fixed-height layout", () => {
 });
 
 describe("the tools under the suitcase", () => {
-  it("keeps Edit trip, Save as a list, Edit stamp and Edit preferences reachable", async () => {
+  it("keeps Edit trip, Save as a list and Edit preferences reachable", async () => {
     setup();
     await ready();
-    for (const name of ["Edit trip", "Save as a list", "Edit stamp", "Edit preferences"])
+    for (const name of ["Edit trip", "Save as a list", "Edit preferences"])
       expect(screen.getByRole("button", { name }), name).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Edit stamp" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Change theme" })).toBeNull();
   });
 

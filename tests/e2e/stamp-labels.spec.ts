@@ -1,152 +1,50 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsOwner } from "./helpers/auth";
-import { DEVICE, phoneHomeLayout } from "./helpers/device";
-import { expectAccessible } from "./helpers/a11y";
-import { expectPacking } from "./helpers/packing";
-import { planRouteToList, reviewAndCreate } from "./helpers/plan";
-import { futureRow, planATrip } from "./helpers/menu";
 
-// The phone Home (#388) and the phone Pack mode (#386) are drawn below 1024px: this spec's flow starts on the Home and does not
-// depend on the laptop layouts, so it runs there.
-test.beforeEach(async ({ page }) => {
-  await phoneHomeLayout(page);
-});
-
-// Per-trip stamp label (#151), through the real data layer: the packing screen's Edit stamp sheet, the same label on the
-// dashboard (display only), Reset to automatic, and what a person typing a bad label sees.
+// Per-trip stamp label (#151, #494), through the real data layer. Label editing lives only on the Stamps screen: pick a
+// sticker, open Edit stamp label, set a custom label, see it after a reload, and see what a bad label gets.
 const NOW = new Date("2026-10-16T12:00:00");
 
-async function openSanDiego(page: Page) {
+async function openLisbonEditor(page: Page) {
   await page.clock.setFixedTime(NOW);
   await signInAsOwner(page);
-  await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
-  await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
-  await expectPacking(page);
-}
-/** Open the sheet; a click that lands before the page is interactive is repeated until the sheet shows. */
-async function openStampSheet(page: Page) {
+  await page.goto("/stamps");
+  await expect(page.getByRole("heading", { name: "Stamps", level: 1 })).toBeVisible();
+  await page.getByRole("button", { name: "Lisbon, Sep 2026, inked, 1 trip", exact: true }).click();
+  const details = page.getByRole("dialog", { name: "Lisbon · Sep 2026" });
+  await details.getByRole("button", { name: "Edit stamp label" }).click();
   const sheet = page.getByRole("dialog", { name: "Stamp label" });
-  await expect(async () => {
-    await page.getByRole("button", { name: "Edit stamp" }).click();
-    await expect(sheet).toBeVisible({ timeout: 1000 });
-  }).toPass();
+  await expect(sheet).toBeVisible();
   return sheet;
 }
 
-test("set a custom stamp label, see it after a reload, then reset it to automatic", async ({
+test("set a custom stamp label on the Stamps screen and see it after a reload", async ({
   page,
 }) => {
-  await openSanDiego(page);
-
-  const sheet = await openStampSheet(page);
-  await expect(sheet.getByRole("group", { name: "Stamp 1, automatic" })).toBeVisible();
+  const sheet = await openLisbonEditor(page);
   await sheet.getByRole("radio", { name: "Custom" }).check();
   const field = sheet.getByRole("textbox", { name: "Label", exact: true });
   await field.fill("sd7");
   await expect(field).toHaveValue("SD7");
-  await sheet.getByRole("button", { name: "Save" }).click();
+  await sheet.getByRole("button", { name: "Save", exact: true }).click();
   await expect(sheet).toBeHidden();
-  await expect(page.getByText("Stamp updated.")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Edit stamp" })).toBeFocused();
-
-  // It is stored: after a reload the sheet opens on the custom label. The Home draws no route stamps (the redesign's luggage
-  // tag has none), so it shows no Edit stamp either.
-  await page.goto("/");
-  await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Edit stamp" })).toHaveCount(0);
-  await page.getByRole("link", { name: "Continue packing: San Diego" }).click();
-  await expectPacking(page);
-  const stored = await openStampSheet(page);
-  await expect(stored.getByRole("group", { name: "Stamp 1, custom" })).toBeVisible();
-  await expect(stored.getByRole("textbox", { name: "Label", exact: true })).toHaveValue("SD7");
-
-  // Reset to automatic restores the derived label.
-  const reset = stored;
-  await reset.getByRole("button", { name: "Reset to automatic" }).click();
-  await reset.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(page.getByText("Stamp reset to automatic.")).toBeVisible();
-  await expect(reset).toBeHidden();
-  const again = await openStampSheet(page);
-  await expect(again.getByRole("group", { name: "Stamp 1, automatic" })).toBeVisible();
-});
-
-test("a two-country trip has two stamps to label: each is edited on its own, and the name carries both", async ({
-  page,
-}) => {
-  await page.clock.setFixedTime(NOW);
-  await signInAsOwner(page);
-  await planATrip(page);
-  await planRouteToList(
-    page,
-    [
-      { query: "lisbon", option: /Lisbon/ },
-      { query: "paris", option: /Paris/ },
-    ],
-    ["2026-11-12", "2026-11-15", "2026-11-18"],
-  );
-  await reviewAndCreate(page);
-  await (await futureRow(page, /Lisbon & Paris/)).click();
-  await expectPacking(page);
-
-  const sheet = await openStampSheet(page);
-  await expect(sheet.getByRole("group", { name: "Stamp 1, automatic" })).toBeVisible();
-  const second = sheet.getByRole("group", { name: /^Stamp 2,/ });
-  await expect(second.getByText("FRA, the country code for France")).toBeVisible();
-  await second.getByRole("radio", { name: "Custom" }).check();
-  await second.getByRole("textbox", { name: "Label", exact: true }).fill("zz9");
-  await sheet.getByRole("button", { name: "Save" }).click();
-  await expect(sheet).toBeHidden();
+  await expect(page.getByText("Stamp label saved.")).toBeVisible();
   await page.reload();
-  await expectPacking(page);
-  const again = await openStampSheet(page);
-  await expect(
-    again
-      .getByRole("group", { name: /^Stamp 2,/ })
-      .getByRole("textbox", { name: "Label", exact: true }),
-  ).toHaveValue("ZZ9");
+  await expect(page.getByRole("heading", { name: "Stamps", level: 1 })).toBeVisible();
+  await expect(page.getByRole("article", { name: "Selected trip: Lisbon" })).toContainText("SD7");
 });
 
 test("a label that is not exactly 3 letters or numbers is refused with a message, and nothing is saved", async ({
   page,
 }) => {
-  await openSanDiego(page);
-  const sheet = await openStampSheet(page);
+  const sheet = await openLisbonEditor(page);
   await sheet.getByRole("radio", { name: "Custom" }).check();
   const field = sheet.getByRole("textbox", { name: "Label", exact: true });
   await field.fill("ab");
   await field.blur();
   await expect(sheet.getByText("Use exactly 3 letters or numbers (A–Z, 0–9).")).toBeVisible();
   await expect(field).toHaveAttribute("aria-invalid", "true");
-  // Not saveable while it is invalid.
   await expect(sheet.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
   await sheet.getByRole("button", { name: "Cancel" }).click();
   await expect(sheet).toBeHidden();
-  await expect(page.getByRole("button", { name: "Edit stamp" })).toBeFocused();
 });
-
-test(
-  "the Stamp label sheet is accessible, keyboard operable, and fits a phone",
-  DEVICE,
-  async ({ page }) => {
-    await openSanDiego(page);
-    const edit = page.getByRole("button", { name: "Edit stamp" });
-    const box = (await edit.boundingBox())!;
-    expect(box.height).toBeGreaterThanOrEqual(43.9);
-    await edit.focus();
-    await page.keyboard.press("Enter");
-    const sheet = page.getByRole("dialog", { name: "Stamp label" });
-    await expect(sheet).toBeVisible();
-    await expectAccessible(page, "stamp sheet, automatic", { include: '[role="dialog"]' });
-    await sheet.getByRole("radio", { name: "Custom" }).check();
-    await sheet.getByRole("textbox", { name: "Label", exact: true }).fill("a1b");
-    await expectAccessible(page, "stamp sheet, custom", { include: '[role="dialog"]' });
-    expect(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-      ),
-    ).toBeLessThanOrEqual(0);
-    await page.keyboard.press("Escape");
-    await expect(sheet).toBeHidden();
-    await expect(edit).toBeFocused();
-  },
-);

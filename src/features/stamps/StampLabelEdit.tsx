@@ -133,11 +133,12 @@ export function StampLabelEditor({
   onClose: () => void;
 }) {
   const source = useTripsSource();
-  const { track } = useSaveStatus();
+  const { track, discard } = useSaveStatus();
   const toast = useToast();
   const [saving, setSaving] = useState(false);
   const [failed, setFailed] = useState(false);
   const editor = useEditorGate(failed, saving);
+  const lastWrite = useRef<(() => Promise<unknown>) | null>(null);
 
   const save = (
     slot1: string | null,
@@ -146,15 +147,14 @@ export function StampLabelEditor({
   ) => {
     setFailed(false);
     setSaving(true);
-    track(
-      () => saveFreshLabels(source, trip.id, [slot1, slot2], changed),
-      (change) => {
-        setSaving(false);
-        onSaved(change.trip);
-        toast.show("Stamp label saved.");
-        onClose();
-      },
-    ).catch(() => {
+    const write = () => saveFreshLabels(source, trip.id, [slot1, slot2], changed);
+    lastWrite.current = write;
+    track(write, (change) => {
+      setSaving(false);
+      onSaved(change.trip);
+      toast.show("Stamp label saved.");
+      onClose();
+    }).catch(() => {
       setSaving(false);
       setFailed(true);
     });
@@ -171,7 +171,11 @@ export function StampLabelEditor({
       retrying={editor.retrying}
       onRetry={editor.onRetry}
       blockedNote={editor.blockedNote}
-      onClose={onClose}
+      onClose={() => {
+        // Cancel drops a failed draft, so the top bar's Retry cannot save it later and editing opens up again.
+        if (failed && lastWrite.current) discard(lastWrite.current);
+        onClose();
+      }}
       onSave={save}
     />
   );

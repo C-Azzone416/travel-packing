@@ -112,14 +112,19 @@ describe("Edit stamp label (#494)", () => {
   it("shows the route line, disabled, for a sticker whose code comes from a later stop", async () => {
     const base = lisbon();
     const [first] = base.stops;
-    const stop = (city: string, arrive: string) => ({
+    // Three countries: the route has no editable slot for the third, so its code comes from the route alone.
+    const stop = (city: string, arrive: string, countryCode: string) => ({
       ...first,
-      location: { ...first.location, city, id: city },
+      location: { ...first.location, city, id: city, countryCode },
       arrive,
     });
     const trip = {
       ...base,
-      stops: [stop("Porto", "2026-09-03"), stop("Faro", "2026-09-04"), stop("Lagos", "2026-09-05")],
+      stops: [
+        stop("Porto", "2026-09-03", "PT"),
+        stop("Faro", "2026-09-04", "ES"),
+        stop("Lagos", "2026-09-05", "FR"),
+      ],
     };
     const { user, src } = open(withTrip(trip));
     const setLabels = vi.spyOn(src, "setStampLabels");
@@ -244,6 +249,33 @@ describe("Edit stamp label (#494)", () => {
     expect(await src.getTrip("lisbon")).toMatchObject({ stampLabels: ["QQ1", "ZZZ"] });
   });
 
+  it("Cancel after a failed save drops the draft: the top bar Retry has nothing to replay and editing is available again", async () => {
+    const { user, src } = open();
+    const real = src.setStampLabels.bind(src);
+    const setLabels = vi
+      .spyOn(src, "setStampLabels")
+      .mockImplementationOnce(() => Promise.reject(new Error("down")));
+    await user.click(await screen.findByRole("button", { name: LISBON }));
+    await user.click(edit(screen.getByRole("dialog")));
+    await user.click(screen.getByRole("radio", { name: "Custom" }));
+    const input = screen.getByLabelText("Label");
+    await user.clear(input);
+    await user.type(input, "abc");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    const editor = await screen.findByRole("dialog", { name: "Stamp label" });
+    await within(editor).findByRole("button", { name: "Try again" });
+    await user.click(within(editor).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog", { name: "Stamp label" })).toBeNull();
+    // The failed write is gone: no error chip to retry from, and the label action is no longer blocked.
+    expect(screen.queryByRole("button", { name: "Not saved, retry" })).toBeNull();
+    expect(
+      edit(screen.getByRole("article", { name: /Selected trip/ })).getAttribute("aria-disabled"),
+    ).toBeNull();
+    setLabels.mockImplementation(real);
+    expect(setLabels).toHaveBeenCalledTimes(1);
+    expect((await src.getTrip("lisbon")).stampLabels ?? [null, null]).toEqual([null, null]);
+  });
+
   it("says Saving, not the failure, while the retry is in flight, and fails again cleanly", async () => {
     const { user, src } = open(withTrip(lisbon()));
     let gate: (() => void) | null = null;
@@ -312,7 +344,11 @@ describe("Edit stamp label (#494)", () => {
     });
     const porto = {
       ...base,
-      stops: [stop("Lisbon", "2026-09-03"), stop("Porto", "2026-09-05")],
+      stops: [
+        stop("Lisbon", "2026-09-03"),
+        stop("Madrid", "2026-09-04", { countryCode: "ES" }),
+        stop("Porto", "2026-09-05", { countryCode: "FR" }),
+      ],
     };
     const { user } = open(withTrip(porto));
     await user.click(await screen.findByRole("button", { name: /^Porto, Sep 2026/ }));
