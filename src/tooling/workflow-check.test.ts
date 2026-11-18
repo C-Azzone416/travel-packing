@@ -896,11 +896,7 @@ describe("checkCiWorkflow", () => {
       inJob("checks", /\n {8}with:\n {10}fetch-depth: 0[^\n]*/, ""),
       /full history/,
     ],
-    [
-      "the audit weakened",
-      inJob("checks", "--audit-level=high", "--audit-level=critical"),
-      /dependency audit/,
-    ],
+    ["the audit gate removed", inJob("checks", "npm run check:audit", "true"), /dependency audit/],
     [
       "the locked Vercel CLI install dropped from the checks job",
       inJob("checks", "npm ci --prefix tools/vercel-cli --ignore-scripts", "true"),

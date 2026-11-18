@@ -80,11 +80,7 @@ describe("verifyParityProblems: each drift is caught", () => {
       mutate(/ {6}- name: Typecheck\n {8}run: npm run typecheck\n\n/, ""),
       /"typecheck" 1x but ci.yml runs it 0x/,
     ],
-    [
-      "the audit removed from ci.yml",
-      mutate("npm audit --omit=dev --audit-level=high", "true"),
-      /"audit"/,
-    ],
+    ["the audit removed from ci.yml", mutate("npm run check:audit", "true"), /"check:audit"/],
     [
       "gitleaks removed from ci.yml",
       mutate(/ {6}- uses: gitleaks[^\n]*\n {8}env:\n {10}GITHUB_TOKEN[^\n]*\n\n/, ""),
@@ -125,7 +121,7 @@ describe("verifyParityProblems: each drift is caught", () => {
       verifyParityProblems(
         mutate(
           "      - name: Lint\n",
-          "      # npm run something-else and npm audit\n      - name: Lint\n",
+          "      # npm run something-else and npm run check:audit\n      - name: Lint\n",
         ),
       ),
     ).toEqual([]);
@@ -163,9 +159,9 @@ describe("verifyParityProblems: each drift is caught", () => {
     );
     expect(verifyParityProblems(ci, steps).join("\n")).toMatch(/"lint" does not run the command/);
     const audit = VERIFY_STEPS.map((step) =>
-      step.id === "audit" ? { ...step, command: ["true"] } : step,
+      step.id === "check:audit" ? { ...step, command: ["true"] } : step,
     );
-    expect(verifyParityProblems(ci, audit).join("\n")).toMatch(/"audit" does not run/);
+    expect(verifyParityProblems(ci, audit).join("\n")).toMatch(/"check:audit" does not run/);
   });
 });
 
