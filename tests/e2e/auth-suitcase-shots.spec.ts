@@ -76,13 +76,17 @@ test("the compact #424 AuthSuitcase review set", async ({ page, context, baseURL
         clientHeight: element.clientHeight,
         scrollHeight: element.scrollHeight,
       }));
-      expect(panel.scrollHeight).toBeGreaterThan(panel.clientHeight);
+      expect(panel.scrollHeight).toBeLessThanOrEqual(panel.clientHeight);
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollHeight - document.documentElement.clientHeight,
+        ),
+      ).toBeGreaterThan(0);
     }
     await screenshot(page, `auth-ocean-sign-in-${size.tag}`);
   }
 
-  const oceanPanel = page.locator(".auth-panel");
-  await oceanPanel.evaluate((element) => (element.scrollTop = element.scrollHeight));
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   await screenshot(page, "auth-ocean-sign-in-390x600-short-bottom");
 
   // The brand adds no stop: the first six tabs are the accepted form and help-link order.
@@ -101,22 +105,25 @@ test("the compact #424 AuthSuitcase review set", async ({ page, context, baseURL
     await expect(control).toBeFocused();
   }
 
-  // AuthShell is retained during client navigation. A scrolled short panel must reset for every linked destination.
+  // AuthShell is retained during client navigation. A scrolled short document must reset for every linked destination.
   await page.setViewportSize({ width: 390, height: 600 });
   await page.goto("/sign-in");
   const panel = page.locator(".auth-panel");
-  await panel.evaluate((element) => (element.scrollTop = element.scrollHeight));
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   await page.getByRole("link", { name: "Create an account" }).click();
   await expect(page).toHaveURL(/\/sign-up$/);
   expect(await panel.evaluate((element) => element.scrollTop)).toBe(0);
-  await panel.evaluate((element) => (element.scrollTop = element.scrollHeight));
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   await page.getByRole("link", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/sign-in$/);
   expect(await panel.evaluate((element) => element.scrollTop)).toBe(0);
-  await panel.evaluate((element) => (element.scrollTop = element.scrollHeight));
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   await page.getByRole("link", { name: "Forgot password?" }).click();
   await expect(page).toHaveURL(/\/forgot-password$/);
   expect(await panel.evaluate((element) => element.scrollTop)).toBe(0);
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
 
   for (const scheme of ["evergreen", "dusk"] as const) {
     await setScheme(context, baseURL!, scheme);

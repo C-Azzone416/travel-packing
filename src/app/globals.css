@@ -2066,8 +2066,11 @@ input:disabled {
   }
   .auth-suitcase {
     width: 100%;
-    height: calc(100dvh - 142px);
-    min-height: 0;
+    /* Phone browser chrome and the on-screen keyboard both shrink the visual viewport. Let the suitcase grow with
+       its controls so the document remains the one scroll surface; a fixed height here made the paper panel a
+       cramped nested scroller and hid its account/reset links below the fold. */
+    height: auto;
+    min-height: calc(100dvh - 142px);
   }
   .auth-lid {
     min-height: 155px;
@@ -2095,6 +2098,9 @@ input:disabled {
     display: none;
   }
   .auth-panel {
+    flex: 1 0 auto;
+    min-height: auto;
+    overflow-y: visible;
     padding: 20px 18px;
   }
   .auth-card h1 {
