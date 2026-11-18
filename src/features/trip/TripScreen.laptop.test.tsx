@@ -872,6 +872,7 @@ describe("the forecast and the weather review rows", () => {
     await ready();
     const heading = await screen.findByRole("heading", { name: "Forecast", level: 2 });
     expect(heading).toBeTruthy();
+    expect(document.getElementById("forecast")?.contains(heading)).toBe(true);
     const card = screen.getByRole("article", { name: "Lisbon" });
     expect(card.getAttribute("data-city-state")).toBe("alert");
     expect(within(card).getAllByRole("group").length).toBeGreaterThan(0);
