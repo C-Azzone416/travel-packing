@@ -485,6 +485,96 @@ test.describe("the account screens", () => {
       await visit("/finish-setup", [() => page.getByRole("link", { name: "Send me a link" })]);
     },
   );
+
+  test(
+    "phone auth controls stay in document flow through errors, reset and repeated switching",
+    DEVICE,
+    async ({ page }) => {
+      await page.setViewportSize({ width: 402, height: 874 });
+
+      const expectSingleScrollSurface = async () => {
+        const panel = await page.locator(".auth-panel").evaluate((element) => {
+          const style = getComputedStyle(element);
+          return {
+            clientHeight: element.clientHeight,
+            overflowY: style.overflowY,
+            scrollHeight: element.scrollHeight,
+            scrollTop: element.scrollTop,
+          };
+        });
+        expect(panel.overflowY).toBe("visible");
+        expect(panel.scrollHeight).toBeLessThanOrEqual(panel.clientHeight);
+        expect(panel.scrollTop).toBe(0);
+        expect(
+          await page.evaluate(
+            () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+          ),
+        ).toBeLessThanOrEqual(0);
+      };
+
+      await page.goto("/sign-in");
+      await expect(page.getByRole("link", { name: "Forgot password?" })).toBeVisible();
+      await expect(page.getByRole("link", { name: "Create an account" })).toBeVisible();
+      await signIn(page, "nobody@example.test", "not-the-password");
+      await expect(page.locator(".auth-card > p[role='alert']")).toBeVisible();
+      await expectSingleScrollSurface();
+
+      for (let pass = 0; pass < 2; pass += 1) {
+        await page.getByRole("link", { name: "Create an account" }).click();
+        await expect(page).toHaveURL(/\/sign-up$/);
+        await page.getByLabel("Email").fill("not-an-email");
+        await page.getByRole("button", { name: "Create account" }).click();
+        await expect(page.locator("#email-error")).toBeVisible();
+        await expect(page.getByRole("link", { name: "Sign in" })).toBeVisible();
+        await expectSingleScrollSurface();
+
+        await page.getByRole("link", { name: "Sign in" }).click();
+        await expect(page).toHaveURL(/\/sign-in$/);
+        await page.getByRole("link", { name: "Forgot password?" }).click();
+        await expect(page).toHaveURL(/\/forgot-password$/);
+        await page.getByLabel("Email").fill("not-an-email");
+        await page.getByRole("button", { name: "Send reset link" }).click();
+        await expect(page.locator("#email-error")).toBeVisible();
+        await expect(page.getByRole("link", { name: "Back to sign in" })).toBeVisible();
+        await expectSingleScrollSurface();
+
+        await page.getByRole("link", { name: "Back to sign in" }).click();
+        await expect(page).toHaveURL(/\/sign-in$/);
+      }
+
+      await page.goto(`/reset-password?token=${"a".repeat(48)}`);
+      await page.getByLabel("New password", { exact: true }).fill("short");
+      await page.getByRole("button", { name: "Update password" }).click();
+      await expect(page.locator("#password-error")).toBeVisible();
+      await expect(page.getByRole("button", { name: "Show password" })).toBeVisible();
+      await expectSingleScrollSurface();
+
+      // A shorter visual viewport stands in for Safari with browser chrome and the software keyboard open. The
+      // focused field and lower controls remain reachable by ordinary page scrolling, without moving the paper panel.
+      await page.setViewportSize({ width: 402, height: 430 });
+      await page.goto("/sign-in");
+      await page.getByLabel("Password", { exact: true }).focus();
+      await page.getByRole("link", { name: "Create an account" }).scrollIntoViewIfNeeded();
+      await expect(page.getByRole("link", { name: "Create an account" })).toBeInViewport();
+      await expectSingleScrollSurface();
+      expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+    },
+  );
+
+  test("desktop keeps the fixed suitcase frame", async ({ page }) => {
+    await page.goto("/sign-in");
+    const frame = await page.locator(".auth-suitcase").evaluate((suitcase) => {
+      const panel = suitcase.querySelector<HTMLElement>(".auth-panel")!;
+      return {
+        display: getComputedStyle(suitcase).display,
+        height: suitcase.getBoundingClientRect().height,
+        panelOverflowY: getComputedStyle(panel).overflowY,
+      };
+    });
+    expect(frame.display).toBe("grid");
+    expect(Math.round(frame.height)).toBe(700);
+    expect(frame.panelOverflowY).toBe("auto");
+  });
 });
 
 test.describe("accessibility and screenshots", DEVICE, () => {
