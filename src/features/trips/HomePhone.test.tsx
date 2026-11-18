@@ -238,6 +238,9 @@ describe("HomePhone", () => {
         .getAttribute("aria-expanded"),
     ).toBe("false");
     expect(within(panel).getByText(/\d+ to review/)).toBeTruthy();
+    expect(within(panel).getByRole("link", { name: "+3 more days" }).getAttribute("href")).toBe(
+      "/trips/t1#forecast",
+    );
   });
 
   it("counts the changes to review on a dry, high-UV city too, and opens that city", async () => {

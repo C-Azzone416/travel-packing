@@ -193,7 +193,7 @@ describe("HomeLaptop", () => {
     expect(porto.textContent).toContain("Rain · 4 added");
     expect(screen.getByRole("region", { name: "Porto forecast" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "+3 more days" }).getAttribute("href")).toBe(
-      "/trips/t1",
+      "/trips/t1#forecast",
     );
     await user.click(lisbon);
     expect(lisbon.getAttribute("aria-expanded")).toBe("true");

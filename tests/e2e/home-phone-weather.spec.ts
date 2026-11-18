@@ -55,7 +55,7 @@ async function openWeather(page: Page, stays: Stay[], width = 390) {
 }
 
 test.describe("forecast days", DEVICE, () => {
-  test("a rainy stay opens itself with its days, and a long stay links to the rest", async ({
+  test("a rainy stay opens itself with its days, and a long stay links to its Packing forecast", async ({
     page,
   }) => {
     const panel = await openWeather(page, [{ leave: 3, back: 14 }]);
@@ -65,8 +65,51 @@ test.describe("forecast days", DEVICE, () => {
     expect(await region.getByRole("listitem").count()).toBeGreaterThan(0);
     const more = region.getByRole("link", { name: /^\+\d+ more days$/ });
     await expect(more).toBeVisible();
+
+    // The city disclosure is a separate action: it stays on Home and does not follow the more-days link.
+    await row.click();
+    await expect(row).toHaveAttribute("aria-expanded", "false");
+    await expect(page).toHaveURL(/\/?tab=weather$/);
+    await row.click();
+    await expect(row).toHaveAttribute("aria-expanded", "true");
+
     await more.click();
-    await expect(page).toHaveURL(/\/trips\/[^/?]+(\?cube=\w+)?$/);
+    await expect(page).toHaveURL(/\/trips\/[^/?#]+#forecast$/);
+    const forecast = page.locator("#forecast");
+    await expect(forecast).toBeVisible();
+    await expect(forecast).toBeInViewport();
+
+    // The URL-backed Home tab and the fragment both survive history navigation and repeat activation.
+    await page.goBack();
+    await expect(page).toHaveURL(/\/?tab=weather$/);
+    await expect(page.getByRole("tabpanel")).toBeVisible();
+    await page.goForward();
+    await expect(page).toHaveURL(/\/trips\/[^/?#]+#forecast$/);
+    await expect(page.locator("#forecast")).toBeInViewport();
+    await page.goBack();
+    await expect(
+      page.getByRole("tabpanel").getByRole("link", { name: /^\+\d+ more days$/ }),
+    ).toBeVisible();
+    await page
+      .getByRole("tabpanel")
+      .getByRole("link", { name: /^\+\d+ more days$/ })
+      .click();
+    await expect(page.locator("#forecast")).toBeInViewport();
+  });
+
+  test("the laptop Home more-days link lands on the laptop Forecast section", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await createWeatherTrip(page, [{ leave: 3, back: 14 }]);
+    await page.goto("/");
+    await page.evaluate(() => document.fonts.ready);
+    await expect(page.getByRole("tablist", { name: "Trip sections" })).toHaveCount(0);
+    const more = page.getByRole("link", { name: /^\+\d+ more days$/ });
+    await expect(more).toBeVisible({ timeout: 30_000 });
+    await more.click();
+    await expect(page).toHaveURL(/\/trips\/[^/?#]+#forecast$/);
+    const forecast = page.locator("#forecast");
+    await expect(forecast.getByRole("heading", { name: "Forecast" })).toBeVisible();
+    await expect(forecast).toBeInViewport();
   });
 
   test("a trip made with weather on has its rain on the list, so the pill is Clear, not ALERT", async ({

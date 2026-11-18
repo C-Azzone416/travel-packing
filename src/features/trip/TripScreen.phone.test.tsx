@@ -686,6 +686,7 @@ describe("one city's forecast at a time", () => {
     expect(screen.queryByRole("tablist", { name: "City" })).toBeNull();
     expect(screen.getByRole("list", { name: "Daily forecast for Lisbon" })).toBeTruthy();
     const forecast = screen.getByRole("region", { name: "Forecast" });
+    expect(document.getElementById("forecast")?.contains(forecast)).toBe(true);
     expect(forecast.getAttribute("data-forecast-state")).toBe("alert");
     expect(
       within(forecast).getByRole("link", { name: "Weather data by Open-Meteo.com" }),
