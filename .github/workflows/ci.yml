@@ -122,7 +122,7 @@ jobs:
 
       # Known-vulnerable runtime dependencies fail the build (#22). Dev-only tooling is Dependabot's job.
       - name: Dependency audit (production dependencies)
-        run: npm audit --omit=dev --audit-level=high
+        run: npm run check:audit
 
       # The deploy job installs the Vercel CLI from its own lockfile, and PR runs never reach the deploy job, so a lock this runner's npm
       # cannot install (#218 broke the first Preview deploy that way) is found here, on the same Node and npm the deploy job uses.

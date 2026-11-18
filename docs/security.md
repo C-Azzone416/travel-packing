@@ -14,7 +14,8 @@ What the repository checks automatically, and what it deliberately does not do y
   Node (`db/`, `seed/`, `auth/allowlist-fingerprint`) deliberately do not import it; the scan above still guards them.
   Unit tests alias the package to a no-op (`vitest.config.ts`).
 - **E2E-only code** stays out of builds (`npm run check:no-e2e-in-build`).
-- **Dependency audit:** `npm audit --omit=dev --audit-level=high` fails the build; Dependabot opens weekly update PRs
+- **Dependency audit:** `npm run check:audit` fails on high/critical production findings, except the package-scoped
+  `GHSA-fc5q-39xc-vjpf` entry in `audit-allowlist.json`, which expires 2026-12-18 and is tracked by #536; Dependabot opens weekly update PRs
   for npm and GitHub Actions, **against `develop`** (`target-branch`, checked by `npm run check:workflows`), so they go through the normal gates and
   the Preview before any promotion to `main`; nothing auto-merges.
 - **Repository hygiene** (`npm run check:repo-hygiene`) and the secret scan (gitleaks, the first step of the `ci` job, full history).
