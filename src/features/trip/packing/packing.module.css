@@ -164,6 +164,9 @@
 }
 
 /* ---- Forecast ---- */
+.forecastAnchor {
+  min-width: 0;
+}
 .forecast {
   display: grid;
   gap: 10px;
