@@ -7,7 +7,9 @@
   /* #424 darkens links only on the signed-out paper2 panel. Keep the existing app-shell role on its varied surfaces;
      the full palette contrast audit remains tracked in #377. */
   --link: var(--dark);
+  box-sizing: border-box;
   min-height: 100vh;
+  min-height: 100dvh;
   padding-bottom: calc(var(--sticky-bottom) + 16px);
 }
 
@@ -34,6 +36,16 @@
   display: flex;
   align-items: center;
   flex: none;
+  gap: 4px;
+}
+
+/* The phone Home's direct create action shares the existing header row with save state. It is route-specific (the component
+   renders only at `/`) and disappears at the laptop breakpoint, where Home already has room for its existing actions. */
+.home-new-trip {
+  display: none;
+}
+.home-new-trip-label-short {
+  display: none;
 }
 
 .shell-brand {
@@ -129,8 +141,39 @@ main {
 /* Legacy screens (#14 on) are tuned to the old gutters (16px, then 24px from 660px; the hero band's whole-row geometry depends on
    the width). Keep them until each screen's redesign adopts the spec's 12px gutter. */
 @media (max-width: 1023px) {
+  .home-new-trip {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 0 6px;
+    border-radius: 12px;
+    color: var(--ink);
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .home-new-trip:active {
+    background: var(--tint);
+  }
+  /* At small-phone widths the mark still identifies the Home link; freeing the wordmark keeps New and every save/error
+     control in the same header row. */
+  @media (max-width: 359px) {
+    .topbar:has(.home-new-trip) .shell-brand strong,
+    .home-new-trip-label {
+      display: none;
+    }
+    .home-new-trip-label-short {
+      display: inline;
+    }
+  }
   main {
     padding-inline: 16px;
+    /* The shell already reserves the fixed tab bar plus 16px. Keeping the desktop's extra 36px here forced short phone
+       pages to scroll even when their last control was already clear of the bar. */
+    padding-bottom: 16px;
   }
 }
 @media (min-width: 660px) and (max-width: 1023px) {

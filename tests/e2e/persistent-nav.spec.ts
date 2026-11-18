@@ -436,6 +436,8 @@ test(
     await page.setViewportSize({ width: 320, height: 640 });
     await page.goto("/");
     await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
+    const newTrip = page.locator("header.topbar").getByRole("link", { name: "New trip" });
+    await expect(newTrip).toBeVisible();
     const feedback = page.getByRole("button", { name: "Send feedback" });
     const feedbackX = Math.round((await feedback.boundingBox())!.x);
 
@@ -457,6 +459,7 @@ test(
         const word = document.querySelector(".shell-brand strong")!;
         const style = getComputedStyle(word);
         const chipRect = document.querySelector(".sync-chip")!.getBoundingClientRect();
+        const newTripRect = document.querySelector(".home-new-trip")!.getBoundingClientRect();
         const brand = document.querySelector(".shell-brand")!;
         return {
           height: word.getBoundingClientRect().height,
@@ -464,6 +467,8 @@ test(
           wordOverflow: brand.scrollWidth - brand.clientWidth,
           chipWidth: chipRect.width,
           chipRight: chipRect.right,
+          newTripRight: newTripRect.right,
+          chipLeft: chipRect.left,
           innerWidth,
           overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
         };
@@ -473,6 +478,7 @@ test(
       expect(result.wordOverflow).toBeLessThanOrEqual(0);
       expect(result.chipWidth).toBeGreaterThanOrEqual(44);
       expect(result.chipRight).toBeLessThanOrEqual(result.innerWidth - 8);
+      expect(result.newTripRight).toBeLessThanOrEqual(result.chipLeft + 0.5);
       expect(result.overflow).toBe(0);
       expect(Math.round((await feedback.boundingBox())!.x)).toBe(feedbackX);
     };
@@ -481,6 +487,29 @@ test(
     await archive;
     await expect(page.getByRole("link", { name: "Saved" })).toBeVisible();
     await check();
+  },
+);
+
+test(
+  "New trip shares the 320px Home header with the save-error recovery control",
+  DEVICE,
+  async ({ page }) => {
+    await page.clock.setFixedTime(DASHBOARD_NOW);
+    await signInAsOwner(page);
+    await page.setViewportSize({ width: 320, height: 640 });
+    await page.goto("/");
+    await expect(page.getByRole("heading", { name: "San Diego", level: 2 })).toBeVisible();
+    const newTrip = page.locator("header.topbar").getByRole("link", { name: "New trip" });
+    await expect(newTrip).toBeVisible();
+
+    const archiveAction = serverActionId("src/features/trips/actions.ts", "archiveTripAction");
+    await page.route("**/*", async (route) => {
+      if (route.request().headers()["next-action"] === archiveAction) return route.abort("failed");
+      return route.continue();
+    });
+    await chooseFromMenu(page, "San Diego", "Archive");
+    await expect(page.getByRole("button", { name: "Not saved, retry" })).toBeVisible();
+    expect(await barProblems(page)).toEqual([]);
   },
 );
 
@@ -504,6 +533,7 @@ function barProblems(page: Page) {
       ]),
       ["sign out", document.querySelector(".nav-signout button")],
       ["feedback", document.querySelector(".nav-feedback")],
+      ["new trip", document.querySelector(".home-new-trip")],
       ["chip", document.querySelector(".sync-chip")],
     ];
     const boxes: [string, DOMRect][] = [];
