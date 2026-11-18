@@ -11,12 +11,25 @@ export interface AuditGateResult {
 }
 type JsonObject = Record<string, unknown>;
 const BLOCKING_SEVERITIES = new Set(["high", "critical"]);
+const SEVERITIES = new Set(["info", "low", "moderate", "high", "critical"]);
 const GHSA = /\bGHSA-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}\b/i;
 function object(value: unknown): value is JsonObject {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 function failure(message: string): AuditGateResult {
   return { passed: false, messages: [`ERROR: ${message}`] };
+}
+function severityProblem(value: unknown, subject: string): string | null {
+  if (typeof value === "string" && SEVERITIES.has(value)) return null;
+  const shown = value === undefined ? "missing" : JSON.stringify(value);
+  return `${subject} has unexpected severity ${shown}`;
+}
+function auditError(value: unknown): string {
+  if (!object(value)) return `npm audit reported an error: ${String(value)}`;
+  const detail = [value.code, value.summary]
+    .filter((part) => typeof part === "string" && part.length > 0)
+    .join(" ");
+  return `npm audit reported an error${detail ? `: ${detail}` : ""}`;
 }
 function cleanMetadataReport(report: JsonObject): boolean {
   if (!object(report.metadata) || !object(report.metadata.vulnerabilities)) return false;
@@ -56,6 +69,7 @@ function validatedAllowlist(value: unknown): AuditAllowlistEntry[] | string {
 }
 function validatedVulnerabilities(report: unknown): JsonObject | string {
   if (!object(report)) return "npm audit report must be a JSON object";
+  if ("error" in report) return auditError(report.error);
   if (!("vulnerabilities" in report)) {
     return cleanMetadataReport(report)
       ? {}
@@ -63,17 +77,40 @@ function validatedVulnerabilities(report: unknown): JsonObject | string {
   }
   if (!object(report.vulnerabilities)) return "npm audit vulnerabilities must be an object";
   for (const [name, finding] of Object.entries(report.vulnerabilities)) {
-    if (
-      !object(finding) ||
-      typeof finding.severity !== "string" ||
-      !Array.isArray(finding.via) ||
-      !finding.via.every(
-        (via) =>
-          (typeof via === "string" && via.length > 0) ||
-          (object(via) && typeof via.severity === "string" && typeof via.url === "string"),
-      )
-    ) {
+    if (!object(finding) || !Array.isArray(finding.via)) {
       return `npm audit finding for ${name} is malformed`;
+    }
+    const aggregateProblem = severityProblem(finding.severity, name);
+    if (aggregateProblem) return aggregateProblem;
+    for (const via of finding.via) {
+      if (typeof via === "string" && via.length > 0) continue;
+      if (!object(via) || typeof via.url !== "string") {
+        return `npm audit finding for ${name} is malformed`;
+      }
+      const advisoryProblem = severityProblem(via.severity, `${name} advisory`);
+      if (advisoryProblem) return advisoryProblem;
+    }
+  }
+  if ("metadata" in report) {
+    if (!object(report.metadata)) return "npm audit metadata is malformed";
+    if ("vulnerabilities" in report.metadata) {
+      const totals = report.metadata.vulnerabilities;
+      if (!object(totals)) return "npm audit metadata vulnerability counts are malformed";
+      // npm metadata counts packages by their aggregate severity, not advisory objects.
+      for (const severity of BLOCKING_SEVERITIES) {
+        const expected = totals[severity];
+        if (typeof expected !== "number" || !Number.isInteger(expected) || expected < 0) {
+          return `npm audit metadata has an invalid ${severity} count`;
+        }
+        const actual = Object.values(report.vulnerabilities).filter(
+          (finding) => object(finding) && finding.severity === severity,
+        ).length;
+        if (expected !== actual) {
+          return expected > actual
+            ? `metadata reports ${expected} ${severity} findings the report doesn't list (map has ${actual})`
+            : `metadata reports ${expected} ${severity} findings but the map lists ${actual}`;
+        }
+      }
     }
   }
   return report.vulnerabilities;
@@ -138,9 +175,12 @@ export function checkAuditReport(
   };
 
   for (const [name, finding] of Object.entries(vulnerabilities)) {
-    if (!object(finding) || !BLOCKING_SEVERITIES.has(String(finding.severity).toLowerCase())) {
-      continue;
-    }
+    if (!object(finding) || !Array.isArray(finding.via)) continue;
+    const directSeverities = [
+      finding.severity,
+      ...finding.via.filter(object).map((via) => via.severity),
+    ];
+    if (!directSeverities.some((severity) => BLOCKING_SEVERITIES.has(String(severity)))) continue;
     const resolved = resolve(name, []);
     if (resolved.errors.length) {
       messages.push(...resolved.errors.map((message) => `ERROR: ${message}`));

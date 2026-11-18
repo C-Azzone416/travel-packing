@@ -1,3 +1,7 @@
+import { spawnSync } from "node:child_process";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { checkAuditJson, checkAuditReport, type AuditAllowlistEntry } from "./audit-gate";
 
@@ -53,6 +57,7 @@ describe("checkAuditReport", () => {
 
   it("fails when another high advisory is present", () => {
     const input = report();
+    Reflect.deleteProperty(input, "metadata");
     Object.assign(input.vulnerabilities, {
       other: finding("high", [advisory("GHSA-1111-2222-3333")]),
     });
@@ -63,6 +68,7 @@ describe("checkAuditReport", () => {
 
   it("does not match a different critical advisory on the allowlisted package", () => {
     const input = report();
+    Reflect.deleteProperty(input, "metadata");
     input.vulnerabilities.picomatch = finding("critical", [
       advisory("GHSA-4444-5555-6666", "critical"),
     ]);
@@ -73,6 +79,7 @@ describe("checkAuditReport", () => {
 
   it("fails a dependent when any of its chains is not allowlisted", () => {
     const input = report();
+    Reflect.deleteProperty(input, "metadata");
     Object.assign(input.vulnerabilities, {
       unsafe: finding("high", [advisory("GHSA-7777-8888-9999")]),
       dependent: finding("high", ["picomatch", "unsafe"]),
@@ -110,6 +117,18 @@ describe("checkAuditReport", () => {
     expect(
       checkAuditReport({ vulnerabilities: { bad: { severity: "high" } } }, ALLOWLIST, TODAY).passed,
     ).toBe(false);
+    expect(checkAuditReport({}, [{}], TODAY).passed).toBe(false);
+    expect(
+      checkAuditReport({ vulnerabilities: { bad: finding("high", [null]) } }, ALLOWLIST, TODAY)
+        .passed,
+    ).toBe(false);
+    expect(
+      checkAuditReport(
+        { vulnerabilities: {}, metadata: { vulnerabilities: { high: -1, critical: 0 } } },
+        ALLOWLIST,
+        TODAY,
+      ).passed,
+    ).toBe(false);
   });
 
   it("passes clean reports with an empty map or clean metadata totals", () => {
@@ -145,5 +164,83 @@ describe("checkAuditReport", () => {
     expect(checkAuditReport({ vulnerabilities }, ALLOWLIST, TODAY).messages.join("\n")).toMatch(
       message,
     );
+  });
+});
+
+describe("fail-closed report integrity", () => {
+  const critical = advisory("GHSA-1111-2222-3333", "critical");
+
+  it.each([
+    ["unexpected aggregate", finding("unexpected", [critical])],
+    ["empty aggregate", finding("", [critical])],
+    ["missing aggregate", { via: [critical] }],
+    ["unexpected advisory", finding("high", [advisory(), { ...critical, severity: "nonsense" }])],
+    ["empty advisory", finding("high", [advisory(), { ...critical, severity: "" }])],
+    ["missing advisory", finding("high", [advisory(), { ...critical, severity: undefined }])],
+  ])("rejects an %s severity", (_case, vulnerable) => {
+    const result = checkAuditReport(
+      { vulnerabilities: { picomatch: vulnerable } },
+      ALLOWLIST,
+      TODAY,
+    );
+    expect(result.passed).toBe(false);
+    expect(result.messages.join("\n")).toMatch(/unexpected severity/i);
+  });
+
+  it("treats a critical advisory as blocking under a moderate aggregate", () => {
+    const result = checkAuditReport(
+      { vulnerabilities: { other: finding("moderate", [critical]) } },
+      ALLOWLIST,
+      TODAY,
+    );
+    expect(result.passed).toBe(false);
+    expect(result.messages.join("\n")).toMatch(/other.*GHSA-1111-2222-3333/);
+  });
+
+  it("rejects metadata counts that contradict the vulnerability map", () => {
+    const result = checkAuditReport(
+      { vulnerabilities: {}, metadata: { vulnerabilities: { high: 1, critical: 0, total: 1 } } },
+      ALLOWLIST,
+      TODAY,
+    );
+    expect(result.passed).toBe(false);
+    expect(result.messages.join("\n")).toMatch(/metadata reports 1 high.*doesn't list/i);
+  });
+
+  it("rejects a top-level npm audit error", () => {
+    const result = checkAuditReport(
+      { error: { code: "EAUDIT", summary: "failed" }, vulnerabilities: {} },
+      ALLOWLIST,
+      TODAY,
+    );
+    expect(result).toMatchObject({
+      passed: false,
+      messages: [expect.stringMatching(/npm audit reported an error: EAUDIT failed/)],
+    });
+  });
+
+  it("makes the script fail when npm exits 1 with an error report", () => {
+    const dir = mkdtempSync(join(tmpdir(), "audit-gate-"));
+    const npm = join(dir, "npm");
+    writeFileSync(
+      npm,
+      `#!/bin/sh\nprintf '%s' '{"error":{"code":"EAUDIT","summary":"failed"},"vulnerabilities":{}}'\nexit 1\n`,
+    );
+    chmodSync(npm, 0o755);
+    const runScript = () =>
+      spawnSync(join(process.cwd(), "node_modules", ".bin", "tsx"), ["scripts/check-audit.ts"], {
+        cwd: process.cwd(),
+        env: { ...process.env, PATH: `${dir}:${process.env.PATH ?? ""}` },
+        encoding: "utf8",
+      });
+    const run = runScript();
+    expect(run.status).toBe(1);
+    expect(run.stderr).toMatch(/npm audit reported an error: EAUDIT failed/);
+
+    const valid = JSON.stringify({ vulnerabilities: { picomatch: finding("high", [advisory()]) } });
+    writeFileSync(npm, `#!/bin/sh\nprintf '%s' '${valid}'\nexit 1\n`);
+    const validRun = runScript();
+    rmSync(dir, { recursive: true, force: true });
+    expect(validRun.status).toBe(0);
   });
 });
