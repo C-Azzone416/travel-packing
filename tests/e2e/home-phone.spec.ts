@@ -36,8 +36,32 @@ test.describe("pills and panels", DEVICE, () => {
     await expect(tabs.nth(0)).toHaveAttribute("aria-selected", "true");
     await expect(page.getByRole("tabpanel")).toHaveAttribute("aria-labelledby", "home-tab-pack");
     const tag = page.getByRole("region", { name: "San Diego" });
+    await expect(tag.locator('[data-luggage-tag="compact"]')).toHaveCount(1);
     await expect(tag).toContainText("NEXT TRIP · 23–27 Oct · 4 nights");
     await expect(tag).toContainText("7 days");
+  });
+
+  test("compact trip identity and its menu remain usable across every panel", async ({ page }) => {
+    await openHome(page);
+    const tag = page.getByRole("region", { name: "San Diego" });
+    const menuButton = page.getByRole("button", { name: "More actions for San Diego" });
+    for (const name of [/^Pack/, /^Weather/, /^Future/, /^Stamps/]) {
+      await pill(page, name).click();
+      await expect(tag).toBeVisible();
+      await expect(tag).toContainText("San Diego");
+      await expect(tag).toContainText("23–27 Oct · 4 nights");
+      await expect(tag).toContainText("7 days");
+      await expect(menuButton).toBeVisible();
+    }
+
+    await menuButton.focus();
+    await expect(menuButton).toBeFocused();
+    await menuButton.press("Enter");
+    const firstItem = page.getByRole("menuitem", { name: "Edit trip" });
+    await expect(firstItem).toBeFocused();
+    await firstItem.press("Escape");
+    await expect(menuButton).toBeFocused();
+    await expect(page.getByRole("menu")).toHaveCount(0);
   });
 
   test("New trip stays in the header across all four panels and returns cleanly", async ({

@@ -3,8 +3,8 @@ import { cx } from "./cx";
 import styles from "./LuggageTag.module.css";
 
 export interface LuggageTagProps extends HTMLAttributes<HTMLDivElement> {
-  /** "card" is the hero tag (Home, Plan preview); "mini" is an upcoming-trip row (64px laptop, 58px phone). */
-  variant?: "card" | "mini";
+  /** "card" is the full hero tag; "compact" is its shorter phone form; "mini" is an upcoming-trip row. */
+  variant?: "card" | "compact" | "mini";
 }
 
 // The luggage tag (spec part 2 section 3): a paper card whose left corners are cut diagonally, with a punched hole on
@@ -12,7 +12,15 @@ export interface LuggageTagProps extends HTMLAttributes<HTMLDivElement> {
 // trip text inside it belongs to the screen.
 export function LuggageTag({ variant = "card", className, children, ...rest }: LuggageTagProps) {
   return (
-    <div className={cx(styles.wrap, variant === "mini" && styles.mini, className)} {...rest}>
+    <div
+      className={cx(
+        styles.wrap,
+        variant === "compact" && styles.compact,
+        variant === "mini" && styles.mini,
+        className,
+      )}
+      {...rest}
+    >
       <div className={styles.tag} data-luggage-tag={variant}>
         <span className={styles.hole} aria-hidden="true" data-luggage-hole />
         <div className={styles.content}>{children}</div>

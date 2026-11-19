@@ -110,6 +110,14 @@ describe("LuggageTag", () => {
     expect((container.firstChild as HTMLElement).className).toContain("mini");
   });
 
+  it("the compact variant keeps the full tag motif in a shorter phone form", () => {
+    const { container } = render(<LuggageTag variant="compact">Lisbon</LuggageTag>);
+    expect(container.querySelector("[data-luggage-tag]")?.getAttribute("data-luggage-tag")).toBe(
+      "compact",
+    );
+    expect((container.firstChild as HTMLElement).className).toContain("compact");
+  });
+
   it("keeps the spec notch, hole and padding, and shadows the wrapper so the shadow follows the notch", () => {
     const text = css("LuggageTag.module.css");
     for (const value of [
@@ -120,6 +128,8 @@ describe("LuggageTag", () => {
       "--pad: 16px 14px 16px 34px",
       "--pad: 28px 30px 28px 56px",
       "--pad: 14px 10px 14px 28px",
+      "--pad: 10px 12px 10px 30px",
+      "--pad: 10px 8px 10px 26px",
       "clip-path: polygon(",
       "filter: drop-shadow(",
       "box-shadow: 0 0 0 3px var(--tint)",

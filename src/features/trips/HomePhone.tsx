@@ -129,7 +129,12 @@ export function HomePhone({
         Trips
       </h1>
       <div className={styles.tagWrap}>
-        <LuggageTag role="region" aria-labelledby="home-trip-title" className={styles.tag}>
+        <LuggageTag
+          variant="compact"
+          role="region"
+          aria-labelledby="home-trip-title"
+          className={styles.tag}
+        >
           <div className={styles.tagRow}>
             <div className={styles.tagCopy}>
               <p className={styles.chip} data-on-now={dayBadge ? "" : undefined}>

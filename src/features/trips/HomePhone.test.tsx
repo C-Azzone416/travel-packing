@@ -167,6 +167,9 @@ describe("HomePhone", () => {
   it("draws the tag with its dates, nights and countdown, and the four pills", () => {
     setup();
     const tag = screen.getByRole("region", { name: /Lisbon/ });
+    expect(tag.querySelector("[data-luggage-tag]")?.getAttribute("data-luggage-tag")).toBe(
+      "compact",
+    );
     expect(within(tag).getByText(/NEXT TRIP · 14–24 Mar · 10 nights/)).toBeTruthy();
     expect(within(tag).getByText("12 days to go")).toBeTruthy();
     expect(within(tag).getAllByText("& Porto").length).toBeGreaterThan(0);
