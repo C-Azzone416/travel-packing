@@ -288,7 +288,7 @@ describe("the cube bar", () => {
       setup();
       await ready();
       const list = screen.getByRole("navigation", { name: "Cubes" }).querySelector("ul")!;
-      expect(list.scrollLeft).toBe(300 - (200 - 80) / 2);
+      await waitFor(() => expect(list.scrollLeft).toBe(300 - (200 - 80) / 2));
     } finally {
       offsets.mockRestore();
       client.mockRestore();
@@ -686,6 +686,7 @@ describe("one city's forecast at a time", () => {
     expect(screen.queryByRole("tablist", { name: "City" })).toBeNull();
     expect(screen.getByRole("list", { name: "Daily forecast for Lisbon" })).toBeTruthy();
     const forecast = screen.getByRole("region", { name: "Forecast" });
+    expect(document.getElementById("forecast")?.contains(forecast)).toBe(true);
     expect(forecast.getAttribute("data-forecast-state")).toBe("alert");
     expect(
       within(forecast).getByRole("link", { name: "Weather data by Open-Meteo.com" }),
@@ -803,11 +804,14 @@ describe("text zoom and the fixed-height layout", () => {
 
   it("marks the page zoomed while the root font size is larger than 16px, and clears it again", async () => {
     let notify: () => void = () => {};
+    const observeMock = vi.fn();
     globalThis.ResizeObserver = class {
       constructor(callback: () => void) {
         notify = callback;
       }
-      observe() {}
+      observe(target: Element) {
+        observeMock(target);
+      }
       disconnect() {}
       unobserve() {}
     } as unknown as typeof ResizeObserver;
@@ -817,6 +821,7 @@ describe("text zoom and the fixed-height layout", () => {
     );
     setup();
     await ready();
+    await waitFor(() => expect(observeMock).toHaveBeenCalledTimes(1));
     expect(document.querySelector("[data-zoomed]")).toBeNull();
     px = 32;
     act(() => notify());
@@ -830,11 +835,12 @@ describe("text zoom and the fixed-height layout", () => {
 });
 
 describe("the tools under the suitcase", () => {
-  it("keeps Edit trip, Save as a list, Edit stamp and Edit preferences reachable", async () => {
+  it("keeps Edit trip, Save as a list and Edit preferences reachable", async () => {
     setup();
     await ready();
-    for (const name of ["Edit trip", "Save as a list", "Edit stamp", "Edit preferences"])
+    for (const name of ["Edit trip", "Save as a list", "Edit preferences"])
       expect(screen.getByRole("button", { name }), name).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Edit stamp" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Change theme" })).toBeNull();
   });
 

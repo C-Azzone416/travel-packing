@@ -40,6 +40,35 @@ test.describe("pills and panels", DEVICE, () => {
     await expect(tag).toContainText("7 days");
   });
 
+  test("New trip stays in the header across all four panels and returns cleanly", async ({
+    page,
+  }) => {
+    await openHome(page, 402);
+    const create = page.locator("header.topbar").getByRole("link", { name: "New trip" });
+    for (const name of [/^Pack/, /^Weather/, /^Future/, /^Stamps/]) {
+      await pill(page, name).click();
+      await expect(create).toBeVisible();
+      await expect(create).toHaveAttribute("href", "/trips/new");
+    }
+
+    await pill(page, /^Weather/).click();
+    await create.click();
+    await expect(page).toHaveURL(/\/trips\/new$/);
+    await expect(page.getByRole("heading", { name: "Plan a trip", level: 1 })).toBeVisible();
+    await page.goBack();
+    await expect(page).toHaveURL(/\/?tab=weather$/);
+    await expect(pill(page, /^Weather/)).toHaveAttribute("aria-selected", "true");
+
+    await create.click();
+    await page.getByRole("link", { name: "Close and return to trips" }).click();
+    await expect(page).toHaveURL(/\/$/);
+    await expect(pill(page, /^Pack/)).toHaveAttribute("aria-selected", "true");
+
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.reload();
+    await expect(create).toBeHidden();
+  });
+
   test("Pack shows the count, the cubes and the one primary action", async ({ page }) => {
     await openHome(page);
     await expect(page.getByRole("heading", { name: /in the bag/ })).toHaveText(
@@ -225,6 +254,15 @@ for (const width of [195, 320, 390] as const) {
             expect(box.x + box.width).toBeLessThanOrEqual(width + 0.5);
           }
         }
+        const create = page.locator("header.topbar").getByRole("link", { name: "New trip" });
+        await expect(create).toBeVisible();
+        await expectWholeWords(
+          page.locator("header.topbar"),
+          `Home header at ${width}px, ${zoom}%`,
+        );
+        const createBox = (await create.boundingBox())!;
+        expect(createBox.x).toBeGreaterThanOrEqual(-0.5);
+        expect(createBox.x + createBox.width).toBeLessThanOrEqual(width + 0.5);
         await pill(page, /^Pack/).click();
         const go = page.getByRole("link", { name: /^Continue packing/ });
         await go.scrollIntoViewIfNeeded();

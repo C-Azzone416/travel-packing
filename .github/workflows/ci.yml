@@ -122,7 +122,7 @@ jobs:
 
       # Known-vulnerable runtime dependencies fail the build (#22). Dev-only tooling is Dependabot's job.
       - name: Dependency audit (production dependencies)
-        run: npm audit --omit=dev --audit-level=high
+        run: npm run check:audit
 
       # The deploy job installs the Vercel CLI from its own lockfile, and PR runs never reach the deploy job, so a lock this runner's npm
       # cannot install (#218 broke the first Preview deploy that way) is found here, on the same Node and npm the deploy job uses.
@@ -357,6 +357,16 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ matrix.browser }}-${{ steps.playwright.outputs.version }}
+
+      # GitHub's runner mirror list has repeatedly selected an EC2 mirror that stalls browser dependency downloads.
+      # Prefer Ubuntu's primary signed archive for this apt-only step, retaining the signed security endpoint as fallback.
+      - name: Use Ubuntu primary archive for Playwright dependencies
+        shell: bash
+        run: |
+          test -f /etc/apt/apt-mirrors.txt
+          printf '%s\tpriority:1\n%s\tpriority:2\n' 'https://archive.ubuntu.com/ubuntu/' 'https://security.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+          grep -Ex 'https://archive\.ubuntu\.com/ubuntu/[[:space:]]+priority:1' /etc/apt/apt-mirrors.txt
+          grep -Ex 'https://security\.ubuntu\.com/ubuntu/[[:space:]]+priority:2' /etc/apt/apt-mirrors.txt
 
       # The browser archive is cached, but WebKit's Ubuntu dependencies still come from the runner's apt mirror. That
       # mirror has repeatedly slowed to a few KiB/s until the 30-minute job limit (#252). Bound one retry here; the

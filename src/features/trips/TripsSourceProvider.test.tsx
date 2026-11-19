@@ -302,9 +302,9 @@ describe("TripsSourceProvider", () => {
       ],
       [
         "setStampLabels",
-        (s) => s.setStampLabels("t", "ABC", null),
+        (s) => s.setStampLabels("t", "ABC", null, [true, false]),
         () => actions.commands.setStampLabelsAction,
-        ["t", "ABC", null],
+        ["t", "ABC", null, [true, false]],
       ],
       [
         "setStops",

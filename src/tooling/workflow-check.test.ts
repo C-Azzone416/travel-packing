@@ -896,11 +896,7 @@ describe("checkCiWorkflow", () => {
       inJob("checks", /\n {8}with:\n {10}fetch-depth: 0[^\n]*/, ""),
       /full history/,
     ],
-    [
-      "the audit weakened",
-      inJob("checks", "--audit-level=high", "--audit-level=critical"),
-      /dependency audit/,
-    ],
+    ["the audit gate removed", inJob("checks", "npm run check:audit", "true"), /dependency audit/],
     [
       "the locked Vercel CLI install dropped from the checks job",
       inJob("checks", "npm ci --prefix tools/vercel-cli --ignore-scripts", "true"),
@@ -1091,6 +1087,34 @@ describe("checkCiWorkflow", () => {
         "npx playwright install-deps",
       ),
       /dependency install needs one bounded timeout retry/,
+    ],
+    [
+      "the Ubuntu primary archive step is removed",
+      inJob(
+        "e2e",
+        "https://archive.ubuntu.com/ubuntu/",
+        "http://us-east-2.ec2.archive.ubuntu.com/ubuntu/",
+      ),
+      /prefer Ubuntu's primary signed archive/,
+    ],
+    [
+      "the Ubuntu security endpoint is removed",
+      inJob("e2e", " 'https://security.ubuntu.com/ubuntu/'", ""),
+      /prefer Ubuntu's primary signed archive/,
+    ],
+    [
+      "the Ubuntu security endpoint is given equal priority",
+      inJob("e2e", "priority:2", "priority:1"),
+      /prefer Ubuntu's primary signed archive/,
+    ],
+    [
+      "the Ubuntu primary archive is trusted without signature checks",
+      inJob(
+        "e2e",
+        "grep -Ex 'https://archive\\.ubuntu\\.com/ubuntu/[[:space:]]+priority:1' /etc/apt/apt-mirrors.txt",
+        "echo 'deb [trusted=yes] https://archive.ubuntu.com/ubuntu noble main'",
+      ),
+      /prefer Ubuntu's primary signed archive/,
     ],
     [
       "a cache shared by both browsers",

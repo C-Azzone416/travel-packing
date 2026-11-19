@@ -455,7 +455,6 @@ export function CubePanel({
     if (!scrollToId || scrolledId.current === scrollToId) return;
     if (!view.items.some((item) => item.id === scrollToId)) return;
     scrolledId.current = scrollToId;
-    if (!shown.some((item) => item.id === scrollToId)) return;
     listRef.current
       ?.querySelector(`[data-item-id="${scrollToId}"]`)
       ?.scrollIntoView?.({ block: "nearest" });

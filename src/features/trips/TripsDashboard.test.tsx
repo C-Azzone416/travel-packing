@@ -677,7 +677,7 @@ describe("the Home with no trip coming up (#409)", () => {
     expect(reads).not.toHaveBeenCalled();
     trips.resolve(emptyState());
     expect(await screen.findByRole("heading", { name: "Where to first?" })).toBeTruthy();
-    expect(reads).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(reads).toHaveBeenCalledTimes(1));
     expect(screen.queryByRole("link", { name: NUDGE })).toBeNull();
     gate.resolve(null);
     expect(await screen.findByRole("link", { name: NUDGE })).toBeTruthy();

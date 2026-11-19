@@ -233,11 +233,4 @@ describe("a sticker opens its details (#494)", () => {
       within(screen.getByRole("dialog")).getByText("Upcoming · inks when you get home"),
     ).toBeTruthy();
   });
-
-  it("is read only: the details offer no label editing", async () => {
-    const { user } = open();
-    await user.click(await screen.findByRole("button", { name: LISBON }));
-    expect(screen.queryByRole("button", { name: /Edit stamp label/ })).toBeNull();
-    expect(within(screen.getByRole("dialog")).getAllByRole("link")).toHaveLength(2);
-  });
 });

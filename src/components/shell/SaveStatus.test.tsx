@@ -201,6 +201,73 @@ describe("SaveStatusProvider", () => {
     expect(chipText()).toContain("Saved");
   });
 
+  it("discard drops only the failed write it is given, and never one in flight", async () => {
+    setup();
+    const failed = vi.fn().mockRejectedValue(new Error("a"));
+    await act(async () => {
+      await api.track(failed).catch(() => {});
+    });
+    // Another write is not the failed one: nothing changes.
+    act(() => api.discard(() => Promise.resolve()));
+    expect(chipText()).not.toContain("Saved");
+    act(() => api.discard(failed));
+    expect(chipText()).not.toContain("Not saved");
+    await act(async () => {
+      api.retry();
+    });
+    expect(failed).toHaveBeenCalledOnce();
+
+    const again = vi.fn().mockRejectedValue(new Error("b"));
+    await act(async () => {
+      await api.track(again).catch(() => {});
+    });
+    const slow = deferred();
+    act(() => {
+      void api.track(() => slow.promise);
+    });
+    act(() => api.discard(again));
+    await act(async () => {
+      slow.resolve("x");
+    });
+    expect(chipText()).toContain("Saved");
+    await act(async () => {
+      api.retry();
+    });
+    expect(again).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the failed write retryable when discard runs during a held Retry", async () => {
+    setup();
+    const held = deferred();
+    const write = vi
+      .fn<() => Promise<string>>()
+      .mockRejectedValueOnce(new Error("first failure"))
+      .mockImplementationOnce(() => held.promise)
+      .mockResolvedValueOnce("saved");
+    await act(async () => {
+      await api.track(write).catch(() => {});
+    });
+
+    act(() => api.retry());
+    expect(write).toHaveBeenCalledTimes(2);
+    expect(api.pending).toBe(true);
+    act(() => api.discard(write));
+    expect(api.pending).toBe(true);
+    expect(api.status).toBe("error");
+    expect(chipText()).toContain("Not saved");
+
+    await act(async () => {
+      held.reject(new Error("retry failure"));
+    });
+    expect(api.pending).toBe(false);
+    expect(api.status).toBe("error");
+    await act(async () => {
+      api.retry();
+    });
+    expect(write).toHaveBeenCalledTimes(3);
+    expect(api.status).toBe("saved");
+  });
+
   it("stays in Error when the retry fails again, and keeps retrying the same write", async () => {
     setup();
     const write = vi.fn().mockRejectedValue(new Error("still down"));

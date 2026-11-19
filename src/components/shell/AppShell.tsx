@@ -13,6 +13,7 @@ import { NavIcon } from "./NavIcon";
 import { PreviewBanner } from "./PreviewBanner";
 import { RouteFocus } from "./RouteFocus";
 import { ConnectedSaveChip, SaveStatusProvider } from "./SaveStatus";
+import { HomeNewTripLink } from "./HomeNewTripLink";
 
 export interface AppShellProps {
   children: ReactNode;
@@ -45,6 +46,7 @@ export function AppShell({ children, signOut, email, setupActions }: AppShellPro
                     </Link>
                     <Nav signOut={signOut} email={email} />
                     <div className="topbar-end">
+                      <HomeNewTripLink />
                       <ConnectedSaveChip />
                     </div>
                   </div>

@@ -179,7 +179,9 @@ export function PackingPhone({
           </ul>
         </nav>
 
-        {forecast}
+        <div id="forecast" className={styles.forecastAnchor}>
+          {forecast}
+        </div>
 
         <FilterBar
           view={current}

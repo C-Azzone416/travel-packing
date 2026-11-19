@@ -3,7 +3,7 @@
 // this list drift apart (a check added to one but not the other).
 
 export interface VerifyStep {
-  /** Matches the id `ciChecks` derives from ci.yml: the npm script name, `audit`, `gitleaks` or `actionlint`. */
+  /** Matches the id `ciChecks` derives from ci.yml: an npm script name, `gitleaks` or `actionlint`. */
   id: string;
   label: string;
   command: string[];
@@ -48,9 +48,9 @@ export const VERIFY_STEPS: readonly VerifyStep[] = [
     quick: true,
   },
   {
-    id: "audit",
+    id: "check:audit",
     label: "Dependency audit",
-    command: ["npm", "audit", "--omit=dev", "--audit-level=high"],
+    command: npm("check:audit"),
     quick: true,
   },
   { id: "lint", label: "Lint", command: npm("lint"), quick: true },
@@ -243,7 +243,7 @@ export function formatSummary(
 }
 
 /**
- * The checks a `ci` job runs, in order, as ids: gitleaks, actionlint, `npm run <script>` and `npm audit`. Comment lines
+ * The checks a `ci` job runs, in order, as ids: gitleaks, actionlint and `npm run <script>`. Comment lines
  * are ignored, and so are steps that only install, decide the mode, summarise or upload.
  */
 export function ciChecks(ci: string): string[] {
@@ -256,8 +256,7 @@ export function ciChecks(ci: string): string[] {
       .join("\n");
     if (/uses:\s*gitleaks\/gitleaks-action@/.test(code)) ids.push("gitleaks");
     if (/^\s*"?\$RUNNER_TEMP\/actionlint"?(\s|$)/m.test(code)) ids.push("actionlint");
-    for (const match of code.matchAll(/npm (?:run ([\w:.-]+)|(audit)\b)/g))
-      ids.push(match[1] ?? "audit");
+    for (const match of code.matchAll(/npm run ([\w:.-]+)/g)) ids.push(match[1]);
   }
   return ids;
 }
@@ -287,11 +286,7 @@ export function verifyParityProblems(
   }
   for (const step of steps) {
     const expected =
-      step.id === "audit"
-        ? ["npm", "audit"]
-        : step.command[0] === "npm"
-          ? ["npm", "run", step.id]
-          : null;
+      step.id === "check:audit" || step.command[0] === "npm" ? ["npm", "run", step.id] : null;
     if (expected && !expected.every((word, i) => step.command[i] === word)) {
       problems.push(`the verify step "${step.id}" does not run the command its id names`);
     }
