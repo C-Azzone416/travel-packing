@@ -1,9 +1,1 @@
-[
-  {
-    "id": "GHSA-fc5q-39xc-vjpf",
-    "packages": ["picomatch"],
-    "expires": "2026-12-18",
-    "issue": 536,
-    "reason": "No fix upstream; reached only via vitest/vite (test runner, build tool) pulled in by better-auth."
-  }
-]
+[]

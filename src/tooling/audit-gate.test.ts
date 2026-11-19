@@ -219,7 +219,7 @@ describe("fail-closed report integrity", () => {
     });
   });
 
-  it("makes the script fail when npm exits 1 with an error report", () => {
+  it("makes the script fail on errors and the formerly allowlisted advisory", () => {
     const dir = mkdtempSync(join(tmpdir(), "audit-gate-"));
     const npm = join(dir, "npm");
     writeFileSync(
@@ -241,6 +241,7 @@ describe("fail-closed report integrity", () => {
     writeFileSync(npm, `#!/bin/sh\nprintf '%s' '${valid}'\nexit 1\n`);
     const validRun = runScript();
     rmSync(dir, { recursive: true, force: true });
-    expect(validRun.status).toBe(0);
+    expect(validRun.status).toBe(1);
+    expect(validRun.stderr).toMatch(/GHSA-fc5q-39xc-vjpf/i);
   });
 });
