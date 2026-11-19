@@ -878,15 +878,16 @@ export function checkCiWorkflow(workflow: string): string[] {
     "shell: bash",
     "run: |",
     "test -f /etc/apt/apt-mirrors.txt",
-    "printf '%s\\n' 'https://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt >/dev/null",
+    "printf '%s\\n' 'https://archive.ubuntu.com/ubuntu/' 'https://security.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt >/dev/null",
     "grep -Fx 'https://archive.ubuntu.com/ubuntu/' /etc/apt/apt-mirrors.txt",
+    "grep -Fx 'https://security.ubuntu.com/ubuntu/' /etc/apt/apt-mirrors.txt",
   ];
   if (
     JSON.stringify(stepLines(e2e, "Use Ubuntu primary archive for Playwright dependencies")) !==
     JSON.stringify(primaryArchiveStep)
   )
     problems.push(
-      "the e2e jobs must use Ubuntu's primary signed archive for Playwright dependencies",
+      "the e2e jobs must use Ubuntu's primary signed archive and security endpoint for Playwright dependencies",
     );
   if (!/key:\s*playwright-[^\n]*matrix\.browser/.test(e2e))
     problems.push("the Playwright cache key must include the browser");
