@@ -166,6 +166,8 @@ describe("HomeLaptop", () => {
 
   it("shows the tag: eyebrow with dates, name and subtitle, countdown and facts", () => {
     setup();
+    const tag = screen.getByRole("region", { name: /Lisbon/ });
+    expect(tag.querySelector("[data-luggage-tag]")?.getAttribute("data-luggage-tag")).toBe("card");
     expect(screen.getByText(/NEXT TRIP/).textContent).toBe("NEXT TRIP · Sun 14 – Wed 24 Mar");
     expect(screen.getByText("12 days to go", { selector: ".sr-only" })).toBeTruthy();
     expect(screen.getByText("flight · 10 nights · 2 cities")).toBeTruthy();

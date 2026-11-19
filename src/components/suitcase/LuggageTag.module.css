@@ -15,6 +15,13 @@
   --hole-left: 9px; /* centre 14px from the left */
   --pad: 0 14px 0 32px;
 }
+.compact {
+  --notch: 16px;
+  --radius: 14px;
+  --hole: 10px;
+  --hole-left: 9px; /* centre 14px from the left */
+  --pad: 10px 12px 10px 30px;
+}
 .tag {
   position: relative;
   box-sizing: border-box;
@@ -67,6 +74,9 @@
     --hole: 10px;
     --hole-left: 11px;
     --pad: 14px 10px 14px 28px;
+  }
+  .wrap.compact {
+    --pad: 10px 8px 10px 26px;
   }
 }
 @media (max-width: 359px) {
