@@ -873,6 +873,21 @@ export function checkCiWorkflow(workflow: string): string[] {
     !/Playwright dependency install timed out/.test(e2e)
   )
     problems.push("the Playwright dependency install needs one bounded timeout retry");
+  const primaryArchiveStep = [
+    "- name: Use Ubuntu primary archive for Playwright dependencies",
+    "shell: bash",
+    "run: |",
+    "test -f /etc/apt/apt-mirrors.txt",
+    "printf '%s\\n' 'https://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt >/dev/null",
+    "grep -Fx 'https://archive.ubuntu.com/ubuntu/' /etc/apt/apt-mirrors.txt",
+  ];
+  if (
+    JSON.stringify(stepLines(e2e, "Use Ubuntu primary archive for Playwright dependencies")) !==
+    JSON.stringify(primaryArchiveStep)
+  )
+    problems.push(
+      "the e2e jobs must use Ubuntu's primary signed archive for Playwright dependencies",
+    );
   if (!/key:\s*playwright-[^\n]*matrix\.browser/.test(e2e))
     problems.push("the Playwright cache key must include the browser");
   if (!/fail-fast:\s*false/.test(e2e))
