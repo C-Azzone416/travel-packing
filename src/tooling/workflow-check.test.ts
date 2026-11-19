@@ -1095,21 +1095,26 @@ describe("checkCiWorkflow", () => {
         "https://archive.ubuntu.com/ubuntu/",
         "http://us-east-2.ec2.archive.ubuntu.com/ubuntu/",
       ),
-      /primary signed archive and security endpoint/,
+      /prefer Ubuntu's primary signed archive/,
     ],
     [
       "the Ubuntu security endpoint is removed",
       inJob("e2e", " 'https://security.ubuntu.com/ubuntu/'", ""),
-      /primary signed archive and security endpoint/,
+      /prefer Ubuntu's primary signed archive/,
+    ],
+    [
+      "the Ubuntu security endpoint is given equal priority",
+      inJob("e2e", "priority:2", "priority:1"),
+      /prefer Ubuntu's primary signed archive/,
     ],
     [
       "the Ubuntu primary archive is trusted without signature checks",
       inJob(
         "e2e",
-        "grep -Fx 'https://archive.ubuntu.com/ubuntu/' /etc/apt/apt-mirrors.txt",
+        "grep -Ex 'https://archive\\.ubuntu\\.com/ubuntu/[[:space:]]+priority:1' /etc/apt/apt-mirrors.txt",
         "echo 'deb [trusted=yes] https://archive.ubuntu.com/ubuntu noble main'",
       ),
-      /primary signed archive and security endpoint/,
+      /prefer Ubuntu's primary signed archive/,
     ],
     [
       "a cache shared by both browsers",

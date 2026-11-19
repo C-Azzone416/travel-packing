@@ -364,9 +364,9 @@ jobs:
         shell: bash
         run: |
           test -f /etc/apt/apt-mirrors.txt
-          printf '%s\n' 'https://archive.ubuntu.com/ubuntu/' 'https://security.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
-          grep -Fx 'https://archive.ubuntu.com/ubuntu/' /etc/apt/apt-mirrors.txt
-          grep -Fx 'https://security.ubuntu.com/ubuntu/' /etc/apt/apt-mirrors.txt
+          printf '%s\tpriority:1\n%s\tpriority:2\n' 'https://archive.ubuntu.com/ubuntu/' 'https://security.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+          grep -Ex 'https://archive\.ubuntu\.com/ubuntu/[[:space:]]+priority:1' /etc/apt/apt-mirrors.txt
+          grep -Ex 'https://security\.ubuntu\.com/ubuntu/[[:space:]]+priority:2' /etc/apt/apt-mirrors.txt
 
       # The browser archive is cached, but WebKit's Ubuntu dependencies still come from the runner's apt mirror. That
       # mirror has repeatedly slowed to a few KiB/s until the 30-minute job limit (#252). Bound one retry here; the
