@@ -1089,6 +1089,34 @@ describe("checkCiWorkflow", () => {
       /dependency install needs one bounded timeout retry/,
     ],
     [
+      "the Ubuntu primary archive step is removed",
+      inJob(
+        "e2e",
+        "https://archive.ubuntu.com/ubuntu/",
+        "http://us-east-2.ec2.archive.ubuntu.com/ubuntu/",
+      ),
+      /prefer Ubuntu's primary signed archive/,
+    ],
+    [
+      "the Ubuntu security endpoint is removed",
+      inJob("e2e", " 'https://security.ubuntu.com/ubuntu/'", ""),
+      /prefer Ubuntu's primary signed archive/,
+    ],
+    [
+      "the Ubuntu security endpoint is given equal priority",
+      inJob("e2e", "priority:2", "priority:1"),
+      /prefer Ubuntu's primary signed archive/,
+    ],
+    [
+      "the Ubuntu primary archive is trusted without signature checks",
+      inJob(
+        "e2e",
+        "grep -Ex 'https://archive\\.ubuntu\\.com/ubuntu/[[:space:]]+priority:1' /etc/apt/apt-mirrors.txt",
+        "echo 'deb [trusted=yes] https://archive.ubuntu.com/ubuntu noble main'",
+      ),
+      /prefer Ubuntu's primary signed archive/,
+    ],
+    [
       "a cache shared by both browsers",
       inJob("e2e", "-${{ matrix.browser }}-", "-"),
       /cache key must include the browser/,

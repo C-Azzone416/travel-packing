@@ -358,6 +358,16 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ matrix.browser }}-${{ steps.playwright.outputs.version }}
 
+      # GitHub's runner mirror list has repeatedly selected an EC2 mirror that stalls browser dependency downloads.
+      # Prefer Ubuntu's primary signed archive for this apt-only step, retaining the signed security endpoint as fallback.
+      - name: Use Ubuntu primary archive for Playwright dependencies
+        shell: bash
+        run: |
+          test -f /etc/apt/apt-mirrors.txt
+          printf '%s\tpriority:1\n%s\tpriority:2\n' 'https://archive.ubuntu.com/ubuntu/' 'https://security.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+          grep -Ex 'https://archive\.ubuntu\.com/ubuntu/[[:space:]]+priority:1' /etc/apt/apt-mirrors.txt
+          grep -Ex 'https://security\.ubuntu\.com/ubuntu/[[:space:]]+priority:2' /etc/apt/apt-mirrors.txt
+
       # The browser archive is cached, but WebKit's Ubuntu dependencies still come from the runner's apt mirror. That
       # mirror has repeatedly slowed to a few KiB/s until the 30-minute job limit (#252). Bound one retry here; the
       # second apt run reuses packages the first attempt already downloaded instead of making a whole job rerun.
