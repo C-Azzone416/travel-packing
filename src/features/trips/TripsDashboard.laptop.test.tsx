@@ -42,7 +42,7 @@ afterEach(() => {
 const memory = () => createMemoryTripsSource(sampleLifecycleState(), { now: () => 5_000 });
 
 function setup(source: TripsSource = memory(), maps?: HomeMaps) {
-  renderInApp(<TripsDashboard source={source} getToday={TODAY} maps={maps} />);
+  return renderInApp(<TripsDashboard source={source} getToday={TODAY} maps={maps} />);
 }
 
 describe("TripsDashboard at laptop width", () => {
@@ -85,7 +85,42 @@ describe("TripsDashboard at laptop width", () => {
     expect(screen.queryByRole("img", { name: "Old map" })).toBeNull();
   });
 
-  it("starts a trip that never had an origin from the Home the server drew it with (#497), and says so when there is none", async () => {
+  it("shows the origin hint only after the one-time Home read confirms Home is unset", async () => {
+    laptop(true);
+    const home = {
+      location: {
+        id: "chicago",
+        city: "Chicago",
+        region: "Illinois",
+        country: "United States",
+        countryCode: "US",
+        label: "Chicago, Illinois, United States",
+      },
+      airportCode: "ORD",
+    };
+    const setRead = vi.fn(async () => home);
+    const first = setup({ ...memory(), homeCity: setRead });
+    await screen.findByRole("heading", { level: 2, name: "San Diego" });
+    await waitFor(() => expect(setRead).toHaveBeenCalledTimes(1));
+    expect(screen.queryByTestId("origin-nudge")).toBeNull();
+    first.unmount();
+
+    const unsetRead = vi.fn(async () => null);
+    setup({ ...memory(), homeCity: unsetRead });
+    expect(await screen.findByRole("link", { name: "Set your Home city" })).toBeTruthy();
+    expect(unsetRead).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not guess that Home is unset when the one-time read fails", async () => {
+    laptop(true);
+    const homeCity = vi.fn(() => Promise.reject(new Error("down")));
+    setup({ ...memory(), homeCity });
+    await screen.findByRole("heading", { level: 2, name: "San Diego" });
+    await waitFor(() => expect(homeCity).toHaveBeenCalledTimes(1));
+    expect(screen.queryByTestId("origin-nudge")).toBeNull();
+  });
+
+  it("starts a trip that never had an origin from the Home the server drew it with (#497), without another Home read", async () => {
     laptop(true);
     const trip = sampleLifecycleState().trips[0];
     expect(trip.origin ?? null).toBeNull();
@@ -106,26 +141,30 @@ describe("TripsDashboard at laptop width", () => {
     const drawn: HomeMaps = {
       [trip.id]: { signature: withHome, node: <svg role="img" aria-label="Drawn map" />, home },
     };
+    const homeCity = vi.fn(async () => home);
     const { unmount } = renderInApp(
-      <TripsDashboard source={memory()} getToday={TODAY} maps={drawn} />,
+      <TripsDashboard source={{ ...memory(), homeCity }} getToday={TODAY} maps={drawn} />,
     );
     expect(await screen.findByRole("img", { name: "Drawn map" })).toBeTruthy();
     expect(screen.getByText(/^ORD → /)).toBeTruthy();
     expect(screen.queryByTestId("origin-nudge")).toBeNull();
+    expect(homeCity).not.toHaveBeenCalled();
     unmount();
-    // No Home and no origin: the destination-only map stays, with a way to set a start.
+    // Home is known unset and there is no origin: the destination-only map stays, with a way to set a start.
     const noHome = routeSignature(tripRoutePoints(trip), trip.travelMode);
+    const unsetRead = vi.fn(async () => null);
     renderInApp(
       <TripsDashboard
-        source={memory()}
+        source={{ ...memory(), homeCity: unsetRead }}
         getToday={TODAY}
         maps={{ [trip.id]: { signature: noHome, node: <svg role="img" aria-label="Drawn map" /> } }}
       />,
     );
     expect(await screen.findByRole("img", { name: "Drawn map" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Set your Home city" }).getAttribute("href")).toBe(
-      "/settings",
-    );
+    expect(
+      (await screen.findByRole("link", { name: "Set your Home city" })).getAttribute("href"),
+    ).toBe("/settings");
+    expect(unsetRead).toHaveBeenCalledTimes(1);
   });
 
   it("opens Past & archive from the trip menu without a reload", async () => {

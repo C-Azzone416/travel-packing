@@ -145,6 +145,17 @@ const later = (id: string, name: string, start: string) =>
   trip({ id, name, start, end: start, stops: [stop(name)] });
 
 describe("HomePhone", () => {
+  it("shows the Settings hint when Home is unset, and leaves it out once Home is set", () => {
+    const first = setup({ needsOrigin: true });
+    expect(screen.getByRole("link", { name: "Set your Home city" }).getAttribute("href")).toBe(
+      "/settings",
+    );
+    first.unmount();
+
+    setup({ needsOrigin: false });
+    expect(screen.queryByRole("link", { name: "Set your Home city" })).toBeNull();
+  });
+
   it("says '1 night' for a one-night trip and 'day trip' with a single date for a day trip (#412)", () => {
     const night = trip({
       start: "2027-03-14",
