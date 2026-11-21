@@ -41,7 +41,8 @@
     "check:client-bundle": "tsx scripts/check-client-bundle.ts",
     "check:deploy-env": "tsx scripts/check-deploy-env.ts",
     "check:migration-target": "tsx scripts/check-migration-target.ts",
-    "smoke": "tsx scripts/smoke-test.ts"
+    "smoke": "tsx scripts/smoke-test.ts",
+    "icons:build": "tsx scripts/build-icons.ts"
   },
   "dependencies": {
     "@masra91/framebriar": "0.4.1",
