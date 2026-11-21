@@ -186,7 +186,9 @@ export function PackingLaptop({
         onNotReady={onNotReady}
         readyBusy={readyBusy}
       />
-      {forecast}
+      <div id="forecast" className={styles.forecastAnchor}>
+        {forecast}
+      </div>
       <Suitcase interior="dark" className={styles.suitcase} ribbon={<PackedRibbon state={state} />}>
         {state === "packed" && bannerOpen ? (
           <PackedBanner

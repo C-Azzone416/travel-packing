@@ -124,7 +124,7 @@ function CityRows({
                 </ul>
                 {row.more > 0 ? (
                   <p className={styles.more}>
-                    <Link href={`/trips/${tripId}`}>+{row.more} more days</Link>
+                    <Link href={`/trips/${tripId}#forecast`}>+{row.more} more days</Link>
                   </p>
                 ) : null}
               </div>

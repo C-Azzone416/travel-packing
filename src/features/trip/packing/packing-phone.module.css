@@ -67,6 +67,9 @@
 }
 
 /* ---- Header ---- */
+.forecastAnchor {
+  min-width: 0;
+}
 .head {
   display: flex;
   flex-wrap: wrap;
