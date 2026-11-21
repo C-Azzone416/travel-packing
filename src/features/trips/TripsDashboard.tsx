@@ -148,23 +148,24 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
     // weatherKey stands for the hero and its stops: a changed route is a new question for the weather service.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [source, weatherKey]);
-  // Whether the account has a home city, for the first-run nudge. It is a hint: it is asked only after the trips have loaded
+  // Whether the account has a home city, for the first-run and missing-origin nudges. It is asked only after the trips have loaded
   // (server actions queue one after another, so it must never stand in front of the list) and only when the Home opens
-  // with no trip to show, once (not when the trips run out later, so no read lands in the middle of an archive or remove).
+  // with no trip to show or a trip without an origin/Home-map fallback, once (not when trips run out later).
   // Unknown until answered, and a failed or missing answer stays unknown: the nudge never guesses.
   const [homeCityUnset, setHomeCityUnset] = useState(false);
   const homeCityAsked = useRef(false);
   const loaded = load.phase === "ready";
+  const needsHomeCityRead = heroTrip === null || (!heroTrip.origin && !maps?.[heroTrip.id]?.home);
   useEffect(() => {
     if (!loaded || homeCityAsked.current) return;
     // Decided once, on the first loaded Home: trips running out later (an archive, a remove) never start a read.
     homeCityAsked.current = true;
-    if (heroId !== null || !source.homeCity) return;
+    if (!needsHomeCityRead || !source.homeCity) return;
     source
       .homeCity()
       .then((home) => setHomeCityUnset(home === null))
       .catch(() => undefined);
-  }, [loaded, heroId, source]);
+  }, [loaded, needsHomeCityRead, source]);
   const weather: HeroWeather =
     !weatherKey || !source.weather
       ? { phase: "none" }
@@ -472,7 +473,7 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
           {hero && shown && laptop ? (
             <HomeLaptop
               trip={shown}
-              needsOrigin={!shown.origin}
+              needsOrigin={!shown.origin && homeCityUnset}
               later={departures.slice(1)}
               today={today}
               weather={weather}
@@ -487,7 +488,7 @@ export function TripsDashboard({ source, getToday = localToday, maps }: TripsDas
           ) : hero && shown ? (
             <HomePhone
               trip={shown}
-              needsOrigin={!shown.origin}
+              needsOrigin={!shown.origin && homeCityUnset}
               later={departures.slice(1)}
               state={state}
               today={today}

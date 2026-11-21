@@ -201,7 +201,7 @@ describe("loading and errors", () => {
     expect(user).toBeTruthy();
     // The sample trips are past on the real date, so there is no next trip and the returning Home shows.
     expect(await screen.findByRole("heading", { name: "Trips", level: 1 })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Where to next?" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Where to next?" })).toBeTruthy();
   });
 });
 
@@ -660,10 +660,13 @@ describe("the Home with no trip coming up (#409)", () => {
     const reads = vi.fn(() => gate.promise);
     const source = { ...sourceWith(sampleLifecycleState(), null), homeCity: reads };
     renderInApp(<TripsDashboard source={source} getToday={TODAY} />);
-    // The trips render while the read is still pending; with a trip to show it is not even asked.
+    // The trip renders while the missing-origin check is still pending.
     expect(await screen.findByRole("heading", { name: "San Diego" })).toBeTruthy();
-    expect(reads).not.toHaveBeenCalled();
+    await waitFor(() => expect(reads).toHaveBeenCalledTimes(1));
+    expect(screen.queryByTestId("origin-nudge")).toBeNull();
     gate.resolve(null);
+    expect(await screen.findByTestId("origin-nudge")).toBeTruthy();
+    expect(reads).toHaveBeenCalledTimes(1);
   });
 
   it("asks for the home city only after the trips loaded, and shows the list-first Home meanwhile", async () => {
@@ -685,7 +688,11 @@ describe("the Home with no trip coming up (#409)", () => {
 
   it("does not read the home city when the trips run out after the Home opened with a trip", async () => {
     const reads = vi.fn(async () => null);
-    const source = { ...sourceWith(sampleLifecycleState(), null), homeCity: reads };
+    const initial = sampleLifecycleState();
+    initial.trips = initial.trips.map((trip) =>
+      trip.id === "san-diego" ? { ...trip, origin: SEATTLE } : trip,
+    );
+    const source = { ...sourceWith(initial, null), homeCity: reads };
     const { user } = (() => ({ user: userEvent.setup() }))();
     renderInApp(<TripsDashboard source={source} getToday={TODAY} />);
     await screen.findByRole("heading", { name: "San Diego" });
