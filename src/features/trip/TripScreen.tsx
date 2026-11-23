@@ -972,18 +972,11 @@ export function TripScreen({
           staples={editing.staples}
           saving={submitting}
           onClose={close}
-          onSave={(edit, expected) =>
-            void act(() => source.editItem(tripId, editing.item.id, edit, expected), {
-              modal: true,
-              after: close,
-            })
-          }
+          onSave={(edit, expected) => source.editItem(tripId, editing.item.id, edit, expected)}
           onRemove={(scope, expected) =>
-            void act(() => source.removeItem(tripId, editing.item.id, scope, expected), {
-              modal: true,
-              after: close,
-            })
+            source.removeItem(tripId, editing.item.id, scope, expected)
           }
+          onWrite={(write, retryable, after) => void act(write, { retryable, after })}
         />
       ) : null}
       {dialog?.kind === "save-list" ? (
