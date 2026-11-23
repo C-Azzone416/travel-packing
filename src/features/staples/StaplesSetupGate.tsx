@@ -58,6 +58,8 @@ export function StaplesSetupGate({
   const [saveFailure, setSaveFailure] = useState<"retry" | "conflict" | "reload" | null>(null);
   const [reviewKey, setReviewKey] = useState(0);
   const flight = useRef(false);
+  // Once read, this generation changes only through explicit review or mutation.
+  const acceptedRead = useRef(false);
   const intended = useRef<{ staples: Staple[]; baseline: StaplesSetupBaseline } | null>(null);
 
   async function save(staples: Staple[], setup: ReviewedSetup) {
@@ -120,10 +122,13 @@ export function StaplesSetupGate({
       .get()
       .then(unwrap)
       .then((setup) => {
-        if (!cancelled && !intended.current) setLoad({ phase: "ready", setup });
+        if (!cancelled && !acceptedRead.current) {
+          acceptedRead.current = true;
+          setLoad({ phase: "ready", setup });
+        }
       })
       .catch(() => {
-        if (!cancelled && !intended.current) setLoad({ phase: "error" });
+        if (!cancelled && !acceptedRead.current) setLoad({ phase: "error" });
       });
     return () => {
       cancelled = true;
