@@ -111,6 +111,7 @@ describe("favicon generator", () => {
       expect(dib.readInt32LE(4)).toBe(size);
       expect(dib.readInt32LE(8)).toBe(size * 2);
       expect(dib.readUInt16LE(14)).toBe(32);
+      expect(dib.length).toBe(40 + size * size * 4 + Math.ceil(size / 32) * 4 * size);
       expect(dib.subarray(40 + size * size * 4).every((byte) => byte === 0)).toBe(true);
       expect(maxChannelDelta(raw, committed[index].raw)).toBe(0);
     });
