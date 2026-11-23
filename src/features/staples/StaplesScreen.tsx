@@ -33,6 +33,12 @@ import styles from "./Staples.module.css";
 
 type Load = { phase: "loading" } | { phase: "error" } | { phase: "ready"; staples: Staple[] };
 
+type Operation = {
+  phase: "pending" | "failed" | "conflict" | "loading" | "load-failed";
+  retired: boolean;
+  retry: () => void;
+  write?: () => Promise<Staple[]>;
+};
 const NAME_MAX = 50;
 
 export function StaplesScreen({
@@ -45,7 +51,7 @@ export function StaplesScreen({
   removeStaple?: (id: string, expected: StapleRevision) => Promise<Staple[]>;
 } = {}) {
   const source = useTripsSource();
-  const { track } = useSaveStatus();
+  const { track, discard } = useSaveStatus();
   const toast = useToast();
   const [load, setLoad] = useState<Load>({ phase: "loading" });
   const [reloads, setReloads] = useState(0);
@@ -61,9 +67,9 @@ export function StaplesScreen({
     null | { kind: "name" } | { kind: "duplicate"; id: string }
   >(null);
   const laptop = useMediaQuery(LAPTOP_QUERY);
-  // The newest value of each staple being edited, and the save chain per staple (one request at a time, last value wins).
-  const latest = useRef<Record<string, Staple>>({});
-  const chains = useRef<Record<string, Promise<void>>>({});
+  const operations = useRef<Record<string, Operation>>({});
+  const [, refresh] = useState(0);
+  const changed = () => refresh((value) => value + 1);
   const rowButtons = useRef<Record<string, HTMLButtonElement | null>>({});
 
   useEffect(() => {
@@ -84,7 +90,6 @@ export function StaplesScreen({
   }, [source, track, reloads]);
 
   const clearDraft = useCallback((id: string) => {
-    delete latest.current[id];
     setDrafts((current) => {
       const { [id]: _gone, ...rest } = current;
       void _gone;
@@ -92,67 +97,124 @@ export function StaplesScreen({
     });
   }, []);
 
-  // Changes save as they are made. The editor shows the new value at once; the list itself changes only when the server
-  // confirms. A failure puts the staple back to what is stored, and the save chip shows Error.
-  const commit = useCallback(
-    (next: Staple) => {
-      const expected = next.revision && Object.freeze({ ...next.revision });
-      latest.current[next.id] = next;
-      setDrafts((current) => ({ ...current, [next.id]: next }));
-      const previous = chains.current[next.id] ?? Promise.resolve();
-      chains.current[next.id] = previous.then(async () => {
-        if (latest.current[next.id] !== next) return; // a newer change is queued behind this one
-        await track(
-          () =>
-            expected
-              ? source.upsertStaple(next, expected)
-              : Promise.reject(new Error("INVALID_INPUT")),
-          (staples) => {
-            setLoad({ phase: "ready", staples });
-            if (latest.current[next.id] === next) clearDraft(next.id);
-          },
-        ).catch(() => {
-          if (latest.current[next.id] === next) clearDraft(next.id);
-        });
-      });
-    },
-    [clearDraft, source, track],
-  );
-
-  // Remove goes on the same per-staple chain as the saves, so it cannot overtake an upsert still in flight and bring the
-  // staple back; saves still queued behind it are dropped.
-  const remove = useCallback(
-    (staple: Staple) => {
-      const expected = staple.revision && Object.freeze({ ...staple.revision });
-      delete latest.current[staple.id];
-      const previous = chains.current[staple.id] ?? Promise.resolve();
-      chains.current[staple.id] = previous.then(async () => {
-        await track(
-          () =>
-            expected
-              ? removeStaple(staple.id, expected)
-              : Promise.reject(new Error("INVALID_INPUT")),
-          (staples) => {
-            clearDraft(staple.id);
-            setLoad({ phase: "ready", staples });
-            setOpenId(null);
-            setAnnouncement(`${staple.name} removed from future trips.`);
-            toast.show(`${staple.name} removed from future trips.`);
-          },
-        ).catch(() => clearDraft(staple.id));
-      });
-    },
-    [clearDraft, removeStaple, toast, track],
-  );
+  // Advance only this target's confirmed baseline; unrelated local operations keep their own intent.
+  const accept = (id: string, rows: Staple[]) =>
+    setLoad((current) => {
+      if (current.phase !== "ready") return current;
+      const row = rows.find((entry) => entry.id === id);
+      const staples = current.staples.flatMap((entry) =>
+        entry.id === id ? (row ? [row] : []) : [entry],
+      );
+      if (row && !staples.some((entry) => entry.id === id)) staples.push(row);
+      return { phase: "ready", staples };
+    });
+  const begin = (intent: Staple, expected: StapleRevision | null | undefined, removing = false) => {
+    if (operations.current[intent.id]) return;
+    const next = Object.freeze({
+      ...intent,
+      revision: intent.revision && Object.freeze({ ...intent.revision }),
+    });
+    const token = expected && Object.freeze({ ...expected });
+    setDrafts((current) => ({ ...current, [next.id]: next }));
+    const op: Operation = { phase: "failed", retired: false, retry: () => {} };
+    let flight: Promise<Staple[]> | undefined;
+    const write = (): Promise<Staple[]> => {
+      if (op.retired || op.phase === "conflict") return Promise.reject(new Error("STALE"));
+      if (flight) return flight;
+      op.phase = "pending";
+      changed();
+      flight = (async () => {
+        try {
+          if (token === undefined) throw new Error("INVALID_INPUT");
+          return await (removing
+            ? removeStaple(next.id, token!)
+            : source.upsertStaple(next, token));
+        } catch (error) {
+          op.phase =
+            error instanceof Error && ["STALE", "INVALID_INPUT"].includes(error.message)
+              ? "conflict"
+              : "failed";
+          changed();
+          throw error;
+        } finally {
+          flight = undefined;
+        }
+      })();
+      return flight;
+    };
+    op.retry = () => {
+      if (op.retired || op.phase !== "failed") return;
+      void track(
+        write,
+        (rows) => {
+          accept(next.id, rows);
+          clearDraft(next.id);
+          delete operations.current[next.id];
+          op.retired = true;
+          changed();
+          if (removing) {
+            setOpenId((id) => (id === next.id ? null : id));
+            setAnnouncement(`${next.name} removed from future trips.`);
+            toast.show(`${next.name} removed from future trips.`);
+          } else if (token === null) {
+            setAnnouncement(`${next.name} added to ${CUBE_LABELS[stapleCube(next)]}.`);
+            toast.show(`${next.name} saved for future trips.`);
+          }
+        },
+        { retryable: () => !op.retired && op.phase === "failed" },
+      ).catch(() => {});
+    };
+    operations.current[next.id] = op;
+    op.write = write;
+    op.retry();
+  };
+  const reload = async (id: string) => {
+    const op = operations.current[id];
+    if (op?.phase === "pending" || op?.phase === "loading") return;
+    if (op) {
+      op.retired = true;
+      if (op.write) discard(op.write);
+      op.phase = "loading";
+    }
+    changed();
+    try {
+      const rows = await source.listStaples();
+      if (rows.find((row) => row.id === id && !row.revision)) throw new Error("INVALID_INPUT");
+      accept(id, rows);
+      clearDraft(id);
+      delete operations.current[id];
+    } catch {
+      if (op) op.phase = "load-failed";
+    }
+    changed();
+  };
 
   const close = useCallback((id: string) => {
     setOpenId(null);
     // Escape from the inline editor puts focus back on its row.
-    queueMicrotask(() => rowButtons.current[id]?.focus());
+    queueMicrotask(() => rowButtons.current[id]?.focus({ preventScroll: true }));
   }, []);
 
+  useEffect(() => {
+    if (!laptop || !openId) return;
+    // A newly disabled control may lose focus to the body; Escape still closes the editor.
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close(openId);
+    };
+    window.addEventListener("keydown", escape);
+    return () => window.removeEventListener("keydown", escape);
+  }, [laptop, openId, close]);
+
   const staples = useMemo(
-    () => (load.phase === "ready" ? load.staples.map((staple) => drafts[staple.id] ?? staple) : []),
+    () =>
+      load.phase === "ready"
+        ? [
+            ...load.staples.map((staple) => drafts[staple.id] ?? staple),
+            ...Object.values(drafts).filter(
+              (draft) => !load.staples.some((row) => row.id === draft.id),
+            ),
+          ]
+        : [],
     [load, drafts],
   );
   const summary = useMemo(
@@ -186,17 +248,9 @@ export function StaplesScreen({
     };
     const created = moveToCube(base, addCube);
     setProblem(null);
-    void track(
-      () => source.upsertStaple(created, null),
-      (list) => {
-        setLoad({ phase: "ready", staples: list });
-        setName("");
-        setAnnouncement(`${created.name} added to ${CUBE_LABELS[addCube]}.`);
-        toast.show(`${created.name} saved for future trips.`);
-        // On a phone the cube is chosen in the sheet after adding, so the new staple opens straight away.
-        if (!laptop) setOpenId(created.id);
-      },
-    ).catch(() => undefined);
+    begin(created, null);
+    setName("");
+    if (!laptop) setOpenId(created.id);
   };
 
   const head = (
@@ -265,12 +319,54 @@ export function StaplesScreen({
   const opened = openId ? (staples.find((staple) => staple.id === openId) ?? null) : null;
   const controls = (staple: Staple) => ({
     staple,
+    locked: Boolean(operations.current[staple.id]) || !staple.revision,
+    recovery: (() => {
+      const op = operations.current[staple.id];
+      if (!op && staple.revision) return null;
+      const phase = op?.phase ?? "conflict";
+      return (
+        <div role="status" aria-label={`Save ${staple.name}`}>
+          <p>
+            {phase === "pending"
+              ? "Saving…"
+              : phase === "loading"
+                ? "Reloading…"
+                : phase === "conflict"
+                  ? "This staple changed. Reload to review it."
+                  : phase === "load-failed"
+                    ? "Couldn’t reload. Try again."
+                    : "Couldn’t save. Your change is kept here."}
+          </p>
+          {phase === "failed" ? (
+            <button type="button" onClick={op!.retry}>
+              Retry save
+            </button>
+          ) : null}
+          {phase !== "pending" && phase !== "loading" ? (
+            <button
+              type="button"
+              onClick={() => {
+                if (!op)
+                  operations.current[staple.id] = {
+                    phase: "conflict",
+                    retired: true,
+                    retry: () => {},
+                  };
+                void reload(staple.id);
+              }}
+            >
+              {phase === "load-failed" ? "Try reload again" : "Reload and discard change"}
+            </button>
+          ) : null}
+        </div>
+      );
+    })(),
     taken: (name: string, exceptId: string) => findDuplicate(staples, name, exceptId),
     onChange: (next: Staple) => {
       setAddCube(stapleCube(next));
-      commit(next);
+      begin(next, staple.revision);
     },
-    onRemove: () => remove(staple),
+    onRemove: () => begin(staple, staple.revision, true),
     onClose: () => close(staple.id),
   });
 
