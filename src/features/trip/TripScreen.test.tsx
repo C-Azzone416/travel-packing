@@ -546,8 +546,13 @@ describe("item editor", () => {
     );
   });
 
-  it("staged 4a rejects the old remembered UI without metadata; per-day preview remains truthful", async () => {
-    const { user, source } = setup();
+  it("remembers using the opening metadata; per-day preview and conversion remain truthful", async () => {
+    let edit!: ReturnType<typeof vi.fn<TripsSource["editItem"]>>;
+    const { user, source } = setup("san-diego", (base) => {
+      edit = vi.fn(base.editItem);
+      return { ...base, editItem: edit };
+    });
+    const opening = source.staplesSnapshot().find((row) => row.id === "underwear")!.revision;
     await ready();
     await openEditor(user, "underwear");
     const dialog = screen.getByRole("dialog", { name: "Edit item" });
@@ -561,15 +566,26 @@ describe("item editor", () => {
     await user.click(within(dialog).getByRole("radio", { name: /This trip only/ }));
     expect(hint.textContent).toBe("");
     await user.click(within(dialog).getByRole("radio", { name: /Remember for future trips/ }));
-    // 4b supplies captured opening metadata; this unmerged intermediate boundary fails closed.
-    const before = structuredClone({ trip: source.snapshot(), staples: source.staplesSnapshot() });
+    const otherTrip = structuredClone(tripOf(source, "lisbon"));
     await user.click(within(dialog).getByRole("button", { name: "Save item" }));
-    await waitFor(() =>
-      expect(screen.getByRole("alert", { name: "Save error" }).textContent).toContain("Couldn"),
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(edit).toHaveBeenCalledExactlyOnceWith(
+      "san-diego",
+      "underwear",
+      {
+        name: "Underwear",
+        qty: 9,
+        timing: "main",
+        scope: "remember",
+      },
+      opening,
     );
-    expect(screen.getByRole("dialog", { name: "Edit item" })).toBe(dialog);
-    expect(source.snapshot()).toEqual(before.trip);
-    expect(source.staplesSnapshot()).toEqual(before.staples);
+    expect(itemOf(source, "underwear").qty).toBe(9);
+    expect(source.staplesSnapshot().find((row) => row.id === "underwear")).toMatchObject({
+      qty: 2,
+      cadence: "per day",
+    });
+    expect(tripOf(source, "lisbon")).toEqual(otherTrip);
   });
 
   it("says the saved quantity stays the same when the trip has no calendar days", async () => {
@@ -670,8 +686,13 @@ describe("item editor", () => {
     expect(tripOf(source).items.some((item) => item.id === "nice-shoes")).toBe(false);
   });
 
-  it("staged 4a rejects remembered removal without opening metadata, retaining the confirmation", async () => {
-    const { user, source } = setup();
+  it("removes remembered items with the exact opening metadata after confirmation", async () => {
+    let remove!: ReturnType<typeof vi.fn<TripsSource["removeItem"]>>;
+    const { user, source } = setup("san-diego", (base) => {
+      remove = vi.fn(base.removeItem);
+      return { ...base, removeItem: remove };
+    });
+    const opening = source.staplesSnapshot().find((row) => row.id === "last-toothbrush")!.revision;
     await ready();
     await openEditor(user, "last-toothbrush");
     await user.click(screen.getByRole("radio", { name: /Remember for future trips/ }));
@@ -682,11 +703,16 @@ describe("item editor", () => {
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", { name: "Remove item" }),
     );
-    await waitFor(() =>
-      expect(screen.getByRole("alert", { name: "Save error" }).textContent).toContain("Couldn"),
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(remove).toHaveBeenCalledExactlyOnceWith(
+      "san-diego",
+      "last-toothbrush",
+      "remember",
+      opening,
     );
-    expect(row("last-toothbrush")).not.toBeNull();
-    expect(source.staplesSnapshot().some((staple) => staple.id === "last-toothbrush")).toBe(true);
+    expect(row("last-toothbrush")).toBeNull();
+    expect(tripOf(source).items.some((item) => item.id === "last-toothbrush")).toBe(false);
+    expect(source.staplesSnapshot().some((staple) => staple.id === "last-toothbrush")).toBe(false);
   });
 });
 
