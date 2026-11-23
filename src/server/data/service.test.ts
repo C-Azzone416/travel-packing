@@ -2253,14 +2253,17 @@ describe("input bounds are enforced exactly at the limit", () => {
 
 describe("concurrent staple upserts are serialized (no silently dropped staple)", () => {
   const upsert = (semanticId: string, name: string, over: Record<string, unknown> = {}) =>
-    writeFixtureStaple(context(), {
-      semanticId,
-      name,
-      category: "Accessories",
-      qty: 1,
-      cadence: "per trip",
-      packLast: false,
-      ...over,
+    service.upsertStapleChecked(context(), {
+      staple: {
+        semanticId,
+        name,
+        category: "Accessories",
+        qty: 1,
+        cadence: "per trip",
+        packLast: false,
+        ...over,
+      },
+      expected: null,
     });
   const staplesOf = async (owner: string) =>
     (

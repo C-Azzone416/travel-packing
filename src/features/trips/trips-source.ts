@@ -253,10 +253,11 @@ export function createMemoryTripsSource(
         Object.keys(expected).sort().join() !== "rowId,version")
     )
       throw new TripsSourceError("INVALID_INPUT");
-    const actual = currentStaples.find((row) => row.id === id)?.revision;
+    const existing = currentStaples.find((row) => row.id === id);
+    const actual = existing?.revision;
     if (
       expected === null
-        ? actual
+        ? existing
         : !actual || actual.rowId !== expected.rowId || actual.version !== expected.version
     )
       throw new TripsSourceError("STALE");

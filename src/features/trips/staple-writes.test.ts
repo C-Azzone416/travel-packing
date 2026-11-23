@@ -82,6 +82,55 @@ describe("direct memory Staples revision contract", () => {
     )!;
     expect(created.revision).toEqual({ rowId: expect.any(String), version: 1 });
   });
+  describe.each(["explicit absence", "captured revision"])(
+    "%s on a tokenless row",
+    (expectation) => {
+      it.each(["remove", "equal-content upsert", "changed upsert"])(
+        "rejects %s without changing Staples or trips",
+        async (operation) => {
+          const source = createMemoryTripsSource(sampleLifecycleState(), {
+            now: () => 1,
+            staples: [],
+            newId: () => "qa-razor",
+          });
+          await source.addToiletryItem("san-diego", {
+            name: "Razor",
+            qty: 1,
+            packLast: false,
+            scope: "remember",
+          });
+          const row = (await source.listStaples())[0];
+          expect(row).toEqual({
+            id: "qa-razor",
+            name: "Razor",
+            category: "Toiletries",
+            qty: 1,
+            cadence: "per trip",
+            packLast: false,
+            groupId: "toiletry-bag",
+            revision: undefined,
+          });
+          // Arrange an unrelated row and a real captured token; remember normalization is a later slice.
+          const unrelated = (await source.upsertStaple(scarf, null)).find(
+            (entry) => entry.id === scarf.id,
+          )!;
+          const expected = expectation === "explicit absence" ? null : unrelated.revision!;
+          const before = await source.listStaples();
+          const trips = structuredClone(source.snapshot());
+          const attempt =
+            operation === "remove"
+              ? source.removeStaple(row.id, expected)
+              : source.upsertStaple(
+                  operation === "changed upsert" ? { ...row, qty: 9 } : row,
+                  expected,
+                );
+          await expect(attempt).rejects.toThrow("STALE");
+          expect(await source.listStaples()).toEqual(before);
+          expect(source.snapshot()).toEqual(trips);
+        },
+      );
+    },
+  );
   it("rejects stale edit, equal-content no-op and removal, preserving all rows", async () => {
     const source = create();
     const old = await read(source);
