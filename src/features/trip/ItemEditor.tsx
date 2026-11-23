@@ -1,5 +1,6 @@
 "use client";
 
+import { z } from "zod";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useSaveStatus } from "@/components/shell/SaveStatus";
 import type { StapleRevision } from "@/domain/calc/staples";
@@ -23,6 +24,12 @@ export interface ItemEditorProps {
   onSave: (edit: ItemEdit, expected?: StapleRevision | null) => Promise<TripChange>;
   onRemove: (scope: Scope, expected?: StapleRevision | null) => Promise<TripChange>;
   onWrite: (write: () => Promise<TripChange>, retryable: () => boolean, after: () => void) => void;
+  onReview: () => Promise<{
+    item?: TripItem;
+    staples: Staple[];
+    tripDays: number;
+    destination: string;
+  }>;
 }
 
 /** Optional Nice suggestions and Bathroom items can be removed; everything else is simply edited. */
@@ -57,12 +64,14 @@ export function ItemEditor({
   onSave,
   onRemove,
   onWrite,
+  onReview,
 }: ItemEditorProps) {
   const { discard } = useSaveStatus();
-  const [view] = useState(() => capture(item, staples, tripDays, destination));
+  const [view, setView] = useState(() => capture(item, staples, tripDays, destination));
   const [failure, setFailure] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const alive = useRef(true);
+  const reviewing = useRef(false);
   const body = useRef<HTMLDivElement>(null);
   const operation = useRef<{
     retired: boolean;
@@ -95,14 +104,15 @@ export function ItemEditor({
   }
   function start(run: () => Promise<TripChange>) {
     // Register synchronously: two submit events can precede React's disabled render.
-    if (operation.current || saving || !alive.current) return;
+    if (operation.current || reviewing.current || saving || !alive.current) return;
     if (view.expected) Object.freeze(view.expected);
     const op = {
       retired: false,
       pending: false,
       stale: false,
       write: async (): Promise<TripChange> => {
-        if (op.retired || op.pending || op.stale) throw new TripsSourceError("STALE");
+        if (op.retired || op.pending || op.stale || reviewing.current)
+          throw new TripsSourceError("STALE");
         op.pending = true;
         if (alive.current && operation.current === op) {
           setBusy(true);
@@ -117,7 +127,7 @@ export function ItemEditor({
           if (alive.current && !op.retired && operation.current === op)
             setFailure(
               op.stale
-                ? "Your Staples changed. Discard this change and reload the page to review."
+                ? "Your Staples changed. Reload and review before editing."
                 : "Couldn’t save. Retry this change or discard it.",
             );
           throw error;
@@ -131,14 +141,54 @@ export function ItemEditor({
     retry(op);
   }
   function retry(op = operation.current) {
-    if (!op || op.pending || op.retired || op.stale) return;
+    if (!op || op.pending || op.retired || op.stale || reviewing.current) return;
     onWrite(
       op.write,
-      () => !op.pending && !op.retired && !op.stale,
+      () => !op.pending && !op.retired && !op.stale && !reviewing.current,
       () => {
         if (alive.current && !op.retired && operation.current === op) close();
       },
     );
+  }
+  async function review() {
+    if (operation.current?.pending || reviewing.current || saving || !alive.current) return;
+    reviewing.current = true;
+    setBusy(true);
+    // Retire locally before discard: the provider can refuse while other work is pending.
+    if (operation.current) {
+      operation.current.retired = true;
+      discard(operation.current.write);
+    }
+    try {
+      const fresh = await onReview();
+      if (!alive.current) return;
+      if (!fresh.item) return close();
+      const next = capture(fresh.item, fresh.staples, fresh.tripDays, fresh.destination);
+      if (
+        next.staples.some((row) => row.id === next.item.id) &&
+        !z
+          .strictObject({ rowId: z.uuid(), version: z.number().int().min(1).max(2_147_483_647) })
+          .safeParse(next.expected).success
+      )
+        throw Error("Missing or invalid revision");
+      retire();
+      setView(next);
+      setName(next.item.name);
+      setQty(String(next.item.qty));
+      setPackLast(next.item.section === "packlast");
+      setScope("this-trip");
+      setNameError(false);
+      setConfirming(false);
+      setFailure(null);
+    } catch {
+      if (alive.current)
+        setFailure(
+          "Couldn’t reload. Your unsaved change is still shown. Try Reload and review again, or discard it.",
+        );
+    } finally {
+      reviewing.current = false;
+      if (alive.current) setBusy(false);
+    }
   }
   const [name, setName] = useState(item.name);
   const [qty, setQty] = useState(String(item.qty));
@@ -206,11 +256,14 @@ export function ItemEditor({
   const recovery = failure ? (
     <div role="alert">
       <p>{failure}</p>
-      {!operation.current?.stale ? (
+      {!operation.current?.stale && !operation.current?.retired ? (
         <Button disabled={busy} onClick={() => retry()}>
           Retry change
         </Button>
       ) : null}
+      <Button disabled={busy} onClick={() => void review()}>
+        Reload and review
+      </Button>
       <Button disabled={busy} onClick={close}>
         Discard change and close
       </Button>
