@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderInApp } from "@/test/providers";
+import { deferPassiveEffects } from "@/test/deferred-passive-effects";
 import { sampleLifecycleState, SAMPLE_LOCATIONS } from "@/features/trips/fixtures";
 import { buildTrip, emptyLifecycleState, type LifecycleState } from "@/domain/trip-lifecycle";
 import type { TripConfig } from "@/domain/trip";
@@ -11,6 +12,18 @@ import { TripsSourceProvider } from "@/features/trips/TripsSourceProvider";
 import { StampsContent, StampsScreen } from "./StampsScreen";
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/stamps" }));
+
+// Exercise the original first-click assertions under an actual scheduled-passive deferral (#572).
+let deferred: ReturnType<typeof deferPassiveEffects> | null = null;
+beforeEach(() => {
+  if (expect.getState().currentTestName?.includes("returns focus to the sticker that opened")) {
+    deferred = deferPassiveEffects();
+  }
+});
+afterEach(() => {
+  deferred?.release();
+  deferred = null;
+});
 
 const TODAY = "2026-10-16";
 const CONFIG: TripConfig = {

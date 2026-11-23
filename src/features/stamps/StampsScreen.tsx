@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { buttonClassName, Button } from "@/components/ui/Button";
 import { Suitcase } from "@/components/suitcase";
 import { useSaveStatus } from "@/components/shell/SaveStatus";
@@ -313,7 +313,7 @@ export function StampsContent({
       ? (marker as { owner: string; key: string })
       : null;
   }, []);
-  useEffect(() => {
+  useLayoutEffect(() => {
     historyOwner.current = crypto.randomUUID();
     historyUrl.current = location.href;
     const mountedOpeners = openers.current;
