@@ -234,3 +234,23 @@ describe("a sticker opens its details (#494)", () => {
     ).toBeTruthy();
   });
 });
+
+describe("unknown dates", () => {
+  it("keeps an unknown sticker neutral until explicitly opened", async () => {
+    const legacy = {
+      ...trip("legacy", "2026-11-20", "2026-11-25"),
+      start: "2026-11-20",
+      end: "2026-09-01",
+    };
+    const { user } = open(source(withTrips(legacy)));
+    await user.click(await screen.findByRole("button", { name: "All time" }));
+    const sticker = screen.getByRole("button", { name: "Lisbon, Date not set" });
+    expect(sticker.getAttribute("aria-pressed")).toBe("false");
+    expect(screen.queryByRole("article", { name: /Selected trip/ })).toBeNull();
+    expect(sticker.textContent).not.toMatch(/Upcoming|Inked/);
+    await user.click(sticker);
+    const dialog = screen.getByRole("dialog", { name: "Lisbon · Date not set" });
+    expect(within(dialog).getByText("Date not set")).toBeTruthy();
+    expect(dialog.textContent).not.toMatch(/Upcoming|Inked|day trip|night|20 NOV|2026/i);
+  });
+});

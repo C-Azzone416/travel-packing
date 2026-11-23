@@ -1,10 +1,11 @@
 import { parseDate } from "@/domain/calc";
 import { packedTotals } from "@/domain/readiness";
 import { selectStamps, stampSlotForStop } from "@/domain/stamps";
-import { isPastTrip, type LifecycleTrip } from "@/domain/trip-lifecycle";
+import { type LifecycleTrip } from "@/domain/trip-lifecycle";
 import { TRAVEL_MODE_CAPTION, routeTextShort, tripDisplayName } from "@/domain/trip-route";
 import { daysBetween, type TripStop } from "@/domain/trip-stops";
 
+export type StampStatus = "earned" | "upcoming" | "unknown";
 export type StampFilter = "rolling" | "year" | "all";
 export type StickerShape = "circle" | "rounded" | "squared";
 export type StickerColour = "accent" | "dark2" | "good" | "info" | "goldDeep";
@@ -18,6 +19,7 @@ export interface StickerView {
   monthYear: string;
   completedCount: number;
   upcoming: boolean;
+  status: StampStatus;
   shape: StickerShape;
   colour: StickerColour;
   tilt: number;
@@ -33,8 +35,6 @@ export interface PastTripView {
   stickerColour: StickerColour | null;
   name: string;
   monthYear: string;
-  /** Not home yet: the trip has not ended, so it inks when you get home. */
-  upcoming: boolean;
   eyebrow: string;
   facts: string;
   packed: number;
@@ -91,6 +91,17 @@ function dateOf(value: string): Date | null {
   return parseDate(value);
 }
 
+export function stampStatus(
+  trip: Pick<LifecycleTrip, "start" | "end">,
+  today: string,
+): StampStatus {
+  const start = dateOf(trip.start);
+  const end = dateOf(trip.end);
+  const now = dateOf(today);
+  if (!start || !end || !now || end < start) return "unknown";
+  return end < now ? "earned" : "upcoming";
+}
+
 function month(value: string): string {
   const date = dateOf(value);
   return date ? MONTH.format(date).toUpperCase() : "";
@@ -127,7 +138,9 @@ export function tripMatchesFilter(
   today: string,
 ): boolean {
   if (filter === "all") return true;
-  const upcoming = !isPastTrip(trip, today);
+  const status = stampStatus(trip, today);
+  if (status === "unknown") return false;
+  const upcoming = status === "upcoming";
   if (upcoming && trip.start >= today) return true;
   if (filter === "year") {
     const year = dateOf(today)?.getUTCFullYear();
@@ -160,14 +173,20 @@ export function stampTripView(trip: LifecycleTrip, today: string): PastTripView 
     ? stickerLook(first.location.countryCode, first.location.city).colour
     : null;
   const totals = packedTotals(trip);
-  // A trip with no usable dates is neither: it keeps its "Date not set" line.
-  const upcoming = dateOf(trip.start) !== null && !isPastTrip(trip, today);
+  const status = stampStatus(trip, today);
+  const date = status === "unknown" ? "" : trip.start;
   const nights = Math.max(0, daysBetween(trip.start, trip.end));
   const facts = [
-    monthYear(trip.start),
+    monthYear(date),
     trip.travelMode ? TRAVEL_MODE_CAPTION[trip.travelMode] : "",
     routeTextShort(trip.origin, trip.stops),
-    nights === 0 ? "day trip" : nights === 1 ? "1 night" : `${nights} nights`,
+    status === "unknown"
+      ? ""
+      : nights === 0
+        ? "day trip"
+        : nights === 1
+          ? "1 night"
+          : `${nights} nights`,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -176,11 +195,11 @@ export function stampTripView(trip: LifecycleTrip, today: string): PastTripView 
     code,
     stickerColour,
     name: tripDisplayName(trip),
-    monthYear: monthYear(trip.start),
-    upcoming,
-    eyebrow: upcoming
-      ? UPCOMING_EYEBROW
-      : [code, compactMonthYear(trip.start)].filter(Boolean).join(" · "),
+    monthYear: monthYear(date),
+    eyebrow:
+      status === "upcoming"
+        ? UPCOMING_EYEBROW
+        : [code, compactMonthYear(date)].filter(Boolean).join(" · "),
     facts,
     packed: totals.packed,
     total: totals.total,
@@ -192,6 +211,7 @@ interface PlaceGroup {
   stop: TripStop;
   completed: Array<{ trip: LifecycleTrip; stopIndex: number }>;
   upcoming: Array<{ trip: LifecycleTrip; stopIndex: number }>;
+  unknown: Array<{ trip: LifecycleTrip; stopIndex: number }>;
 }
 
 /** One sticker per distinct place, plus xN for completed repeat visits. */
@@ -202,19 +222,24 @@ export function stampsView(
 ): StampsView {
   const matching = trips.filter((trip) => tripMatchesFilter(trip, filter, today));
   const past = matching
-    .filter((trip) => isPastTrip(trip, today))
+    .filter((trip) => stampStatus(trip, today) === "earned")
     .sort((a, b) => b.end.localeCompare(a.end));
   const groups = new Map<string, PlaceGroup>();
 
   for (const trip of matching) {
-    const complete = isPastTrip(trip, today);
+    const status = stampStatus(trip, today);
     const seen = new Set<string>();
     trip.stops.forEach((stop, stopIndex) => {
       const key = placeKey(stop);
       if (seen.has(key)) return;
       seen.add(key);
-      const group = groups.get(key) ?? { key, stop, completed: [], upcoming: [] };
-      (complete ? group.completed : group.upcoming).push({ trip, stopIndex });
+      const group = groups.get(key) ?? { key, stop, completed: [], upcoming: [], unknown: [] };
+      (status === "earned"
+        ? group.completed
+        : status === "upcoming"
+          ? group.upcoming
+          : group.unknown
+      ).push({ trip, stopIndex });
       groups.set(key, group);
     });
   }
@@ -223,12 +248,13 @@ export function stampsView(
     .map((group): { sticker: StickerView; order: string } => {
       const complete = [...group.completed].sort((a, b) => b.trip.end.localeCompare(a.trip.end));
       const upcoming = [...group.upcoming].sort((a, b) => a.trip.start.localeCompare(b.trip.start));
-      const chosen = complete[0] ?? upcoming[0];
+      const chosen = complete[0] ?? upcoming[0] ?? group.unknown[0];
       const chosenStop = chosen.trip.stops[chosen.stopIndex] ?? group.stop;
-      const date = chosen.trip.start;
+      const status = stampStatus(chosen.trip, today);
+      const date = status === "unknown" ? "" : chosen.trip.start;
       const look = stickerLook(chosenStop.location.countryCode, chosenStop.location.city);
       const count = complete.length;
-      const isUpcoming = count === 0;
+      const isUpcoming = status === "upcoming";
       return {
         order: date,
         sticker: {
@@ -240,19 +266,25 @@ export function stampsView(
           monthYear: monthYear(date),
           completedCount: count,
           upcoming: isUpcoming,
+          status,
           shape: look.shape,
           colour: look.colour,
           tilt: look.tilt,
           tripId: chosen.trip.id,
           codeFromRoute: stampSlotForStop(chosen.trip.stops, chosen.stopIndex) === null,
-          accessibleName: isUpcoming
-            ? `${chosenStop.location.city}, ${monthYear(date)}, upcoming, not inked yet`
-            : `${chosenStop.location.city}, ${monthYear(date)}, inked, ${count} ${count === 1 ? "trip" : "trips"}`,
+          accessibleName:
+            status === "unknown"
+              ? `${chosenStop.location.city}, Date not set`
+              : isUpcoming
+                ? `${chosenStop.location.city}, ${monthYear(date)}, upcoming, not inked yet`
+                : `${chosenStop.location.city}, ${monthYear(date)}, inked, ${count} ${count === 1 ? "trip" : "trips"}`,
         },
       };
     })
     .sort((a, b) => {
-      if (a.sticker.upcoming !== b.sticker.upcoming) return a.sticker.upcoming ? 1 : -1;
+      const rank = { earned: 0, upcoming: 1, unknown: 2 };
+      if (a.sticker.status !== b.sticker.status)
+        return rank[a.sticker.status] - rank[b.sticker.status];
       return b.order.localeCompare(a.order);
     })
     .map(({ sticker }) => sticker);
@@ -276,6 +308,6 @@ export function stampsView(
       countries: countries.size,
       nights: past.reduce((sum, trip) => sum + Math.max(0, daysBetween(trip.start, trip.end)), 0),
     },
-    inked: stickers.filter((sticker) => !sticker.upcoming).length,
+    inked: stickers.filter((sticker) => sticker.status === "earned").length,
   };
 }

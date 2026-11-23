@@ -264,7 +264,7 @@ export function StampsContent({
   // It is the most recently completed trip (by its end date) that an earned sticker stands for; none earned, nothing selected.
   const defaultId = useMemo(() => {
     const ends = new Map(state.trips.map((trip) => [trip.id, trip.end]));
-    const earned = view.stickers.filter((sticker) => !sticker.upcoming);
+    const earned = view.stickers.filter((sticker) => sticker.status === "earned");
     return (
       earned.reduce<(typeof earned)[number] | null>(
         (best, sticker) =>
@@ -283,7 +283,7 @@ export function StampsContent({
       : view.stickers.find(
           (sticker) =>
             sticker.tripId === activeId &&
-            (selectedKey === null ? !sticker.upcoming : sticker.key === selectedKey),
+            (selectedKey === null ? sticker.status === "earned" : sticker.key === selectedKey),
         );
   const selected = selectedTrip ? stampTripView(selectedTrip, today) : null;
   const detailSticker = detailKey
