@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import type { StapleRevision } from "@/domain/calc/staples";
 import { Button } from "@/components/ui/Button";
 import { ModalSheet } from "@/components/ui/ModalSheet";
 import { Switch } from "@/components/ui/Switch";
@@ -17,8 +18,8 @@ export interface ItemEditorProps {
   staples: Staple[];
   saving: boolean;
   onClose: () => void;
-  onSave: (edit: ItemEdit) => void;
-  onRemove: (scope: Scope) => void;
+  onSave: (edit: ItemEdit, expected?: StapleRevision | null) => void;
+  onRemove: (scope: Scope, expected?: StapleRevision | null) => void;
 }
 
 /** Optional Nice suggestions and Bathroom items can be removed; everything else is simply edited. */
@@ -32,6 +33,17 @@ function previewText(preview: ReturnType<typeof rememberPreview>): string {
     : "This trip has no calendar days, so the saved quantity stays the same.";
 }
 
+function capture(item: TripItem, staples: Staple[], tripDays: number, destination: string) {
+  const row = staples.find((entry) => entry.id === item.id);
+  return structuredClone({
+    item,
+    staples,
+    tripDays,
+    destination,
+    expected: row ? row.revision : null,
+  });
+}
+
 export function ItemEditor({
   item,
   destination,
@@ -42,6 +54,7 @@ export function ItemEditor({
   onSave,
   onRemove,
 }: ItemEditorProps) {
+  const [view] = useState(() => capture(item, staples, tripDays, destination));
   const [name, setName] = useState(item.name);
   const [qty, setQty] = useState(String(item.qty));
   const [packLast, setPackLast] = useState(item.section === "packlast");
@@ -49,10 +62,10 @@ export function ItemEditor({
   const [nameError, setNameError] = useState(false);
   const [confirming, setConfirming] = useState(false);
 
-  const isReturn = item.section === "return";
+  const isReturn = view.item.section === "return";
   const preview =
     scope === "remember"
-      ? rememberPreview(staples, item.id, normalizeQty(Number(qty)), tripDays)
+      ? rememberPreview(view.staples, view.item.id, normalizeQty(Number(qty)), view.tripDays)
       : null;
 
   function submit(event: FormEvent) {
@@ -63,12 +76,15 @@ export function ItemEditor({
       setNameError(true);
       return;
     }
-    onSave({
-      name,
-      qty: Number(qty),
-      timing: isReturn ? "return" : packLast ? "packlast" : "main",
-      scope,
-    });
+    onSave(
+      {
+        name,
+        qty: Number(qty),
+        timing: isReturn ? "return" : packLast ? "packlast" : "main",
+        scope,
+      },
+      view.expected,
+    );
   }
 
   if (confirming) {
@@ -77,7 +93,7 @@ export function ItemEditor({
       <ModalSheet
         key="confirm"
         open
-        title={`Remove ${item.name}?`}
+        title={`Remove ${view.item.name}?`}
         description={
           everywhere
             ? "It is removed from this trip and from your staples, so future trips will not add it."
@@ -90,7 +106,11 @@ export function ItemEditor({
             <Button variant="secondary" onClick={() => setConfirming(false)}>
               Keep item
             </Button>
-            <Button variant="danger" disabled={saving} onClick={() => onRemove(scope)}>
+            <Button
+              variant="danger"
+              disabled={saving}
+              onClick={() => onRemove(scope, view.expected)}
+            >
               Remove item
             </Button>
           </>
@@ -143,17 +163,17 @@ export function ItemEditor({
           />
         </label>
         <ScopeFieldset
-          destination={destination}
+          destination={view.destination}
           scope={scope}
           onScope={setScope}
           preview={previewText(preview)}
         />
-        {item.optional ? (
+        {view.item.optional ? (
           <div className="callout">
             <strong>Optional suggestion.</strong> Edit it, keep it, or remove it from this trip.
           </div>
         ) : null}
-        {item.groupId === TOILETRY_GROUP_ID ? (
+        {view.item.groupId === TOILETRY_GROUP_ID ? (
           <div className="callout">
             <strong>Bathroom item.</strong> This is one checkbox in Toiletries. Bag placement is
             confirmed separately after all contents are checked.
@@ -175,7 +195,7 @@ export function ItemEditor({
           <Button type="submit" disabled={saving}>
             Save item
           </Button>
-          {isRemovable(item) ? (
+          {isRemovable(view.item) ? (
             <Button variant="danger" onClick={() => setConfirming(true)}>
               Remove item
             </Button>
