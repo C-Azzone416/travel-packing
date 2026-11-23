@@ -183,7 +183,12 @@ describe("TripsSourceProvider", () => {
       ["getTrip", (s) => s.getTrip("t"), () => actions.getTripAction, ["t"]],
       ["homeCity", (s) => s.homeCity!(), () => actions.getHomeCityAction, []],
       ["listStaples", (s) => s.listStaples(), () => actions.listStaplesAction, []],
-      ["upsertStaple", (s) => s.upsertStaple(staple), () => actions.upsertStapleAction, [staple]],
+      [
+        "upsertStaple",
+        (s) => s.upsertStaple(staple, null),
+        () => actions.upsertStapleAction,
+        [staple, null],
+      ],
       [
         "setPacked",
         (s) => s.setPacked("t", "i", 3),

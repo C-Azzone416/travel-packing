@@ -1,3 +1,4 @@
+import type { StapleRevision } from "@/domain/calc/staples";
 // The dashboard's TripsSource backed by the server actions (the real data layer). Client-safe: it only holds the
 // action functions it is given, so tests can pass fakes.
 
@@ -47,7 +48,7 @@ export interface TripActions {
   listStaples(): Promise<StaplesReadResult>;
   /** The account's home city, the default "From" of a new trip. Left out by fakes that have none. */
   getHomeCity?(): Promise<HomeCityResult>;
-  upsertStaple(staple: Staple): Promise<StaplesReadResult>;
+  upsertStaple(staple: Staple, expected: StapleRevision | null): Promise<StaplesReadResult>;
   setPacked(tripId: string, itemId: string, packed: number): Promise<TripCommandResult>;
   setPackedMany(
     tripId: string,
@@ -175,7 +176,7 @@ export function createServerTripsSource(
 
     getTrip: (id) => unwrapRead(trip.getTrip(id)),
     listStaples: () => unwrapStaples(trip.listStaples()),
-    upsertStaple: (staple) => unwrapStaples(trip.upsertStaple(staple)),
+    upsertStaple: (staple, expected) => unwrapStaples(trip.upsertStaple(staple, expected)),
     setPacked: (id, itemId, packed) => unwrapChange(trip.setPacked(id, itemId, packed)),
     setPackedMany: (id, entries) => unwrapChange(trip.setPackedMany(id, entries)),
     togglePacked: (id, itemId) => unwrapChange(trip.togglePacked(id, itemId)),

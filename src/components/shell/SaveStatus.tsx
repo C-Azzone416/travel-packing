@@ -23,6 +23,7 @@ interface PendingWrite {
   write: () => Promise<unknown>;
   onSuccess?: (result: never) => void;
   read: boolean;
+  retryable?: () => boolean;
 }
 
 export interface TrackOptions {
@@ -31,6 +32,8 @@ export interface TrackOptions {
    * failed read still shows the Error state with Retry, and a successful retry clears it.
    */
   read?: boolean;
+  /** Optional per-attempt gate for retired or conflicted local intents. */
+  retryable?: () => boolean;
 }
 
 interface SaveStatusApi {
@@ -166,7 +169,12 @@ export function SaveStatusProvider({ children }: { children: ReactNode }) {
         settle();
         clearSavingTimer();
         clearSavedTimer();
-        lastFailed.current = { write, onSuccess: onSuccess as PendingWrite["onSuccess"], read };
+        lastFailed.current = {
+          write,
+          onSuccess: onSuccess as PendingWrite["onSuccess"],
+          read,
+          retryable: options?.retryable,
+        };
         failed.current = true;
         applyStatus("error");
         throw error;
@@ -177,9 +185,10 @@ export function SaveStatusProvider({ children }: { children: ReactNode }) {
 
   const retry = useCallback(() => {
     const failedWrite = lastFailed.current;
-    if (failedWrite)
+    if (failedWrite && (failedWrite.retryable?.() ?? true))
       void track(failedWrite.write, failedWrite.onSuccess as (result: unknown) => void, {
         read: failedWrite.read,
+        retryable: failedWrite.retryable,
       }).catch(() => {});
   }, [track]);
 
