@@ -348,3 +348,44 @@ describe("remembered edit/remove actual source action persistence contract", () 
     ).toEqual(unrelated);
   });
 });
+
+it.each(["edit", "remove"] as const)(
+  "explicit fresh review after stale %s supplies ONLY a new subsequent intent",
+  async (kind) => {
+    const { tripId, itemId, row, expected, snapshot } = await arrange();
+    data(await external(row, expected));
+    const port = source();
+    const original = () =>
+      kind === "edit"
+        ? port.editItem(tripId, itemId, edit, expected)
+        : port.removeItem(tripId, itemId, "remember", expected);
+    const before = await state();
+    faults.tripWrites = 0;
+    faults.defaultWrites = 0;
+    await expect(original()).rejects.toThrow("STALE");
+    expect(await state()).toEqual(before);
+    const [reviewedTrip, reviewedDefaults] = await Promise.all([
+      port.getTrip(tripId),
+      port.listStaples(),
+    ]);
+    expect(reviewedTrip.items.some((item) => item.id === itemId)).toBe(true);
+    const reviewed = reviewedDefaults.find((item) => item.id === itemId)!.revision!;
+    expect(reviewed).not.toEqual(expected);
+    expect(faults.tripWrites).toBe(0);
+    expect(faults.defaultWrites).toBe(0);
+    // The captured stale closure remains stale even AFTER the successful explicit reads.
+    await expect(original()).rejects.toThrow("STALE");
+    expect(await state()).toEqual(before);
+    const result =
+      kind === "edit"
+        ? await port.editItem(
+            tripId,
+            itemId,
+            { ...edit, name: "Explicit reviewed intent" },
+            reviewed,
+          )
+        : await port.removeItem(tripId, itemId, "remember", reviewed);
+    expect(result.staples).toEqual(await port.listStaples());
+    expect(data(await service.getTrip(current, { tripId: snapshot.id }))).toEqual(snapshot);
+  },
+);

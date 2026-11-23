@@ -272,6 +272,7 @@ it("ItemEditor retains full opening item/destination/cadence/day view across inc
       onClose={vi.fn()}
       onSave={onSave}
       onRemove={vi.fn()}
+      onReview={vi.fn()}
       onWrite={(write) => void write()}
     />
   );
@@ -338,6 +339,7 @@ it.each([
         onClose={vi.fn()}
         onSave={vi.fn()}
         onRemove={vi.fn()}
+        onReview={vi.fn()}
         onWrite={vi.fn()}
       />,
       { wrapper: Shell },

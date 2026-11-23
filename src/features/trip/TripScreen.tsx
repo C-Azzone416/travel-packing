@@ -977,6 +977,14 @@ export function TripScreen({
             source.removeItem(tripId, editing.item.id, scope, expected)
           }
           onWrite={(write, retryable, after) => void act(write, { retryable, after })}
+          onReview={() =>
+            Promise.all([source.getTrip(tripId), source.listStaples()]).then(([fresh, owned]) => ({
+              item: fresh.items.find((row) => row.id === editing.item.id),
+              staples: owned,
+              tripDays: fresh.days,
+              destination: fresh.destination,
+            }))
+          }
         />
       ) : null}
       {dialog?.kind === "save-list" ? (

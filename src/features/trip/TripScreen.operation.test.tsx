@@ -232,7 +232,7 @@ for (const kind of ["edit", "remove"] as const) {
       remove.mockImplementation(base.removeItem);
       const d = screen.getByRole("dialog");
       click("Retry change", d);
-      await screen.findByText(/reload the page to review/);
+      await screen.findByText(/Reload and review before editing/);
       expect(snapshot(base)).toEqual(committed);
       const calls = kind === "edit" ? edit.mock.calls : remove.mock.calls;
       expect(calls).toHaveLength(2);
@@ -271,7 +271,7 @@ for (const kind of ["edit", "remove"] as const) {
         const before = snapshot(base);
         const d = screen.getByRole("dialog");
         click("Retry change", d);
-        await screen.findByText(/reload the page to review/);
+        await screen.findByText(/Reload and review before editing/);
         expect(snapshot(base)).toEqual(before);
         const calls = kind === "edit" ? edit.mock.calls : remove.mock.calls;
         expect(calls).toHaveLength(2);
@@ -286,17 +286,17 @@ for (const kind of ["edit", "remove"] as const) {
 }
 
 it.each(["STALE", "INVALID_INPUT"] as const)(
-  "%s has explicit discard/page review guidance and no local/global retry",
+  "%s has explicit review/discard guidance and no local/global retry",
   async (error) => {
     const base = fixture();
     const edit = vi.fn(base.editItem).mockRejectedValue(new TripsSourceError(error));
     await open({ ...base, editItem: edit });
     remember();
     click("Save item");
-    await screen.findByText(/Discard this change and reload the page to review/);
+    await screen.findByText(/Reload and review before editing/);
     locked();
     expect(within(editor()).queryByRole("button", { name: "Retry change" })).toBeNull();
-    expect(within(editor()).queryByRole("button", { name: /Review|Reload/ })).toBeNull();
+    expect(within(editor()).queryByRole("button", { name: "Reload and review" })).not.toBeNull();
     act(() => status.retry());
     expect(edit).toHaveBeenCalledTimes(1);
     click("Discard change and close");
@@ -470,7 +470,7 @@ it("remembered remove with missing metadata refuses transport and cannot Retry",
   click("Remove item");
   const d = screen.getByRole("dialog", { name: /Remove Toothbrush/ });
   click("Remove item", d);
-  await screen.findByText(/Discard this change and reload the page to review/);
+  await screen.findByText(/Reload and review before editing/);
   expect(within(d).queryByRole("button", { name: "Retry change" })).toBeNull();
   act(() => status.retry());
   expect(remove).not.toHaveBeenCalled();
