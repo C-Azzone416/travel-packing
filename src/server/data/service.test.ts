@@ -86,6 +86,33 @@ const context = () => ({
 });
 const as = (user: typeof OWNER | null) => signedInAs(fake, user);
 
+// Fixture-only adaptation for legacy content tests. Real conflict oracles call checked APIs directly.
+async function fixtureRevision(semanticId: string) {
+  if (!fake.current) return null;
+  const row = (
+    await ctx.client.query<{ id: string; version: number }>(
+      "SELECT id, version FROM staples WHERE owner_id = $1 AND semantic_id = $2",
+      [fake.current.userId, semanticId],
+    )
+  ).rows[0];
+  return row ? { rowId: row.id, version: row.version } : null;
+}
+async function writeFixtureStaple(
+  context: DataContext,
+  staple: { semanticId: string; [key: string]: unknown },
+) {
+  return service.upsertStapleChecked(context, {
+    staple,
+    expected: await fixtureRevision(staple.semanticId),
+  });
+}
+async function removeFixtureStaple(context: DataContext, { semanticId }: { semanticId: string }) {
+  return service.removeStapleChecked(context, {
+    semanticId,
+    expected: await fixtureRevision(semanticId),
+  });
+}
+
 beforeAll(async () => {
   ctx = await createMigratedDb();
 });
@@ -242,7 +269,7 @@ describe("signed out: every operation is refused and nothing is written", () => 
     [
       "upsertStaple",
       () =>
-        service.upsertStaple(context(), {
+        writeFixtureStaple(context(), {
           semanticId: "x",
           name: "X",
           category: "Tech",
@@ -292,7 +319,7 @@ describe("cross-user: user B cannot touch user A's trips or staples", () => {
   it("lists and staples are per-owner", async () => {
     await seedTrip(db(), OWNER.userId);
     data(
-      await service.upsertStaple(context(), {
+      await writeFixtureStaple(context(), {
         semanticId: "scarf",
         name: "Scarf",
         category: "Accessories",
@@ -306,7 +333,7 @@ describe("cross-user: user B cannot touch user A's trips or staples", () => {
     const theirs = data(await service.listStaplesForOwner(context()));
     expect(theirs).toEqual([]);
     data(
-      await service.upsertStaple(context(), {
+      await writeFixtureStaple(context(), {
         semanticId: "hat",
         name: "Hat",
         category: "Accessories",
@@ -328,7 +355,7 @@ describe("cross-user: user B cannot touch user A's trips or staples", () => {
     as(OTHER_OWNER);
     data(await service.listStaplesForOwner(context()));
     data(
-      await service.upsertStaple(context(), {
+      await writeFixtureStaple(context(), {
         semanticId: "socks",
         name: "Socks",
         category: "Clothing",
@@ -440,7 +467,7 @@ describe("input validation", () => {
     [
       "unknown staple category",
       () =>
-        service.upsertStaple(context(), {
+        writeFixtureStaple(context(), {
           semanticId: "x",
           name: "X",
           category: "Gadgets",
@@ -448,12 +475,12 @@ describe("input validation", () => {
           cadence: "per trip",
           packLast: false,
         }),
-      ["category"],
+      ["staple.category"],
     ],
     [
       "unknown staple group",
       () =>
-        service.upsertStaple(context(), {
+        writeFixtureStaple(context(), {
           semanticId: "x",
           name: "X",
           category: "Tech",
@@ -462,12 +489,12 @@ describe("input validation", () => {
           packLast: false,
           groupId: "mystery",
         }),
-      ["groupId"],
+      ["staple.groupId"],
     ],
     [
       "Smart quantity on an unsupported custom item",
       () =>
-        service.upsertStaple(context(), {
+        writeFixtureStaple(context(), {
           semanticId: "custom-book",
           name: "Book",
           category: "Other essentials",
@@ -475,7 +502,7 @@ describe("input validation", () => {
           cadence: "smart",
           packLast: false,
         }),
-      ["cadence"],
+      ["staple.cadence"],
     ],
     ["extra input to a no-input call", () => service.getTrip(context(), null), ["(root)"]],
   ])("%s -> INVALID_INPUT with field paths", async (_name, call, fields) => {
@@ -804,7 +831,7 @@ describe("item operations", () => {
         packLast: true,
       },
     ] as const) {
-      data(await service.upsertStaple(context(), staple));
+      data(await writeFixtureStaple(context(), staple));
     }
     const created = data(
       await service.createTrip(context(), {
@@ -1109,7 +1136,7 @@ describe("weather (simulated)", () => {
 describe("staples", () => {
   it("upsertStaple creates then updates, bumping the version", async () => {
     const created = data(
-      await service.upsertStaple(context(), {
+      await writeFixtureStaple(context(), {
         semanticId: "scarf",
         name: "Scarf",
         category: "Accessories",
@@ -1120,7 +1147,7 @@ describe("staples", () => {
     );
     expect(created.find((staple) => staple.id === "scarf")).toMatchObject({ qty: 1 });
     const updated = data(
-      await service.upsertStaple(context(), {
+      await writeFixtureStaple(context(), {
         semanticId: "scarf",
         name: "Wool scarf",
         category: "Accessories",
@@ -1148,13 +1175,16 @@ describe("staples", () => {
     const initial = data(await service.getStaplesSetup(context()));
     expect(initial).toEqual({ state: "incomplete", reminderDismissed: false, staples: [] });
 
-    const completed = data(await service.saveStaplesSetup(context(), { staples: [] }));
+    const completed = data(
+      await service.saveStaplesSetup(context(), { baseline: [], staples: [] }),
+    );
     expect(completed).toEqual({ state: "completed", reminderDismissed: false, staples: [] });
     expect(data(await service.getStaplesSetup(context()))).toEqual(completed);
   });
 
   it("saves a chosen setup idempotently and never creates unselected suggestions", async () => {
     const request = {
+      baseline: [],
       staples: [
         {
           semanticId: "underwear",
@@ -1167,7 +1197,15 @@ describe("staples", () => {
       ],
     };
     const first = data(await service.saveStaplesSetup(context(), request));
-    const second = data(await service.saveStaplesSetup(context(), request));
+    const second = data(
+      await service.saveStaplesSetup(context(), {
+        ...request,
+        baseline: first.staples.map((entry) => ({
+          semanticId: entry.id,
+          revision: entry.revision!,
+        })),
+      }),
+    );
     expect(first).toEqual(second);
     expect(second.staples.map((entry) => entry.id)).toEqual(["underwear"]);
     const versions = await ctx.client.query<{ version: number }>(
@@ -1195,7 +1233,7 @@ describe("staples", () => {
       packLast: false,
     };
     const first = data(
-      await service.saveStaplesSetup(context(), { staples: [toothbrush, underwear] }),
+      await service.saveStaplesSetup(context(), { baseline: [], staples: [toothbrush, underwear] }),
     );
     expect(first.staples).toEqual([
       expect.objectContaining({
@@ -1210,6 +1248,10 @@ describe("staples", () => {
 
     const second = data(
       await service.saveStaplesSetup(context(), {
+        baseline: first.staples.map((entry) => ({
+          semanticId: entry.id,
+          revision: entry.revision!,
+        })),
         staples: [
           toothbrush,
           { ...underwear, qty: 3 },
@@ -1232,7 +1274,7 @@ describe("staples", () => {
 
   it("rolls setup state and list back together when the list write fails", async () => {
     data(
-      await service.upsertStaple(context(), {
+      await writeFixtureStaple(context(), {
         semanticId: "scarf",
         name: "Scarf",
         category: "Accessories",
@@ -1241,8 +1283,15 @@ describe("staples", () => {
         packLast: false,
       }),
     );
+    const reviewed = data(await service.getStaplesSetup(context()));
+    const baseline = reviewed.staples.map((entry) => ({
+      semanticId: entry.id,
+      revision: entry.revision!,
+    }));
     failStaples = true;
-    expect(errorOf(await service.saveStaplesSetup(context(), { staples: [] }))).toMatchObject({
+    expect(
+      errorOf(await service.saveStaplesSetup(context(), { baseline, staples: [] })),
+    ).toMatchObject({
       code: "INTERNAL",
     });
     failStaples = false;
@@ -1254,7 +1303,7 @@ describe("staples", () => {
 
   it("skip and reminder dismissal are independent and do not change an existing list", async () => {
     data(
-      await service.upsertStaple(context(), {
+      await writeFixtureStaple(context(), {
         semanticId: "scarf",
         name: "Scarf",
         category: "Accessories",
@@ -1278,6 +1327,7 @@ describe("staples", () => {
   it("does not regress a completed setup when a stale Skip request arrives", async () => {
     data(
       await service.saveStaplesSetup(context(), {
+        baseline: [],
         staples: [
           {
             semanticId: "scarf",
@@ -1305,6 +1355,7 @@ describe("staples", () => {
   it("keeps setup state and selected staples owner-scoped", async () => {
     data(
       await service.saveStaplesSetup(context(), {
+        baseline: [],
         staples: [
           {
             semanticId: "underwear",
@@ -1333,7 +1384,7 @@ describe("staples", () => {
 
   it("removes a future staple idempotently without changing an existing trip snapshot", async () => {
     data(
-      await service.upsertStaple(context(), {
+      await writeFixtureStaple(context(), {
         semanticId: "scarf",
         name: "Scarf",
         category: "Accessories",
@@ -1347,8 +1398,8 @@ describe("staples", () => {
         { id: "scarf", name: "Scarf", category: "Accessories", qty: 1, packed: 1, section: "main" },
       ],
     });
-    expect(data(await service.removeStaple(context(), { semanticId: "scarf" }))).toEqual([]);
-    expect(data(await service.removeStaple(context(), { semanticId: "scarf" }))).toEqual([]);
+    expect(data(await removeFixtureStaple(context(), { semanticId: "scarf" }))).toEqual([]);
+    expect(data(await removeFixtureStaple(context(), { semanticId: "scarf" }))).toEqual([]);
     expect(await loadTrip(db(), OWNER.userId, trip.id)).toMatchObject({
       items: [expect.objectContaining({ id: "scarf", packed: 1 })],
     });
@@ -1446,7 +1497,7 @@ describe("trip lifecycle", () => {
 
     it("builds the trip from the owner's current staples", async () => {
       data(
-        await service.upsertStaple(context(), {
+        await writeFixtureStaple(context(), {
           semanticId: "scarf",
           name: "Scarf",
           category: "Accessories",
@@ -2027,7 +2078,7 @@ describe("staples are per-owner even when owners share the same default ids", ()
       )
     ).rows[0];
   const upsertSocks = (qty: number) =>
-    service.upsertStaple(context(), {
+    writeFixtureStaple(context(), {
       semanticId: "socks",
       name: "Socks",
       category: "Clothing",
@@ -2169,7 +2220,7 @@ describe("input bounds are enforced exactly at the limit", () => {
     [
       "staple qty",
       (n: number) =>
-        service.upsertStaple(context(), {
+        writeFixtureStaple(context(), {
           semanticId: "s",
           name: "x",
           category: "Tech",
@@ -2179,12 +2230,12 @@ describe("input bounds are enforced exactly at the limit", () => {
         }),
       999,
       1000,
-      "qty",
+      "staple.qty",
     ],
     [
       "staple name length",
       (n: number) =>
-        service.upsertStaple(context(), {
+        writeFixtureStaple(context(), {
           semanticId: "s",
           name: "n".repeat(n),
           category: "Tech",
@@ -2194,12 +2245,12 @@ describe("input bounds are enforced exactly at the limit", () => {
         }),
       120,
       121,
-      "name",
+      "staple.name",
     ],
     [
       "staple semanticId length",
       (n: number) =>
-        service.upsertStaple(context(), {
+        writeFixtureStaple(context(), {
           semanticId: "s".repeat(n),
           name: "x",
           category: "Tech",
@@ -2209,7 +2260,7 @@ describe("input bounds are enforced exactly at the limit", () => {
         }),
       100,
       101,
-      "semanticId",
+      "staple.semanticId",
     ],
   ])(
     "%s: the limit is accepted, one past it is INVALID_INPUT",
@@ -2226,14 +2277,17 @@ describe("input bounds are enforced exactly at the limit", () => {
 
 describe("concurrent staple upserts are serialized (no silently dropped staple)", () => {
   const upsert = (semanticId: string, name: string, over: Record<string, unknown> = {}) =>
-    service.upsertStaple(context(), {
-      semanticId,
-      name,
-      category: "Accessories",
-      qty: 1,
-      cadence: "per trip",
-      packLast: false,
-      ...over,
+    service.upsertStapleChecked(context(), {
+      staple: {
+        semanticId,
+        name,
+        category: "Accessories",
+        qty: 1,
+        cadence: "per trip",
+        packLast: false,
+        ...over,
+      },
+      expected: null,
     });
   const staplesOf = async (owner: string) =>
     (
@@ -2252,7 +2306,14 @@ describe("concurrent staple upserts are serialized (no silently dropped staple)"
   });
 
   it("concurrent upserts of the same staple end on one of the two values, with the rest intact", async () => {
-    await Promise.all([upsert("scarf", "Wool scarf"), upsert("scarf", "Silk scarf")]);
+    const results = await Promise.all([
+      upsert("scarf", "Wool scarf"),
+      upsert("scarf", "Silk scarf"),
+    ]);
+    expect(results.filter((result) => result.ok)).toHaveLength(1);
+    expect(results.filter((result) => !result.ok)).toEqual([
+      expect.objectContaining({ error: expect.objectContaining({ code: "STALE" }) }),
+    ]);
     const rows = (
       await ctx.client.query<{ name: string }>(
         "SELECT name FROM staples WHERE owner_id = $1 AND semantic_id = 'scarf'",
@@ -2271,7 +2332,7 @@ describe("concurrent staple upserts are serialized (no silently dropped staple)"
       logger: { logQuery: (query: string) => void statements.push(query) },
     }) as unknown as Db;
     data(
-      await service.upsertStaple(makeContext(logged, fake), {
+      await writeFixtureStaple(makeContext(logged, fake), {
         semanticId: "scarf",
         name: "Scarf",
         category: "Accessories",

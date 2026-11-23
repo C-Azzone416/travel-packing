@@ -160,6 +160,7 @@ describe("StaplesSetupGate", () => {
           id: STAPLE_SUGGESTIONS.find(({ staple }) => staple.name === "Underwear")?.staple.id,
         }),
       ]),
+      [],
     );
   });
 
@@ -219,7 +220,12 @@ describe("StaplesSetupGate", () => {
 
   it("labels migrated owners' reminder as a review invitation", async () => {
     const existing = answer("skipped") as Extract<StaplesSetupResult, { ok: true }>;
-    existing.staples = [STAPLE_SUGGESTIONS[0].staple];
+    existing.staples = [
+      {
+        ...STAPLE_SUGGESTIONS[0].staple,
+        revision: { rowId: "00000000-0000-4000-8000-000000000001", version: 1 },
+      },
+    ];
     const api = actions(existing);
     render(
       <StaplesSetupGate actions={api}>

@@ -1,5 +1,7 @@
 "use server";
 
+import type { StapleRevision } from "@/domain/calc/staples";
+
 // The trip screen's server actions (#16 on the real data layer). Every one goes through the owner-gated service:
 // the owner comes from the session, the trip id from the URL is only a lookup key (another owner's id is
 // NOT_FOUND), and the data layer's per-trip lock orders concurrent edits. Result -> UI mapping matches the
@@ -89,27 +91,36 @@ export async function getHomeCityAction(): Promise<HomeCityResult> {
 }
 
 /** Create or update one staple. The server validates every field; changes apply to future trips only. */
-export async function upsertStapleAction(staple: Staple): Promise<StaplesReadResult> {
+export async function upsertStapleAction(
+  staple: Staple,
+  expected: StapleRevision | null,
+): Promise<StaplesReadResult> {
   return withContext(
     (context) =>
-      service.upsertStaple(context, {
-        semanticId: staple.id,
-        name: staple.name,
-        category: staple.category,
-        qty: staple.qty,
-        cadence: staple.cadence,
-        packLast: staple.packLast,
-        ...(staple.groupId ? { groupId: staple.groupId } : {}),
-        ...(staple.laundryHalves ? { laundryHalves: true } : {}),
-        ...(staple.cube ? { cube: staple.cube } : {}),
+      service.upsertStapleChecked(context, {
+        expected,
+        staple: {
+          semanticId: staple.id,
+          name: staple.name,
+          category: staple.category,
+          qty: staple.qty,
+          cadence: staple.cadence,
+          packLast: staple.packLast,
+          ...(staple.groupId ? { groupId: staple.groupId } : {}),
+          ...(staple.laundryHalves ? { laundryHalves: true } : {}),
+          ...(staple.cube ? { cube: staple.cube } : {}),
+        },
       }),
     (staples) => ({ ok: true as const, staples }),
   ) as Promise<StaplesReadResult>;
 }
 
-export async function removeStapleAction(semanticId: string): Promise<StaplesReadResult> {
+export async function removeStapleAction(
+  semanticId: string,
+  expected: StapleRevision | null,
+): Promise<StaplesReadResult> {
   return withContext(
-    (context) => service.removeStaple(context, { semanticId }),
+    (context) => service.removeStapleChecked(context, { semanticId, expected }),
     (staples) => ({ ok: true as const, staples }),
   ) as Promise<StaplesReadResult>;
 }
@@ -121,9 +132,18 @@ export async function getStaplesSetupAction(): Promise<StaplesSetupResult> {
   return setupResult((context) => service.getStaplesSetup(context));
 }
 
-export async function saveStaplesSetupAction(staples: Staple[]): Promise<StaplesSetupResult> {
+export type StaplesSetupBaseline = ReadonlyArray<{
+  readonly semanticId: string;
+  readonly revision: Readonly<StapleRevision>;
+}>;
+
+export async function saveStaplesSetupAction(
+  staples: Staple[],
+  baseline: StaplesSetupBaseline,
+): Promise<StaplesSetupResult> {
   return setupResult((context) =>
     service.saveStaplesSetup(context, {
+      baseline,
       staples: staples.map((staple) => ({
         semanticId: staple.id,
         name: staple.name,

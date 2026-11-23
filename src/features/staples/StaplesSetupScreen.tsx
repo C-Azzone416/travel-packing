@@ -11,6 +11,8 @@ export interface StaplesSetupScreenProps {
   setup: StaplesSetup;
   busy: boolean;
   saveError?: boolean;
+  recovery?: "retry" | "conflict" | "reload";
+  onReview?: () => void;
   onSave: (staples: Staple[]) => void;
   onSkip: () => void;
 }
@@ -22,12 +24,15 @@ export function StaplesSetupScreen({
   setup,
   busy,
   saveError = false,
+  recovery,
+  onReview,
   onSave,
   onSkip,
 }: StaplesSetupScreenProps) {
   const [staples, setStaples] = useState<Staple[]>(setup.staples);
   const [editing, setEditing] = useState<Editing>(null);
   const [announcement, setAnnouncement] = useState("");
+  const locked = busy || saveError;
   const selected = useMemo(() => new Set(staples.map((staple) => staple.id)), [staples]);
   const target = editing?.staple ?? null;
 
@@ -64,7 +69,7 @@ export function StaplesSetupScreen({
           small
           variant="secondary"
           onClick={() => setEditing({ staple: null })}
-          disabled={busy}
+          disabled={locked}
         >
           ＋ Custom item
         </Button>
@@ -94,7 +99,7 @@ export function StaplesSetupScreen({
                         checked={selected.has(staple.id)}
                         aria-describedby={current ? `setup-rule-${staple.id}` : undefined}
                         onChange={() => toggle(staple)}
-                        disabled={busy}
+                        disabled={locked}
                       />
                       <span className="save-list-box" aria-hidden="true">
                         ✓
@@ -114,6 +119,7 @@ export function StaplesSetupScreen({
                           variant="ghost"
                           className="staples-setup-edit"
                           aria-label={`Edit ${current.name}, ${unitLabel(current)}`}
+                          disabled={locked}
                           onClick={() => setEditing({ staple: current })}
                         >
                           Edit
@@ -152,6 +158,7 @@ export function StaplesSetupScreen({
                   variant="ghost"
                   className="staples-setup-edit"
                   aria-label={`Edit ${staple.name}, ${unitLabel(staple)}`}
+                  disabled={locked}
                   onClick={() => setEditing({ staple })}
                 >
                   Edit
@@ -165,20 +172,34 @@ export function StaplesSetupScreen({
         {saveError ? (
           <div className="callout error staples-setup-error" role="alert">
             <strong>Couldn’t save your Staples.</strong>
-            <p>Your selections are still here. Check your connection and try again.</p>
+            <p>
+              Your selections are still here.{" "}
+              {recovery === "conflict"
+                ? "Staples changed. Reload to review before saving."
+                : recovery === "reload"
+                  ? "Couldn’t reload. Try again to review your Staples."
+                  : "Check your connection and try again."}
+            </p>
+            {onReview ? (
+              <Button variant="ghost" onClick={onReview} disabled={busy}>
+                {recovery === "reload" ? "Try again" : "Reload and discard changes"}
+              </Button>
+            ) : null}
           </div>
         ) : null}
         <div className="actions staples-setup-actions">
           <Button variant="ghost" onClick={onSkip} disabled={busy}>
-            Skip for now
+            {saveError ? "Discard changes and skip" : "Skip for now"}
           </Button>
-          <Button onClick={() => onSave(staples)} disabled={busy}>
-            {busy
-              ? "Saving…"
-              : saveError
-                ? "Try save again"
-                : `Save ${staples.length || "empty"} Staples`}
-          </Button>
+          {recovery !== "conflict" && recovery !== "reload" ? (
+            <Button onClick={() => onSave(staples)} disabled={busy}>
+              {busy
+                ? "Saving…"
+                : saveError
+                  ? "Try save again"
+                  : `Save ${staples.length || "empty"} Staples`}
+            </Button>
+          ) : null}
         </div>
       </div>
 

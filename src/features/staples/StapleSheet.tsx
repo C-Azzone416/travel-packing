@@ -1,6 +1,6 @@
 "use client";
 
-import { useId } from "react";
+import { useEffect, useId, useRef, type ComponentProps } from "react";
 import { Chip } from "@/components/suitcase/Chip";
 import { Stepper } from "@/components/suitcase/Stepper";
 import { Icon } from "@/components/ui/Icon";
@@ -20,8 +20,41 @@ import styles from "./Staples.module.css";
 
 // The phone's editor (spec part 3 section 1.5, st-p-sheet): a bottom sheet with CUBE chips, HOW MANY, the laundry row,
 // and Remove / Done. ModalSheet gives it the focus trap, Escape, and the return of focus to the row that opened it.
-export function StapleSheet({ staple, taken, onChange, onRemove, onClose }: StapleEditorControls) {
+export function StapleSheet({
+  staple,
+  locked = false,
+  recovery,
+  taken,
+  onChange,
+  onRemove,
+  onClose,
+}: StapleEditorControls) {
+  const sheetRef = useRef<HTMLDivElement>(null);
   const radioName = useId();
+  useEffect(() => {
+    if (!locked) return;
+    const dialog = sheetRef.current?.closest('[role="dialog"]');
+    // ModalSheet's attribute selector misses native fieldset disabling; tab only among recovery and Done.
+    const tab = (event: KeyboardEvent) => {
+      if (event.key !== "Tab" || !dialog?.contains(document.activeElement)) return;
+      const buttons = [...dialog.querySelectorAll<HTMLButtonElement>("button")].filter(
+        (button) => !button.matches(":disabled"),
+      );
+      const current = buttons.indexOf(document.activeElement as HTMLButtonElement);
+      const next = event.shiftKey
+        ? current <= 0
+          ? buttons.length - 1
+          : current - 1
+        : current === buttons.length - 1
+          ? 0
+          : current + 1;
+      event.preventDefault();
+      event.stopPropagation();
+      buttons[next]?.focus();
+    };
+    window.addEventListener("keydown", tab, true);
+    return () => window.removeEventListener("keydown", tab, true);
+  }, [locked]);
   const hintId = useId();
   const blocked = laundryBlockedReason(staple);
   const on = Boolean(staple.laundryHalves) && blocked === null;
@@ -30,10 +63,11 @@ export function StapleSheet({ staple, taken, onChange, onRemove, onClose }: Stap
     <ModalSheet
       open
       title={staple.name}
+      focusTitle={locked}
       onClose={onClose}
       actions={
         <div className={styles.sheetActions}>
-          <button type="button" className={styles.sheetRemove} onClick={onRemove}>
+          <button type="button" className={styles.sheetRemove} disabled={locked} onClick={onRemove}>
             Remove
           </button>
           <button type="button" className={styles.sheetDone} onClick={onClose}>
@@ -42,7 +76,7 @@ export function StapleSheet({ staple, taken, onChange, onRemove, onClose }: Stap
         </div>
       }
     >
-      <div className={styles.sheet}>
+      <SheetFields ref={sheetRef} disabled={locked} className={styles.sheet}>
         <StapleNameField
           key={`${staple.id}:${staple.name}`}
           staple={staple}
@@ -121,7 +155,23 @@ export function StapleSheet({ staple, taken, onChange, onRemove, onClose }: Stap
           <span className={styles.switchTrack} aria-hidden="true" />
         </label>
         <p className={styles.packLastHint}>Packed last, on the morning you leave</p>
-      </div>
+      </SheetFields>
+      {recovery}
     </ModalSheet>
+  );
+}
+
+// Keep the shrinking scroller on an ordinary box; native disabling needs no layout box.
+function SheetFields({
+  disabled,
+  children,
+  ...props
+}: ComponentProps<"div"> & { disabled: boolean }) {
+  return (
+    <div {...props}>
+      <fieldset disabled={disabled} style={{ display: "contents" }}>
+        {children}
+      </fieldset>
+    </div>
   );
 }

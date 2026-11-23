@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, type KeyboardEvent } from "react";
+import { useId, type ReactNode, type KeyboardEvent } from "react";
 import { Chip } from "@/components/suitcase/Chip";
 import { Stepper } from "@/components/suitcase/Stepper";
 import { Icon } from "@/components/ui/Icon";
@@ -20,6 +20,8 @@ import styles from "./Staples.module.css";
 
 export interface StapleEditorControls {
   staple: Staple;
+  locked?: boolean;
+  recovery?: ReactNode;
   /** The staple that already has this name (other than `exceptId`), for the rename check. */
   taken: (name: string, exceptId: string) => Staple | undefined;
   onChange: (next: Staple) => void;
@@ -39,6 +41,8 @@ export function laundryBlockedReason(staple: Staple): string | null {
 // Escape closes it. Pack last, the one control the redesign does not draw, lives here as a small switch.
 export function StapleInlineEditor({
   staple,
+  locked = false,
+  recovery,
   taken,
   onChange,
   onRemove,
@@ -60,13 +64,19 @@ export function StapleInlineEditor({
       aria-label={`Edit ${staple.name}`}
       onKeyDown={onKeyDown}
     >
-      <StapleNameField
-        key={`${staple.id}:${staple.name}`}
-        staple={staple}
-        taken={taken}
-        onRename={(name) => onChange({ ...staple, name })}
-      />
-      <div className={styles.editorRow}>
+      <fieldset disabled={locked} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+        <StapleNameField
+          key={`${staple.id}:${staple.name}`}
+          staple={staple}
+          taken={taken}
+          onRename={(name) => onChange({ ...staple, name })}
+        />
+      </fieldset>
+      <fieldset
+        disabled={locked}
+        className={styles.editorRow}
+        style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}
+      >
         <Stepper
           label={`Quantity for ${staple.name}`}
           itemName={staple.name}
@@ -85,8 +95,14 @@ export function StapleInlineEditor({
             </option>
           ))}
         </select>
-      </div>
-      <div className={styles.editorRow} role="group" aria-label={`How ${staple.name} scales`}>
+      </fieldset>
+      <fieldset
+        disabled={locked}
+        style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}
+        className={styles.editorRow}
+        role="group"
+        aria-label={`How ${staple.name} scales`}
+      >
         {cadenceChoices(staple).map((cadence) => (
           <Chip
             key={cadence}
@@ -97,8 +113,12 @@ export function StapleInlineEditor({
             {cadence}
           </Chip>
         ))}
-      </div>
-      <div className={styles.editorRow}>
+      </fieldset>
+      <fieldset
+        disabled={locked}
+        style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}
+        className={styles.editorRow}
+      >
         <button
           type="button"
           role="switch"
@@ -115,13 +135,14 @@ export function StapleInlineEditor({
         <button type="button" className={styles.remove} onClick={onRemove}>
           Remove
         </button>
-      </div>
+      </fieldset>
       <label className={`${styles.switchRow} ${styles.packLastSwitch}`}>
         Pack last
         <input
           className={styles.switchInput}
           type="checkbox"
           role="switch"
+          disabled={locked}
           checked={staple.packLast}
           onChange={(event) => onChange({ ...staple, packLast: event.target.checked })}
         />
@@ -133,6 +154,7 @@ export function StapleInlineEditor({
           {blocked}
         </p>
       ) : null}
+      {recovery}
     </div>
   );
 }

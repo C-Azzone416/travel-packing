@@ -194,16 +194,22 @@ describe("per-trip commands", () => {
     const { source } = setup();
     const tripsBefore = JSON.stringify(source.snapshot().trips);
     const before = (await source.listStaples()).length;
-    const added = await source.upsertStaple({
-      id: "razor",
-      name: "Razor",
-      qty: 1,
-      cadence: "per trip",
-      category: "Bathroom",
-      packLast: false,
-    });
+    const added = await source.upsertStaple(
+      {
+        id: "razor",
+        name: "Razor",
+        qty: 1,
+        cadence: "per trip",
+        category: "Bathroom",
+        packLast: false,
+      },
+      null,
+    );
     expect(added).toHaveLength(before + 1);
-    const changed = await source.upsertStaple({ ...added.find((s) => s.id === "razor")!, qty: 2 });
+    const changed = await source.upsertStaple(
+      { ...added.find((s) => s.id === "razor")!, qty: 2 },
+      added.find((s) => s.id === "razor")!.revision!,
+    );
     expect(changed).toHaveLength(before + 1);
     expect(changed.find((s) => s.id === "razor")!.qty).toBe(2);
     expect(source.staplesSnapshot()).toEqual(changed);
