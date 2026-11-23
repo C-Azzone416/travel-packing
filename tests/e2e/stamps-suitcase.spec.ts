@@ -238,3 +238,330 @@ test("details: a sticker opens a sheet with Edit stamp label; Escape puts focus 
   await expect(details).toBeHidden();
   await expect(lisbon).toBeFocused();
 });
+
+// Real same-document history: Back dismisses details before ordinary route navigation (#557).
+test(
+  "history: Back preserves the selected sticker, nonzero scroll and opener",
+  DEVICE,
+  async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 400 });
+    await openStamps(page);
+    const sticker = page.getByRole("button", {
+      name: "San Diego, Oct 2026, upcoming, not inked yet",
+      exact: true,
+    });
+    await sticker.scrollIntoViewIfNeeded();
+    await page.evaluate(() => window.scrollTo(0, 150));
+    const before = await page.evaluate(() => ({
+      state: history.state,
+      length: history.length,
+      scroll: scrollY,
+    }));
+    expect(before.scroll).toBe(150);
+    // Instrument the actual focus calls without changing their behavior.
+    await sticker.evaluate((node: HTMLElement) => {
+      const focus = HTMLElement.prototype.focus;
+      const calls: (FocusOptions | undefined)[] = [];
+      HTMLElement.prototype.focus = function (options) {
+        if (this === node) {
+          calls.push(options);
+          node.dataset.focusCalls = JSON.stringify(calls);
+        }
+        return focus.call(this, options);
+      };
+      node.focus({ preventScroll: true });
+    });
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("dialog")).toBeVisible();
+    const opened = await page.evaluate(() => ({ state: history.state, length: history.length }));
+    expect(opened.length).toBe(before.length + 1);
+    expect(opened.state).toMatchObject(before.state);
+    await page.goBack();
+    await expect(page).toHaveURL(/\/stamps$/);
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(sticker).toBeFocused();
+    await expect(sticker).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("article", { name: "Selected trip: San Diego" })).toBeVisible();
+    expect(await page.evaluate(() => scrollY)).toBe(before.scroll);
+    await page.goForward();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await historyClosed(page);
+    await expect(sticker).toBeFocused();
+    expect(await page.evaluate(() => scrollY)).toBe(before.scroll);
+    const focusCalls = JSON.parse(
+      (await sticker.getAttribute("data-focus-calls")) ?? "[]",
+    ) as FocusOptions[];
+    expect(focusCalls.length).toBeGreaterThanOrEqual(4);
+    expect(focusCalls.every((options) => options?.preventScroll === true)).toBe(true);
+    await page.goBack();
+    await expect(page).toHaveURL(/\/$/);
+  },
+);
+
+const historySticker = (p: Page) =>
+  p.getByRole("button", { name: "San Diego, Oct 2026, upcoming, not inked yet", exact: true });
+const historyDetails = (p: Page) =>
+  p.getByRole("dialog", { name: "San Diego · Oct 2026", exact: true });
+const historyClosed = async (p: Page) => {
+  await expect(p.getByRole("dialog")).toHaveCount(0);
+  await expect(p.locator("body")).not.toHaveAttribute("data-sheet-open");
+};
+const historySnapshot = async (p: Page, label: string) => {
+  const data = await p.evaluate(() => ({
+    url: location.href,
+    state: history.state,
+    length: history.length,
+  }));
+  await test
+    .info()
+    .attach(label, { body: JSON.stringify(data, null, 2), contentType: "application/json" });
+  return data;
+};
+test.describe("owned stamp history", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.clock.setFixedTime(NOW);
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await signInAsOwner(page);
+  });
+  test(
+    "history: repeated activation pending close Escape reopen creates one active entry",
+    DEVICE,
+    async ({ page }) => {
+      await page.goto("/stamps");
+      await expect(historySticker(page)).toBeVisible();
+      const before = await historySnapshot(page, "before");
+      await historySticker(page).evaluate((n: HTMLElement) => {
+        n.click();
+        n.click();
+        n.click();
+      });
+      await expect(historyDetails(page)).toBeVisible();
+      expect((await historySnapshot(page, "triple-open")).length).toBe(before.length + 1);
+      await historyDetails(page)
+        .getByRole("button", { name: "Close dialog" })
+        .evaluate((n: HTMLElement) => {
+          n.click();
+          n.click();
+          n.click();
+        });
+      await historyClosed(page);
+      await expect(page).toHaveURL(/\/stamps$/);
+      await historySticker(page).click();
+      const firstKey = (await historySnapshot(page, "first-key")).state.packingStampDetails.key;
+      // Background is inert: stress a different activation before any close traversal completes.
+      await page
+        .getByRole("button", { name: "Lisbon, Sep 2026, inked, 1 trip" })
+        .evaluate((node: HTMLElement) => node.click());
+      await expect(page.getByRole("dialog", { name: "Lisbon · Sep 2026" })).toBeVisible();
+      const changed = await historySnapshot(page, "changed-key");
+      expect(changed.length).toBe(before.length + 1);
+      expect(changed.state.packingStampDetails.key).not.toBe(firstKey);
+      await page.goBack();
+      await historyClosed(page);
+      await page.goForward();
+      await expect(page.getByRole("dialog", { name: "Lisbon · Sep 2026" })).toBeVisible();
+      await page.keyboard.press("Escape");
+      await historyClosed(page);
+      for (let i = 0; i < 3; i++) {
+        await historySticker(page).click();
+        await expect(historyDetails(page)).toBeVisible();
+        await page.keyboard.press("Escape");
+        await historyClosed(page);
+        await expect(historySticker(page)).toBeFocused();
+      }
+      await historySticker(page).click();
+      await page.goBack();
+      await historyClosed(page);
+      await page.goBack();
+      await expect(page).toHaveURL(/\/$/);
+      await historySnapshot(page, "ordinary-back");
+    },
+  );
+  test(
+    "history: label editor handoff cancel then Forward and back are serialized",
+    DEVICE,
+    async ({ page }) => {
+      await page.goto("/stamps");
+      await expect(historySticker(page)).toBeVisible();
+      await historySticker(page).click();
+      await expect(historyDetails(page)).toBeVisible();
+      await historyDetails(page).getByRole("button", { name: "Edit stamp label" }).click();
+      const editor = page.getByRole("dialog", { name: "Stamp label", exact: true });
+      await expect(editor).toBeVisible();
+      await expect(historyDetails(page)).toHaveCount(0);
+      expect((await historySnapshot(page, "editor")).state.packingStampDetails).toBeUndefined();
+      await editor.getByRole("button", { name: "Cancel", exact: true }).click();
+      await historyClosed(page);
+      await expect(historySticker(page)).toBeFocused();
+      await page.goForward();
+      await expect(historyDetails(page)).toBeVisible();
+      await page.goBack();
+      await historyClosed(page);
+      await page.goBack();
+      await expect(page).toHaveURL(/\/$/);
+      await historySnapshot(page, "ordinary-back");
+    },
+  );
+  test(
+    "history: details Open trip route leave and obsolete entry on Back stay inert",
+    DEVICE,
+    async ({ page }) => {
+      await page.goto("/stamps");
+      await expect(historySticker(page)).toBeVisible();
+      await historySticker(page).click();
+      await expect(historyDetails(page)).toBeVisible();
+      const old = await historySnapshot(page, "old-instance");
+      await historyDetails(page).getByRole("link", { name: "Open trip", exact: true }).click();
+      await expect(page).toHaveURL(/\/trips\/[^/?]+$/);
+      await historyClosed(page);
+      await historySnapshot(page, "route");
+      await page.goBack();
+      await expect(page).toHaveURL(/\/stamps$/);
+      await expect(historySticker(page)).toBeVisible();
+      await historyClosed(page);
+      expect((await historySnapshot(page, "obsolete-back")).state.packingStampDetails?.owner).toBe(
+        old.state.packingStampDetails.owner,
+      );
+      await historySticker(page).click();
+      await expect(historyDetails(page)).toBeVisible();
+      const fresh = await historySnapshot(page, "fresh-instance");
+      expect(fresh.state.packingStampDetails.owner).not.toBe(old.state.packingStampDetails.owner);
+      await page.goBack();
+      await historyClosed(page);
+      await page.goForward();
+      await expect(historyDetails(page)).toBeVisible();
+      await historySnapshot(page, "fresh-forward");
+    },
+  );
+  test(
+    "history: details Reuse link leaves cleanly and normal Next history resumes",
+    DEVICE,
+    async ({ page }) => {
+      await page.goto("/stamps");
+      await expect(historySticker(page)).toBeVisible();
+      await historySticker(page).click();
+      await historyDetails(page)
+        .getByRole("link", { name: "Reuse this list", exact: true })
+        .click();
+      await expect(page).toHaveURL(/\/trips\/new\?copy=/);
+      await historyClosed(page);
+      await page.goBack();
+      await expect(page).toHaveURL(/\/stamps$/);
+      await expect(historySticker(page)).toBeVisible();
+      await historyClosed(page);
+      await historySnapshot(page, "obsolete-reuse-back");
+      await page.goBack();
+      await expect(page).toHaveURL(/\/stamps$/);
+      await historyClosed(page);
+      await page.goBack();
+      await expect(page).toHaveURL(/\/$/);
+    },
+  );
+  test(
+    "history: phone Home switch while details open unmount remount obsolete traversal",
+    DEVICE,
+    async ({ page }) => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      const stampsTab = page.getByRole("tab", { name: /^Stamps/ });
+      await stampsTab.click();
+      await expect(historySticker(page)).toBeVisible();
+      await historySticker(page).click();
+      await expect(historyDetails(page)).toBeVisible();
+      await historySnapshot(page, "home-open");
+      // The modal makes tabs inert. Inject the existing tab click to exercise external view teardown while open.
+      await page.locator("#home-tab-weather").evaluate((n: HTMLElement) => n.click());
+      await expect(page).toHaveURL(/tab=weather/);
+      await historyClosed(page);
+      await historySnapshot(page, "switched-weather");
+      await page.goBack();
+      await expect(page).toHaveURL(/tab=stamps/);
+      await expect(historySticker(page)).toBeVisible();
+      await historyClosed(page);
+      await historySnapshot(page, "obsolete-home-back");
+      await page.goForward();
+      await expect(page).toHaveURL(/tab=weather/);
+      await historyClosed(page);
+      await page.goBack();
+      await expect(historySticker(page)).toBeVisible();
+      await historyClosed(page);
+      await historySticker(page).click();
+      await expect(historyDetails(page)).toBeVisible();
+      await page.goBack();
+      await historyClosed(page);
+      await expect(historySticker(page)).toBeFocused();
+      await page.goForward();
+      await expect(historyDetails(page)).toBeVisible();
+      await page.keyboard.press("Escape");
+      await historyClosed(page);
+      await historySnapshot(page, "remounted-active");
+    },
+  );
+  test(
+    "history: external route leave while open and reload never resurrect stale dialog",
+    DEVICE,
+    async ({ page }) => {
+      await page.goto("/stamps");
+      await expect(historySticker(page)).toBeVisible();
+      await historySticker(page).click();
+      await expect(historyDetails(page)).toBeVisible();
+      // Exercise an already-authorized app route event despite the inert background.
+      const home = page.locator('a[href="/"]:visible').first();
+      await home.evaluate((n: HTMLElement) => n.click());
+      await expect(page).toHaveURL(/\/$/);
+      await historyClosed(page);
+      await page.goBack();
+      await expect(page).toHaveURL(/\/stamps$/);
+      await expect(historySticker(page)).toBeVisible();
+      await historyClosed(page);
+      await historySticker(page).click();
+      await expect(historyDetails(page)).toBeVisible();
+      await page.reload();
+      await expect(historySticker(page)).toBeVisible();
+      await historyClosed(page);
+      await historySnapshot(page, "reload-obsolete");
+      await page.goBack();
+      await historyClosed(page);
+      await page.goForward();
+      await historyClosed(page);
+      await historySnapshot(page, "reload-forward-inert");
+    },
+  );
+  test(
+    "history: narrow invalid sticker marker is inert for same live instance",
+    DEVICE,
+    async ({ page }) => {
+      for (const embedded of [false, true]) {
+        if (embedded) {
+          await page.setViewportSize({ width: 390, height: 844 });
+          await page.goto("/");
+          await page.getByRole("tab", { name: /^Stamps/ }).click();
+        } else await page.goto("/stamps");
+        await expect(historySticker(page)).toBeVisible();
+        await historySticker(page).click();
+        await expect(historyDetails(page)).toBeVisible();
+        const before = await historySnapshot(page, `valid-marker-${embedded}`);
+        // Fault injection represents a marker whose referenced sticker is absent from this live view.
+        await page.evaluate(() =>
+          history.replaceState(
+            {
+              ...history.state,
+              packingStampDetails: {
+                ...history.state.packingStampDetails,
+                key: "absent-proof-sticker",
+              },
+            },
+            "",
+            location.href,
+          ),
+        );
+        await page.goBack();
+        await historyClosed(page);
+        await page.goForward();
+        await historyClosed(page);
+        const after = await historySnapshot(page, `invalid-forward-${embedded}`);
+        expect(after.state.packingStampDetails.owner).toBe(before.state.packingStampDetails.owner);
+      }
+    },
+  );
+});

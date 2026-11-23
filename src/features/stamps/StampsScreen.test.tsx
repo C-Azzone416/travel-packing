@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { act, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { StrictMode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { renderInApp } from "@/test/providers";
 import { SaveStatusProvider, ConnectedSaveChip } from "@/components/shell/SaveStatus";
@@ -444,5 +445,142 @@ describe("Stamps selected from the address and the Home teaser (#409)", () => {
     expect(document.querySelectorAll('[data-decorative="true"]')).toHaveLength(1);
     expect(within(screen.getByLabelText("Travel totals")).getAllByRole("term")).toHaveLength(2);
     expect(screen.getByRole("link", { name: "All stamps ›" }).getAttribute("href")).toBe("/stamps");
+  });
+});
+
+describe("local detail entry ownership (#557)", () => {
+  const sticker = () =>
+    screen.getByRole("button", { name: "San Diego, Oct 2026, upcoming, not inked yet" });
+  const pop = (state: unknown, url = location.href) =>
+    act(() => {
+      history.replaceState(state, "", url);
+      window.dispatchEvent(new PopStateEvent("popstate", { state }));
+    });
+  const historyTree = (state: LifecycleState) => (
+    <ToastProvider>
+      <SaveStatusProvider>
+        <StrictMode>
+          <StampsContent state={state} today="2026-10-16" onTripChange={vi.fn()} />
+        </StrictMode>
+      </SaveStatusProvider>
+    </ToastProvider>
+  );
+  const mount = (state = sampleLifecycleState()) => render(historyTree(state));
+
+  it("updates the owned key without stacking entries and serializes close and reactivation", () => {
+    history.replaceState({ __NA: true, tree: { nested: [1, 2] }, custom: "keep" }, "", "/stamps");
+    const before = history.state;
+    const push = vi.spyOn(history, "pushState");
+    const back = vi.spyOn(history, "back").mockImplementation(() => undefined);
+    try {
+      mount();
+      fireEvent.click(sticker());
+      fireEvent.click(sticker());
+      const first = history.state;
+      expect(push).toHaveBeenCalledTimes(1);
+      expect(first).toMatchObject(before);
+      fireEvent.click(screen.getByRole("button", { name: "Lisbon, Sep 2026, inked, 1 trip" }));
+      const changed = history.state;
+      expect(changed.packingStampDetails.owner).toBe(first.packingStampDetails.owner);
+      expect(changed.packingStampDetails.key).not.toBe(first.packingStampDetails.key);
+      expect(push).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole("dialog", { name: "Lisbon · Sep 2026" })).toBeTruthy();
+      const close = within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Close dialog",
+      });
+      fireEvent.click(close);
+      fireEvent.click(close);
+      fireEvent.click(sticker());
+      expect(back).toHaveBeenCalledTimes(1);
+      expect(history.state).toEqual(changed);
+      pop(before);
+      expect(screen.queryByRole("dialog")).toBeNull();
+      pop(changed);
+      expect(screen.getByRole("dialog", { name: "Lisbon · Sep 2026" })).toBeTruthy();
+    } finally {
+      back.mockRestore();
+      push.mockRestore();
+    }
+  });
+
+  it("waits for consumption before editing and drops handoffs on foreign URLs or invalidation", () => {
+    const back = vi.spyOn(history, "back").mockImplementation(() => undefined);
+    try {
+      const view = mount();
+      const beginEdit = () => {
+        fireEvent.click(sticker());
+        fireEvent.click(
+          within(screen.getByRole("dialog")).getByRole("button", { name: "Edit stamp label" }),
+        );
+        expect(screen.queryByRole("dialog", { name: "Stamp label" })).toBeNull();
+      };
+      history.replaceState(null, "", "/stamps");
+      beginEdit();
+      pop(null, "/elsewhere");
+      expect(screen.queryByRole("dialog")).toBeNull();
+      pop(null, "/stamps");
+      beginEdit();
+      const owned = history.state;
+      view.rerender(historyTree(emptyLifecycleState()));
+      pop(null);
+      expect(screen.queryByRole("dialog")).toBeNull();
+      pop(owned);
+      expect(screen.queryByRole("dialog")).toBeNull();
+    } finally {
+      back.mockRestore();
+    }
+  });
+
+  it("does not traverse foreign state, rejects malformed markers and invalid stickers", () => {
+    const back = vi.spyOn(history, "back").mockImplementation(() => undefined);
+    try {
+      mount();
+      fireEvent.click(sticker());
+      const owned = history.state;
+      for (const value of [
+        null,
+        12,
+        "foreign",
+        { packingStampDetails: 1 },
+        { packingStampDetails: { owner: "foreign", key: "x" } },
+      ]) {
+        pop(value);
+        expect(screen.queryByRole("dialog")).toBeNull();
+      }
+      pop({ ...owned, packingStampDetails: { ...owned.packingStampDetails, key: "missing" } });
+      expect(screen.queryByRole("dialog")).toBeNull();
+      pop(owned);
+      expect(screen.getByRole("dialog")).toBeTruthy();
+      history.replaceState({ packingStampDetails: { owner: "foreign" } }, "", "/foreign");
+      fireEvent.click(
+        within(screen.getByRole("dialog")).getByRole("button", { name: "Close dialog" }),
+      );
+      expect(back).not.toHaveBeenCalled();
+      expect(screen.queryByRole("dialog")).toBeNull();
+    } finally {
+      back.mockRestore();
+    }
+  });
+
+  it("removes its listener on teardown and never adopts a previous mount's entry", () => {
+    history.replaceState(null, "", "/stamps");
+    const back = vi.spyOn(history, "back");
+    const remove = vi.spyOn(window, "removeEventListener");
+    try {
+      const view = mount();
+      fireEvent.click(sticker());
+      const obsolete = history.state;
+      view.unmount();
+      expect(remove.mock.calls.some(([type]) => type === "popstate")).toBe(true);
+      expect(back).not.toHaveBeenCalled();
+      mount();
+      pop(obsolete);
+      expect(screen.queryByRole("dialog")).toBeNull();
+      fireEvent.click(sticker());
+      expect(history.state.packingStampDetails.owner).not.toBe(obsolete.packingStampDetails.owner);
+    } finally {
+      back.mockRestore();
+      remove.mockRestore();
+    }
   });
 });
