@@ -272,7 +272,8 @@ export function buildTrip(
     : built.items
         .filter((entry) => entry.qty > 0)
         .map((entry) =>
-          BATHROOM_NAMES.has(entry.name.toLowerCase())
+          BATHROOM_NAMES.has(entry.name.toLowerCase()) &&
+          !staples.findLast((staple) => staple.id === entry.id)?.cube
             ? { ...entry, groupId: TOILETRY_GROUP_ID }
             : entry,
         );
