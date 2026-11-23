@@ -198,6 +198,16 @@ test(
     const dialog = page.getByRole("dialog", { name: "San Diego · Oct 2026" });
     await expect(dialog).toBeVisible();
     await doubleText('[role="dialog"]');
+    await page.evaluate(() => document.documentElement.setAttribute("data-scheme", "ocean"));
+    const title = dialog.getByRole("heading");
+    const close = dialog.getByRole("button", { name: "Close" });
+    await title.scrollIntoViewIfNeeded();
+    const titleBox = (await title.boundingBox())!;
+    const closeBox = (await close.boundingBox())!;
+    expect(closeBox.width).toBeGreaterThanOrEqual(44);
+    expect(closeBox.x).toBeGreaterThanOrEqual(0);
+    expect(closeBox.x + closeBox.width).toBeLessThanOrEqual(195);
+    expect(titleBox.x + titleBox.width).toBeLessThanOrEqual(closeBox.x);
     for (const name of ["Reuse this list", "Open trip"]) {
       const action = dialog.getByRole("link", { name });
       await action.scrollIntoViewIfNeeded();
