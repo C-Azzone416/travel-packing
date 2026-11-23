@@ -83,7 +83,7 @@ describe("direct memory Staples revision contract", () => {
     expect(created.revision).toEqual({ rowId: expect.any(String), version: 1 });
   });
   describe.each(["explicit absence", "captured revision"])(
-    "%s on a tokenless row",
+    "%s on a remembered ADD row",
     (expectation) => {
       it.each(["remove", "equal-content upsert", "changed upsert"])(
         "rejects %s without changing Staples or trips",
@@ -108,9 +108,9 @@ describe("direct memory Staples revision contract", () => {
             cadence: "per trip",
             packLast: false,
             groupId: "toiletry-bag",
-            revision: undefined,
+            revision: { rowId: expect.stringMatching(/^[a-f0-9-]{36}$/), version: 1 },
           });
-          // Arrange an unrelated row and a real captured token; remember normalization is a later slice.
+          // A different row token must not authorize this remembered row.
           const unrelated = (await source.upsertStaple(scarf, null)).find(
             (entry) => entry.id === scarf.id,
           )!;

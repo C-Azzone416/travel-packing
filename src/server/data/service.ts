@@ -106,6 +106,7 @@ import {
 } from "./weather-store";
 
 export interface TripResult {
+  staples?: Staple[];
   trip: StoredTrip;
   signals?: Signals;
 }
@@ -149,6 +150,7 @@ function mutateTrip<Input extends { tripId: string }>(
   schema: ZodType<Input>,
   raw: unknown,
   apply: (trip: StoredTrip, input: Input, staples: Staple[]) => Mutation,
+  guard?: (scope: OwnerScope, input: Input) => Promise<void>,
 ): Promise<Result<TripResult>> {
   return run(context, schema, raw, async (scope, input) =>
     scope.db.transaction(async (tx) => {
@@ -157,6 +159,7 @@ function mutateTrip<Input extends { tripId: string }>(
       if (!(await lockTrip(txScope.db, txScope.ownerId, input.tripId))) refuse(fail("NOT_FOUND"));
       const current = await mustLoad(txScope, input.tripId);
       const staples = await listStaples(txScope.db, txScope.ownerId, { lock: true });
+      await guard?.(txScope, input);
       const next = apply(current, input, staples);
       const savedAt = await saveTripAt(txScope.db, txScope.ownerId, next.trip);
       if (!savedAt) refuse(fail("NOT_FOUND"));
@@ -165,7 +168,13 @@ function mutateTrip<Input extends { tripId: string }>(
       if (next.staples && next.staples !== staples) {
         await saveStaples(txScope.db, txScope.ownerId, next.staples);
       }
-      return { trip: next.trip, signals: next.signals };
+      return {
+        trip: next.trip,
+        signals: next.signals,
+        ...(next.staples && next.staples !== staples
+          ? { staples: await listStaples(txScope.db, txScope.ownerId) }
+          : {}),
+      };
     }),
   );
 }
@@ -240,15 +249,32 @@ export const markTripNotReady = tripCommand(markNotReady);
 
 // ---------------------------------------------------------------- item operations
 
+async function guardRemember(
+  scope: OwnerScope,
+  input: { itemId: string; scope: string; expected?: Staple["revision"] | null },
+) {
+  if (input.scope === "remember")
+    await assertStapleRevision(scope.db, scope.ownerId, input.itemId, input.expected!);
+}
+
 export function editTripItem(context: DataContext, input: unknown) {
-  return mutateTrip(context, inputs.editItemInput, input, (trip, { itemId, ...edit }, staples) =>
-    unwrapItemOp(editItem(trip, staples, itemId, edit)),
+  return mutateTrip(
+    context,
+    inputs.editItemInput,
+    input,
+    (trip, { itemId, ...edit }, staples) => unwrapItemOp(editItem(trip, staples, itemId, edit)),
+    guardRemember,
   );
 }
 
 export function removeItemFromTrip(context: DataContext, input: unknown) {
-  return mutateTrip(context, inputs.removeItemInput, input, (trip, { itemId, scope }, staples) =>
-    unwrapItemOp(removeTripItem(trip, staples, itemId, scope)),
+  return mutateTrip(
+    context,
+    inputs.removeItemInput,
+    input,
+    (trip, { itemId, scope }, staples) =>
+      unwrapItemOp(removeTripItem(trip, staples, itemId, scope)),
+    guardRemember,
   );
 }
 

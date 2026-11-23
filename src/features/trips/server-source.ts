@@ -57,8 +57,18 @@ export interface TripActions {
   togglePacked(tripId: string, itemId: string): Promise<TripCommandResult>;
   incrementPacked(tripId: string, itemId: string): Promise<TripCommandResult>;
   decrementPacked(tripId: string, itemId: string): Promise<TripCommandResult>;
-  editItem(tripId: string, itemId: string, edit: ItemEdit): Promise<TripCommandResult>;
-  removeItem(tripId: string, itemId: string, scope: Scope): Promise<TripCommandResult>;
+  editItem(
+    tripId: string,
+    itemId: string,
+    edit: ItemEdit,
+    expected?: StapleRevision | null,
+  ): Promise<TripCommandResult>;
+  removeItem(
+    tripId: string,
+    itemId: string,
+    scope: Scope,
+    expected?: StapleRevision | null,
+  ): Promise<TripCommandResult>;
   addToiletryItem(tripId: string, item: NewToiletryItem): Promise<TripCommandResult>;
   moveItemToCube(tripId: string, itemId: string, cube: Cube): Promise<TripCommandResult>;
   setMorningOf(tripId: string, cube: Cube, on: boolean): Promise<TripCommandResult>;
@@ -124,7 +134,11 @@ async function unwrapTrip(pending: Promise<CreateTripActionResult>): Promise<Lif
 async function unwrapChange(pending: Promise<TripCommandResult>): Promise<TripChange> {
   const result = await pending;
   if (!result.ok) throw new TripsSourceError(result.code);
-  return { trip: result.trip, signals: result.signals };
+  return {
+    trip: result.trip,
+    signals: result.signals,
+    ...(result.staples ? { staples: result.staples } : {}),
+  };
 }
 
 async function unwrapRead(pending: Promise<TripReadResult>): Promise<LifecycleTrip> {
@@ -182,8 +196,10 @@ export function createServerTripsSource(
     togglePacked: (id, itemId) => unwrapChange(trip.togglePacked(id, itemId)),
     incrementPacked: (id, itemId) => unwrapChange(trip.incrementPacked(id, itemId)),
     decrementPacked: (id, itemId) => unwrapChange(trip.decrementPacked(id, itemId)),
-    editItem: (id, itemId, edit) => unwrapChange(trip.editItem(id, itemId, edit)),
-    removeItem: (id, itemId, scope) => unwrapChange(trip.removeItem(id, itemId, scope)),
+    editItem: (id, itemId, edit, expected) =>
+      unwrapChange(trip.editItem(id, itemId, edit, expected)),
+    removeItem: (id, itemId, scope, expected) =>
+      unwrapChange(trip.removeItem(id, itemId, scope, expected)),
     addToiletryItem: (id, item) => unwrapChange(trip.addToiletryItem(id, item)),
     moveItemToCube: (id, itemId, cube) => unwrapChange(trip.moveItemToCube(id, itemId, cube)),
     setMorningOf: (id, cube, on) => unwrapChange(trip.setMorningOf(id, cube, on)),

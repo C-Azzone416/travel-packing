@@ -338,12 +338,17 @@ describe("item and preference commands", () => {
     });
     expect(item(edited, "sunglasses")).toMatchObject({ name: "Shades", qty: 2 });
     const before = await listStaplesAction();
-    await editItemAction(trip.id, "sunglasses", {
-      name: "Sunglasses",
-      qty: 3,
-      timing: "packlast",
-      scope: "remember",
-    });
+    await editItemAction(
+      trip.id,
+      "sunglasses",
+      {
+        name: "Sunglasses",
+        qty: 3,
+        timing: "packlast",
+        scope: "remember",
+      },
+      null,
+    );
     const after = await listStaplesAction();
     if (!before.ok || !after.ok) throw new Error("expected ok");
     expect(after.staples).not.toEqual(before.staples);
