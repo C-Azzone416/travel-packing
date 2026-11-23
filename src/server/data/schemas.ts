@@ -266,6 +266,20 @@ export const saveStaplesSetupInput = z.object({
 });
 export const stapleOnly = z.object({ semanticId: z.string().min(1).max(100) });
 
+/** Required command metadata, separate from content used by seed/setup. Null means explicit absence. */
+export const stapleExpectation = z
+  .object({
+    rowId: z.uuid(),
+    version: z.number().int().min(1).max(2_147_483_647),
+  })
+  .strict()
+  .nullable();
+export const checkedStapleInput = z.object({
+  staple: stapleInput,
+  expected: stapleExpectation,
+});
+export const checkedStapleOnly = stapleOnly.extend({ expected: stapleExpectation });
+
 export const none = z.object({}).strict();
 
 export const weatherSettingsInput = z
