@@ -10,7 +10,15 @@ import { calculateSuggestions, type CalcConfig, type WeatherInput } from "./sugg
 export type StapleCadence = "per day" | "per trip" | "smart" | "per night";
 export type ItemSection = "main" | "packlast" | "return";
 
+/** Owner-scoped persistence revision. Semantic identity remains Staple.id. */
+export interface StapleRevision {
+  rowId: string;
+  version: number;
+}
+
 export interface Staple {
+  /** Present on persisted reads; absent on synthetic/seed content. Never copied into trip items. */
+  revision?: StapleRevision;
   id: string;
   name: string;
   qty: number;

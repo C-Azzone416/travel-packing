@@ -384,7 +384,10 @@ describe("item and preference commands", () => {
     } as const;
     const upserted = await upsertStapleAction(tees);
     if (!upserted.ok) throw new Error(`expected ok, got ${upserted.code}`);
-    expect(upserted.staples.find((entry) => entry.id === "tops")).toEqual(tees);
+    expect(upserted.staples.find((entry) => entry.id === "tops")).toEqual({
+      ...tees,
+      revision: { rowId: expect.any(String), version: 1 },
+    });
     const cleared = await upsertStapleAction({
       ...tees,
       laundryHalves: undefined,
@@ -396,7 +399,9 @@ describe("item and preference commands", () => {
     );
     const setup = await saveStaplesSetupAction([tees]);
     if (!setup.ok) throw new Error(`expected ok, got ${setup.code}`);
-    expect(setup.staples).toEqual([tees]);
+    expect(setup.staples).toEqual([
+      { ...tees, revision: { rowId: expect.any(String), version: 3 } },
+    ]);
   });
 
   it("upsertStapleAction rejects bad input, and another owner's staples are separate", async () => {

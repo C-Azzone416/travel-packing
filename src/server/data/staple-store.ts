@@ -4,6 +4,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { canCarryLaundryFlag, cubeForItem } from "../../domain/cubes";
 import { canonicalItemId } from "../../domain/item-identity";
 import { supportsSmartQuantity } from "../../domain/calc";
+import type { StapleRevision } from "../../domain/calc/staples";
 import type { Staple } from "../../domain/trip";
 import type { Db } from "../db/retention";
 import * as schema from "../db/schema";
@@ -18,6 +19,7 @@ type StapleRow = typeof schema.staples.$inferSelect;
 function toStaple(row: StapleRow): Staple {
   const staple: Staple = {
     id: row.semanticId,
+    revision: { rowId: row.id, version: row.version },
     name: row.name,
     category: row.category,
     qty: row.qty,
@@ -45,6 +47,29 @@ export async function listStaples(
   return rows.map(toStaple);
 }
 
+/**
+ * Assert the captured target revision BEFORE any writes in the caller's run() owner transaction.
+ * That existing advisory lock also serializes absence checks. Never fetch an expectation for a caller.
+ * Only this semantic id is compared, so changes to other rows do not conflict.
+ */
+export async function assertStapleRevision(
+  db: Db,
+  ownerId: string,
+  semanticId: string,
+  expected: StapleRevision | null,
+): Promise<void> {
+  const [row] = await db
+    .select({ rowId: schema.staples.id, version: schema.staples.version })
+    .from(schema.staples)
+    .where(and(eq(schema.staples.ownerId, ownerId), eq(schema.staples.semanticId, semanticId)))
+    .for("update");
+  const matches =
+    expected === null
+      ? row === undefined
+      : row !== undefined && row.rowId === expected.rowId && row.version === expected.version;
+  if (!matches) refuse(fail("STALE"));
+}
+
 function sameStaple(a: Staple, b: Staple): boolean {
   return (
     a.name === b.name &&
@@ -59,6 +84,7 @@ function sameStaple(a: Staple, b: Staple): boolean {
 }
 
 /**
+ * Internal seed/replacement facility, not a client mutation boundary.
  * Make the owner's stored staples equal `next`: new ones are inserted, changed ones are updated with their
  * version bumped, missing ones are deleted. Trip rows are never touched (snapshots).
  */
