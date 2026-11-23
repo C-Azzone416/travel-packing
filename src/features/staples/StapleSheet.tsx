@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useRef, type ComponentProps } from "react";
 import { Chip } from "@/components/suitcase/Chip";
 import { Stepper } from "@/components/suitcase/Stepper";
 import { Icon } from "@/components/ui/Icon";
@@ -29,7 +29,7 @@ export function StapleSheet({
   onRemove,
   onClose,
 }: StapleEditorControls) {
-  const sheetRef = useRef<HTMLFieldSetElement>(null);
+  const sheetRef = useRef<HTMLDivElement>(null);
   const radioName = useId();
   useEffect(() => {
     if (!locked) return;
@@ -76,12 +76,7 @@ export function StapleSheet({
         </div>
       }
     >
-      <fieldset
-        ref={sheetRef}
-        disabled={locked}
-        className={styles.sheet}
-        style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}
-      >
+      <SheetFields ref={sheetRef} disabled={locked} className={styles.sheet}>
         <StapleNameField
           key={`${staple.id}:${staple.name}`}
           staple={staple}
@@ -160,8 +155,23 @@ export function StapleSheet({
           <span className={styles.switchTrack} aria-hidden="true" />
         </label>
         <p className={styles.packLastHint}>Packed last, on the morning you leave</p>
-      </fieldset>
+      </SheetFields>
       {recovery}
     </ModalSheet>
+  );
+}
+
+// Keep the shrinking scroller on an ordinary box; native disabling needs no layout box.
+function SheetFields({
+  disabled,
+  children,
+  ...props
+}: ComponentProps<"div"> & { disabled: boolean }) {
+  return (
+    <div {...props}>
+      <fieldset disabled={disabled} style={{ display: "contents" }}>
+        {children}
+      </fieldset>
+    </div>
   );
 }
