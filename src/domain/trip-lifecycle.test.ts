@@ -382,6 +382,25 @@ describe("buildTrip", () => {
     expect(trip.location).toBeNull();
   });
 
+  it("respects explicit staple placement while retaining legacy bathroom fallback", () => {
+    const trip = buildTrip(
+      "X",
+      null,
+      "2030-04-01",
+      "2030-04-05",
+      CONFIG,
+      [
+        { ...STAPLES[2], id: "last-toothbrush", cube: "misc" },
+        { ...STAPLES[2], id: "contacts", name: "Contacts", cube: "misc", groupId: "custom" },
+        { ...STAPLES[2], id: "toothpaste", name: "Toothpaste" },
+      ],
+      makeDeps(),
+    );
+    expect(byId(trip, "last-toothbrush")).toMatchObject({ cube: "misc", groupId: null });
+    expect(byId(trip, "contacts")).toMatchObject({ cube: "misc", groupId: "custom" });
+    expect(byId(trip, "toothpaste")?.groupId).toBe(TOILETRY_GROUP_ID);
+  });
+
   it("tags the default Bathroom names as toiletry contents and drops stale groups from matched staples", () => {
     const trip = savedTrip({}, [
       {

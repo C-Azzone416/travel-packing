@@ -505,8 +505,9 @@ test.describe("design's known items", DEVICE, () => {
   test("the fixed bottom navigation never covers the last content", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 600 });
     await openDashboard(page);
-    // The "Set your Home city" hint arrives after the Home city read and grows the page: measure only once it has landed.
-    await expect(page.getByText("Set your Home city")).toBeVisible();
+    // Wait for pending page data and fonts before measuring the final scrollable content.
+    await page.waitForLoadState("networkidle");
+    await page.evaluate(() => document.fonts.ready);
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     const nav = (await page.getByRole("navigation", { name: "Primary navigation" }).boundingBox())!;
     const lastBottom = await page.evaluate(() => {

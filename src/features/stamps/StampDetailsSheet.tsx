@@ -59,12 +59,20 @@ export function StampDetailsSheet({
         </div>
         {stamps.length ? (
           <div className={styles.preview}>
-            <Stamps compact departure={trip.start} stamps={stamps} />
+            <Stamps
+              compact
+              departure={sticker.status === "unknown" ? "" : trip.start}
+              stamps={stamps}
+            />
           </div>
         ) : null}
         <p className={styles.facts}>{summary.facts}</p>
         <p className={styles.status}>
-          {sticker.upcoming ? "Upcoming · inks when you get home" : "Inked"}
+          {sticker.status === "unknown"
+            ? "Date not set"
+            : sticker.status === "upcoming"
+              ? "Upcoming · inks when you get home"
+              : "Inked"}
           {sticker.completedCount > 1 ? ` · Visited ${sticker.completedCount} times` : ""}
         </p>
       </div>

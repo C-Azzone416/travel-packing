@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { renderInApp } from "@/test/providers";
@@ -185,17 +185,18 @@ describe("a sticker opens its details (#494)", () => {
     const sanDiego = screen.getByRole("button", { name: SAN_DIEGO });
     fireEvent.click(lisbon);
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /Close/ }));
-    expect(screen.queryByRole("dialog")).toBeNull();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     fireEvent.click(sanDiego);
     expect(screen.getByRole("dialog", { name: "San Diego · Oct 2026" })).toBeTruthy();
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /Close/ }));
-    expect(document.activeElement).toBe(sanDiego);
+    await waitFor(() => expect(document.activeElement).toBe(sanDiego));
     fireEvent.click(lisbon);
     await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     fireEvent.click(sanDiego);
     await user.keyboard("{Escape}");
-    expect(screen.queryByRole("dialog")).toBeNull();
-    expect(document.activeElement).toBe(sanDiego);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(sanDiego));
   });
 
   it("pins the read-only route preview by its accessible name and saved label, apart from the close-up", async () => {
@@ -232,5 +233,25 @@ describe("a sticker opens its details (#494)", () => {
     expect(
       within(screen.getByRole("dialog")).getByText("Upcoming · inks when you get home"),
     ).toBeTruthy();
+  });
+});
+
+describe("unknown dates", () => {
+  it("keeps an unknown sticker neutral until explicitly opened", async () => {
+    const legacy = {
+      ...trip("legacy", "2026-11-20", "2026-11-25"),
+      start: "2026-11-20",
+      end: "2026-09-01",
+    };
+    const { user } = open(source(withTrips(legacy)));
+    await user.click(await screen.findByRole("button", { name: "All time" }));
+    const sticker = screen.getByRole("button", { name: "Lisbon, Date not set" });
+    expect(sticker.getAttribute("aria-pressed")).toBe("false");
+    expect(screen.queryByRole("article", { name: /Selected trip/ })).toBeNull();
+    expect(sticker.textContent).not.toMatch(/Upcoming|Inked/);
+    await user.click(sticker);
+    const dialog = screen.getByRole("dialog", { name: "Lisbon · Date not set" });
+    expect(within(dialog).getByText("Date not set")).toBeTruthy();
+    expect(dialog.textContent).not.toMatch(/Upcoming|Inked|day trip|night|20 NOV|2026/i);
   });
 });

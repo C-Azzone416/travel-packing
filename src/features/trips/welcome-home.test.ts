@@ -185,3 +185,16 @@ describe("seen on this device", () => {
     expect(() => markWelcomeSeen("a", null)).not.toThrow();
   });
 });
+
+describe("unknown dates do not announce a return", () => {
+  it.each([
+    ["bad", "2026-09-07"],
+    ["2026-09-10", "2026-09-07"],
+    ["", ""],
+    ["2026-02-30", "2026-09-07"],
+  ])("rejects %s / %s", (start, end) => {
+    const legacy = { ...LISBON_TRIP, start, end };
+    expect(welcomeHomeCandidate([legacy], "2026-09-08")).toBeNull();
+    expect(welcomeHomeModel([legacy], "2026-09-08")).toBeNull();
+  });
+});
