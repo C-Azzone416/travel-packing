@@ -132,9 +132,18 @@ export async function getStaplesSetupAction(): Promise<StaplesSetupResult> {
   return setupResult((context) => service.getStaplesSetup(context));
 }
 
-export async function saveStaplesSetupAction(staples: Staple[]): Promise<StaplesSetupResult> {
+export type StaplesSetupBaseline = ReadonlyArray<{
+  readonly semanticId: string;
+  readonly revision: Readonly<StapleRevision>;
+}>;
+
+export async function saveStaplesSetupAction(
+  staples: Staple[],
+  baseline: StaplesSetupBaseline,
+): Promise<StaplesSetupResult> {
   return setupResult((context) =>
     service.saveStaplesSetup(context, {
+      baseline,
       staples: staples.map((staple) => ({
         semanticId: staple.id,
         name: staple.name,

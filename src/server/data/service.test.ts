@@ -1175,13 +1175,16 @@ describe("staples", () => {
     const initial = data(await service.getStaplesSetup(context()));
     expect(initial).toEqual({ state: "incomplete", reminderDismissed: false, staples: [] });
 
-    const completed = data(await service.saveStaplesSetup(context(), { staples: [] }));
+    const completed = data(
+      await service.saveStaplesSetup(context(), { baseline: [], staples: [] }),
+    );
     expect(completed).toEqual({ state: "completed", reminderDismissed: false, staples: [] });
     expect(data(await service.getStaplesSetup(context()))).toEqual(completed);
   });
 
   it("saves a chosen setup idempotently and never creates unselected suggestions", async () => {
     const request = {
+      baseline: [],
       staples: [
         {
           semanticId: "underwear",
@@ -1194,7 +1197,15 @@ describe("staples", () => {
       ],
     };
     const first = data(await service.saveStaplesSetup(context(), request));
-    const second = data(await service.saveStaplesSetup(context(), request));
+    const second = data(
+      await service.saveStaplesSetup(context(), {
+        ...request,
+        baseline: first.staples.map((entry) => ({
+          semanticId: entry.id,
+          revision: entry.revision!,
+        })),
+      }),
+    );
     expect(first).toEqual(second);
     expect(second.staples.map((entry) => entry.id)).toEqual(["underwear"]);
     const versions = await ctx.client.query<{ version: number }>(
@@ -1222,7 +1233,7 @@ describe("staples", () => {
       packLast: false,
     };
     const first = data(
-      await service.saveStaplesSetup(context(), { staples: [toothbrush, underwear] }),
+      await service.saveStaplesSetup(context(), { baseline: [], staples: [toothbrush, underwear] }),
     );
     expect(first.staples).toEqual([
       expect.objectContaining({
@@ -1237,6 +1248,10 @@ describe("staples", () => {
 
     const second = data(
       await service.saveStaplesSetup(context(), {
+        baseline: first.staples.map((entry) => ({
+          semanticId: entry.id,
+          revision: entry.revision!,
+        })),
         staples: [
           toothbrush,
           { ...underwear, qty: 3 },
@@ -1268,8 +1283,15 @@ describe("staples", () => {
         packLast: false,
       }),
     );
+    const reviewed = data(await service.getStaplesSetup(context()));
+    const baseline = reviewed.staples.map((entry) => ({
+      semanticId: entry.id,
+      revision: entry.revision!,
+    }));
     failStaples = true;
-    expect(errorOf(await service.saveStaplesSetup(context(), { staples: [] }))).toMatchObject({
+    expect(
+      errorOf(await service.saveStaplesSetup(context(), { baseline, staples: [] })),
+    ).toMatchObject({
       code: "INTERNAL",
     });
     failStaples = false;
@@ -1305,6 +1327,7 @@ describe("staples", () => {
   it("does not regress a completed setup when a stale Skip request arrives", async () => {
     data(
       await service.saveStaplesSetup(context(), {
+        baseline: [],
         staples: [
           {
             semanticId: "scarf",
@@ -1332,6 +1355,7 @@ describe("staples", () => {
   it("keeps setup state and selected staples owner-scoped", async () => {
     data(
       await service.saveStaplesSetup(context(), {
+        baseline: [],
         staples: [
           {
             semanticId: "underwear",

@@ -148,7 +148,7 @@ describe("reads", () => {
       cadence: "smart",
       packLast: false,
     } as const;
-    expect(await saveStaplesSetupAction([chosen])).toMatchObject({
+    expect(await saveStaplesSetupAction([chosen], [])).toMatchObject({
       ok: true,
       state: "completed",
       staples: [chosen],
@@ -409,7 +409,10 @@ describe("item and preference commands", () => {
     expect(cleared.staples.find((entry) => entry.id === "tops")).not.toHaveProperty(
       "laundryHalves",
     );
-    const setup = await saveStaplesSetupAction([tees]);
+    const setup = await saveStaplesSetupAction(
+      [tees],
+      cleared.staples.map((entry) => ({ semanticId: entry.id, revision: entry.revision! })),
+    );
     if (!setup.ok) throw new Error(`expected ok, got ${setup.code}`);
     expect(setup.staples).toEqual([
       { ...tees, revision: { rowId: expect.any(String), version: 3 } },

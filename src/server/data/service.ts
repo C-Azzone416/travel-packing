@@ -451,6 +451,20 @@ export function saveStaplesSetup(
         .from(schema.users)
         .where(eq(schema.users.id, scope.ownerId))
         .for("update");
+      const current = await listStaples(db, scope.ownerId, { lock: true });
+      const baseline = new Map(request.baseline.map((entry) => [entry.semanticId, entry.revision]));
+      if (
+        current.length !== baseline.size ||
+        current.some((entry) => {
+          const expected = baseline.get(entry.id);
+          return (
+            !expected ||
+            entry.revision?.rowId !== expected.rowId ||
+            entry.revision.version !== expected.version
+          );
+        })
+      )
+        refuse(fail("STALE"));
       await saveStaples(db, scope.ownerId, fromSetupInput(request));
       await db
         .update(schema.users)

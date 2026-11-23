@@ -54,9 +54,12 @@ describe("stapleInput (#378)", () => {
 
   it("applies the same rules inside the setup save", () => {
     const socks = { ...valid, semanticId: "socks", laundryHalves: true };
-    expect(saveStaplesSetupInput.safeParse({ staples: [socks] }).success).toBe(false);
+    expect(saveStaplesSetupInput.safeParse({ staples: [socks], baseline: [] }).success).toBe(false);
     expect(
-      saveStaplesSetupInput.safeParse({ staples: [{ ...valid, laundryHalves: true }] }).success,
+      saveStaplesSetupInput.safeParse({
+        staples: [{ ...valid, laundryHalves: true }],
+        baseline: [],
+      }).success,
     ).toBe(true);
   });
 });
@@ -88,9 +91,13 @@ describe("Staple command expectations", () => {
       false,
     );
   });
-  it("keeps content and setup schemas independent of command expectations", () => {
+  it("keeps content independent of command metadata and requires setup membership", () => {
     expect(stapleInput.parse(valid)).toEqual(valid);
-    expect(saveStaplesSetupInput.parse({ staples: [valid] })).toEqual({ staples: [valid] });
+    expect(saveStaplesSetupInput.parse({ staples: [valid], baseline: [] })).toEqual({
+      staples: [valid],
+      baseline: [],
+    });
+    expect(saveStaplesSetupInput.safeParse({ staples: [valid] }).success).toBe(false);
     expect(
       checkedStapleInput.safeParse({
         staple: { ...valid, laundryHalves: true, semanticId: "socks" },
