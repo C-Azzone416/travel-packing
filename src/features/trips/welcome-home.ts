@@ -2,10 +2,10 @@
 // view-model and the device-local "seen" list; no React, no clock (`today` is passed in, device-local per #26).
 
 import { packedTotals } from "@/domain/readiness";
-import { isPastTrip, type LifecycleTrip } from "@/domain/trip-lifecycle";
+import { type LifecycleTrip } from "@/domain/trip-lifecycle";
 import { tripDisplayName } from "@/domain/trip-route";
 import { daysBetween } from "@/domain/trip-stops";
-import { stampsView, type StickerView } from "@/features/stamps/stamps-view";
+import { stampStatus, stampsView, type StickerView } from "@/features/stamps/stamps-view";
 
 /** The card shows for this many days after the trip's end date, or until it is dismissed. */
 export const WELCOME_HOME_DAYS = 14;
@@ -49,7 +49,7 @@ export function welcomeHomeCandidate(
   today: string,
 ): LifecycleTrip | null {
   const recent = trips
-    .filter((trip) => !trip.archived && isPastTrip(trip, today))
+    .filter((trip) => !trip.archived && stampStatus(trip, today) === "earned")
     .filter((trip) => daysBetween(trip.end, today) <= WELCOME_HOME_DAYS)
     .sort((a, b) => b.end.localeCompare(a.end) || b.start.localeCompare(a.start));
   return recent[0] ?? null;

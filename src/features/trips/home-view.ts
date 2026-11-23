@@ -685,7 +685,9 @@ export function noTripModel(trips: readonly LifecycleTrip[], today: string): NoT
     lede: returning
       ? "Your Staples are ready to start the list."
       : "Plan a trip and Packed Smart builds your list from your Staples and the weather.",
-    stickers: rolling.stickers.filter((sticker) => !sticker.upcoming).slice(0, TEASER_STICKERS),
+    stickers: rolling.stickers
+      .filter((sticker) => sticker.status === "earned")
+      .slice(0, TEASER_STICKERS),
     inked: rolling.inked,
     filterLabel: rolling.filterLabel,
     totals: { trips: rolling.totals.trips, nights: rolling.totals.nights },
