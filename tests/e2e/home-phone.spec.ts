@@ -297,3 +297,39 @@ for (const width of [195, 320, 390] as const) {
     );
   }
 }
+
+test(
+  "history: Home detail Back retains scroll and selection before ordinary Pack Back",
+  DEVICE,
+  async ({ page }) => {
+    await openHome(page);
+    await pill(page, /^Stamps/).click();
+    await page.setViewportSize({ width: 390, height: 400 });
+    const sticker = page.getByRole("button", {
+      name: "San Diego, Oct 2026, upcoming, not inked yet",
+      exact: true,
+    });
+    await expect(sticker).toBeVisible();
+    await page.evaluate(() => window.scrollTo(0, 150));
+    expect(await page.evaluate(() => scrollY)).toBe(150);
+    const before = await page.evaluate(() => history.state);
+    await sticker.evaluate((node: HTMLElement) => node.focus({ preventScroll: true }));
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("dialog")).toBeVisible();
+    expect(await page.evaluate(() => history.state)).toMatchObject(before);
+    await page.goBack();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(sticker).toBeFocused();
+    await expect(sticker).toHaveAttribute("aria-pressed", "true");
+    expect(await page.evaluate(() => scrollY)).toBe(150);
+    await page.goForward();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(sticker).toBeFocused();
+    expect(await page.evaluate(() => scrollY)).toBe(150);
+    await page.goBack();
+    await expect(page).toHaveURL(/\/$/);
+    await expect(pill(page, /^Pack/)).toHaveAttribute("aria-selected", "true");
+  },
+);

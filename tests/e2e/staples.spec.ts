@@ -379,64 +379,266 @@ test("the count-rules disclosure stays reachable and wraps whole words at every 
 
 // #491: the phone dock starts as ONE collapsed bar (48px button) above the tab bar; opening it never lets it cover the tab
 // bar or grow past 45% of the screen. The staple sheet keeps Remove and Done on screen at 195×844 and 390×640.
-test("the phone dock starts as one collapsed bar clear of the tab bar, and the sheet keeps Remove and Done on screen", async ({
-  page,
-}) => {
-  await page.clock.setFixedTime(NOW);
-  await page.setViewportSize({ width: 390, height: 844 });
-  await signInAsOwner(page);
-  await page.goto("/staples");
-  await expect(section(page, "Clothing")).toBeVisible();
-  const dock = page.getByRole("complementary", { name: "Preview" });
-  const bar = page.getByRole("button", { name: "Preview a trip", exact: true });
-  await expect(bar).toHaveAttribute("aria-expanded", "false");
-  await expect(page.getByRole("slider")).toHaveCount(0);
-  expect((await bar.boundingBox())!.height).toBeGreaterThanOrEqual(48);
-  expect((await dock.boundingBox())!.height).toBeLessThanOrEqual(80);
-  const tabBar = (await page
-    .getByRole("navigation", { name: "Primary navigation" })
-    .boundingBox())!;
-  const closed = (await dock.boundingBox())!;
-  expect(closed.y + closed.height).toBeLessThanOrEqual(tabBar.y + 0.5);
-  await bar.click();
-  await expect(page.getByRole("button", { name: "Preview: 4 nights" })).toHaveAttribute(
-    "aria-expanded",
-    "true",
-  );
-  const open = (await dock.boundingBox())!;
-  expect(open.height).toBeLessThanOrEqual(844 * 0.45 + 1);
-  expect(open.y + open.height).toBeLessThanOrEqual(tabBar.y + 0.5);
-  await page.getByRole("button", { name: "Turn off" }).click();
-  await expect(bar).toHaveAttribute("aria-expanded", "false");
+test(
+  "the phone dock starts as one collapsed bar clear of the tab bar, and the sheet keeps Remove and Done on screen",
+  DEVICE,
+  async ({ page }) => {
+    await page.clock.setFixedTime(NOW);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await signInAsOwner(page);
+    await page.goto("/staples");
+    await expect(section(page, "Clothing")).toBeVisible();
+    const dock = page.getByRole("complementary", { name: "Preview" });
+    const bar = page.getByRole("button", { name: "Preview a trip", exact: true });
+    await expect(bar).toHaveAttribute("aria-expanded", "false");
+    await expect(page.getByRole("slider")).toHaveCount(0);
+    expect((await bar.boundingBox())!.height).toBeGreaterThanOrEqual(48);
+    expect((await dock.boundingBox())!.height).toBeLessThanOrEqual(80);
+    const tabBar = (await page
+      .getByRole("navigation", { name: "Primary navigation" })
+      .boundingBox())!;
+    const closed = (await dock.boundingBox())!;
+    expect(closed.y + closed.height).toBeLessThanOrEqual(tabBar.y + 0.5);
+    await bar.click();
+    await expect(page.getByRole("button", { name: "Preview: 4 nights" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    const open = (await dock.boundingBox())!;
+    expect(open.height).toBeLessThanOrEqual(844 * 0.45 + 1);
+    expect(open.y + open.height).toBeLessThanOrEqual(tabBar.y + 0.5);
+    await page.getByRole("button", { name: "Turn off" }).click();
+    await expect(bar).toHaveAttribute("aria-expanded", "false");
 
-  for (const size of [
-    { width: 195, height: 844 },
-    { width: 390, height: 640 },
-  ]) {
-    await page.setViewportSize(size);
-    await rowButton(page, "sleepwear", "Sleepwear").click();
-    const sheet = page.getByRole("dialog", { name: "Sleepwear" });
-    await expect(sheet).toBeVisible();
-    for (const name of ["Remove", "Done"]) {
-      const box = (await sheet.getByRole("button", { name, exact: true }).boundingBox())!;
-      expect(box.y).toBeGreaterThanOrEqual(0);
-      expect(box.y + box.height).toBeLessThanOrEqual(size.height);
+    for (const size of [
+      { width: 195, height: 844 },
+      { width: 390, height: 640 },
+      { width: 390, height: 844 },
+    ]) {
+      await page.setViewportSize(size);
+      await rowButton(page, "sleepwear", "Sleepwear").click();
+      const sheet = page.getByRole("dialog", { name: "Sleepwear" });
+      await expect(sheet).toBeVisible();
+      for (const name of ["Remove", "Done"]) {
+        const box = (await sheet.getByRole("button", { name, exact: true }).boundingBox())!;
+        expect(box.y).toBeGreaterThanOrEqual(0);
+        expect(box.y + box.height).toBeLessThanOrEqual(size.height);
+      }
+      // The laundry pill keeps "On"/"Off" on its right edge, even at 195.
+      const pill = sheet.getByRole("switch", { name: "Fewer with laundry" });
+      const state = pill.locator("span").last();
+      const [pillBox, stateBox] = [(await pill.boundingBox())!, (await state.boundingBox())!];
+      expect(pillBox.x + pillBox.width - (stateBox.x + stateBox.width)).toBeLessThan(30);
+      expect(stateBox.y).toBeGreaterThan(pillBox.y - 1);
+      // The label wraps inside the pill, which grows to hold it (it used to spill out of a 52px pill at 195).
+      const label = (await pill.locator("span").first().boundingBox())!;
+      expect(label.y).toBeGreaterThanOrEqual(pillBox.y);
+      expect(label.y + label.height).toBeLessThanOrEqual(pillBox.y + pillBox.height);
+      // Visible geometry alone misses positioned form content painting over the pinned footer.
+      const expectFooterTargets = async () => {
+        for (const name of ["Remove", "Done"]) {
+          const button = sheet.getByRole("button", { name, exact: true });
+          await expect
+            .poll(
+              () =>
+                button.evaluate((node) => {
+                  const box = node.getBoundingClientRect();
+                  return node.contains(
+                    document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2),
+                  );
+                }),
+              { message: `${name} owns its center at ${size.width}x${size.height}` },
+            )
+            .toBe(true);
+        }
+      };
+      await sheet.getByRole("button", { name: "Done" }).scrollIntoViewIfNeeded();
+      await expectFooterTargets();
+      const hint = sheet.getByText("Packed last, on the morning you leave", { exact: true });
+      await hint.scrollIntoViewIfNeeded();
+      const scroll = await hint.evaluate((node) => {
+        let scroller = node.parentElement;
+        while (scroller && getComputedStyle(scroller).overflowY !== "auto")
+          scroller = scroller.parentElement;
+        if (!scroller) throw new Error("Missing form scroller");
+        const box = scroller.getBoundingClientRect();
+        const hintBox = node.getBoundingClientRect();
+        return {
+          top: box.top,
+          bottom: box.bottom,
+          hintTop: hintBox.top,
+          hintBottom: hintBox.bottom,
+          remaining: scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop,
+        };
+      });
+      expect(scroll.hintTop).toBeGreaterThanOrEqual(scroll.top - 1);
+      expect(scroll.hintBottom).toBeLessThanOrEqual(scroll.bottom + 1);
+      expect(scroll.remaining).toBeLessThanOrEqual(1);
+      await expectFooterTargets();
+      await page.screenshot({
+        path: `test-results/screenshots/${test.info().project.name}-staple-sheet-${size.width}x${size.height}.png`,
+        animations: "disabled",
+      });
+      const done = sheet.getByRole("button", { name: "Done", exact: true });
+      const trusted = done.evaluate(
+        (node) =>
+          new Promise<boolean>((resolve) => {
+            node.addEventListener("click", (event) => resolve(event.isTrusted), { once: true });
+          }),
+      );
+      await done.click();
+      expect(await trusted).toBe(true);
+      await expect(page.getByRole("dialog")).toHaveCount(0);
     }
-    // The laundry pill keeps "On"/"Off" on its right edge, even at 195.
-    const pill = sheet.getByRole("switch", { name: "Fewer with laundry" });
-    const state = pill.locator("span").last();
-    const [pillBox, stateBox] = [(await pill.boundingBox())!, (await state.boundingBox())!];
-    expect(pillBox.x + pillBox.width - (stateBox.x + stateBox.width)).toBeLessThan(30);
-    expect(stateBox.y).toBeGreaterThan(pillBox.y - 1);
-    // The label wraps inside the pill, which grows to hold it (it used to spill out of a 52px pill at 195).
-    const label = (await pill.locator("span").first().boundingBox())!;
-    expect(label.y).toBeGreaterThanOrEqual(pillBox.y);
-    expect(label.y + label.height).toBeLessThanOrEqual(pillBox.y + pillBox.height);
-    await sheet.getByRole("button", { name: "Done" }).scrollIntoViewIfNeeded();
-    await sheet.getByRole("button", { name: "Done" }).click();
-    await expect(page.getByRole("dialog")).toHaveCount(0);
-  }
-});
+  },
+);
+
+// #366: the short sheet keeps the native form lock separate from usable exit/recovery targets.
+test(
+  "the short staple sheet keeps pending, failed and conflicted recovery usable",
+  DEVICE,
+  async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 640 });
+    await openStaples(page);
+    const opener = rowButton(page, "sleepwear", "Sleepwear");
+    const sheet = page.getByRole("dialog", { name: "Sleepwear", exact: true });
+    const done = sheet.getByRole("button", { name: "Done", exact: true });
+    const shot = (state: string) =>
+      page.screenshot({
+        path: `test-results/screenshots/${test.info().project.name}-staple-short-${state}.png`,
+        animations: "disabled",
+      });
+    const locked = async () => {
+      const fields = sheet.locator("fieldset");
+      await expect(fields).toHaveAttribute("disabled", "");
+      expect(await fields.evaluate((node) => node.matches(":disabled"))).toBe(true);
+      expect(await fields.locator("input, button, select").count()).toBeGreaterThan(5);
+      expect(
+        await fields
+          .locator("input, button, select")
+          .evaluateAll((nodes) => nodes.every((node) => node.matches(":disabled"))),
+      ).toBe(true);
+      // The unadorned Name input proves native fieldset inheritance, including display:contents.
+      await expect(sheet.getByRole("textbox", { name: "Name", exact: true })).not.toHaveAttribute(
+        "disabled",
+      );
+      await expect(sheet.getByRole("button", { name: "Remove", exact: true })).toBeDisabled();
+      await expect(done).toBeEnabled();
+    };
+    const keyboard = async (labels: string[]) => {
+      const heading = sheet.getByRole("heading", { name: "Sleepwear", exact: true });
+      await heading.focus();
+      for (const name of [...labels, labels[0]]) {
+        await page.keyboard.press("Tab");
+        await expect(sheet.getByRole("button", { name, exact: true })).toBeFocused();
+      }
+      await page.keyboard.press("Shift+Tab");
+      await expect(done).toBeFocused();
+      for (const name of labels) {
+        const button = sheet.getByRole("button", { name, exact: true });
+        expect(
+          await button.evaluate((node) => {
+            const box = node.getBoundingClientRect();
+            return node.contains(
+              document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2),
+            );
+          }),
+          `${name} owns its short-sheet center`,
+        ).toBe(true);
+      }
+    };
+    let rejectWrite!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      rejectWrite = resolve;
+    });
+    await page.route("**/staples", async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      await blocked;
+      await route.abort("failed");
+    });
+    await opener.click();
+    await expect(sheet.getByRole("textbox", { name: "Name", exact: true })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(sheet.getByRole("radio", { name: "Clothing", exact: true })).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(sheet.getByRole("textbox", { name: "Name", exact: true })).toBeFocused();
+    await sheet.getByRole("button", { name: "More Sleepwear", exact: true }).click();
+    await expect(sheet.getByText("Saving…", { exact: true })).toBeVisible();
+    await locked();
+    await expect(sheet.getByRole("heading", { name: "Sleepwear", exact: true })).toBeFocused();
+    await keyboard(["Done"]);
+    await shot("pending");
+    await done.click();
+    await expect(sheet).toHaveCount(0);
+    await expect(opener).toBeFocused();
+    rejectWrite();
+    await opener.click();
+    await expect(sheet.getByRole("button", { name: "Retry save", exact: true })).toBeVisible();
+    await page.unroute("**/staples");
+    await locked();
+    await keyboard(["Retry save", "Reload and discard change", "Done"]);
+    await shot("failed");
+    await page.keyboard.press("Escape");
+    await expect(sheet).toHaveCount(0);
+    await expect(opener).toBeFocused();
+
+    // A second real session view confirms a newer token while the first retains its failed intent.
+    const other = await page.context().newPage();
+    try {
+      await other.setViewportSize({ width: 390, height: 640 });
+      await other.goto("/staples");
+      await rowButton(other, "sleepwear", "Sleepwear").click();
+      const otherSheet = other.getByRole("dialog", { name: "Sleepwear", exact: true });
+      await saved(other, () =>
+        otherSheet.getByRole("button", { name: "per night", exact: true }).click(),
+      );
+      await expect(
+        otherSheet.getByRole("button", { name: "per night", exact: true }),
+      ).toBeEnabled();
+    } finally {
+      await other.close();
+    }
+    await opener.click();
+    await sheet.getByRole("button", { name: "Retry save", exact: true }).click();
+    await expect(sheet.getByText("This staple changed. Reload to review it.")).toBeVisible();
+    await expect(sheet.getByRole("button", { name: "Retry save", exact: true })).toHaveCount(0);
+    await locked();
+    await keyboard(["Reload and discard change", "Done"]);
+    await shot("conflict");
+    await page.route("**/staples", (route) =>
+      route.request().method() === "POST" ? route.abort("failed") : route.continue(),
+    );
+    await sheet.getByRole("button", { name: "Reload and discard change", exact: true }).click();
+    await expect(
+      sheet.getByRole("button", { name: "Try reload again", exact: true }),
+    ).toBeVisible();
+    await page.unroute("**/staples");
+    await locked();
+    await keyboard(["Try reload again", "Done"]);
+    await shot("reload-failed");
+    await sheet.getByRole("button", { name: "Try reload again", exact: true }).click();
+    await expect(sheet.getByRole("button", { name: "More Sleepwear", exact: true })).toBeEnabled();
+    await expect(sheet.getByRole("button", { name: "per night", exact: true })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(sheet.getByRole("button", { name: "Remove", exact: true })).toBeEnabled();
+    await shot("reviewed");
+    await done.click();
+    await expect(sheet).toHaveCount(0);
+    await opener.click();
+    const remove = sheet.getByRole("button", { name: "Remove", exact: true });
+    const trustedRemove = remove.evaluate(
+      (node) =>
+        new Promise<boolean>((resolve) => {
+          node.addEventListener("click", (event) => resolve(event.isTrusted), { once: true });
+        }),
+    );
+    await remove.click();
+    expect(await trustedRemove).toBe(true);
+    await expect(opener).toHaveCount(0);
+  },
+);
 
 // #491 geometry pin: at 195px and at 200% text, a long staple name with a scaled rule and a total stacks (name over the rule
 // and total), nothing overflows sideways, and the targets stay 44px.

@@ -48,10 +48,19 @@ for (const width of [1280, 390]) {
     await expect(unavailable).toHaveCount(0);
     await shot(page, `ocean-${width}-no-home`);
 
-    // Save Home (as Settings would), go to Settings and come back by the navigation, then reload.
+    // Visit Settings after Home has already been read, then save and return within the same document.
+    await page.evaluate(() => {
+      (window as Window & { homeNavSentinel?: boolean }).homeNavSentinel = true;
+    });
+    const nav = page.getByRole("navigation", { name: "Primary navigation" });
+    await nav.getByRole("link", { name: "Settings" }).click();
+    await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
     await setOwnerHomeCity(ownerId(), SEATTLE);
-    await page.goto("/settings");
-    await page.goto("/");
+    await nav.getByRole("link", { name: "Trips" }).click();
+    await expect(page).toHaveURL(/\/$/);
+    expect(
+      await page.evaluate(() => (window as Window & { homeNavSentinel?: boolean }).homeNavSentinel),
+    ).toBe(true);
     await expect(map.first()).toBeVisible();
     await expect(unavailable).toHaveCount(0);
     await expect(nudge).toHaveCount(0);

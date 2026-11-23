@@ -685,3 +685,20 @@ describe("noTripModel (#409)", () => {
     expect(model.totals).toEqual({ trips: 0, nights: 0 });
   });
 });
+
+describe("unknown dates on Home", () => {
+  it("does not count or welcome an invalid or reversed trip", () => {
+    const base = sampleLifecycleState().trips[0];
+    for (const dates of [
+      { start: "bad", end: "2026-10-10" },
+      { start: "2026-10-10", end: "2026-10-01" },
+    ]) {
+      const model = noTripModel([{ ...base, ...dates }], "2026-10-16");
+      expect(model.kind).toBe("first");
+      expect(model.inked).toBe(0);
+      expect(model.totals).toEqual({ trips: 0, nights: 0 });
+      expect(model.stickers).toEqual([]);
+      expect(model.recent).toEqual([]);
+    }
+  });
+});

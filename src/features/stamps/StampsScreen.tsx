@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { buttonClassName, Button } from "@/components/ui/Button";
 import { Suitcase } from "@/components/suitcase";
 import { useSaveStatus } from "@/components/shell/SaveStatus";
@@ -264,7 +264,7 @@ export function StampsContent({
   // It is the most recently completed trip (by its end date) that an earned sticker stands for; none earned, nothing selected.
   const defaultId = useMemo(() => {
     const ends = new Map(state.trips.map((trip) => [trip.id, trip.end]));
-    const earned = view.stickers.filter((sticker) => !sticker.upcoming);
+    const earned = view.stickers.filter((sticker) => sticker.status === "earned");
     return (
       earned.reduce<(typeof earned)[number] | null>(
         (best, sticker) =>
@@ -283,7 +283,7 @@ export function StampsContent({
       : view.stickers.find(
           (sticker) =>
             sticker.tripId === activeId &&
-            (selectedKey === null ? !sticker.upcoming : sticker.key === selectedKey),
+            (selectedKey === null ? sticker.status === "earned" : sticker.key === selectedKey),
         );
   const selected = selectedTrip ? stampTripView(selectedTrip, today) : null;
   const detailSticker = detailKey
@@ -294,6 +294,94 @@ export function StampsContent({
     : null;
   const editTrip = editId ? (state.trips.find((trip) => trip.id === editId) ?? null) : null;
   const onEditTrip = onTripChange ? () => setEditId(selectedTrip?.id ?? null) : undefined;
+
+  // A detail entry belongs only to this mounted suitcase; obsolete entries stay inert.
+  const historyOwner = useRef<string | null>(null);
+  const historyUrl = useRef("");
+  const transition = useRef<{ edit: string | null } | null>(null);
+  const openers = useRef(new Map<string, HTMLElement>());
+  const live = useRef({ stickers: view.stickers, editId });
+  useEffect(() => {
+    live.current = { stickers: view.stickers, editId };
+  }, [view.stickers, editId]);
+  const ownedMarker = useCallback(() => {
+    const marker = history.state?.packingStampDetails;
+    return historyOwner.current &&
+      location.href === historyUrl.current &&
+      marker?.owner === historyOwner.current &&
+      typeof marker.key === "string"
+      ? (marker as { owner: string; key: string })
+      : null;
+  }, []);
+  useLayoutEffect(() => {
+    historyOwner.current = crypto.randomUUID();
+    historyUrl.current = location.href;
+    const mountedOpeners = openers.current;
+    const onPop = () => {
+      const pending = transition.current;
+      transition.current = null;
+      const marker = ownedMarker();
+      const sticker = marker && live.current.stickers.find((item) => item.key === marker.key);
+      if (sticker && !live.current.editId) {
+        const opener = mountedOpeners.get(sticker.key);
+        if (opener?.isConnected) opener.focus({ preventScroll: true });
+        setSelectedId(sticker.tripId);
+        setSelectedKey(sticker.key);
+        setDetailKey(sticker.key);
+      } else {
+        setDetailKey(null);
+        // Only hand off after leaving our entry, on this URL, with the trip still in view.
+        if (
+          pending?.edit &&
+          !marker &&
+          location.href === historyUrl.current &&
+          live.current.stickers.some((item) => item.tripId === pending.edit)
+        ) {
+          setEditId(pending.edit);
+        }
+      }
+    };
+    window.addEventListener("popstate", onPop);
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      historyOwner.current = null;
+      transition.current = null;
+      mountedOpeners.clear();
+      // Never call Back during teardown: the current entry may belong to another route.
+    };
+  }, [ownedMarker]);
+  const openDetails = (sticker: StickerView) => {
+    if (transition.current || !historyOwner.current || editId) return;
+    const marker = ownedMarker();
+    const nextState = {
+      ...history.state,
+      packingStampDetails: {
+        owner: historyOwner.current,
+        key: sticker.key,
+      },
+    };
+    if (!marker) {
+      historyUrl.current = location.href;
+      history.pushState(nextState, "", location.href);
+    } else if (marker.key !== sticker.key) {
+      history.replaceState(nextState, "", location.href);
+    }
+    if (document.activeElement instanceof HTMLElement)
+      openers.current.set(sticker.key, document.activeElement);
+    setSelectedId(sticker.tripId);
+    setSelectedKey(sticker.key);
+    setDetailKey(sticker.key);
+  };
+  const closeDetails = (edit: string | null = null) => {
+    if (transition.current) return;
+    if (ownedMarker()) {
+      transition.current = { edit };
+      history.back();
+    } else {
+      setDetailKey(null);
+      if (edit && location.href === historyUrl.current) setEditId(edit);
+    }
+  };
 
   return (
     <section className={`${styles.root} ${embedded ? styles.embedded : "screen"}`}>
@@ -334,11 +422,7 @@ export function StampsContent({
                   key={sticker.key}
                   sticker={sticker}
                   selected={activeId === sticker.tripId}
-                  onSelect={() => {
-                    setSelectedId(sticker.tripId);
-                    setSelectedKey(sticker.key);
-                    setDetailKey(sticker.key);
-                  }}
+                  onSelect={() => openDetails(sticker)}
                 />
               ))}
             </div>
@@ -402,12 +486,11 @@ export function StampsContent({
           onEdit={
             onTripChange
               ? () => {
-                  setEditId(detailTrip.id);
-                  setDetailKey(null);
+                  closeDetails(detailTrip.id);
                 }
               : undefined
           }
-          onClose={() => setDetailKey(null)}
+          onClose={() => closeDetails()}
         />
       ) : null}
       {editTrip && onTripChange ? (

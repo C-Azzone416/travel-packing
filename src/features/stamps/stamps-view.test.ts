@@ -286,3 +286,61 @@ describe("the rolling window's boundaries (#446)", () => {
     ).toEqual([onMarch1.id]);
   });
 });
+
+describe("unknown dates in Stamps", () => {
+  const today = "2026-10-16";
+  const base = trip("Mystery", "PT", "2026-09-01", "2026-09-02");
+  it.each([
+    ["", ""],
+    ["bad", "2026-09-02"],
+    ["2026-09-01", ""],
+    ["2026-02-30", "2026-09-02"],
+    ["2026-11-01", "2026-09-01"],
+    ["zzzz", "bad"],
+  ])("treats %s / %s as unknown", (start, end) => {
+    const item = { ...base, start, end };
+    const before = JSON.stringify(item);
+    const view = stampsView([item], today, "all");
+    expect(view.stickers[0]).toMatchObject({
+      status: "unknown",
+      upcoming: false,
+      completedCount: 0,
+      monthYear: "Date not set",
+      accessibleName: "Mystery, Date not set",
+    });
+    expect(view.totals).toEqual({ trips: 0, places: 0, countries: 0, nights: 0 });
+    expect(view.inked).toBe(0);
+    expect(view.pastTrips).toEqual([]);
+    expect(tripMatchesFilter(item, "year", today)).toBe(false);
+    expect(tripMatchesFilter(item, "rolling", today)).toBe(false);
+    expect(stampTripView(item, today).facts).not.toMatch(/day trip|night/);
+    expect(stampTripView(item, today).eyebrow).not.toMatch(/Upcoming/);
+    expect(JSON.stringify(item)).toBe(before);
+  });
+  it("keeps boundaries and requires a valid today", () => {
+    const past = { ...base, end: "2026-10-15" };
+    const ongoing = { ...base, end: today };
+    const future = { ...base, start: "2026-11-01", end: "2026-11-01" };
+    expect(stampsView([past], today, "all").stickers[0].status).toBe("earned");
+    expect(stampsView([ongoing], today, "all").stickers[0].status).toBe("upcoming");
+    expect(stampsView([future], today, "all").stickers[0].status).toBe("upcoming");
+    expect(stampsView([past], "bad", "all").stickers[0].status).toBe("unknown");
+    expect(tripMatchesFilter(past, "rolling", "bad")).toBe(false);
+  });
+  it("prefers earned then upcoming representatives over unknown without counting it", () => {
+    const unknown = { ...base, id: "unknown", start: "", end: "" };
+    const upcoming = { ...base, id: "future", start: "2026-11-01", end: "2026-11-02" };
+    const earned = { ...base, id: "past" };
+    expect(stampsView([unknown, upcoming], today, "all").stickers[0]).toMatchObject({
+      tripId: "future",
+      completedCount: 0,
+    });
+    expect(stampsView([unknown, upcoming, earned], today, "all").stickers[0]).toMatchObject({
+      tripId: "past",
+      completedCount: 1,
+    });
+    expect(
+      stampsView([unknown, { ...unknown, id: "second" }], today, "all").stickers[0].tripId,
+    ).toBe("unknown");
+  });
+});

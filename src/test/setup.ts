@@ -1,3 +1,4 @@
+import "./deferred-passive-effects";
 import { cleanup } from "@testing-library/react";
 import { afterEach } from "vitest";
 
