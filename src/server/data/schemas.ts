@@ -62,8 +62,24 @@ export const setPackedManyInput = z.object({
     .min(1)
     .max(200),
 });
-export const editItemInput = z.object({ tripId, itemId, name, qty, timing, scope });
-export const removeItemInput = z.object({ tripId, itemId, scope });
+const rememberExpectation = z
+  .object({
+    rowId: z.uuid(),
+    version: z.number().int().min(1).max(2_147_483_647),
+  })
+  .strict()
+  .nullable()
+  .optional();
+const requireRemember = (value: { scope: string; expected?: unknown }, ctx: z.RefinementCtx) => {
+  if (value.scope === "remember" && value.expected === undefined)
+    ctx.addIssue({ code: "custom", path: ["expected"], message: "Review your Staples first" });
+};
+export const editItemInput = z
+  .object({ tripId, itemId, name, qty, timing, scope, expected: rememberExpectation })
+  .superRefine(requireRemember);
+export const removeItemInput = z
+  .object({ tripId, itemId, scope, expected: rememberExpectation })
+  .superRefine(requireRemember);
 export const addToiletryItemInput = z.object({
   tripId,
   name,

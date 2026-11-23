@@ -546,7 +546,7 @@ describe("item editor", () => {
     );
   });
 
-  it("a remembered edit saves to the staples; the per-day preview reads from the domain and updates as the quantity changes", async () => {
+  it("staged 4a rejects the old remembered UI without metadata; per-day preview remains truthful", async () => {
     const { user, source } = setup();
     await ready();
     await openEditor(user, "underwear");
@@ -561,10 +561,15 @@ describe("item editor", () => {
     await user.click(within(dialog).getByRole("radio", { name: /This trip only/ }));
     expect(hint.textContent).toBe("");
     await user.click(within(dialog).getByRole("radio", { name: /Remember for future trips/ }));
+    // 4b supplies captured opening metadata; this unmerged intermediate boundary fails closed.
+    const before = structuredClone({ trip: source.snapshot(), staples: source.staplesSnapshot() });
     await user.click(within(dialog).getByRole("button", { name: "Save item" }));
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(source.staplesSnapshot().find((staple) => staple.id === "underwear")?.qty).toBe(2);
-    expect(itemOf(source, "underwear").qty).toBe(9);
+    await waitFor(() =>
+      expect(screen.getByRole("alert", { name: "Save error" }).textContent).toContain("Couldn"),
+    );
+    expect(screen.getByRole("dialog", { name: "Edit item" })).toBe(dialog);
+    expect(source.snapshot()).toEqual(before.trip);
+    expect(source.staplesSnapshot()).toEqual(before.staples);
   });
 
   it("says the saved quantity stays the same when the trip has no calendar days", async () => {
@@ -665,7 +670,7 @@ describe("item editor", () => {
     expect(tripOf(source).items.some((item) => item.id === "nice-shoes")).toBe(false);
   });
 
-  it("removing with 'Remember' also removes the staple, and the confirmation says so", async () => {
+  it("staged 4a rejects remembered removal without opening metadata, retaining the confirmation", async () => {
     const { user, source } = setup();
     await ready();
     await openEditor(user, "last-toothbrush");
@@ -677,8 +682,11 @@ describe("item editor", () => {
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", { name: "Remove item" }),
     );
-    await waitFor(() => expect(row("last-toothbrush")).toBeNull());
-    expect(source.staplesSnapshot().some((staple) => staple.id === "last-toothbrush")).toBe(false);
+    await waitFor(() =>
+      expect(screen.getByRole("alert", { name: "Save error" }).textContent).toContain("Couldn"),
+    );
+    expect(row("last-toothbrush")).not.toBeNull();
+    expect(source.staplesSnapshot().some((staple) => staple.id === "last-toothbrush")).toBe(true);
   });
 });
 

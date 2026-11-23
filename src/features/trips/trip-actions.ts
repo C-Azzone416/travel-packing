@@ -32,7 +32,8 @@ export type StaplesReadResult = { ok: true; staples: Staple[] } | { ok: false; c
 export type HomeCityResult = { ok: true; home: TripOrigin | null } | { ok: false; code: ErrorCode };
 export type StaplesSetupResult = ({ ok: true } & StaplesSetup) | { ok: false; code: ErrorCode };
 export type TripCommandResult =
-  { ok: true; trip: LifecycleTrip; signals: Signals } | { ok: false; code: ErrorCode };
+  | { ok: true; trip: LifecycleTrip; signals: Signals; staples?: Staple[] }
+  | { ok: false; code: ErrorCode };
 export type WeatherSuggestionsResult =
   { ok: true; suggestions: WeatherSuggestionState[] } | { ok: false; code: ErrorCode };
 export type AcceptedWeatherDecision = WeatherAppliedChange & { ruleSignature: string };
@@ -65,6 +66,7 @@ async function command(work: (context: DataContext) => Changed): Promise<TripCom
     ok: true as const,
     trip: toLifecycleTrip(data.trip),
     signals: data.signals ?? NO_SIGNALS,
+    ...(data.staples ? { staples: data.staples } : {}),
   })) as Promise<TripCommandResult>;
 }
 
@@ -208,6 +210,7 @@ export async function editItemAction(
   tripId: string,
   itemId: string,
   edit: ItemEdit,
+  expected?: StapleRevision | null,
 ): Promise<TripCommandResult> {
   return command((context) =>
     service.editTripItem(context, {
@@ -217,6 +220,7 @@ export async function editItemAction(
       qty: edit.qty,
       timing: edit.timing,
       scope: edit.scope,
+      expected,
     }),
   );
 }
@@ -225,8 +229,11 @@ export async function removeItemAction(
   tripId: string,
   itemId: string,
   scope: Scope,
+  expected?: StapleRevision | null,
 ): Promise<TripCommandResult> {
-  return command((context) => service.removeItemFromTrip(context, { tripId, itemId, scope }));
+  return command((context) =>
+    service.removeItemFromTrip(context, { tripId, itemId, scope, expected }),
+  );
 }
 
 /** Move one item to another cube (#385). Only the cube changes. */

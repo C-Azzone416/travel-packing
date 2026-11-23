@@ -369,12 +369,17 @@ describe("per-trip commands", () => {
       source.snapshot().trips.find((trip) => trip.id === "lisbon"),
     );
     const stapleBefore = source.staplesSnapshot().find((entry) => entry.id === "sunglasses")!;
-    await source.editItem("san-diego", "sunglasses", {
-      name: "Polarized sunglasses",
-      qty: 2,
-      timing: "main",
-      scope: "remember",
-    });
+    await source.editItem(
+      "san-diego",
+      "sunglasses",
+      {
+        name: "Polarized sunglasses",
+        qty: 2,
+        timing: "main",
+        scope: "remember",
+      },
+      stapleBefore.revision!,
+    );
     const staple = source.staplesSnapshot().find((entry) => entry.id === "sunglasses")!;
     expect(staple).toMatchObject({ name: "Polarized sunglasses", qty: 2 });
     expect(staple).not.toEqual(stapleBefore);
@@ -425,7 +430,12 @@ describe("per-trip commands", () => {
     const removed = await source.removeItem("san-diego", "nice-shoes", "this-trip");
     expect(removed.trip.items.some((entry) => entry.id === "nice-shoes")).toBe(false);
     expect(source.staplesSnapshot()).toEqual(staplesBefore);
-    await source.removeItem("san-diego", "last-glasses", "remember");
+    await source.removeItem(
+      "san-diego",
+      "last-glasses",
+      "remember",
+      staplesBefore.find((row) => row.id === "last-glasses")!.revision!,
+    );
     expect(source.staplesSnapshot().some((entry) => entry.id === "last-glasses")).toBe(false);
     await expect(source.removeItem("san-diego", "nope", "this-trip")).rejects.toThrow(
       "ITEM_NOT_FOUND",

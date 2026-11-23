@@ -190,12 +190,18 @@ const OPERATIONS: Operation[] = [
         qty: 2,
         timing: "main",
         scope: "remember",
+        expected: null,
       }),
   ],
   [
     "removeItemFromTrip",
     (tripId) =>
-      service.removeItemFromTrip(context(), { tripId, itemId: "sunglasses", scope: "remember" }),
+      service.removeItemFromTrip(context(), {
+        tripId,
+        itemId: "sunglasses",
+        scope: "remember",
+        expected: null,
+      }),
   ],
   [
     "addToiletryItemToTrip",
@@ -672,6 +678,7 @@ describe("item operations", () => {
         qty: 1,
         timing: "main",
         scope: "remember",
+        expected: null,
       }),
     );
 
@@ -747,6 +754,7 @@ describe("item operations", () => {
         tripId: trip.id,
         itemId: "sunglasses",
         scope: "remember",
+        expected: null,
       }),
     );
     const staples = data(await service.listStaplesForOwner(context()));
@@ -2125,6 +2133,7 @@ describe("staples are per-owner even when owners share the same default ids", ()
         qty: 1,
         timing: "main",
         scope: "remember",
+        expected: null,
       }),
     );
     const names = (
@@ -2472,6 +2481,7 @@ describe("atomicity and failures", () => {
       qty: 3,
       timing: "main",
       scope: "remember",
+      expected: null,
     });
     expect(errorOf(result)).toMatchObject({ code: "INTERNAL", message: "Something went wrong" });
     expect(JSON.stringify(result)).not.toContain("Sampleton");
@@ -2502,6 +2512,7 @@ describe("atomicity and failures", () => {
       qty: 2,
       timing: "main",
       scope: "remember",
+      expected: null,
     });
     as(null);
     await service.listTrips(context());
@@ -2528,6 +2539,7 @@ describe("reload durability", () => {
           qty: 2,
           timing: "packlast",
           scope: "remember",
+          expected: null,
         }),
       );
       data(await service.acceptTripWeather(durableContext, { tripId: trip.id }));
