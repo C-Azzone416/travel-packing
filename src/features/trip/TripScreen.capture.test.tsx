@@ -140,15 +140,19 @@ describe("opening capture and confirmed metadata", () => {
       });
       if (scope === "remember") remember();
       save();
-      await waitFor(() => expect(edit).toHaveBeenCalledTimes(1));
-      expect(edit.mock.calls[0][3]).toBeUndefined();
-      expect(edit.mock.calls[0]).toHaveLength(4);
       if (scope === "remember") {
+        // Missing metadata now refuses the local immutable operation before transport.
+        expect(edit).not.toHaveBeenCalled();
         await waitFor(() =>
           expect(screen.getByRole("alert", { name: "Save error" }).textContent).toContain("Couldn"),
         );
         expect(base.snapshot()).toEqual(before);
-      } else await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      } else {
+        await waitFor(() => expect(edit).toHaveBeenCalledTimes(1));
+        expect(edit.mock.calls[0][3]).toBeUndefined();
+        expect(edit.mock.calls[0]).toHaveLength(4);
+        await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      }
     },
   );
   it("reviewed default absence is explicit null, creating a remembered rule", async () => {
@@ -250,7 +254,14 @@ it("ItemEditor retains full opening item/destination/cadence/day view across inc
   const item = trip(base).items.find((row) => row.id === "underwear")!;
   const defaults = base.staplesSnapshot();
   const opening = defaults.find((row) => row.id === item.id)!.revision;
-  const onSave = vi.fn();
+  const onSave = vi.fn(async () =>
+    base.editItem(
+      "san-diego",
+      item.id,
+      { name: item.name, qty: 9, timing: "main", scope: "remember" },
+      opening,
+    ),
+  );
   const ui = (entry: TripItem, rows: Staple[], days: number, destination: string) => (
     <ItemEditor
       item={entry}
@@ -261,6 +272,7 @@ it("ItemEditor retains full opening item/destination/cadence/day view across inc
       onClose={vi.fn()}
       onSave={onSave}
       onRemove={vi.fn()}
+      onWrite={(write) => void write()}
     />
   );
   const view = render(ui(item, defaults, 5, "Opening city"), { wrapper: Shell });
@@ -326,6 +338,7 @@ it.each([
         onClose={vi.fn()}
         onSave={vi.fn()}
         onRemove={vi.fn()}
+        onWrite={vi.fn()}
       />,
       { wrapper: Shell },
     );

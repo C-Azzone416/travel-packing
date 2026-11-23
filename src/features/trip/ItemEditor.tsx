@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useSaveStatus } from "@/components/shell/SaveStatus";
 import type { StapleRevision } from "@/domain/calc/staples";
+import { TripsSourceError, type TripChange } from "@/features/trips/trips-source";
 import { Button } from "@/components/ui/Button";
 import { ModalSheet } from "@/components/ui/ModalSheet";
 import { Switch } from "@/components/ui/Switch";
@@ -18,8 +20,9 @@ export interface ItemEditorProps {
   staples: Staple[];
   saving: boolean;
   onClose: () => void;
-  onSave: (edit: ItemEdit, expected?: StapleRevision | null) => void;
-  onRemove: (scope: Scope, expected?: StapleRevision | null) => void;
+  onSave: (edit: ItemEdit, expected?: StapleRevision | null) => Promise<TripChange>;
+  onRemove: (scope: Scope, expected?: StapleRevision | null) => Promise<TripChange>;
+  onWrite: (write: () => Promise<TripChange>, retryable: () => boolean, after: () => void) => void;
 }
 
 /** Optional Nice suggestions and Bathroom items can be removed; everything else is simply edited. */
@@ -53,14 +56,125 @@ export function ItemEditor({
   onClose,
   onSave,
   onRemove,
+  onWrite,
 }: ItemEditorProps) {
+  const { discard } = useSaveStatus();
   const [view] = useState(() => capture(item, staples, tripDays, destination));
+  const [failure, setFailure] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const alive = useRef(true);
+  const body = useRef<HTMLDivElement>(null);
+  const operation = useRef<{
+    retired: boolean;
+    pending: boolean;
+    stale: boolean;
+    write: () => Promise<TripChange>;
+  } | null>(null);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+      if (operation.current) {
+        operation.current.retired = true;
+        discard(operation.current.write);
+      }
+    };
+  }, [discard]);
+  const locked = busy || saving || operation.current !== null;
+  function retire() {
+    if (operation.current) {
+      operation.current.retired = true;
+      discard(operation.current.write);
+    }
+    operation.current = null;
+  }
+  function close() {
+    alive.current = false;
+    retire();
+    onClose();
+  }
+  function start(run: () => Promise<TripChange>) {
+    // Register synchronously: two submit events can precede React's disabled render.
+    if (operation.current || saving || !alive.current) return;
+    if (view.expected) Object.freeze(view.expected);
+    const op = {
+      retired: false,
+      pending: false,
+      stale: false,
+      write: async (): Promise<TripChange> => {
+        if (op.retired || op.pending || op.stale) throw new TripsSourceError("STALE");
+        op.pending = true;
+        if (alive.current && operation.current === op) {
+          setBusy(true);
+          setFailure(null);
+        }
+        try {
+          return await run();
+        } catch (error) {
+          op.stale =
+            error instanceof TripsSourceError &&
+            (error.message === "STALE" || error.message === "INVALID_INPUT");
+          if (alive.current && !op.retired && operation.current === op)
+            setFailure(
+              op.stale
+                ? "Your Staples changed. Discard this change and reload the page to review."
+                : "Couldn’t save. Retry this change or discard it.",
+            );
+          throw error;
+        } finally {
+          op.pending = false;
+          if (alive.current && !op.retired && operation.current === op) setBusy(false);
+        }
+      },
+    };
+    operation.current = op;
+    retry(op);
+  }
+  function retry(op = operation.current) {
+    if (!op || op.pending || op.retired || op.stale) return;
+    onWrite(
+      op.write,
+      () => !op.pending && !op.retired && !op.stale,
+      () => {
+        if (alive.current && !op.retired && operation.current === op) close();
+      },
+    );
+  }
   const [name, setName] = useState(item.name);
   const [qty, setQty] = useState(String(item.qty));
   const [packLast, setPackLast] = useState(item.section === "packlast");
   const [scope, setScope] = useState<Scope>("this-trip");
   const [nameError, setNameError] = useState(false);
   const [confirming, setConfirming] = useState(false);
+
+  // Native fieldset disabling also affects descendants without a disabled attribute.
+  // Bound the existing modal's Tab loop locally so it skips those radios in both engines.
+  useEffect(() => {
+    if (!locked) return;
+    const dialog = body.current?.closest('[role="dialog"]');
+    const trap = (event: Event) => {
+      const key = event as KeyboardEvent;
+      if (key.key !== "Tab") return;
+      const controls = [
+        ...dialog!.querySelectorAll<HTMLElement>(
+          "button, input, select, textarea, a[href], [tabindex]",
+        ),
+      ].filter((node) => !node.matches(":disabled") && node.tabIndex >= 0);
+      const index = controls.indexOf(document.activeElement as HTMLElement);
+      key.preventDefault();
+      key.stopPropagation();
+      const next = key.shiftKey
+        ? index <= 0
+          ? controls.length - 1
+          : index - 1
+        : index < 0 || index === controls.length - 1
+          ? 0
+          : index + 1;
+      controls[next]?.focus();
+    };
+    dialog?.addEventListener("keydown", trap, true);
+    return () => dialog?.removeEventListener("keydown", trap, true);
+  }, [locked, confirming]);
 
   const isReturn = view.item.section === "return";
   const preview =
@@ -71,21 +185,37 @@ export function ItemEditor({
   function submit(event: FormEvent) {
     event.preventDefault();
     // The button is disabled while saving, but Enter in a field submits the form too: one save only.
-    if (saving) return;
+    if (locked) return;
     if (name.trim() === "") {
       setNameError(true);
       return;
     }
-    onSave(
-      {
-        name,
-        qty: Number(qty),
-        timing: isReturn ? "return" : packLast ? "packlast" : "main",
-        scope,
-      },
-      view.expected,
+    const edit: ItemEdit = Object.freeze({
+      name,
+      qty: Number(qty),
+      timing: isReturn ? "return" : packLast ? "packlast" : "main",
+      scope,
+    });
+    start(() =>
+      edit.scope === "remember" && view.expected === undefined
+        ? Promise.reject(new TripsSourceError("INVALID_INPUT"))
+        : onSave(edit, view.expected),
     );
   }
+
+  const recovery = failure ? (
+    <div role="alert">
+      <p>{failure}</p>
+      {!operation.current?.stale ? (
+        <Button disabled={busy} onClick={() => retry()}>
+          Retry change
+        </Button>
+      ) : null}
+      <Button disabled={busy} onClick={close}>
+        Discard change and close
+      </Button>
+    </div>
+  ) : null;
 
   if (confirming) {
     const everywhere = scope === "remember";
@@ -94,29 +224,40 @@ export function ItemEditor({
         key="confirm"
         open
         title={`Remove ${view.item.name}?`}
+        showClose={locked}
         description={
           everywhere
             ? "It is removed from this trip and from your staples, so future trips will not add it."
             : "It is removed from this trip only. Your staples and other trips are not changed."
         }
-        onClose={() => setConfirming(false)}
+        onClose={() => (locked ? close() : setConfirming(false))}
         dismissOnBackdrop={false}
         actions={
           <>
-            <Button variant="secondary" onClick={() => setConfirming(false)}>
+            <Button variant="secondary" disabled={locked} onClick={() => setConfirming(false)}>
               Keep item
             </Button>
             <Button
               variant="danger"
-              disabled={saving}
-              onClick={() => onRemove(scope, view.expected)}
+              disabled={locked}
+              onClick={() => {
+                const capturedScope = scope;
+                start(() =>
+                  capturedScope === "remember" && view.expected === undefined
+                    ? Promise.reject(new TripsSourceError("INVALID_INPUT"))
+                    : onRemove(capturedScope, view.expected),
+                );
+              }}
             >
               Remove item
             </Button>
           </>
         }
       >
-        {null}
+        <div ref={body}>
+          {recovery}
+          {failure ? <p>Close discards this unsaved change.</p> : null}
+        </div>
       </ModalSheet>
     );
   }
@@ -127,81 +268,90 @@ export function ItemEditor({
       open
       showClose
       title="Edit item"
-      description="Existing trips stay as they were."
-      onClose={onClose}
+      description={
+        failure ? "Close discards this unsaved change." : "Existing trips stay as they were."
+      }
+      onClose={close}
     >
-      <form className="form-grid editor-form" onSubmit={submit} noValidate autoComplete="off">
-        <label className="field">
-          Item name
-          <input
-            name="packing-item-name"
-            value={name}
-            maxLength={50}
-            autoComplete="off"
-            aria-invalid={nameError}
-            aria-describedby={nameError ? "name-error" : undefined}
-            onChange={(event) => {
-              setName(event.target.value);
-              setNameError(false);
-            }}
-          />
-        </label>
-        {nameError ? (
-          <span id="name-error" className="field-error" role="alert">
-            Enter a name.
-          </span>
-        ) : null}
-        <label className="field">
-          Quantity
-          <input
-            name="qty"
-            type="number"
-            min={1}
-            max={99}
-            value={qty}
-            onChange={(event) => setQty(event.target.value)}
-          />
-        </label>
-        <ScopeFieldset
-          destination={view.destination}
-          scope={scope}
-          onScope={setScope}
-          preview={previewText(preview)}
-        />
-        {view.item.optional ? (
-          <div className="callout">
-            <strong>Optional suggestion.</strong> Edit it, keep it, or remove it from this trip.
-          </div>
-        ) : null}
-        {view.item.groupId === TOILETRY_GROUP_ID ? (
-          <div className="callout">
-            <strong>Bathroom item.</strong> This is one checkbox in Toiletries. Bag placement is
-            confirmed separately after all contents are checked.
-          </div>
-        ) : null}
-        {isReturn ? (
-          <div className="callout">
-            <strong>Return outfit item.</strong> It stays in the dedicated return set.
-          </div>
-        ) : (
-          <Switch
-            label="Pack last"
-            description="A timing flag only. The item can still be saved to My staples."
-            checked={packLast}
-            onChange={setPackLast}
-          />
-        )}
-        <div className="actions">
-          <Button type="submit" disabled={saving}>
-            Save item
-          </Button>
-          {isRemovable(view.item) ? (
-            <Button variant="danger" onClick={() => setConfirming(true)}>
-              Remove item
-            </Button>
+      <div ref={body}>
+        {recovery}
+        <form className="form-grid editor-form" onSubmit={submit} noValidate autoComplete="off">
+          <label className="field">
+            Item name
+            <input
+              disabled={locked}
+              name="packing-item-name"
+              value={name}
+              maxLength={50}
+              autoComplete="off"
+              aria-invalid={nameError}
+              aria-describedby={nameError ? "name-error" : undefined}
+              onChange={(event) => {
+                setName(event.target.value);
+                setNameError(false);
+              }}
+            />
+          </label>
+          {nameError ? (
+            <span id="name-error" className="field-error" role="alert">
+              Enter a name.
+            </span>
           ) : null}
-        </div>
-      </form>
+          <label className="field">
+            Quantity
+            <input
+              disabled={locked}
+              name="qty"
+              type="number"
+              min={1}
+              max={99}
+              value={qty}
+              onChange={(event) => setQty(event.target.value)}
+            />
+          </label>
+          <ScopeFieldset
+            destination={view.destination}
+            scope={scope}
+            onScope={setScope}
+            disabled={locked}
+            preview={previewText(preview)}
+          />
+          {view.item.optional ? (
+            <div className="callout">
+              <strong>Optional suggestion.</strong> Edit it, keep it, or remove it from this trip.
+            </div>
+          ) : null}
+          {view.item.groupId === TOILETRY_GROUP_ID ? (
+            <div className="callout">
+              <strong>Bathroom item.</strong> This is one checkbox in Toiletries. Bag placement is
+              confirmed separately after all contents are checked.
+            </div>
+          ) : null}
+          {isReturn ? (
+            <div className="callout">
+              <strong>Return outfit item.</strong> It stays in the dedicated return set.
+            </div>
+          ) : (
+            <Switch
+              label="Pack last"
+              description="A timing flag only. The item can still be saved to My staples."
+              disabled={locked}
+              checked={packLast}
+              onChange={setPackLast}
+            />
+          )}
+          <div className="actions">
+            <Button type="submit" disabled={locked}>
+              Save item
+            </Button>
+            {isRemovable(view.item) ? (
+              <Button variant="danger" disabled={locked} onClick={() => setConfirming(true)}>
+                Remove item
+              </Button>
+            ) : null}
+          </div>
+        </form>
+      </div>
     </ModalSheet>
   );
 }
@@ -211,14 +361,16 @@ function ScopeFieldset({
   scope,
   onScope,
   preview,
+  disabled,
 }: {
   destination: string;
   scope: Scope;
   onScope: (scope: Scope) => void;
   preview: string;
+  disabled: boolean;
 }) {
   return (
-    <div>
+    <fieldset disabled={disabled} style={{ border: 0, padding: 0, margin: 0 }}>
       <ScopeChoice
         legend="Apply this change to"
         destination={destination}
@@ -228,6 +380,6 @@ function ScopeFieldset({
       <p className="tiny muted scope-preview" role="status" aria-label="Saved quantity">
         {preview}
       </p>
-    </div>
+    </fieldset>
   );
 }
