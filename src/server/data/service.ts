@@ -369,14 +369,6 @@ export const reviewTripWeatherAgain = weather(reviewWeatherAgain);
 
 // ---------------------------------------------------------------- staples
 
-/**
- * Temporary unchecked staging route for the existing UI. Slice2 must switch every direct writer to
- * the checked route and remove this export; setup/remember activate their own baselines in slices3/4.
- */
-export function upsertStaple(context: DataContext, input: unknown): Promise<Result<Staple[]>> {
-  return run(context, inputs.stapleInput, input, upsertStapleInScope);
-}
-
 /** Create/update using the exact revision captured by the reader, or null for a new row. */
 export function upsertStapleChecked(
   context: DataContext,
@@ -530,13 +522,6 @@ export function dismissStaplesReminder(context: DataContext): Promise<Result<Sta
       staples: await listStaples(scope.db, scope.ownerId),
     };
   });
-}
-
-/** Temporary unchecked staging route; remove alongside upsertStaple when slice2 activates checked writes. */
-export function removeStaple(context: DataContext, input: unknown): Promise<Result<Staple[]>> {
-  return run(context, inputs.stapleOnly, input, (scope, { semanticId }) =>
-    removeStapleInScope(scope, semanticId),
-  );
 }
 
 /** A stale delete (including a repeated delete) conflicts instead of deleting a newer row. */

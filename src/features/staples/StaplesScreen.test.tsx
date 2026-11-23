@@ -1,3 +1,6 @@
+import { useEffect } from "react";
+import { useSaveStatus } from "@/components/shell/SaveStatus";
+import { SYNTHETIC_STAPLES } from "@/domain/calc/staples";
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -13,9 +16,18 @@ import { StaplesScreen } from "./StaplesScreen";
 vi.mock("next/navigation", () => ({ usePathname: () => "/staples" }));
 
 type Memory = ReturnType<typeof memory>;
+let saveApi: ReturnType<typeof useSaveStatus>;
+function SaveStatusCapture() {
+  const api = useSaveStatus();
+  useEffect(() => {
+    saveApi = api;
+  }, [api]);
+  return null;
+}
 
-function memory() {
+function memory(extra: Staple[] = []) {
   return createMemoryTripsSource(sampleLifecycleState(), {
+    staples: [...SYNTHETIC_STAPLES, ...extra],
     now: () => 1,
     newId: () => "new",
     today: () => "2026-10-16",
@@ -48,18 +60,16 @@ function setup(
     short?: boolean;
     wrap?: (base: Memory) => TripsSource;
     extra?: Staple[];
-    removeStaple?: (id: string) => Promise<Staple[]>;
+    removeStaple?: (id: string, expected: NonNullable<Staple["revision"]>) => Promise<Staple[]>;
   } = {},
 ) {
   viewport(options.laptop ?? true, options.short);
-  const base = memory();
-  const withExtra: TripsSource = options.extra
-    ? { ...base, listStaples: async () => [...(await base.listStaples()), ...options.extra!] }
-    : base;
-  const source = options.wrap ? options.wrap(base) : withExtra;
+  const base = memory(options.extra);
+  const source = options.wrap ? options.wrap(base) : base;
   const user = userEvent.setup();
   renderInApp(
     <TripsSourceProvider source={source}>
+      <SaveStatusCapture />
       <StaplesScreen removeStaple={options.removeStaple} />
     </TripsSourceProvider>,
   );
@@ -361,7 +371,10 @@ describe("laptop: the preview", () => {
       wrap: (base) => ({
         ...base,
         listStaples: async () => [...(await base.listStaples()), TEES],
-        upsertStaple: async (staple) => (upsert(staple), base.upsertStaple(staple)),
+        upsertStaple: async (staple, expected) => (
+          upsert(staple),
+          base.upsertStaple(staple, expected)
+        ),
       }),
     });
     await loaded();
@@ -410,7 +423,10 @@ describe("laptop: the inline editor", () => {
     const { user, source } = setup({
       wrap: (base) => ({
         ...base,
-        upsertStaple: async (staple) => (await gate.promise, base.upsertStaple(staple)),
+        upsertStaple: async (staple, expected) => (
+          await gate.promise,
+          base.upsertStaple(staple, expected)
+        ),
       }),
     });
     await loaded();
@@ -429,16 +445,16 @@ describe("laptop: the inline editor", () => {
     expect(JSON.stringify(source.snapshot().trips)).toBe(tripsBefore);
   });
 
-  it("coalesces quick changes into the last value", async () => {
+  it("rejects queued same-row intent carrying the old token (locking follows in 2b)", async () => {
     const calls: number[] = [];
     const gate = deferred<void>();
     const { user, source } = setup({
       wrap: (base) => ({
         ...base,
-        upsertStaple: async (staple) => {
+        upsertStaple: async (staple, expected) => {
           calls.push(staple.qty);
           if (calls.length === 1) await gate.promise;
-          return base.upsertStaple(staple);
+          return base.upsertStaple(staple, expected);
         },
       }),
     });
@@ -452,9 +468,10 @@ describe("laptop: the inline editor", () => {
     await user.click(more);
     await act(async () => gate.resolve());
     await waitFor(() =>
-      expect(source.staplesSnapshot().find((s) => s.id === "last-laptop")!.qty).toBe(4),
+      expect(source.staplesSnapshot().find((s) => s.id === "last-laptop")!.qty).toBe(2),
     );
     expect(calls).toEqual([2, 4]);
+    await screen.findByRole("alert", { name: "Save error" });
   });
 
   it("changes the cadence with the three chips, including per night", async () => {
@@ -568,7 +585,10 @@ describe("laptop: the inline editor", () => {
     await user.click(within(rowFor("sleepwear")).getByRole("button", { name: /^Sleepwear/ }));
     await user.click(screen.getByRole("button", { name: "Remove" }));
     await waitFor(() => expect(rowFor("sleepwear")).toBeNull());
-    expect(removeStaple).toHaveBeenCalledWith("sleepwear");
+    expect(removeStaple).toHaveBeenCalledWith(
+      "sleepwear",
+      expect.objectContaining({ rowId: expect.any(String), version: 1 }),
+    );
     expect(live().textContent).toBe("Sleepwear removed from future trips.");
   });
 
@@ -672,57 +692,51 @@ describe("renaming, Smart, and removing", () => {
     expect(within(laptopScales).queryByRole("button", { name: "smart" })).toBeNull();
   });
 
-  it("removes after an in-flight save, so the staple cannot come back", async () => {
-    const order: string[] = [];
+  it("rejects removal queued with the pre-save token (pending lock follows in 2b)", async () => {
     const gate = deferred<void>();
-    const removeStaple = vi.fn(async (id: string) => {
-      order.push("remove");
-      return (await memory().listStaples()).filter((s) => s.id !== id);
-    });
+    const removeStaple = vi.fn((id: string, expected: NonNullable<Staple["revision"]>) =>
+      source.removeStaple(id, expected),
+    );
     const { user, source } = setup({
       removeStaple,
       wrap: (base) => ({
         ...base,
-        upsertStaple: async (staple) => {
-          order.push("upsert-start");
+        upsertStaple: async (staple, expected) => {
           await gate.promise;
-          order.push("upsert-end");
-          return base.upsertStaple(staple);
+          return base.upsertStaple(staple, expected);
         },
       }),
     });
     await loaded();
+    const captured = source.staplesSnapshot().find((row) => row.id === "sleepwear")!.revision!;
     await user.click(within(rowFor("sleepwear")).getByRole("button", { name: /^Sleepwear/ }));
-    await user.click(
-      within(screen.getByRole("group", { name: "Edit Sleepwear" })).getByRole("button", {
-        name: /^More /,
-      }),
-    );
-    await waitFor(() => expect(order).toEqual(["upsert-start"]));
+    await user.click(screen.getByRole("button", { name: /^More / }));
     await user.click(screen.getByRole("button", { name: "Remove" }));
-    // Remove waits behind the save that is still in flight.
     expect(removeStaple).not.toHaveBeenCalled();
     await act(async () => gate.resolve());
-    await waitFor(() => expect(removeStaple).toHaveBeenCalledWith("sleepwear"));
-    expect(order).toEqual(["upsert-start", "upsert-end", "remove"]);
-    await waitFor(() => expect(rowFor("sleepwear")).toBeNull());
-    void source;
+    await waitFor(() => expect(removeStaple).toHaveBeenCalledWith("sleepwear", captured));
+    await waitFor(() => expect(saveApi.status).toBe("error"));
+    expect(source.staplesSnapshot().find((row) => row.id === "sleepwear")).toMatchObject({
+      qty: 2,
+      revision: { ...captured, version: 2 },
+    });
+    expect(rowFor("sleepwear")).not.toBeNull();
   });
 
   it("drops a save that is still queued when the staple is removed", async () => {
     const calls: number[] = [];
     const gate = deferred<void>();
-    const removeStaple = vi.fn(async (id: string) =>
-      (await memory().listStaples()).filter((s) => s.id !== id),
+    const removeStaple = vi.fn((id: string, expected: NonNullable<Staple["revision"]>) =>
+      source.removeStaple(id, expected),
     );
-    const { user } = setup({
+    const { user, source } = setup({
       removeStaple,
       wrap: (base) => ({
         ...base,
-        upsertStaple: async (staple) => {
+        upsertStaple: async (staple, expected) => {
           calls.push(staple.qty);
           await gate.promise;
-          return base.upsertStaple(staple);
+          return base.upsertStaple(staple, expected);
         },
       }),
     });
@@ -737,6 +751,8 @@ describe("renaming, Smart, and removing", () => {
     await act(async () => gate.resolve());
     await waitFor(() => expect(removeStaple).toHaveBeenCalled());
     expect(calls).toEqual([2]);
+    await waitFor(() => expect(saveApi.status).toBe("error"));
+    expect(source.staplesSnapshot().find((row) => row.id === "sleepwear")!.qty).toBe(2);
   });
 });
 
@@ -746,7 +762,10 @@ describe("adding a staple", () => {
     const { user, source } = setup({
       wrap: (base) => ({
         ...base,
-        upsertStaple: async (staple) => (await gate.promise, base.upsertStaple(staple)),
+        upsertStaple: async (staple, expected) => (
+          await gate.promise,
+          base.upsertStaple(staple, expected)
+        ),
       }),
     });
     await loaded();
@@ -959,5 +978,79 @@ describe("phone", () => {
     const after = screen.getByRole("button", { name: "Preview a trip" });
     expect(after.getAttribute("aria-expanded")).toBe("false");
     expect(document.activeElement).toBe(after);
+  });
+});
+
+describe("direct Screen revision forwarding", () => {
+  it("fails closed for old reads missing metadata without invoking a writer", async () => {
+    const write = vi.fn();
+    const remove = vi.fn();
+    const { user } = setup({
+      removeStaple: remove,
+      wrap: (base) => ({
+        ...base,
+        listStaples: async () =>
+          (await base.listStaples()).map(({ revision: _revision, ...content }) => {
+            void _revision;
+            return content;
+          }),
+        upsertStaple: write,
+      }),
+    });
+    await loaded();
+    await user.click(within(rowFor("sleepwear")).getByRole("button", { name: /^Sleepwear/ }));
+    await user.click(screen.getByRole("button", { name: /^More / }));
+    await waitFor(() => expect(saveApi.status).toBe("error"));
+    await user.click(screen.getByRole("button", { name: "Remove" }));
+    await act(async () => saveApi.retry());
+    expect(write).not.toHaveBeenCalled();
+    expect(remove).not.toHaveBeenCalled();
+  });
+  it("retries exactly the captured object/token after failure and cannot resurrect a deleted row", async () => {
+    const calls: { staple: Staple; expected: Staple["revision"] | null }[] = [];
+    const { user, source } = setup({
+      wrap: (base) => ({
+        ...base,
+        upsertStaple: async (staple, expected) => {
+          calls.push({ staple, expected });
+          if (calls.length === 1) throw Error("offline");
+          return base.upsertStaple(staple, expected);
+        },
+      }),
+    });
+    await loaded();
+    await user.click(within(rowFor("sleepwear")).getByRole("button", { name: /^Sleepwear/ }));
+    await user.click(screen.getByRole("button", { name: /^More / }));
+    await waitFor(() => expect(saveApi.status).toBe("error"));
+    const old = (await source.listStaples()).find((row) => row.id === "sleepwear")!;
+    await source.removeStaple(old.id, old.revision!);
+    const socks = (await source.listStaples()).find((row) => row.id === "socks")!;
+    await source.upsertStaple({ ...socks, qty: 3 }, socks.revision!);
+    await act(async () => saveApi.retry());
+    await waitFor(() => expect(calls).toHaveLength(2));
+    expect(calls[1].staple).toBe(calls[0].staple);
+    expect(calls[1].expected).toBe(calls[0].expected);
+    expect(calls[1].expected).toEqual(old.revision);
+    expect(calls[1].staple.qty).toBe(2);
+    expect((await source.listStaples()).some((row) => row.id === old.id)).toBe(false);
+    expect((await source.listStaples()).find((row) => row.id === "socks")!.qty).toBe(3);
+  });
+  it("explicitly expects absence for a new add", async () => {
+    const upsert = vi.fn();
+    const { user } = setup({
+      wrap: (base) => ({
+        ...base,
+        upsertStaple: async (staple, expected) => {
+          upsert(staple, expected);
+          return base.upsertStaple(staple, expected);
+        },
+      }),
+    });
+    await loaded();
+    await user.type(screen.getByRole("textbox", { name: "Staple name" }), "Hat");
+    await user.click(screen.getByRole("button", { name: "Add staple" }));
+    await waitFor(() =>
+      expect(upsert).toHaveBeenCalledWith(expect.objectContaining({ name: "Hat" }), null),
+    );
   });
 });

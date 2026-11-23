@@ -7,6 +7,7 @@ import { Icon } from "@/components/ui/Icon";
 import { useToast } from "@/components/ui/Toast";
 import { LAPTOP_QUERY, useMediaQuery } from "@/components/ui/useMediaQuery";
 import { CUBE_LABELS, type Cube } from "@/domain/cubes";
+import type { StapleRevision } from "@/domain/calc/staples";
 import type { Staple } from "@/domain/trip";
 import { useTripsSource } from "@/features/trips/TripsSourceProvider";
 import { removeStapleAction } from "@/features/trips/trip-actions";
@@ -35,13 +36,13 @@ type Load = { phase: "loading" } | { phase: "error" } | { phase: "ready"; staple
 const NAME_MAX = 50;
 
 export function StaplesScreen({
-  removeStaple = async (id: string) => {
-    const result = await removeStapleAction(id);
+  removeStaple = async (id: string, expected: StapleRevision) => {
+    const result = await removeStapleAction(id, expected);
     if (!result.ok) throw new Error(result.code);
     return result.staples;
   },
 }: {
-  removeStaple?: (id: string) => Promise<Staple[]>;
+  removeStaple?: (id: string, expected: StapleRevision) => Promise<Staple[]>;
 } = {}) {
   const source = useTripsSource();
   const { track } = useSaveStatus();
@@ -95,13 +96,17 @@ export function StaplesScreen({
   // confirms. A failure puts the staple back to what is stored, and the save chip shows Error.
   const commit = useCallback(
     (next: Staple) => {
+      const expected = next.revision && Object.freeze({ ...next.revision });
       latest.current[next.id] = next;
       setDrafts((current) => ({ ...current, [next.id]: next }));
       const previous = chains.current[next.id] ?? Promise.resolve();
       chains.current[next.id] = previous.then(async () => {
         if (latest.current[next.id] !== next) return; // a newer change is queued behind this one
         await track(
-          () => source.upsertStaple(next),
+          () =>
+            expected
+              ? source.upsertStaple(next, expected)
+              : Promise.reject(new Error("INVALID_INPUT")),
           (staples) => {
             setLoad({ phase: "ready", staples });
             if (latest.current[next.id] === next) clearDraft(next.id);
@@ -118,11 +123,15 @@ export function StaplesScreen({
   // staple back; saves still queued behind it are dropped.
   const remove = useCallback(
     (staple: Staple) => {
+      const expected = staple.revision && Object.freeze({ ...staple.revision });
       delete latest.current[staple.id];
       const previous = chains.current[staple.id] ?? Promise.resolve();
       chains.current[staple.id] = previous.then(async () => {
         await track(
-          () => removeStaple(staple.id),
+          () =>
+            expected
+              ? removeStaple(staple.id, expected)
+              : Promise.reject(new Error("INVALID_INPUT")),
           (staples) => {
             clearDraft(staple.id);
             setLoad({ phase: "ready", staples });
@@ -178,7 +187,7 @@ export function StaplesScreen({
     const created = moveToCube(base, addCube);
     setProblem(null);
     void track(
-      () => source.upsertStaple(created),
+      () => source.upsertStaple(created, null),
       (list) => {
         setLoad({ phase: "ready", staples: list });
         setName("");

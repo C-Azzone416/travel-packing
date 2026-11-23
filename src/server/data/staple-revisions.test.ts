@@ -29,7 +29,7 @@ vi.mock("./staple-store", async (importOriginal) => {
 
 let ctx: Awaited<ReturnType<typeof createMigratedDb>>;
 const fake = createFakeAuth();
-const context = () => makeContext(ctx.db as unknown as Db, fake);
+const context = (db = ctx.db as unknown as Db) => makeContext(db, fake);
 function data<T>(result: Result<T>): T {
   if (!result.ok) throw Error(result.error.code);
   return result.data;
@@ -70,12 +70,12 @@ beforeEach(async () => {
   faults.afterWrite = false;
   await resetData(ctx.client);
   signedInAs(fake, OWNER);
-  data(await service.upsertStaple(context(), content));
+  data(await upsert(content, null));
 });
 describe("captured Staple revision policy", () => {
   it("rejects stale same-row update atomically", async () => {
     const expected = await token();
-    data(await service.upsertStaple(context(), { ...content, qty: 3 }));
+    data(await upsert({ ...content, qty: 3 }, await token()));
     const before = await raw();
     expect(await upsert({ ...content, packLast: true }, expected)).toMatchObject({
       ok: false,
@@ -85,14 +85,14 @@ describe("captured Staple revision policy", () => {
   });
   it("rejects stale delete atomically", async () => {
     const expected = await token();
-    data(await service.upsertStaple(context(), { ...content, qty: 3 }));
+    data(await upsert({ ...content, qty: 3 }, await token()));
     const before = await raw();
     expect(await remove(expected)).toMatchObject({ ok: false, error: { code: "STALE" } });
     expect(await raw()).toEqual(before);
   });
   it("rejects resurrection after delete atomically", async () => {
     const expected = await token();
-    data(await service.removeStaple(context(), { semanticId: "scarf" }));
+    data(await remove(await token()));
     const before = await raw();
     expect(await upsert({ ...content, qty: 3 }, expected)).toMatchObject({
       ok: false,
@@ -273,4 +273,50 @@ describe("checked Staple commands", () => {
     data(await remove(await token()));
     expect(data(await service.getTrip(context(), { tripId: trip.id }))).toEqual(before);
   });
+});
+
+it("outer owner transaction rolls back after service savepoint has completed", async () => {
+  const expected = await token();
+  const before = await state();
+  let completed = 0;
+  function decorate(db: Db, depth = 0): Db {
+    return new Proxy(db, {
+      get(target, key) {
+        if (key === "transaction")
+          return async (fn: (tx: Db) => Promise<unknown>) => {
+            const value = await target.transaction((tx) =>
+              fn(decorate(tx as unknown as Db, depth + 1)),
+            );
+            if (depth === 1) {
+              completed++;
+              throw Error("failure after service savepoint release");
+            }
+            return value;
+          };
+        const value = Reflect.get(target, key, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+  }
+  for (const attempt of [
+    () =>
+      service.upsertStapleChecked(context(decorate(ctx.db as unknown as Db)), {
+        staple: { ...content, qty: 4 },
+        expected,
+      }),
+    () =>
+      service.upsertStapleChecked(context(decorate(ctx.db as unknown as Db)), {
+        staple: { ...content, semanticId: "hat" },
+        expected: null,
+      }),
+    () =>
+      service.removeStapleChecked(context(decorate(ctx.db as unknown as Db)), {
+        semanticId: content.semanticId,
+        expected,
+      }),
+  ]) {
+    expect(await attempt()).toMatchObject({ ok: false, error: { code: "INTERNAL" } });
+    expect(await state()).toEqual(before);
+  }
+  expect(completed).toBe(3);
 });
