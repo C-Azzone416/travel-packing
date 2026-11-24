@@ -263,10 +263,21 @@ describe.each<Entry>(["nav", "settings"])("sign-out warning from %s", (entry) =>
     expect(document.activeElement).toBe(again);
     expect(t.signOut).not.toHaveBeenCalled();
     expect(t.order).toEqual([]);
-    // Stay clears the alert for next time.
+    // Stay clears the alert for next time; the async form action must commit its reopening.
+    const accountKey = t.outbox.created[0].outboxKey;
     await t.user.click(screen.getByRole("button", { name: "Stay signed in" }));
     await t.user.click(signOutButton());
+    await screen.findByRole("dialog", { name: "Feedback hasn’t sent yet" });
     expect(within(screen.getByRole("dialog")).getByRole("alert").textContent).toBe("");
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(within(screen.getByRole("dialog")).getByText(many(2))).toBeTruthy();
+    expect(t.outbox.box.clear).not.toHaveBeenCalled();
+    expect(t.signOut).not.toHaveBeenCalled();
+    expect(t.order).toEqual([]);
+    expect(t.outbox.created.map(({ outboxKey }) => outboxKey)).toEqual([accountKey]);
+    expect(t.server.state.outboxKey).toBe(accountKey);
+    expect(t.server.state.session).toBe("in");
+    expect(t.outbox.box.status()).toEqual({ ...OUTBOX_STATUS, items: 2, blocked: 0 });
   });
 
   it("a flush that attempts nothing (still inside the retry delay) shows the calm line, not the alert", async () => {
