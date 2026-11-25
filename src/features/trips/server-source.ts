@@ -1,3 +1,4 @@
+import type { StapleRevision } from "@/domain/calc/staples";
 // The dashboard's TripsSource backed by the server actions (the real data layer). Client-safe: it only holds the
 // action functions it is given, so tests can pass fakes.
 
@@ -47,7 +48,7 @@ export interface TripActions {
   listStaples(): Promise<StaplesReadResult>;
   /** The account's home city, the default "From" of a new trip. Left out by fakes that have none. */
   getHomeCity?(): Promise<HomeCityResult>;
-  upsertStaple(staple: Staple): Promise<StaplesReadResult>;
+  upsertStaple(staple: Staple, expected: StapleRevision | null): Promise<StaplesReadResult>;
   setPacked(tripId: string, itemId: string, packed: number): Promise<TripCommandResult>;
   setPackedMany(
     tripId: string,
@@ -56,8 +57,18 @@ export interface TripActions {
   togglePacked(tripId: string, itemId: string): Promise<TripCommandResult>;
   incrementPacked(tripId: string, itemId: string): Promise<TripCommandResult>;
   decrementPacked(tripId: string, itemId: string): Promise<TripCommandResult>;
-  editItem(tripId: string, itemId: string, edit: ItemEdit): Promise<TripCommandResult>;
-  removeItem(tripId: string, itemId: string, scope: Scope): Promise<TripCommandResult>;
+  editItem(
+    tripId: string,
+    itemId: string,
+    edit: ItemEdit,
+    expected?: StapleRevision | null,
+  ): Promise<TripCommandResult>;
+  removeItem(
+    tripId: string,
+    itemId: string,
+    scope: Scope,
+    expected?: StapleRevision | null,
+  ): Promise<TripCommandResult>;
   addToiletryItem(tripId: string, item: NewToiletryItem): Promise<TripCommandResult>;
   moveItemToCube(tripId: string, itemId: string, cube: Cube): Promise<TripCommandResult>;
   setMorningOf(tripId: string, cube: Cube, on: boolean): Promise<TripCommandResult>;
@@ -123,7 +134,11 @@ async function unwrapTrip(pending: Promise<CreateTripActionResult>): Promise<Lif
 async function unwrapChange(pending: Promise<TripCommandResult>): Promise<TripChange> {
   const result = await pending;
   if (!result.ok) throw new TripsSourceError(result.code);
-  return { trip: result.trip, signals: result.signals };
+  return {
+    trip: result.trip,
+    signals: result.signals,
+    ...(result.staples ? { staples: result.staples } : {}),
+  };
 }
 
 async function unwrapRead(pending: Promise<TripReadResult>): Promise<LifecycleTrip> {
@@ -175,14 +190,16 @@ export function createServerTripsSource(
 
     getTrip: (id) => unwrapRead(trip.getTrip(id)),
     listStaples: () => unwrapStaples(trip.listStaples()),
-    upsertStaple: (staple) => unwrapStaples(trip.upsertStaple(staple)),
+    upsertStaple: (staple, expected) => unwrapStaples(trip.upsertStaple(staple, expected)),
     setPacked: (id, itemId, packed) => unwrapChange(trip.setPacked(id, itemId, packed)),
     setPackedMany: (id, entries) => unwrapChange(trip.setPackedMany(id, entries)),
     togglePacked: (id, itemId) => unwrapChange(trip.togglePacked(id, itemId)),
     incrementPacked: (id, itemId) => unwrapChange(trip.incrementPacked(id, itemId)),
     decrementPacked: (id, itemId) => unwrapChange(trip.decrementPacked(id, itemId)),
-    editItem: (id, itemId, edit) => unwrapChange(trip.editItem(id, itemId, edit)),
-    removeItem: (id, itemId, scope) => unwrapChange(trip.removeItem(id, itemId, scope)),
+    editItem: (id, itemId, edit, expected) =>
+      unwrapChange(trip.editItem(id, itemId, edit, expected)),
+    removeItem: (id, itemId, scope, expected) =>
+      unwrapChange(trip.removeItem(id, itemId, scope, expected)),
     addToiletryItem: (id, item) => unwrapChange(trip.addToiletryItem(id, item)),
     moveItemToCube: (id, itemId, cube) => unwrapChange(trip.moveItemToCube(id, itemId, cube)),
     setMorningOf: (id, cube, on) => unwrapChange(trip.setMorningOf(id, cube, on)),

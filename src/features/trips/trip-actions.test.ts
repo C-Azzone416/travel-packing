@@ -1,3 +1,4 @@
+import { createServerTripsSource, type TripsActions, type TripActions } from "./server-source";
 import * as service from "@/server/data/service";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMigratedDb, resetData } from "@/server/db/__fixtures__/db";
@@ -147,12 +148,17 @@ describe("reads", () => {
       cadence: "smart",
       packLast: false,
     } as const;
-    expect(await saveStaplesSetupAction([chosen])).toMatchObject({
+    expect(await saveStaplesSetupAction([chosen], [])).toMatchObject({
       ok: true,
       state: "completed",
       staples: [chosen],
     });
-    expect(await removeStapleAction("underwear")).toEqual({ ok: true, staples: [] });
+    const beforeRemove = await listStaplesAction();
+    if (!beforeRemove.ok) throw new Error("expected ok");
+    expect(await removeStapleAction("underwear", beforeRemove.staples[0].revision!)).toEqual({
+      ok: true,
+      staples: [],
+    });
 
     as(OTHER_OWNER);
     expect(await skipStaplesSetupAction()).toMatchObject({
@@ -332,12 +338,17 @@ describe("item and preference commands", () => {
     });
     expect(item(edited, "sunglasses")).toMatchObject({ name: "Shades", qty: 2 });
     const before = await listStaplesAction();
-    await editItemAction(trip.id, "sunglasses", {
-      name: "Sunglasses",
-      qty: 3,
-      timing: "packlast",
-      scope: "remember",
-    });
+    await editItemAction(
+      trip.id,
+      "sunglasses",
+      {
+        name: "Sunglasses",
+        qty: 3,
+        timing: "packlast",
+        scope: "remember",
+      },
+      null,
+    );
     const after = await listStaplesAction();
     if (!before.ok || !after.ok) throw new Error("expected ok");
     expect(after.staples).not.toEqual(before.staples);
@@ -354,14 +365,17 @@ describe("item and preference commands", () => {
       packLast: false,
       groupId: "toiletry-bag",
     } as const;
-    const added = await upsertStapleAction(staple);
+    const added = await upsertStapleAction(staple, null);
     if (!added.ok) throw new Error(`expected ok, got ${added.code}`);
     expect(added.staples.find((entry) => entry.id === "razor")).toMatchObject({
       name: "Razor",
       qty: 1,
       groupId: "toiletry-bag",
     });
-    const edited = await upsertStapleAction({ ...staple, qty: 3, packLast: true });
+    const edited = await upsertStapleAction(
+      { ...staple, qty: 3, packLast: true },
+      added.staples.find((row) => row.id === staple.id)!.revision!,
+    );
     if (!edited.ok) throw new Error(`expected ok, got ${edited.code}`);
     const razors = edited.staples.filter((entry) => entry.id === "razor");
     expect(razors).toHaveLength(1);
@@ -382,21 +396,32 @@ describe("item and preference commands", () => {
       laundryHalves: true,
       cube: "misc",
     } as const;
-    const upserted = await upsertStapleAction(tees);
+    const upserted = await upsertStapleAction(tees, null);
     if (!upserted.ok) throw new Error(`expected ok, got ${upserted.code}`);
-    expect(upserted.staples.find((entry) => entry.id === "tops")).toEqual(tees);
-    const cleared = await upsertStapleAction({
+    expect(upserted.staples.find((entry) => entry.id === "tops")).toEqual({
       ...tees,
-      laundryHalves: undefined,
-      cube: undefined,
+      revision: { rowId: expect.any(String), version: 1 },
     });
+    const cleared = await upsertStapleAction(
+      {
+        ...tees,
+        laundryHalves: undefined,
+        cube: undefined,
+      },
+      upserted.staples.find((row) => row.id === tees.id)!.revision!,
+    );
     if (!cleared.ok) throw new Error(`expected ok, got ${cleared.code}`);
     expect(cleared.staples.find((entry) => entry.id === "tops")).not.toHaveProperty(
       "laundryHalves",
     );
-    const setup = await saveStaplesSetupAction([tees]);
+    const setup = await saveStaplesSetupAction(
+      [tees],
+      cleared.staples.map((entry) => ({ semanticId: entry.id, revision: entry.revision! })),
+    );
     if (!setup.ok) throw new Error(`expected ok, got ${setup.code}`);
-    expect(setup.staples).toEqual([tees]);
+    expect(setup.staples).toEqual([
+      { ...tees, revision: { rowId: expect.any(String), version: 3 } },
+    ]);
   });
 
   it("upsertStapleAction rejects bad input, and another owner's staples are separate", async () => {
@@ -408,11 +433,11 @@ describe("item and preference commands", () => {
       category: "Tech",
       packLast: false,
     } as const;
-    expect(await upsertStapleAction(bad)).toEqual({ ok: false, code: "INVALID_INPUT" });
+    expect(await upsertStapleAction(bad, null)).toEqual({ ok: false, code: "INVALID_INPUT" });
     expect(
-      await upsertStapleAction({ ...bad, name: "Cable", qty: 1, category: "Nope" as never }),
+      await upsertStapleAction({ ...bad, name: "Cable", qty: 1, category: "Nope" as never }, null),
     ).toEqual({ ok: false, code: "INVALID_INPUT" });
-    await upsertStapleAction({ ...bad, id: "mine", name: "Mine", qty: 1 });
+    await upsertStapleAction({ ...bad, id: "mine", name: "Mine", qty: 1 }, null);
     as(OTHER_OWNER);
     const theirs = await listStaplesAction();
     if (!theirs.ok) throw new Error("expected ok");
@@ -591,14 +616,17 @@ describe("owner gate", () => {
       () => getTripAction(trip.id),
       () => listStaplesAction(),
       () =>
-        upsertStapleAction({
-          id: "x",
-          name: "X",
-          qty: 1,
-          cadence: "per trip",
-          category: "Tech",
-          packLast: false,
-        }),
+        upsertStapleAction(
+          {
+            id: "x",
+            name: "X",
+            qty: 1,
+            cadence: "per trip",
+            category: "Tech",
+            packLast: false,
+          },
+          null,
+        ),
       () => setPackedAction(trip.id, "socks", 1),
       () => markReadyAction(trip.id),
       () => updatePreferencesAction(trip.id, trip.config),
@@ -781,5 +809,93 @@ describe("saveAsListAction (#169)", () => {
     );
     current = null;
     expect(await saveAsListAction(MISSING, "x", ["a"])).toEqual({ ok: false, code: "INTERNAL" });
+  });
+});
+
+describe("direct Staples transport expectations", () => {
+  const scarf = {
+    id: "scarf",
+    name: "Scarf",
+    category: "Accessories",
+    cube: "misc",
+    qty: 1,
+    cadence: "per trip",
+    packLast: false,
+  } as const;
+  const row = (result: Awaited<ReturnType<typeof listStaplesAction>>, id = "scarf") => {
+    if (!result.ok) throw new Error(result.code);
+    return result.staples.find((entry) => entry.id === id)!;
+  };
+  const raw = async () =>
+    (await ctx.client.query("SELECT * FROM staples ORDER BY owner_id, semantic_id")).rows;
+  it("forwards captured content/token through server source and actual action to the checked service", async () => {
+    const source = createServerTripsSource(
+      {} as TripsActions,
+      { listStaples: listStaplesAction, upsertStaple: upsertStapleAction } as TripActions,
+    );
+    const adding = source.upsertStaple(scarf, null);
+    await expect(adding).resolves.toEqual([
+      { ...scarf, revision: { rowId: expect.any(String), version: 1 } },
+    ]);
+    const added = (await adding)[0];
+    expect(added).toEqual({ ...scarf, revision: { rowId: expect.any(String), version: 1 } });
+    const changing = source.upsertStaple({ ...added, qty: 3 }, added.revision!);
+    await expect(changing).resolves.toEqual([
+      { ...scarf, qty: 3, revision: { ...added.revision!, version: 2 } },
+    ]);
+    const changed = (await changing)[0];
+    expect(changed).toEqual({ ...scarf, qty: 3, revision: { ...added.revision!, version: 2 } });
+    const before = await raw();
+    await expect(
+      source.upsertStaple({ ...added, packLast: true }, added.revision!),
+    ).rejects.toThrow("STALE");
+    expect(await raw()).toEqual(before);
+  });
+  it("rejects omitted and malformed metadata at actual action boundaries, and has no legacy exports", async () => {
+    expect(service).not.toHaveProperty("upsertStaple");
+    expect(service).not.toHaveProperty("removeStaple");
+    const before = await raw();
+    for (const expected of [undefined, {}, { rowId: "bad", version: 1 }]) {
+      expect(await upsertStapleAction(scarf, expected as never)).toEqual({
+        ok: false,
+        code: "INVALID_INPUT",
+      });
+      expect(await removeStapleAction(scarf.id, expected as never)).toEqual({
+        ok: false,
+        code: "INVALID_INPUT",
+      });
+    }
+    expect(await raw()).toEqual(before);
+  });
+  it("preserves different-row writers and rejects stale delete and equal-content stale no-ops", async () => {
+    const a = row(await upsertStapleAction(scarf, null));
+    const b = row(await upsertStapleAction({ ...scarf, id: "hat", name: "Hat" }, null), "hat");
+    const updated = row(await upsertStapleAction({ ...a, qty: 3 }, a.revision!));
+    const changed = await upsertStapleAction({ ...b, qty: 2 }, b.revision!);
+    expect(row(changed)).toEqual(updated);
+    expect(row(changed, "hat")).toEqual({ ...b, qty: 2, revision: { ...b.revision!, version: 2 } });
+    const before = await raw();
+    expect(await removeStapleAction(a.id, a.revision!)).toEqual({ ok: false, code: "STALE" });
+    expect(await upsertStapleAction({ ...a, qty: 3 }, a.revision!)).toEqual({
+      ok: false,
+      code: "STALE",
+    });
+    expect(await raw()).toEqual(before);
+  });
+  it("fails a captured retry after deletion and rejects delete/recreate ABA at equal version", async () => {
+    const a = row(await upsertStapleAction(scarf, null));
+    const intended = { ...a, qty: 2 };
+    const expected = { ...a.revision! };
+    const write = () => upsertStapleAction(intended, expected);
+    expect(await removeStapleAction(a.id, expected)).toEqual({ ok: true, staples: [] });
+    expect(await write()).toEqual({ ok: false, code: "STALE" });
+    expect(await listStaplesAction()).toEqual({ ok: true, staples: [] });
+    const recreated = row(await upsertStapleAction(scarf, null));
+    expect(recreated.revision!.version).toBe(expected.version);
+    expect(recreated.revision!.rowId).not.toBe(expected.rowId);
+    const before = await raw();
+    expect(await write()).toEqual({ ok: false, code: "STALE" });
+    expect(await removeStapleAction(a.id, expected)).toEqual({ ok: false, code: "STALE" });
+    expect(await raw()).toEqual(before);
   });
 });

@@ -62,7 +62,7 @@ import { todayOf, type DataContext } from "./context";
 import { fail, type Result } from "./result";
 import { run, refuse, type OwnerScope } from "./run";
 import * as inputs from "./schemas";
-import { listStaples, saveStaples } from "./staple-store";
+import { assertStapleRevision, listStaples, saveStaples } from "./staple-store";
 import { curatedResolver } from "../locations/resolver";
 import { round2 } from "../locations/open-meteo";
 import type { Appearance } from "../../domain/appearance";
@@ -106,6 +106,7 @@ import {
 } from "./weather-store";
 
 export interface TripResult {
+  staples?: Staple[];
   trip: StoredTrip;
   signals?: Signals;
 }
@@ -149,6 +150,7 @@ function mutateTrip<Input extends { tripId: string }>(
   schema: ZodType<Input>,
   raw: unknown,
   apply: (trip: StoredTrip, input: Input, staples: Staple[]) => Mutation,
+  guard?: (scope: OwnerScope, input: Input) => Promise<void>,
 ): Promise<Result<TripResult>> {
   return run(context, schema, raw, async (scope, input) =>
     scope.db.transaction(async (tx) => {
@@ -157,6 +159,7 @@ function mutateTrip<Input extends { tripId: string }>(
       if (!(await lockTrip(txScope.db, txScope.ownerId, input.tripId))) refuse(fail("NOT_FOUND"));
       const current = await mustLoad(txScope, input.tripId);
       const staples = await listStaples(txScope.db, txScope.ownerId, { lock: true });
+      await guard?.(txScope, input);
       const next = apply(current, input, staples);
       const savedAt = await saveTripAt(txScope.db, txScope.ownerId, next.trip);
       if (!savedAt) refuse(fail("NOT_FOUND"));
@@ -165,7 +168,13 @@ function mutateTrip<Input extends { tripId: string }>(
       if (next.staples && next.staples !== staples) {
         await saveStaples(txScope.db, txScope.ownerId, next.staples);
       }
-      return { trip: next.trip, signals: next.signals };
+      return {
+        trip: next.trip,
+        signals: next.signals,
+        ...(next.staples && next.staples !== staples
+          ? { staples: await listStaples(txScope.db, txScope.ownerId) }
+          : {}),
+      };
     }),
   );
 }
@@ -240,15 +249,32 @@ export const markTripNotReady = tripCommand(markNotReady);
 
 // ---------------------------------------------------------------- item operations
 
+async function guardRemember(
+  scope: OwnerScope,
+  input: { itemId: string; scope: string; expected?: Staple["revision"] | null },
+) {
+  if (input.scope === "remember")
+    await assertStapleRevision(scope.db, scope.ownerId, input.itemId, input.expected!);
+}
+
 export function editTripItem(context: DataContext, input: unknown) {
-  return mutateTrip(context, inputs.editItemInput, input, (trip, { itemId, ...edit }, staples) =>
-    unwrapItemOp(editItem(trip, staples, itemId, edit)),
+  return mutateTrip(
+    context,
+    inputs.editItemInput,
+    input,
+    (trip, { itemId, ...edit }, staples) => unwrapItemOp(editItem(trip, staples, itemId, edit)),
+    guardRemember,
   );
 }
 
 export function removeItemFromTrip(context: DataContext, input: unknown) {
-  return mutateTrip(context, inputs.removeItemInput, input, (trip, { itemId, scope }, staples) =>
-    unwrapItemOp(removeTripItem(trip, staples, itemId, scope)),
+  return mutateTrip(
+    context,
+    inputs.removeItemInput,
+    input,
+    (trip, { itemId, scope }, staples) =>
+      unwrapItemOp(removeTripItem(trip, staples, itemId, scope)),
+    guardRemember,
   );
 }
 
@@ -369,36 +395,47 @@ export const reviewTripWeatherAgain = weather(reviewWeatherAgain);
 
 // ---------------------------------------------------------------- staples
 
-/** Create or update one of the owner's staples (bumps its version). Trip snapshots are never touched. */
-export function upsertStaple(context: DataContext, input: unknown): Promise<Result<Staple[]>> {
-  return run(context, inputs.stapleInput, input, (scope, request) =>
-    // One transaction, reading the owner's staples WITH a lock: the write below replaces the whole set (anything not in
-    // the list is deleted), so two concurrent upserts of different staples must not both start from the same snapshot.
-    scope.db.transaction(async (tx) => {
-      const db = tx as OwnerScope["db"];
-      const current = await listStaples(db, scope.ownerId, { lock: true });
-      const staple: Staple = {
-        id: request.semanticId,
-        name: request.name,
-        category: request.category,
-        qty: request.qty,
-        cadence: request.cadence,
-        packLast: request.packLast,
-        ...(request.groupId ? { groupId: request.groupId } : {}),
-        ...(request.laundryHalves ? { laundryHalves: true } : {}),
-        ...(request.cube ? { cube: request.cube } : {}),
-      };
-      const exists = current.some((entry) => entry.id === staple.id);
-      await saveStaples(
-        db,
-        scope.ownerId,
-        exists
-          ? current.map((entry) => (entry.id === staple.id ? staple : entry))
-          : [...current, staple],
-      );
-      return listStaples(db, scope.ownerId);
-    }),
-  );
+/** Create/update using the exact revision captured by the reader, or null for a new row. */
+export function upsertStapleChecked(
+  context: DataContext,
+  input: unknown,
+): Promise<Result<Staple[]>> {
+  return run(context, inputs.checkedStapleInput, input, async (scope, { staple, expected }) => {
+    await assertStapleRevision(scope.db, scope.ownerId, staple.semanticId, expected);
+    return upsertStapleInScope(scope, staple);
+  });
+}
+
+function upsertStapleInScope(
+  scope: OwnerScope,
+  request: ReturnType<typeof inputs.stapleInput.parse>,
+): Promise<Staple[]> {
+  // One transaction, reading the owner's staples WITH a lock: the write below replaces the whole set (anything not in
+  // the list is deleted), so two concurrent upserts of different staples must not both start from the same snapshot.
+  return scope.db.transaction(async (tx) => {
+    const db = tx as OwnerScope["db"];
+    const current = await listStaples(db, scope.ownerId, { lock: true });
+    const staple: Staple = {
+      id: request.semanticId,
+      name: request.name,
+      category: request.category,
+      qty: request.qty,
+      cadence: request.cadence,
+      packLast: request.packLast,
+      ...(request.groupId ? { groupId: request.groupId } : {}),
+      ...(request.laundryHalves ? { laundryHalves: true } : {}),
+      ...(request.cube ? { cube: request.cube } : {}),
+    };
+    const exists = current.some((entry) => entry.id === staple.id);
+    await saveStaples(
+      db,
+      scope.ownerId,
+      exists
+        ? current.map((entry) => (entry.id === staple.id ? staple : entry))
+        : [...current, staple],
+    );
+    return listStaples(db, scope.ownerId);
+  });
 }
 
 function fromSetupInput(request: {
@@ -440,6 +477,20 @@ export function saveStaplesSetup(
         .from(schema.users)
         .where(eq(schema.users.id, scope.ownerId))
         .for("update");
+      const current = await listStaples(db, scope.ownerId, { lock: true });
+      const baseline = new Map(request.baseline.map((entry) => [entry.semanticId, entry.revision]));
+      if (
+        current.length !== baseline.size ||
+        current.some((entry) => {
+          const expected = baseline.get(entry.id);
+          return (
+            !expected ||
+            entry.revision?.rowId !== expected.rowId ||
+            entry.revision.version !== expected.version
+          );
+        })
+      )
+        refuse(fail("STALE"));
       await saveStaples(db, scope.ownerId, fromSetupInput(request));
       await db
         .update(schema.users)
@@ -513,20 +564,28 @@ export function dismissStaplesReminder(context: DataContext): Promise<Result<Sta
   });
 }
 
-/** Removing a template affects future trips only; a repeated removal is safely idempotent. */
-export function removeStaple(context: DataContext, input: unknown): Promise<Result<Staple[]>> {
-  return run(context, inputs.stapleOnly, input, (scope, { semanticId }) =>
-    scope.db.transaction(async (tx) => {
-      const db = tx as OwnerScope["db"];
-      const current = await listStaples(db, scope.ownerId, { lock: true });
-      await saveStaples(
-        db,
-        scope.ownerId,
-        current.filter((entry) => entry.id !== semanticId),
-      );
-      return listStaples(db, scope.ownerId);
-    }),
-  );
+/** A stale delete (including a repeated delete) conflicts instead of deleting a newer row. */
+export function removeStapleChecked(
+  context: DataContext,
+  input: unknown,
+): Promise<Result<Staple[]>> {
+  return run(context, inputs.checkedStapleOnly, input, async (scope, { semanticId, expected }) => {
+    await assertStapleRevision(scope.db, scope.ownerId, semanticId, expected);
+    return removeStapleInScope(scope, semanticId);
+  });
+}
+
+function removeStapleInScope(scope: OwnerScope, semanticId: string): Promise<Staple[]> {
+  return scope.db.transaction(async (tx) => {
+    const db = tx as OwnerScope["db"];
+    const current = await listStaples(db, scope.ownerId, { lock: true });
+    await saveStaples(
+      db,
+      scope.ownerId,
+      current.filter((entry) => entry.id !== semanticId),
+    );
+    return listStaples(db, scope.ownerId);
+  });
 }
 
 // ---------------------------------------------------------------- trip lifecycle

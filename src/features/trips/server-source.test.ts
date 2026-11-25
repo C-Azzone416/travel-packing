@@ -104,8 +104,8 @@ describe("createServerTripsSource: per-trip commands", () => {
       togglePacked: () => source.togglePacked("t", "i"),
       incrementPacked: () => source.incrementPacked("t", "i"),
       decrementPacked: () => source.decrementPacked("t", "i"),
-      editItem: () => source.editItem("t", "i", edit),
-      removeItem: () => source.removeItem("t", "i", "remember"),
+      editItem: () => source.editItem("t", "i", edit, null),
+      removeItem: () => source.removeItem("t", "i", "remember", null),
       addToiletryItem: () => source.addToiletryItem("t", toiletry),
       moveItemToCube: () => source.moveItemToCube("t", "i", "tech"),
       setMorningOf: () => source.setMorningOf("t", "tech", true),
@@ -135,8 +135,8 @@ describe("createServerTripsSource: per-trip commands", () => {
       ["togglePacked", "t", "i"],
       ["incrementPacked", "t", "i"],
       ["decrementPacked", "t", "i"],
-      ["editItem", "t", "i", edit],
-      ["removeItem", "t", "i", "remember"],
+      ["editItem", "t", "i", edit, null],
+      ["removeItem", "t", "i", "remember", null],
       ["addToiletryItem", "t", toiletry],
       ["moveItemToCube", "t", "i", "tech"],
       ["setMorningOf", "t", "tech", true],
@@ -200,9 +200,12 @@ describe("createServerTripsSource: per-trip commands", () => {
       category: "Bathroom",
       packLast: false,
     } as const;
-    expect(await source.upsertStaple(staple)).toEqual([]);
-    expect(fakes.upsertStaple).toHaveBeenCalledWith(staple);
+    expect(await source.upsertStaple(staple, null)).toEqual([]);
+    expect(fakes.upsertStaple).toHaveBeenCalledWith(staple, null);
     expect(calls).toEqual([["upsertStaple", "razor"]]);
+    const expected = { rowId: "00000000-0000-4000-8000-000000000001", version: 7 };
+    await source.upsertStaple(staple, expected);
+    expect(vi.mocked(fakes.upsertStaple).mock.calls.at(-1)?.[1]).toBe(expected);
   });
 
   it.each(["NOT_FOUND", "REJECTED", "INVALID_INPUT", "INTERNAL"] as const)(
@@ -216,14 +219,17 @@ describe("createServerTripsSource: per-trip commands", () => {
         () => source.getTrip("t"),
         () => source.listStaples(),
         () =>
-          source.upsertStaple({
-            id: "x",
-            name: "X",
-            qty: 1,
-            cadence: "per trip",
-            category: "Other essentials",
-            packLast: false,
-          }),
+          source.upsertStaple(
+            {
+              id: "x",
+              name: "X",
+              qty: 1,
+              cadence: "per trip",
+              category: "Other essentials",
+              packLast: false,
+            },
+            null,
+          ),
       ]) {
         const error = await call().catch((caught: unknown) => caught);
         expect(error).toBeInstanceOf(TripsSourceError);

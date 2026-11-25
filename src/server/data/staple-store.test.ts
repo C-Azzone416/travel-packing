@@ -21,6 +21,18 @@ afterAll(async () => {
   await ctx.client.close();
 });
 
+// Assert read metadata independently, then keep the original exact content assertions.
+async function listStapleContent(ownerId: string): Promise<Staple[]> {
+  const staples = await listStaples(db(), ownerId);
+  return staples.map(({ revision, ...staple }) => {
+    expect(revision).toEqual({
+      rowId: expect.stringMatching(/^[0-9a-f-]{36}$/),
+      version: expect.any(Number),
+    });
+    return staple;
+  });
+}
+
 const versions = async () =>
   (
     await ctx.client.query<{ semantic_id: string; version: number }>(
@@ -30,9 +42,9 @@ const versions = async () =>
 
 describe("an uninitialized owner's Staples", () => {
   it("starts empty and stays empty across repeated reads", async () => {
-    expect(await listStaples(db(), OWNER.userId)).toEqual([]);
-    expect(await listStaples(db(), OWNER.userId)).toEqual([]);
-    expect(await listStaples(db(), OTHER_OWNER.userId)).toEqual([]);
+    expect(await listStapleContent(OWNER.userId)).toEqual([]);
+    expect(await listStapleContent(OWNER.userId)).toEqual([]);
+    expect(await listStapleContent(OTHER_OWNER.userId)).toEqual([]);
   });
 });
 
@@ -49,7 +61,7 @@ describe("saveStaples", () => {
 
   it("inserts new staples at version 1", async () => {
     await saveStaples(db(), OWNER.userId, [base]);
-    expect(await listStaples(db(), OWNER.userId)).toEqual([base]);
+    expect(await listStapleContent(OWNER.userId)).toEqual([base]);
     expect(await versions()).toEqual([{ semantic_id: "scarf", version: 1 }]);
   });
 
@@ -74,36 +86,36 @@ describe("saveStaples", () => {
   ])("a changed %s is saved", async (_label, change) => {
     await saveStaples(db(), OWNER.userId, [base]);
     await saveStaples(db(), OWNER.userId, [{ ...base, ...change }]);
-    expect(await listStaples(db(), OWNER.userId)).toEqual([{ ...base, ...change }]);
+    expect(await listStapleContent(OWNER.userId)).toEqual([{ ...base, ...change }]);
     expect((await versions())[0].version).toBe(2);
   });
 
   it("clearing a group is a change", async () => {
     await saveStaples(db(), OWNER.userId, [{ ...base, groupId: "toiletry-bag" }]);
     await saveStaples(db(), OWNER.userId, [base]);
-    expect(await listStaples(db(), OWNER.userId)).toEqual([base]);
+    expect(await listStapleContent(OWNER.userId)).toEqual([base]);
   });
 
   it("deletes staples that are no longer present, only for this owner", async () => {
     await saveStaples(db(), OWNER.userId, [base]);
     await saveStaples(db(), OTHER_OWNER.userId, [base]);
     await saveStaples(db(), OWNER.userId, []);
-    expect(await listStaples(db(), OWNER.userId)).toEqual([]);
-    expect(await listStaples(db(), OTHER_OWNER.userId)).toEqual([base]);
+    expect(await listStapleContent(OWNER.userId)).toEqual([]);
+    expect(await listStapleContent(OTHER_OWNER.userId)).toEqual([base]);
   });
 
   it("rejects a category outside the enum before writing", async () => {
     await expect(
       saveStaples(db(), OWNER.userId, [{ ...base, category: "Gadgets" }]),
     ).rejects.toBeInstanceOf(Refusal);
-    expect(await listStaples(db(), OWNER.userId)).toEqual([]);
+    expect(await listStapleContent(OWNER.userId)).toEqual([]);
   });
 
   it("accepts Smart only for documented clothing identities", async () => {
     await saveStaples(db(), OWNER.userId, [
       { ...base, id: "tops", name: "My shirts", category: "Clothing", cadence: "smart" },
     ]);
-    expect(await listStaples(db(), OWNER.userId)).toEqual([
+    expect(await listStapleContent(OWNER.userId)).toEqual([
       { ...base, id: "tops", name: "My shirts", category: "Clothing", cadence: "smart" },
     ]);
     await expect(
@@ -121,13 +133,13 @@ describe("saveStaples", () => {
       cube: "toiletries",
     };
     await saveStaples(db(), OWNER.userId, [lens]);
-    expect(await listStaples(db(), OWNER.userId)).toEqual([lens]);
+    expect(await listStapleContent(OWNER.userId)).toEqual([lens]);
     await saveStaples(db(), OWNER.userId, [{ ...lens, laundryHalves: false }]);
-    const [saved] = await listStaples(db(), OWNER.userId);
+    const [saved] = await listStapleContent(OWNER.userId);
     expect(saved.laundryHalves).toBeUndefined();
     expect((await versions())[0].version).toBe(2);
     await saveStaples(db(), OWNER.userId, [{ ...lens, laundryHalves: false, cube: "tech" }]);
-    expect((await listStaples(db(), OWNER.userId))[0].cube).toBe("tech");
+    expect((await listStapleContent(OWNER.userId))[0].cube).toBe("tech");
   });
 
   it("derives the cube from the category when none is given", async () => {
@@ -136,7 +148,7 @@ describe("saveStaples", () => {
     await saveStaples(db(), OWNER.userId, [
       { ...withoutCube, id: "passport", name: "Passport", category: "Other essentials" },
     ]);
-    expect((await listStaples(db(), OWNER.userId))[0].cube).toBe("documents");
+    expect((await listStapleContent(OWNER.userId))[0].cube).toBe("documents");
   });
 
   it.each(["underwear", "socks"])("refuses the laundry flag on %s", async (id) => {
@@ -145,7 +157,7 @@ describe("saveStaples", () => {
         { ...base, id, name: id, category: "Clothing", cadence: "per day", laundryHalves: true },
       ]),
     ).rejects.toBeInstanceOf(Refusal);
-    expect(await listStaples(db(), OWNER.userId)).toEqual([]);
+    expect(await listStapleContent(OWNER.userId)).toEqual([]);
   });
 
   it("round-trips the laundry flag, a per-night cadence and the cube", async () => {
@@ -158,13 +170,13 @@ describe("saveStaples", () => {
       cube: "toiletries",
     };
     await saveStaples(db(), OWNER.userId, [lens]);
-    expect(await listStaples(db(), OWNER.userId)).toEqual([lens]);
+    expect(await listStapleContent(OWNER.userId)).toEqual([lens]);
     await saveStaples(db(), OWNER.userId, [{ ...lens, laundryHalves: false }]);
-    const [saved] = await listStaples(db(), OWNER.userId);
+    const [saved] = await listStapleContent(OWNER.userId);
     expect(saved.laundryHalves).toBeUndefined();
     expect((await versions())[0].version).toBe(2);
     await saveStaples(db(), OWNER.userId, [{ ...lens, laundryHalves: false, cube: "tech" }]);
-    expect((await listStaples(db(), OWNER.userId))[0].cube).toBe("tech");
+    expect((await listStapleContent(OWNER.userId))[0].cube).toBe("tech");
   });
 
   it("derives the cube from the category when none is given", async () => {
@@ -173,7 +185,7 @@ describe("saveStaples", () => {
     await saveStaples(db(), OWNER.userId, [
       { ...withoutCube, id: "passport", name: "Passport", category: "Other essentials" },
     ]);
-    expect((await listStaples(db(), OWNER.userId))[0].cube).toBe("documents");
+    expect((await listStapleContent(OWNER.userId))[0].cube).toBe("documents");
   });
 
   it.each(["underwear", "socks"])("refuses the laundry flag on %s", async (id) => {
@@ -182,7 +194,7 @@ describe("saveStaples", () => {
         { ...base, id, name: id, category: "Clothing", cadence: "per day", laundryHalves: true },
       ]),
     ).rejects.toBeInstanceOf(Refusal);
-    expect(await listStaples(db(), OWNER.userId)).toEqual([]);
+    expect(await listStapleContent(OWNER.userId)).toEqual([]);
   });
 
   it("rejects two raw ids that resolve to one canonical identity", async () => {
@@ -192,7 +204,7 @@ describe("saveStaples", () => {
         { ...base, id: "weather-sunscreen", name: "Sun cream" },
       ]),
     ).rejects.toBeInstanceOf(Refusal);
-    expect(await listStaples(db(), OWNER.userId)).toEqual([]);
+    expect(await listStapleContent(OWNER.userId)).toEqual([]);
   });
 
   describe("another owner with the same default ids", () => {
@@ -212,11 +224,11 @@ describe("saveStaples", () => {
     ])("each owner's edit persists and bumps only their own version (%s)", async (_name, order) => {
       for (const owner of order) await saveStaples(db(), owner, [base]);
       await saveStaples(db(), OWNER.userId, [{ ...base, qty: 3 }]);
-      expect((await listStaples(db(), OWNER.userId))[0].qty).toBe(3);
-      expect((await listStaples(db(), OTHER_OWNER.userId))[0].qty).toBe(1);
+      expect((await listStapleContent(OWNER.userId))[0].qty).toBe(3);
+      expect((await listStapleContent(OTHER_OWNER.userId))[0].qty).toBe(1);
       await saveStaples(db(), OTHER_OWNER.userId, [{ ...base, qty: 5 }]);
-      expect((await listStaples(db(), OTHER_OWNER.userId))[0].qty).toBe(5);
-      expect((await listStaples(db(), OWNER.userId))[0].qty).toBe(3);
+      expect((await listStapleContent(OTHER_OWNER.userId))[0].qty).toBe(5);
+      expect((await listStapleContent(OWNER.userId))[0].qty).toBe(3);
       const versions = (
         await ctx.client.query<{ owner_id: string; version: number }>(
           "SELECT owner_id, version FROM staples ORDER BY owner_id",
@@ -232,7 +244,7 @@ describe("saveStaples", () => {
       await saveStaples(db(), OWNER.userId, [base]);
       await saveStaples(db(), OTHER_OWNER.userId, [base]);
       await saveStaples(db(), OWNER.userId, []);
-      expect(await listStaples(db(), OTHER_OWNER.userId)).toEqual([base]);
+      expect(await listStapleContent(OTHER_OWNER.userId)).toEqual([base]);
     });
   });
 });

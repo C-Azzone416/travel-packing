@@ -1,9 +1,10 @@
+import type { StapleRevision } from "@/domain/calc/staples";
 // The UI talks to trips only through this port, so the real data layer (#10) can replace the in-memory
 // source without touching any screen. Per-trip commands mirror the data layer's entry points one for one
 // (togglePackedItem, editTripItem, ...), and each returns the changed trip plus the domain's signals.
 
 import { calculateSuggestions, SYNTHETIC_STAPLES, tripDays } from "@/domain/calc";
-import type { Cube } from "@/domain/cubes";
+import { cubeForItem, type Cube } from "@/domain/cubes";
 import {
   acceptWeather,
   addCustomItem,
@@ -58,6 +59,7 @@ import type { WeatherFetchResult } from "./weather-client";
 /** A changed trip, with what the UI may offer next ("Put bag in suitcase", "Review your bag"). */
 export interface TripChange {
   trip: LifecycleTrip;
+  staples?: Staple[];
   signals: Signals;
 }
 
@@ -104,7 +106,7 @@ export interface TripsSource {
   /** The owner's staples (what "Remember for future trips" changes). */
   listStaples(): Promise<Staple[]>;
   /** Create or update one of the owner's staples (matched by id). Applies to future trips only; returns the whole list. */
-  upsertStaple(staple: Staple): Promise<Staple[]>;
+  upsertStaple(staple: Staple, expected: StapleRevision | null): Promise<Staple[]>;
   /** Sets one item's packed count (clamped to 0..qty). The screen sends one of these per item after taps settle. */
   setPacked(tripId: string, itemId: string, packed: number): Promise<TripChange>;
   /** Several packed counts as one change (All in, and its Undo): all are saved or none (#386). */
@@ -115,8 +117,18 @@ export interface TripsSource {
   togglePacked(tripId: string, itemId: string): Promise<TripChange>;
   incrementPacked(tripId: string, itemId: string): Promise<TripChange>;
   decrementPacked(tripId: string, itemId: string): Promise<TripChange>;
-  editItem(tripId: string, itemId: string, edit: ItemEdit): Promise<TripChange>;
-  removeItem(tripId: string, itemId: string, scope: Scope): Promise<TripChange>;
+  editItem(
+    tripId: string,
+    itemId: string,
+    edit: ItemEdit,
+    expected?: StapleRevision | null,
+  ): Promise<TripChange>;
+  removeItem(
+    tripId: string,
+    itemId: string,
+    scope: Scope,
+    expected?: StapleRevision | null,
+  ): Promise<TripChange>;
   addToiletryItem(tripId: string, input: NewToiletryItem): Promise<TripChange>;
   /** Move one item to another cube (#385). Only the cube changes; packed counts and Ready are untouched. */
   moveItemToCube(tripId: string, itemId: string, cube: Cube): Promise<TripChange>;
@@ -226,10 +238,54 @@ export function createMemoryTripsSource(
     savedLists,
     homeCity = null,
   }: MemorySourceOptions,
-): TripsSource & { snapshot(): LifecycleState; staplesSnapshot(): Staple[] } {
+): TripsSource & {
+  snapshot(): LifecycleState;
+  staplesSnapshot(): Staple[];
+  removeStaple(id: string, expected: StapleRevision | null): Promise<Staple[]>;
+} {
   let state = initial;
   // The owner's staples: "remember for future trips" edits change these, never an existing trip.
-  let currentStaples: Staple[] = [...staples];
+  const copy = (rows: readonly Staple[]) =>
+    rows.map((row) => ({ ...row, revision: row.revision && { ...row.revision } }));
+  let currentStaples: Staple[] = staples.map((row) => ({
+    ...row,
+    revision: { rowId: crypto.randomUUID(), version: 1 },
+  }));
+  const assertRevision = (id: string, expected: StapleRevision | null) => {
+    if (
+      expected !== null &&
+      (!expected ||
+        !/^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/.test(
+          expected.rowId,
+        ) ||
+        !Number.isInteger(expected.version) ||
+        expected.version < 1 ||
+        expected.version > 2147483647 ||
+        Object.keys(expected).sort().join() !== "rowId,version")
+    )
+      throw new TripsSourceError("INVALID_INPUT");
+    const existing = currentStaples.find((row) => row.id === id);
+    const actual = existing?.revision;
+    if (
+      expected === null
+        ? existing
+        : !actual || actual.rowId !== expected.rowId || actual.version !== expected.version
+    )
+      throw new TripsSourceError("STALE");
+  };
+  const sameContent = (existing: Staple | undefined, staple: Staple) => {
+    return (
+      existing &&
+      existing.name === staple.name &&
+      existing.category === staple.category &&
+      existing.qty === staple.qty &&
+      existing.cadence === staple.cadence &&
+      existing.packLast === staple.packLast &&
+      (existing.groupId ?? null) === (staple.groupId ?? null) &&
+      Boolean(existing.laundryHalves) === Boolean(staple.laundryHalves) &&
+      (existing.cube ?? cubeForItem(existing)) === (staple.cube ?? cubeForItem(staple))
+    );
+  };
   // The names of the saved lists made from trips (#169); the in-memory source keeps no more of them than that.
   let madeLists: { id: string; name: string }[] = [];
 
@@ -267,9 +323,25 @@ export function createMemoryTripsSource(
   ): Promise<TripChange> => {
     const result = run(find(tripId), currentStaples);
     if (!result.ok) throw new TripsSourceError(result.reason);
+    const changed = result.staples !== currentStaples;
     store(result.trip);
-    currentStaples = result.staples;
-    return { trip: result.trip, signals: NO_SIGNALS };
+    currentStaples = result.staples.map((row) => {
+      const existing = currentStaples.find((entry) => entry.id === row.id);
+      return {
+        ...row,
+        revision: existing
+          ? {
+              rowId: existing.revision!.rowId,
+              version: existing.revision!.version + (sameContent(existing, row) ? 0 : 1),
+            }
+          : { rowId: crypto.randomUUID(), version: 1 },
+      };
+    });
+    return {
+      trip: result.trip,
+      signals: NO_SIGNALS,
+      ...(changed ? { staples: copy(currentStaples) } : {}),
+    };
   };
 
   // Commands the domain applies directly (no result wrapper).
@@ -296,7 +368,7 @@ export function createMemoryTripsSource(
 
   return {
     snapshot: () => state,
-    staplesSnapshot: () => currentStaples,
+    staplesSnapshot: () => copy(currentStaples),
     ...(lists ? { savedLists: lists } : {}),
     load: async () => state,
     homeCity: async () => homeCity,
@@ -326,23 +398,46 @@ export function createMemoryTripsSource(
     },
 
     getTrip: async (id) => find(id),
-    listStaples: async () => currentStaples,
-    upsertStaple: async (staple) => {
-      const exists = currentStaples.some((entry) => entry.id === staple.id);
-      currentStaples = exists
-        ? currentStaples.map((entry) => (entry.id === staple.id ? { ...staple } : entry))
-        : [...currentStaples, { ...staple }];
-      return currentStaples;
+    listStaples: async () => copy(currentStaples),
+    upsertStaple: async (staple, expected) => {
+      assertRevision(staple.id, expected);
+      const existing = currentStaples.find((row) => row.id === staple.id);
+      const unchanged = sameContent(existing, staple);
+      if (unchanged) return copy(currentStaples);
+      const { revision: _revision, ...content } = staple;
+      void _revision;
+      const next = {
+        ...content,
+        revision: existing
+          ? {
+              rowId: existing.revision!.rowId,
+              version: existing.revision!.version + 1,
+            }
+          : { rowId: crypto.randomUUID(), version: 1 },
+      };
+      currentStaples = existing
+        ? currentStaples.map((row) => (row.id === staple.id ? next : row))
+        : [...currentStaples, next];
+      return copy(currentStaples);
+    },
+    removeStaple: async (id: string, expected: StapleRevision | null) => {
+      assertRevision(id, expected);
+      currentStaples = currentStaples.filter((row) => row.id !== id);
+      return copy(currentStaples);
     },
     setPacked: (id, itemId, packed) => command(id, (trip) => setPacked(trip, itemId, packed)),
     setPackedMany: (id, entries) => command(id, (trip) => setPackedMany(trip, entries)),
     togglePacked: (id, itemId) => command(id, (trip) => togglePacked(trip, itemId)),
     incrementPacked: (id, itemId) => command(id, (trip) => incrementPacked(trip, itemId)),
     decrementPacked: (id, itemId) => command(id, (trip) => decrementPacked(trip, itemId)),
-    editItem: (id, itemId, edit) =>
-      itemOp(id, (trip, owned) => editItem(trip, owned, itemId, edit)),
-    removeItem: (id, itemId, scope) =>
-      itemOp(id, (trip, owned) => removeTripItem(trip, owned, itemId, scope)),
+    editItem: async (id, itemId, edit, expected) => {
+      if (edit.scope === "remember") assertRevision(itemId, expected!);
+      return itemOp(id, (trip, owned) => editItem(trip, owned, itemId, edit));
+    },
+    removeItem: async (id, itemId, scope, expected) => {
+      if (scope === "remember") assertRevision(itemId, expected!);
+      return itemOp(id, (trip, owned) => removeTripItem(trip, owned, itemId, scope));
+    },
     addToiletryItem: (id, input) =>
       itemOp(id, (trip, owned) => addToiletryItem(trip, owned, { ...input, id: newId() })),
     moveItemToCube: (id, itemId, cube) =>

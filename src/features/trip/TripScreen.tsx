@@ -57,7 +57,14 @@ type Load =
   | { phase: "ready"; trip: LifecycleTrip };
 type Dialog =
   | null
-  | { kind: "edit"; itemId: string }
+  | {
+      kind: "edit";
+      generation: number;
+      item: TripItem;
+      staples: Staple[];
+      days: number;
+      destination: string;
+    }
   | { kind: "add-toiletry"; name?: string; qty?: number }
   | { kind: "save-list" }
   | { kind: "bag" }
@@ -80,6 +87,7 @@ interface ActOptions {
   after?: (change: TripChange) => void;
   /** The write failed: a dialog can say so itself, since the top-bar chip is out of reach behind it. */
   onFail?: (error: unknown) => void;
+  retryable?: () => boolean;
 }
 
 export function TripScreen({
@@ -103,6 +111,7 @@ export function TripScreen({
   const [staples, setStaples] = useState<Staple[]>([]);
   const [reloads, setReloads] = useState(0);
   const [dialog, setDialog] = useState<Dialog>(null);
+  const editorGeneration = useRef(0);
   // How many dialog/sheet writes are in flight. A count (not a flag): a row write that never set it must not clear it, and two
   // overlapping writes keep their controls disabled until the LAST one settles.
   const [modalWrites, setModalWrites] = useState(0);
@@ -221,14 +230,18 @@ export function TripScreen({
       { read: true },
     ).catch((error: unknown) => {
       if (!cancelled)
-        setLoad({
-          phase:
-            // A malformed id (INVALID_INPUT) can't be a trip either, so it reads the same as a missing one.
-            error instanceof TripsSourceError &&
-            (error.message === "NOT_FOUND" || error.message === "INVALID_INPUT")
-              ? "missing"
-              : "error",
-        });
+        setLoad((current) =>
+          current.phase === "ready"
+            ? current
+            : {
+                phase:
+                  // A malformed id (INVALID_INPUT) can't be a trip either, so it reads the same as a missing one.
+                  error instanceof TripsSourceError &&
+                  (error.message === "NOT_FOUND" || error.message === "INVALID_INPUT")
+                    ? "missing"
+                    : "error",
+              },
+        );
     });
     return () => {
       cancelled = true;
@@ -238,7 +251,7 @@ export function TripScreen({
   const act = useCallback(
     (write: () => Promise<TripChange>, options: ActOptions = {}): Promise<void> => {
       if (options.modal) setModalWrites((count) => count + 1);
-      return track(write, (change) => {
+      const accept = (change: TripChange) => {
         const reason = confirmed.current ? revocationReason(confirmed.current, change.trip) : null;
         confirmed.current = change.trip;
         setLoad({ phase: "ready", trip: change.trip });
@@ -248,15 +261,18 @@ export function TripScreen({
           setFailedRows((current) => new Set([...current].filter((id) => id !== options.row)));
         }
         if (
+          (options.retryable?.() ?? true) &&
           change.signals.promptBagPlacement &&
           !bagPromptDismissed.current &&
           !reviewOpenRef.current
         )
           setDialog({ kind: "bag" });
         if (options.announce) setAnnouncement(options.announce(change));
-        if (options.staples) void source.listStaples().then(setStaples);
+        if (change.staples) setStaples(change.staples);
+        else if (options.staples) void source.listStaples().then(setStaples);
         options.after?.(change);
-      })
+      };
+      return track(write, accept, { retryable: options.retryable })
         .then(() => undefined)
         .catch((error: unknown) => {
           options.onFail?.(error);
@@ -351,11 +367,21 @@ export function TripScreen({
     const itemId = urlItem.current;
     urlItem.current = undefined;
     window.history.replaceState(null, "", `/trips/${tripId}`);
-    if (load.trip.items.some((entry) => entry.id === itemId)) {
+    const item = load.trip.items.find((entry) => entry.id === itemId);
+    if (item) {
       returnFocusTo.current = itemId;
-      setDialog({ kind: "edit", itemId });
+      setDialog(
+        structuredClone({
+          kind: "edit",
+          generation: ++editorGeneration.current,
+          item,
+          staples,
+          days: load.trip.days,
+          destination: load.trip.destination,
+        }),
+      );
     }
-  }, [load, tripId]);
+  }, [load, tripId, staples]);
 
   // After the editor opened from ?edit= closes (Escape, ×, Save or Remove), focus goes to that item's Edit target, or to
   // the open cube's title when the item is gone. It waits for the commit that removes the sheet and updates the row (a save
@@ -442,8 +468,7 @@ export function TripScreen({
     ),
   };
   const gate = bagGate(trip);
-  const editing =
-    dialog?.kind === "edit" ? trip.items.find((entry) => entry.id === dialog.itemId) : undefined;
+  const editing = dialog?.kind === "edit" ? dialog : undefined;
   const weatherStops = trip.stops ?? [];
   // While the trip is on, only the days still ahead are reviewed: the same calculation the Home counts with (#410).
   const reviewedStops =
@@ -683,8 +708,19 @@ export function TripScreen({
   };
 
   const editItem = (id: string) => {
+    const item = trip.items.find((row) => row.id === id);
+    if (!item) return;
     returnFocusTo.current = id;
-    setDialog({ kind: "edit", itemId: id });
+    setDialog(
+      structuredClone({
+        kind: "edit",
+        generation: ++editorGeneration.current,
+        item,
+        staples,
+        days: trip.days,
+        destination: trip.destination,
+      }),
+    );
   };
 
   /**
@@ -929,26 +965,25 @@ export function TripScreen({
       ) : null}
       {editing ? (
         <ItemEditor
-          key={editing.id}
-          item={editing}
-          destination={trip.destination}
-          tripDays={trip.days}
-          staples={staples}
+          key={editing.generation}
+          item={editing.item}
+          destination={editing.destination}
+          tripDays={editing.days}
+          staples={editing.staples}
           saving={submitting}
           onClose={close}
-          onSave={(edit) =>
-            void act(() => source.editItem(tripId, editing.id, edit), {
-              modal: true,
-              staples: edit.scope === "remember",
-              after: close,
-            })
+          onSave={(edit, expected) => source.editItem(tripId, editing.item.id, edit, expected)}
+          onRemove={(scope, expected) =>
+            source.removeItem(tripId, editing.item.id, scope, expected)
           }
-          onRemove={(scope) =>
-            void act(() => source.removeItem(tripId, editing.id, scope), {
-              modal: true,
-              staples: scope === "remember",
-              after: close,
-            })
+          onWrite={(write, retryable, after) => void act(write, { retryable, after })}
+          onReview={() =>
+            Promise.all([source.getTrip(tripId), source.listStaples()]).then(([fresh, owned]) => ({
+              item: fresh.items.find((row) => row.id === editing.item.id),
+              staples: owned,
+              tripDays: fresh.days,
+              destination: fresh.destination,
+            }))
           }
         />
       ) : null}

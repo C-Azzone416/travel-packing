@@ -194,16 +194,22 @@ describe("per-trip commands", () => {
     const { source } = setup();
     const tripsBefore = JSON.stringify(source.snapshot().trips);
     const before = (await source.listStaples()).length;
-    const added = await source.upsertStaple({
-      id: "razor",
-      name: "Razor",
-      qty: 1,
-      cadence: "per trip",
-      category: "Bathroom",
-      packLast: false,
-    });
+    const added = await source.upsertStaple(
+      {
+        id: "razor",
+        name: "Razor",
+        qty: 1,
+        cadence: "per trip",
+        category: "Bathroom",
+        packLast: false,
+      },
+      null,
+    );
     expect(added).toHaveLength(before + 1);
-    const changed = await source.upsertStaple({ ...added.find((s) => s.id === "razor")!, qty: 2 });
+    const changed = await source.upsertStaple(
+      { ...added.find((s) => s.id === "razor")!, qty: 2 },
+      added.find((s) => s.id === "razor")!.revision!,
+    );
     expect(changed).toHaveLength(before + 1);
     expect(changed.find((s) => s.id === "razor")!.qty).toBe(2);
     expect(source.staplesSnapshot()).toEqual(changed);
@@ -363,12 +369,17 @@ describe("per-trip commands", () => {
       source.snapshot().trips.find((trip) => trip.id === "lisbon"),
     );
     const stapleBefore = source.staplesSnapshot().find((entry) => entry.id === "sunglasses")!;
-    await source.editItem("san-diego", "sunglasses", {
-      name: "Polarized sunglasses",
-      qty: 2,
-      timing: "main",
-      scope: "remember",
-    });
+    await source.editItem(
+      "san-diego",
+      "sunglasses",
+      {
+        name: "Polarized sunglasses",
+        qty: 2,
+        timing: "main",
+        scope: "remember",
+      },
+      stapleBefore.revision!,
+    );
     const staple = source.staplesSnapshot().find((entry) => entry.id === "sunglasses")!;
     expect(staple).toMatchObject({ name: "Polarized sunglasses", qty: 2 });
     expect(staple).not.toEqual(stapleBefore);
@@ -419,7 +430,12 @@ describe("per-trip commands", () => {
     const removed = await source.removeItem("san-diego", "nice-shoes", "this-trip");
     expect(removed.trip.items.some((entry) => entry.id === "nice-shoes")).toBe(false);
     expect(source.staplesSnapshot()).toEqual(staplesBefore);
-    await source.removeItem("san-diego", "last-glasses", "remember");
+    await source.removeItem(
+      "san-diego",
+      "last-glasses",
+      "remember",
+      staplesBefore.find((row) => row.id === "last-glasses")!.revision!,
+    );
     expect(source.staplesSnapshot().some((entry) => entry.id === "last-glasses")).toBe(false);
     await expect(source.removeItem("san-diego", "nope", "this-trip")).rejects.toThrow(
       "ITEM_NOT_FOUND",

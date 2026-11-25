@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { saveStaplesSetupInput, stapleInput } from "./schemas";
+import {
+  checkedStapleInput,
+  checkedStapleOnly,
+  saveStaplesSetupInput,
+  stapleInput,
+} from "./schemas";
 
 const valid = {
   semanticId: "tops",
@@ -49,9 +54,55 @@ describe("stapleInput (#378)", () => {
 
   it("applies the same rules inside the setup save", () => {
     const socks = { ...valid, semanticId: "socks", laundryHalves: true };
-    expect(saveStaplesSetupInput.safeParse({ staples: [socks] }).success).toBe(false);
+    expect(saveStaplesSetupInput.safeParse({ staples: [socks], baseline: [] }).success).toBe(false);
     expect(
-      saveStaplesSetupInput.safeParse({ staples: [{ ...valid, laundryHalves: true }] }).success,
+      saveStaplesSetupInput.safeParse({
+        staples: [{ ...valid, laundryHalves: true }],
+        baseline: [],
+      }).success,
     ).toBe(true);
+  });
+});
+
+describe("Staple command expectations", () => {
+  const revision = { rowId: "00000000-0000-4000-8000-000000000001", version: 1 };
+  it.each([null, revision])(
+    "accepts explicit expectation %j for both checked commands",
+    (expected) => {
+      expect(checkedStapleInput.parse({ staple: valid, expected })).toEqual({
+        staple: valid,
+        expected,
+      });
+      expect(checkedStapleOnly.parse({ semanticId: valid.semanticId, expected })).toEqual({
+        semanticId: valid.semanticId,
+        expected,
+      });
+    },
+  );
+  it.each([
+    undefined,
+    {},
+    { ...revision, version: -1 },
+    { ...revision, version: 2_147_483_648 },
+    { ...revision, rowId: "bad" },
+  ])("rejects missing/malformed metadata %j", (expected) => {
+    expect(checkedStapleInput.safeParse({ staple: valid, expected }).success).toBe(false);
+    expect(checkedStapleOnly.safeParse({ semanticId: valid.semanticId, expected }).success).toBe(
+      false,
+    );
+  });
+  it("keeps content independent of command metadata and requires setup membership", () => {
+    expect(stapleInput.parse(valid)).toEqual(valid);
+    expect(saveStaplesSetupInput.parse({ staples: [valid], baseline: [] })).toEqual({
+      staples: [valid],
+      baseline: [],
+    });
+    expect(saveStaplesSetupInput.safeParse({ staples: [valid] }).success).toBe(false);
+    expect(
+      checkedStapleInput.safeParse({
+        staple: { ...valid, laundryHalves: true, semanticId: "socks" },
+        expected: null,
+      }).success,
+    ).toBe(false);
   });
 });

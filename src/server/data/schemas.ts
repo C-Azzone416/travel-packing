@@ -62,8 +62,24 @@ export const setPackedManyInput = z.object({
     .min(1)
     .max(200),
 });
-export const editItemInput = z.object({ tripId, itemId, name, qty, timing, scope });
-export const removeItemInput = z.object({ tripId, itemId, scope });
+const rememberExpectation = z
+  .object({
+    rowId: z.uuid(),
+    version: z.number().int().min(1).max(2_147_483_647),
+  })
+  .strict()
+  .nullable()
+  .optional();
+const requireRemember = (value: { scope: string; expected?: unknown }, ctx: z.RefinementCtx) => {
+  if (value.scope === "remember" && value.expected === undefined)
+    ctx.addIssue({ code: "custom", path: ["expected"], message: "Review your Staples first" });
+};
+export const editItemInput = z
+  .object({ tripId, itemId, name, qty, timing, scope, expected: rememberExpectation })
+  .superRefine(requireRemember);
+export const removeItemInput = z
+  .object({ tripId, itemId, scope, expected: rememberExpectation })
+  .superRefine(requireRemember);
 export const addToiletryItemInput = z.object({
   tripId,
   name,
@@ -260,11 +276,43 @@ export const stapleInput = z
     }
   });
 
-/** One all-or-nothing first-run save. An empty selection is a valid completed setup. */
+export const stapleOnly = z.object({ semanticId: z.string().min(1).max(100) });
+
+/** Required command metadata, separate from content used by seed/setup. Null means explicit absence. */
+export const stapleExpectation = z
+  .object({
+    rowId: z.uuid(),
+    version: z.number().int().min(1).max(2_147_483_647),
+  })
+  .strict()
+  .nullable();
+/** Complete captured membership, independent of the edited selection. Empty is explicit and valid. */
 export const saveStaplesSetupInput = z.object({
   staples: z.array(stapleInput).max(100),
+  baseline: z
+    .array(
+      z
+        .object({
+          semanticId: z.string().min(1).max(100),
+          revision: stapleExpectation.unwrap(),
+        })
+        .strict(),
+    )
+    .max(100)
+    .superRefine((entries, ctx) => {
+      if (
+        new Set(entries.map((entry) => entry.semanticId)).size !== entries.length ||
+        new Set(entries.map((entry) => entry.revision.rowId)).size !== entries.length
+      ) {
+        ctx.addIssue({ code: "custom", message: "Duplicate baseline identity" });
+      }
+    }),
 });
-export const stapleOnly = z.object({ semanticId: z.string().min(1).max(100) });
+export const checkedStapleInput = z.object({
+  staple: stapleInput,
+  expected: stapleExpectation,
+});
+export const checkedStapleOnly = stapleOnly.extend({ expected: stapleExpectation });
 
 export const none = z.object({}).strict();
 

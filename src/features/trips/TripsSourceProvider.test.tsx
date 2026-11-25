@@ -147,6 +147,7 @@ describe("TripsSourceProvider", () => {
   });
 
   describe("the default wiring: every source method calls exactly its own action, once, with its arguments", () => {
+    const rememberedExpected = { rowId: "00000000-0000-4000-8000-000000000001", version: 3 };
     const edit = { name: "Shades", qty: 2, timing: "main", scope: "this-trip" } as const;
     const toiletry = { name: "Face wash", qty: 1, packLast: false, scope: "this-trip" } as const;
     const config = {
@@ -183,7 +184,12 @@ describe("TripsSourceProvider", () => {
       ["getTrip", (s) => s.getTrip("t"), () => actions.getTripAction, ["t"]],
       ["homeCity", (s) => s.homeCity!(), () => actions.getHomeCityAction, []],
       ["listStaples", (s) => s.listStaples(), () => actions.listStaplesAction, []],
-      ["upsertStaple", (s) => s.upsertStaple(staple), () => actions.upsertStapleAction, [staple]],
+      [
+        "upsertStaple",
+        (s) => s.upsertStaple(staple, null),
+        () => actions.upsertStapleAction,
+        [staple, null],
+      ],
       [
         "setPacked",
         (s) => s.setPacked("t", "i", 3),
@@ -216,15 +222,15 @@ describe("TripsSourceProvider", () => {
       ],
       [
         "editItem",
-        (s) => s.editItem("t", "i", edit),
+        (s) => s.editItem("t", "i", edit, rememberedExpected),
         () => actions.commands.editItemAction,
-        ["t", "i", edit],
+        ["t", "i", edit, rememberedExpected],
       ],
       [
         "removeItem",
-        (s) => s.removeItem("t", "i", "remember"),
+        (s) => s.removeItem("t", "i", "remember", rememberedExpected),
         () => actions.commands.removeItemAction,
-        ["t", "i", "remember"],
+        ["t", "i", "remember", rememberedExpected],
       ],
       [
         "addToiletryItem",

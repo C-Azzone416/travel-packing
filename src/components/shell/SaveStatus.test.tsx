@@ -607,3 +607,23 @@ describe("SaveStatusProvider", () => {
     expect(chipText()).toContain("Saved");
   });
 });
+
+describe("per-operation Retry gate", () => {
+  it("does not replay retired/conflicted operations and retains the gate on Retry", async () => {
+    setup();
+    let retryable = false;
+    const write = vi.fn(() => Promise.reject(Error("offline")));
+    await act(async () => {
+      await api.track(write, undefined, { retryable: () => retryable }).catch(() => {});
+    });
+    await act(async () => api.retry());
+    expect(write).toHaveBeenCalledTimes(1);
+    retryable = true;
+    await act(async () => api.retry());
+    expect(write).toHaveBeenCalledTimes(2);
+    retryable = false;
+    await act(async () => api.retry());
+    expect(write).toHaveBeenCalledTimes(2);
+    expect(api.status).toBe("error");
+  });
+});

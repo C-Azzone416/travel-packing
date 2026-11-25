@@ -1,28 +1,44 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import type { Staple } from "@/domain/trip";
 import type { StaplesSetup } from "@/domain/staples-setup";
-import type { StaplesSetupResult } from "@/features/trips/trip-actions";
+import type { StaplesSetupBaseline, StaplesSetupResult } from "@/features/trips/trip-actions";
 import { StaplesSetupScreen } from "./StaplesSetupScreen";
 
 export interface StaplesSetupActions {
   get(): Promise<StaplesSetupResult>;
-  save(staples: Staple[]): Promise<StaplesSetupResult>;
+  save(staples: Staple[], baseline: StaplesSetupBaseline): Promise<StaplesSetupResult>;
   skip(): Promise<StaplesSetupResult>;
   dismiss(): Promise<StaplesSetupResult>;
 }
 
-type Load = { phase: "loading" } | { phase: "error" } | { phase: "ready"; setup: StaplesSetup };
+type ReviewedSetup = StaplesSetup & { baseline: StaplesSetupBaseline };
+type Load = { phase: "loading" } | { phase: "error" } | { phase: "ready"; setup: ReviewedSetup };
 
-const unwrap = (result: StaplesSetupResult): StaplesSetup => {
+const unwrap = (result: StaplesSetupResult): ReviewedSetup => {
   if (!result.ok) throw new Error(result.code);
+  if (
+    result.staples.some(
+      ({ revision }) =>
+        !revision || !revision.rowId || !Number.isInteger(revision.version) || revision.version < 1,
+    )
+  )
+    throw new Error("INVALID_INPUT");
   return {
     state: result.state,
     reminderDismissed: result.reminderDismissed,
     staples: result.staples,
+    baseline: Object.freeze(
+      result.staples.map((entry) =>
+        Object.freeze({
+          semanticId: entry.id,
+          revision: Object.freeze({ ...entry.revision! }),
+        }),
+      ),
+    ),
   };
 };
 
@@ -39,6 +55,66 @@ export function StaplesSetupGate({
   const [busy, setBusy] = useState(false);
   const [mutationError, setMutationError] = useState(false);
   const [reloads, setReloads] = useState(0);
+  const [saveFailure, setSaveFailure] = useState<"retry" | "conflict" | "reload" | null>(null);
+  const [reviewKey, setReviewKey] = useState(0);
+  const flight = useRef(false);
+  // Once read, this generation changes only through explicit review or mutation.
+  const acceptedRead = useRef(false);
+  const intended = useRef<{ staples: Staple[]; baseline: StaplesSetupBaseline } | null>(null);
+
+  async function save(staples: Staple[], setup: ReviewedSetup) {
+    if (flight.current || (saveFailure && saveFailure !== "retry")) return;
+    intended.current ??= {
+      staples: Object.freeze(
+        staples.map((entry) =>
+          Object.freeze({
+            ...entry,
+            ...(entry.revision ? { revision: Object.freeze({ ...entry.revision }) } : {}),
+          }),
+        ),
+      ) as unknown as Staple[],
+      baseline: setup.baseline,
+    };
+    flight.current = true;
+    setBusy(true);
+    setSaveFailure(null);
+    try {
+      const result = await actions.save(intended.current.staples, intended.current.baseline);
+      if (!result.ok) {
+        setSaveFailure(
+          result.code === "STALE" || result.code === "INVALID_INPUT" ? "conflict" : "retry",
+        );
+        return;
+      }
+      setLoad({ phase: "ready", setup: unwrap(result) });
+      intended.current = null;
+      setOpen(false);
+    } catch {
+      setSaveFailure("retry");
+    } finally {
+      flight.current = false;
+      setBusy(false);
+    }
+  }
+
+  async function review() {
+    if (flight.current) return;
+    flight.current = true;
+    setBusy(true);
+    try {
+      const setup = unwrap(await actions.get());
+      setLoad({ phase: "ready", setup });
+      intended.current = null;
+      setSaveFailure(null);
+      setMutationError(false);
+      setReviewKey((value) => value + 1);
+    } catch {
+      setSaveFailure("reload");
+    } finally {
+      flight.current = false;
+      setBusy(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -46,10 +122,13 @@ export function StaplesSetupGate({
       .get()
       .then(unwrap)
       .then((setup) => {
-        if (!cancelled) setLoad({ phase: "ready", setup });
+        if (!cancelled && !acceptedRead.current) {
+          acceptedRead.current = true;
+          setLoad({ phase: "ready", setup });
+        }
       })
       .catch(() => {
-        if (!cancelled) setLoad({ phase: "error" });
+        if (!cancelled && !acceptedRead.current) setLoad({ phase: "error" });
       });
     return () => {
       cancelled = true;
@@ -57,6 +136,8 @@ export function StaplesSetupGate({
   }, [actions, reloads]);
 
   const run = useCallback((work: () => Promise<StaplesSetupResult>, after?: () => void) => {
+    if (flight.current) return;
+    flight.current = true;
     setBusy(true);
     setMutationError(false);
     work()
@@ -68,7 +149,10 @@ export function StaplesSetupGate({
       .catch(() => {
         setMutationError(true);
       })
-      .finally(() => setBusy(false));
+      .finally(() => {
+        flight.current = false;
+        setBusy(false);
+      });
   }, []);
 
   if (load.phase === "loading") {
@@ -108,7 +192,7 @@ export function StaplesSetupGate({
       <section className="screen">
         <div className="empty-state">
           <h1>Couldn’t load your Staples setup.</h1>
-          <p className="muted">Nothing was changed.</p>
+          <p className="muted">Nothing was changed. Try again to reload your Staples.</p>
           <Button onClick={retry}>Try again</Button>
         </div>
       </section>
@@ -119,18 +203,22 @@ export function StaplesSetupGate({
   if (setup.state === "incomplete" || open) {
     return (
       <StaplesSetupScreen
+        key={reviewKey}
         setup={setup}
         busy={busy}
-        saveError={mutationError}
-        onSave={(staples) =>
-          run(
-            () => actions.save(staples),
-            () => setOpen(false),
-          )
-        }
+        saveError={mutationError || saveFailure !== null}
+        recovery={saveFailure ?? undefined}
+        onReview={() => void review()}
+        onSave={(staples) => void save(staples, setup)}
         onSkip={() => {
+          if (flight.current) return;
+          const discard = () => {
+            intended.current = null;
+            setSaveFailure(null);
+            setOpen(false);
+          };
           setMutationError(false);
-          return setup.state === "incomplete" ? run(actions.skip) : setOpen(false);
+          return setup.state === "incomplete" ? run(actions.skip, discard) : discard();
         }}
       />
     );

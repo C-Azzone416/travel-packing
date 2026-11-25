@@ -1,3 +1,6 @@
+import { useEffect } from "react";
+import { useSaveStatus } from "@/components/shell/SaveStatus";
+import { SYNTHETIC_STAPLES } from "@/domain/calc/staples";
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -13,9 +16,18 @@ import { StaplesScreen } from "./StaplesScreen";
 vi.mock("next/navigation", () => ({ usePathname: () => "/staples" }));
 
 type Memory = ReturnType<typeof memory>;
+let saveApi: ReturnType<typeof useSaveStatus>;
+function SaveStatusCapture() {
+  const api = useSaveStatus();
+  useEffect(() => {
+    saveApi = api;
+  }, [api]);
+  return null;
+}
 
-function memory() {
+function memory(extra: Staple[] = []) {
   return createMemoryTripsSource(sampleLifecycleState(), {
+    staples: [...SYNTHETIC_STAPLES, ...extra],
     now: () => 1,
     newId: () => "new",
     today: () => "2026-10-16",
@@ -24,12 +36,17 @@ function memory() {
 
 /** jsdom has no media queries: pick the laptop (>= 1024px) or the phone layout, and a tall or short screen. */
 function viewport(laptop: boolean, short = false) {
+  const listeners = new Set<() => void>();
   window.matchMedia = ((query: string) => ({
     matches: query.includes("min-width: 1024px") ? laptop : query.includes("max-height") && short,
     media: query,
-    addEventListener: () => undefined,
-    removeEventListener: () => undefined,
+    addEventListener: (_type: string, notify: () => void) => listeners.add(notify),
+    removeEventListener: (_type: string, notify: () => void) => listeners.delete(notify),
   })) as unknown as typeof window.matchMedia;
+  return (next: boolean) => {
+    laptop = next;
+    for (const notify of [...listeners]) notify();
+  };
 }
 
 const TEES: Staple = {
@@ -48,22 +65,20 @@ function setup(
     short?: boolean;
     wrap?: (base: Memory) => TripsSource;
     extra?: Staple[];
-    removeStaple?: (id: string) => Promise<Staple[]>;
+    removeStaple?: (id: string, expected: NonNullable<Staple["revision"]>) => Promise<Staple[]>;
   } = {},
 ) {
-  viewport(options.laptop ?? true, options.short);
-  const base = memory();
-  const withExtra: TripsSource = options.extra
-    ? { ...base, listStaples: async () => [...(await base.listStaples()), ...options.extra!] }
-    : base;
-  const source = options.wrap ? options.wrap(base) : withExtra;
+  const setLaptop = viewport(options.laptop ?? true, options.short);
+  const base = memory(options.extra);
+  const source = options.wrap ? options.wrap(base) : base;
   const user = userEvent.setup();
   renderInApp(
     <TripsSourceProvider source={source}>
+      <SaveStatusCapture />
       <StaplesScreen removeStaple={options.removeStaple} />
     </TripsSourceProvider>,
   );
-  return { user, source: base };
+  return { user, source: base, setLaptop };
 }
 
 const ready = () => screen.findByRole("heading", { name: "Staples", level: 1 });
@@ -361,7 +376,10 @@ describe("laptop: the preview", () => {
       wrap: (base) => ({
         ...base,
         listStaples: async () => [...(await base.listStaples()), TEES],
-        upsertStaple: async (staple) => (upsert(staple), base.upsertStaple(staple)),
+        upsertStaple: async (staple, expected) => (
+          upsert(staple),
+          base.upsertStaple(staple, expected)
+        ),
       }),
     });
     await loaded();
@@ -410,7 +428,10 @@ describe("laptop: the inline editor", () => {
     const { user, source } = setup({
       wrap: (base) => ({
         ...base,
-        upsertStaple: async (staple) => (await gate.promise, base.upsertStaple(staple)),
+        upsertStaple: async (staple, expected) => (
+          await gate.promise,
+          base.upsertStaple(staple, expected)
+        ),
       }),
     });
     await loaded();
@@ -419,7 +440,10 @@ describe("laptop: the inline editor", () => {
     const group = screen.getByRole("group", { name: "Edit Laptop" });
     await user.click(within(group).getByRole("button", { name: /^More / }));
     // The editor shows it at once; the list is stored only after the server answers.
-    expect(within(group).getByRole("status").textContent).toBe("2");
+    expect(
+      within(within(group).getByRole("group", { name: "Quantity for Laptop" })).getByRole("status")
+        .textContent,
+    ).toBe("2");
     expect(source.staplesSnapshot().find((s) => s.id === "last-laptop")!.qty).toBe(1);
     await act(async () => gate.resolve());
     await waitFor(() =>
@@ -429,16 +453,16 @@ describe("laptop: the inline editor", () => {
     expect(JSON.stringify(source.snapshot().trips)).toBe(tripsBefore);
   });
 
-  it("coalesces quick changes into the last value", async () => {
+  it("blocks quick same-row changes until the first confirmed save", async () => {
     const calls: number[] = [];
     const gate = deferred<void>();
     const { user, source } = setup({
       wrap: (base) => ({
         ...base,
-        upsertStaple: async (staple) => {
+        upsertStaple: async (staple, expected) => {
           calls.push(staple.qty);
           if (calls.length === 1) await gate.promise;
-          return base.upsertStaple(staple);
+          return base.upsertStaple(staple, expected);
         },
       }),
     });
@@ -452,9 +476,11 @@ describe("laptop: the inline editor", () => {
     await user.click(more);
     await act(async () => gate.resolve());
     await waitFor(() =>
-      expect(source.staplesSnapshot().find((s) => s.id === "last-laptop")!.qty).toBe(4),
+      expect(source.staplesSnapshot().find((s) => s.id === "last-laptop")!.qty).toBe(2),
     );
-    expect(calls).toEqual([2, 4]);
+    expect(calls).toEqual([2]);
+    expect(saveApi.status).toBe("saved");
+    expect(more.matches(":disabled")).toBe(false);
   });
 
   it("changes the cadence with the three chips, including per night", async () => {
@@ -568,19 +594,23 @@ describe("laptop: the inline editor", () => {
     await user.click(within(rowFor("sleepwear")).getByRole("button", { name: /^Sleepwear/ }));
     await user.click(screen.getByRole("button", { name: "Remove" }));
     await waitFor(() => expect(rowFor("sleepwear")).toBeNull());
-    expect(removeStaple).toHaveBeenCalledWith("sleepwear");
+    expect(removeStaple).toHaveBeenCalledWith(
+      "sleepwear",
+      expect.objectContaining({ rowId: expect.any(String), version: 1 }),
+    );
     expect(live().textContent).toBe("Sleepwear removed from future trips.");
   });
 
-  it("keeps the value stored when a save fails, and shows the Error chip", async () => {
-    const { user } = setup({
+  it("retains the failed intent on screen while stored content stays unchanged", async () => {
+    const { user, source } = setup({
       wrap: (base) => ({ ...base, upsertStaple: () => Promise.reject(new Error("down")) }),
     });
     await loaded();
     await user.click(within(rowFor("last-laptop")).getByRole("button", { name: /^Laptop/ }));
     await user.click(screen.getByRole("button", { name: /^More / }));
     expect(await screen.findByRole("button", { name: /not saved/i })).toBeTruthy();
-    await waitFor(() => expect(rowText("last-laptop")).toContain("1 per trip"));
+    await waitFor(() => expect(rowText("last-laptop")).toContain("2 per trip"));
+    expect(source.staplesSnapshot().find((row) => row.id === "last-laptop")!.qty).toBe(1);
   });
 });
 
@@ -672,57 +702,54 @@ describe("renaming, Smart, and removing", () => {
     expect(within(laptopScales).queryByRole("button", { name: "smart" })).toBeNull();
   });
 
-  it("removes after an in-flight save, so the staple cannot come back", async () => {
-    const order: string[] = [];
+  it("blocks pending removal, then permits a new explicit removal with the confirmed token", async () => {
     const gate = deferred<void>();
-    const removeStaple = vi.fn(async (id: string) => {
-      order.push("remove");
-      return (await memory().listStaples()).filter((s) => s.id !== id);
-    });
+    const removeStaple = vi.fn((id: string, expected: NonNullable<Staple["revision"]>) =>
+      source.removeStaple(id, expected),
+    );
     const { user, source } = setup({
       removeStaple,
       wrap: (base) => ({
         ...base,
-        upsertStaple: async (staple) => {
-          order.push("upsert-start");
+        upsertStaple: async (staple, expected) => {
           await gate.promise;
-          order.push("upsert-end");
-          return base.upsertStaple(staple);
+          return base.upsertStaple(staple, expected);
         },
       }),
     });
     await loaded();
+    const captured = source.staplesSnapshot().find((row) => row.id === "sleepwear")!.revision!;
     await user.click(within(rowFor("sleepwear")).getByRole("button", { name: /^Sleepwear/ }));
-    await user.click(
-      within(screen.getByRole("group", { name: "Edit Sleepwear" })).getByRole("button", {
-        name: /^More /,
-      }),
-    );
-    await waitFor(() => expect(order).toEqual(["upsert-start"]));
+    await user.click(screen.getByRole("button", { name: /^More / }));
     await user.click(screen.getByRole("button", { name: "Remove" }));
-    // Remove waits behind the save that is still in flight.
     expect(removeStaple).not.toHaveBeenCalled();
     await act(async () => gate.resolve());
-    await waitFor(() => expect(removeStaple).toHaveBeenCalledWith("sleepwear"));
-    expect(order).toEqual(["upsert-start", "upsert-end", "remove"]);
+    await waitFor(() => expect(saveApi.status).toBe("saved"));
+    expect(removeStaple).not.toHaveBeenCalled();
+    expect(source.staplesSnapshot().find((row) => row.id === "sleepwear")).toMatchObject({
+      qty: 2,
+      revision: { ...captured, version: 2 },
+    });
+    expect(rowFor("sleepwear")).not.toBeNull();
+    await user.click(screen.getByRole("button", { name: "Remove" }));
     await waitFor(() => expect(rowFor("sleepwear")).toBeNull());
-    void source;
+    expect(removeStaple).toHaveBeenCalledWith("sleepwear", { ...captured, version: 2 });
   });
 
-  it("drops a save that is still queued when the staple is removed", async () => {
+  it("does not enqueue edits or removal while the staple is pending", async () => {
     const calls: number[] = [];
     const gate = deferred<void>();
-    const removeStaple = vi.fn(async (id: string) =>
-      (await memory().listStaples()).filter((s) => s.id !== id),
+    const removeStaple = vi.fn((id: string, expected: NonNullable<Staple["revision"]>) =>
+      source.removeStaple(id, expected),
     );
-    const { user } = setup({
+    const { user, source } = setup({
       removeStaple,
       wrap: (base) => ({
         ...base,
-        upsertStaple: async (staple) => {
+        upsertStaple: async (staple, expected) => {
           calls.push(staple.qty);
           await gate.promise;
-          return base.upsertStaple(staple);
+          return base.upsertStaple(staple, expected);
         },
       }),
     });
@@ -735,8 +762,10 @@ describe("renaming, Smart, and removing", () => {
     await user.click(more);
     await user.click(screen.getByRole("button", { name: "Remove" }));
     await act(async () => gate.resolve());
-    await waitFor(() => expect(removeStaple).toHaveBeenCalled());
+    await waitFor(() => expect(saveApi.status).toBe("saved"));
+    expect(removeStaple).not.toHaveBeenCalled();
     expect(calls).toEqual([2]);
+    expect(source.staplesSnapshot().find((row) => row.id === "sleepwear")!.qty).toBe(2);
   });
 });
 
@@ -746,7 +775,10 @@ describe("adding a staple", () => {
     const { user, source } = setup({
       wrap: (base) => ({
         ...base,
-        upsertStaple: async (staple) => (await gate.promise, base.upsertStaple(staple)),
+        upsertStaple: async (staple, expected) => (
+          await gate.promise,
+          base.upsertStaple(staple, expected)
+        ),
       }),
     });
     await loaded();
@@ -760,7 +792,8 @@ describe("adding a staple", () => {
       "tech",
     );
     await user.click(screen.getByRole("button", { name: "Add staple" }));
-    expect(screen.queryByText("Phone charger")).toBeNull();
+    expect(within(card("Tech")).getByText("Phone charger")).toBeTruthy();
+    expect(source.staplesSnapshot().some((row) => row.name === "Phone charger")).toBe(false);
     await act(async () => gate.resolve());
     await waitFor(() => expect(within(card("Tech")).getByText("Phone charger")).toBeTruthy());
     const saved = source.staplesSnapshot().find((s) => s.name === "Phone charger")!;
@@ -959,5 +992,598 @@ describe("phone", () => {
     const after = screen.getByRole("button", { name: "Preview a trip" });
     expect(after.getAttribute("aria-expanded")).toBe("false");
     expect(document.activeElement).toBe(after);
+  });
+});
+
+describe("direct Screen revision forwarding", () => {
+  it("fails closed for old reads missing metadata without invoking a writer", async () => {
+    const write = vi.fn();
+    const remove = vi.fn();
+    const { user } = setup({
+      removeStaple: remove,
+      wrap: (base) => ({
+        ...base,
+        listStaples: async () =>
+          (await base.listStaples()).map(({ revision: _revision, ...content }) => {
+            void _revision;
+            return content;
+          }),
+        upsertStaple: write,
+      }),
+    });
+    await loaded();
+    await user.click(within(rowFor("sleepwear")).getByRole("button", { name: /^Sleepwear/ }));
+    await user.click(screen.getByRole("button", { name: /^More / }));
+    expect(screen.getByRole("button", { name: /^More / }).matches(":disabled")).toBe(true);
+    expect(
+      screen.getByRole("button", { name: "Reload and discard change" }).matches(":disabled"),
+    ).toBe(false);
+    await user.click(screen.getByRole("button", { name: "Remove" }));
+    await act(async () => saveApi.retry());
+    expect(write).not.toHaveBeenCalled();
+    expect(remove).not.toHaveBeenCalled();
+  });
+  it("retries exactly the captured object/token after failure and cannot resurrect a deleted row", async () => {
+    const calls: { staple: Staple; expected: Staple["revision"] | null }[] = [];
+    const { user, source } = setup({
+      wrap: (base) => ({
+        ...base,
+        upsertStaple: async (staple, expected) => {
+          calls.push({ staple, expected });
+          if (calls.length === 1) throw Error("offline");
+          return base.upsertStaple(staple, expected);
+        },
+      }),
+    });
+    await loaded();
+    await user.click(within(rowFor("sleepwear")).getByRole("button", { name: /^Sleepwear/ }));
+    await user.click(screen.getByRole("button", { name: /^More / }));
+    await waitFor(() => expect(saveApi.status).toBe("error"));
+    const old = (await source.listStaples()).find((row) => row.id === "sleepwear")!;
+    await source.removeStaple(old.id, old.revision!);
+    const socks = (await source.listStaples()).find((row) => row.id === "socks")!;
+    await source.upsertStaple({ ...socks, qty: 3 }, socks.revision!);
+    await act(async () => saveApi.retry());
+    await waitFor(() => expect(calls).toHaveLength(2));
+    expect(calls[1].staple).toBe(calls[0].staple);
+    expect(calls[1].expected).toBe(calls[0].expected);
+    expect(calls[1].expected).toEqual(old.revision);
+    expect(calls[1].staple.qty).toBe(2);
+    expect((await source.listStaples()).some((row) => row.id === old.id)).toBe(false);
+    expect((await source.listStaples()).find((row) => row.id === "socks")!.qty).toBe(3);
+  });
+  it("explicitly expects absence for a new add", async () => {
+    const upsert = vi.fn();
+    const { user } = setup({
+      wrap: (base) => ({
+        ...base,
+        upsertStaple: async (staple, expected) => {
+          upsert(staple, expected);
+          return base.upsertStaple(staple, expected);
+        },
+      }),
+    });
+    await loaded();
+    await user.type(screen.getByRole("textbox", { name: "Staple name" }), "Hat");
+    await user.click(screen.getByRole("button", { name: "Add staple" }));
+    await waitFor(() =>
+      expect(upsert).toHaveBeenCalledWith(expect.objectContaining({ name: "Hat" }), null),
+    );
+  });
+});
+
+describe("row recovery fault injection", () => {
+  const open = async (user: ReturnType<typeof userEvent.setup>, id = "sleepwear") => {
+    await user.click(within(rowFor(id)).getAllByRole("button")[0]);
+    return screen.queryByRole("dialog") ?? screen.getByRole("group", { name: /^Edit / });
+  };
+  const assertLocked = (editor: HTMLElement, laptop: boolean) => {
+    const ui = within(editor);
+    const controls = [
+      ui.getByRole("textbox", { name: "Name" }),
+      ui.getByRole("button", { name: /^More / }),
+      ui.getByRole("button", { name: /^Fewer / }),
+      ui.getByRole("button", { name: "per day" }),
+      ui.getByRole("switch", { name: "Fewer with laundry" }),
+      ui.getByRole("switch", { name: "Pack last" }),
+      ui.getByRole("button", { name: "Remove" }),
+      ...(laptop ? [ui.getByRole("combobox", { name: /^Cube for / })] : ui.getAllByRole("radio")),
+    ];
+    for (const control of controls) expect(control.matches(":disabled")).toBe(true);
+    if (!laptop) expect(ui.getByRole("button", { name: "Done" }).matches(":disabled")).toBe(false);
+  };
+
+  it.each([true, false])(
+    "natively locks pending edit and removal; exits stay usable (laptop=%s)",
+    async (laptop) => {
+      const gate = deferred<void>();
+      const removeGate = deferred<void>();
+      const upsert = vi.fn();
+      const remove = vi.fn(async (id: string, expected: NonNullable<Staple["revision"]>) => {
+        await removeGate.promise;
+        return source.removeStaple(id, expected);
+      });
+      const { user, source } = setup({
+        laptop,
+        removeStaple: remove,
+        wrap: (base) => ({
+          ...base,
+          upsertStaple: async (row, token) => {
+            upsert(row, token);
+            await gate.promise;
+            return base.upsertStaple(row, token);
+          },
+        }),
+      });
+      await loaded();
+      const before = source.staplesSnapshot();
+      let editor = await open(user);
+      if (!laptop) {
+        const nameField = within(editor).getByRole("textbox", { name: "Name" });
+        nameField.focus();
+        await user.tab();
+        expect(document.activeElement).toBe(
+          within(editor).getByRole("radio", { name: "Clothing" }),
+        );
+        await user.tab({ shift: true });
+        expect(document.activeElement).toBe(nameField);
+      }
+      await user.click(within(editor).getByRole("button", { name: /^More / }));
+      assertLocked(editor, laptop);
+      if (!laptop) {
+        const done = within(editor).getByRole("button", { name: "Done" });
+        await user.tab();
+        expect(document.activeElement).toBe(done);
+        await user.tab();
+        expect(document.activeElement).toBe(done);
+        await user.tab({ shift: true });
+        expect(document.activeElement).toBe(done);
+      }
+      await user.click(within(editor).getByRole("button", { name: /^More / }));
+      await user.click(within(editor).getByRole("button", { name: "Remove" }));
+      expect(upsert).toHaveBeenCalledTimes(1);
+      expect(remove).not.toHaveBeenCalled();
+      expect(source.staplesSnapshot()).toEqual(before);
+      if (laptop) {
+        await user.keyboard("{Escape}");
+        expect(screen.queryByRole("group", { name: "Edit Sleepwear" })).toBeNull();
+        expect(screen.getByRole("link", { name: "Saved lists" }).getAttribute("href")).toBeTruthy();
+      } else {
+        await user.click(within(editor).getByRole("button", { name: "Done" }));
+        expect(screen.queryByRole("dialog")).toBeNull();
+      }
+      editor = await open(user, "socks");
+      expect(
+        within(editor)
+          .getByRole("button", { name: /^More / })
+          .matches(":disabled"),
+      ).toBe(false);
+      if (!laptop) await user.keyboard("{Escape}");
+      else await user.click(within(rowFor("socks")).getAllByRole("button")[0]);
+      await act(async () => gate.resolve());
+      await waitFor(() => expect(saveApi.status).toBe("saved"));
+      editor = await open(user);
+      await user.click(within(editor).getByRole("button", { name: "Remove" }));
+      assertLocked(editor, laptop);
+      expect(source.staplesSnapshot().find((row) => row.id === "sleepwear")!.qty).toBe(2);
+      await act(async () => removeGate.resolve());
+      await waitFor(() => expect(rowFor("sleepwear")).toBeNull());
+      expect(remove).toHaveBeenCalledWith("sleepwear", expect.objectContaining({ version: 2 }));
+    },
+  );
+
+  it.each([true, false])(
+    "retains failed lock/recovery after unrelated success (laptop=%s)",
+    async (laptop) => {
+      const { user, source } = setup({
+        laptop,
+        wrap: (base) => ({
+          ...base,
+          upsertStaple: async (row, token) => {
+            if (row.id === "sleepwear") throw Error("offline");
+            return base.upsertStaple(row, token);
+          },
+        }),
+      });
+      await loaded();
+      let editor = await open(user);
+      await user.click(within(editor).getByRole("button", { name: /^More / }));
+      await screen.findByText("Couldn’t save. Your change is kept here.");
+      assertLocked(editor, laptop);
+      expect(within(editor).getByRole("button", { name: "Retry save" }).matches(":disabled")).toBe(
+        false,
+      );
+      await user.keyboard("{Escape}");
+      editor = await open(user, "socks");
+      await user.click(within(editor).getByRole("button", { name: /^More / }));
+      await waitFor(() => expect(saveApi.status).toBe("saved"));
+      await user.keyboard("{Escape}");
+      editor = await open(user);
+      assertLocked(editor, laptop);
+      expect(within(editor).getByRole("button", { name: "Retry save" })).toBeTruthy();
+      expect(
+        within(editor)
+          .getByRole("button", { name: "Reload and discard change" })
+          .matches(":disabled"),
+      ).toBe(false);
+      expect(rowText("sleepwear")).toContain("2 per trip");
+      expect(source.staplesSnapshot().find((row) => row.id === "sleepwear")!.qty).toBe(1);
+      expect(source.staplesSnapshot().find((row) => row.id === "socks")!.qty).toBe(2);
+    },
+  );
+
+  it.each(["local-first", "global-first"])(
+    "retries the same frozen object/token once across %s race",
+    async (order) => {
+      const gate = deferred<void>();
+      const calls: { row: Staple; token: Staple["revision"] | null }[] = [];
+      const read = vi.fn();
+      const { user, source } = setup({
+        wrap: (base) => ({
+          ...base,
+          listStaples: async () => {
+            read();
+            return base.listStaples();
+          },
+          upsertStaple: async (row, token) => {
+            calls.push({ row, token });
+            if (calls.length === 1) throw Error("offline");
+            await gate.promise;
+            return base.upsertStaple(row, token);
+          },
+        }),
+      });
+      await loaded();
+      await open(user);
+      await user.click(screen.getByRole("button", { name: /^More / }));
+      const retry = await screen.findByRole("button", { name: "Retry save" });
+      act(() => {
+        if (order === "global-first") saveApi.retry();
+        fireEvent.click(retry);
+        saveApi.retry();
+        fireEvent.click(retry);
+        saveApi.retry();
+      });
+      expect(calls).toHaveLength(2);
+      expect(calls[1].row).toBe(calls[0].row);
+      expect(calls[1].token).toBe(calls[0].token);
+      expect(Object.isFrozen(calls[0].row)).toBe(true);
+      expect(Object.isFrozen(calls[0].token)).toBe(true);
+      expect(read).toHaveBeenCalledTimes(1);
+      expect(
+        source.staplesSnapshot().find((row) => row.id === "sleepwear")!.revision!.version,
+      ).toBe(1);
+      await act(async () => gate.resolve());
+      await waitFor(() => expect(saveApi.status).toBe("saved"));
+      expect(source.staplesSnapshot().find((row) => row.id === "sleepwear")!).toMatchObject({
+        qty: 2,
+        revision: { version: 2 },
+      });
+      expect(screen.getByRole("button", { name: /^More / }).matches(":disabled")).toBe(false);
+      expect(screen.queryByRole("button", { name: "Retry save" })).toBeNull();
+    },
+  );
+
+  it.each(["edit", "delete"])(
+    "external same-row %s makes original Retry STALE without any writes",
+    async (external) => {
+      const calls: { row: Staple; token: Staple["revision"] | null }[] = [];
+      const { user, source } = setup({
+        wrap: (base) => ({
+          ...base,
+          upsertStaple: async (row, token) => {
+            calls.push({ row, token });
+            if (calls.length === 1) throw Error("offline");
+            return base.upsertStaple(row, token);
+          },
+        }),
+      });
+      await loaded();
+      const original = source.staplesSnapshot().find((row) => row.id === "sleepwear")!;
+      await open(user);
+      await user.click(screen.getByRole("button", { name: /^More / }));
+      await screen.findByRole("button", { name: "Retry save" });
+      if (external === "delete") await source.removeStaple(original.id, original.revision!);
+      else await source.upsertStaple({ ...original, qty: 9, packLast: true }, original.revision!);
+      const socks = source.staplesSnapshot().find((row) => row.id === "socks")!;
+      await source.upsertStaple({ ...socks, qty: 3 }, socks.revision!);
+      const before = source.staplesSnapshot();
+      const trips = source.snapshot();
+      await user.click(screen.getByRole("button", { name: "Retry save" }));
+      await waitFor(() => expect(calls).toHaveLength(2));
+      expect(calls).toHaveLength(2);
+      expect(calls[1].row).toBe(calls[0].row);
+      expect(calls[1].token).toBe(calls[0].token);
+      expect(calls[1].token).toEqual(original.revision);
+      expect(calls[1].row).toMatchObject({ qty: 2, packLast: false });
+      expect(source.staplesSnapshot()).toEqual(before);
+      expect(source.snapshot()).toEqual(trips);
+      await screen.findByText("This staple changed. Reload to review it.");
+      expect(screen.queryByRole("button", { name: "Retry save" })).toBeNull();
+      await act(async () => saveApi.retry());
+      expect(calls).toHaveLength(2);
+      await user.click(screen.getByRole("button", { name: "Reload and discard change" }));
+      await waitFor(() => {
+        if (external === "delete") expect(rowFor(original.id)).toBeNull();
+        else expect(rowText(original.id)).toContain("9 per trip");
+      });
+      await act(async () => saveApi.retry());
+      expect(calls).toHaveLength(2);
+      expect(source.staplesSnapshot()).toEqual(before);
+      if (external === "edit") {
+        await user.click(screen.getByRole("button", { name: /^More / }));
+        await waitFor(() => expect(calls).toHaveLength(3));
+        expect(calls[2].token).toEqual(before.find((row) => row.id === original.id)!.revision);
+        expect(calls[2].token).not.toEqual(calls[0].token);
+        expect(calls[2].row).toMatchObject({ qty: 10, packLast: true });
+        expect(source.staplesSnapshot().find((row) => row.id === "socks")!.qty).toBe(3);
+      }
+    },
+  );
+
+  it("keeps failed intent locked through reload failure/missing metadata and preserves another local operation", async () => {
+    let reads = 0;
+    const write = vi.fn();
+    const { user, source } = setup({
+      wrap: (base) => ({
+        ...base,
+        listStaples: async () => {
+          reads++;
+          if (reads === 2) throw Error("offline read");
+          const rows = await base.listStaples();
+          return reads === 3
+            ? rows.map((row) => (row.id === "sleepwear" ? { ...row, revision: undefined } : row))
+            : rows;
+        },
+        upsertStaple: async (row, token) => {
+          write(row, token);
+          throw Error("offline");
+        },
+      }),
+    });
+    await loaded();
+    await open(user);
+    await user.click(screen.getByRole("button", { name: /^More / }));
+    await screen.findByRole("button", { name: "Retry save" });
+    await user.keyboard("{Escape}");
+    await open(user, "socks");
+    await user.click(screen.getByRole("button", { name: /^More / }));
+    await screen.findByRole("button", { name: "Retry save" });
+    await user.keyboard("{Escape}");
+    await open(user);
+    const stored = source.staplesSnapshot().find((row) => row.id === "sleepwear")!;
+    await source.upsertStaple({ ...stored, qty: 7 }, stored.revision!);
+    await user.click(screen.getByRole("button", { name: "Reload and discard change" }));
+    let retry = await screen.findByRole("button", { name: "Try reload again" });
+    expect(retry.matches(":disabled")).toBe(false);
+    assertLocked(screen.getByRole("group", { name: "Edit Sleepwear" }), true);
+    expect(rowText("sleepwear")).toContain("2 per trip");
+    expect(screen.queryByRole("button", { name: "Retry save" })).toBeNull();
+    await user.click(retry);
+    retry = await screen.findByRole("button", { name: "Try reload again" });
+    assertLocked(screen.getByRole("group", { name: "Edit Sleepwear" }), true);
+    expect(rowText("sleepwear")).toContain("2 per trip");
+    await user.click(retry);
+    await waitFor(() => expect(rowText("sleepwear")).toContain("7 per trip"));
+    expect(screen.getByRole("button", { name: /^More / }).matches(":disabled")).toBe(false);
+    await user.keyboard("{Escape}");
+    const socks = await open(user, "socks");
+    assertLocked(socks, true);
+    expect(within(socks).getByRole("button", { name: "Retry save" })).toBeTruthy();
+    expect(rowText("socks")).toContain("2 per day");
+    expect(write).toHaveBeenCalledTimes(2);
+  });
+
+  it("retires global Retry after reviewed deletion even while another row prevents global discard", async () => {
+    const gate = deferred<void>();
+    const write = vi.fn();
+    const { user, source } = setup({
+      wrap: (base) => ({
+        ...base,
+        upsertStaple: async (row, token) => {
+          write(row, token);
+          if (row.id === "sleepwear") throw Error("offline");
+          await gate.promise;
+          return base.upsertStaple(row, token);
+        },
+      }),
+    });
+    await loaded();
+    await open(user);
+    await user.click(screen.getByRole("button", { name: /^More / }));
+    await screen.findByRole("button", { name: "Retry save" });
+    const row = source.staplesSnapshot().find((entry) => entry.id === "sleepwear")!;
+    await source.removeStaple(row.id, row.revision!);
+    await user.keyboard("{Escape}");
+    await open(user, "socks");
+    await user.click(screen.getByRole("button", { name: /^More / }));
+    await user.keyboard("{Escape}");
+    await open(user);
+    expect(saveApi.pending).toBe(true);
+    await user.click(screen.getByRole("button", { name: "Reload and discard change" }));
+    await waitFor(() => expect(rowFor("sleepwear")).toBeNull());
+    expect(saveApi.status).toBe("error"); // discard could not clear the old failure while Socks was pending.
+    expect(write).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      saveApi.retry();
+      saveApi.retry();
+    });
+    expect(write).toHaveBeenCalledTimes(2);
+    expect(source.staplesSnapshot().some((entry) => entry.id === "sleepwear")).toBe(false);
+    const socks = await open(user, "socks");
+    assertLocked(socks, true);
+    await act(async () => gate.resolve());
+    await waitFor(() => expect(saveApi.status).toBe("saved"));
+    expect(source.staplesSnapshot().find((entry) => entry.id === "socks")!.qty).toBe(2);
+  });
+
+  it.each(["retry", "discard"])(
+    "keeps failed adds recoverable locally with explicit absence (%s)",
+    async (recovery) => {
+      const calls: { row: Staple; token: Staple["revision"] | null }[] = [];
+      const { user, source } = setup({
+        wrap: (base) => ({
+          ...base,
+          upsertStaple: async (row, token) => {
+            calls.push({ row, token });
+            if (row.name === "Hat" && calls.length === 1) throw Error("offline");
+            return base.upsertStaple(row, token);
+          },
+        }),
+      });
+      await loaded();
+      await user.type(screen.getByRole("textbox", { name: "Staple name" }), "Hat");
+      await user.click(screen.getByRole("button", { name: "Add staple" }));
+      await waitFor(() => expect(saveApi.status).toBe("error"));
+      const id = calls[0].row.id;
+      expect(calls[0].token).toBeNull();
+      await open(user, "socks");
+      await user.click(screen.getByRole("button", { name: /^More / }));
+      await waitFor(() => expect(saveApi.status).toBe("saved"));
+      await user.keyboard("{Escape}");
+      const editor = await open(user, id);
+      assertLocked(editor, true);
+      expect(source.staplesSnapshot().some((row) => row.id === id)).toBe(false);
+      await user.click(
+        screen.getByRole("button", {
+          name: recovery === "retry" ? "Retry save" : "Reload and discard change",
+        }),
+      );
+      if (recovery === "retry") {
+        await waitFor(() => expect(calls).toHaveLength(3));
+        expect(calls[2].row).toBe(calls[0].row);
+        expect(calls[2].token).toBeNull();
+        expect(source.staplesSnapshot().find((row) => row.id === id)).toMatchObject({
+          name: "Hat",
+          revision: { version: 1 },
+        });
+      } else {
+        await waitFor(() => expect(rowFor(id)).toBeNull());
+        await act(async () => saveApi.retry());
+        expect(calls).toHaveLength(2);
+        expect(source.staplesSnapshot().some((row) => row.id === id)).toBe(false);
+      }
+    },
+  );
+});
+
+describe("inline Escape listener lifecycle", () => {
+  it("respects the recovery dialog, returns focus without scrolling, and cleans up on close/phone/unmount", async () => {
+    const { user, setLaptop } = setup({
+      wrap: (base) => ({
+        ...base,
+        upsertStaple: async () => {
+          throw Error("offline");
+        },
+      }),
+    });
+    await loaded();
+    const add = vi.spyOn(window, "addEventListener");
+    const remove = vi.spyOn(window, "removeEventListener");
+    const row = within(rowFor("sleepwear")).getAllByRole("button")[0];
+    const focus = vi.spyOn(row, "focus");
+    const keyListeners = () =>
+      add.mock.calls
+        .filter(([type, , capture]) => type === "keydown" && capture !== true)
+        .map(([, fn]) => fn);
+    expect(keyListeners()).toHaveLength(0);
+    await user.click(row);
+    const first = keyListeners()[0];
+    expect(first).toBeTypeOf("function");
+    await user.click(screen.getByRole("button", { name: /^More / }));
+    await screen.findByRole("button", { name: "Retry save" });
+    await user.click(screen.getByRole("button", { name: /not saved/i }));
+    expect(screen.getByRole("dialog", { name: "Couldn’t save" })).toBeTruthy();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("group", { name: "Edit Sleepwear" })).toBeTruthy();
+    expect(remove.mock.calls.some(([type, fn]) => type === "keydown" && fn === first)).toBe(false);
+    await user.click(row); // close the inline editor
+    expect(remove).toHaveBeenCalledWith("keydown", first);
+    await user.click(row);
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(document.activeElement).toBe(row));
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+    await user.click(row);
+    const beforePhone = keyListeners().at(-1);
+    act(() => setLaptop(false));
+    expect(remove).toHaveBeenCalledWith("keydown", beforePhone);
+    const count = keyListeners().length;
+    expect(screen.getByRole("dialog", { name: "Sleepwear" })).toBeTruthy();
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: /^More / }));
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(keyListeners()).toHaveLength(count);
+    act(() => setLaptop(true));
+    await user.click(row);
+    const beforeUnmount = keyListeners().at(-1);
+    cleanup();
+    expect(remove).toHaveBeenCalledWith("keydown", beforeUnmount);
+  });
+});
+
+describe("failed removal recovery", () => {
+  it("locks a failed phone removal, retries the same original token, and reviews a conflicting writer", async () => {
+    const tokens: NonNullable<Staple["revision"]>[] = [];
+    const remove = vi.fn(async (id: string, token: NonNullable<Staple["revision"]>) => {
+      tokens.push(token);
+      if (tokens.length === 1) throw Error("offline");
+      return source.removeStaple(id, token);
+    });
+    const { user, source } = setup({ laptop: false, removeStaple: remove });
+    await loaded();
+    const original = source.staplesSnapshot().find((row) => row.id === "sleepwear")!;
+    await user.click(within(rowFor(original.id)).getAllByRole("button")[0]);
+    const dialog = screen.getByRole("dialog", { name: original.name });
+    await user.click(within(dialog).getByRole("button", { name: "Remove" }));
+    const retry = await within(dialog).findByRole("button", { name: "Retry save" });
+    await user.click(screen.getByRole("button", { name: /not saved/i }));
+    const otherDialog = screen.getByRole("dialog", { name: "Couldn’t save" });
+    await user.tab();
+    expect(document.activeElement).toBe(within(otherDialog).getByRole("button", { name: "Retry" }));
+    await user.tab({ shift: true });
+    expect(document.activeElement).toBe(
+      within(otherDialog).getByRole("button", { name: "Dismiss" }),
+    );
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "Couldn’t save" })).toBeNull();
+    expect(screen.getByRole("dialog", { name: original.name })).toBe(dialog);
+    within(dialog).getByRole("heading", { name: original.name }).focus();
+    await user.tab();
+    expect(document.activeElement).toBe(retry);
+    await user.tab();
+    expect(document.activeElement).toBe(
+      within(dialog).getByRole("button", { name: "Reload and discard change" }),
+    );
+    await user.tab();
+    expect(document.activeElement).toBe(within(dialog).getByRole("button", { name: "Done" }));
+    await user.tab({ shift: true });
+    expect(document.activeElement).toBe(
+      within(dialog).getByRole("button", { name: "Reload and discard change" }),
+    );
+    expect(within(dialog).getByRole("button", { name: "Remove" }).matches(":disabled")).toBe(true);
+    expect(within(dialog).getByRole("button", { name: "Done" }).matches(":disabled")).toBe(false);
+    expect(rowFor(original.id)).not.toBeNull();
+    await source.upsertStaple({ ...original, qty: 8 }, original.revision!);
+    const before = source.staplesSnapshot();
+    await user.click(retry);
+    await within(dialog).findByText("This staple changed. Reload to review it.");
+    expect(tokens).toHaveLength(2);
+    expect(tokens[1]).toBe(tokens[0]);
+    expect(tokens[0]).toEqual(original.revision);
+    expect(source.staplesSnapshot()).toEqual(before);
+    await act(async () => saveApi.retry());
+    expect(tokens).toHaveLength(2);
+    await user.click(within(dialog).getByRole("button", { name: "Reload and discard change" }));
+    await waitFor(() =>
+      expect(within(dialog).getByRole("button", { name: "Remove" }).matches(":disabled")).toBe(
+        false,
+      ),
+    );
+    expect(rowText(original.id)).toContain("8 per trip");
+    await user.click(within(dialog).getByRole("button", { name: "Remove" }));
+    await waitFor(() => expect(rowFor(original.id)).toBeNull());
+    expect(tokens[2]).toEqual(before.find((row) => row.id === original.id)!.revision);
+    expect(tokens[2]).not.toEqual(tokens[0]);
   });
 });
